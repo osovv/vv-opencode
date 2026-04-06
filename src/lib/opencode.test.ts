@@ -6,6 +6,7 @@ import {
   ensurePackageConfigText,
   parseGuardianConfigText,
   renderGuardianConfig,
+  resolvePaths,
 } from "./opencode.js";
 
 describe("ensurePackageConfigText", () => {
@@ -48,5 +49,32 @@ describe("guardian config helpers", () => {
       approvalRiskThreshold: 55,
       reviewToastDurationMs: 6_789,
     });
+  });
+});
+
+describe("resolvePaths", () => {
+  test("separates global opencode and vvoc config roots", async () => {
+    const paths = await resolvePaths({
+      scope: "global",
+      cwd: "/workspace/project",
+      configDir: "/tmp/vvoc-config-home",
+    });
+
+    expect(paths.configHome).toBe("/tmp/vvoc-config-home");
+    expect(paths.opencodeBaseDir).toBe("/tmp/vvoc-config-home/opencode");
+    expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
+    expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
+    expect(paths.guardianConfigPath).toBe("/tmp/vvoc-config-home/vvoc/guardian.jsonc");
+  });
+
+  test("uses .vvoc for project-scoped vvoc config", async () => {
+    const paths = await resolvePaths({
+      scope: "project",
+      cwd: "/workspace/project",
+    });
+
+    expect(paths.opencodeBaseDir).toBe("/workspace/project");
+    expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
+    expect(paths.guardianConfigPath).toBe("/workspace/project/.vvoc/guardian.jsonc");
   });
 });

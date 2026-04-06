@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Portable OpenCode workflow plugins and CLI tooling.",
   "type": "module",
   "license": "MIT",
@@ -12,6 +12,7 @@
     "plugins",
     "workflow",
     "guardian",
+    "memory",
     "bun",
     "citty"
   ],
@@ -32,6 +33,10 @@
     "./plugins/guardian": {
       "types": "./dist/plugins/guardian.d.ts",
       "import": "./dist/plugins/guardian.js"
+    },
+    "./plugins/memory": {
+      "types": "./dist/plugins/memory.d.ts",
+      "import": "./dist/plugins/memory.js"
     }
   },
   "scripts": {

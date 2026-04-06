@@ -1,16 +1,21 @@
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import {
+  getConfigHome,
+  getGlobalOpencodeDir,
+  getGlobalVvocDir,
+  getProjectVvocDir,
+} from "./vvoc-paths.js";
 
 export const CLI_NAME = "vvoc";
 export const PACKAGE_NAME = "@osovv/vv-opencode";
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
-
-const DEFAULT_GLOBAL_CONFIG_DIR = join(homedir(), ".config", "opencode");
 const MANAGED_MARKER = "Managed by vvoc";
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
 const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
+const GUARDIAN_CONFIG_FILE_NAMES = ["guardian.jsonc", "guardian.json"] as const;
+const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
 
 const JSON_FORMAT = {
   insertSpaces: true,
@@ -25,8 +30,9 @@ export type Scope = "global" | "project";
 export type ResolvedPaths = {
   scope: Scope;
   cwd: string;
+  configHome: string;
   opencodeBaseDir: string;
-  guardianBaseDir: string;
+  vvocBaseDir: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
   guardianConfigPath: string;
@@ -74,26 +80,26 @@ export async function resolvePaths(options: {
   cwd: string;
   configDir?: string;
 }): Promise<ResolvedPaths> {
+  const configHome = getConfigHome(options.configDir);
   const opencodeBaseDir =
-    options.scope === "global" ? (options.configDir ?? DEFAULT_GLOBAL_CONFIG_DIR) : options.cwd;
-  const guardianBaseDir =
+    options.scope === "global" ? getGlobalOpencodeDir(options.configDir) : options.cwd;
+  const vvocBaseDir =
     options.scope === "global"
-      ? (options.configDir ?? DEFAULT_GLOBAL_CONFIG_DIR)
-      : join(options.cwd, ".opencode");
-  const opencodeSelection = await selectPrimaryPath([
-    join(opencodeBaseDir, "opencode.json"),
-    join(opencodeBaseDir, "opencode.jsonc"),
-  ]);
-  const guardianSelection = await selectPrimaryPath([
-    join(guardianBaseDir, "guardian.jsonc"),
-    join(guardianBaseDir, "guardian.json"),
-  ]);
+      ? getGlobalVvocDir(options.configDir)
+      : getProjectVvocDir(options.cwd);
+  const opencodeSelection = await selectPrimaryPath(
+    OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
+  );
+  const guardianSelection = await selectPrimaryPath(
+    GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
+  );
 
   return {
     scope: options.scope,
     cwd: options.cwd,
+    configHome,
     opencodeBaseDir,
-    guardianBaseDir,
+    vvocBaseDir,
     opencodeConfigPath: opencodeSelection.primary,
     opencodeAlternatePaths: opencodeSelection.alternates,
     guardianConfigPath: guardianSelection.primary,
@@ -343,16 +349,24 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
 }
 
 export function describeWriteResult(result: WriteResult): string {
+  let message = "";
+
   switch (result.action) {
     case "created":
-      return `Created ${result.path}`;
+      message = `Created ${result.path}`;
+      break;
     case "updated":
-      return `Updated ${result.path}`;
+      message = `Updated ${result.path}`;
+      break;
     case "kept":
-      return `Kept ${result.path}`;
+      message = `Kept ${result.path}`;
+      break;
     case "skipped":
-      return `Skipped ${result.path}${result.reason ? ` (${result.reason})` : ""}`;
+      message = `Skipped ${result.path}`;
+      break;
   }
+
+  return result.reason ? `${message} (${result.reason})` : message;
 }
 
 function parseObjectDocument(text: string, label: string): JsonObject {

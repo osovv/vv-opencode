@@ -13,7 +13,9 @@ Portable OpenCode workflow package with plugins and a Bun CLI for install, sync,
 - primary runtime: `Bun`
 - language: `TypeScript`
 - CLI framework: `citty`
-- current exported plugin: `GuardianPlugin`
+- current exported plugins:
+  - `GuardianPlugin`
+  - `MemoryPlugin`
 - current command set: `install`, `sync`, `status`, `doctor`, `guardian config`
 
 ## Repository Rules
@@ -21,7 +23,7 @@ Portable OpenCode workflow package with plugins and a Bun CLI for install, sync,
 1. `src/` is the source of truth.
 2. `dist/` is generated output. Never edit it manually.
 3. Publishing is manual from the terminal with `npm publish`. Do not add CI publish workflows unless explicitly requested.
-4. If CLI behavior, package exports, or setup flow changes, update `README.md` in the same change.
+4. If CLI behavior, package exports, setup flow, or config locations change, update `README.md` in the same change.
 5. This package manages user config, so prefer conservative, idempotent writes over aggressive rewrites.
 
 ## Core Principles
@@ -58,6 +60,7 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 - Root package exports must stay valid:
   - `@osovv/vv-opencode`
   - `@osovv/vv-opencode/plugins/guardian`
+  - `@osovv/vv-opencode/plugins/memory`
 - Local quality tooling uses `oxlint`, `oxfmt`, and `lefthook`.
 - `lefthook` owns the `pre-commit` hook and should keep running lint + format checks.
 - Before release, run:
@@ -69,14 +72,15 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 
 ### Config safety
 
-- `opencode.json` and `opencode.jsonc` must be handled conservatively.
-- Preserve existing comments in JSONC edits where practical.
+- OpenCode config remains in OpenCode-managed paths.
+- vvoc-managed config must live in `$XDG_CONFIG_HOME/vvoc/` or project-local `.vvoc/`.
 - `guardian.jsonc` may only be auto-rewritten when it is clearly managed by `vvoc`, unless the user explicitly forces overwrite.
+- `MemoryPlugin` stores entries in `.vvoc/memory/` and must stay explicit-only. Never inject stored entries into prompts automatically.
 - Never silently clobber user-owned config.
 
 ### Documentation sync
 
-- If command names, flags, examples, or install flow change, update `README.md`.
+- If command names, flags, examples, install flow, or vvoc config paths change, update `README.md`.
 - If modules or public exports change, update `docs/knowledge-graph.xml`.
 - If commands, test strategy, or critical scenarios change, update `docs/verification-plan.xml`.
 

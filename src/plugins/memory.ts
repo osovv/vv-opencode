@@ -1,0 +1,394 @@
+import { type Config, type Plugin, tool } from "@opencode-ai/plugin";
+import {
+  deleteMemory,
+  getDefaultProjectScopeKey,
+  getDefaultSearchLimit,
+  getDefaultSharedScopeKey,
+  getMemory,
+  listMemories,
+  loadMemoryRuntimeConfig,
+  normalizeReadScopeType,
+  normalizeWriteScopeType,
+  putMemory,
+  resolveBranchScopeKey,
+  searchMemories,
+  updateMemory,
+  type MemoryEntry,
+  type MemoryRuntimeConfig,
+  type MemoryScope,
+} from "./memory-store.js";
+
+const MEMORY_REVIEW_AGENT = "memory-reviewer";
+const z = tool.schema;
+
+const MEMORY_REVIEW_PROMPT = `
+You review explicit persistent memory managed by vvoc.
+
+Rules:
+- Memory is explicit-only. Nothing is automatically loaded into the prompt.
+- Start with memory_list for the relevant scopes.
+- Use memory_get for exact ids.
+- Use memory_search to confirm overlap, duplicates, or scope mistakes.
+- Do not create, update, or delete memory.
+- Produce a report only.
+
+Return sections in this order:
+## Keep
+## Update
+## Merge
+## Delete
+## Questions
+## Summary
+`;
+
+function createMemoryReviewerToolsConfig(): Record<string, boolean> {
+  return {
+    bash: false,
+    edit: false,
+    write: false,
+    read: false,
+    list: false,
+    glob: false,
+    grep: false,
+    task: false,
+    webfetch: false,
+    websearch: false,
+    codesearch: false,
+    lsp: false,
+    skill: false,
+    todoread: false,
+    todowrite: false,
+    memory_search: true,
+    memory_get: true,
+    memory_list: true,
+    memory_put: false,
+    memory_update: false,
+    memory_delete: false,
+  };
+}
+
+function installMemoryReviewerAgent(config: Config): void {
+  config.agent ??= {};
+  config.agent[MEMORY_REVIEW_AGENT] = {
+    mode: "subagent",
+    description:
+      "Reviews stored vvoc memory and suggests cleanup actions without modifying entries.",
+    prompt: MEMORY_REVIEW_PROMPT.trim(),
+    steps: 6,
+    permission: {
+      edit: "deny",
+      webfetch: "deny",
+      bash: {
+        "*": "deny",
+      },
+    },
+    tools: createMemoryReviewerToolsConfig(),
+  } as never;
+}
+
+function resolveWriteScope(
+  scopeType: unknown,
+  scopeKey: unknown,
+  sessionID: string,
+  directory: string,
+): MemoryScope {
+  const normalizedType = normalizeWriteScopeType(scopeType) ?? "project";
+
+  if (normalizedType === "project") {
+    return { scopeType: "project", scopeKey: getDefaultProjectScopeKey() };
+  }
+  if (normalizedType === "shared") {
+    return {
+      scopeType: "shared",
+      scopeKey:
+        typeof scopeKey === "string" && scopeKey.trim()
+          ? scopeKey.trim()
+          : getDefaultSharedScopeKey(),
+    };
+  }
+  if (normalizedType === "session") {
+    return {
+      scopeType: "session",
+      scopeKey: typeof scopeKey === "string" && scopeKey.trim() ? scopeKey.trim() : sessionID,
+    };
+  }
+
+  return {
+    scopeType: "branch",
+    scopeKey:
+      typeof scopeKey === "string" && scopeKey.trim()
+        ? scopeKey.trim()
+        : resolveBranchScopeKey(directory),
+  };
+}
+
+function getRelevantScopes(sessionID: string, directory: string): MemoryScope[] {
+  return [
+    resolveWriteScope("session", undefined, sessionID, directory),
+    resolveWriteScope("branch", undefined, sessionID, directory),
+    resolveWriteScope("project", undefined, sessionID, directory),
+    resolveWriteScope("shared", undefined, sessionID, directory),
+  ];
+}
+
+function resolveReadScopes(
+  scopeType: unknown,
+  scopeKey: unknown,
+  sessionID: string,
+  directory: string,
+): MemoryScope[] | undefined {
+  const normalizedType = normalizeReadScopeType(scopeType);
+  if (!normalizedType) {
+    return getRelevantScopes(sessionID, directory);
+  }
+  if (normalizedType === "all") {
+    return undefined;
+  }
+
+  return [resolveWriteScope(normalizedType, scopeKey, sessionID, directory)];
+}
+
+function formatMemoryEntry(entry: MemoryEntry): string {
+  return `- ${entry.id} [${entry.scope_type}:${entry.scope_key}] [${entry.kind}] ${entry.text}`;
+}
+
+function formatMemoryEntries(entries: MemoryEntry[]): string {
+  return entries.map(formatMemoryEntry).join("\n");
+}
+
+function formatMemoryDetails(entry: MemoryEntry): string {
+  return JSON.stringify(entry, null, 2);
+}
+
+function getMemoryMetadataTitle(action: string, count?: number): string {
+  if (typeof count === "number") {
+    return `${action} (${count})`;
+  }
+  return action;
+}
+
+function getMemoryConfigWarningLines(memoryConfig: MemoryRuntimeConfig): string[] {
+  return memoryConfig.warnings.map((warning) => `- ${warning}`);
+}
+
+function assertEnabled(memoryConfig: MemoryRuntimeConfig): void {
+  if (!memoryConfig.enabled) {
+    throw new Error("vvoc memory is disabled in memory.jsonc");
+  }
+}
+
+export const MemoryPlugin: Plugin = async ({ client, directory }) => {
+  const memoryConfig = await loadMemoryRuntimeConfig(directory);
+
+  await client.app.log({
+    body: {
+      service: "memory",
+      level: "info",
+      message: "memory plugin initialized",
+      extra: {
+        enabled: memoryConfig.enabled,
+        storageRoot: memoryConfig.storageRoot,
+        defaultSearchLimit: memoryConfig.defaultSearchLimit,
+        configSources: memoryConfig.sources,
+        configWarnings: memoryConfig.warnings,
+      },
+    },
+  });
+
+  if (!memoryConfig.enabled) {
+    return {};
+  }
+
+  const metadataWarnings = getMemoryConfigWarningLines(memoryConfig);
+
+  return {
+    config: async (config) => {
+      installMemoryReviewerAgent(config);
+    },
+    tool: {
+      memory_search: tool({
+        description:
+          "Search explicit persistent memory stored in .vvoc/memory. Memory is never preloaded into the prompt.",
+        args: {
+          query: z.string(),
+          scopeType: z.enum(["session", "branch", "project", "shared", "all"]).optional(),
+          scopeKey: z.string().optional(),
+          kind: z.string().optional(),
+          limit: z.number().int().positive().optional(),
+        },
+        async execute(args, context) {
+          assertEnabled(memoryConfig);
+          const results = await searchMemories(memoryConfig, args.query, {
+            scopes: resolveReadScopes(
+              args.scopeType,
+              args.scopeKey,
+              context.sessionID,
+              context.worktree,
+            ),
+            kind: args.kind,
+            limit: args.limit ?? getDefaultSearchLimit(memoryConfig),
+          });
+
+          context.metadata({
+            title: getMemoryMetadataTitle("Memory Search", results.length),
+            metadata: { count: results.length },
+          });
+
+          if (results.length === 0) {
+            return metadataWarnings.length > 0
+              ? [`No matching memory entries found.`, "", ...metadataWarnings].join("\n")
+              : "No matching memory entries found.";
+          }
+
+          return metadataWarnings.length > 0
+            ? [formatMemoryEntries(results), "", "Warnings:", ...metadataWarnings].join("\n")
+            : formatMemoryEntries(results);
+        },
+      }),
+      memory_get: tool({
+        description: "Load a single explicit memory entry by id from .vvoc/memory.",
+        args: {
+          id: z.string(),
+        },
+        async execute(args, context) {
+          assertEnabled(memoryConfig);
+          const entry = await getMemory(memoryConfig, args.id);
+          if (!entry) {
+            throw new Error(`Memory not found: ${args.id}`);
+          }
+
+          context.metadata({
+            title: getMemoryMetadataTitle("Memory Get"),
+            metadata: { id: entry.id },
+          });
+
+          return formatMemoryDetails(entry);
+        },
+      }),
+      memory_put: tool({
+        description:
+          "Create a new explicit memory entry in session, branch, project, or shared scope. Use this deliberately for durable facts, preferences, or procedures.",
+        args: {
+          text: z.string(),
+          kind: z.string().optional(),
+          scopeType: z.enum(["session", "branch", "project", "shared"]).optional(),
+          scopeKey: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+          meta: z.record(z.string(), z.unknown()).optional(),
+        },
+        async execute(args, context) {
+          assertEnabled(memoryConfig);
+          const scope = resolveWriteScope(
+            args.scopeType,
+            args.scopeKey,
+            context.sessionID,
+            context.worktree,
+          );
+          const entry = await putMemory(memoryConfig, {
+            scope_type: scope.scopeType,
+            scope_key: scope.scopeKey,
+            kind: args.kind,
+            text: args.text,
+            tags: args.tags,
+            meta: args.meta,
+          });
+
+          context.metadata({
+            title: getMemoryMetadataTitle("Memory Put"),
+            metadata: { id: entry.id, scopeType: entry.scope_type, scopeKey: entry.scope_key },
+          });
+
+          return `Stored memory ${entry.id}`;
+        },
+      }),
+      memory_update: tool({
+        description: "Update an existing explicit memory entry by id.",
+        args: {
+          id: z.string(),
+          text: z.string().optional(),
+          kind: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+          meta: z.record(z.string(), z.unknown()).optional(),
+        },
+        async execute(args, context) {
+          assertEnabled(memoryConfig);
+          if (
+            args.text === undefined &&
+            args.kind === undefined &&
+            args.tags === undefined &&
+            args.meta === undefined
+          ) {
+            throw new Error("memory_update requires at least one field to change");
+          }
+
+          const entry = await updateMemory(memoryConfig, args.id, {
+            text: args.text,
+            kind: args.kind,
+            tags: args.tags,
+            meta: args.meta,
+          });
+          if (!entry) {
+            throw new Error(`Memory not found: ${args.id}`);
+          }
+
+          context.metadata({
+            title: getMemoryMetadataTitle("Memory Update"),
+            metadata: { id: entry.id },
+          });
+
+          return `Updated memory ${entry.id}`;
+        },
+      }),
+      memory_delete: tool({
+        description: "Delete an explicit memory entry by id.",
+        args: {
+          id: z.string(),
+        },
+        async execute(args, context) {
+          assertEnabled(memoryConfig);
+          const entry = await deleteMemory(memoryConfig, args.id);
+          if (!entry) {
+            throw new Error(`Memory not found: ${args.id}`);
+          }
+
+          context.metadata({
+            title: getMemoryMetadataTitle("Memory Delete"),
+            metadata: { id: entry.id },
+          });
+
+          return `Deleted memory ${entry.id}`;
+        },
+      }),
+      memory_list: tool({
+        description:
+          "List explicit persistent memory entries across session, branch, project, or shared scopes. Memory is never preloaded into the prompt.",
+        args: {
+          scopeType: z.enum(["session", "branch", "project", "shared", "all"]).optional(),
+          scopeKey: z.string().optional(),
+          kind: z.string().optional(),
+          limit: z.number().int().positive().optional(),
+        },
+        async execute(args, context) {
+          assertEnabled(memoryConfig);
+          const results = await listMemories(memoryConfig, {
+            scopes: resolveReadScopes(
+              args.scopeType,
+              args.scopeKey,
+              context.sessionID,
+              context.worktree,
+            ),
+            kind: args.kind,
+            limit: args.limit ?? getDefaultSearchLimit(memoryConfig),
+          });
+
+          context.metadata({
+            title: getMemoryMetadataTitle("Memory List", results.length),
+            metadata: { count: results.length },
+          });
+
+          return results.length > 0 ? formatMemoryEntries(results) : "No memory entries found.";
+        },
+      }),
+    },
+  };
+};

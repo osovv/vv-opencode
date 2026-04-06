@@ -1,14 +1,15 @@
-<DevelopmentPlan VERSION="0.2.0">
+<DevelopmentPlan VERSION="0.3.0">
   <ArchitectureNotes>
-    <objective>Package the existing Guardian plugin without behavior drift, while adding a small CLI that manages portable OpenCode config safely.</objective>
-    <non-goal>Do not expand into a large monorepo or broad profile manager before the first plugin packaging path is stable.</non-goal>
+    <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config.</objective>
+    <non-goal>Do not expand into a large monorepo or broad profile manager before plugin packaging, explicit memory, and vvoc config boundaries are stable.</non-goal>
     <risk-1>Config file mutation must stay conservative because users may already have hand-maintained JSONC with comments.</risk-1>
+    <risk-2>The file-based memory store does full scans and should stay explicit, simple, and easy to reason about until scale requires indexing.</risk-2>
   </ArchitectureNotes>
 
   <Modules>
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Resolve OpenCode config paths, edit JSONC safely, render managed Guardian config, and inspect installation state.</purpose>
+        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, render managed Guardian config, and inspect installation state.</purpose>
         <inputs>
           <param name="scope" type="global | project" />
           <param name="cwd" type="string" />
@@ -23,13 +24,13 @@
         </errors>
       </contract>
       <interface>
-        <export-resolvePaths PURPOSE="Resolve config and Guardian file paths for the selected scope." />
-        <export-ensurePackageInstalled PURPOSE="Ensure the npm plugin is registered in OpenCode config." />
+        <export-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
+        <export-ensurePackageInstalled PURPOSE="Ensure the npm package is registered in OpenCode config." />
         <export-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </interface>
       <depends>none</depends>
       <target>
-        <source>src/lib/opencode.ts</source>
+        <source>src/lib/opencode.ts + src/lib/vvoc-paths.ts</source>
         <tests>src/lib/opencode.test.ts</tests>
       </target>
       <observability>
@@ -57,7 +58,7 @@
       </contract>
       <interface>
         <export-install PURPOSE="Bootstrap plugin registration and optional Guardian config." />
-        <export-sync PURPOSE="Refresh managed config files." />
+        <export-sync PURPOSE="Refresh managed vvoc config files." />
         <export-doctor PURPOSE="Diagnose installation drift or invalid config." />
       </interface>
       <depends>M-CLI-CONFIG</depends>
@@ -71,7 +72,7 @@
       </observability>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
       <notes>
-        <note-1>Commands should stay thin and delegate file logic to `M-CLI-CONFIG`.</note-1>
+        <note-1>Commands should stay thin and delegate file logic to helper utilities.</note-1>
       </notes>
     </M-CLI-COMMANDS>
 
@@ -92,7 +93,7 @@
       <interface>
         <export-GuardianPlugin PURPOSE="Register Guardian hooks, config agent, and permission review flow." />
       </interface>
-      <depends>none</depends>
+      <depends>M-CLI-CONFIG</depends>
       <target>
         <source>src/plugins/guardian.ts</source>
         <tests>typecheck-only in v1</tests>
@@ -103,16 +104,83 @@
       </observability>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <notes>
-        <note-1>This module is a direct port of the existing standalone plugin and should change minimally at first.</note-1>
+        <note-1>Guardian now reads vvoc-managed config from `.vvoc/` or `$XDG_CONFIG_HOME/vvoc/` only.</note-1>
       </notes>
     </M-PLUGIN-GUARDIAN>
+
+    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
+      <contract>
+        <purpose>Persist explicit memory entries in `.vvoc/memory`, support scope-aware CRUD, and rank lexical search results.</purpose>
+        <inputs>
+          <param name="MemoryRuntimeConfig" type="object" />
+          <param name="MemoryEntry or query/filter inputs" type="object" />
+        </inputs>
+        <outputs>
+          <param name="MemoryEntry | MemoryEntry[] | MemoryRuntimeConfig" type="object" />
+        </outputs>
+        <errors>
+          <error code="INVALID_MEMORY_CONFIG" />
+          <error code="INVALID_MEMORY_TEXT" />
+        </errors>
+      </contract>
+      <interface>
+        <export-loadMemoryRuntimeConfig PURPOSE="Load vvoc memory settings from global and project config files." />
+        <export-putMemory PURPOSE="Create a scoped memory entry in `.vvoc/memory`." />
+        <export-searchMemories PURPOSE="Return ranked lexical matches across relevant memory scopes." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/plugins/memory-store.ts</source>
+        <tests>src/plugins/memory.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[memory-store]</log-prefix>
+        <critical-block>BLOCK_MEMORY_SEARCH</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
+      <notes>
+        <note-1>Memory remains explicit-only. The store must not inject entries into prompts or system context.</note-1>
+      </notes>
+    </M-PLUGIN-MEMORY-STORE>
+
+    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="implemented">
+      <contract>
+        <purpose>Add explicit memory tools to OpenCode and register a report-only `memory-reviewer` subagent.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks with custom tools and config mutation" />
+        </outputs>
+        <errors>
+          <error code="MEMORY_DISABLED" />
+          <error code="MEMORY_NOT_FOUND" />
+        </errors>
+      </contract>
+      <interface>
+        <export-MemoryPlugin PURPOSE="Register explicit memory tools and the `memory-reviewer` subagent." />
+      </interface>
+      <depends>M-PLUGIN-MEMORY-STORE</depends>
+      <target>
+        <source>src/plugins/memory.ts</source>
+        <tests>src/plugins/memory.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[memory]</log-prefix>
+        <critical-block>BLOCK_REGISTER_MEMORY_TOOLS</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
+      <notes>
+        <note-1>The reviewer is implemented as a bundled subagent instead of prompt injection or automatic background memory reads.</note-1>
+      </notes>
+    </M-PLUGIN-MEMORY>
   </Modules>
 
   <DataFlow>
     <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc install">
-      <step-1>Resolve scope-specific OpenCode and Guardian config paths.</step-1>
+      <step-1>Resolve scope-specific OpenCode config paths and vvoc config paths.</step-1>
       <step-2>Ensure `@osovv/vv-opencode` exists in the OpenCode `plugin` array.</step-2>
-      <step-3>Create `guardian.jsonc` when it does not already exist.</step-3>
+      <step-3>Create `guardian.jsonc` under the vvoc config root when it does not already exist.</step-3>
       <evidence>`vvoc status`, parsed config content, and successful typecheck/build.</evidence>
     </DF-PLUGIN-INSTALL>
     <DF-CONFIG-SYNC NAME="ManagedConfigSync" TRIGGER="vvoc sync">
@@ -121,18 +189,24 @@
       <step-3>Rewrite managed file canonically while preserving current values.</step-3>
       <evidence>Stable rewritten `guardian.jsonc` and no overwrite of unmanaged files without force.</evidence>
     </DF-CONFIG-SYNC>
-    <DF-GUARDIAN-SETTINGS NAME="GuardianConfigWrite" TRIGGER="vvoc guardian config">
-      <step-1>Parse CLI overrides for model, variant, timeout, and thresholds.</step-1>
-      <step-2>Render a managed Guardian config template.</step-2>
-      <step-3>Write or print the config depending on mode.</step-3>
-      <evidence>JSONC parse succeeds and plugin can load the written file later.</evidence>
-    </DF-GUARDIAN-SETTINGS>
     <DF-GUARDIAN-REVIEW NAME="GuardianPermissionReview" TRIGGER="permission.asked event">
       <step-1>Capture relevant tool and command intent for the session.</step-1>
       <step-2>Build a bounded transcript and planned action prompt.</step-2>
       <step-3>Run Guardian, interpret risk, and auto-reply only when below threshold.</step-3>
       <evidence>Guardian logs, toasts, and permission reply behavior inside OpenCode.</evidence>
     </DF-GUARDIAN-REVIEW>
+    <DF-MEMORY-ACCESS NAME="MemoryAccess" TRIGGER="memory_* tool call">
+      <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/memory.jsonc` and project `.vvoc/memory.jsonc`.</step-1>
+      <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
+      <step-3>Read or mutate entries under `.vvoc/memory/` using file-per-entry JSON records.</step-3>
+      <evidence>Correct file layout, deterministic CRUD/search behavior, and no automatic prompt injection.</evidence>
+    </DF-MEMORY-ACCESS>
+    <DF-MEMORY-REVIEW NAME="MemoryReview" TRIGGER="@memory-reviewer invocation">
+      <step-1>Register the reviewer subagent through plugin config mutation.</step-1>
+      <step-2>The reviewer inspects memory with `memory_list`, `memory_get`, and `memory_search` only.</step-2>
+      <step-3>The reviewer returns a keep/update/merge/delete report without modifying entries.</step-3>
+      <evidence>Bundled `memory-reviewer` agent with read-only memory tooling.</evidence>
+    </DF-MEMORY-REVIEW>
   </DataFlow>
 
   <ImplementationOrder>
@@ -143,8 +217,13 @@
     </Phase-1>
     <Phase-2 name="Guardian Packaging" status="done">
       <goal>Move the existing standalone Guardian plugin into the repository and export it from the package.</goal>
-      <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port the current Guardian plugin source into `src/plugins/guardian.ts`.</step-1>
+      <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port Guardian and move runtime config to vvoc-owned paths.</step-1>
     </Phase-2>
+    <Phase-3 name="Explicit Memory" status="done">
+      <goal>Add explicit persistent memory, store it in `.vvoc/memory`, and expose a report-only reviewer subagent.</goal>
+      <step-1 module="M-PLUGIN-MEMORY-STORE" status="done" verification="V-M-PLUGIN-MEMORY-STORE">Implement file-based scoped memory storage and lexical search.</step-1>
+      <step-2 module="M-PLUGIN-MEMORY" status="done" verification="V-M-PLUGIN-MEMORY">Register memory tools and the `memory-reviewer` subagent via OpenCode plugin hooks.</step-2>
+    </Phase-3>
   </ImplementationOrder>
 
   <ExecutionPolicy>

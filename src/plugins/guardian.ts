@@ -1,8 +1,8 @@
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import type { Message, Part } from "@opencode-ai/sdk";
 import { appendFile, readFile, unlink } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getGlobalVvocDir, getProjectVvocDir } from "../lib/vvoc-paths.js";
 
 const GUARDIAN_AGENT = "guardian";
 const GUARDIAN_DISABLED_ENV = "OPENCODE_GUARDIAN_DISABLED";
@@ -497,13 +497,13 @@ async function loadGuardianRuntimeConfig(directory: string): Promise<GuardianRun
   const sources: string[] = [];
   const warnings: string[] = [];
   const globalConfig = await loadScopedGuardianConfig(
-    GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(homedir(), ".config", "opencode", name)),
+    GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(getGlobalVvocDir(), name)),
     sources,
     warnings,
   );
   const projectConfig = directory
     ? await loadScopedGuardianConfig(
-        GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(directory, ".opencode", name)),
+        GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(getProjectVvocDir(directory), name)),
         sources,
         warnings,
       )

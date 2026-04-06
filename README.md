@@ -2,17 +2,20 @@
 
 Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.
 
-Current v1 scope:
+Current package scope:
 
-- package the `guardian` OpenCode plugin from this repository
-- ship a small CLI named `vvoc`
-- make local and cross-device setup reproducible
+- `GuardianPlugin` for permission review
+- `MemoryPlugin` for explicit persistent memory
+- `vvoc` CLI for bootstrap, sync, and diagnostics
+- vvoc-managed config kept separate from OpenCode config
 
 ## What is included
 
 - npm package: `@osovv/vv-opencode`
 - binary: `vvoc`
-- exported plugin: `GuardianPlugin`
+- exported plugins:
+  - `GuardianPlugin`
+  - `MemoryPlugin`
 - CLI commands:
   - `install`
   - `sync`
@@ -44,7 +47,7 @@ Plain `vvoc` only works when the binary is available in your `PATH`, for example
 
 ## OpenCode usage
 
-The package exports `GuardianPlugin` and can be referenced from OpenCode config as an npm plugin:
+Add the package to your OpenCode config:
 
 ```json
 {
@@ -53,7 +56,28 @@ The package exports `GuardianPlugin` and can be referenced from OpenCode config 
 }
 ```
 
-The CLI is intended to make this setup easier and to manage `guardian.jsonc`.
+OpenCode loads all exported plugin functions from the package, so this enables both `GuardianPlugin` and `MemoryPlugin`.
+
+## Config layout
+
+OpenCode config stays in OpenCode-managed locations:
+
+- global: `$XDG_CONFIG_HOME/opencode/opencode.json` or `~/.config/opencode/opencode.json`
+- project: `./opencode.json` or `./opencode.jsonc`
+
+vvoc-managed config stays separate:
+
+- global: `$XDG_CONFIG_HOME/vvoc/` or `~/.config/vvoc/`
+- project: `./.vvoc/`
+
+Examples:
+
+- global Guardian config: `~/.config/vvoc/guardian.jsonc`
+- project Guardian config: `./.vvoc/guardian.jsonc`
+- project memory store: `./.vvoc/memory/`
+- project memory settings: `./.vvoc/memory.jsonc`
+
+This keeps vvoc state clearly separated from native OpenCode config and avoids future clashes if OpenCode adds its own memory features.
 
 ## CLI
 
@@ -69,17 +93,22 @@ Install package config and bootstrap Guardian config:
 bun x vvoc install
 ```
 
-Install into a specific config directory:
-
-```bash
-bun x vvoc install --config-dir ~/.config/opencode
-```
-
 Use project scope instead of global scope:
 
 ```bash
 bun x vvoc install --scope project
 ```
+
+Override the global config home used for both `opencode/` and `vvoc/`:
+
+```bash
+bun x vvoc install --config-dir /tmp/vvoc-home
+```
+
+This writes:
+
+- `/tmp/vvoc-home/opencode/opencode.json`
+- `/tmp/vvoc-home/vvoc/guardian.jsonc`
 
 Sync managed config files:
 
@@ -103,24 +132,63 @@ bun x vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
 
 ### Guardian config behavior
 
-`vvoc` creates a managed `guardian.jsonc` with a small header marker.
+`vvoc` creates a managed `guardian.jsonc` with a marker header.
 
 - managed files can be resynced safely
 - existing unmanaged files are not overwritten unless `--force` is passed
-- current Guardian values are preserved on sync when the file is managed by `vvoc`
+- Guardian now reads vvoc-managed config from `.vvoc/` or `$XDG_CONFIG_HOME/vvoc/`
+
+## Memory plugin
+
+`MemoryPlugin` adds explicit memory tools to OpenCode.
+
+Available tools:
+
+- `memory_search`
+- `memory_get`
+- `memory_put`
+- `memory_update`
+- `memory_delete`
+- `memory_list`
+
+Memory is explicit-only:
+
+- stored entries are never injected into the prompt automatically
+- the agent must call memory tools directly when it needs durable context
+- memory lives in `./.vvoc/memory/`
+
+Supported scopes:
+
+- `session`
+- `branch`
+- `project`
+- `shared`
+
+### Memory review
+
+The package also installs a bundled reviewer subagent named `memory-reviewer`.
+
+Use it when you want a report-only audit of stored memory:
+
+```text
+@memory-reviewer review the current memory and suggest keep/update/merge/delete actions
+```
+
+The reviewer can read memory with `memory_list`, `memory_get`, and `memory_search`, but it does not modify entries.
 
 ## Package API
 
-Root export:
+Root exports:
 
 ```ts
-import { GuardianPlugin } from "@osovv/vv-opencode";
+import { GuardianPlugin, MemoryPlugin } from "@osovv/vv-opencode";
 ```
 
-Subpath export:
+Subpath exports:
 
 ```ts
 import { GuardianPlugin } from "@osovv/vv-opencode/plugins/guardian";
+import { MemoryPlugin } from "@osovv/vv-opencode/plugins/memory";
 ```
 
 ## Local development
@@ -149,10 +217,10 @@ bun run fmt
 
 Git hooks are managed with `lefthook`.
 
-- `bun install` runs `lefthook install` through the `prepare` script
+- `bun install` runs `lefthook install --force` through the `prepare` script
 - the `pre-commit` hook runs `bun run lint` and `bun run fmt:check`
 
-Smoke-test the CLI against a temporary config directory:
+Smoke-test the CLI against a temporary config home:
 
 ```bash
 tmpdir="$(mktemp -d)"
@@ -176,7 +244,10 @@ npm publish
 ## Repository layout
 
 - `src/plugins/guardian.ts` - Guardian OpenCode plugin
-- `src/lib/opencode.ts` - config path resolution and JSONC helpers
+- `src/plugins/memory.ts` - Memory OpenCode plugin and reviewer subagent config
+- `src/plugins/memory-store.ts` - file-based memory store and search logic
+- `src/lib/opencode.ts` - config path resolution and JSONC helpers for the CLI
+- `src/lib/vvoc-paths.ts` - shared vvoc/openCode path helpers
 - `src/commands/` - `vvoc` commands
 - `src/cli.ts` - CLI entrypoint
 - `docs/` - GRACE planning, verification, and graph artifacts
@@ -185,4 +256,4 @@ npm publish
 
 - `src/` is the source of truth
 - `dist/` is generated output for packaging and local smoke tests
-- if you change CLI behavior, keep this README in sync
+- if you change CLI behavior, plugin exports, vvoc config paths, or memory workflow, keep this README in sync

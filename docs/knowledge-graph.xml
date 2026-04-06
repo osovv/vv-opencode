@@ -1,15 +1,15 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.2.0">
+  <Project NAME="@osovv/vv-opencode" VERSION="0.3.0">
     <keywords>opencode, plugins, workflow</keywords>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware config mutation, managed Guardian config rendering, and installation inspection.</purpose>
-      <path>src/lib/opencode.ts</path>
+      <purpose>Path resolution, JSONC-aware config mutation, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
+      <path>src/lib/opencode.ts + src/lib/vvoc-paths.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
-        <fn-resolvePaths PURPOSE="Resolve scope-aware config file paths for OpenCode and Guardian." />
+        <fn-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the package name to the OpenCode plugin array if needed." />
         <fn-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </annotations>
@@ -22,7 +22,7 @@
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
       <annotations>
         <export-install PURPOSE="Bootstrap package registration and optional Guardian config." />
-        <export-sync PURPOSE="Refresh managed config files." />
+        <export-sync PURPOSE="Refresh managed vvoc config files." />
         <export-guardian PURPOSE="Expose Guardian-specific helper commands." />
       </annotations>
     </M-CLI-COMMANDS>
@@ -30,13 +30,37 @@
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Review OpenCode permission requests using a constrained Guardian agent and safe fallback behavior.</purpose>
       <path>src/plugins/guardian.ts</path>
-      <depends>none</depends>
+      <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <annotations>
         <export-GuardianPlugin PURPOSE="Register Guardian hooks for config, events, tool intent capture, and permission review." />
       </annotations>
     </M-PLUGIN-GUARDIAN>
 
+    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Store explicit memory under `.vvoc/memory`, resolve scopes, and provide lexical ranking for search.</purpose>
+      <path>src/plugins/memory-store.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
+      <annotations>
+        <fn-loadMemoryRuntimeConfig PURPOSE="Load global and project vvoc memory settings." />
+        <fn-putMemory PURPOSE="Create a scoped memory entry in `.vvoc/memory`." />
+        <fn-searchMemories PURPOSE="Return ranked lexical matches across scoped entries." />
+      </annotations>
+    </M-PLUGIN-MEMORY-STORE>
+
+    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent.</purpose>
+      <path>src/plugins/memory.ts</path>
+      <depends>M-PLUGIN-MEMORY-STORE</depends>
+      <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
+      <annotations>
+        <export-MemoryPlugin PURPOSE="Register memory tools and the report-only reviewer subagent." />
+      </annotations>
+    </M-PLUGIN-MEMORY>
+
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-PLUGIN-GUARDIAN" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-PLUGIN-MEMORY" to="M-PLUGIN-MEMORY-STORE" relation="uses" />
   </Project>
 </KnowledgeGraph>

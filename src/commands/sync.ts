@@ -21,7 +21,7 @@ export default defineCommand({
     },
     "config-dir": {
       type: "string",
-      description: "Override the global OpenCode config directory.",
+      description: "Override the global config home used for opencode/ and vvoc/.",
     },
     force: {
       type: "boolean",
