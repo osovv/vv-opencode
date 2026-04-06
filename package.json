@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,12 +33,12 @@
       "import": "./dist/index.js"
     },
     "./plugins/guardian": {
-      "types": "./dist/plugins/guardian.d.ts",
-      "import": "./dist/plugins/guardian.js"
+      "types": "./dist/plugins/guardian/index.d.ts",
+      "import": "./dist/plugins/guardian/index.js"
     },
     "./plugins/memory": {
-      "types": "./dist/plugins/memory.d.ts",
-      "import": "./dist/plugins/memory.js"
+      "types": "./dist/plugins/memory/index.d.ts",
+      "import": "./dist/plugins/memory/index.js"
     }
   },
   "scripts": {

@@ -289,8 +289,8 @@ npm publish
 
 ## Repository layout
 
-- `src/plugins/guardian.ts` - Guardian OpenCode plugin
-- `src/plugins/memory.ts` - Memory OpenCode plugin and reviewer subagent config
+- `src/plugins/guardian/` - Guardian OpenCode plugin (index.ts + policy.md)
+- `src/plugins/memory/` - Memory OpenCode plugin (index.ts + system-instruction.md + reviewer.md)
 - `src/plugins/memory-store.ts` - file-based memory store and search logic
 - `src/lib/opencode.ts` - config path resolution and JSONC helpers for the CLI
 - `src/lib/vvoc-paths.ts` - shared vvoc/openCode path helpers

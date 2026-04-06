@@ -29,7 +29,7 @@
 
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Review OpenCode permission requests using a constrained Guardian agent and safe fallback behavior.</purpose>
-      <path>src/plugins/guardian.ts</path>
+      <path>src/plugins/guardian/index.ts + src/plugins/guardian/policy.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <annotations>
@@ -51,7 +51,7 @@
 
     <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent.</purpose>
-      <path>src/plugins/memory.ts</path>
+      <path>src/plugins/memory/index.ts + src/plugins/memory/system-instruction.md + src/plugins/memory/reviewer.md</path>
       <depends>M-PLUGIN-MEMORY-STORE</depends>
       <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
       <annotations>

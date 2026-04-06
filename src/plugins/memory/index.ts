@@ -1,4 +1,4 @@
-// FILE: src/plugins/memory.ts
+// FILE: src/plugins/memory/memory.ts
 // VERSION: 0.2.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Register explicit vvoc memory tools and the report-only memory reviewer agent.
@@ -35,42 +35,15 @@ import {
   type MemoryEntry,
   type MemoryRuntimeConfig,
   type MemoryScope,
-} from "./memory-store.js";
+} from "../memory-store.js";
+import systemInstructionTemplate from "./system-instruction.md?raw";
+import reviewerPromptTemplate from "./reviewer.md?raw";
 
 const MEMORY_REVIEW_AGENT = "memory-reviewer";
 const z = tool.schema;
 
-const MEMORY_SYSTEM_INSTRUCTION = `
-vvoc explicit memory is available in this workspace.
-
-- Stored memory is never preloaded into the prompt.
-- When durable user preferences, recurring project facts, or reusable procedures may already exist, consider memory_search, memory_list, or memory_get before guessing.
-- When you discover durable information that should survive across turns or sessions, consider memory_put if your current role and available tools permit it.
-- Use shared scope for reusable facts that should be visible across projects.
-- Use project, branch, or session scope for context that belongs only to the current project.
-- Do not use memory for transient scratch notes or one-off reasoning.
-`.trim();
-
-const MEMORY_REVIEW_PROMPT = `
-You review explicit persistent memory managed by vvoc.
-
-Rules:
-- Memory is explicit-only. Nothing is automatically loaded into the prompt.
-- Shared scope is global across projects. Session, branch, and project scopes are local to the current project.
-- Start with memory_list for the relevant scopes.
-- Use memory_get for exact ids.
-- Use memory_search to confirm overlap, duplicates, or scope mistakes.
-- Do not create, update, or delete memory.
-- Produce a report only.
-
-Return sections in this order:
-## Keep
-## Update
-## Merge
-## Delete
-## Questions
-## Summary
-`;
+const MEMORY_SYSTEM_INSTRUCTION = systemInstructionTemplate.trim();
+const MEMORY_REVIEW_PROMPT = reviewerPromptTemplate.trim();
 
 // START_BLOCK_REVIEWER_AGENT_CONFIGURATION
 function createMemoryReviewerToolsConfig(): Record<string, boolean> {

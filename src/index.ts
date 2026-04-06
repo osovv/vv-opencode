@@ -17,6 +17,6 @@
 //   LAST_CHANGE: [v0.3.0 - Added SecretsRedactionPlugin for secret redaction in LLM requests.]
 // END_CHANGE_SUMMARY
 
-export { GuardianPlugin } from "./plugins/guardian.js";
-export { MemoryPlugin } from "./plugins/memory.js";
+export { GuardianPlugin } from "./plugins/guardian/index.js";
+export { MemoryPlugin } from "./plugins/memory/index.js";
 export { SecretsRedactionPlugin } from "./plugins/secrets-redaction.js";

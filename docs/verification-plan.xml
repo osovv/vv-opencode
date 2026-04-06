@@ -225,7 +225,7 @@
         <command-4>bun run build</command-4>
       </commands>
       <required-evidence>
-        <evidence-1>`src/plugins/guardian.ts` is present and package root exports `GuardianPlugin`.</evidence-1>
+        <evidence-1>`src/plugins/guardian/index.ts` is present and package root exports `GuardianPlugin`.</evidence-1>
       </required-evidence>
     </Gate-Phase-2>
     <Gate-Phase-3 PHASE="Phase-3">
@@ -238,7 +238,7 @@
         <command-5>bun run build</command-5>
       </commands>
       <required-evidence>
-        <evidence-1>`src/plugins/memory.ts` and `src/plugins/memory-store.ts` are present and package root exports `MemoryPlugin`.</evidence-1>
+        <evidence-1>`src/plugins/memory/index.ts` and `src/plugins/memory-store.ts` are present and package root exports `MemoryPlugin`.</evidence-1>
       </required-evidence>
     </Gate-Phase-3>
   </PhaseGates>

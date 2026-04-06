@@ -95,7 +95,7 @@
       </interface>
       <depends>M-CLI-CONFIG</depends>
       <target>
-        <source>src/plugins/guardian.ts</source>
+        <source>src/plugins/guardian/index.ts</source>
         <tests>typecheck-only in v1</tests>
       </target>
       <observability>
@@ -163,7 +163,7 @@
       </interface>
       <depends>M-PLUGIN-MEMORY-STORE</depends>
       <target>
-        <source>src/plugins/memory.ts</source>
+        <source>src/plugins/memory/index.ts</source>
         <tests>src/plugins/memory.test.ts</tests>
       </target>
       <observability>

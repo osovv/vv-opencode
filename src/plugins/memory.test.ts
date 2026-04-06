@@ -24,7 +24,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { MemoryPlugin } from "./memory.js";
+import { MemoryPlugin } from "./memory/index.js";
 import {
   deleteMemory,
   getMemory,
