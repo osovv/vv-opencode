@@ -1,8 +1,10 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Portable OpenCode workflow plugins and CLI tooling.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
