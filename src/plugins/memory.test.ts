@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MemoryPlugin } from "./memory.js";
 import {
   deleteMemory,
@@ -46,9 +46,10 @@ describe("loadMemoryRuntimeConfig", () => {
 
         expect(memoryConfig.enabled).toBe(true);
         expect(memoryConfig.defaultSearchLimit).toBe(2);
-        expect(memoryConfig.storageRoot).toContain(join(dataHome, "vvoc", "projects"));
-        expect(memoryConfig.storageRoot).toContain("vvoc-memory-project-");
-        expect(memoryConfig.storageRoot.endsWith("/memory")).toBe(true);
+        expect(memoryConfig.projectStorageRoot).toContain(join(dataHome, "vvoc", "projects"));
+        expect(memoryConfig.projectStorageRoot).toContain("vvoc-memory-project-");
+        expect(memoryConfig.projectStorageRoot.endsWith("/memory")).toBe(true);
+        expect(memoryConfig.sharedStorageRoot).toBe(join(dataHome, "vvoc", "memory"));
         expect(memoryConfig.sources).toEqual([
           join(configHome, "vvoc", "memory.jsonc"),
           join(projectDir, ".vvoc", "memory.jsonc"),
@@ -88,11 +89,18 @@ describe("loadMemoryRuntimeConfig", () => {
 });
 
 describe("memory store", () => {
-  test("stores, searches, updates, lists, and deletes scoped memories", async () => {
-    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-store-"));
+  test("stores local scopes per project and shared scope globally", async () => {
+    const dataHome = await mkdtemp(join(tmpdir(), "vvoc-memory-data-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-store-a-"));
+    const otherProjectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-store-b-"));
+    const previousDataHome = process.env.XDG_DATA_HOME;
 
     try {
+      process.env.XDG_DATA_HOME = dataHome;
+
       const memoryConfig = await loadMemoryRuntimeConfig(projectDir);
+      const otherMemoryConfig = await loadMemoryRuntimeConfig(otherProjectDir);
+
       const projectMemory = await putMemory(memoryConfig, {
         scope_type: "project",
         scope_key: "project",
@@ -123,12 +131,12 @@ describe("memory store", () => {
       });
 
       expect(
-        existsSync(join(memoryConfig.storageRoot, "project", `${projectMemory.id}.json`)),
+        existsSync(join(memoryConfig.projectStorageRoot, "project", `${projectMemory.id}.json`)),
       ).toBe(true);
       expect(
         existsSync(
           join(
-            memoryConfig.storageRoot,
+            memoryConfig.projectStorageRoot,
             "branch",
             encodeURIComponent("feature/memory-plugin"),
             `${branchMemory.id}.json`,
@@ -137,12 +145,22 @@ describe("memory store", () => {
       ).toBe(true);
       expect(
         existsSync(
-          join(memoryConfig.storageRoot, "session", "session-123", `${sessionMemory.id}.json`),
+          join(
+            memoryConfig.projectStorageRoot,
+            "session",
+            "session-123",
+            `${sessionMemory.id}.json`,
+          ),
         ),
       ).toBe(true);
       expect(
-        existsSync(join(memoryConfig.storageRoot, "shared", "team", `${sharedMemory.id}.json`)),
+        existsSync(
+          join(memoryConfig.sharedStorageRoot, "shared", "team", `${sharedMemory.id}.json`),
+        ),
       ).toBe(true);
+
+      expect(otherMemoryConfig.sharedStorageRoot).toBe(memoryConfig.sharedStorageRoot);
+      expect(otherMemoryConfig.projectStorageRoot).not.toBe(memoryConfig.projectStorageRoot);
 
       const branchResults = await searchMemories(memoryConfig, "branch-specific memory", {
         scopes: [{ scopeType: "branch", scopeKey: "feature/memory-plugin" }],
@@ -166,11 +184,60 @@ describe("memory store", () => {
       expect(listed).toHaveLength(1);
       expect(listed[0]?.id).toBe(sharedMemory.id);
 
+      const sharedFromOtherProject = await listMemories(otherMemoryConfig, {
+        scopes: [{ scopeType: "shared", scopeKey: "team" }],
+        limit: 5,
+      });
+      expect(sharedFromOtherProject).toHaveLength(1);
+      expect(sharedFromOtherProject[0]?.id).toBe(sharedMemory.id);
+
+      const projectFromOtherProject = await listMemories(otherMemoryConfig, {
+        scopes: [{ scopeType: "project", scopeKey: "project" }],
+        limit: 5,
+      });
+      expect(projectFromOtherProject).toHaveLength(0);
+
+      const ignoredLegacySharedPath = join(
+        memoryConfig.projectStorageRoot,
+        "shared",
+        "team",
+        "mem_legacy.json",
+      );
+      await mkdir(dirname(ignoredLegacySharedPath), { recursive: true });
+      await writeFile(
+        ignoredLegacySharedPath,
+        JSON.stringify({
+          id: "mem_legacy",
+          scope_type: "shared",
+          scope_key: "team",
+          kind: "decision",
+          text: "old project-local shared entry",
+          tags: [],
+          meta: {},
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+        "utf8",
+      );
+
+      const sharedAfterLegacyWrite = await listMemories(memoryConfig, {
+        scopes: [{ scopeType: "shared", scopeKey: "team" }],
+        limit: 10,
+      });
+      expect(sharedAfterLegacyWrite.map((entry) => entry.id)).toEqual([sharedMemory.id]);
+
       const deleted = await deleteMemory(memoryConfig, sessionMemory.id);
       expect(deleted?.id).toBe(sessionMemory.id);
       expect(await getMemory(memoryConfig, sessionMemory.id)).toBeNull();
     } finally {
+      if (previousDataHome === undefined) {
+        delete process.env.XDG_DATA_HOME;
+      } else {
+        process.env.XDG_DATA_HOME = previousDataHome;
+      }
+      await rm(dataHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
+      await rm(otherProjectDir, { recursive: true, force: true });
     }
   });
 });
@@ -226,6 +293,9 @@ describe("MemoryPlugin", () => {
       expect(system.system.join("\n\n")).toContain("memory_search, memory_list, or memory_get");
       expect(system.system.join("\n\n")).toContain(
         "memory_put if your current role and available tools permit it",
+      );
+      expect(system.system.join("\n\n")).toContain(
+        "Use shared scope for reusable facts that should be visible across projects.",
       );
     } finally {
       await rm(projectDir, { recursive: true, force: true });

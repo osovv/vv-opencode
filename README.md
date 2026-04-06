@@ -90,7 +90,8 @@ Examples:
 
 - global Guardian config: `~/.config/vvoc/guardian.jsonc`
 - project Guardian config: `./.vvoc/guardian.jsonc`
-- global memory data: `~/.local/share/vvoc/projects/<project-id>/memory/`
+- project-local memory data: `~/.local/share/vvoc/projects/<project-id>/memory/`
+- global shared memory data: `~/.local/share/vvoc/memory/shared/<namespace>/`
 - project memory settings: `./.vvoc/memory.jsonc`
 
 This keeps vvoc state clearly separated from native OpenCode config and avoids future clashes if OpenCode adds its own memory features.
@@ -182,15 +183,16 @@ Memory is explicit-only:
 - stored entries are never injected into the prompt automatically
 - the agent must call memory tools directly when it needs durable context
 - memory settings live in `./.vvoc/memory.jsonc` or `$XDG_CONFIG_HOME/vvoc/memory.jsonc`
-- memory data lives under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`
+- session, branch, and project memory data live under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`
+- shared memory data lives under `$XDG_DATA_HOME/vvoc/memory/shared/<namespace>/`
 - the plugin adds a short system instruction that reminds the agent to consider memory tools proactively when durable context may help
 
 Supported scopes:
 
-- `session`
-- `branch`
-- `project`
-- `shared`
+- `session` - local to the current session in the current project
+- `branch` - local to the current git branch in the current project
+- `project` - local to the current project
+- `shared` - global across projects
 
 ### Memory review
 

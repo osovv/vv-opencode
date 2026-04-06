@@ -27,6 +27,8 @@ vvoc explicit memory is available in this workspace.
 - Stored memory is never preloaded into the prompt.
 - When durable user preferences, recurring project facts, or reusable procedures may already exist, consider memory_search, memory_list, or memory_get before guessing.
 - When you discover durable information that should survive across turns or sessions, consider memory_put if your current role and available tools permit it.
+- Use shared scope for reusable facts that should be visible across projects.
+- Use project, branch, or session scope for context that belongs only to the current project.
 - Do not use memory for transient scratch notes or one-off reasoning.
 `.trim();
 
@@ -35,6 +37,7 @@ You review explicit persistent memory managed by vvoc.
 
 Rules:
 - Memory is explicit-only. Nothing is automatically loaded into the prompt.
+- Shared scope is global across projects. Session, branch, and project scopes are local to the current project.
 - Start with memory_list for the relevant scopes.
 - Use memory_get for exact ids.
 - Use memory_search to confirm overlap, duplicates, or scope mistakes.
@@ -196,7 +199,8 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
       message: "memory plugin initialized",
       extra: {
         enabled: memoryConfig.enabled,
-        storageRoot: memoryConfig.storageRoot,
+        projectStorageRoot: memoryConfig.projectStorageRoot,
+        sharedStorageRoot: memoryConfig.sharedStorageRoot,
         defaultSearchLimit: memoryConfig.defaultSearchLimit,
         configSources: memoryConfig.sources,
         configWarnings: memoryConfig.warnings,
@@ -222,7 +226,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
     tool: {
       memory_search: tool({
         description:
-          "Search explicit persistent memory stored in .vvoc/memory. Memory is never preloaded into the prompt.",
+          "Search explicit persistent vvoc memory. Shared scope is global across projects, and session/branch/project scopes are local to the current project. Memory is never preloaded into the prompt.",
         args: {
           query: z.string(),
           scopeType: z.enum(["session", "branch", "project", "shared", "all"]).optional(),
@@ -260,7 +264,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
         },
       }),
       memory_get: tool({
-        description: "Load a single explicit memory entry by id from .vvoc/memory.",
+        description: "Load a single explicit memory entry by id from vvoc memory storage.",
         args: {
           id: z.string(),
         },
@@ -281,7 +285,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
       }),
       memory_put: tool({
         description:
-          "Create a new explicit memory entry in session, branch, project, or shared scope. Use this deliberately for durable facts, preferences, or procedures.",
+          "Create a new explicit memory entry in session, branch, project, or shared scope. Shared scope is global across projects. Use this deliberately for durable facts, preferences, or procedures.",
         args: {
           text: z.string(),
           kind: z.string().optional(),
@@ -375,7 +379,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
       }),
       memory_list: tool({
         description:
-          "List explicit persistent memory entries across session, branch, project, or shared scopes. Memory is never preloaded into the prompt.",
+          "List explicit persistent memory entries across session, branch, project, or shared scopes. Shared scope is global across projects. Memory is never preloaded into the prompt.",
         args: {
           scopeType: z.enum(["session", "branch", "project", "shared", "all"]).optional(),
           scopeKey: z.string().optional(),

@@ -38,7 +38,7 @@
     </M-PLUGIN-GUARDIAN>
 
     <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Store explicit memory under the vvoc XDG data root, resolve scopes, and provide lexical ranking for search.</purpose>
+      <purpose>Store explicit memory under the vvoc XDG data root, keep shared scope global across projects, resolve scopes, and provide lexical ranking for search.</purpose>
       <path>src/plugins/memory-store.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>

@@ -28,7 +28,7 @@
   <ConfigLayout>
     <openCode>OpenCode config remains in `opencode.json(c)` or `$XDG_CONFIG_HOME/opencode/`.</openCode>
     <vvoc>vvoc-managed config lives in `.vvoc/` or `$XDG_CONFIG_HOME/vvoc/`.</vvoc>
-    <memory>Persistent explicit memory settings live in `.vvoc/memory.jsonc` or `$XDG_CONFIG_HOME/vvoc/memory.jsonc`, while memory data is stored under `$XDG_DATA_HOME/vvoc/projects/&lt;project-id&gt;/memory/`.</memory>
+    <memory>Persistent explicit memory settings live in `.vvoc/memory.jsonc` or `$XDG_CONFIG_HOME/vvoc/memory.jsonc`. Session, branch, and project data live under `$XDG_DATA_HOME/vvoc/projects/&lt;project-id&gt;/memory/`, while shared data lives under `$XDG_DATA_HOME/vvoc/memory/shared/&lt;namespace&gt;/`.</memory>
   </ConfigLayout>
 
   <Testing>

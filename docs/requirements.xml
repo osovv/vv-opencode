@@ -32,9 +32,9 @@
     <UC-003>
       <Actor>User</Actor>
       <Action>Uses `memory_put`, `memory_search`, `memory_get`, `memory_update`, `memory_delete`, or `memory_list` inside OpenCode.</Action>
-      <Goal>To persist explicit durable context in the vvoc data root under `$XDG_DATA_HOME/vvoc/` without automatic prompt injection.</Goal>
+      <Goal>To persist explicit durable context in the vvoc data root under `$XDG_DATA_HOME/vvoc/`, with `shared` scope visible across projects and local scopes isolated per project.</Goal>
       <Preconditions>The package is enabled in OpenCode and memory is not disabled in `memory.jsonc`.</Preconditions>
-      <AcceptanceCriteria>Memory entries are stored in the correct scope, searchable later, and never silently injected into prompts.</AcceptanceCriteria>
+      <AcceptanceCriteria>Session, branch, and project entries are project-local, shared entries are visible across projects, and stored memory is never silently injected into prompts.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-MEMORY-ACCESS</RelatedFlows>
     </UC-003>

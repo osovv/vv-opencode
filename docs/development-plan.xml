@@ -110,7 +110,7 @@
 
     <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
       <contract>
-        <purpose>Persist explicit memory entries in the vvoc XDG data root, support scope-aware CRUD, and rank lexical search results.</purpose>
+        <purpose>Persist explicit memory entries in the vvoc XDG data root, keep shared scope global across projects, support scope-aware CRUD, and rank lexical search results.</purpose>
         <inputs>
           <param name="MemoryRuntimeConfig" type="object" />
           <param name="MemoryEntry or query/filter inputs" type="object" />
@@ -140,6 +140,7 @@
       <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
       <notes>
         <note-1>Memory remains explicit-only. The store must not inject entries into prompts or system context.</note-1>
+        <note-2>`shared` scope is global across projects. Session, branch, and project scopes remain project-local.</note-2>
       </notes>
     </M-PLUGIN-MEMORY-STORE>
 
@@ -199,7 +200,7 @@
       <step-0>Before model turns, the plugin appends a short system reminder that explicit memory tools exist, without injecting stored memory entries.</step-0>
       <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/memory.jsonc` and project `.vvoc/memory.jsonc`.</step-1>
       <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
-      <step-3>Read or mutate entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/` using file-per-entry JSON records.</step-3>
+      <step-3>Read or mutate session, branch, and project entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`, and shared entries under `$XDG_DATA_HOME/vvoc/memory/shared/<namespace>/`.</step-3>
       <evidence>Correct file layout, deterministic CRUD/search behavior, and no automatic prompt injection.</evidence>
     </DF-MEMORY-ACCESS>
     <DF-MEMORY-REVIEW NAME="MemoryReview" TRIGGER="@memory-reviewer invocation">

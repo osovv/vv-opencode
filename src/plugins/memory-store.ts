@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parse, type ParseError } from "jsonc-parser";
 import {
+  getGlobalVvocDataDir,
   getGlobalVvocDir,
   getGlobalVvocProjectDataDir,
   getProjectVvocDir,
@@ -44,7 +45,8 @@ export type MemoryEntry = {
 
 export type MemoryRuntimeConfig = {
   enabled: boolean;
-  storageRoot: string;
+  projectStorageRoot: string;
+  sharedStorageRoot: string;
   defaultSearchLimit: number;
   sources: string[];
   warnings: string[];
@@ -86,7 +88,8 @@ export async function loadMemoryRuntimeConfig(directory: string): Promise<Memory
 
   return {
     enabled: projectConfig.enabled ?? globalConfig.enabled ?? true,
-    storageRoot: join(getGlobalVvocProjectDataDir(directory), "memory"),
+    projectStorageRoot: join(getGlobalVvocProjectDataDir(directory), "memory"),
+    sharedStorageRoot: join(getGlobalVvocDataDir(), "memory"),
     defaultSearchLimit:
       projectConfig.defaultSearchLimit ?? globalConfig.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT,
     sources,
@@ -217,7 +220,10 @@ export async function updateMemory(
 
   if (nextPath !== record.filePath) {
     await rm(record.filePath, { force: true });
-    await pruneEmptyDirectories(dirname(record.filePath), config.storageRoot);
+    await pruneEmptyDirectories(
+      dirname(record.filePath),
+      getPruneStopDir(config, merged.scope_type),
+    );
   }
 
   return merged;
@@ -231,7 +237,10 @@ export async function deleteMemory(
   if (!record) return null;
 
   await rm(record.filePath, { force: true });
-  await pruneEmptyDirectories(dirname(record.filePath), config.storageRoot);
+  await pruneEmptyDirectories(
+    dirname(record.filePath),
+    getPruneStopDir(config, record.entry.scope_type),
+  );
   return record.entry;
 }
 
@@ -432,11 +441,15 @@ function getScopeDir(
   scopeType: MemoryScopeType,
   scopeKey: string,
 ): string {
-  if (scopeType === "project") {
-    return join(config.storageRoot, "project");
+  if (scopeType === "shared") {
+    return join(config.sharedStorageRoot, "shared", encodeScopeSegment(scopeKey));
   }
 
-  return join(config.storageRoot, scopeType, encodeScopeSegment(scopeKey));
+  if (scopeType === "project") {
+    return join(config.projectStorageRoot, "project");
+  }
+
+  return join(config.projectStorageRoot, scopeType, encodeScopeSegment(scopeKey));
 }
 
 function getEntryPath(config: MemoryRuntimeConfig, entry: MemoryEntry): string {
@@ -476,7 +489,16 @@ async function walkJsonFiles(targetDir: string): Promise<string[]> {
 }
 
 async function loadRecords(config: MemoryRuntimeConfig): Promise<MemoryRecord[]> {
-  const files = await walkJsonFiles(config.storageRoot);
+  const files = (
+    await Promise.all([
+      walkJsonFiles(join(config.projectStorageRoot, "session")),
+      walkJsonFiles(join(config.projectStorageRoot, "branch")),
+      walkJsonFiles(join(config.projectStorageRoot, "project")),
+      walkJsonFiles(join(config.sharedStorageRoot, "shared")),
+    ])
+  )
+    .flat()
+    .sort((left, right) => left.localeCompare(right));
   const records = await Promise.all(
     files.map(async (filePath) => {
       try {
@@ -605,6 +627,10 @@ async function findRecordById(
 
 async function ensureEntryDir(config: MemoryRuntimeConfig, entry: MemoryEntry): Promise<void> {
   await mkdir(getScopeDir(config, entry.scope_type, entry.scope_key), { recursive: true });
+}
+
+function getPruneStopDir(config: MemoryRuntimeConfig, scopeType: MemoryScopeType): string {
+  return scopeType === "shared" ? config.sharedStorageRoot : config.projectStorageRoot;
 }
 
 async function pruneEmptyDirectories(startDir: string, stopDir: string): Promise<void> {
