@@ -6,6 +6,7 @@ Current package scope:
 
 - `GuardianPlugin` for permission review
 - `MemoryPlugin` for explicit persistent memory
+- built-in `memory-reviewer` subagent for report-only memory audits
 - `vvoc` CLI for bootstrap, sync, and diagnostics
 - vvoc-managed config kept separate from OpenCode config
 
@@ -48,18 +49,7 @@ Plain `vvoc` only works when the binary is available in your `PATH`, for example
 
 ## OpenCode usage
 
-Add the package to your OpenCode config:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@osovv/vv-opencode"]
-}
-```
-
-OpenCode loads all exported plugin functions from the package, so this enables both `GuardianPlugin` and `MemoryPlugin`.
-
-`vvoc install` writes a pinned package specifier automatically, for example:
+Add the package to your OpenCode config with a pinned version:
 
 ```json
 {
@@ -68,7 +58,9 @@ OpenCode loads all exported plugin functions from the package, so this enables b
 }
 ```
 
-This avoids stale `latest` plugin cache behavior inside OpenCode.
+OpenCode loads all exported plugin functions from the package, so this enables both `GuardianPlugin` and `MemoryPlugin`.
+
+`vvoc install` writes this pinned package specifier automatically and avoids stale `latest` plugin cache behavior inside OpenCode.
 
 ## Config layout
 
@@ -110,13 +102,14 @@ Show the installed `vvoc` package version:
 bun x vvoc version
 ```
 
-Install package config and bootstrap Guardian config:
+Install package config and bootstrap Guardian + Memory config:
 
 ```bash
 bun x vvoc install
 ```
 
 `install` writes the current installed package version into the OpenCode `plugin` array instead of using an unpinned `latest` reference.
+It also creates managed `guardian.jsonc` and `memory.jsonc` files when they are missing.
 
 Use project scope instead of global scope:
 
@@ -165,6 +158,21 @@ bun x vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
 - Guardian now reads vvoc-managed config from `.vvoc/` or `$XDG_CONFIG_HOME/vvoc/`
 - `vvoc install` also creates `memory.jsonc` when it is missing
 
+### Memory config behavior
+
+`vvoc` also manages `memory.jsonc`.
+
+Current supported settings:
+
+```jsonc
+{
+  "enabled": true,
+  "defaultSearchLimit": 8
+}
+```
+
+Project config overrides global config.
+
 ## Memory plugin
 
 `MemoryPlugin` adds explicit memory tools to OpenCode.
@@ -193,6 +201,13 @@ Supported scopes:
 - `branch` - local to the current git branch in the current project
 - `project` - local to the current project
 - `shared` - global across projects
+
+In practice:
+
+- use `shared` for reusable personal preferences, reusable docs locations, and cross-project habits
+- use `project` for repository-specific facts and workflows
+- use `branch` for work that only matters on one branch
+- use `session` for temporary context you want to keep only for the current session
 
 ### Memory review
 
@@ -268,6 +283,7 @@ Typical release flow:
 ```bash
 bun run check
 bun run build
+bun run pack:check
 npm publish
 ```
 

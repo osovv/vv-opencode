@@ -1,7 +1,7 @@
 {
   "name": "@osovv/vv-opencode",
   "version": "0.2.5",
-  "description": "Portable OpenCode workflow plugins and CLI tooling.",
+  "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,6 +15,8 @@
     "workflow",
     "guardian",
     "memory",
+    "xdg",
+    "grace",
     "bun",
     "citty"
   ],
@@ -47,6 +49,7 @@
     "fmt:check": "oxfmt --check src",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test",
+    "pack:check": "npm pack --dry-run",
     "prepare": "lefthook install --force"
   },
   "dependencies": {

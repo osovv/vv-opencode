@@ -16,6 +16,7 @@ Portable OpenCode workflow package with plugins and a Bun CLI for install, sync,
 - current exported plugins:
   - `GuardianPlugin`
   - `MemoryPlugin`
+- bundled subagent: `memory-reviewer`
 - current command set: `install`, `sync`, `status`, `doctor`, `guardian config`, `version`
 
 ## Repository Rules
@@ -69,6 +70,7 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
   - `bun run fmt:check`
   - `bun test`
   - `bun run build`
+  - `bun run pack:check`
 
 ### Config safety
 
@@ -78,6 +80,7 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 - persisted vvoc data must live in `$XDG_DATA_HOME/vvoc/`.
 - `MemoryPlugin` stores `session`, `branch`, and `project` entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`.
 - `MemoryPlugin` stores `shared` entries under `$XDG_DATA_HOME/vvoc/memory/shared/<namespace>/` and they must be visible across projects.
+- `memory-reviewer` is report-only and must never gain write/delete memory tools.
 - Memory must stay explicit-only. Never inject stored entries into prompts automatically.
 - Never silently clobber user-owned config.
 
@@ -85,6 +88,7 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 
 - If command names, flags, examples, install flow, or vvoc config paths change, update `README.md`.
 - `vvoc install` should keep writing a pinned package specifier to the OpenCode plugin array.
+- If memory scope semantics change, update `README.md` and verification references in the same change.
 - If modules or public exports change, update `docs/knowledge-graph.xml`.
 - If commands, test strategy, or critical scenarios change, update `docs/verification-plan.xml`.
 
