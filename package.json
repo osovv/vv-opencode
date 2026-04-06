@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",
@@ -39,6 +39,10 @@
     "./plugins/memory": {
       "types": "./dist/plugins/memory/index.d.ts",
       "import": "./dist/plugins/memory/index.js"
+    },
+    "./plugins/secrets-redaction": {
+      "types": "./dist/plugins/secrets-redaction/index.d.ts",
+      "import": "./dist/plugins/secrets-redaction/index.js"
     }
   },
   "scripts": {

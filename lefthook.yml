@@ -5,3 +5,5 @@ pre-commit:
       run: bun run lint
     format:
       run: bun run fmt:check
+    check-exports:
+      run: bun run scripts/check-exports.ts
