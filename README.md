@@ -156,6 +156,7 @@ Memory is explicit-only:
 - stored entries are never injected into the prompt automatically
 - the agent must call memory tools directly when it needs durable context
 - memory lives in `./.vvoc/memory/`
+- the plugin adds a short system instruction that reminds the agent to consider memory tools proactively when durable context may help
 
 Supported scopes:
 

@@ -21,6 +21,15 @@ import {
 const MEMORY_REVIEW_AGENT = "memory-reviewer";
 const z = tool.schema;
 
+const MEMORY_SYSTEM_INSTRUCTION = `
+vvoc explicit memory is available in this workspace.
+
+- Stored memory is never preloaded into the prompt.
+- When durable user preferences, recurring project facts, or reusable procedures may already exist, consider memory_search, memory_list, or memory_get before guessing.
+- When you discover durable information that should survive across turns or sessions, consider memory_put if your current role and available tools permit it.
+- Do not use memory for transient scratch notes or one-off reasoning.
+`.trim();
+
 const MEMORY_REVIEW_PROMPT = `
 You review explicit persistent memory managed by vvoc.
 
@@ -204,6 +213,11 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
   return {
     config: async (config) => {
       installMemoryReviewerAgent(config);
+    },
+    "experimental.chat.system.transform": async (_input, output) => {
+      if (!output.system.includes(MEMORY_SYSTEM_INSTRUCTION)) {
+        output.system.push(MEMORY_SYSTEM_INSTRUCTION);
+      }
     },
     tool: {
       memory_search: tool({

@@ -182,6 +182,24 @@ describe("MemoryPlugin", () => {
       expect((config.agent as Record<string, { mode?: string }>)?.["memory-reviewer"]?.mode).toBe(
         "subagent",
       );
+
+      const system = { system: ["base system prompt"] };
+      await plugin["experimental.chat.system.transform"]?.(
+        {
+          sessionID: "session-1",
+          model: {} as never,
+        },
+        system,
+      );
+
+      expect(system.system).toContain("base system prompt");
+      expect(system.system.join("\n\n")).toContain(
+        "vvoc explicit memory is available in this workspace.",
+      );
+      expect(system.system.join("\n\n")).toContain("memory_search, memory_list, or memory_get");
+      expect(system.system.join("\n\n")).toContain(
+        "memory_put if your current role and available tools permit it",
+      );
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }

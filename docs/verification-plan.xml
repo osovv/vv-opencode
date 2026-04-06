@@ -33,9 +33,9 @@
     </VF-GUARDIAN-REVIEW>
     <VF-MEMORY-ACCESS NAME="MemoryAccess" USE_CASES="UC-003" DATA_FLOW="DF-MEMORY-ACCESS" PRIORITY="high">
       <scenario>User stores and retrieves explicit memory across session, branch, project, and shared scopes.</scenario>
-      <expected-outcome>Entries are written to `.vvoc/memory`, later searchable, and never injected into prompts automatically.</expected-outcome>
+      <expected-outcome>Entries are written to `.vvoc/memory`, later searchable, and never injected into prompts automatically, while the agent still receives a short system reminder to use memory tools proactively.</expected-outcome>
       <required-signals>
-        <trace-sequence>loadMemoryRuntimeConfig -&gt; putMemory/listMemories/searchMemories -&gt; correct file layout</trace-sequence>
+        <trace-sequence>system reminder appended -&gt; loadMemoryRuntimeConfig -&gt; putMemory/listMemories/searchMemories -&gt; correct file layout</trace-sequence>
       </required-signals>
     </VF-MEMORY-ACCESS>
     <VF-MEMORY-REVIEW NAME="MemoryReview" USE_CASES="UC-004" DATA_FLOW="DF-MEMORY-REVIEW" PRIORITY="medium">
@@ -149,13 +149,15 @@
       <scenarios>
         <scenario-1 kind="success">MemoryPlugin registers all six memory tools.</scenario-1>
         <scenario-2 kind="success">Plugin config registers the `memory-reviewer` subagent.</scenario-2>
-        <scenario-3 kind="failure">Disabled memory config blocks tool use instead of pretending memory exists.</scenario-3>
+        <scenario-3 kind="success">Plugin appends a short system instruction encouraging proactive memory tool usage without injecting stored entries.</scenario-3>
+        <scenario-4 kind="failure">Disabled memory config blocks tool use instead of pretending memory exists.</scenario-4>
       </scenarios>
       <required-log-markers>
         <marker-1>memory plugin initialized</marker-1>
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>The reviewer agent must not have write/delete memory tools enabled.</assertion-1>
+        <assertion-2>The system reminder must not include stored memory entries or imply that memory is already loaded.</assertion-2>
       </required-trace-assertions>
       <wave-follow-up>Consider adding a smoke test around custom tool execution in a live OpenCode session.</wave-follow-up>
       <phase-follow-up>Add coverage for memory config warnings and disabled mode if the config surface grows.</phase-follow-up>

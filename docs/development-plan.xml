@@ -145,7 +145,7 @@
 
     <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="implemented">
       <contract>
-        <purpose>Add explicit memory tools to OpenCode and register a report-only `memory-reviewer` subagent.</purpose>
+        <purpose>Add explicit memory tools to OpenCode, register a report-only `memory-reviewer` subagent, and inject a short system reminder that encourages proactive memory tool usage without loading stored entries.</purpose>
         <inputs>
           <param name="PluginInput" type="@opencode-ai/plugin input" />
         </inputs>
@@ -171,7 +171,7 @@
       </observability>
       <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
       <notes>
-        <note-1>The reviewer is implemented as a bundled subagent instead of prompt injection or automatic background memory reads.</note-1>
+        <note-1>The reviewer is implemented as a bundled subagent, and the main chat path receives only a short memory policy reminder instead of prompt-injected memory entries.</note-1>
       </notes>
     </M-PLUGIN-MEMORY>
   </Modules>
@@ -196,6 +196,7 @@
       <evidence>Guardian logs, toasts, and permission reply behavior inside OpenCode.</evidence>
     </DF-GUARDIAN-REVIEW>
     <DF-MEMORY-ACCESS NAME="MemoryAccess" TRIGGER="memory_* tool call">
+      <step-0>Before model turns, the plugin appends a short system reminder that explicit memory tools exist, without injecting stored memory entries.</step-0>
       <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/memory.jsonc` and project `.vvoc/memory.jsonc`.</step-1>
       <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
       <step-3>Read or mutate entries under `.vvoc/memory/` using file-per-entry JSON records.</step-3>
