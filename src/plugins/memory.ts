@@ -1,3 +1,22 @@
+// FILE: src/plugins/memory.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Register explicit vvoc memory tools and the report-only memory reviewer agent.
+//   SCOPE: Memory reviewer agent config, scope resolution, memory tool execution, proactive system instruction injection, and plugin initialization logging.
+//   DEPENDS: [@opencode-ai/plugin, src/plugins/memory-store.ts]
+//   LINKS: [M-PLUGIN-MEMORY, M-PLUGIN-MEMORY-STORE]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   MemoryPlugin - Registers explicit memory tools, proactive system guidance, and the memory-reviewer subagent.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and refined semantic blocks for memory tool registration/navigation.]
+// END_CHANGE_SUMMARY
+
 import { type Config, type Plugin, tool } from "@opencode-ai/plugin";
 import {
   deleteMemory,
@@ -53,6 +72,7 @@ Return sections in this order:
 ## Summary
 `;
 
+// START_BLOCK_REVIEWER_AGENT_CONFIGURATION
 function createMemoryReviewerToolsConfig(): Record<string, boolean> {
   return {
     bash: false,
@@ -97,7 +117,9 @@ function installMemoryReviewerAgent(config: Config): void {
     tools: createMemoryReviewerToolsConfig(),
   } as never;
 }
+// END_BLOCK_REVIEWER_AGENT_CONFIGURATION
 
+// START_BLOCK_SCOPE_RESOLUTION
 function resolveWriteScope(
   scopeType: unknown,
   scopeKey: unknown,
@@ -159,7 +181,9 @@ function resolveReadScopes(
 
   return [resolveWriteScope(normalizedType, scopeKey, sessionID, directory)];
 }
+// END_BLOCK_SCOPE_RESOLUTION
 
+// START_BLOCK_MEMORY_OUTPUT_FORMATTING
 function formatMemoryEntry(entry: MemoryEntry): string {
   return `- ${entry.id} [${entry.scope_type}:${entry.scope_key}] [${entry.kind}] ${entry.text}`;
 }
@@ -183,13 +207,18 @@ function getMemoryConfigWarningLines(memoryConfig: MemoryRuntimeConfig): string[
   return memoryConfig.warnings.map((warning) => `- ${warning}`);
 }
 
+// END_BLOCK_MEMORY_OUTPUT_FORMATTING
+
+// START_BLOCK_VALIDATE_MEMORY_ENABLED
 function assertEnabled(memoryConfig: MemoryRuntimeConfig): void {
   if (!memoryConfig.enabled) {
     throw new Error("vvoc memory is disabled in memory.jsonc");
   }
 }
+// END_BLOCK_VALIDATE_MEMORY_ENABLED
 
 export const MemoryPlugin: Plugin = async ({ client, directory }) => {
+  // START_BLOCK_INITIALIZE_MEMORY_PLUGIN
   const memoryConfig = await loadMemoryRuntimeConfig(directory);
 
   await client.app.log({
@@ -213,6 +242,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
   }
 
   const metadataWarnings = getMemoryConfigWarningLines(memoryConfig);
+  // END_BLOCK_INITIALIZE_MEMORY_PLUGIN
 
   return {
     config: async (config) => {
@@ -224,6 +254,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
       }
     },
     tool: {
+      // START_BLOCK_REGISTER_MEMORY_READ_TOOLS
       memory_search: tool({
         description:
           "Search explicit persistent vvoc memory. Shared scope is global across projects, and session/branch/project scopes are local to the current project. Memory is never preloaded into the prompt.",
@@ -283,6 +314,8 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
           return formatMemoryDetails(entry);
         },
       }),
+      // END_BLOCK_REGISTER_MEMORY_READ_TOOLS
+      // START_BLOCK_REGISTER_MEMORY_MUTATION_TOOLS
       memory_put: tool({
         description:
           "Create a new explicit memory entry in session, branch, project, or shared scope. Shared scope is global across projects. Use this deliberately for durable facts, preferences, or procedures.",
@@ -377,6 +410,8 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
           return `Deleted memory ${entry.id}`;
         },
       }),
+      // END_BLOCK_REGISTER_MEMORY_MUTATION_TOOLS
+      // START_BLOCK_REGISTER_MEMORY_LIST_TOOL
       memory_list: tool({
         description:
           "List explicit persistent memory entries across session, branch, project, or shared scopes. Shared scope is global across projects. Memory is never preloaded into the prompt.",
@@ -407,6 +442,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
           return results.length > 0 ? formatMemoryEntries(results) : "No memory entries found.";
         },
       }),
+      // END_BLOCK_REGISTER_MEMORY_LIST_TOOL
     },
   };
 };

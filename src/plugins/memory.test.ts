@@ -1,3 +1,24 @@
+// FILE: src/plugins/memory.test.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Verify vvoc memory runtime config, scope semantics, and plugin registration behavior.
+//   SCOPE: Memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer setup.
+//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/plugins/memory.ts, src/plugins/memory-store.ts]
+//   LINKS: [V-M-PLUGIN-MEMORY-STORE, V-M-PLUGIN-MEMORY]
+//   ROLE: TEST
+//   MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   loadMemoryRuntimeConfig tests - Verify config merge and storage root derivation.
+//   memory store tests - Verify local/shared scope storage semantics and CRUD/search behavior.
+//   MemoryPlugin tests - Verify tool registration, reviewer setup, and proactive system instruction injection.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE test markup around explicit memory verification suites.]
+// END_CHANGE_SUMMARY
+
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";

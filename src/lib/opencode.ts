@@ -1,3 +1,41 @@
+// FILE: src/lib/opencode.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Manage OpenCode plugin registration and vvoc-owned config files.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, Guardian/Memory config rendering and sync, and installation inspection.
+//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
+//   LINKS: [M-CLI-CONFIG]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   CLI_NAME - Canonical vvoc CLI binary name.
+//   PACKAGE_NAME - Canonical vvoc npm package name.
+//   OPENCODE_SCHEMA_URL - OpenCode config schema URL.
+//   Scope - Supported installation scopes for vvoc config writes.
+//   ResolvedPaths - Scope-aware path bundle for OpenCode and vvoc config locations.
+//   GuardianConfigOverrides - Guardian config override shape parsed from managed JSONC.
+//   WriteResult - Result shape returned by managed config write operations.
+//   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
+//   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
+//   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
+//   parseGuardianConfigText - Parses Guardian config JSONC into typed overrides.
+//   renderGuardianConfig - Renders managed Guardian config JSONC.
+//   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
+//   installGuardianConfig - Creates or preserves managed Guardian config.
+//   syncGuardianConfig - Rewrites managed Guardian config while preserving current values.
+//   writeGuardianConfig - Writes explicit Guardian overrides to managed config.
+//   installMemoryConfig - Creates or preserves managed Memory config.
+//   syncMemoryConfig - Rewrites managed Memory config while preserving current values.
+//   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
+//   describeWriteResult - Formats config write outcomes for CLI output.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and symbol-accurate export mapping for OpenCode/vvoc config helpers.]
+// END_CHANGE_SUMMARY
+
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -92,6 +130,7 @@ export type InstallationInspection = {
   problems: string[];
 };
 
+// START_BLOCK_RESOLVE_CONFIG_PATHS
 export async function resolvePaths(options: {
   scope: Scope;
   cwd: string;
@@ -128,7 +167,9 @@ export async function resolvePaths(options: {
     memoryConfigAlternates: memorySelection.alternates,
   };
 }
+// END_BLOCK_RESOLVE_CONFIG_PATHS
 
+// START_BLOCK_ENSURE_OPENCODE_PLUGIN_CONFIG
 export function ensurePackageConfigText(
   text: string | undefined,
   packageSpecifier = PACKAGE_NAME,
@@ -166,11 +207,13 @@ export function ensurePackageConfigText(
 
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
+// END_BLOCK_ENSURE_OPENCODE_PLUGIN_CONFIG
 
 export function parseGuardianConfigText(text: string, label: string): GuardianConfigOverrides {
   return normalizeGuardianOverrides(parseObjectDocument(text, label), label);
 }
 
+// START_BLOCK_RENDER_GUARDIAN_CONFIG
 export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): string {
   const timeoutMs = overrides.timeoutMs ?? DEFAULT_GUARDIAN_TIMEOUT_MS;
   const approvalRiskThreshold =
@@ -206,7 +249,9 @@ export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): s
 
   return `${lines.join("\n")}\n`;
 }
+// END_BLOCK_RENDER_GUARDIAN_CONFIG
 
+// START_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 export async function ensurePackageInstalled(paths: ResolvedPaths): Promise<{
   path: string;
   changed: boolean;
@@ -300,7 +345,9 @@ export async function writeGuardianConfig(
     path: paths.guardianConfigPath,
   };
 }
+// END_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 
+// START_BLOCK_INSTALL_MEMORY_CONFIG
 export async function installMemoryConfig(
   paths: ResolvedPaths,
   options: { force: boolean },
@@ -351,7 +398,9 @@ export async function syncMemoryConfig(
   await writeText(paths.memoryConfigPath, nextText);
   return { action: "updated", path: paths.memoryConfigPath };
 }
+// END_BLOCK_INSTALL_MEMORY_CONFIG
 
+// START_BLOCK_INSPECT_INSTALLATION_STATE
 export async function inspectInstallation(paths: ResolvedPaths): Promise<InstallationInspection> {
   const warnings: string[] = [];
   const problems: string[] = [];
@@ -450,6 +499,7 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     problems,
   };
 }
+// END_BLOCK_INSPECT_INSTALLATION_STATE
 
 export function describeWriteResult(result: WriteResult): string {
   let message = "";
@@ -472,6 +522,7 @@ export function describeWriteResult(result: WriteResult): string {
   return result.reason ? `${message} (${result.reason})` : message;
 }
 
+// START_BLOCK_PARSE_AND_NORMALIZE_CONFIG_VALUES
 function parseObjectDocument(text: string, label: string): JsonObject {
   const errors: ParseError[] = [];
   const value = parse(text, errors, {
@@ -587,7 +638,9 @@ function readThreshold(value: unknown, label: string): number {
   }
   throw new Error(`${label}: expected a number between 0 and 100`);
 }
+// END_BLOCK_PARSE_AND_NORMALIZE_CONFIG_VALUES
 
+// START_BLOCK_FILESYSTEM_HELPERS
 function isManagedFile(text: string): boolean {
   return text.includes(MANAGED_MARKER);
 }
@@ -633,3 +686,4 @@ async function selectPrimaryPath(candidates: string[]): Promise<{
     alternates: existing.slice(1),
   };
 }
+// END_BLOCK_FILESYSTEM_HELPERS

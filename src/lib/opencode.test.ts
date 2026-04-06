@@ -1,3 +1,24 @@
+// FILE: src/lib/opencode.test.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
+//   SCOPE: Plugin specifier writes, Guardian config round-trips, and path resolution behavior.
+//   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
+//   LINKS: [V-M-CLI-CONFIG]
+//   ROLE: TEST
+//   MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
+//   guardian config helpers tests - Verify Guardian config render/parse round-trips.
+//   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE test markup so config helper verification can be navigated alongside runtime modules.]
+// END_CHANGE_SUMMARY
+
 import { describe, expect, test } from "bun:test";
 import { parse } from "jsonc-parser";
 import {

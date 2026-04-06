@@ -1,3 +1,22 @@
+// FILE: src/commands/guardian.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Expose Guardian-specific vvoc CLI helpers.
+//   SCOPE: Guardian config command wiring plus CLI argument normalization for Guardian config values.
+//   DEPENDS: [citty, src/lib/opencode.ts]
+//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   default - Guardian command group.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE command markup around Guardian CLI helpers and argument normalization.]
+// END_CHANGE_SUMMARY
+
 import { defineCommand } from "citty";
 import {
   describeWriteResult,
@@ -54,6 +73,7 @@ const config = defineCommand({
     },
   },
   async run({ args }) {
+    // START_BLOCK_APPLY_GUARDIAN_CONFIG_COMMAND
     const overrides = readGuardianOverridesFromArgs(args);
     if (args.print) {
       process.stdout.write(renderGuardianConfig(overrides));
@@ -73,6 +93,7 @@ const config = defineCommand({
     if (result.action === "skipped") {
       process.exitCode = 1;
     }
+    // END_BLOCK_APPLY_GUARDIAN_CONFIG_COMMAND
   },
 });
 
@@ -87,6 +108,7 @@ export default defineCommand({
 });
 
 function readGuardianOverridesFromArgs(args: Record<string, unknown>): GuardianConfigOverrides {
+  // START_BLOCK_NORMALIZE_GUARDIAN_ARG_OVERRIDES
   const overrides: GuardianConfigOverrides = {};
 
   if (typeof args.model === "string" && args.model.trim()) {
@@ -117,6 +139,7 @@ function readGuardianOverridesFromArgs(args: Record<string, unknown>): GuardianC
     overrides.reviewToastDurationMs = reviewToastDurationMs;
   }
 
+  // END_BLOCK_NORMALIZE_GUARDIAN_ARG_OVERRIDES
   return overrides;
 }
 

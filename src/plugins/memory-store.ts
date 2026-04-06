@@ -1,3 +1,43 @@
+// FILE: src/plugins/memory-store.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Persist and query explicit vvoc memory entries across local and shared scopes.
+//   SCOPE: Memory config loading, scope-aware storage roots, CRUD operations, lexical search, and JSON-backed filesystem helpers.
+//   DEPENDS: [node:child_process, node:crypto, node:fs/promises, node:path, jsonc-parser, src/lib/vvoc-paths.ts]
+//   LINKS: [M-PLUGIN-MEMORY-STORE]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   MemoryScopeType - Supported write scope categories for explicit memory.
+//   MemoryReadScopeType - Supported read scopes including the cross-scope `all` selector.
+//   MemoryScope - Scope selector used by list/search filters.
+//   MemoryEntry - Canonical persisted memory record shape.
+//   MemoryRuntimeConfig - Resolved runtime config including local and shared storage roots.
+//   MemoryFilters - Shared filter shape for list/search operations.
+//   MemoryConfigOverrides - Parsed memory config override values.
+//   loadMemoryRuntimeConfig - Loads merged global/project memory settings and storage roots.
+//   parseMemoryConfigText - Parses managed memory config JSONC.
+//   renderMemoryConfig - Renders managed memory config JSONC.
+//   getDefaultSearchLimit - Returns the effective default limit for memory list/search operations.
+//   getDefaultProjectScopeKey - Returns the canonical project scope key.
+//   getDefaultSharedScopeKey - Returns the canonical shared scope fallback key.
+//   normalizeReadScopeType - Normalizes list/search scope arguments including `all`.
+//   normalizeWriteScopeType - Normalizes memory write scope arguments.
+//   resolveBranchScopeKey - Resolves the current git branch fallback key.
+//   listMemories - Lists explicit memory entries for the requested filters.
+//   getMemory - Loads a single explicit memory entry by id.
+//   putMemory - Persists a new explicit memory entry.
+//   updateMemory - Updates a stored explicit memory entry.
+//   deleteMemory - Deletes an explicit memory entry by id.
+//   searchMemories - Performs ranked lexical memory search across resolved scopes.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and symbol-accurate export mapping for explicit memory storage helpers.]
+// END_CHANGE_SUMMARY
+
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -70,6 +110,7 @@ type MemoryRecord = {
 
 type JsonObject = Record<string, unknown>;
 
+// START_BLOCK_LOAD_MEMORY_RUNTIME_CONFIG
 export async function loadMemoryRuntimeConfig(directory: string): Promise<MemoryRuntimeConfig> {
   const sources: string[] = [];
   const warnings: string[] = [];
@@ -96,11 +137,13 @@ export async function loadMemoryRuntimeConfig(directory: string): Promise<Memory
     warnings,
   };
 }
+// END_BLOCK_LOAD_MEMORY_RUNTIME_CONFIG
 
 export function parseMemoryConfigText(text: string, label: string): MemoryConfigOverrides {
   return normalizeMemoryConfigDocument(parseMemoryConfigDocument(text, label), label);
 }
 
+// START_BLOCK_RENDER_MEMORY_CONFIG
 export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): string {
   const lines = [
     "// Managed by vvoc.",
@@ -115,6 +158,7 @@ export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): strin
 
   return `${lines.join("\n")}\n`;
 }
+// END_BLOCK_RENDER_MEMORY_CONFIG
 
 export function getDefaultSearchLimit(config: MemoryRuntimeConfig): number {
   return config.defaultSearchLimit;
@@ -161,6 +205,7 @@ export function resolveBranchScopeKey(cwd: string): string {
   return branch;
 }
 
+// START_BLOCK_MEMORY_CRUD_AND_SEARCH
 export async function listMemories(
   config: MemoryRuntimeConfig,
   filters: MemoryFilters = {},
@@ -267,7 +312,9 @@ export async function searchMemories(
 
   return ranked.slice(0, resolveLimit(config, filters.limit)).map((item) => item.entry);
 }
+// END_BLOCK_MEMORY_CRUD_AND_SEARCH
 
+// START_BLOCK_MEMORY_CONFIG_NORMALIZATION
 function clamp(value: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -354,7 +401,9 @@ async function loadScopedMemoryConfig(
 
   return {};
 }
+// END_BLOCK_MEMORY_CONFIG_NORMALIZATION
 
+// START_BLOCK_MEMORY_ENTRY_NORMALIZATION
 function normalizeScopeType(scopeType: unknown): MemoryScopeType {
   return normalizeWriteScopeType(scopeType) ?? "project";
 }
@@ -427,7 +476,9 @@ function normalizeEntry(raw: unknown): MemoryEntry | null {
     updated_at: updatedAt,
   };
 }
+// END_BLOCK_MEMORY_ENTRY_NORMALIZATION
 
+// START_BLOCK_MEMORY_FILESYSTEM_LAYOUT
 function serializeEntry(entry: MemoryEntry): string {
   return `${JSON.stringify(entry, null, 2)}\n`;
 }
@@ -487,7 +538,9 @@ async function walkJsonFiles(targetDir: string): Promise<string[]> {
   files.sort((left, right) => left.localeCompare(right));
   return files;
 }
+// END_BLOCK_MEMORY_FILESYSTEM_LAYOUT
 
+// START_BLOCK_MEMORY_RECORD_LOADING_AND_FILTERING
 async function loadRecords(config: MemoryRuntimeConfig): Promise<MemoryRecord[]> {
   const files = (
     await Promise.all([
@@ -547,7 +600,9 @@ function matchesFilters(entry: MemoryEntry, filters: MemoryFilters): boolean {
 
   return matchesScopes(entry, filters.scopes);
 }
+// END_BLOCK_MEMORY_RECORD_LOADING_AND_FILTERING
 
+// START_BLOCK_MEMORY_SEARCH_SCORING
 function scopeBonus(scopeType: MemoryScopeType): number {
   return SCOPE_PRIORITY[scopeType] * 0.08;
 }
@@ -614,7 +669,9 @@ function searchScore(entry: MemoryEntry, query: string): number {
     exactPhrase
   );
 }
+// END_BLOCK_MEMORY_SEARCH_SCORING
 
+// START_BLOCK_MEMORY_FS_HELPERS
 async function findRecordById(
   config: MemoryRuntimeConfig,
   id: string,
@@ -677,3 +734,4 @@ async function readOptionalText(path: string): Promise<string | undefined> {
     throw error;
   }
 }
+// END_BLOCK_MEMORY_FS_HELPERS

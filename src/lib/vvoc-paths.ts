@@ -1,3 +1,30 @@
+// FILE: src/lib/vvoc-paths.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and project-local conventions.
+//   SCOPE: XDG config/data home lookup, vvoc root derivation, and deterministic project data directory naming.
+//   DEPENDS: [node:os, node:path, node:crypto]
+//   LINKS: [M-CLI-CONFIG, M-PLUGIN-MEMORY-STORE, M-PLUGIN-GUARDIAN]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   VVOC_DIRECTORY_NAME - Project-local vvoc directory name.
+//   getConfigHome - Resolves the effective XDG config home.
+//   getDataHome - Resolves the effective XDG data home.
+//   getGlobalOpencodeDir - Resolves the global OpenCode config directory.
+//   getGlobalVvocDir - Resolves the global vvoc config directory.
+//   getGlobalVvocDataDir - Resolves the global vvoc data directory.
+//   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
+//   getProjectVvocDir - Resolves the project-local vvoc config directory.
+//   getProjectLegacyOpencodeDir - Resolves the old project-local OpenCode directory path.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup around vvoc path helpers for deterministic XDG/navigation context.]
+// END_CHANGE_SUMMARY
+
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import crypto from "node:crypto";

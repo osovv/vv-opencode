@@ -1,3 +1,22 @@
+// FILE: src/plugins/guardian.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe fallback behavior.
+//   SCOPE: Guardian runtime config loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
+//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, node:path, src/lib/vvoc-paths.ts]
+//   LINKS: [M-PLUGIN-GUARDIAN]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   GuardianPlugin - Registers Guardian agent config, permission review flow, and tool/command intent capture hooks.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and navigable section anchors for the Guardian permission review pipeline.]
+// END_CHANGE_SUMMARY
+
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import type { Message, Part } from "@opencode-ai/sdk";
 import { appendFile, readFile, unlink } from "node:fs/promises";
@@ -150,6 +169,7 @@ type GuardianConfigOverrides = {
   reviewToastDurationMs?: number;
 };
 
+// START_BLOCK_GUARDIAN_AGENT_CONFIGURATION
 function createGuardianPermissionConfig() {
   return {
     edit: "deny" as const,
@@ -179,7 +199,9 @@ function createGuardianToolsConfig() {
     todowrite: false,
   };
 }
+// END_BLOCK_GUARDIAN_AGENT_CONFIGURATION
 
+// START_BLOCK_PARSE_JSONC_UTILITIES
 function stripJsonComments(text: string): string {
   let result = "";
   let inString = false;
@@ -328,7 +350,9 @@ function readStringOverride(value: unknown): string | undefined {
   const trimmed = value.trim();
   return trimmed || undefined;
 }
+// END_BLOCK_PARSE_JSONC_UTILITIES
 
+// START_BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG
 function normalizeGuardianConfigOverrides(
   source: string,
   raw: unknown,
@@ -526,7 +550,9 @@ async function loadGuardianRuntimeConfig(directory: string): Promise<GuardianRun
     warnings,
   };
 }
+// END_BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG
 
+// START_BLOCK_RENDER_GUARDIAN_TRANSCRIPT
 function truncateText(
   value: string | undefined,
   limit = MAX_TRANSCRIPT_ENTRY_CHARS,
@@ -699,7 +725,9 @@ async function loadTranscript(
 
   return renderTranscript(collectTranscriptEntries(response.data));
 }
+// END_BLOCK_RENDER_GUARDIAN_TRANSCRIPT
 
+// START_BLOCK_BUILD_GUARDIAN_REVIEW_INPUT
 function buildPlannedAction(
   permissionEvent: PermissionAskedEvent,
   toolIntent: ToolIntent | undefined,
@@ -756,7 +784,9 @@ ${actionJson}
 
   return truncateText(prompt, MAX_PROMPT_CHARS) ?? prompt;
 }
+// END_BLOCK_BUILD_GUARDIAN_REVIEW_INPUT
 
+// START_BLOCK_PARSE_GUARDIAN_REVIEW_OUTPUT
 function extractJsonObject(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -896,7 +926,9 @@ function guardianDecisionFromAssessment(
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
+// END_BLOCK_PARSE_GUARDIAN_REVIEW_OUTPUT
 
+// START_BLOCK_RUN_GUARDIAN_SUBPROCESS
 async function runGuardianCommand(
   _directory: string,
   prompt: string,
@@ -988,7 +1020,9 @@ async function runGuardianCommand(
     await unlink(stderrPath).catch(() => undefined);
   }
 }
+// END_BLOCK_RUN_GUARDIAN_SUBPROCESS
 
+// START_BLOCK_GUARDIAN_LOGGING_AND_FEEDBACK
 async function writeGuardianDebug(entry: Record<string, unknown>) {
   try {
     await appendFile(
@@ -1045,7 +1079,9 @@ async function showGuardianToast(
     // TUI toast is best-effort only.
   }
 }
+// END_BLOCK_GUARDIAN_LOGGING_AND_FEEDBACK
 
+// START_BLOCK_REPLY_TO_PERMISSION_REQUEST
 async function replyToPermission(
   client: Parameters<Plugin>[0]["client"],
   serverUrl: URL,
@@ -1146,7 +1182,9 @@ async function replyToPermission(
 
   return true;
 }
+// END_BLOCK_REPLY_TO_PERMISSION_REQUEST
 
+// START_BLOCK_REVIEW_PERMISSION_REQUEST
 async function reviewPermissionRequest(
   client: Parameters<Plugin>[0]["client"],
   serverUrl: URL,
@@ -1361,7 +1399,9 @@ async function reviewPermissionRequest(
     }
   }
 }
+// END_BLOCK_REVIEW_PERMISSION_REQUEST
 
+// START_BLOCK_INSTALL_GUARDIAN_AGENT
 function installGuardianAgent(config: Config, guardianConfig: GuardianRuntimeConfig) {
   config.agent ??= {};
   config.agent[GUARDIAN_AGENT] = {
@@ -1374,7 +1414,9 @@ function installGuardianAgent(config: Config, guardianConfig: GuardianRuntimeCon
     ...(guardianConfig.model ? { model: guardianConfig.model } : {}),
   };
 }
+// END_BLOCK_INSTALL_GUARDIAN_AGENT
 
+// START_BLOCK_REGISTER_GUARDIAN_PLUGIN_HOOKS
 export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) => {
   const toolIntentsByCallID = new Map<string, ToolIntent>();
   const latestCommandIntentBySessionID = new Map<string, CommandIntent>();
@@ -1496,3 +1538,4 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
     },
   };
 };
+// END_BLOCK_REGISTER_GUARDIAN_PLUGIN_HOOKS

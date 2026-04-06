@@ -1,3 +1,22 @@
+// FILE: src/commands/doctor.ts
+// VERSION: 0.2.5
+// START_MODULE_CONTRACT
+//   PURPOSE: Diagnose vv-opencode installation problems and surface actionable failures.
+//   SCOPE: Scope parsing, installation inspection, warning/problem reporting, and non-zero exit signaling.
+//   DEPENDS: [citty, src/lib/opencode.ts]
+//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   default - Doctor command definition for vvoc installation diagnostics.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Added GRACE command markup around doctor diagnostics for deterministic troubleshooting navigation.]
+// END_CHANGE_SUMMARY
+
 import { defineCommand } from "citty";
 import { inspectInstallation, resolvePaths, type Scope } from "../lib/opencode.js";
 
@@ -19,6 +38,7 @@ export default defineCommand({
     },
   },
   async run({ args }) {
+    // START_BLOCK_PRINT_DIAGNOSTIC_REPORT
     const scope = args.scope === "project" ? "project" : "global";
     const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
     const paths = await resolvePaths({
@@ -64,5 +84,6 @@ export default defineCommand({
     }
 
     console.log("Doctor: ok");
+    // END_BLOCK_PRINT_DIAGNOSTIC_REPORT
   },
 });
