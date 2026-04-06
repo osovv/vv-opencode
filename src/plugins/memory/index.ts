@@ -72,7 +72,11 @@ function createMemoryReviewerToolsConfig(): Record<string, boolean> {
   };
 }
 
-function installMemoryReviewerAgent(config: Config): void {
+function installMemoryReviewerAgent(
+  config: Config,
+  reviewerModel?: string,
+  reviewerVariant?: string,
+): void {
   config.agent ??= {};
   config.agent[MEMORY_REVIEW_AGENT] = {
     mode: "subagent",
@@ -88,6 +92,8 @@ function installMemoryReviewerAgent(config: Config): void {
       },
     },
     tools: createMemoryReviewerToolsConfig(),
+    ...(reviewerModel ? { model: reviewerModel } : {}),
+    ...(reviewerVariant ? { variant: reviewerVariant } : {}),
   } as never;
 }
 // END_BLOCK_REVIEWER_AGENT_CONFIGURATION
@@ -219,7 +225,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
 
   return {
     config: async (config) => {
-      installMemoryReviewerAgent(config);
+      installMemoryReviewerAgent(config, memoryConfig.reviewerModel, memoryConfig.reviewerVariant);
     },
     "experimental.chat.system.transform": async (_input, output) => {
       if (!output.system.includes(MEMORY_SYSTEM_INSTRUCTION)) {

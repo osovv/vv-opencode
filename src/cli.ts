@@ -21,6 +21,7 @@
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
+import agent from "./commands/agent.js";
 import doctor from "./commands/doctor.js";
 import guardian from "./commands/guardian.js";
 import install from "./commands/install.js";
@@ -39,6 +40,7 @@ const main = defineCommand({
     description: "Install and sync vv-opencode plugins for OpenCode.",
   },
   subCommands: {
+    agent,
     install,
     sync,
     status,

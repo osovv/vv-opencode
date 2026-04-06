@@ -88,6 +88,8 @@ export type MemoryRuntimeConfig = {
   projectStorageRoot: string;
   sharedStorageRoot: string;
   defaultSearchLimit: number;
+  reviewerModel?: string;
+  reviewerVariant?: string;
   sources: string[];
   warnings: string[];
 };
@@ -101,6 +103,8 @@ export type MemoryFilters = {
 export type MemoryConfigOverrides = {
   enabled?: boolean;
   defaultSearchLimit?: number;
+  reviewerModel?: string;
+  reviewerVariant?: string;
 };
 
 type MemoryRecord = {
@@ -133,6 +137,8 @@ export async function loadMemoryRuntimeConfig(directory: string): Promise<Memory
     sharedStorageRoot: join(getGlobalVvocDataDir(), "memory"),
     defaultSearchLimit:
       projectConfig.defaultSearchLimit ?? globalConfig.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT,
+    reviewerModel: projectConfig.reviewerModel ?? globalConfig.reviewerModel,
+    reviewerVariant: projectConfig.reviewerVariant ?? globalConfig.reviewerVariant,
     sources,
     warnings,
   };
@@ -152,10 +158,18 @@ export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): strin
     "",
     "{",
     `  "enabled": ${JSON.stringify(overrides.enabled ?? true)},`,
-    `  "defaultSearchLimit": ${overrides.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT}`,
-    "}",
+    `  "defaultSearchLimit": ${overrides.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT},`,
   ];
 
+  if (overrides.reviewerModel !== undefined) {
+    lines.push(`  "reviewerModel": ${JSON.stringify(overrides.reviewerModel)},`);
+  }
+
+  if (overrides.reviewerVariant !== undefined) {
+    lines.push(`  "reviewerVariant": ${JSON.stringify(overrides.reviewerVariant)},`);
+  }
+
+  lines.push("}");
   return `${lines.join("\n")}\n`;
 }
 // END_BLOCK_RENDER_MEMORY_CONFIG
@@ -361,6 +375,20 @@ function normalizeMemoryConfigDocument(raw: unknown, label: string): MemoryConfi
       throw new Error(`${label}: expected "defaultSearchLimit" to be a positive integer`);
     }
     overrides.defaultSearchLimit = limit;
+  }
+
+  if (Object.hasOwn(raw, "reviewerModel")) {
+    const model = readStringValue(raw.reviewerModel);
+    if (model !== undefined) {
+      overrides.reviewerModel = model;
+    }
+  }
+
+  if (Object.hasOwn(raw, "reviewerVariant")) {
+    const variant = readStringValue(raw.reviewerVariant);
+    if (variant !== undefined) {
+      overrides.reviewerVariant = variant;
+    }
   }
 
   return overrides;
@@ -721,6 +749,13 @@ function readPositiveInteger(value: unknown): number | undefined {
     return Math.round(value);
   }
 
+  return undefined;
+}
+
+function readStringValue(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
   return undefined;
 }
 
