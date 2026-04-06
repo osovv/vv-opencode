@@ -12,13 +12,22 @@ import { describe, expect, test } from "bun:test";
 import { buildPatternSet, BUILTIN_PATTERNS } from "./patterns.js";
 
 describe("BUILTIN_PATTERNS", () => {
-  test("has all 4 expected builtin patterns", () => {
+  test("has all 13 expected builtin patterns", () => {
     const names = Array.from(BUILTIN_PATTERNS.keys());
     expect(names).toContain("email");
     expect(names).toContain("uuid");
     expect(names).toContain("ipv4");
     expect(names).toContain("mac");
-    expect(names.length).toBe(4);
+    expect(names).toContain("openai_key");
+    expect(names).toContain("anthropic_key");
+    expect(names).toContain("github_token");
+    expect(names).toContain("aws_access_key");
+    expect(names).toContain("stripe_key");
+    expect(names).toContain("bearer_token");
+    expect(names).toContain("bearer_dot");
+    expect(names).toContain("syn_key");
+    expect(names).toContain("hex_token");
+    expect(names.length).toBe(13);
   });
 
   test("email pattern matches standard emails", () => {
@@ -50,6 +59,40 @@ describe("BUILTIN_PATTERNS", () => {
     expect(regex.test("00:1a:2b:3c:4d:5e")).toBe(true);
     expect(regex.test("FF:FF:FF:FF:FF:FF")).toBe(true);
   });
+
+  test("openai_key pattern matches OpenAI API keys", () => {
+    const keyBuiltin = BUILTIN_PATTERNS.get("openai_key")!;
+    const regex = new RegExp(keyBuiltin.pattern, "i");
+    expect(regex.test("sk-1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
+    expect(regex.test("sk-proj-1234567890abcdefghijklmnopqrstu")).toBe(true);
+  });
+
+  test("github_token pattern matches GitHub tokens", () => {
+    const keyBuiltin = BUILTIN_PATTERNS.get("github_token")!;
+    const regex = new RegExp(keyBuiltin.pattern, "i");
+    expect(regex.test("ghp_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
+    expect(regex.test("gho_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
+    expect(regex.test("ghu_1234567890abcdefghijklmnopqrstuvwxyz")).toBe(true);
+  });
+
+  test("aws_access_key pattern matches AWS access key IDs", () => {
+    const keyBuiltin = BUILTIN_PATTERNS.get("aws_access_key")!;
+    const regex = new RegExp(keyBuiltin.pattern, "i");
+    expect(regex.test("AKIAIOSFODNN7EXAMPLE")).toBe(true);
+    expect(regex.test("AKIAJ7XXXXXXXXXXXXXXX")).toBe(true);
+  });
+
+  test("stripe_key pattern matches Stripe live keys", () => {
+    const keyBuiltin = BUILTIN_PATTERNS.get("stripe_key")!;
+    expect(keyBuiltin.pattern).toBe("sk_live_[A-Za-z0-9]{24,}");
+  });
+
+  test("bearer_token pattern matches generic bearer tokens", () => {
+    const keyBuiltin = BUILTIN_PATTERNS.get("bearer_token")!;
+    const regex = new RegExp(keyBuiltin.pattern, "i");
+    expect(regex.test("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")).toBe(true);
+    expect(regex.test("abcdefghijklmnopqrstuvwxyz123456")).toBe(true);
+  });
 });
 
 describe("buildPatternSet", () => {
@@ -59,11 +102,25 @@ describe("buildPatternSet", () => {
     expect(ps.exclude.size).toBe(0);
   });
 
-  test("loads all 4 builtins by default", () => {
+  test("loads all 13 builtins by default", () => {
     const ps = buildPatternSet({
-      builtin: ["email", "uuid", "ipv4", "mac"],
+      builtin: [
+        "email",
+        "uuid",
+        "ipv4",
+        "mac",
+        "openai_key",
+        "anthropic_key",
+        "github_token",
+        "aws_access_key",
+        "stripe_key",
+        "bearer_token",
+        "bearer_dot",
+        "syn_key",
+        "hex_token",
+      ],
     });
-    expect(ps.rules).toHaveLength(4);
+    expect(ps.rules).toHaveLength(13);
   });
 
   test("loads only specified builtins", () => {

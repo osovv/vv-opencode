@@ -11,7 +11,7 @@
 //
 // START_MODULE_MAP
 //   buildPatternSet - builds pattern set from config object
-//   BUILTIN_PATTERNS - Map of 4 builtin pattern definitions
+//   BUILTIN_PATTERNS - Map of 13 builtin pattern definitions
 // END_MODULE_MAP
 
 export interface PatternRule {
@@ -43,6 +43,24 @@ const BUILTIN_PATTERNS: Map<string, { pattern: string; category: string }> = new
   ],
   ["ipv4", { pattern: "(?:\\d{1,3}\\.){3}\\d{1,3}", category: "IPV4" }],
   ["mac", { pattern: "(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", category: "MAC" }],
+  ["openai_key", { pattern: "sk-[A-Za-z0-9_-]{32,}", category: "OPENAI_KEY" }],
+  ["anthropic_key", { pattern: "sk-ant-[A-Za-z0-9_-]{32,}", category: "ANTHROPIC_KEY" }],
+  [
+    "github_token",
+    { pattern: "(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_-]{36,}", category: "GITHUB_TOKEN" },
+  ],
+  ["aws_access_key", { pattern: "AKIA[0-9A-Z]{16}", category: "AWS_ACCESS_KEY" }],
+  ["stripe_key", { pattern: "sk_live_[A-Za-z0-9]{24,}", category: "STRIPE_KEY" }],
+  [
+    "bearer_token",
+    { pattern: "(?<![A-Za-z0-9])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9])", category: "BEARER_TOKEN" },
+  ],
+  ["bearer_dot", { pattern: "[A-Za-z0-9]{16,}\\.[A-Za-z0-9_-]{16,}", category: "BEARER_DOT" }],
+  ["syn_key", { pattern: "syn_[A-Za-z0-9_-]{32,}", category: "SYN_KEY" }],
+  [
+    "hex_token",
+    { pattern: "(?<![A-Za-z0-9])[a-fA-F0-9]{64}(?![A-Za-z0-9])", category: "HEX_TOKEN" },
+  ],
 ]);
 
 function peelFlags(pattern: string): { pattern: string; flags: string } {
