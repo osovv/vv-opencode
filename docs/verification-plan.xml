@@ -1,0 +1,145 @@
+<VerificationPlan VERSION="0.2.0">
+  <GlobalPolicy>
+    <log-format>[service][function][block] message</log-format>
+    <deterministic-first>true</deterministic-first>
+    <module-level-focus>Fast deterministic checks for config mutation and rendering helpers.</module-level-focus>
+    <wave-level-focus>Typecheck and test the merged CLI + helper surface after each coordinated change.</wave-level-focus>
+    <phase-level-focus>Buildable package output plus stable command behavior for installation and sync workflows.</phase-level-focus>
+    <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
+  </GlobalPolicy>
+
+  <CriticalFlows>
+    <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
+      <scenario>User installs the package into a fresh or existing OpenCode config.</scenario>
+      <expected-outcome>The package name is present in the resolved `plugin` array and OpenCode can later load the plugin from npm.</expected-outcome>
+      <required-signals>
+        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; status reports configured</trace-sequence>
+      </required-signals>
+    </VF-PLUGIN-INSTALL>
+    <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
+      <scenario>User syncs a managed Guardian config after changing package versions or moving to another device.</scenario>
+      <expected-outcome>The managed file is rewritten canonically and current values survive the rewrite.</expected-outcome>
+      <required-signals>
+        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC</trace-sequence>
+      </required-signals>
+    </VF-CONFIG-SYNC>
+    <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-003" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
+      <scenario>OpenCode asks for a permission decision while Guardian is active.</scenario>
+      <expected-outcome>Low-risk actions may be auto-approved and higher-risk actions fall back to manual approval.</expected-outcome>
+      <required-signals>
+        <log-marker>guardian review started</log-marker>
+        <log-marker>guardian review completed</log-marker>
+      </required-signals>
+    </VF-GUARDIAN-REVIEW>
+    <VF-SAFE-UPDATES NAME="SafeUpdates" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
+      <scenario>User already owns a manually-maintained Guardian config file.</scenario>
+      <expected-outcome>The CLI skips rewriting it unless force is explicit.</expected-outcome>
+      <required-signals>
+        <trace-sequence>detect unmanaged file -&gt; skip write</trace-sequence>
+      </required-signals>
+    </VF-SAFE-UPDATES>
+    <VF-CROSS-DEVICE-SETUP NAME="CrossDeviceSetup" USE_CASES="UC-001, UC-002" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
+      <scenario>User repeats install or sync on another machine.</scenario>
+      <expected-outcome>The same package and config layout can be recreated with predictable CLI output.</expected-outcome>
+      <required-signals>
+        <trace-sequence>install -&gt; status -&gt; doctor</trace-sequence>
+      </required-signals>
+    </VF-CROSS-DEVICE-SETUP>
+  </CriticalFlows>
+
+  <ModuleVerification>
+    <V-M-CLI-CONFIG MODULE="M-CLI-CONFIG" PRIORITY="high">
+      <test-files>
+        <file>src/lib/opencode.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/lib/opencode.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Fresh install config renders with schema and plugin array.</scenario-1>
+        <scenario-2 kind="success">Existing JSONC comments survive plugin insertion.</scenario-2>
+        <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
+        <scenario-4 kind="failure">Invalid plugin array or invalid Guardian config shape fails loudly.</scenario-4>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Sync must not overwrite unmanaged Guardian config without force.</assertion-1>
+      </required-trace-assertions>
+      <wave-follow-up>Smoke command output for `status` and `doctor` after build.</wave-follow-up>
+      <phase-follow-up>Extend tests to cover more path and scope permutations.</phase-follow-up>
+    </V-M-CLI-CONFIG>
+
+    <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
+      <test-files>
+        <file>src/lib/opencode.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run build</check-1>
+        <check-2>bun test</check-2>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands.</scenario-1>
+        <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Command handlers should delegate file mutation to helper utilities instead of duplicating filesystem logic.</assertion-1>
+      </required-trace-assertions>
+      <wave-follow-up>Verify `vvoc install`, `vvoc sync`, and `vvoc doctor` against a temp config directory.</wave-follow-up>
+      <phase-follow-up>Add command-level smoke tests once temp-dir fixtures are introduced.</phase-follow-up>
+    </V-M-CLI-COMMANDS>
+
+    <V-M-PLUGIN-GUARDIAN MODULE="M-PLUGIN-GUARDIAN" PRIORITY="high">
+      <test-files>
+        <file>typecheck-only in v1</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun x tsc --noEmit</check-1>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Guardian plugin exports compile against current OpenCode plugin and SDK types.</scenario-1>
+        <scenario-2 kind="failure">Review failures fall back to manual approval instead of silently allowing.</scenario-2>
+      </scenarios>
+      <required-log-markers>
+        <marker-1>guardian plugin initialized</marker-1>
+        <marker-2>guardian review started</marker-2>
+        <marker-3>guardian review completed</marker-3>
+      </required-log-markers>
+      <required-trace-assertions>
+        <assertion-1>Auto-allow only occurs when Guardian returns a risk score below the configured threshold.</assertion-1>
+      </required-trace-assertions>
+      <wave-follow-up>Add isolated behavioral tests around assessment parsing and decision thresholds.</wave-follow-up>
+      <phase-follow-up>Consider extracting pure Guardian parsing helpers for direct unit coverage.</phase-follow-up>
+    </V-M-PLUGIN-GUARDIAN>
+  </ModuleVerification>
+
+  <PhaseGates>
+    <Gate-Phase-1 PHASE="Phase-1">
+      <goal>CLI foundation is buildable and the helper layer has deterministic checks.</goal>
+      <commands>
+        <command-1>bun x tsc --noEmit</command-1>
+        <command-2>bun test</command-2>
+      </commands>
+      <required-evidence>
+        <evidence-1>Config merge and Guardian config rendering are covered by module-local tests.</evidence-1>
+      </required-evidence>
+    </Gate-Phase-1>
+    <Gate-Phase-2 PHASE="Phase-2">
+      <goal>Guardian is packaged from the repo and exported without behavior drift.</goal>
+      <commands>
+        <command-1>bun run build</command-1>
+        <command-2>bun x tsc --noEmit</command-2>
+      </commands>
+      <required-evidence>
+        <evidence-1>`src/plugins/guardian.ts` is present and package root exports `GuardianPlugin`.</evidence-1>
+      </required-evidence>
+    </Gate-Phase-2>
+  </PhaseGates>
+
+  <FailurePackets>
+    <packet-template>
+      <expected-fields>scenario, expected-evidence, observed-evidence, first-divergent-block, next-action</expected-fields>
+    </packet-template>
+  </FailurePackets>
+</VerificationPlan>

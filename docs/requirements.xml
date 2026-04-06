@@ -1,0 +1,66 @@
+<RequirementsAnalysis VERSION="0.2.0">
+  <Project>
+    <name>@osovv/vv-opencode</name>
+    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
+    <keywords>opencode, plugins, workflow</keywords>
+  </Project>
+
+  <Actors>
+    <actor-User>Engineer who wants a portable OpenCode workflow across devices and repositories.</actor-User>
+    <actor-System>CLI and plugin runtime that install, sync, and execute the configured workflow safely.</actor-System>
+  </Actors>
+
+  <UseCases>
+    <UC-001>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc install` for global or project scope.</Action>
+      <Goal>To register `@osovv/vv-opencode` in OpenCode config and bootstrap Guardian config when needed.</Goal>
+      <Preconditions>Bun and OpenCode are available, and the target config location is writable.</Preconditions>
+      <AcceptanceCriteria>The package name appears in the resolved OpenCode config and a default Guardian config can be created idempotently.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-PLUGIN-INSTALL</RelatedFlows>
+    </UC-001>
+    <UC-002>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc sync` on another machine or after package updates.</Action>
+      <Goal>To refresh managed workflow files without clobbering manually-owned config.</Goal>
+      <Preconditions>The target config files already exist or can be created.</Preconditions>
+      <AcceptanceCriteria>Managed files are rewritten canonically, existing values are preserved, and unmanaged files are skipped unless force is explicit.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-CONFIG-SYNC</RelatedFlows>
+    </UC-002>
+    <UC-003>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc guardian config` with optional model, variant, timeout, or threshold overrides.</Action>
+      <Goal>To customize Guardian behavior without editing JSONC by hand.</Goal>
+      <Preconditions>A target OpenCode config scope has been chosen.</Preconditions>
+      <AcceptanceCriteria>The generated `guardian.jsonc` is valid, readable by the plugin, and safe to resync later.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-GUARDIAN-SETTINGS</RelatedFlows>
+    </UC-003>
+  </UseCases>
+
+  <NonGoals>
+    <item-1>No public plugin marketplace, profile manager, or multi-package monorepo in v1.</item-1>
+    <item-2>No forced overwrite of unmanaged user config files without an explicit force flag.</item-2>
+    <item-3>No attempt to redesign Guardian logic before it is safely packaged and reproducible from this repository.</item-3>
+  </NonGoals>
+
+  <Constraints>
+    <constraint-1>OpenCode config integration must follow documented global and project path conventions.</constraint-1>
+    <constraint-2>Guardian must remain compatible with the current standalone plugin behavior while being moved into the repo.</constraint-2>
+    <constraint-3>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-3>
+    <constraint-4>Generated Guardian config should be clearly marked as CLI-managed so sync can distinguish owned and non-owned files.</constraint-4>
+  </Constraints>
+
+  <Risks>
+    <risk-1>Repositories or machines may contain multiple config files (`.json` and `.jsonc`) that can drift from each other.</risk-1>
+    <risk-2>Unsafe rewrites of user-maintained config could damage trust in the CLI.</risk-2>
+    <risk-3>Guardian depends on OpenCode plugin and SDK surface area that may evolve over time.</risk-3>
+  </Risks>
+
+  <OpenQuestions>
+    <question-1>Should future versions also manage agents, commands, skills, and themes in addition to plugins and Guardian config?</question-1>
+    <question-2>Should the package eventually export multiple plugins from the same npm entrypoint or separate them by subpath and opt-in config?</question-2>
+  </OpenQuestions>
+</RequirementsAnalysis>

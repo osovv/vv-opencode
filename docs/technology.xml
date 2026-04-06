@@ -1,0 +1,51 @@
+<TechnologyStack VERSION="0.2.0">
+  <Runtime>Bun 1.3.8</Runtime>
+  <Language>TypeScript 5.8.2</Language>
+  <Framework>citty 0.2.2</Framework>
+
+  <Dependencies>
+    <dep name="@opencode-ai/plugin" version="1.3.17" purpose="Type-safe OpenCode plugin API and hook definitions" />
+    <dep name="@opencode-ai/sdk" version="1.3.17" purpose="OpenCode client types and runtime interactions used by Guardian" />
+    <dep name="citty" version="0.2.2" purpose="CLI command tree and argument parsing for `vvoc`" />
+    <dep name="jsonc-parser" version="3.3.1" purpose="Safe JSONC-aware config parsing and in-place edits" />
+  </Dependencies>
+
+  <VersionConstraints>
+    <constraint lib="bun" min="1.3.8" max="1.3.x" reason="The package and local verification target Bun-based runtime and test execution." />
+    <constraint lib="@opencode-ai/plugin" min="1.3.17" max="1.3.x" reason="Guardian depends on the current plugin hook and input shape." />
+    <constraint lib="@opencode-ai/sdk" min="1.3.17" max="1.3.x" reason="Guardian uses current SDK message, part, and config types." />
+  </VersionConstraints>
+
+  <Tooling>
+    <tool name="package-manager" value="bun" version="1.3.8" />
+    <tool name="compiler" value="typescript" version="5.8.2" />
+    <tool name="test-runner" value="bun test" version="1.3.8" />
+  </Tooling>
+
+  <Testing>
+    <module-level>
+      <command>bun test src/lib/opencode.test.ts</command>
+      <focus>Fast deterministic checks for config merge and Guardian config rendering.</focus>
+    </module-level>
+    <wave-level>
+      <command>bun run typecheck &amp;&amp; bun test</command>
+      <focus>Checks merged CLI and helper behavior after coordinated changes.</focus>
+    </wave-level>
+    <phase-level>
+      <command>bun run build &amp;&amp; bun test</command>
+      <focus>Validates package output and regression-safe baseline behavior.</focus>
+    </phase-level>
+    <mocking-policy>Prefer direct pure-function verification and fixture text over broad mocks.</mocking-policy>
+  </Testing>
+
+  <Observability>
+    <logger>OpenCode app log via `client.app.log()` plus Guardian best-effort debug file in `/tmp`.</logger>
+    <log-format>[service][function][block] message</log-format>
+    <required-fields>service, level, message, requestID, sessionID</required-fields>
+    <redaction>Never log secrets, credentials, or raw high-risk payloads beyond the existing Guardian truncation policy.</redaction>
+  </Observability>
+
+  <DeliveryShape>
+    <shape>One public npm package that exports OpenCode plugins and ships a Bun CLI binary named `vvoc`.</shape>
+  </DeliveryShape>
+</TechnologyStack>

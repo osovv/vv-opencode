@@ -1,0 +1,42 @@
+<KnowledgeGraph>
+  <Project NAME="@osovv/vv-opencode" VERSION="0.2.0">
+    <keywords>opencode, plugins, workflow</keywords>
+    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
+
+    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Path resolution, JSONC-aware config mutation, managed Guardian config rendering, and installation inspection.</purpose>
+      <path>src/lib/opencode.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-CLI-CONFIG</verification-ref>
+      <annotations>
+        <fn-resolvePaths PURPOSE="Resolve scope-aware config file paths for OpenCode and Guardian." />
+        <fn-ensurePackageInstalled PURPOSE="Add the package name to the OpenCode plugin array if needed." />
+        <fn-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
+      </annotations>
+    </M-CLI-CONFIG>
+
+    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
+      <purpose>Compose the `vvoc` CLI and expose install, sync, status, doctor, and Guardian config commands.</purpose>
+      <path>src/cli.ts + src/commands/*.ts</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-CLI-COMMANDS</verification-ref>
+      <annotations>
+        <export-install PURPOSE="Bootstrap package registration and optional Guardian config." />
+        <export-sync PURPOSE="Refresh managed config files." />
+        <export-guardian PURPOSE="Expose Guardian-specific helper commands." />
+      </annotations>
+    </M-CLI-COMMANDS>
+
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Review OpenCode permission requests using a constrained Guardian agent and safe fallback behavior.</purpose>
+      <path>src/plugins/guardian.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
+      <annotations>
+        <export-GuardianPlugin PURPOSE="Register Guardian hooks for config, events, tool intent capture, and permission review." />
+      </annotations>
+    </M-PLUGIN-GUARDIAN>
+
+    <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
+  </Project>
+</KnowledgeGraph>

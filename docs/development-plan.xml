@@ -1,0 +1,155 @@
+<DevelopmentPlan VERSION="0.2.0">
+  <ArchitectureNotes>
+    <objective>Package the existing Guardian plugin without behavior drift, while adding a small CLI that manages portable OpenCode config safely.</objective>
+    <non-goal>Do not expand into a large monorepo or broad profile manager before the first plugin packaging path is stable.</non-goal>
+    <risk-1>Config file mutation must stay conservative because users may already have hand-maintained JSONC with comments.</risk-1>
+  </ArchitectureNotes>
+
+  <Modules>
+    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
+      <contract>
+        <purpose>Resolve OpenCode config paths, edit JSONC safely, render managed Guardian config, and inspect installation state.</purpose>
+        <inputs>
+          <param name="scope" type="global | project" />
+          <param name="cwd" type="string" />
+          <param name="configDir" type="string | undefined" />
+        </inputs>
+        <outputs>
+          <param name="ResolvedPaths | WriteResult | InstallationInspection" type="object" />
+        </outputs>
+        <errors>
+          <error code="INVALID_JSONC" />
+          <error code="INVALID_GUARDIAN_CONFIG" />
+        </errors>
+      </contract>
+      <interface>
+        <export-resolvePaths PURPOSE="Resolve config and Guardian file paths for the selected scope." />
+        <export-ensurePackageInstalled PURPOSE="Ensure the npm plugin is registered in OpenCode config." />
+        <export-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/lib/opencode.ts</source>
+        <tests>src/lib/opencode.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[OpenCodeConfigTools]</log-prefix>
+        <critical-block>BLOCK_SYNC_GUARDIAN_CONFIG</critical-block>
+      </observability>
+      <verification-ref>V-M-CLI-CONFIG</verification-ref>
+      <notes>
+        <note-1>Main config edits should preserve comments when only the plugin array changes.</note-1>
+      </notes>
+    </M-CLI-CONFIG>
+
+    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
+      <contract>
+        <purpose>Expose install, sync, status, doctor, and Guardian config subcommands through citty.</purpose>
+        <inputs>
+          <param name="argv" type="string[]" />
+        </inputs>
+        <outputs>
+          <param name="stdout/stderr" type="terminal output" />
+        </outputs>
+        <errors>
+          <error code="INVALID_ARGUMENT" />
+        </errors>
+      </contract>
+      <interface>
+        <export-install PURPOSE="Bootstrap plugin registration and optional Guardian config." />
+        <export-sync PURPOSE="Refresh managed config files." />
+        <export-doctor PURPOSE="Diagnose installation drift or invalid config." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/cli.ts + src/commands/*.ts</source>
+        <tests>src/lib/opencode.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[VVOC]</log-prefix>
+        <critical-block>BLOCK_APPLY_COMMAND</critical-block>
+      </observability>
+      <verification-ref>V-M-CLI-COMMANDS</verification-ref>
+      <notes>
+        <note-1>Commands should stay thin and delegate file logic to `M-CLI-CONFIG`.</note-1>
+      </notes>
+    </M-CLI-COMMANDS>
+
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="2" STATUS="implemented">
+      <contract>
+        <purpose>Review OpenCode permission requests with a constrained Guardian agent and auto-allow only low-risk actions.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks" />
+        </outputs>
+        <errors>
+          <error code="GUARDIAN_REVIEW_FAILED" />
+          <error code="PERMISSION_REPLY_FAILED" />
+        </errors>
+      </contract>
+      <interface>
+        <export-GuardianPlugin PURPOSE="Register Guardian hooks, config agent, and permission review flow." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/plugins/guardian.ts</source>
+        <tests>typecheck-only in v1</tests>
+      </target>
+      <observability>
+        <log-prefix>[guardian]</log-prefix>
+        <critical-block>BLOCK_REVIEW_PERMISSION</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
+      <notes>
+        <note-1>This module is a direct port of the existing standalone plugin and should change minimally at first.</note-1>
+      </notes>
+    </M-PLUGIN-GUARDIAN>
+  </Modules>
+
+  <DataFlow>
+    <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc install">
+      <step-1>Resolve scope-specific OpenCode and Guardian config paths.</step-1>
+      <step-2>Ensure `@osovv/vv-opencode` exists in the OpenCode `plugin` array.</step-2>
+      <step-3>Create `guardian.jsonc` when it does not already exist.</step-3>
+      <evidence>`vvoc status`, parsed config content, and successful typecheck/build.</evidence>
+    </DF-PLUGIN-INSTALL>
+    <DF-CONFIG-SYNC NAME="ManagedConfigSync" TRIGGER="vvoc sync">
+      <step-1>Inspect whether Guardian config is CLI-managed.</step-1>
+      <step-2>Parse current Guardian values from JSONC.</step-2>
+      <step-3>Rewrite managed file canonically while preserving current values.</step-3>
+      <evidence>Stable rewritten `guardian.jsonc` and no overwrite of unmanaged files without force.</evidence>
+    </DF-CONFIG-SYNC>
+    <DF-GUARDIAN-SETTINGS NAME="GuardianConfigWrite" TRIGGER="vvoc guardian config">
+      <step-1>Parse CLI overrides for model, variant, timeout, and thresholds.</step-1>
+      <step-2>Render a managed Guardian config template.</step-2>
+      <step-3>Write or print the config depending on mode.</step-3>
+      <evidence>JSONC parse succeeds and plugin can load the written file later.</evidence>
+    </DF-GUARDIAN-SETTINGS>
+    <DF-GUARDIAN-REVIEW NAME="GuardianPermissionReview" TRIGGER="permission.asked event">
+      <step-1>Capture relevant tool and command intent for the session.</step-1>
+      <step-2>Build a bounded transcript and planned action prompt.</step-2>
+      <step-3>Run Guardian, interpret risk, and auto-reply only when below threshold.</step-3>
+      <evidence>Guardian logs, toasts, and permission reply behavior inside OpenCode.</evidence>
+    </DF-GUARDIAN-REVIEW>
+  </DataFlow>
+
+  <ImplementationOrder>
+    <Phase-1 name="CLI Foundation" status="done">
+      <goal>Establish safe config mutation helpers and wire them into a usable Bun CLI.</goal>
+      <step-1 module="M-CLI-CONFIG" status="done" verification="V-M-CLI-CONFIG">Implement path resolution, JSONC edits, inspection, and Guardian template helpers.</step-1>
+      <step-2 module="M-CLI-COMMANDS" status="done" verification="V-M-CLI-COMMANDS">Expose install, sync, status, doctor, and Guardian config commands.</step-2>
+    </Phase-1>
+    <Phase-2 name="Guardian Packaging" status="done">
+      <goal>Move the existing standalone Guardian plugin into the repository and export it from the package.</goal>
+      <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port the current Guardian plugin source into `src/plugins/guardian.ts`.</step-1>
+    </Phase-2>
+  </ImplementationOrder>
+
+  <ExecutionPolicy>
+    <default-profile>balanced</default-profile>
+    <controller-owns>docs/development-plan.xml, docs/knowledge-graph.xml, docs/verification-plan.xml</controller-owns>
+    <worker-owns>Only package source files, tests, and narrowly scoped documentation updates required by the approved module changes.</worker-owns>
+  </ExecutionPolicy>
+</DevelopmentPlan>

@@ -1,0 +1,106 @@
+<OperationalPackets VERSION="0.1.0">
+  <ExecutionPacketTemplate>
+    <ExecutionPacket>
+      <module-id>M-EXAMPLE</module-id>
+      <module-name>ExampleDomain</module-name>
+      <purpose>Implement the approved module without architectural drift.</purpose>
+      <write-scope>
+        <file-1>src/example/index.ts</file-1>
+        <file-2>src/example/index.test.ts</file-2>
+      </write-scope>
+      <contract-excerpt><![CDATA[
+Planned module contract excerpt goes here.
+      ]]></contract-excerpt>
+      <graph-entry-excerpt><![CDATA[
+Knowledge graph entry excerpt goes here.
+      ]]></graph-entry-excerpt>
+      <dependency-contract-summaries>
+        <dependency-1 module="M-LOGGER">Structured logger interface with stable marker fields.</dependency-1>
+      </dependency-contract-summaries>
+      <verification-excerpt><![CDATA[
+Verification-plan excerpt goes here.
+      ]]></verification-excerpt>
+      <expected-graph-delta-fields>
+        <field-1>imports</field-1>
+        <field-2>exports</field-2>
+        <field-3>annotations</field-3>
+        <field-4>CrossLinks</field-4>
+      </expected-graph-delta-fields>
+      <expected-verification-delta-fields>
+        <field-1>test-files</field-1>
+        <field-2>module-checks</field-2>
+        <field-3>required-log-markers</field-3>
+        <field-4>follow-up-checks</field-4>
+      </expected-verification-delta-fields>
+      <notes>
+        <note-1>Workers should only read more context when the packet is insufficient.</note-1>
+      </notes>
+    </ExecutionPacket>
+  </ExecutionPacketTemplate>
+
+  <GraphDeltaTemplate>
+    <GraphDelta module="M-EXAMPLE">
+      <imports-added>
+        <import-1>M-LOGGER</import-1>
+      </imports-added>
+      <imports-removed />
+      <exports-added>
+        <export-1>runExample</export-1>
+      </exports-added>
+      <exports-removed />
+      <annotations-added>
+        <annotation-1>&lt;fn-runExample PURPOSE="Execute the example flow" /&gt;</annotation-1>
+      </annotations-added>
+      <annotations-removed />
+      <cross-links-added>
+        <CrossLink from="M-EXAMPLE" to="M-LOGGER" relation="uses" />
+      </cross-links-added>
+      <cross-links-removed />
+      <notes>
+        <note-1>Only list graph facts that really changed in the code.</note-1>
+      </notes>
+    </GraphDelta>
+  </GraphDeltaTemplate>
+
+  <VerificationDeltaTemplate>
+    <VerificationDelta module="M-EXAMPLE">
+      <test-files-added>
+        <file-1>src/example/index.test.ts</file-1>
+      </test-files-added>
+      <test-files-removed />
+      <module-checks>
+        <command-1>bun test src/example/index.test.ts</command-1>
+        <command-2>bun x tsc --noEmit</command-2>
+      </module-checks>
+      <required-log-markers>
+        <marker-1>[ExampleDomain][runExample][BLOCK_EXECUTE_FLOW]</marker-1>
+      </required-log-markers>
+      <required-trace-assertions>
+        <assertion-1>Failure path must not emit BLOCK_PERSIST_RESULT.</assertion-1>
+      </required-trace-assertions>
+      <wave-follow-up>
+        <item-1>Run merged-surface integration check for the logger adapter.</item-1>
+      </wave-follow-up>
+      <phase-follow-up>
+        <item-1>Run the broader regression suite before marking the phase done.</item-1>
+      </phase-follow-up>
+    </VerificationDelta>
+  </VerificationDeltaTemplate>
+
+  <FailurePacketTemplate>
+    <FailurePacket>
+      <scenario>Primary success path fails on valid input.</scenario>
+      <contract-ref>M-EXAMPLE / V-M-EXAMPLE / scenario-1</contract-ref>
+      <expected-evidence>
+        <marker-1>[ExampleDomain][runExample][BLOCK_VALIDATE_INPUT]</marker-1>
+        <assertion-1>Expected return value should equal "ok".</assertion-1>
+      </expected-evidence>
+      <observed-evidence>
+        <log-1>[ExampleDomain][runExample][BLOCK_VALIDATE_INPUT] emitted</log-1>
+        <trace-1>BLOCK_VALIDATE_INPUT -&gt; threw EXAMPLE_INVALID_STATE</trace-1>
+      </observed-evidence>
+      <first-divergent-block>BLOCK_VALIDATE_INPUT</first-divergent-block>
+      <suggested-next-action>Read the contract, inspect the divergent block, and apply the smallest safe fix.</suggested-next-action>
+    </FailurePacket>
+  </FailurePacketTemplate>
+</OperationalPackets>
