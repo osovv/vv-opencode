@@ -41,6 +41,11 @@ export default defineCommand({
       `Guardian config parse: ${inspection.guardian.parseError ? inspection.guardian.parseError : inspection.guardian.exists ? "ok" : "missing"}`,
     );
     console.log(`Guardian config managed by vvoc: ${inspection.guardian.managed ? "yes" : "no"}`);
+    console.log(`Memory config: ${inspection.memory.path}`);
+    console.log(
+      `Memory config parse: ${inspection.memory.parseError ? inspection.memory.parseError : inspection.memory.exists ? "ok" : "missing"}`,
+    );
+    console.log(`Memory config managed by vvoc: ${inspection.memory.managed ? "yes" : "no"}`);
 
     if (inspection.warnings.length > 0) {
       console.log("Warnings:");

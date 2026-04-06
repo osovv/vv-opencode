@@ -110,7 +110,7 @@
 
     <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
       <contract>
-        <purpose>Persist explicit memory entries in `.vvoc/memory`, support scope-aware CRUD, and rank lexical search results.</purpose>
+        <purpose>Persist explicit memory entries in the vvoc XDG data root, support scope-aware CRUD, and rank lexical search results.</purpose>
         <inputs>
           <param name="MemoryRuntimeConfig" type="object" />
           <param name="MemoryEntry or query/filter inputs" type="object" />
@@ -125,7 +125,7 @@
       </contract>
       <interface>
         <export-loadMemoryRuntimeConfig PURPOSE="Load vvoc memory settings from global and project config files." />
-        <export-putMemory PURPOSE="Create a scoped memory entry in `.vvoc/memory`." />
+        <export-putMemory PURPOSE="Create a scoped memory entry in the vvoc XDG data root." />
         <export-searchMemories PURPOSE="Return ranked lexical matches across relevant memory scopes." />
       </interface>
       <depends>none</depends>
@@ -199,7 +199,7 @@
       <step-0>Before model turns, the plugin appends a short system reminder that explicit memory tools exist, without injecting stored memory entries.</step-0>
       <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/memory.jsonc` and project `.vvoc/memory.jsonc`.</step-1>
       <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
-      <step-3>Read or mutate entries under `.vvoc/memory/` using file-per-entry JSON records.</step-3>
+      <step-3>Read or mutate entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/` using file-per-entry JSON records.</step-3>
       <evidence>Correct file layout, deterministic CRUD/search behavior, and no automatic prompt injection.</evidence>
     </DF-MEMORY-ACCESS>
     <DF-MEMORY-REVIEW NAME="MemoryReview" TRIGGER="@memory-reviewer invocation">
@@ -221,7 +221,7 @@
       <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port Guardian and move runtime config to vvoc-owned paths.</step-1>
     </Phase-2>
     <Phase-3 name="Explicit Memory" status="done">
-      <goal>Add explicit persistent memory, store it in `.vvoc/memory`, and expose a report-only reviewer subagent.</goal>
+      <goal>Add explicit persistent memory, store it in the vvoc XDG data root, and expose a report-only reviewer subagent.</goal>
       <step-1 module="M-PLUGIN-MEMORY-STORE" status="done" verification="V-M-PLUGIN-MEMORY-STORE">Implement file-based scoped memory storage and lexical search.</step-1>
       <step-2 module="M-PLUGIN-MEMORY" status="done" verification="V-M-PLUGIN-MEMORY">Register memory tools and the `memory-reviewer` subagent via OpenCode plugin hooks.</step-2>
     </Phase-3>

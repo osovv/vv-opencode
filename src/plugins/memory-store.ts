@@ -3,7 +3,11 @@ import crypto from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parse, type ParseError } from "jsonc-parser";
-import { getGlobalVvocDir, getProjectVvocDir } from "../lib/vvoc-paths.js";
+import {
+  getGlobalVvocDir,
+  getGlobalVvocProjectDataDir,
+  getProjectVvocDir,
+} from "../lib/vvoc-paths.js";
 
 const MEMORY_SCOPE_TYPES = ["session", "branch", "project", "shared"] as const;
 const MEMORY_SCOPE_TYPES_WITH_ALL = [...MEMORY_SCOPE_TYPES, "all"] as const;
@@ -52,7 +56,7 @@ export type MemoryFilters = {
   limit?: number;
 };
 
-type MemoryConfigOverrides = {
+export type MemoryConfigOverrides = {
   enabled?: boolean;
   defaultSearchLimit?: number;
 };
@@ -82,12 +86,31 @@ export async function loadMemoryRuntimeConfig(directory: string): Promise<Memory
 
   return {
     enabled: projectConfig.enabled ?? globalConfig.enabled ?? true,
-    storageRoot: join(getProjectVvocDir(directory), "memory"),
+    storageRoot: join(getGlobalVvocProjectDataDir(directory), "memory"),
     defaultSearchLimit:
       projectConfig.defaultSearchLimit ?? globalConfig.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT,
     sources,
     warnings,
   };
+}
+
+export function parseMemoryConfigText(text: string, label: string): MemoryConfigOverrides {
+  return normalizeMemoryConfigDocument(parseMemoryConfigDocument(text, label), label);
+}
+
+export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): string {
+  const lines = [
+    "// Managed by vvoc.",
+    "// `vvoc sync` rewrites files with this marker while preserving current values.",
+    "// Remove this header if you want to manage the file manually.",
+    "",
+    "{",
+    `  "enabled": ${JSON.stringify(overrides.enabled ?? true)},`,
+    `  "defaultSearchLimit": ${overrides.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT}`,
+    "}",
+  ];
+
+  return `${lines.join("\n")}\n`;
 }
 
 export function getDefaultSearchLimit(config: MemoryRuntimeConfig): number {
@@ -262,36 +285,42 @@ function parseMemoryConfigDocument(text: string, label: string): JsonObject {
   return value;
 }
 
-function normalizeMemoryConfigOverrides(
-  source: string,
-  raw: unknown,
-  warnings: string[],
-): MemoryConfigOverrides {
+function normalizeMemoryConfigDocument(raw: unknown, label: string): MemoryConfigOverrides {
   if (!isPlainObject(raw)) {
-    warnings.push(`${source}: expected an object`);
-    return {};
+    throw new Error(`${label}: expected a top-level object`);
   }
 
   const overrides: MemoryConfigOverrides = {};
 
   if (Object.hasOwn(raw, "enabled")) {
-    if (typeof raw.enabled === "boolean") {
-      overrides.enabled = raw.enabled;
-    } else {
-      warnings.push(`${source}: ignored invalid "enabled" value`);
+    if (typeof raw.enabled !== "boolean") {
+      throw new Error(`${label}: expected "enabled" to be a boolean`);
     }
+    overrides.enabled = raw.enabled;
   }
 
   if (Object.hasOwn(raw, "defaultSearchLimit")) {
     const limit = readPositiveInteger(raw.defaultSearchLimit);
-    if (limit) {
-      overrides.defaultSearchLimit = limit;
-    } else {
-      warnings.push(`${source}: ignored invalid "defaultSearchLimit" value`);
+    if (!limit) {
+      throw new Error(`${label}: expected "defaultSearchLimit" to be a positive integer`);
     }
+    overrides.defaultSearchLimit = limit;
   }
 
   return overrides;
+}
+
+function normalizeMemoryConfigOverrides(
+  source: string,
+  raw: unknown,
+  warnings: string[],
+): MemoryConfigOverrides {
+  try {
+    return normalizeMemoryConfigDocument(raw, source);
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : `${source}: invalid memory config`);
+    return {};
+  }
 }
 
 async function loadScopedMemoryConfig(

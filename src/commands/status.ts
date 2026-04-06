@@ -35,6 +35,9 @@ export default defineCommand({
     console.log(`Guardian config: ${inspection.guardian.path}`);
     console.log(`Guardian config exists: ${inspection.guardian.exists ? "yes" : "no"}`);
     console.log(`Guardian config managed by vvoc: ${inspection.guardian.managed ? "yes" : "no"}`);
+    console.log(`Memory config: ${inspection.memory.path}`);
+    console.log(`Memory config exists: ${inspection.memory.exists ? "yes" : "no"}`);
+    console.log(`Memory config managed by vvoc: ${inspection.memory.managed ? "yes" : "no"}`);
 
     if (inspection.warnings.length > 0) {
       console.log("Warnings:");

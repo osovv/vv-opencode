@@ -4,6 +4,7 @@ import {
   ensurePackageInstalled,
   resolvePaths,
   syncGuardianConfig,
+  syncMemoryConfig,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -25,7 +26,7 @@ export default defineCommand({
     },
     force: {
       type: "boolean",
-      description: "Allow rewriting unmanaged guardian config files.",
+      description: "Allow rewriting unmanaged vvoc config files.",
     },
   },
   async run({ args }) {
@@ -38,8 +39,10 @@ export default defineCommand({
     });
     const opencode = await ensurePackageInstalled(paths);
     const guardian = await syncGuardianConfig(paths, { force: Boolean(args.force) });
+    const memory = await syncMemoryConfig(paths, { force: Boolean(args.force) });
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
     console.log(describeWriteResult(guardian));
+    console.log(describeWriteResult(memory));
   },
 });

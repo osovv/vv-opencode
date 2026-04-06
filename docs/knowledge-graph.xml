@@ -38,13 +38,13 @@
     </M-PLUGIN-GUARDIAN>
 
     <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Store explicit memory under `.vvoc/memory`, resolve scopes, and provide lexical ranking for search.</purpose>
+      <purpose>Store explicit memory under the vvoc XDG data root, resolve scopes, and provide lexical ranking for search.</purpose>
       <path>src/plugins/memory-store.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
       <annotations>
         <fn-loadMemoryRuntimeConfig PURPOSE="Load global and project vvoc memory settings." />
-        <fn-putMemory PURPOSE="Create a scoped memory entry in `.vvoc/memory`." />
+        <fn-putMemory PURPOSE="Create a scoped memory entry in the vvoc XDG data root." />
         <fn-searchMemories PURPOSE="Return ranked lexical matches across scoped entries." />
       </annotations>
     </M-PLUGIN-MEMORY-STORE>

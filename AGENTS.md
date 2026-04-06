@@ -75,7 +75,8 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 - OpenCode config remains in OpenCode-managed paths.
 - vvoc-managed config must live in `$XDG_CONFIG_HOME/vvoc/` or project-local `.vvoc/`.
 - `guardian.jsonc` may only be auto-rewritten when it is clearly managed by `vvoc`, unless the user explicitly forces overwrite.
-- `MemoryPlugin` stores entries in `.vvoc/memory/` and must stay explicit-only. Never inject stored entries into prompts automatically.
+- persisted vvoc data must live in `$XDG_DATA_HOME/vvoc/`.
+- `MemoryPlugin` stores entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/` and must stay explicit-only. Never inject stored entries into prompts automatically.
 - Never silently clobber user-owned config.
 
 ### Documentation sync

@@ -33,7 +33,7 @@
     </VF-GUARDIAN-REVIEW>
     <VF-MEMORY-ACCESS NAME="MemoryAccess" USE_CASES="UC-003" DATA_FLOW="DF-MEMORY-ACCESS" PRIORITY="high">
       <scenario>User stores and retrieves explicit memory across session, branch, project, and shared scopes.</scenario>
-      <expected-outcome>Entries are written to `.vvoc/memory`, later searchable, and never injected into prompts automatically, while the agent still receives a short system reminder to use memory tools proactively.</expected-outcome>
+      <expected-outcome>Entries are written to the vvoc XDG data root, later searchable, and never injected into prompts automatically, while the agent still receives a short system reminder to use memory tools proactively.</expected-outcome>
       <required-signals>
         <trace-sequence>system reminder appended -&gt; loadMemoryRuntimeConfig -&gt; putMemory/listMemories/searchMemories -&gt; correct file layout</trace-sequence>
       </required-signals>
@@ -126,7 +126,7 @@
         <check-2>bun x tsc --noEmit</check-2>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Scoped memory entries are stored in the expected `.vvoc/memory` layout.</scenario-1>
+        <scenario-1 kind="success">Scoped memory entries are stored in the expected XDG data-backed vvoc layout.</scenario-1>
         <scenario-2 kind="success">Search returns the best lexical match in the requested scope.</scenario-2>
         <scenario-3 kind="success">Update and delete preserve store consistency and clean empty directories.</scenario-3>
       </scenarios>
@@ -190,7 +190,7 @@
       </required-evidence>
     </Gate-Phase-2>
     <Gate-Phase-3 PHASE="Phase-3">
-      <goal>Explicit memory is packaged from the repo and stored under `.vvoc/memory` with a report-only reviewer agent.</goal>
+      <goal>Explicit memory is packaged from the repo and stored under the vvoc XDG data root with a report-only reviewer agent.</goal>
       <commands>
         <command-1>bun x tsc --noEmit</command-1>
         <command-2>bun run lint</command-2>

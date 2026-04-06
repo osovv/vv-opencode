@@ -2,6 +2,11 @@ import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  parseMemoryConfigText,
+  renderMemoryConfig,
+  type MemoryConfigOverrides,
+} from "../plugins/memory-store.js";
+import {
   getConfigHome,
   getGlobalOpencodeDir,
   getGlobalVvocDir,
@@ -15,6 +20,7 @@ const MANAGED_MARKER = "Managed by vvoc";
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
 const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
 const GUARDIAN_CONFIG_FILE_NAMES = ["guardian.jsonc", "guardian.json"] as const;
+const MEMORY_CONFIG_FILE_NAMES = ["memory.jsonc", "memory.json"] as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
 
 const JSON_FORMAT = {
@@ -37,6 +43,8 @@ export type ResolvedPaths = {
   opencodeAlternatePaths: string[];
   guardianConfigPath: string;
   guardianAlternatePaths: string[];
+  memoryConfigPath: string;
+  memoryConfigAlternates: string[];
 };
 
 export type GuardianConfigOverrides = {
@@ -71,6 +79,14 @@ export type InstallationInspection = {
     parseError?: string;
     overrides?: GuardianConfigOverrides;
   };
+  memory: {
+    path: string;
+    exists: boolean;
+    alternates: string[];
+    managed: boolean;
+    parseError?: string;
+    overrides?: MemoryConfigOverrides;
+  };
   warnings: string[];
   problems: string[];
 };
@@ -93,6 +109,9 @@ export async function resolvePaths(options: {
   const guardianSelection = await selectPrimaryPath(
     GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
   );
+  const memorySelection = await selectPrimaryPath(
+    MEMORY_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
+  );
 
   return {
     scope: options.scope,
@@ -104,6 +123,8 @@ export async function resolvePaths(options: {
     opencodeAlternatePaths: opencodeSelection.alternates,
     guardianConfigPath: guardianSelection.primary,
     guardianAlternatePaths: guardianSelection.alternates,
+    memoryConfigPath: memorySelection.primary,
+    memoryConfigAlternates: memorySelection.alternates,
   };
 }
 
@@ -276,6 +297,57 @@ export async function writeGuardianConfig(
   };
 }
 
+export async function installMemoryConfig(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.memoryConfigPath);
+  if (!currentText) {
+    await writeText(paths.memoryConfigPath, renderMemoryConfig());
+    return { action: "created", path: paths.memoryConfigPath };
+  }
+
+  if (!options.force) {
+    if (!isManagedFile(currentText)) {
+      return {
+        action: "skipped",
+        path: paths.memoryConfigPath,
+        reason: "existing file is not managed by vvoc",
+      };
+    }
+    return { action: "kept", path: paths.memoryConfigPath };
+  }
+
+  return syncMemoryConfig(paths, options);
+}
+
+export async function syncMemoryConfig(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.memoryConfigPath);
+  if (!currentText) {
+    await writeText(paths.memoryConfigPath, renderMemoryConfig());
+    return { action: "created", path: paths.memoryConfigPath };
+  }
+
+  if (!options.force && !isManagedFile(currentText)) {
+    return {
+      action: "skipped",
+      path: paths.memoryConfigPath,
+      reason: "existing file is not managed by vvoc",
+    };
+  }
+
+  const nextText = renderMemoryConfig(parseMemoryConfigText(currentText, paths.memoryConfigPath));
+  if (currentText === nextText) {
+    return { action: "kept", path: paths.memoryConfigPath };
+  }
+
+  await writeText(paths.memoryConfigPath, nextText);
+  return { action: "updated", path: paths.memoryConfigPath };
+}
+
 export async function inspectInstallation(paths: ResolvedPaths): Promise<InstallationInspection> {
   const warnings: string[] = [];
   const problems: string[] = [];
@@ -288,6 +360,11 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   if (paths.guardianAlternatePaths.length > 0) {
     warnings.push(
       `multiple Guardian config files exist: ${[paths.guardianConfigPath, ...paths.guardianAlternatePaths].join(", ")}`,
+    );
+  }
+  if (paths.memoryConfigAlternates.length > 0) {
+    warnings.push(
+      `multiple Memory config files exist: ${[paths.memoryConfigPath, ...paths.memoryConfigAlternates].join(", ")}`,
     );
   }
 
@@ -321,6 +398,20 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     }
   }
 
+  const memoryText = await readOptionalText(paths.memoryConfigPath);
+  let memoryParseError: string | undefined;
+  let memoryOverrides: MemoryConfigOverrides | undefined;
+  const memoryManaged = memoryText ? isManagedFile(memoryText) : false;
+
+  if (memoryText) {
+    try {
+      memoryOverrides = parseMemoryConfigText(memoryText, paths.memoryConfigPath);
+    } catch (error) {
+      memoryParseError = error instanceof Error ? error.message : String(error);
+      problems.push(memoryParseError);
+    }
+  }
+
   if (!pluginConfigured) {
     problems.push(`${PACKAGE_NAME} is not configured in ${paths.opencodeConfigPath}`);
   }
@@ -342,6 +433,14 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
       managed: guardianManaged,
       parseError: guardianParseError,
       overrides: guardianOverrides,
+    },
+    memory: {
+      path: paths.memoryConfigPath,
+      exists: Boolean(memoryText),
+      alternates: paths.memoryConfigAlternates,
+      managed: memoryManaged,
+      parseError: memoryParseError,
+      overrides: memoryOverrides,
     },
     warnings,
     problems,

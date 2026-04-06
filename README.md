@@ -70,11 +70,15 @@ vvoc-managed config stays separate:
 - global: `$XDG_CONFIG_HOME/vvoc/` or `~/.config/vvoc/`
 - project: `./.vvoc/`
 
+vvoc persisted data stays in the XDG data root:
+
+- global data: `$XDG_DATA_HOME/vvoc/` or `~/.local/share/vvoc/`
+
 Examples:
 
 - global Guardian config: `~/.config/vvoc/guardian.jsonc`
 - project Guardian config: `./.vvoc/guardian.jsonc`
-- project memory store: `./.vvoc/memory/`
+- global memory data: `~/.local/share/vvoc/projects/<project-id>/memory/`
 - project memory settings: `./.vvoc/memory.jsonc`
 
 This keeps vvoc state clearly separated from native OpenCode config and avoids future clashes if OpenCode adds its own memory features.
@@ -109,6 +113,7 @@ This writes:
 
 - `/tmp/vvoc-home/opencode/opencode.json`
 - `/tmp/vvoc-home/vvoc/guardian.jsonc`
+- `/tmp/vvoc-home/vvoc/memory.jsonc`
 
 Sync managed config files:
 
@@ -137,6 +142,7 @@ bun x vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
 - managed files can be resynced safely
 - existing unmanaged files are not overwritten unless `--force` is passed
 - Guardian now reads vvoc-managed config from `.vvoc/` or `$XDG_CONFIG_HOME/vvoc/`
+- `vvoc install` also creates `memory.jsonc` when it is missing
 
 ## Memory plugin
 
@@ -155,7 +161,8 @@ Memory is explicit-only:
 
 - stored entries are never injected into the prompt automatically
 - the agent must call memory tools directly when it needs durable context
-- memory lives in `./.vvoc/memory/`
+- memory settings live in `./.vvoc/memory.jsonc` or `$XDG_CONFIG_HOME/vvoc/memory.jsonc`
+- memory data lives under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`
 - the plugin adds a short system instruction that reminds the agent to consider memory tools proactively when durable context may help
 
 Supported scopes:

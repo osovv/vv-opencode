@@ -65,6 +65,7 @@ describe("resolvePaths", () => {
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
     expect(paths.guardianConfigPath).toBe("/tmp/vvoc-config-home/vvoc/guardian.jsonc");
+    expect(paths.memoryConfigPath).toBe("/tmp/vvoc-config-home/vvoc/memory.jsonc");
   });
 
   test("uses .vvoc for project-scoped vvoc config", async () => {
@@ -76,5 +77,6 @@ describe("resolvePaths", () => {
     expect(paths.opencodeBaseDir).toBe("/workspace/project");
     expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
     expect(paths.guardianConfigPath).toBe("/workspace/project/.vvoc/guardian.jsonc");
+    expect(paths.memoryConfigPath).toBe("/workspace/project/.vvoc/memory.jsonc");
   });
 });

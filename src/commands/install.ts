@@ -3,6 +3,7 @@ import {
   describeWriteResult,
   ensurePackageInstalled,
   installGuardianConfig,
+  installMemoryConfig,
   resolvePaths,
   type Scope,
 } from "../lib/opencode.js";
@@ -32,6 +33,11 @@ export default defineCommand({
       default: true,
       description: "Create guardian.jsonc when missing.",
     },
+    "memory-config": {
+      type: "boolean",
+      default: true,
+      description: "Create memory.jsonc when missing.",
+    },
   },
   async run({ args }) {
     const scope = args.scope === "project" ? "project" : "global";
@@ -47,10 +53,17 @@ export default defineCommand({
 
     if (args["guardian-config"] === false) {
       console.log(`Skipped ${paths.guardianConfigPath} (guardian config disabled)`);
+    } else {
+      const guardian = await installGuardianConfig(paths, { force: Boolean(args.force) });
+      console.log(describeWriteResult(guardian));
+    }
+
+    if (args["memory-config"] === false) {
+      console.log(`Skipped ${paths.memoryConfigPath} (memory config disabled)`);
       return;
     }
 
-    const guardian = await installGuardianConfig(paths, { force: Boolean(args.force) });
-    console.log(describeWriteResult(guardian));
+    const memory = await installMemoryConfig(paths, { force: Boolean(args.force) });
+    console.log(describeWriteResult(memory));
   },
 });

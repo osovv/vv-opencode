@@ -9,7 +9,9 @@ import {
   getMemory,
   listMemories,
   loadMemoryRuntimeConfig,
+  parseMemoryConfigText,
   putMemory,
+  renderMemoryConfig,
   searchMemories,
   updateMemory,
 } from "./memory-store.js";
@@ -17,6 +19,7 @@ import {
 describe("loadMemoryRuntimeConfig", () => {
   test("uses global and project vvoc config files", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-config-home-"));
+    const dataHome = await mkdtemp(join(tmpdir(), "vvoc-data-home-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-project-"));
 
     try {
@@ -33,30 +36,54 @@ describe("loadMemoryRuntimeConfig", () => {
         "utf8",
       );
 
-      const previous = process.env.XDG_CONFIG_HOME;
+      const previousConfigHome = process.env.XDG_CONFIG_HOME;
+      const previousDataHome = process.env.XDG_DATA_HOME;
       process.env.XDG_CONFIG_HOME = configHome;
+      process.env.XDG_DATA_HOME = dataHome;
 
       try {
         const memoryConfig = await loadMemoryRuntimeConfig(projectDir);
 
         expect(memoryConfig.enabled).toBe(true);
         expect(memoryConfig.defaultSearchLimit).toBe(2);
-        expect(memoryConfig.storageRoot).toBe(join(projectDir, ".vvoc", "memory"));
+        expect(memoryConfig.storageRoot).toContain(join(dataHome, "vvoc", "projects"));
+        expect(memoryConfig.storageRoot).toContain("vvoc-memory-project-");
+        expect(memoryConfig.storageRoot.endsWith("/memory")).toBe(true);
         expect(memoryConfig.sources).toEqual([
           join(configHome, "vvoc", "memory.jsonc"),
           join(projectDir, ".vvoc", "memory.jsonc"),
         ]);
       } finally {
-        if (previous === undefined) {
+        if (previousConfigHome === undefined) {
           delete process.env.XDG_CONFIG_HOME;
         } else {
-          process.env.XDG_CONFIG_HOME = previous;
+          process.env.XDG_CONFIG_HOME = previousConfigHome;
+        }
+
+        if (previousDataHome === undefined) {
+          delete process.env.XDG_DATA_HOME;
+        } else {
+          process.env.XDG_DATA_HOME = previousDataHome;
         }
       }
     } finally {
       await rm(configHome, { recursive: true, force: true });
+      await rm(dataHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
     }
+  });
+
+  test("round-trips managed memory config values", () => {
+    const output = renderMemoryConfig({
+      enabled: false,
+      defaultSearchLimit: 12,
+    });
+    const parsed = parseMemoryConfigText(output, "test memory config");
+
+    expect(parsed).toEqual({
+      enabled: false,
+      defaultSearchLimit: 12,
+    });
   });
 });
 

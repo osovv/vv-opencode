@@ -32,7 +32,7 @@
     <UC-003>
       <Actor>User</Actor>
       <Action>Uses `memory_put`, `memory_search`, `memory_get`, `memory_update`, `memory_delete`, or `memory_list` inside OpenCode.</Action>
-      <Goal>To persist explicit durable context in `.vvoc/memory/` without automatic prompt injection.</Goal>
+      <Goal>To persist explicit durable context in the vvoc data root under `$XDG_DATA_HOME/vvoc/` without automatic prompt injection.</Goal>
       <Preconditions>The package is enabled in OpenCode and memory is not disabled in `memory.jsonc`.</Preconditions>
       <AcceptanceCriteria>Memory entries are stored in the correct scope, searchable later, and never silently injected into prompts.</AcceptanceCriteria>
       <Priority>high</Priority>
@@ -58,9 +58,10 @@
   <Constraints>
     <constraint-1>OpenCode config integration must follow documented global and project path conventions.</constraint-1>
     <constraint-2>vvoc-managed config must live under `$XDG_CONFIG_HOME/vvoc/` or project-local `.vvoc/`.</constraint-2>
-    <constraint-3>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-3>
-    <constraint-4>Memory must stay explicit-only. Stored entries must not be injected into prompts automatically.</constraint-4>
-    <constraint-5>Generated Guardian config should be clearly marked as CLI-managed so sync can distinguish owned and non-owned files.</constraint-5>
+    <constraint-3>Persisted vvoc data must live under `$XDG_DATA_HOME/vvoc/`, not inside the OpenCode config tree.</constraint-3>
+    <constraint-4>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-4>
+    <constraint-5>Memory must stay explicit-only. Stored entries must not be injected into prompts automatically.</constraint-5>
+    <constraint-6>Generated Guardian and Memory config should be clearly marked as CLI-managed so sync can distinguish owned and non-owned files.</constraint-6>
   </Constraints>
 
   <Risks>
@@ -72,6 +73,6 @@
 
   <OpenQuestions>
     <question-1>Should future versions also manage OpenCode skills and agents as installable assets in addition to plugin config and vvoc-owned files?</question-1>
-    <question-2>Should memory eventually grow an index or vector-backed search layer once `.vvoc/memory` becomes large?</question-2>
+    <question-2>Should memory eventually grow an index or vector-backed search layer once the XDG data-backed store becomes large?</question-2>
   </OpenQuestions>
 </RequirementsAnalysis>
