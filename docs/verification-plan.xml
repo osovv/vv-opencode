@@ -45,6 +45,15 @@
         <trace-sequence>plugin config registers memory-reviewer -&gt; reviewer uses memory_list/get/search only</trace-sequence>
       </required-signals>
     </VF-MEMORY-REVIEW>
+    <VF-SECRETS-REDACTION NAME="SecretsRedaction" USE_CASES="UC-005" DATA_FLOW="DF-SECRETS-REDACTION" PRIORITY="high">
+      <scenario>LLM request is sent with secrets in message history, tool inputs, or tool outputs.</scenario>
+      <expected-outcome>Secrets are replaced with `__VVOC_SECRET_*` placeholders before LLM request, restored after LLM response, and restored before tool execution.</expected-outcome>
+      <required-signals>
+        <trace-sequence>experimental.chat.messages.transform -&gt; redactText/redactDeep</trace-sequence>
+        <trace-sequence>experimental.text.complete -&gt; restoreText</trace-sequence>
+        <trace-sequence>tool.execute.before -&gt; restoreDeep</trace-sequence>
+      </required-signals>
+    </VF-SECRETS-REDACTION>
   </CriticalFlows>
 
   <ModuleVerification>
@@ -163,6 +172,35 @@
       <wave-follow-up>Consider adding a smoke test around custom tool execution in a live OpenCode session.</wave-follow-up>
       <phase-follow-up>Add coverage for memory config warnings and disabled mode if the config surface grows.</phase-follow-up>
     </V-M-PLUGIN-MEMORY>
+
+    <V-M-PLUGIN-SECRETS-REDACTION MODULE="M-PLUGIN-SECRETS-REDACTION" PRIORITY="high">
+      <test-files>
+        <file>src/plugins/secrets-redaction/*.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun x tsc --noEmit</check-1>
+        <check-2>bun run lint</check-2>
+        <check-3>bun run fmt:check</check-3>
+        <check-4>bun test src/plugins/secrets-redaction/*.test.ts</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Plugin exports compile against current OpenCode plugin and SDK types.</scenario-1>
+        <scenario-2 kind="success">Placeholders are stable within a session (same secret maps to same placeholder).</scenario-2>
+        <scenario-3 kind="success">Builtin patterns detect email, china_phone, china_id, uuid, ipv4, mac.</scenario-3>
+        <scenario-4 kind="success">Config file loads from $XDG_CONFIG_HOME/vvoc/secrets-redaction.config.json.</scenario-4>
+        <scenario-5 kind="failure">Disabled config makes plugin a no-op.</scenario-5>
+      </scenarios>
+      <required-log-markers>
+        <marker-1>secrets-redaction</marker-1>
+      </required-log-markers>
+      <required-trace-assertions>
+        <assertion-1>HMAC hash is irreversible without the session secret.</assertion-1>
+        <assertion-2>TTL eviction removes expired mappings.</assertion-1>
+        <assertion-2>Max-mappings eviction removes oldest entries when limit is reached.</assertion-2>
+      </required-trace-assertions>
+      <wave-follow-up>Add isolated unit tests for PlaceholderSession, redactText, and pattern matching.</wave-follow-up>
+      <phase-follow-up>Consider integration tests with a mock OpenCode plugin context.</phase-follow-up>
+    </V-M-PLUGIN-SECRETS-REDACTION>
   </ModuleVerification>
 
   <PhaseGates>

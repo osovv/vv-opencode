@@ -1,0 +1,102 @@
+// FILE: src/plugins/secrets-redaction/patterns.ts
+// VERSION: 1.0.0
+// START_MODULE_CONTRACT
+//   PURPOSE: Builds the internal pattern set from config — keywords, regex rules, and builtin patterns.
+//   SCOPE: pattern parsing, normalization, deduplication
+//   DEPENDS: node:crypto (for hashing)
+//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   ROLE: RUNTIME
+//   MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   buildPatternSet - builds pattern set from config object
+//   BUILTIN_PATTERNS - Map of 6 builtin pattern definitions
+// END_MODULE_MAP
+
+export interface PatternRule {
+  pattern: RegExp;
+  category: string;
+}
+
+export interface PatternSet {
+  rules: PatternRule[];
+  exclude: Set<string>;
+}
+
+export interface PatternsConfig {
+  keywords?: Array<{ value: string; category?: string }>;
+  regex?: Array<{ pattern: string; category: string }>;
+  builtin?: string[];
+  exclude?: string[];
+}
+
+const BUILTIN_PATTERNS: Map<string, { pattern: string; category: string }> = new Map([
+  ["email", { pattern: "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}", category: "EMAIL" }],
+  ["china_phone", { pattern: "(?<!\\d)1[3-9]\\d{9}(?!\\d)", category: "CHINA_PHONE" }],
+  ["china_id", { pattern: "(?<!\\d)\\d{17}[\\dXx](?!\\d)", category: "CHINA_ID" }],
+  [
+    "uuid",
+    {
+      pattern:
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}",
+      category: "UUID",
+    },
+  ],
+  ["ipv4", { pattern: "(?:\\d{1,3}\\.){3}\\d{1,3}", category: "IPV4" }],
+  ["mac", { pattern: "(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", category: "MAC" }],
+]);
+
+function peelFlags(pattern: string): { pattern: string; flags: string } {
+  const inlineFlags: string[] = [];
+  let p = pattern;
+
+  const iMatch = p.match(/^\(\?([a-z]+)\)/);
+  if (iMatch) {
+    const captured = iMatch[1];
+    if (captured.includes("i")) inlineFlags.push("i");
+    if (captured.includes("m")) inlineFlags.push("m");
+    if (captured.includes("s")) inlineFlags.push("s");
+    p = p.slice(iMatch[0].length);
+  }
+
+  return { pattern: p, flags: inlineFlags.join("") };
+}
+
+function buildRegex(pattern: string, defaultFlags = "gi"): RegExp {
+  const { pattern: raw, flags: peeled } = peelFlags(pattern);
+  const flags = peeled ? `${defaultFlags}${peeled}` : defaultFlags;
+  return new RegExp(raw, flags);
+}
+
+export function buildPatternSet(config: PatternsConfig): PatternSet {
+  const rules: PatternRule[] = [];
+
+  if (config.builtin) {
+    for (const name of config.builtin) {
+      const builtin = BUILTIN_PATTERNS.get(name);
+      if (builtin) {
+        rules.push({ pattern: buildRegex(builtin.pattern), category: builtin.category });
+      }
+    }
+  }
+
+  if (config.regex) {
+    for (const { pattern, category } of config.regex) {
+      rules.push({ pattern: buildRegex(pattern), category });
+    }
+  }
+
+  if (config.keywords) {
+    for (const { value, category = "KEYWORD" } of config.keywords) {
+      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      rules.push({ pattern: new RegExp(escaped, "gi"), category });
+    }
+  }
+
+  const exclude = new Set<string>(config.exclude ?? []);
+
+  return { rules, exclude };
+}
+
+export { BUILTIN_PATTERNS };

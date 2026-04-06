@@ -59,8 +59,89 @@
       </annotations>
     </M-PLUGIN-MEMORY>
 
+    <M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION NAME="PlaceholderSession" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Manages secret-to-placeholder mappings with HMAC-SHA256 hashing, TTL eviction, and max-mappings limits.</purpose>
+      <path>src/plugins/secrets-redaction/session.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <class-PlaceholderSession PURPOSE="Manages placeholder lifecycle — creation, lookup, TTL cleanup." />
+        <fn-getPlaceholderRegex PURPOSE="Returns RegExp to find all placeholders in text." />
+        <fn-generateFallbackSecret PURPOSE="Generates random hex secret when VVOC_SECRET is not set." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION>
+
+    <M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS NAME="PatternSet" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Builds pattern set from config — keywords, regex rules, and 6 builtin patterns (email, china_phone, china_id, uuid, ipv4, mac).</purpose>
+      <path>src/plugins/secrets-redaction/patterns.ts</path>
+      <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <fn-buildPatternSet PURPOSE="Builds pattern set from config with regex normalization." />
+        <const-BUILTIN_PATTERNS PURPOSE="Map of 6 builtin pattern definitions." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS>
+
+    <M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE NAME="RedactEngine" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Core redaction engine — performs find/replace of secrets with placeholders using right-to-left interval arithmetic.</purpose>
+      <path>src/plugins/secrets-redaction/engine.ts</path>
+      <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION, M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <fn-redactText PURPOSE="Replaces secrets in text with placeholders, returns changed text + match list." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE>
+
+    <M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE NAME="RestoreEngine" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Restores placeholders in a single string back to original secret values.</purpose>
+      <path>src/plugins/secrets-redaction/restore.ts</path>
+      <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <fn-restoreText PURPOSE="Restores all placeholders in a string to original values." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE>
+
+    <M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP NAME="DeepTraversal" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Deep traversal helpers for restoring/redacting placeholders in nested objects and arrays with cycle safety.</purpose>
+      <path>src/plugins/secrets-redaction/deep.ts</path>
+      <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION, M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <fn-restoreDeep PURPOSE="In-place restoration of placeholders in objects/arrays." />
+        <fn-redactDeep PURPOSE="In-place redaction of secrets in objects/arrays." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP>
+
+    <M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG NAME="ConfigLoader" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Loads secrets-redaction.config.json from XDG config paths with environment variable substitution.</purpose>
+      <path>src/plugins/secrets-redaction/config.ts</path>
+      <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <fn-loadConfig PURPOSE="Loads and returns normalized config with warnings." />
+        <fn-getConfigCandidates PURPOSE="Returns ordered candidate paths for config file." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG>
+
+    <M-PLUGIN-SECRETS-REDACTION NAME="SecretsRedactionPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Redacts secrets from messages before LLM requests and restores them after — protects secrets from being sent to LLM providers.</purpose>
+      <path>src/plugins/secrets-redaction/index.ts</path>
+      <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION, M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS, M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG</depends>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+      <annotations>
+        <export-SecretsRedactionPlugin PURPOSE="Main plugin factory — hooks into experimental.chat.messages.transform, experimental.text.complete, tool.execute.before." />
+      </annotations>
+    </M-PLUGIN-SECRETS-REDACTION>
+
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-GUARDIAN" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-MEMORY" to="M-PLUGIN-MEMORY-STORE" relation="uses" />
+    <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION" relation="uses" />
+    <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS" relation="uses" />
+    <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE" relation="uses" />
+    <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE" relation="uses" />
+    <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP" relation="uses" />
+    <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG" relation="uses" />
   </Project>
 </KnowledgeGraph>
