@@ -4,19 +4,19 @@
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware config mutation, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
+      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-paths.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
-        <fn-ensurePackageInstalled PURPOSE="Add the package name to the OpenCode plugin array if needed." />
+        <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
         <fn-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </annotations>
     </M-CLI-CONFIG>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose install, sync, status, doctor, and Guardian config commands.</purpose>
+      <purpose>Compose the `vvoc` CLI and expose install, sync, status, doctor, version, and Guardian config commands.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>

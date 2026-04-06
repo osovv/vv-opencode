@@ -11,11 +11,11 @@ import {
 
 describe("ensurePackageConfigText", () => {
   test("creates a new config when none exists", () => {
-    const output = ensurePackageConfigText();
+    const output = ensurePackageConfigText(undefined, `${PACKAGE_NAME}@0.2.3`);
     const parsed = parse(output) as { $schema?: string; plugin?: string[] };
 
     expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
-    expect(parsed.plugin).toEqual([PACKAGE_NAME]);
+    expect(parsed.plugin).toEqual([`${PACKAGE_NAME}@0.2.3`]);
   });
 
   test("preserves comments while appending the plugin", () => {
@@ -23,11 +23,21 @@ describe("ensurePackageConfigText", () => {
   // existing plugin comment
   "plugin": ["foo"]
 }\n`;
-    const output = ensurePackageConfigText(input);
+    const output = ensurePackageConfigText(input, `${PACKAGE_NAME}@0.2.3`);
     const parsed = parse(output) as { plugin?: string[] };
 
     expect(output).toContain("// existing plugin comment");
-    expect(parsed.plugin).toEqual(["foo", PACKAGE_NAME]);
+    expect(parsed.plugin).toEqual(["foo", `${PACKAGE_NAME}@0.2.3`]);
+  });
+
+  test("upgrades bare or old pinned package entries to the requested version", () => {
+    const input = `{
+  "plugin": ["foo", "${PACKAGE_NAME}", "${PACKAGE_NAME}@0.2.2"]
+}\n`;
+    const output = ensurePackageConfigText(input, `${PACKAGE_NAME}@0.2.3`);
+    const parsed = parse(output) as { plugin?: string[] };
+
+    expect(parsed.plugin).toEqual(["foo", `${PACKAGE_NAME}@0.2.3`]);
   });
 });
 

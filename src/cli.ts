@@ -6,11 +6,15 @@ import guardian from "./commands/guardian.js";
 import install from "./commands/install.js";
 import status from "./commands/status.js";
 import sync from "./commands/sync.js";
+import version from "./commands/version.js";
+import { getPackageVersion } from "./lib/package.js";
+
+const packageVersion = await getPackageVersion();
 
 const main = defineCommand({
   meta: {
     name: "vvoc",
-    version: "0.1.0",
+    version: packageVersion,
     description: "Install and sync vv-opencode plugins for OpenCode.",
   },
   subCommands: {
@@ -19,6 +23,7 @@ const main = defineCommand({
     status,
     doctor,
     guardian,
+    version,
   },
 });
 

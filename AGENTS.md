@@ -16,7 +16,7 @@ Portable OpenCode workflow package with plugins and a Bun CLI for install, sync,
 - current exported plugins:
   - `GuardianPlugin`
   - `MemoryPlugin`
-- current command set: `install`, `sync`, `status`, `doctor`, `guardian config`
+- current command set: `install`, `sync`, `status`, `doctor`, `guardian config`, `version`
 
 ## Repository Rules
 
@@ -82,6 +82,7 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 ### Documentation sync
 
 - If command names, flags, examples, install flow, or vvoc config paths change, update `README.md`.
+- `vvoc install` should keep writing a pinned package specifier to the OpenCode plugin array.
 - If modules or public exports change, update `docs/knowledge-graph.xml`.
 - If commands, test strategy, or critical scenarios change, update `docs/verification-plan.xml`.
 

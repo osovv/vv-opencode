@@ -6,6 +6,7 @@ import {
   renderMemoryConfig,
   type MemoryConfigOverrides,
 } from "../plugins/memory-store.js";
+import { getPinnedPackageSpecifier, PACKAGE_NAME } from "./package.js";
 import {
   getConfigHome,
   getGlobalOpencodeDir,
@@ -14,7 +15,7 @@ import {
 } from "./vvoc-paths.js";
 
 export const CLI_NAME = "vvoc";
-export const PACKAGE_NAME = "@osovv/vv-opencode";
+export { PACKAGE_NAME };
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
 const MANAGED_MARKER = "Managed by vvoc";
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
@@ -128,11 +129,14 @@ export async function resolvePaths(options: {
   };
 }
 
-export function ensurePackageConfigText(text?: string): string {
+export function ensurePackageConfigText(
+  text: string | undefined,
+  packageSpecifier = PACKAGE_NAME,
+): string {
   if (!text?.trim()) {
     return renderJson({
       $schema: OPENCODE_SCHEMA_URL,
-      plugin: [PACKAGE_NAME],
+      plugin: [packageSpecifier],
     });
   }
 
@@ -150,8 +154,8 @@ export function ensurePackageConfigText(text?: string): string {
     );
   }
 
-  const nextPlugins = Array.from(new Set([...currentPlugins, PACKAGE_NAME]));
-  if (nextPlugins.length !== currentPlugins.length) {
+  const nextPlugins = normalizePluginList(currentPlugins, packageSpecifier);
+  if (JSON.stringify(nextPlugins) !== JSON.stringify(currentPlugins)) {
     nextText = applyEdits(
       nextText,
       modify(nextText, ["plugin"], nextPlugins, {
@@ -208,7 +212,7 @@ export async function ensurePackageInstalled(paths: ResolvedPaths): Promise<{
   changed: boolean;
 }> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
-  const nextText = ensurePackageConfigText(currentText);
+  const nextText = ensurePackageConfigText(currentText, await getPinnedPackageSpecifier());
 
   if (currentText === nextText) {
     return { path: paths.opencodeConfigPath, changed: false };
@@ -377,7 +381,7 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     try {
       const document = parseObjectDocument(opencodeText, paths.opencodeConfigPath);
       plugins = readPluginList(document, paths.opencodeConfigPath);
-      pluginConfigured = plugins.includes(PACKAGE_NAME);
+      pluginConfigured = plugins.some(isPackagePluginSpecifier);
     } catch (error) {
       opencodeParseError = error instanceof Error ? error.message : String(error);
       problems.push(opencodeParseError);
@@ -493,6 +497,41 @@ function readPluginList(document: JsonObject, label: string): string[] {
     throw new Error(`${label}: expected "plugin" to be an array of strings`);
   }
   return raw.slice();
+}
+
+function normalizePluginList(currentPlugins: string[], packageSpecifier: string): string[] {
+  const nextPlugins: string[] = [];
+  const seen = new Set<string>();
+  let insertedPackage = false;
+
+  const push = (value: string) => {
+    if (!seen.has(value)) {
+      seen.add(value);
+      nextPlugins.push(value);
+    }
+  };
+
+  for (const plugin of currentPlugins) {
+    if (isPackagePluginSpecifier(plugin)) {
+      if (!insertedPackage) {
+        push(packageSpecifier);
+        insertedPackage = true;
+      }
+      continue;
+    }
+
+    push(plugin);
+  }
+
+  if (!insertedPackage) {
+    push(packageSpecifier);
+  }
+
+  return nextPlugins;
+}
+
+function isPackagePluginSpecifier(value: string): boolean {
+  return value === PACKAGE_NAME || value.startsWith(`${PACKAGE_NAME}@`);
 }
 
 function normalizeGuardianOverrides(raw: unknown, label: string): GuardianConfigOverrides {

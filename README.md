@@ -22,6 +22,7 @@ Current package scope:
   - `status`
   - `doctor`
   - `guardian config`
+  - `version`
 
 ## Installation
 
@@ -58,6 +59,17 @@ Add the package to your OpenCode config:
 
 OpenCode loads all exported plugin functions from the package, so this enables both `GuardianPlugin` and `MemoryPlugin`.
 
+`vvoc install` writes a pinned package specifier automatically, for example:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@osovv/vv-opencode@<installed-version>"]
+}
+```
+
+This avoids stale `latest` plugin cache behavior inside OpenCode.
+
 ## Config layout
 
 OpenCode config stays in OpenCode-managed locations:
@@ -91,11 +103,19 @@ Show help:
 bun x vvoc --help
 ```
 
+Show the installed `vvoc` package version:
+
+```bash
+bun x vvoc version
+```
+
 Install package config and bootstrap Guardian config:
 
 ```bash
 bun x vvoc install
 ```
+
+`install` writes the current installed package version into the OpenCode `plugin` array instead of using an unpinned `latest` reference.
 
 Use project scope instead of global scope:
 

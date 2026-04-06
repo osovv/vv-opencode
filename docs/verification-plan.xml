@@ -11,7 +11,7 @@
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User installs the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The package name is present in the resolved OpenCode `plugin` array and Guardian config lives under the vvoc config root.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array and Guardian config lives under the vvoc config root.</expected-outcome>
       <required-signals>
         <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
       </required-signals>
@@ -59,7 +59,7 @@
         <check-4>bun run fmt:check</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Fresh install config renders with schema and plugin array.</scenario-1>
+        <scenario-1 kind="success">Fresh install config renders with schema and a pinned vvoc package specifier in the plugin array.</scenario-1>
         <scenario-2 kind="success">Existing JSONC comments survive plugin insertion.</scenario-2>
         <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
@@ -83,7 +83,7 @@
         <check-4>bun test</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands.</scenario-1>
+        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
       </scenarios>
       <required-log-markers />
