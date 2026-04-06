@@ -19,6 +19,9 @@
   <Tooling>
     <tool name="package-manager" value="bun" version="1.3.8" />
     <tool name="compiler" value="typescript" version="5.8.2" />
+    <tool name="linter" value="oxlint" version="1.58.0" />
+    <tool name="formatter" value="oxfmt" version="0.43.0" />
+    <tool name="git-hooks" value="lefthook" version="2.1.5" />
     <tool name="test-runner" value="bun test" version="1.3.8" />
   </Tooling>
 
@@ -28,12 +31,12 @@
       <focus>Fast deterministic checks for config merge and Guardian config rendering.</focus>
     </module-level>
     <wave-level>
-      <command>bun run typecheck &amp;&amp; bun test</command>
-      <focus>Checks merged CLI and helper behavior after coordinated changes.</focus>
+      <command>bun run check</command>
+      <focus>Checks merged CLI and helper behavior with lint and format verification included.</focus>
     </wave-level>
     <phase-level>
-      <command>bun run build &amp;&amp; bun test</command>
-      <focus>Validates package output and regression-safe baseline behavior.</focus>
+      <command>bun run check &amp;&amp; bun run build</command>
+      <focus>Validates package output and regression-safe baseline behavior after quality gates pass.</focus>
     </phase-level>
     <mocking-policy>Prefer direct pure-function verification and fixture text over broad mocks.</mocking-policy>
   </Testing>

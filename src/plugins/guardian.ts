@@ -217,13 +217,13 @@ function stripJsonComments(text: string): string {
         escaped = true;
         continue;
       }
-      if (char === "\"") {
+      if (char === '"') {
         inString = false;
       }
       continue;
     }
 
-    if (char === "\"") {
+    if (char === '"') {
       inString = true;
       result += char;
       continue;
@@ -265,13 +265,13 @@ function stripTrailingCommas(text: string): string {
         escaped = true;
         continue;
       }
-      if (char === "\"") {
+      if (char === '"') {
         inString = false;
       }
       continue;
     }
 
-    if (char === "\"") {
+    if (char === '"') {
       inString = true;
       result += char;
       continue;
@@ -297,10 +297,7 @@ function parseJsonc(text: string): unknown {
   return JSON.parse(stripTrailingCommas(stripJsonComments(text)));
 }
 
-function parsePositiveInteger(
-  value: unknown,
-  fallback: number | undefined,
-): number | undefined {
+function parsePositiveInteger(value: unknown, fallback: number | undefined): number | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return Math.round(value);
   }
@@ -313,10 +310,7 @@ function parsePositiveInteger(
   return fallback;
 }
 
-function parseThreshold(
-  value: unknown,
-  fallback: number | undefined,
-): number | undefined {
+function parseThreshold(value: unknown, fallback: number | undefined): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.max(0, Math.min(100, Math.round(value)));
   }
@@ -415,7 +409,9 @@ async function loadGuardianConfigFile(
     const parsed = parseJsonc(contents);
     return normalizeGuardianConfigOverrides(path, parsed, warnings);
   } catch (error) {
-    warnings.push(`${path}: failed to parse JSONC (${error instanceof Error ? error.message : String(error)})`);
+    warnings.push(
+      `${path}: failed to parse JSONC (${error instanceof Error ? error.message : String(error)})`,
+    );
     return undefined;
   }
 }
@@ -507,10 +503,10 @@ async function loadGuardianRuntimeConfig(directory: string): Promise<GuardianRun
   );
   const projectConfig = directory
     ? await loadScopedGuardianConfig(
-      GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(directory, ".opencode", name)),
-      sources,
-      warnings,
-    )
+        GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(directory, ".opencode", name)),
+        sources,
+        warnings,
+      )
     : {};
   const envConfig = readGuardianEnvConfig(sources, warnings);
   const merged = {
@@ -531,7 +527,10 @@ async function loadGuardianRuntimeConfig(directory: string): Promise<GuardianRun
   };
 }
 
-function truncateText(value: string | undefined, limit = MAX_TRANSCRIPT_ENTRY_CHARS): string | undefined {
+function truncateText(
+  value: string | undefined,
+  limit = MAX_TRANSCRIPT_ENTRY_CHARS,
+): string | undefined {
   if (!value) return value;
   if (value.length <= limit) return value;
   return `${value.slice(0, limit)}<${GUARDIAN_TRUNCATION_TAG} chars=${value.length - limit} />`;
@@ -644,7 +643,7 @@ function renderTranscript(entries: TranscriptEntry[]): { lines: string[]; omissi
     size: entry.text.length,
   }));
 
-  const included = new Array(rendered.length).fill(false);
+  const included = Array.from({ length: rendered.length }, () => false);
   let userChars = 0;
   let nonUserChars = 0;
   let retainedNonUserEntries = 0;
@@ -672,9 +671,7 @@ function renderTranscript(entries: TranscriptEntry[]): { lines: string[]; omissi
     nonUserChars += rendered[index].size;
   }
 
-  const lines = rendered
-    .filter((_entry, index) => included[index])
-    .map((entry) => entry.line);
+  const lines = rendered.filter((_entry, index) => included[index]).map((entry) => entry.line);
 
   const omissionNote = included.some((value) => !value)
     ? "Earlier conversation entries were omitted."
@@ -801,7 +798,9 @@ function parseGuardianAssessment(stdout: string): GuardianAssessment | undefined
     if (!event || typeof event !== "object") continue;
 
     const type = (event as { type?: unknown }).type;
-    const properties = (event as { properties?: unknown }).properties as Record<string, unknown> | undefined;
+    const properties = (event as { properties?: unknown }).properties as
+      | Record<string, unknown>
+      | undefined;
     const part = (event as { part?: unknown }).part as Part | undefined;
 
     if (type === "text" && part?.type === "text" && typeof part.text === "string") {
@@ -836,9 +835,8 @@ function parseGuardianAssessment(stdout: string): GuardianAssessment | undefined
     }
 
     if (type === "message.part.delta") {
-      const messageID = typeof properties?.messageID === "string"
-        ? (properties.messageID as string)
-        : undefined;
+      const messageID =
+        typeof properties?.messageID === "string" ? (properties.messageID as string) : undefined;
       const partID = typeof properties?.partID === "string" ? properties.partID : undefined;
       const field = typeof properties?.field === "string" ? properties.field : undefined;
       const delta = typeof properties?.delta === "string" ? properties.delta : undefined;
@@ -857,9 +855,8 @@ function parseGuardianAssessment(stdout: string): GuardianAssessment | undefined
     : "";
   const standaloneText = standaloneTextParts[standaloneTextParts.length - 1] ?? "";
   const directText = extractJsonObject(stdout);
-  const candidate = extractJsonObject(streamedMessageText) ??
-    extractJsonObject(standaloneText) ??
-    directText;
+  const candidate =
+    extractJsonObject(streamedMessageText) ?? extractJsonObject(standaloneText) ?? directText;
   if (!candidate) return undefined;
 
   try {
@@ -869,7 +866,9 @@ function parseGuardianAssessment(stdout: string): GuardianAssessment | undefined
   }
 }
 
-function normalizeAssessment(result: GuardianAssessment | undefined): GuardianAssessment | undefined {
+function normalizeAssessment(
+  result: GuardianAssessment | undefined,
+): GuardianAssessment | undefined {
   if (!result) return undefined;
   if (typeof result.risk_score !== "number" || !Number.isFinite(result.risk_score)) {
     return undefined;
@@ -895,7 +894,7 @@ function guardianDecisionFromAssessment(
 }
 
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
 
 async function runGuardianCommand(
@@ -919,8 +918,7 @@ async function runGuardianCommand(
     ...(guardianConfig.model ? [`--model ${shellQuote(guardianConfig.model)}`] : []),
     ...(guardianConfig.variant ? [`--variant ${shellQuote(guardianConfig.variant)}`] : []),
   ];
-  const command =
-    `${commandParts.join(" ")} > ${shellQuote(stdoutPath)} 2> ${shellQuote(stderrPath)}`;
+  const command = `${commandParts.join(" ")} > ${shellQuote(stdoutPath)} 2> ${shellQuote(stderrPath)}`;
   const proc = Bun.spawn({
     cmd: ["/bin/sh", "-lc", command],
     cwd: GUARDIAN_RUN_DIRECTORY,
@@ -954,8 +952,12 @@ async function runGuardianCommand(
 
   try {
     const exitCode = await proc.exited;
-    const stdout = await Bun.file(stdoutPath).text().catch(() => "");
-    const stderr = await Bun.file(stderrPath).text().catch(() => "");
+    const stdout = await Bun.file(stdoutPath)
+      .text()
+      .catch(() => "");
+    const stderr = await Bun.file(stderrPath)
+      .text()
+      .catch(() => "");
 
     if (aborted) {
       return {
@@ -1054,7 +1056,8 @@ async function replyToPermission(
   message?: string,
 ) {
   const reply = decision === "allow" ? "once" : "reject";
-  const permissionClient = (client as { permission?: { reply?: (input: unknown) => Promise<any> } }).permission;
+  const permissionClient = (client as { permission?: { reply?: (input: unknown) => Promise<any> } })
+    .permission;
 
   if (permissionClient?.reply) {
     const response = await permissionClient.reply({
@@ -1065,9 +1068,7 @@ async function replyToPermission(
     });
 
     if (response.error) {
-      throw new Error(
-        `permission.reply failed: ${JSON.stringify(response.error)}`,
-      );
+      throw new Error(`permission.reply failed: ${JSON.stringify(response.error)}`);
     }
 
     if (response.data !== true) {
@@ -1108,9 +1109,7 @@ async function replyToPermission(
     });
 
     if (response.error) {
-      throw new Error(
-        `legacy permission respond failed: ${JSON.stringify(response.error)}`,
-      );
+      throw new Error(`legacy permission respond failed: ${JSON.stringify(response.error)}`);
     }
 
     if (response.data !== true) {
@@ -1233,7 +1232,8 @@ async function reviewPermissionRequest(
     const stdout = run.stdout.trim();
     const stderr = run.stderr.trim();
     const assessment = normalizeAssessment(parseGuardianAssessment(stdout));
-    const decision = run.exitCode === 0 ? guardianDecisionFromAssessment(assessment, guardianConfig) : "defer";
+    const decision =
+      run.exitCode === 0 ? guardianDecisionFromAssessment(assessment, guardianConfig) : "defer";
     if (activeReview.cancelled) {
       await logGuardian(client, directory, "info", "guardian review cancelled before reply", {
         requestID: permissionEvent.id,
@@ -1285,20 +1285,26 @@ async function reviewPermissionRequest(
       );
     }
 
-    await logGuardian(client, directory, decision === "allow" ? "info" : "warn", "guardian review completed", {
-      requestID: permissionEvent.id,
-      permission: permissionEvent.permission,
-      sessionID: permissionEvent.sessionID,
-      decision,
-      replied,
-      riskLevel: assessment?.risk_level,
-      riskScore: assessment?.risk_score,
-      rationale: truncateText(assessment?.rationale, MAX_LOG_CHARS),
-      exitCode: run.exitCode,
-      durationMs: Date.now() - reviewStart,
-      stderr: truncateText(stderr, MAX_LOG_CHARS),
-      plannedAction: safeJsonStringify(plannedAction, MAX_LOG_CHARS),
-    });
+    await logGuardian(
+      client,
+      directory,
+      decision === "allow" ? "info" : "warn",
+      "guardian review completed",
+      {
+        requestID: permissionEvent.id,
+        permission: permissionEvent.permission,
+        sessionID: permissionEvent.sessionID,
+        decision,
+        replied,
+        riskLevel: assessment?.risk_level,
+        riskScore: assessment?.risk_score,
+        rationale: truncateText(assessment?.rationale, MAX_LOG_CHARS),
+        exitCode: run.exitCode,
+        durationMs: Date.now() - reviewStart,
+        stderr: truncateText(stderr, MAX_LOG_CHARS),
+        plannedAction: safeJsonStringify(plannedAction, MAX_LOG_CHARS),
+      },
+    );
     await writeGuardianDebug({
       phase: "review_completed",
       requestID: permissionEvent.id,
@@ -1442,11 +1448,12 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
       }
 
       if (raw.type === "permission.replied") {
-        const permissionID = typeof raw.properties?.permissionID === "string"
-          ? raw.properties.permissionID
-          : typeof raw.properties?.requestID === "string"
-            ? raw.properties.requestID
-            : undefined;
+        const permissionID =
+          typeof raw.properties?.permissionID === "string"
+            ? raw.properties.permissionID
+            : typeof raw.properties?.requestID === "string"
+              ? raw.properties.requestID
+              : undefined;
         if (permissionID) {
           const activeReview = activeReviews.get(permissionID);
           if (!activeReview) return;
@@ -1457,10 +1464,12 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
 
           if (!activeReview.cancellationNoticeShown) {
             activeReview.cancellationNoticeShown = true;
-            const reply = typeof raw.properties?.reply === "string" ? raw.properties.reply : "handled";
-            const message = reply === "reject"
-              ? "Guardian review cancelled; permission denied manually."
-              : "Guardian review cancelled; permission approved manually.";
+            const reply =
+              typeof raw.properties?.reply === "string" ? raw.properties.reply : "handled";
+            const message =
+              reply === "reject"
+                ? "Guardian review cancelled; permission denied manually."
+                : "Guardian review cancelled; permission approved manually.";
             await showGuardianToast(client, directory, "info", message, "Guardian", 4_000);
           }
         }

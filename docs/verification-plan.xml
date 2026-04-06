@@ -3,7 +3,7 @@
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
     <module-level-focus>Fast deterministic checks for config mutation and rendering helpers.</module-level-focus>
-    <wave-level-focus>Typecheck and test the merged CLI + helper surface after each coordinated change.</wave-level-focus>
+    <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + helper surface after each coordinated change.</wave-level-focus>
     <phase-level-focus>Buildable package output plus stable command behavior for installation and sync workflows.</phase-level-focus>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
@@ -55,6 +55,8 @@
       <module-checks>
         <check-1>bun test src/lib/opencode.test.ts</check-1>
         <check-2>bun x tsc --noEmit</check-2>
+        <check-3>bun run lint</check-3>
+        <check-4>bun run fmt:check</check-4>
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">Fresh install config renders with schema and plugin array.</scenario-1>
@@ -75,8 +77,10 @@
         <file>src/lib/opencode.test.ts</file>
       </test-files>
       <module-checks>
-        <check-1>bun run build</check-1>
-        <check-2>bun test</check-2>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+        <check-4>bun test</check-4>
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands.</scenario-1>
@@ -119,7 +123,9 @@
       <goal>CLI foundation is buildable and the helper layer has deterministic checks.</goal>
       <commands>
         <command-1>bun x tsc --noEmit</command-1>
-        <command-2>bun test</command-2>
+        <command-2>bun run lint</command-2>
+        <command-3>bun run fmt:check</command-3>
+        <command-4>bun test</command-4>
       </commands>
       <required-evidence>
         <evidence-1>Config merge and Guardian config rendering are covered by module-local tests.</evidence-1>
@@ -128,8 +134,10 @@
     <Gate-Phase-2 PHASE="Phase-2">
       <goal>Guardian is packaged from the repo and exported without behavior drift.</goal>
       <commands>
-        <command-1>bun run build</command-1>
-        <command-2>bun x tsc --noEmit</command-2>
+        <command-1>bun x tsc --noEmit</command-1>
+        <command-2>bun run lint</command-2>
+        <command-3>bun run fmt:check</command-3>
+        <command-4>bun run build</command-4>
       </commands>
       <required-evidence>
         <evidence-1>`src/plugins/guardian.ts` is present and package root exports `GuardianPlugin`.</evidence-1>

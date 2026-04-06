@@ -30,10 +30,16 @@ export default defineCommand({
 
     console.log(`Scope: ${inspection.scope}`);
     console.log(`OpenCode config: ${inspection.opencode.path}`);
-    console.log(`OpenCode config parse: ${inspection.opencode.parseError ? inspection.opencode.parseError : "ok"}`);
-    console.log(`Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.join(", ") : "<none>"}`);
+    console.log(
+      `OpenCode config parse: ${inspection.opencode.parseError ? inspection.opencode.parseError : "ok"}`,
+    );
+    console.log(
+      `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.join(", ") : "<none>"}`,
+    );
     console.log(`Guardian config: ${inspection.guardian.path}`);
-    console.log(`Guardian config parse: ${inspection.guardian.parseError ? inspection.guardian.parseError : inspection.guardian.exists ? "ok" : "missing"}`);
+    console.log(
+      `Guardian config parse: ${inspection.guardian.parseError ? inspection.guardian.parseError : inspection.guardian.exists ? "ok" : "missing"}`,
+    );
     console.log(`Guardian config managed by vvoc: ${inspection.guardian.managed ? "yes" : "no"}`);
 
     if (inspection.warnings.length > 0) {

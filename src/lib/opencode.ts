@@ -74,12 +74,12 @@ export async function resolvePaths(options: {
   cwd: string;
   configDir?: string;
 }): Promise<ResolvedPaths> {
-  const opencodeBaseDir = options.scope === "global"
-    ? options.configDir ?? DEFAULT_GLOBAL_CONFIG_DIR
-    : options.cwd;
-  const guardianBaseDir = options.scope === "global"
-    ? options.configDir ?? DEFAULT_GLOBAL_CONFIG_DIR
-    : join(options.cwd, ".opencode");
+  const opencodeBaseDir =
+    options.scope === "global" ? (options.configDir ?? DEFAULT_GLOBAL_CONFIG_DIR) : options.cwd;
+  const guardianBaseDir =
+    options.scope === "global"
+      ? (options.configDir ?? DEFAULT_GLOBAL_CONFIG_DIR)
+      : join(options.cwd, ".opencode");
   const opencodeSelection = await selectPrimaryPath([
     join(opencodeBaseDir, "opencode.json"),
     join(opencodeBaseDir, "opencode.jsonc"),
@@ -114,33 +114,36 @@ export function ensurePackageConfigText(text?: string): string {
   let nextText = text;
 
   if (!Object.hasOwn(document, "$schema")) {
-    nextText = applyEdits(nextText, modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
-      formattingOptions: JSON_FORMAT,
-      getInsertionIndex: () => 0,
-    }));
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
   }
 
   const nextPlugins = Array.from(new Set([...currentPlugins, PACKAGE_NAME]));
   if (nextPlugins.length !== currentPlugins.length) {
-    nextText = applyEdits(nextText, modify(nextText, ["plugin"], nextPlugins, {
-      formattingOptions: JSON_FORMAT,
-    }));
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["plugin"], nextPlugins, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
   }
 
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 
-export function parseGuardianConfigText(
-  text: string,
-  label: string,
-): GuardianConfigOverrides {
+export function parseGuardianConfigText(text: string, label: string): GuardianConfigOverrides {
   return normalizeGuardianOverrides(parseObjectDocument(text, label), label);
 }
 
 export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): string {
   const timeoutMs = overrides.timeoutMs ?? DEFAULT_GUARDIAN_TIMEOUT_MS;
-  const approvalRiskThreshold = overrides.approvalRiskThreshold
-    ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD;
+  const approvalRiskThreshold =
+    overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD;
   const reviewToastDurationMs = overrides.reviewToastDurationMs ?? timeoutMs;
   const lines = [
     "// Managed by vvoc.",
@@ -151,23 +154,23 @@ export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): s
   ];
 
   if (overrides.model) {
-    lines.push(`  \"model\": ${JSON.stringify(overrides.model)},`);
+    lines.push(`  "model": ${JSON.stringify(overrides.model)},`);
   } else {
-    lines.push("  // \"model\": \"anthropic/claude-sonnet-4-5\",");
+    lines.push('  // "model": "anthropic/claude-sonnet-4-5",');
   }
 
   lines.push("");
 
   if (overrides.variant) {
-    lines.push(`  \"variant\": ${JSON.stringify(overrides.variant)},`);
+    lines.push(`  "variant": ${JSON.stringify(overrides.variant)},`);
   } else {
-    lines.push("  // \"variant\": \"high\",");
+    lines.push('  // "variant": "high",');
   }
 
   lines.push("");
-  lines.push(`  \"timeoutMs\": ${timeoutMs},`);
-  lines.push(`  \"approvalRiskThreshold\": ${approvalRiskThreshold},`);
-  lines.push(`  \"reviewToastDurationMs\": ${reviewToastDurationMs}`);
+  lines.push(`  "timeoutMs": ${timeoutMs},`);
+  lines.push(`  "approvalRiskThreshold": ${approvalRiskThreshold},`);
+  lines.push(`  "reviewToastDurationMs": ${reviewToastDurationMs}`);
   lines.push("}");
 
   return `${lines.join("\n")}\n`;
@@ -230,7 +233,9 @@ export async function syncGuardianConfig(
     };
   }
 
-  const nextText = renderGuardianConfig(parseGuardianConfigText(currentText, paths.guardianConfigPath));
+  const nextText = renderGuardianConfig(
+    parseGuardianConfigText(currentText, paths.guardianConfigPath),
+  );
   if (currentText === nextText) {
     return { action: "kept", path: paths.guardianConfigPath };
   }
@@ -372,7 +377,7 @@ function readPluginList(document: JsonObject, label: string): string[] {
   const raw = document.plugin;
   if (raw === undefined) return [];
   if (!Array.isArray(raw) || raw.some((entry) => typeof entry !== "string")) {
-    throw new Error(`${label}: expected \"plugin\" to be an array of strings`);
+    throw new Error(`${label}: expected "plugin" to be an array of strings`);
   }
   return raw.slice();
 }
@@ -466,7 +471,7 @@ async function selectPrimaryPath(candidates: string[]): Promise<{
   const existing: string[] = [];
 
   for (const candidate of candidates) {
-    if (await readOptionalText(candidate) !== undefined) {
+    if ((await readOptionalText(candidate)) !== undefined) {
       existing.push(candidate);
     }
   }

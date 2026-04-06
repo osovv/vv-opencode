@@ -58,8 +58,12 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, pl
 - Root package exports must stay valid:
   - `@osovv/vv-opencode`
   - `@osovv/vv-opencode/plugins/guardian`
+- Local quality tooling uses `oxlint`, `oxfmt`, and `lefthook`.
+- `lefthook` owns the `pre-commit` hook and should keep running lint + format checks.
 - Before release, run:
   - `bun run typecheck`
+  - `bun run lint`
+  - `bun run fmt:check`
   - `bun test`
   - `bun run build`
 

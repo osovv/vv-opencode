@@ -135,9 +135,22 @@ Run checks:
 
 ```bash
 bun run typecheck
+bun run lint
+bun run fmt:check
 bun test
 bun run build
 ```
+
+Format source files:
+
+```bash
+bun run fmt
+```
+
+Git hooks are managed with `lefthook`.
+
+- `bun install` runs `lefthook install` through the `prepare` script
+- the `pre-commit` hook runs `bun run lint` and `bun run fmt:check`
 
 Smoke-test the CLI against a temporary config directory:
 
@@ -155,6 +168,7 @@ This project is published manually from the terminal. There is no CI publish wor
 Typical release flow:
 
 ```bash
+bun run check
 bun run build
 npm publish
 ```
