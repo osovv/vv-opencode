@@ -12,15 +12,13 @@ import { describe, expect, test } from "bun:test";
 import { buildPatternSet, BUILTIN_PATTERNS } from "./patterns.js";
 
 describe("BUILTIN_PATTERNS", () => {
-  test("has all 6 expected builtin patterns", () => {
+  test("has all 4 expected builtin patterns", () => {
     const names = Array.from(BUILTIN_PATTERNS.keys());
     expect(names).toContain("email");
-    expect(names).toContain("china_phone");
-    expect(names).toContain("china_id");
     expect(names).toContain("uuid");
     expect(names).toContain("ipv4");
     expect(names).toContain("mac");
-    expect(names.length).toBe(6);
+    expect(names.length).toBe(4);
   });
 
   test("email pattern matches standard emails", () => {
@@ -61,11 +59,11 @@ describe("buildPatternSet", () => {
     expect(ps.exclude.size).toBe(0);
   });
 
-  test("loads all 6 builtins by default", () => {
+  test("loads all 4 builtins by default", () => {
     const ps = buildPatternSet({
-      builtin: ["email", "china_phone", "china_id", "uuid", "ipv4", "mac"],
+      builtin: ["email", "uuid", "ipv4", "mac"],
     });
-    expect(ps.rules).toHaveLength(6);
+    expect(ps.rules).toHaveLength(4);
   });
 
   test("loads only specified builtins", () => {

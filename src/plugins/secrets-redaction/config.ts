@@ -40,7 +40,7 @@ export const DEFAULT_CONFIG: SecretsRedactionConfig = {
   patterns: {
     keywords: [],
     regex: [],
-    builtin: ["email", "china_phone", "china_id", "uuid", "ipv4", "mac"],
+    builtin: ["email", "uuid", "ipv4", "mac"],
     exclude: [],
   },
   debug: false,

@@ -11,7 +11,7 @@
 //
 // START_MODULE_MAP
 //   buildPatternSet - builds pattern set from config object
-//   BUILTIN_PATTERNS - Map of 6 builtin pattern definitions
+//   BUILTIN_PATTERNS - Map of 4 builtin pattern definitions
 // END_MODULE_MAP
 
 export interface PatternRule {
@@ -33,8 +33,6 @@ export interface PatternsConfig {
 
 const BUILTIN_PATTERNS: Map<string, { pattern: string; category: string }> = new Map([
   ["email", { pattern: "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}", category: "EMAIL" }],
-  ["china_phone", { pattern: "(?<!\\d)1[3-9]\\d{9}(?!\\d)", category: "CHINA_PHONE" }],
-  ["china_id", { pattern: "(?<!\\d)\\d{17}[\\dXx](?!\\d)", category: "CHINA_ID" }],
   [
     "uuid",
     {

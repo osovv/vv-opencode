@@ -72,7 +72,7 @@
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS NAME="PatternSet" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Builds pattern set from config — keywords, regex rules, and 6 builtin patterns (email, china_phone, china_id, uuid, ipv4, mac).</purpose>
+      <purpose>Builds pattern set from config — keywords, regex rules, and 4 builtin patterns (email, uuid, ipv4, mac).</purpose>
       <path>src/plugins/secrets-redaction/patterns.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>

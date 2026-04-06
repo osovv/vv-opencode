@@ -186,7 +186,7 @@
       <scenarios>
         <scenario-1 kind="success">Plugin exports compile against current OpenCode plugin and SDK types.</scenario-1>
         <scenario-2 kind="success">Placeholders are stable within a session (same secret maps to same placeholder).</scenario-2>
-        <scenario-3 kind="success">Builtin patterns detect email, china_phone, china_id, uuid, ipv4, mac.</scenario-3>
+        <scenario-3 kind="success">Builtin patterns detect email, uuid, ipv4, mac.</scenario-3>
         <scenario-4 kind="success">Config file loads from $XDG_CONFIG_HOME/vvoc/secrets-redaction.config.json.</scenario-4>
         <scenario-5 kind="failure">Disabled config makes plugin a no-op.</scenario-5>
       </scenarios>
