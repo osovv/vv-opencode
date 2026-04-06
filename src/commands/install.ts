@@ -23,6 +23,7 @@ import {
   ensurePackageInstalled,
   installGuardianConfig,
   installMemoryConfig,
+  installSecretsRedactionConfig,
   resolvePaths,
   type Scope,
 } from "../lib/opencode.js";
@@ -57,6 +58,11 @@ export default defineCommand({
       default: true,
       description: "Create memory.jsonc when missing.",
     },
+    "secrets-redaction-config": {
+      type: "boolean",
+      default: true,
+      description: "Create secrets-redaction.config.json when missing.",
+    },
   },
   async run({ args }) {
     // START_BLOCK_APPLY_INSTALL_COMMAND
@@ -80,11 +86,21 @@ export default defineCommand({
 
     if (args["memory-config"] === false) {
       console.log(`Skipped ${paths.memoryConfigPath} (memory config disabled)`);
-      return;
+    } else {
+      const memory = await installMemoryConfig(paths, { force: Boolean(args.force) });
+      console.log(describeWriteResult(memory));
     }
 
-    const memory = await installMemoryConfig(paths, { force: Boolean(args.force) });
-    console.log(describeWriteResult(memory));
+    if (args["secrets-redaction-config"] === false) {
+      console.log(
+        `Skipped ${paths.secretsRedactionConfigPath} (secrets-redaction config disabled)`,
+      );
+    } else {
+      const secretsRedaction = await installSecretsRedactionConfig(paths, {
+        force: Boolean(args.force),
+      });
+      console.log(describeWriteResult(secretsRedaction));
+    }
     // END_BLOCK_APPLY_INSTALL_COMMAND
   },
 });

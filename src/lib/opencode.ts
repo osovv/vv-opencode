@@ -61,6 +61,10 @@ const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
 const GUARDIAN_CONFIG_FILE_NAMES = ["guardian.jsonc", "guardian.json"] as const;
 const MEMORY_CONFIG_FILE_NAMES = ["memory.jsonc", "memory.json"] as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
+const SECRETS_REDACTION_CONFIG_FILE_NAMES = [
+  "secrets-redaction.config.json",
+  "secrets-redaction.config.jsonc",
+] as const;
 
 const JSON_FORMAT = {
   insertSpaces: true,
@@ -84,6 +88,8 @@ export type ResolvedPaths = {
   guardianAlternatePaths: string[];
   memoryConfigPath: string;
   memoryConfigAlternates: string[];
+  secretsRedactionConfigPath: string;
+  secretsRedactionConfigAlternates: string[];
 };
 
 export type GuardianConfigOverrides = {
@@ -126,6 +132,13 @@ export type InstallationInspection = {
     parseError?: string;
     overrides?: MemoryConfigOverrides;
   };
+  secretsRedaction: {
+    path: string;
+    exists: boolean;
+    alternates: string[];
+    managed: boolean;
+    parseError?: string;
+  };
   warnings: string[];
   problems: string[];
 };
@@ -152,6 +165,9 @@ export async function resolvePaths(options: {
   const memorySelection = await selectPrimaryPath(
     MEMORY_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
   );
+  const secretsRedactionSelection = await selectPrimaryPath(
+    SECRETS_REDACTION_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
+  );
 
   return {
     scope: options.scope,
@@ -165,6 +181,8 @@ export async function resolvePaths(options: {
     guardianAlternatePaths: guardianSelection.alternates,
     memoryConfigPath: memorySelection.primary,
     memoryConfigAlternates: memorySelection.alternates,
+    secretsRedactionConfigPath: secretsRedactionSelection.primary,
+    secretsRedactionConfigAlternates: secretsRedactionSelection.alternates,
   };
 }
 // END_BLOCK_RESOLVE_CONFIG_PATHS
@@ -400,6 +418,97 @@ export async function syncMemoryConfig(
 }
 // END_BLOCK_INSTALL_MEMORY_CONFIG
 
+// START_BLOCK_INSTALL_SECRETS_REDACTION_CONFIG
+export function renderSecretsRedactionConfig(): string {
+  const lines = [
+    "// Managed by vvoc.",
+    "// `vvoc sync` rewrites files with this marker while preserving current values.",
+    "// Remove this header if you want to manage the file manually.",
+    "",
+    "{",
+    '  "enabled": true,',
+    '  "secret": "${VVOC_SECRET}",',
+    '  "ttlMs": 3600000,',
+    '  "maxMappings": 10000,',
+    '  "patterns": {',
+    '    "keywords": [],',
+    '    "regex": [],',
+    '    "builtin": ["email", "china_phone", "china_id", "uuid", "ipv4", "mac"],',
+    '    "exclude": []',
+    "  },",
+    '  "debug": false',
+    "}",
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+export function parseSecretsRedactionConfigText(
+  text: string,
+  _filePath: string,
+): Record<string, unknown> {
+  const errors: ParseError[] = [];
+  const result = parse(text, errors, { allowTrailingComma: true });
+  if (errors.length > 0) {
+    throw new Error(`parse error at offset ${errors[0].offset}`);
+  }
+  if (typeof result !== "object" || result === null) {
+    throw new Error("root must be an object");
+  }
+  return result as Record<string, unknown>;
+}
+
+export async function installSecretsRedactionConfig(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.secretsRedactionConfigPath);
+  if (!currentText) {
+    await writeText(paths.secretsRedactionConfigPath, renderSecretsRedactionConfig());
+    return { action: "created", path: paths.secretsRedactionConfigPath };
+  }
+
+  if (!options.force) {
+    if (!isManagedFile(currentText)) {
+      return {
+        action: "skipped",
+        path: paths.secretsRedactionConfigPath,
+        reason: "existing file is not managed by vvoc",
+      };
+    }
+    return { action: "kept", path: paths.secretsRedactionConfigPath };
+  }
+
+  return syncSecretsRedactionConfig(paths, options);
+}
+
+export async function syncSecretsRedactionConfig(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.secretsRedactionConfigPath);
+  if (!currentText) {
+    await writeText(paths.secretsRedactionConfigPath, renderSecretsRedactionConfig());
+    return { action: "created", path: paths.secretsRedactionConfigPath };
+  }
+
+  if (!options.force && !isManagedFile(currentText)) {
+    return {
+      action: "skipped",
+      path: paths.secretsRedactionConfigPath,
+      reason: "existing file is not managed by vvoc",
+    };
+  }
+
+  const nextText = renderSecretsRedactionConfig();
+  if (currentText === nextText) {
+    return { action: "kept", path: paths.secretsRedactionConfigPath };
+  }
+
+  await writeText(paths.secretsRedactionConfigPath, nextText);
+  return { action: "updated", path: paths.secretsRedactionConfigPath };
+}
+// END_BLOCK_INSTALL_SECRETS_REDACTION_CONFIG
+
 // START_BLOCK_INSPECT_INSTALLATION_STATE
 export async function inspectInstallation(paths: ResolvedPaths): Promise<InstallationInspection> {
   const warnings: string[] = [];
@@ -418,6 +527,11 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   if (paths.memoryConfigAlternates.length > 0) {
     warnings.push(
       `multiple Memory config files exist: ${[paths.memoryConfigPath, ...paths.memoryConfigAlternates].join(", ")}`,
+    );
+  }
+  if (paths.secretsRedactionConfigAlternates.length > 0) {
+    warnings.push(
+      `multiple SecretsRedaction config files exist: ${[paths.secretsRedactionConfigPath, ...paths.secretsRedactionConfigAlternates].join(", ")}`,
     );
   }
 
@@ -465,6 +579,21 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     }
   }
 
+  const secretsRedactionText = await readOptionalText(paths.secretsRedactionConfigPath);
+  let secretsRedactionParseError: string | undefined;
+  const secretsRedactionManaged = secretsRedactionText
+    ? isManagedFile(secretsRedactionText)
+    : false;
+
+  if (secretsRedactionText) {
+    try {
+      parseSecretsRedactionConfigText(secretsRedactionText, paths.secretsRedactionConfigPath);
+    } catch (error) {
+      secretsRedactionParseError = error instanceof Error ? error.message : String(error);
+      problems.push(secretsRedactionParseError);
+    }
+  }
+
   if (!pluginConfigured) {
     problems.push(`${PACKAGE_NAME} is not configured in ${paths.opencodeConfigPath}`);
   }
@@ -494,6 +623,13 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
       managed: memoryManaged,
       parseError: memoryParseError,
       overrides: memoryOverrides,
+    },
+    secretsRedaction: {
+      path: paths.secretsRedactionConfigPath,
+      exists: Boolean(secretsRedactionText),
+      alternates: paths.secretsRedactionConfigAlternates,
+      managed: secretsRedactionManaged,
+      parseError: secretsRedactionParseError,
     },
     warnings,
     problems,
