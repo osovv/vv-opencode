@@ -21,6 +21,7 @@
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
+import { getPackageVersion } from "../lib/package.js";
 
 const PACKAGE_NAME = "@osovv/vv-opencode";
 const NPM_REGISTRY = "https://registry.npmjs.org";
@@ -134,9 +135,5 @@ export function printUpgradeStatus(currentVersion: string, latestVersion: string
 }
 
 async function getCurrentVersion(): Promise<string> {
-  const { readFileSync } = await import("node:fs");
-  const { resolve } = await import("path");
-  const packageJsonPath = resolve(process.cwd(), "package.json");
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: string };
-  return packageJson.version ?? "0.0.0";
+  return getPackageVersion();
 }
