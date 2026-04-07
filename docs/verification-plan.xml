@@ -10,8 +10,8 @@
 
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
-      <scenario>User installs the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array and Guardian config lives under the vvoc config root.</expected-outcome>
+      <scenario>User runs `vvoc init` to bootstrap the package into a fresh global or project config root.</scenario>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array and initial Guardian and Memory configs live under the vvoc config root.</expected-outcome>
       <required-signals>
         <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
       </required-signals>

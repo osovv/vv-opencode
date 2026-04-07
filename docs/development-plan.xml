@@ -45,7 +45,7 @@
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Expose install, sync, status, doctor, version, and Guardian config subcommands through citty.</purpose>
+        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, completion, and upgrade subcommands through citty.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
@@ -57,7 +57,7 @@
         </errors>
       </contract>
       <interface>
-        <export-install PURPOSE="Bootstrap plugin registration and optional Guardian config." />
+        <export-init PURPOSE="Bootstrap package registration and config scaffolding (interactive by default)." />
         <export-sync PURPOSE="Refresh managed vvoc config files." />
         <export-doctor PURPOSE="Diagnose installation drift or invalid config." />
       </interface>
@@ -264,7 +264,7 @@
 
     <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>
-        <purpose>Interactive project initialization with prompts for config location, plugin selection, and initial configuration. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
+        <purpose>Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds initial vvoc config files. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
         <inputs>
           <param name="cwd" type="string" />
           <param name="scope" type="global | project" />
@@ -328,10 +328,10 @@
   </Modules>
 
   <DataFlow>
-    <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc install">
+    <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc init">
       <step-1>Resolve scope-specific OpenCode config paths and vvoc config paths.</step-1>
       <step-2>Ensure `@osovv/vv-opencode@<installed-version>` exists in the OpenCode `plugin` array.</step-2>
-      <step-3>Create `guardian.jsonc` under the vvoc config root when it does not already exist.</step-3>
+      <step-3>Create initial `guardian.jsonc` and `memory.jsonc` under the vvoc config root.</step-3>
       <evidence>`vvoc status`, parsed config content, and successful typecheck/build.</evidence>
     </DF-PLUGIN-INSTALL>
     <DF-CONFIG-SYNC NAME="ManagedConfigSync" TRIGGER="vvoc sync">
