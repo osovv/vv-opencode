@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.2.6
+// VERSION: 0.2.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
-//   SCOPE: Plugin specifier writes, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, provider baseURL patching, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -11,13 +11,14 @@
 //
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
+//   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
 //   managed subagent config helpers tests - Verify registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added verification for managed subagent registration and prompt scaffolding.]
+//   LAST_CHANGE: [v0.2.7 - Added verification for conservative provider.options.baseURL patching.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -29,12 +30,14 @@ import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
   ensurePackageConfigText,
+  ensureProviderBaseUrlConfigText,
   ensureManagedSubagentsConfigText,
   installManagedAgentPrompts,
   parseGuardianConfigText,
   readManagedSubagentModels,
   renderGuardianConfig,
   resolvePaths,
+  writeProviderBaseUrl,
   writeManagedSubagentModel,
 } from "./opencode.js";
 
@@ -88,6 +91,85 @@ describe("guardian config helpers", () => {
       approvalRiskThreshold: 55,
       reviewToastDurationMs: 6_789,
     });
+  });
+});
+
+describe("provider baseURL helpers", () => {
+  test("creates a new config with a provider baseURL override", () => {
+    const output = ensureProviderBaseUrlConfigText(
+      undefined,
+      "stepfun",
+      "https://api.stepfun.ai/v1",
+    );
+    const parsed = parse(output) as {
+      $schema?: string;
+      provider?: Record<string, { options?: { baseURL?: string } }>;
+    };
+
+    expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
+    expect(parsed.provider?.stepfun?.options?.baseURL).toBe("https://api.stepfun.ai/v1");
+  });
+
+  test("preserves comments while patching provider baseURL", () => {
+    const input = `{
+  // keep provider docs
+  "provider": {
+    "stepfun": {
+      "options": {
+        // keep timeout
+        "timeout": 1000
+      }
+    }
+  }
+}\n`;
+    const output = ensureProviderBaseUrlConfigText(input, "stepfun", "https://api.stepfun.ai/v1");
+    const parsed = parse(output) as {
+      provider?: Record<string, { options?: { baseURL?: string; timeout?: number } }>;
+    };
+
+    expect(output).toContain("// keep provider docs");
+    expect(output).toContain("// keep timeout");
+    expect(parsed.provider?.stepfun?.options?.timeout).toBe(1000);
+    expect(parsed.provider?.stepfun?.options?.baseURL).toBe("https://api.stepfun.ai/v1");
+  });
+
+  test("rejects non-object provider options", () => {
+    const input = `{
+  "provider": {
+    "stepfun": {
+      "options": "bad"
+    }
+  }
+}\n`;
+
+    expect(() =>
+      ensureProviderBaseUrlConfigText(input, "stepfun", "https://api.stepfun.ai/v1"),
+    ).toThrow('OpenCode config: provider.stepfun: expected "options" to be an object');
+  });
+
+  test("writes provider override idempotently", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-provider-patch-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      const first = await writeProviderBaseUrl(paths, "stepfun", "https://api.stepfun.ai/v1");
+      const second = await writeProviderBaseUrl(paths, "stepfun", "https://api.stepfun.ai/v1");
+      const content = await readFile(paths.opencodeConfigPath, "utf8");
+      const parsed = parse(content) as {
+        provider?: Record<string, { options?: { baseURL?: string } }>;
+      };
+
+      expect(first.action).toBe("created");
+      expect(second.action).toBe("kept");
+      expect(parsed.provider?.stepfun?.options?.baseURL).toBe("https://api.stepfun.ai/v1");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
   });
 });
 

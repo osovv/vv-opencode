@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.2
+// VERSION: 0.5.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command/preset completion generation, and rc file patching.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.2 - Added nested completion support for vvoc-managed agent subcommands.]
+//   LAST_CHANGE: [v0.5.3 - Added path-provider preset completions for the stepfun-ai provider patch command.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -34,6 +34,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
   "guardian",
   "init",
   "install",
+  "path-provider",
   "plugin",
   "status",
   "sync",
@@ -42,6 +43,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 ];
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
+const VVOC_PATH_PROVIDER_PRESETS = ["stepfun-ai"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_AGENT_COMMANDS = [
   "guardian",
@@ -164,6 +166,7 @@ async function installFishCompletion(): Promise<void> {
 export function generateBashCompletion(): string {
   const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
   const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
+  const pathProviderPresets = VVOC_PATH_PROVIDER_PRESETS.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
   const agentCommands = VVOC_AGENT_COMMANDS.join(" ");
   const agentActionCommands = VVOC_AGENT_ACTION_COMMANDS.join(" ");
@@ -185,6 +188,9 @@ export function generateBashCompletion(): string {
     "          ;;\n" +
     "        config)\n" +
     "          _vvoc_config_commands\n" +
+    "          ;;\n" +
+    "        path-provider)\n" +
+    "          _vvoc_path_provider_presets\n" +
     "          ;;\n" +
     "        plugin)\n" +
     "          _vvoc_plugin_commands\n" +
@@ -211,6 +217,13 @@ export function generateBashCompletion(): string {
     "_vvoc_config_commands() {\n" +
     '  local commands="' +
     configCommands +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_path_provider_presets() {\n" +
+    '  local commands="' +
+    pathProviderPresets +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -268,6 +281,9 @@ export function generateZshCompletion(): string {
     "    config)",
     "      _vvoc_config_cmds",
     "      ;;",
+    "    path-provider)",
+    "      _vvoc_path_provider_cmds",
+    "      ;;",
     "    plugin)",
     "      _vvoc_plugin_cmds",
     "      ;;",
@@ -278,6 +294,10 @@ export function generateZshCompletion(): string {
     "  local -a config_commands",
     "  config_commands=(" + VVOC_CONFIG_COMMANDS.join(" ") + ")",
     '  _arguments "1: :(' + VVOC_CONFIG_COMMANDS.join(" ") + ')"',
+    "}",
+    "",
+    "_vvoc_path_provider_cmds() {",
+    '  _arguments "1: :(' + VVOC_PATH_PROVIDER_PRESETS.join(" ") + ')"',
     "}",
     "",
     "_vvoc_agent_cmds() {",
@@ -317,6 +337,10 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_CONFIG_COMMANDS.join(" "),
     "end",
     "",
+    "function __vvoc_path_provider_cmds",
+    "  echo " + VVOC_PATH_PROVIDER_PRESETS.join(" "),
+    "end",
+    "",
     "function __vvoc_agent_cmds",
     "  echo " + VVOC_AGENT_COMMANDS.join(" "),
     "end",
@@ -333,6 +357,7 @@ export function generateFishCompletion(): string {
     'complete -c vvoc -n "__fish_seen_subcommand_from agent" -f -a "(__vvoc_agent_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from guardian memory-reviewer implementer spec-reviewer code-reviewer investitagor" -f -a "(__vvoc_agent_action_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from path-provider" -f -a "(__vvoc_path_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',
   );
 

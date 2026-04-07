@@ -9,7 +9,7 @@
   <Modules>
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, render managed Guardian config, and inspect installation state.</purpose>
+        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, patch provider baseURLs conservatively, render managed Guardian config, and inspect installation state.</purpose>
         <inputs>
           <param name="scope" type="global | project" />
           <param name="cwd" type="string" />
@@ -26,6 +26,7 @@
       <interface>
         <export-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
         <export-ensurePackageInstalled PURPOSE="Ensure the npm package is registered in OpenCode config with a pinned package version." />
+        <export-writeProviderBaseUrl PURPOSE="Write a conservative provider options.baseURL override into OpenCode config." />
         <export-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </interface>
       <depends>none</depends>
@@ -45,7 +46,7 @@
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, completion, and upgrade subcommands through citty.</purpose>
+        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
@@ -235,9 +236,42 @@
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
     </M-CLI-PLUGIN-LIST>
 
+    <M-CLI-PATH-PROVIDER NAME="PathProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+      <contract>
+        <purpose>Apply global OpenCode provider patch presets that rewrite provider.options.baseURL conservatively.</purpose>
+        <inputs>
+          <param name="preset" type="string" />
+          <param name="configDir" type="string | undefined" />
+        </inputs>
+        <outputs>
+          <param name="WriteResult" type="created | updated | kept for global opencode.json/jsonc" />
+        </outputs>
+        <errors>
+          <error code="UNSUPPORTED_PROVIDER_PRESET" />
+          <error code="INVALID_PROVIDER_CONFIG" />
+        </errors>
+      </contract>
+      <interface>
+        <export-resolvePathProviderPreset PURPOSE="Map a supported preset like stepfun-ai to provider/baseURL config." />
+        <export-applyPathProviderPreset PURPOSE="Resolve global OpenCode config paths and apply the preset." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/commands/path-provider.ts</source>
+        <tests>src/commands/path-provider.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[path-provider]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-PATH-PROVIDER</verification-ref>
+      <notes>
+        <note-1>The command is global-only on purpose so the same endpoint patch can be applied consistently across machines.</note-1>
+      </notes>
+    </M-CLI-PATH-PROVIDER>
+
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
-        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish.</purpose>
+        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including path-provider presets.</purpose>
         <inputs>
           <param name="env.SHELL" type="string" />
           <param name="homeDir" type="string" />

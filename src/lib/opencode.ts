@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.2.7
+// VERSION: 0.2.8
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage OpenCode plugin registration and vvoc-owned config files.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, managed subagent registration, managed agent prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
+//   PURPOSE: Manage OpenCode plugin registration, provider patching, and vvoc-owned config files.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed subagent registration, managed agent prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -20,10 +20,12 @@
 //   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
 //   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
+//   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
 //   ensureManagedSubagentsConfigText - Ensures OpenCode config contains the vvoc-managed subagent registrations.
 //   parseGuardianConfigText - Parses Guardian config JSONC into typed overrides.
 //   renderGuardianConfig - Renders managed Guardian config JSONC.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
+//   writeProviderBaseUrl - Writes a provider options.baseURL override into OpenCode config.
 //   syncManagedSubagentRegistrations - Syncs the canonical vvoc-managed subagent registrations into OpenCode config.
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian/subagent agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian/subagent agents.
@@ -39,7 +41,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.7 - Expanded managed prompt scaffolding to cover guardian and memory-reviewer with no bundled runtime fallback.]
+//   LAST_CHANGE: [v0.2.8 - Added conservative OpenCode provider baseURL patch helpers for provider presets like stepfun-ai.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -495,6 +497,75 @@ export async function ensurePackageInstalled(paths: ResolvedPaths): Promise<{
   await writeText(paths.opencodeConfigPath, nextText);
   return { path: paths.opencodeConfigPath, changed: true };
 }
+
+// START_BLOCK_ENSURE_PROVIDER_BASE_URL_CONFIG
+export function ensureProviderBaseUrlConfigText(
+  text: string | undefined,
+  providerID: string,
+  baseURL: string,
+): string {
+  if (!text?.trim()) {
+    return renderJson({
+      $schema: OPENCODE_SCHEMA_URL,
+      provider: {
+        [providerID]: {
+          options: {
+            baseURL,
+          },
+        },
+      },
+    });
+  }
+
+  const document = parseObjectDocument(text, "OpenCode config");
+  const currentProviders = readProviderMap(document, "OpenCode config");
+  const currentProvider = currentProviders[providerID];
+  const currentOptions = currentProvider
+    ? readOptionalObject(currentProvider, "options", `OpenCode config: provider.${providerID}`)
+    : undefined;
+  let nextText = text;
+
+  if (!Object.hasOwn(document, "$schema")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
+  }
+
+  if (currentOptions?.baseURL !== baseURL) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["provider", providerID, "options", "baseURL"], baseURL, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+export async function writeProviderBaseUrl(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  providerID: string,
+  baseURL: string,
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+  const nextText = ensureProviderBaseUrlConfigText(currentText, providerID, baseURL);
+
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  await writeText(paths.opencodeConfigPath, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path: paths.opencodeConfigPath,
+  };
+}
+// END_BLOCK_ENSURE_PROVIDER_BASE_URL_CONFIG
 
 export async function installGuardianConfig(
   paths: ResolvedPaths,
@@ -952,6 +1023,25 @@ function readAgentMap(document: JsonObject, label: string): Record<string, JsonO
   return entries;
 }
 
+function readProviderMap(document: JsonObject, label: string): Record<string, JsonObject> {
+  const raw = document.provider;
+  if (raw === undefined) {
+    return {};
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${label}: expected "provider" to be an object`);
+  }
+
+  const entries: Record<string, JsonObject> = {};
+  for (const [name, value] of Object.entries(raw as JsonObject)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${label}: expected "provider.${name}" to be an object`);
+    }
+    entries[name] = value as JsonObject;
+  }
+  return entries;
+}
+
 function getManagedPromptPath(
   paths: Pick<ResolvedPaths, "managedAgentsDirPath">,
   agentName: ManagedAgentPromptName,
@@ -1079,6 +1169,21 @@ function readNonEmptyString(value: unknown, label: string): string {
     throw new Error(`${label}: expected a non-empty string`);
   }
   return value.trim();
+}
+
+function readOptionalObject(
+  document: JsonObject,
+  key: string,
+  label: string,
+): JsonObject | undefined {
+  const value = document[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label}: expected "${key}" to be an object`);
+  }
+  return value as JsonObject;
 }
 
 function readPositiveInteger(value: unknown, label: string): number {

@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation.
+//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets.
 //   DEPENDS: [src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   Test suite for completion generation.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.2 - Added assertions for the path-provider top-level command and stepfun-ai preset completions.]
+// END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
 import {
@@ -26,6 +30,7 @@ test("generateBashCompletion - contains vvoc command", () => {
   expect(output).toContain("agent");
   expect(output).toContain("completion");
   expect(output).toContain("config");
+  expect(output).toContain("path-provider");
   expect(output).toContain("plugin");
 });
 
@@ -40,6 +45,7 @@ test("generateZshCompletion - contains vvoc command", () => {
   expect(output).toContain("vvoc");
   expect(output).toContain("agent");
   expect(output).toContain("config");
+  expect(output).toContain("path-provider");
   expect(output).toContain("plugin");
 });
 
@@ -56,6 +62,7 @@ test("generateFishCompletion - contains vvoc command", () => {
   expect(output).toContain("agent");
   expect(output).toContain("completion");
   expect(output).toContain("config");
+  expect(output).toContain("path-provider");
   expect(output).toContain("plugin");
 });
 
@@ -73,7 +80,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="agent completion config doctor guardian init install plugin status sync upgrade version"',
+    'local commands="agent completion config doctor guardian init install path-provider plugin status sync upgrade version"',
   );
 });
 
@@ -86,6 +93,7 @@ test("generateFishCompletion - handles nested subcommands", () => {
   const output = generateFishCompletion();
   expect(output).toContain("__fish_seen_subcommand_from agent");
   expect(output).toContain("__fish_seen_subcommand_from config");
+  expect(output).toContain("__fish_seen_subcommand_from path-provider");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
 });
 
@@ -101,4 +109,11 @@ test("generateZshCompletion - contains agent action commands", () => {
     "guardian|memory-reviewer|implementer|spec-reviewer|code-reviewer|investitagor",
   );
   expect(output).toContain("set unset");
+});
+
+test("completion scripts - contain path-provider presets", () => {
+  expect(generateBashCompletion()).toContain("_vvoc_path_provider_presets");
+  expect(generateZshCompletion()).toContain("_vvoc_path_provider_cmds");
+  expect(generateFishCompletion()).toContain("__vvoc_path_provider_cmds");
+  expect(generateBashCompletion()).toContain("stepfun-ai");
 });

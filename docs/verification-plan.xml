@@ -76,6 +76,7 @@
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
         <scenario-5 kind="success">Managed subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references.</scenario-5>
         <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root and model overrides round-trip through OpenCode config.</scenario-6>
+        <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -96,7 +97,7 @@
         <check-4>bun test</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`.</scenario-1>
+        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version` and `path-provider`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
         <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
@@ -243,6 +244,29 @@
       <wave-follow-up>Run against a temp config with known plugin entries.</wave-follow-up>
     </V-M-CLI-PLUGIN-LIST>
 
+    <V-M-CLI-PATH-PROVIDER MODULE="M-CLI-PATH-PROVIDER" PRIORITY="medium">
+      <test-files>
+        <file>src/commands/path-provider.test.ts</file>
+        <file>src/lib/opencode.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+        <check-4>bun test src/commands/path-provider.test.ts src/lib/opencode.test.ts</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">`vvoc path-provider stepfun-ai` writes `provider.stepfun.options.baseURL = https://api.stepfun.ai/v1` into the global OpenCode config.</scenario-1>
+        <scenario-2 kind="success">Reapplying the same preset is idempotent and reports a kept result.</scenario-2>
+        <scenario-3 kind="failure">Unsupported preset names fail with a clear list of supported presets.</scenario-3>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>The command must fail rather than overwrite non-object `provider` or `provider.<id>.options` config shapes.</assertion-1>
+      </required-trace-assertions>
+      <wave-follow-up>Add more presets only when a concrete endpoint mismatch needs a one-shot patch.</wave-follow-up>
+    </V-M-CLI-PATH-PROVIDER>
+
     <V-M-CLI-COMPLETION MODULE="M-CLI-COMPLETION" PRIORITY="low">
       <test-files>
         <file>src/commands/completion.test.ts</file>
@@ -254,9 +278,9 @@
         <check-4>bun test src/commands/completion.test.ts</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config` and `plugin`.</scenario-1>
+        <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, and `path-provider` presets.</scenario-1>
         <scenario-2 kind="success">Zsh completion script registers `vvoc` via `#compdef` and `compdef` markers so the installed file works when sourced or loaded from completion paths.</scenario-2>
-        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config` and `plugin`.</scenario-3>
+        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, and `path-provider` presets.</scenario-3>
         <scenario-4 kind="success">The zsh install flow appends an idempotent loader block that initializes completion support before sourcing `_vvoc`.</scenario-4>
       </scenarios>
       <required-log-markers />

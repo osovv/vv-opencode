@@ -24,6 +24,7 @@ Current package scope:
   - `config`
   - `init`
   - `install`
+  - `path-provider`
   - `plugin`
   - `sync`
   - `status`
@@ -143,6 +144,15 @@ Sync managed config files:
 ```bash
 vvoc sync
 ```
+
+Patch the global OpenCode StepFun provider to use the `stepfun.ai` endpoint:
+
+```bash
+vvoc path-provider stepfun-ai
+```
+
+This writes `provider.stepfun.options.baseURL = "https://api.stepfun.ai/v1"` into the global OpenCode config.
+It does not manage auth for you, so keep using OpenCode's normal StepFun credential flow.
 
 Manage model overrides for bundled agents:
 
