@@ -184,7 +184,7 @@
       </annotations>
     </M-CLI-INIT>
 
-    <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Check npm for updates and offer upgrade with changelog display.</purpose>
       <path>src/commands/upgrade.ts</path>
       <depends>none</depends>
@@ -193,6 +193,7 @@
         <fn-fetchLatestVersion PURPOSE="Query npm registry for latest @osovv/vv-opencode version." />
         <fn-fetchChangelog PURPOSE="Fetch changelog content from npm." />
         <fn-printUpgradeStatus PURPOSE="Print up-to-date or upgrade available message." />
+        <cmd-upgrade PURPOSE="vvoc upgrade - CLI command for checking/upgrading vvoc." />
       </annotations>
     </M-CLI-UPGRADE>
 

@@ -410,13 +410,13 @@
       <step-1 module="M-PLUGIN-MEMORY-STORE" status="done" verification="V-M-PLUGIN-MEMORY-STORE">Implement file-based scoped memory storage and lexical search.</step-1>
       <step-2 module="M-PLUGIN-MEMORY" status="done" verification="V-M-PLUGIN-MEMORY">Register memory tools and the `memory-reviewer` subagent via OpenCode plugin hooks.</step-2>
     </Phase-3>
-    <Phase-4 name="CLI Enhancement Suite" status="planned">
+    <Phase-4 name="CLI Enhancement Suite" status="done">
       <goal>Add plugin list, config validate, shell completion, interactive init, and upgrade commands to improve developer UX.</goal>
       <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate guardian.jsonc and memory.jsonc with human-readable errors.</step-1>
       <step-2 module="M-CLI-PLUGIN-LIST" status="implemented" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
       <step-3 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Generate shell completion scripts for bash, zsh, and fish.</step-3>
       <step-4 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-4>
-      <step-5 module="M-CLI-UPGRADE" status="planned" verification="V-M-CLI-UPGRADE">Check npm for updates and offer upgrade with changelog display.</step-5>
+      <step-5 module="M-CLI-UPGRADE" status="implemented" verification="V-M-CLI-UPGRADE">Check npm for updates and offer upgrade with changelog display.</step-5>
     </Phase-4>
   </ImplementationOrder>
 
