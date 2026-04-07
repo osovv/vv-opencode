@@ -26,6 +26,7 @@ import config from "./commands/config.js";
 import doctor from "./commands/doctor.js";
 import guardian from "./commands/guardian.js";
 import install from "./commands/install.js";
+import plugin from "./commands/plugin.js";
 import status from "./commands/status.js";
 import sync from "./commands/sync.js";
 import version from "./commands/version.js";
@@ -44,6 +45,7 @@ const main = defineCommand({
     agent,
     config,
     install,
+    plugin,
     sync,
     status,
     doctor,
