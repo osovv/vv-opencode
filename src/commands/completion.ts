@@ -1,32 +1,37 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Generate and print shell completion scripts for bash, zsh, and fish.
-//   SCOPE: Shell type argument validation, completion script generation, and stdout output.
-//   DEPENDS: [citty]
+//   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
+//   SCOPE: Shell detection, completion file writing, and rc file patching.
+//   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   default - Completion command definition for vvoc.
-//   generateBashCompletion - Generate bash completion script.
-//   generateZshCompletion - Generate zsh completion script.
-//   generateFishCompletion - Generate fish completion script.
+//   default - Completion install command definition for vvoc.
+//   detectShell - Detect current shell from SHELL env or process.
+//   installBashCompletion - Install bash completions.
+//   installZshCompletion - Install zsh completions.
+//   installFishCompletion - Install fish completions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Initial GRACE implementation for shell completion command.]
+//   LAST_CHANGE: [v0.5.0 - Rewrite to auto-install only, detect shell automatically.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { homedir } from "node:os";
 
 const VVOC_COMMANDS = [
   "agent",
   "config",
   "doctor",
   "guardian",
+  "init",
   "install",
   "plugin",
   "status",
@@ -34,42 +39,107 @@ const VVOC_COMMANDS = [
   "upgrade",
   "validate",
   "version",
-  "list",
 ];
 
 export default defineCommand({
   meta: {
     name: "completion",
-    description: "Generate shell completion scripts.",
+    description: "Install shell completions for vvoc.",
   },
-  args: {
-    shell: {
-      type: "positional",
-      required: true,
-      description: "Shell type: bash, zsh, or fish.",
-    },
-  },
-  async run({ args }) {
-    // START_BLOCK_RUN_COMPLETION
-    const shell = String(args.shell).toLowerCase();
-
+  async run() {
+    const shell = detectShell();
     switch (shell) {
       case "bash":
-        process.stdout.write(generateBashCompletion());
+        await installBashCompletion();
         break;
       case "zsh":
-        process.stdout.write(generateZshCompletion());
+        await installZshCompletion();
         break;
       case "fish":
-        process.stdout.write(generateFishCompletion());
+        await installFishCompletion();
         break;
       default:
-        console.error("Unsupported shell: " + shell + ". Use bash, zsh, or fish.");
+        console.error("Unsupported shell. Please open an issue.");
         process.exitCode = 1;
     }
-    // END_BLOCK_RUN_COMPLETION
   },
 });
+
+export function detectShell(): "bash" | "zsh" | "fish" {
+  const shellPath = process.env.SHELL ?? "";
+  if (shellPath.includes("zsh")) return "zsh";
+  if (shellPath.includes("fish")) return "fish";
+  return "bash";
+}
+
+async function getVvocCompletionsDir(): Promise<string> {
+  const configHome = process.env.XDG_CONFIG_HOME ?? resolve(homedir(), ".config");
+  return resolve(configHome, "vvoc");
+}
+
+async function ensureDir(dir: string): Promise<void> {
+  try {
+    await mkdir(dir, { recursive: true });
+  } catch {}
+}
+
+async function hasLine(filePath: string, line: string): Promise<boolean> {
+  try {
+    const content = await readFile(filePath, "utf8");
+    return content.includes(line);
+  } catch {
+    return false;
+  }
+}
+
+async function appendIfMissing(filePath: string, line: string): Promise<void> {
+  if (!(await hasLine(filePath, line))) {
+    await appendFile(filePath, "\n" + line + "\n");
+  }
+}
+
+async function installBashCompletion(): Promise<void> {
+  const completionsDir = await getVvocCompletionsDir();
+  await ensureDir(completionsDir);
+  const completionFile = resolve(completionsDir, "completions.bash");
+
+  const script = generateBashCompletion();
+  await writeFile(completionFile, script, "utf8");
+
+  const rcFile = resolve(homedir(), ".bashrc");
+  const sourceLine = `[ -f "${completionFile}" ] && source "${completionFile}"`;
+  await appendIfMissing(rcFile, sourceLine);
+
+  console.log(`Bash completions installed to ${completionFile}`);
+  console.log(`Added source line to ~/.bashrc`);
+}
+
+async function installZshCompletion(): Promise<void> {
+  const completionsDir = resolve(homedir(), ".zsh", "completions");
+  await ensureDir(completionsDir);
+
+  const completionFile = resolve(completionsDir, "_vvoc");
+  const script = generateZshCompletion();
+  await writeFile(completionFile, script, "utf8");
+
+  const rcFile = resolve(homedir(), ".zshrc");
+  const fpathLine = `fpath=(~/.zsh/completions $fpath)`;
+  await appendIfMissing(rcFile, fpathLine);
+
+  console.log(`Zsh completions installed to ${completionFile}`);
+  console.log(`Added fpath line to ~/.zshrc`);
+}
+
+async function installFishCompletion(): Promise<void> {
+  const completionsDir = resolve(homedir(), ".config", "fish", "completions");
+  await ensureDir(completionsDir);
+
+  const completionFile = resolve(completionsDir, "vvoc.fish");
+  const script = generateFishCompletion();
+  await writeFile(completionFile, script, "utf8");
+
+  console.log(`Fish completions installed to ${completionFile}`);
+}
 
 export function generateBashCompletion(): string {
   const cmds = VVOC_COMMANDS.join(" ");
@@ -117,7 +187,6 @@ export function generateZshCompletion(): string {
     "  )",
     "",
     "  _arguments -C \\",
-    '    "-s[shell type]" \\',
     '    "1: :(' + VVOC_COMMANDS.join(" ") + ')" \\',
     '    "*::arg:->args"',
     "",
