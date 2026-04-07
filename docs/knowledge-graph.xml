@@ -147,13 +147,16 @@
       </annotations>
     </M-CLI-CONFIG-VALIDATE>
 
-    <M-CLI-PLUGIN-LIST NAME="PluginList" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-PLUGIN-LIST NAME="PluginList" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Display all installed OpenCode plugins with enabled/disabled status and source paths.</purpose>
-      <path>src/commands/plugin-list.ts</path>
+      <path>src/commands/plugin-list.ts + src/commands/plugin.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
       <annotations>
-        <fn-listPlugins PURPOSE="Scan OpenCode config and display plugin table." />
+        <fn-listPlugins PURPOSE="Scan OpenCode config and return plugin entries." />
+        <fn-parsePluginSpecifier PURPOSE="Parse plugin specifier string into name/source/enabled." />
+        <fn-renderPluginTable PURPOSE="Render plugin list as aligned Name/Source/Status table." />
+        <cmd-plugin_list PURPOSE="vvoc plugin list - CLI command for listing plugins." />
       </annotations>
     </M-CLI-PLUGIN-LIST>
 
