@@ -2,7 +2,7 @@
 // VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds initial vvoc config files. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, managed subagent registration, config file scaffolding, and idempotent re-run handling.
+//   SCOPE: Scope selection, plugin registration, managed subagent registration, managed agent prompt scaffolding, config file scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.1 - Added managed subagent registration and prompt scaffolding to init.]
+//   LAST_CHANGE: [v0.4.1 - Added managed subagent registration plus guardian/memory-reviewer prompt scaffolding to init.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,7 +23,7 @@ import * as p from "@clack/prompts";
 import {
   ensurePackageInstalled,
   installGuardianConfig,
-  installManagedSubagentPrompts,
+  installManagedAgentPrompts,
   installMemoryConfig,
   inspectInstallation,
   resolvePaths,
@@ -138,8 +138,8 @@ async function runInit(options: {
     agentRegistration.path + " - " + (agentRegistration.changed ? "updated" : "already up to date"),
   );
 
-  p.log.step("Scaffolding managed subagent prompts...");
-  for (const result of await installManagedSubagentPrompts(finalPaths, { force: true })) {
+  p.log.step("Scaffolding managed agent prompts...");
+  for (const result of await installManagedAgentPrompts(finalPaths, { force: true })) {
     p.log.info(result.path + " - " + result.action);
   }
 
@@ -174,7 +174,7 @@ export async function runInitNonInteractive(options: {
 
   await ensurePackageInstalled(paths);
   await syncManagedSubagentRegistrations(paths);
-  await installManagedSubagentPrompts(paths, { force: true });
+  await installManagedAgentPrompts(paths, { force: true });
   await installGuardianConfig(paths, { force: true });
   await installMemoryConfig(paths, { force: true });
 }

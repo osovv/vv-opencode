@@ -1,8 +1,8 @@
 // FILE: src/plugins/memory.test.ts
-// VERSION: 0.2.5
+// VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc memory runtime config, scope semantics, and plugin registration behavior.
-//   SCOPE: Memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer setup.
+//   SCOPE: Memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer prompt setup.
 //   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/plugins/memory.ts, src/plugins/memory-store.ts]
 //   LINKS: [V-M-PLUGIN-MEMORY-STORE, V-M-PLUGIN-MEMORY]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE test markup around explicit memory verification suites.]
+//   LAST_CHANGE: [v0.2.6 - Added coverage for vvoc-managed memory-reviewer prompt loading and missing-prompt failures.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -264,10 +264,53 @@ describe("memory store", () => {
 });
 
 describe("MemoryPlugin", () => {
-  test("registers explicit memory tools and reviewer agent", async () => {
-    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-plugin-"));
+  test("fails when managed memory-reviewer prompt is missing", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-memory-config-home-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-plugin-missing-"));
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
 
     try {
+      process.env.XDG_CONFIG_HOME = configHome;
+
+      await expect(
+        MemoryPlugin({
+          client: {
+            app: {
+              log: async () => undefined,
+            },
+          } as never,
+          project: {} as never,
+          directory: projectDir,
+          worktree: projectDir,
+          serverUrl: new URL("http://localhost"),
+          $: {} as never,
+        }),
+      ).rejects.toThrow("vvoc managed prompt not found for memory-reviewer");
+    } finally {
+      if (previousConfigHome === undefined) {
+        delete process.env.XDG_CONFIG_HOME;
+      } else {
+        process.env.XDG_CONFIG_HOME = previousConfigHome;
+      }
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("registers explicit memory tools and reviewer agent", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-memory-config-home-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-plugin-"));
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
+
+    try {
+      process.env.XDG_CONFIG_HOME = configHome;
+      await mkdir(join(projectDir, ".vvoc", "agents"), { recursive: true });
+      await writeFile(
+        join(projectDir, ".vvoc", "agents", "memory-reviewer.md"),
+        "Custom project memory reviewer prompt.\n",
+        "utf8",
+      );
+
       const plugin = await MemoryPlugin({
         client: {
           app: {
@@ -297,6 +340,9 @@ describe("MemoryPlugin", () => {
       expect((config.agent as Record<string, { mode?: string }>)?.["memory-reviewer"]?.mode).toBe(
         "subagent",
       );
+      expect(
+        (config.agent as Record<string, { prompt?: string }>)?.["memory-reviewer"]?.prompt,
+      ).toBe("Custom project memory reviewer prompt.");
 
       const system = { system: ["base system prompt"] };
       await plugin["experimental.chat.system.transform"]?.(
@@ -319,6 +365,12 @@ describe("MemoryPlugin", () => {
         "Use shared scope for reusable facts that should be visible across projects.",
       );
     } finally {
+      if (previousConfigHome === undefined) {
+        delete process.env.XDG_CONFIG_HOME;
+      } else {
+        process.env.XDG_CONFIG_HOME = previousConfigHome;
+      }
+      await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
     }
   });

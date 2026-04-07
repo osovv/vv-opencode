@@ -30,7 +30,7 @@ import {
   PACKAGE_NAME,
   ensurePackageConfigText,
   ensureManagedSubagentsConfigText,
-  installManagedSubagentPrompts,
+  installManagedAgentPrompts,
   parseGuardianConfigText,
   readManagedSubagentModels,
   renderGuardianConfig,
@@ -124,15 +124,27 @@ describe("managed subagent config helpers", () => {
         cwd: projectDir,
       });
 
-      const promptResults = await installManagedSubagentPrompts(paths, { force: true });
-      expect(promptResults).toHaveLength(4);
+      const promptResults = await installManagedAgentPrompts(paths, { force: true });
+      expect(promptResults).toHaveLength(6);
 
       const implementerPrompt = await readFile(
         join(projectDir, ".vvoc", "agents", "implementer.md"),
         "utf8",
       );
+      const guardianPrompt = await readFile(
+        join(projectDir, ".vvoc", "agents", "guardian.md"),
+        "utf8",
+      );
+      const memoryReviewerPrompt = await readFile(
+        join(projectDir, ".vvoc", "agents", "memory-reviewer.md"),
+        "utf8",
+      );
       expect(implementerPrompt).toContain("Managed by vvoc");
       expect(implementerPrompt).toContain("You are the implementer subagent.");
+      expect(guardianPrompt).toContain("risk assessment of a coding-agent tool call");
+      expect(memoryReviewerPrompt).toContain(
+        "You review explicit persistent memory managed by vvoc.",
+      );
 
       const setResult = await writeManagedSubagentModel(paths, "implementer", {
         model: "openai/gpt-5",

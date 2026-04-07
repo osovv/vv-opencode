@@ -2,7 +2,7 @@
 // VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync managed vvoc config files and keep the OpenCode plugin specifier current.
-//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed subagent prompt sync, and managed Guardian/Memory config rewrites.
+//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed agent prompt sync, and managed Guardian/Memory config rewrites.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added managed subagent registration and prompt syncing to vvoc sync.]
+//   LAST_CHANGE: [v0.2.6 - Added managed subagent registration plus guardian/memory-reviewer prompt syncing to vvoc sync.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -22,7 +22,7 @@ import {
   describeWriteResult,
   ensurePackageInstalled,
   resolvePaths,
-  syncManagedSubagentPrompts,
+  syncManagedAgentPrompts,
   syncManagedSubagentRegistrations,
   syncGuardianConfig,
   syncMemoryConfig,
@@ -61,7 +61,7 @@ export default defineCommand({
     });
     const opencode = await ensurePackageInstalled(paths);
     const managedSubagents = await syncManagedSubagentRegistrations(paths);
-    const managedPrompts = await syncManagedSubagentPrompts(paths, { force: Boolean(args.force) });
+    const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
     const guardian = await syncGuardianConfig(paths, { force: Boolean(args.force) });
     const memory = await syncMemoryConfig(paths, { force: Boolean(args.force) });
 

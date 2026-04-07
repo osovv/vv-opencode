@@ -47,7 +47,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/plugins/guardian dist/plugins/memory && cp src/plugins/guardian/policy.md dist/plugins/guardian/policy.md && cp src/plugins/memory/system-instruction.md dist/plugins/memory/system-instruction.md && cp src/plugins/memory/reviewer.md dist/plugins/memory/reviewer.md",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/plugins/memory && cp src/plugins/memory/system-instruction.md dist/plugins/memory/system-instruction.md",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --deny warnings src",
     "fmt": "oxfmt --write src",

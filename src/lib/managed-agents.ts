@@ -1,29 +1,35 @@
 // FILE: src/lib/managed-agents.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Describe vvoc-managed OpenCode subagents and load their bundled prompt templates.
-//   SCOPE: Built-in subagent metadata, name validation, definition lookup, and template file loading from package assets.
-//   DEPENDS: [node:fs/promises]
-//   LINKS: [M-CLI-CONFIG]
+//   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
+//   SCOPE: Built-in subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
+//   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-paths.ts]
+//   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   ManagedSubagentName - Canonical vvoc-managed subagent names.
+//   ManagedAgentPromptName - Canonical vvoc-managed agent prompt names including Guardian and memory-reviewer.
 //   ManagedSubagentDefinition - Metadata used to register a managed subagent in OpenCode config.
 //   MANAGED_SUBAGENT_NAMES - Ordered managed subagent names.
+//   MANAGED_AGENT_PROMPT_NAMES - Ordered managed agent prompt names.
 //   MANAGED_SUBAGENTS - Built-in managed subagent definitions.
 //   isManagedSubagentName - Checks whether a string is one of the managed subagent names.
 //   getManagedSubagentDefinition - Returns metadata for a managed subagent.
-//   loadManagedSubagentTemplate - Loads the bundled prompt template for a managed subagent.
+//   getManagedAgentPromptPath - Resolves the prompt file path inside a vvoc agents directory.
+//   loadManagedAgentPromptTemplate - Loads the bundled prompt template for a managed agent prompt.
+//   loadManagedAgentPromptText - Loads a managed prompt from project or global vvoc config and errors if neither exists.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added bundled metadata and asset-backed prompt loading for vvoc-managed subagents.]
+//   LAST_CHANGE: [v0.2.0 - Added guardian and memory-reviewer prompt management with scoped vvoc config loading and no bundled runtime fallback.]
 // END_CHANGE_SUMMARY
 
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
 
 export const MANAGED_SUBAGENT_NAMES = [
   "implementer",
@@ -33,6 +39,13 @@ export const MANAGED_SUBAGENT_NAMES = [
 ] as const;
 
 export type ManagedSubagentName = (typeof MANAGED_SUBAGENT_NAMES)[number];
+export const MANAGED_AGENT_PROMPT_NAMES = [
+  "guardian",
+  "memory-reviewer",
+  ...MANAGED_SUBAGENT_NAMES,
+] as const;
+
+export type ManagedAgentPromptName = (typeof MANAGED_AGENT_PROMPT_NAMES)[number];
 
 export type ManagedSubagentDefinition = {
   name: ManagedSubagentName;
@@ -82,6 +95,17 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
 const MANAGED_SUBAGENT_MAP = new Map(
   MANAGED_SUBAGENTS.map((definition) => [definition.name, definition]),
 );
+const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
+  ManagedAgentPromptName,
+  `${ManagedAgentPromptName}.md`
+>([
+  ["guardian", "guardian.md"],
+  ["memory-reviewer", "memory-reviewer.md"],
+  ["implementer", "implementer.md"],
+  ["spec-reviewer", "spec-reviewer.md"],
+  ["code-reviewer", "code-reviewer.md"],
+  ["investitagor", "investitagor.md"],
+]);
 
 export function isManagedSubagentName(value: string): value is ManagedSubagentName {
   return MANAGED_SUBAGENT_MAP.has(value as ManagedSubagentName);
@@ -95,8 +119,54 @@ export function getManagedSubagentDefinition(name: ManagedSubagentName): Managed
   return definition;
 }
 
-export async function loadManagedSubagentTemplate(name: ManagedSubagentName): Promise<string> {
-  const definition = getManagedSubagentDefinition(name);
-  const assetUrl = new URL(`../../templates/agents/${definition.promptFileName}`, import.meta.url);
+export function getManagedAgentPromptPath(
+  agentsDirPath: string,
+  name: ManagedAgentPromptName,
+): string {
+  return join(agentsDirPath, getManagedAgentPromptFileName(name));
+}
+
+export async function loadManagedAgentPromptTemplate(
+  name: ManagedAgentPromptName,
+): Promise<string> {
+  const assetUrl = new URL(
+    `../../templates/agents/${getManagedAgentPromptFileName(name)}`,
+    import.meta.url,
+  );
   return readFile(assetUrl, "utf8");
+}
+
+export async function loadManagedAgentPromptText(
+  directory: string,
+  name: ManagedAgentPromptName,
+): Promise<string> {
+  const candidatePaths = [
+    getManagedAgentPromptPath(getVvocAgentsDir(getProjectVvocDir(directory)), name),
+    getManagedAgentPromptPath(getVvocAgentsDir(getGlobalVvocDir()), name),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    try {
+      return await readFile(candidatePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(
+    `vvoc managed prompt not found for ${name}. Run \`vvoc install\` or \`vvoc sync\`. Checked: ${candidatePaths.join(", ")}`,
+  );
+}
+
+function getManagedAgentPromptFileName(
+  name: ManagedAgentPromptName,
+): `${ManagedAgentPromptName}.md` {
+  const promptFileName = MANAGED_AGENT_PROMPT_FILE_NAMES.get(name);
+  if (!promptFileName) {
+    throw new Error(`unknown managed agent prompt: ${name}`);
+  }
+  return promptFileName;
 }

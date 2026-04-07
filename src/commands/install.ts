@@ -2,7 +2,7 @@
 // VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Install vv-opencode into OpenCode config and bootstrap vvoc-managed config files.
-//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed subagent prompt scaffolding, and initial Guardian/Memory config creation.
+//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed agent prompt scaffolding, and initial Guardian/Memory config creation.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added managed subagent registration and prompt scaffolding to install.]
+//   LAST_CHANGE: [v0.2.6 - Added managed subagent registration plus guardian/memory-reviewer prompt scaffolding to install.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -22,7 +22,7 @@ import {
   describeWriteResult,
   ensurePackageInstalled,
   installGuardianConfig,
-  installManagedSubagentPrompts,
+  installManagedAgentPrompts,
   installMemoryConfig,
   installSecretsRedactionConfig,
   resolvePaths,
@@ -83,7 +83,7 @@ export default defineCommand({
       `${managedSubagents.changed ? "Updated" : "Kept"} ${managedSubagents.path} (managed subagents)`,
     );
 
-    for (const result of await installManagedSubagentPrompts(paths, {
+    for (const result of await installManagedAgentPrompts(paths, {
       force: Boolean(args.force),
     })) {
       console.log(describeWriteResult(result));

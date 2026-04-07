@@ -86,8 +86,8 @@ Examples:
 - project-local memory data: `~/.local/share/vvoc/projects/<project-id>/memory/`
 - global shared memory data: `~/.local/share/vvoc/memory/shared/<namespace>/`
 - project memory settings: `./.vvoc/memory.jsonc`
-- global managed subagent prompts: `~/.config/vvoc/agents/*.md`
-- project managed subagent prompts: `./.vvoc/agents/*.md`
+- global managed agent prompts: `~/.config/vvoc/agents/*.md`
+- project managed agent prompts: `./.vvoc/agents/*.md`
 
 This keeps vvoc state clearly separated from native OpenCode config and avoids future clashes if OpenCode adds its own memory features.
 
@@ -112,7 +112,7 @@ vvoc install
 ```
 
 `install` writes the current installed package version into the OpenCode `plugin` array instead of using an unpinned `latest` reference.
-It also registers vvoc-managed subagents in OpenCode config and creates managed `guardian.jsonc`, `memory.jsonc`, and `.vvoc/agents/*.md` prompt files when they are missing.
+It also registers vvoc-managed subagents in OpenCode config and creates managed `guardian.jsonc`, `memory.jsonc`, and `vvoc/agents/*.md` prompt files when they are missing.
 
 Use project scope instead of global scope:
 
@@ -131,6 +131,8 @@ This writes:
 - `/tmp/vvoc-home/opencode/opencode.json`
 - `/tmp/vvoc-home/vvoc/guardian.jsonc`
 - `/tmp/vvoc-home/vvoc/memory.jsonc`
+- `/tmp/vvoc-home/vvoc/agents/guardian.md`
+- `/tmp/vvoc-home/vvoc/agents/memory-reviewer.md`
 - `/tmp/vvoc-home/vvoc/agents/implementer.md`
 - `/tmp/vvoc-home/vvoc/agents/spec-reviewer.md`
 - `/tmp/vvoc-home/vvoc/agents/code-reviewer.md`
@@ -245,6 +247,25 @@ Use it when you want a report-only audit of stored memory:
 
 The reviewer can read memory with `memory_list`, `memory_get`, and `memory_search`, but it does not modify entries.
 
+## Managed agent prompts
+
+`vvoc install` and `vvoc sync` create vvoc-managed prompt files under:
+
+- global: `~/.config/vvoc/agents/*.md`
+- project: `./.vvoc/agents/*.md`
+
+This includes:
+
+- `guardian.md`
+- `memory-reviewer.md`
+- `implementer.md`
+- `spec-reviewer.md`
+- `code-reviewer.md`
+- `investitagor.md`
+
+`GuardianPlugin` and `MemoryPlugin` now read `guardian.md` and `memory-reviewer.md` from those vvoc-managed paths at runtime.
+There is no bundled runtime fallback, so missing files should be repaired with `vvoc install` or `vvoc sync`.
+
 ## Managed subagents
 
 `vvoc install` and `vvoc sync` also register four OpenCode subagents in `opencode.json`:
@@ -254,10 +275,7 @@ The reviewer can read memory with `memory_list`, `memory_get`, and `memory_searc
 - `code-reviewer`
 - `investitagor`
 
-Their prompt files live under vvoc-managed config roots instead of being embedded directly into the TypeScript command code:
-
-- global: `~/.config/vvoc/agents/*.md`
-- project: `./.vvoc/agents/*.md`
+Their prompt files also live under the same vvoc-managed `agents/` directory instead of being embedded directly into the TypeScript command code.
 
 OpenCode registration stays in `opencode.json`, but each agent points its `prompt` field at the vvoc-managed file with a relative `{file:...}` reference.
 
@@ -331,8 +349,9 @@ npm publish
 
 ## Repository layout
 
-- `src/plugins/guardian/` - Guardian OpenCode plugin (index.ts + policy.md)
-- `src/plugins/memory/` - Memory OpenCode plugin (index.ts + system-instruction.md + reviewer.md)
+- `src/plugins/guardian/` - Guardian OpenCode plugin runtime
+- `src/plugins/memory/` - Memory OpenCode plugin runtime + system instruction
+- `templates/agents/` - canonical managed prompt templates copied into `vvoc/agents/`
 - `src/plugins/memory-store.ts` - file-based memory store and search logic
 - `src/lib/opencode.ts` - config path resolution and JSONC helpers for the CLI
 - `src/lib/vvoc-paths.ts` - shared vvoc/openCode path helpers

@@ -21,7 +21,7 @@ import { defineCommand } from "citty";
 import { MANAGED_SUBAGENTS, type ManagedSubagentName } from "../lib/managed-agents.js";
 import {
   describeWriteResult,
-  installManagedSubagentPrompts,
+  installManagedAgentPrompts,
   parseGuardianConfigText,
   readManagedSubagentModels,
   renderGuardianConfig,
@@ -317,7 +317,7 @@ function createManagedSubagentSetCommand(agentName: ManagedSubagentName) {
       const model = parseOpenCodeModelArg(args.model, "set");
       const paths = await resolveCommandPaths(args);
 
-      await installManagedSubagentPrompts(paths, { force: false });
+      await installManagedAgentPrompts(paths, { force: false });
       const result = await writeManagedSubagentModel(paths, agentName, {
         model,
         ensureEntry: true,

@@ -2,7 +2,7 @@
 // VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
-//   SCOPE: Non-interactive init path, managed subagent scaffolding, config scaffolding, and idempotent re-run handling.
+//   SCOPE: Non-interactive init path, managed agent prompt scaffolding, config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [src/commands/init.ts]
 //   LINKS: [M-CLI-INIT]
 //   ROLE: TEST
@@ -46,6 +46,8 @@ describe("init scenarios", () => {
       expect(existsSync(paths.opencodeConfigPath)).toBe(true);
       expect(existsSync(paths.guardianConfigPath)).toBe(true);
       expect(existsSync(paths.memoryConfigPath)).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/memory-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/implementer.md")).toBe(true);
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");

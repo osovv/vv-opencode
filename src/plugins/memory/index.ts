@@ -1,9 +1,9 @@
 // FILE: src/plugins/memory/memory.ts
-// VERSION: 0.2.5
+// VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Register explicit vvoc memory tools and the report-only memory reviewer agent.
-//   SCOPE: Memory reviewer agent config, scope resolution, memory tool execution, proactive system instruction injection, and plugin initialization logging.
-//   DEPENDS: [@opencode-ai/plugin, src/plugins/memory-store.ts]
+//   SCOPE: Memory reviewer agent config, managed prompt loading, scope resolution, memory tool execution, proactive system instruction injection, and plugin initialization logging.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-PLUGIN-MEMORY, M-PLUGIN-MEMORY-STORE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,10 +14,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and refined semantic blocks for memory tool registration/navigation.]
+//   LAST_CHANGE: [v0.2.6 - Switched memory-reviewer to vvoc-managed prompt files with no bundled runtime fallback.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin, tool } from "@opencode-ai/plugin";
+import { loadManagedAgentPromptText } from "../../lib/managed-agents.js";
 import {
   deleteMemory,
   getDefaultProjectScopeKey,
@@ -37,13 +38,11 @@ import {
   type MemoryScope,
 } from "../memory-store.js";
 import systemInstructionTemplate from "./system-instruction.md?raw";
-import reviewerPromptTemplate from "./reviewer.md?raw";
 
 const MEMORY_REVIEW_AGENT = "memory-reviewer";
 const z = tool.schema;
 
 const MEMORY_SYSTEM_INSTRUCTION = systemInstructionTemplate.trim();
-const MEMORY_REVIEW_PROMPT = reviewerPromptTemplate.trim();
 
 // START_BLOCK_REVIEWER_AGENT_CONFIGURATION
 function createMemoryReviewerToolsConfig(): Record<string, boolean> {
@@ -74,6 +73,7 @@ function createMemoryReviewerToolsConfig(): Record<string, boolean> {
 
 function installMemoryReviewerAgent(
   config: Config,
+  reviewerPrompt: string,
   reviewerModel?: string,
   reviewerVariant?: string,
 ): void {
@@ -82,7 +82,7 @@ function installMemoryReviewerAgent(
     mode: "subagent",
     description:
       "Reviews stored vvoc memory and suggests cleanup actions without modifying entries.",
-    prompt: MEMORY_REVIEW_PROMPT.trim(),
+    prompt: reviewerPrompt.trim(),
     steps: 6,
     permission: {
       edit: "deny",
@@ -221,11 +221,17 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
   }
 
   const metadataWarnings = getMemoryConfigWarningLines(memoryConfig);
+  const memoryReviewerPrompt = await loadManagedAgentPromptText(directory, MEMORY_REVIEW_AGENT);
   // END_BLOCK_INITIALIZE_MEMORY_PLUGIN
 
   return {
     config: async (config) => {
-      installMemoryReviewerAgent(config, memoryConfig.reviewerModel, memoryConfig.reviewerVariant);
+      installMemoryReviewerAgent(
+        config,
+        memoryReviewerPrompt,
+        memoryConfig.reviewerModel,
+        memoryConfig.reviewerVariant,
+      );
     },
     "experimental.chat.system.transform": async (_input, output) => {
       if (!output.system.includes(MEMORY_SYSTEM_INSTRUCTION)) {

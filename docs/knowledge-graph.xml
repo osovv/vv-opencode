@@ -4,7 +4,7 @@
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, managed subagent registration/prompt scaffolding, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
+      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, managed subagent registration, managed agent prompt scaffolding, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-paths.ts</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
@@ -17,7 +17,7 @@
     </M-CLI-CONFIG>
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedSubagents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled implementer/spec-reviewer/code-reviewer/investitagor metadata and load their prompt templates from package assets.</purpose>
+      <purpose>Define bundled guardian/memory-reviewer/implementer/spec-reviewer/code-reviewer/investitagor prompt templates and managed subagent metadata.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
       <depends>none</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
@@ -40,7 +40,7 @@
 
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Review OpenCode permission requests using a constrained Guardian agent and safe fallback behavior.</purpose>
-      <path>src/plugins/guardian/index.ts + src/plugins/guardian/policy.md</path>
+      <path>src/plugins/guardian/index.ts + templates/agents/guardian.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <annotations>
@@ -62,7 +62,7 @@
 
     <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent.</purpose>
-      <path>src/plugins/memory/index.ts + src/plugins/memory/system-instruction.md + src/plugins/memory/reviewer.md</path>
+      <path>src/plugins/memory/index.ts + src/plugins/memory/system-instruction.md + templates/agents/memory-reviewer.md</path>
       <depends>M-PLUGIN-MEMORY-STORE</depends>
       <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
       <annotations>

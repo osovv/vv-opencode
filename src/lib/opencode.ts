@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.2.6
+// VERSION: 0.2.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode plugin registration and vvoc-owned config files.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, managed subagent registration/prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, managed subagent registration, managed agent prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -25,8 +25,8 @@
 //   renderGuardianConfig - Renders managed Guardian config JSONC.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
 //   syncManagedSubagentRegistrations - Syncs the canonical vvoc-managed subagent registrations into OpenCode config.
-//   installManagedSubagentPrompts - Creates managed vvoc prompt files for the bundled subagents when missing.
-//   syncManagedSubagentPrompts - Rewrites managed vvoc prompt files for the bundled subagents.
+//   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian/subagent agents when missing.
+//   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian/subagent agents.
 //   readManagedSubagentModels - Reads model overrides for the bundled vvoc subagents from OpenCode config.
 //   writeManagedSubagentModel - Writes or removes a bundled vvoc subagent model override in OpenCode config.
 //   installGuardianConfig - Creates or preserves managed Guardian config.
@@ -39,17 +39,20 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added vvoc-managed OpenCode subagent registration, prompt scaffolding, and model override helpers.]
+//   LAST_CHANGE: [v0.2.7 - Expanded managed prompt scaffolding to cover guardian and memory-reviewer with no bundled runtime fallback.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import {
+  MANAGED_AGENT_PROMPT_NAMES,
+  type ManagedAgentPromptName,
   MANAGED_SUBAGENTS,
   type ManagedSubagentName,
+  getManagedAgentPromptPath,
   getManagedSubagentDefinition,
-  loadManagedSubagentTemplate,
+  loadManagedAgentPromptTemplate,
 } from "./managed-agents.js";
 import {
   parseMemoryConfigText,
@@ -313,17 +316,17 @@ export async function syncManagedSubagentRegistrations(paths: ResolvedPaths): Pr
   return { path: paths.opencodeConfigPath, changed: true };
 }
 
-export async function installManagedSubagentPrompts(
+export async function installManagedAgentPrompts(
   paths: ResolvedPaths,
   options: { force: boolean },
 ): Promise<WriteResult[]> {
   const results: WriteResult[] = [];
 
-  for (const definition of MANAGED_SUBAGENTS) {
-    const promptPath = getManagedSubagentPromptPath(paths, definition.name);
+  for (const agentName of MANAGED_AGENT_PROMPT_NAMES) {
+    const promptPath = getManagedPromptPath(paths, agentName);
     const currentText = await readOptionalText(promptPath);
     if (!currentText) {
-      await writeText(promptPath, await renderManagedSubagentPrompt(definition.name));
+      await writeText(promptPath, await renderManagedPrompt(agentName));
       results.push({ action: "created", path: promptPath });
       continue;
     }
@@ -341,20 +344,20 @@ export async function installManagedSubagentPrompts(
       continue;
     }
 
-    results.push(await syncManagedSubagentPrompt(paths, definition.name, options));
+    results.push(await syncManagedPrompt(paths, agentName, options));
   }
 
   return results;
 }
 
-export async function syncManagedSubagentPrompts(
+export async function syncManagedAgentPrompts(
   paths: ResolvedPaths,
   options: { force: boolean },
 ): Promise<WriteResult[]> {
   const results: WriteResult[] = [];
 
-  for (const definition of MANAGED_SUBAGENTS) {
-    results.push(await syncManagedSubagentPrompt(paths, definition.name, options));
+  for (const agentName of MANAGED_AGENT_PROMPT_NAMES) {
+    results.push(await syncManagedPrompt(paths, agentName, options));
   }
 
   return results;
@@ -949,18 +952,18 @@ function readAgentMap(document: JsonObject, label: string): Record<string, JsonO
   return entries;
 }
 
-function getManagedSubagentPromptPath(
+function getManagedPromptPath(
   paths: Pick<ResolvedPaths, "managedAgentsDirPath">,
-  agentName: ManagedSubagentName,
+  agentName: ManagedAgentPromptName,
 ): string {
-  return join(paths.managedAgentsDirPath, getManagedSubagentDefinition(agentName).promptFileName);
+  return getManagedAgentPromptPath(paths.managedAgentsDirPath, agentName);
 }
 
 function getManagedSubagentPromptReference(
   paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
   agentName: ManagedSubagentName,
 ): string {
-  const promptPath = getManagedSubagentPromptPath(paths, agentName);
+  const promptPath = getManagedPromptPath(paths, agentName);
   const promptRef = relative(dirname(paths.opencodeConfigPath), promptPath).replaceAll("\\", "/");
   return `{file:${promptRef.startsWith(".") ? promptRef : `./${promptRef}`}}`;
 }
@@ -986,8 +989,8 @@ function getManagedSubagentRegistration(
   return registration;
 }
 
-async function renderManagedSubagentPrompt(agentName: ManagedSubagentName): Promise<string> {
-  const template = (await loadManagedSubagentTemplate(agentName)).trim();
+async function renderManagedPrompt(agentName: ManagedAgentPromptName): Promise<string> {
+  const template = (await loadManagedAgentPromptTemplate(agentName)).trim();
   const header = [
     "<!-- Managed by vvoc.",
     "`vvoc sync` rewrites files with this marker while preserving agent registration and model settings elsewhere.",
@@ -998,15 +1001,15 @@ async function renderManagedSubagentPrompt(agentName: ManagedSubagentName): Prom
   return `${header}${template}\n`;
 }
 
-async function syncManagedSubagentPrompt(
+async function syncManagedPrompt(
   paths: ResolvedPaths,
-  agentName: ManagedSubagentName,
+  agentName: ManagedAgentPromptName,
   options: { force: boolean },
 ): Promise<WriteResult> {
-  const promptPath = getManagedSubagentPromptPath(paths, agentName);
+  const promptPath = getManagedPromptPath(paths, agentName);
   const currentText = await readOptionalText(promptPath);
   if (!currentText) {
-    await writeText(promptPath, await renderManagedSubagentPrompt(agentName));
+    await writeText(promptPath, await renderManagedPrompt(agentName));
     return { action: "created", path: promptPath };
   }
 
@@ -1018,7 +1021,7 @@ async function syncManagedSubagentPrompt(
     };
   }
 
-  const nextText = await renderManagedSubagentPrompt(agentName);
+  const nextText = await renderManagedPrompt(agentName);
   if (currentText === nextText) {
     return { action: "kept", path: promptPath };
   }
