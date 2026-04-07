@@ -133,14 +133,17 @@
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION>
 
-    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Validate guardian.jsonc and memory.jsonc with human-readable error reporting.</purpose>
-      <path>src/commands/config-validate.ts</path>
+      <path>src/commands/config-validate.ts + src/commands/config.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
       <annotations>
-        <fn-validateGuardianConfig PURPOSE="Parse guardian.jsonc and report schema violations." />
-        <fn-validateMemoryConfig PURPOSE="Parse memory.jsonc and report schema violations." />
+        <fn-validateGuardianConfigContent PURPOSE="Validate guardian.jsonc content and report schema violations with line/col." />
+        <fn-validateMemoryConfigContent PURPOSE="Validate memory.jsonc content and report schema violations with line/col." />
+        <fn-validateGuardianConfigFile PURPOSE="Validate guardian.jsonc file and report schema violations." />
+        <fn-validateMemoryConfigFile PURPOSE="Validate memory.jsonc file and report schema violations." />
+        <cmd-config_validate PURPOSE="vvoc config validate - CLI command for config validation." />
       </annotations>
     </M-CLI-CONFIG-VALIDATE>
 
