@@ -22,6 +22,7 @@
 
 import { defineCommand, runMain } from "citty";
 import agent from "./commands/agent.js";
+import completion from "./commands/completion.js";
 import config from "./commands/config.js";
 import doctor from "./commands/doctor.js";
 import guardian from "./commands/guardian.js";
@@ -43,6 +44,7 @@ const main = defineCommand({
   },
   subCommands: {
     agent,
+    completion,
     config,
     install,
     plugin,
