@@ -235,21 +235,27 @@
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
-        <purpose>Generate and print shell completion scripts for bash, zsh, and fish.</purpose>
+        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish.</purpose>
         <inputs>
-          <param name="shell" type="bash | zsh | fish" />
+          <param name="env.SHELL" type="string" />
+          <param name="homeDir" type="string" />
         </inputs>
         <outputs>
-          <param name="stdout" type="completion script" />
+          <param name="completionFile" type="shell-specific completion file" />
+          <param name="shellInitPatch" type="idempotent rc/config update when required" />
         </outputs>
         <errors>
           <error code="UNSUPPORTED_SHELL" />
         </errors>
       </contract>
       <interface>
-        <export-generateCompletion PURPOSE="Generate completion script for the specified shell." />
+        <export-default PURPOSE="Install shell completions for the detected shell." />
+        <export-detectShell PURPOSE="Detect the active shell from environment variables." />
+        <export-generateBashCompletion PURPOSE="Generate bash completion script content." />
+        <export-generateZshCompletion PURPOSE="Generate zsh completion script content." />
+        <export-generateFishCompletion PURPOSE="Generate fish completion script content." />
       </interface>
       <depends>M-CLI-COMMANDS</depends>
       <target>
@@ -372,11 +378,12 @@
       <step-4>Report human-readable errors per file or pass with OK status.</step-4>
       <evidence>Invalid JSONC is caught and reported with line/column info; valid configs pass silently.</evidence>
     </DF-CONFIG-VALIDATE>
-    <DF-COMPLETION NAME="ShellCompletion" TRIGGER="vvoc completion [bash|zsh|fish]">
-      <step-1>Receive shell type argument.</step-1>
-      <step-2>Generate completion script using citty built-in completion support.</step-2>
-      <step-3>Print script to stdout for user to pipe to the appropriate completion file.</step-3>
-      <evidence>Generated script contains all vvoc commands and flags; bash/zsh/fish variants are syntactically correct.</evidence>
+    <DF-COMPLETION NAME="ShellCompletion" TRIGGER="vvoc completion">
+      <step-1>Detect the current shell from environment variables.</step-1>
+      <step-2>Generate the shell-specific completion content for bash, zsh, or fish.</step-2>
+      <step-3>Write the completion file to the shell-specific location.</step-3>
+      <step-4>Patch shell init files idempotently when the shell needs an explicit loader.</step-4>
+      <evidence>Installed completion files match the real vvoc command tree; zsh installs a loader block that enables `compdef` before sourcing `_vvoc`.</evidence>
     </DF-COMPLETION>
     <DF-INIT NAME="InteractiveInit" TRIGGER="vvoc init [--non-interactive]">
       <step-1>Check --non-interactive flag. If absent and TTY detected, enter interactive mode with @clack/prompts.</step-1>
@@ -414,7 +421,7 @@
       <goal>Add plugin list, config validate, shell completion, interactive init, and upgrade commands to improve developer UX.</goal>
       <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate guardian.jsonc and memory.jsonc with human-readable errors.</step-1>
       <step-2 module="M-CLI-PLUGIN-LIST" status="implemented" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
-      <step-3 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Generate shell completion scripts for bash, zsh, and fish.</step-3>
+      <step-3 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Install shell completions for bash, zsh, and fish with shell auto-detection.</step-3>
       <step-4 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-4>
       <step-5 module="M-CLI-UPGRADE" status="implemented" verification="V-M-CLI-UPGRADE">Check npm for updates and offer upgrade with changelog display.</step-5>
     </Phase-4>

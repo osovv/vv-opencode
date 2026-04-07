@@ -18,11 +18,17 @@ Current package scope:
   - `GuardianPlugin`
   - `MemoryPlugin`
 - CLI commands:
+  - `agent`
+  - `completion`
+  - `config`
+  - `init`
   - `install`
+  - `plugin`
   - `sync`
   - `status`
   - `doctor`
-  - `guardian config`
+  - `guardian`
+  - `upgrade`
   - `version`
 
 ## Installation
@@ -33,19 +39,13 @@ Install into the current project:
 bun add @osovv/vv-opencode
 ```
 
-If installed locally, run the binary as:
+Use the CLI as:
 
 ```bash
-bun x vvoc --help
+vvoc --help
 ```
 
-or:
-
-```bash
-bun run vvoc --help
-```
-
-Plain `vvoc` only works when the binary is available in your `PATH`, for example after a global install.
+Examples below use `vvoc` directly and assume the binary is available in your `PATH`.
 
 ## OpenCode usage
 
@@ -93,19 +93,19 @@ This keeps vvoc state clearly separated from native OpenCode config and avoids f
 Show help:
 
 ```bash
-bun x vvoc --help
+vvoc --help
 ```
 
 Show the installed `vvoc` package version:
 
 ```bash
-bun x vvoc version
+vvoc version
 ```
 
 Install package config and bootstrap Guardian + Memory config:
 
 ```bash
-bun x vvoc install
+vvoc install
 ```
 
 `install` writes the current installed package version into the OpenCode `plugin` array instead of using an unpinned `latest` reference.
@@ -114,13 +114,13 @@ It also creates managed `guardian.jsonc` and `memory.jsonc` files when they are 
 Use project scope instead of global scope:
 
 ```bash
-bun x vvoc install --scope project
+vvoc install --scope project
 ```
 
 Override the global config home used for both `opencode/` and `vvoc/`:
 
 ```bash
-bun x vvoc install --config-dir /tmp/vvoc-home
+vvoc install --config-dir /tmp/vvoc-home
 ```
 
 This writes:
@@ -132,21 +132,29 @@ This writes:
 Sync managed config files:
 
 ```bash
-bun x vvoc sync
+vvoc sync
 ```
 
 Inspect current setup:
 
 ```bash
-bun x vvoc status
-bun x vvoc doctor
+vvoc status
+vvoc doctor
 ```
+
+Install shell completions for the current shell:
+
+```bash
+vvoc completion
+```
+
+For `zsh`, `vvoc completion` writes `~/.zsh/completions/_vvoc` and appends a small loader block to `~/.zshrc`.
 
 Generate or print `guardian.jsonc`:
 
 ```bash
-bun x vvoc guardian config --print
-bun x vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
+vvoc guardian config --print
+vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
 ```
 
 ### Guardian config behavior

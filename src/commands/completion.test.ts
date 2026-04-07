@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion script generation.
@@ -24,6 +24,7 @@ test("generateBashCompletion - contains vvoc command", () => {
   const output = generateBashCompletion();
   expect(output).toContain("vvoc");
   expect(output).toContain("agent");
+  expect(output).toContain("completion");
   expect(output).toContain("config");
   expect(output).toContain("plugin");
 });
@@ -44,6 +45,7 @@ test("generateZshCompletion - contains vvoc command", () => {
 
 test("generateZshCompletion - valid zsh syntax", () => {
   const output = generateZshCompletion();
+  expect(output).toContain("#compdef vvoc");
   expect(output).toContain("_vvoc()");
   expect(output).toContain("compdef _vvoc vvoc");
 });
@@ -52,6 +54,7 @@ test("generateFishCompletion - contains vvoc command", () => {
   const output = generateFishCompletion();
   expect(output).toContain("vvoc");
   expect(output).toContain("agent");
+  expect(output).toContain("completion");
   expect(output).toContain("config");
   expect(output).toContain("plugin");
 });
@@ -65,6 +68,13 @@ test("generateFishCompletion - valid fish syntax", () => {
 test("generateBashCompletion - contains config subcommand", () => {
   const output = generateBashCompletion();
   expect(output).toContain("validate");
+});
+
+test("generateBashCompletion - top-level commands match CLI", () => {
+  const output = generateBashCompletion();
+  expect(output).toContain(
+    'local commands="agent completion config doctor guardian init install plugin status sync upgrade version"',
+  );
 });
 
 test("generateZshCompletion - contains plugin subcommand", () => {

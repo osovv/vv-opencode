@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.0
+// VERSION: 0.5.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, and rc file patching.
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Rewrite to auto-install only, detect shell automatically.]
+//   LAST_CHANGE: [v0.5.1 - Fixed zsh completion registration, added a resilient zsh loader block, and synced completion commands with the real CLI surface.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -26,8 +26,9 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 
-const VVOC_COMMANDS = [
+const VVOC_TOP_LEVEL_COMMANDS = [
   "agent",
+  "completion",
   "config",
   "doctor",
   "guardian",
@@ -37,9 +38,11 @@ const VVOC_COMMANDS = [
   "status",
   "sync",
   "upgrade",
-  "validate",
   "version",
 ];
+
+const VVOC_CONFIG_COMMANDS = ["validate"];
+const VVOC_PLUGIN_COMMANDS = ["list"];
 
 export default defineCommand({
   meta: {
@@ -123,11 +126,18 @@ async function installZshCompletion(): Promise<void> {
   await writeFile(completionFile, script, "utf8");
 
   const rcFile = resolve(homedir(), ".zshrc");
-  const fpathLine = `fpath=(~/.zsh/completions $fpath)`;
-  await appendIfMissing(rcFile, fpathLine);
+  const sourceBlock = [
+    "# vvoc zsh completion",
+    "if ! (( $+functions[compdef] )); then",
+    "  autoload -Uz compinit",
+    "  compinit",
+    "fi",
+    `[ -f "${completionFile}" ] && source "${completionFile}"`,
+  ].join("\n");
+  await appendIfMissing(rcFile, sourceBlock);
 
   console.log(`Zsh completions installed to ${completionFile}`);
-  console.log(`Added fpath line to ~/.zshrc`);
+  console.log(`Added completion loader block to ~/.zshrc`);
 }
 
 async function installFishCompletion(): Promise<void> {
@@ -142,28 +152,52 @@ async function installFishCompletion(): Promise<void> {
 }
 
 export function generateBashCompletion(): string {
-  const cmds = VVOC_COMMANDS.join(" ");
+  const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
+  const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
+  const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
+
   return (
     "# bash completion for vvoc\n" +
     "_vvoc() {\n" +
     "  local cur prev words cword\n" +
     "  _init_completion || return\n" +
     "\n" +
-    '  case "${words[0]}" in\n' +
-    "    vvoc)\n" +
+    '  case "$cword" in\n' +
+    "    1)\n" +
     "      _vvoc_commands\n" +
     "      ;;\n" +
-    "    *)\n" +
+    "    2)\n" +
+    '      case "${words[1]}" in\n' +
+    "        config)\n" +
+    "          _vvoc_config_commands\n" +
+    "          ;;\n" +
+    "        plugin)\n" +
+    "          _vvoc_plugin_commands\n" +
+    "          ;;\n" +
+    "      esac\n" +
     "      ;;\n" +
     "  esac\n" +
     "}\n" +
     "\n" +
     "_vvoc_commands() {\n" +
     '  local commands="' +
-    cmds +
+    topLevelCommands +
     '"\n' +
-    '  _completions=($(compgen -W "$commands" -- "$cur"))\n' +
-    '  COMPREPLY=("${_completions[@]}")\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_config_commands() {\n" +
+    '  local commands="' +
+    configCommands +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_plugin_commands() {\n" +
+    '  local commands="' +
+    pluginCommands +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
     "\n" +
     "complete -F _vvoc vvoc\n"
@@ -172,6 +206,7 @@ export function generateBashCompletion(): string {
 
 export function generateZshCompletion(): string {
   const lines: string[] = [
+    "#compdef vvoc",
     "# zsh completion for vvoc",
     "",
     "_vvoc() {",
@@ -179,7 +214,7 @@ export function generateZshCompletion(): string {
     "  commands=(",
   ];
 
-  for (const cmd of VVOC_COMMANDS) {
+  for (const cmd of VVOC_TOP_LEVEL_COMMANDS) {
     lines.push('    "' + cmd + '"');
   }
 
@@ -187,7 +222,7 @@ export function generateZshCompletion(): string {
     "  )",
     "",
     "  _arguments -C \\",
-    '    "1: :(' + VVOC_COMMANDS.join(" ") + ')" \\',
+    '    "1: :(' + VVOC_TOP_LEVEL_COMMANDS.join(" ") + ')" \\',
     '    "*::arg:->args"',
     "",
     "  case $line[1] in",
@@ -202,15 +237,17 @@ export function generateZshCompletion(): string {
     "",
     "_vvoc_config_cmds() {",
     "  local -a config_commands",
-    "  config_commands=(validate)",
-    '  _arguments "1: :(validate)"',
+    "  config_commands=(" + VVOC_CONFIG_COMMANDS.join(" ") + ")",
+    '  _arguments "1: :(' + VVOC_CONFIG_COMMANDS.join(" ") + ')"',
     "}",
     "",
     "_vvoc_plugin_cmds() {",
     "  local -a plugin_commands",
-    "  plugin_commands=(list)",
-    '  _arguments "1: :(list)"',
+    "  plugin_commands=(" + VVOC_PLUGIN_COMMANDS.join(" ") + ")",
+    '  _arguments "1: :(' + VVOC_PLUGIN_COMMANDS.join(" ") + ')"',
     "}",
+    "",
+    "compdef _vvoc vvoc",
   );
 
   return lines.join("\n") + "\n";
@@ -219,7 +256,7 @@ export function generateZshCompletion(): string {
 export function generateFishCompletion(): string {
   const lines: string[] = ["# fish completion for vvoc", "", "function __vvoc_commands"];
 
-  for (const cmd of VVOC_COMMANDS) {
+  for (const cmd of VVOC_TOP_LEVEL_COMMANDS) {
     lines.push("  echo " + cmd);
   }
 
@@ -227,11 +264,11 @@ export function generateFishCompletion(): string {
     "end",
     "",
     "function __vvoc_config_cmds",
-    "  echo validate",
+    "  echo " + VVOC_CONFIG_COMMANDS.join(" "),
     "end",
     "",
     "function __vvoc_plugin_cmds",
-    "  echo list",
+    "  echo " + VVOC_PLUGIN_COMMANDS.join(" "),
     "end",
     "",
     'complete -c vvoc -f -a "(__vvoc_commands)"',

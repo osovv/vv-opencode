@@ -161,11 +161,12 @@
     </M-CLI-PLUGIN-LIST>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Generate shell completion scripts for bash, zsh, and fish.</purpose>
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
       <annotations>
+        <fn-detectShell PURPOSE="Detect the active shell from environment variables." />
         <fn-generateBashCompletion PURPOSE="Generate bash completion script." />
         <fn-generateZshCompletion PURPOSE="Generate zsh completion script." />
         <fn-generateFishCompletion PURPOSE="Generate fish completion script." />
