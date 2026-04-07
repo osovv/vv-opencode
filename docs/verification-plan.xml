@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.4.4">
+<VerificationPlan VERSION="0.4.7">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -75,7 +75,7 @@
         <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
         <scenario-5 kind="success">Managed subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references.</scenario-5>
-        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root, and model overrides round-trip through OpenCode config for both vvoc-managed subagents and the built-in `general` and `explore` subagents.</scenario-6>
+        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root, model overrides round-trip through OpenCode config for both vvoc-managed subagents and the built-in `general` and `explore` subagents, and only guardian keeps an explicit `steps` limit.</scenario-6>
         <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
       </scenarios>
       <required-log-markers />
@@ -111,13 +111,13 @@
 
     <V-M-PLUGIN-GUARDIAN MODULE="M-PLUGIN-GUARDIAN" PRIORITY="high">
       <test-files>
-        <file>typecheck-only in v1</file>
+        <file>src/plugins/guardian.test.ts</file>
       </test-files>
       <module-checks>
         <check-1>bun x tsc --noEmit</check-1>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Guardian plugin exports compile against current OpenCode plugin and SDK types.</scenario-1>
+        <scenario-1 kind="success">Guardian plugin exports compile against current OpenCode plugin and SDK types, and plugin config registers guardian as a hidden subagent with an explicit two-step limit.</scenario-1>
         <scenario-2 kind="failure">Review failures fall back to manual approval instead of silently allowing.</scenario-2>
       </scenarios>
       <required-log-markers>
@@ -164,7 +164,7 @@
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">MemoryPlugin registers all six memory tools.</scenario-1>
-        <scenario-2 kind="success">Plugin config registers the `memory-reviewer` subagent.</scenario-2>
+        <scenario-2 kind="success">Plugin config registers the `memory-reviewer` subagent without an explicit `steps` limit.</scenario-2>
         <scenario-3 kind="success">Plugin appends a short system instruction encouraging proactive memory tool usage without injecting stored entries.</scenario-3>
         <scenario-4 kind="failure">Disabled memory config blocks tool use instead of pretending memory exists.</scenario-4>
       </scenarios>
@@ -278,9 +278,9 @@
         <check-4>bun test src/commands/completion.test.ts</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, `path-provider`, and `agent` subcommands including built-in `general` and `explore`.</scenario-1>
+        <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, `path-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-1>
         <scenario-2 kind="success">Zsh completion script registers `vvoc` via `#compdef` and `compdef` markers so the installed file works when sourced or loaded from completion paths.</scenario-2>
-        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, `path-provider`, and `agent` action targets including built-in `general` and `explore`.</scenario-3>
+        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, `path-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-3>
         <scenario-4 kind="success">The zsh install flow appends an idempotent loader block that initializes completion support before sourcing `_vvoc`.</scenario-4>
       </scenarios>
       <required-log-markers />

@@ -1,7 +1,6 @@
 ---
 description: Reviews stored vvoc memory and suggests cleanup actions without modifying entries.
 mode: subagent
-steps: 6
 permission:
   edit: deny
   webfetch: deny

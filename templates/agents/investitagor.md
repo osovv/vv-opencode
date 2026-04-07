@@ -1,7 +1,6 @@
 ---
 description: Investigates bugs and unclear behavior before implementation work begins.
 mode: subagent
-steps: 6
 permission:
   edit: deny
 ---

@@ -1,5 +1,5 @@
 // FILE: src/plugins/guardian/guardian.ts
-// VERSION: 0.2.6
+// VERSION: 0.2.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
 //   SCOPE: Guardian runtime config loading, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Switched Guardian to vvoc-managed prompt files with no bundled runtime fallback.]
+//   LAST_CHANGE: [v0.2.7 - Registered Guardian as a hidden subagent while preserving its explicit two-step limit.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -1368,9 +1368,10 @@ function installGuardianAgent(
 ) {
   config.agent ??= {};
   config.agent[GUARDIAN_AGENT] = {
-    mode: "primary",
+    mode: "subagent",
     description: "Risk assessment agent used by the Guardian plugin for permission reviews.",
     prompt: guardianPrompt.trim(),
+    hidden: true,
     steps: 2,
     permission: createGuardianPermissionConfig(),
     tools: createGuardianToolsConfig(),

@@ -1,5 +1,5 @@
 // FILE: src/plugins/memory.test.ts
-// VERSION: 0.2.6
+// VERSION: 0.2.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc memory runtime config, scope semantics, and plugin registration behavior.
 //   SCOPE: Memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer prompt setup.
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added coverage for vvoc-managed memory-reviewer prompt loading and missing-prompt failures.]
+//   LAST_CHANGE: [v0.2.7 - Added coverage ensuring the memory-reviewer registration no longer sets explicit steps.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -340,6 +340,9 @@ describe("MemoryPlugin", () => {
       expect((config.agent as Record<string, { mode?: string }>)?.["memory-reviewer"]?.mode).toBe(
         "subagent",
       );
+      expect(
+        (config.agent as Record<string, { steps?: number }>)?.["memory-reviewer"]?.steps,
+      ).toBeUndefined();
       expect(
         (config.agent as Record<string, { prompt?: string }>)?.["memory-reviewer"]?.prompt,
       ).toBe("Custom project memory reviewer prompt.");

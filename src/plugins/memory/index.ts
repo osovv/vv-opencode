@@ -83,7 +83,6 @@ function installMemoryReviewerAgent(
     description:
       "Reviews stored vvoc memory and suggests cleanup actions without modifying entries.",
     prompt: reviewerPrompt.trim(),
-    steps: 6,
     permission: {
       edit: "deny",
       webfetch: "deny",

@@ -189,13 +189,14 @@ describe("managed subagent config helpers", () => {
       $schema?: string;
       agent?: Record<
         string,
-        { mode?: string; prompt?: string; permission?: Record<string, unknown> }
+        { mode?: string; prompt?: string; permission?: Record<string, unknown>; steps?: number }
       >;
     };
 
     expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
     expect(parsed.agent?.implementer?.mode).toBe("subagent");
     expect(parsed.agent?.implementer?.prompt).toBe("{file:../vvoc/agents/implementer.md}");
+    expect(parsed.agent?.implementer?.steps).toBeUndefined();
     expect(parsed.agent?.["spec-reviewer"]?.permission).toEqual({ edit: "deny" });
     expect(parsed.agent?.investitagor?.prompt).toBe("{file:../vvoc/agents/investitagor.md}");
   });
@@ -226,6 +227,7 @@ describe("managed subagent config helpers", () => {
       );
       expect(implementerPrompt).toContain("Managed by vvoc");
       expect(implementerPrompt).not.toContain("mode: subagent");
+      expect(implementerPrompt).not.toContain("steps:");
       expect(implementerPrompt).not.toStartWith("---\n");
       expect(implementerPrompt).toContain("You are the implementer subagent.");
       expect(guardianPrompt).toContain("risk assessment of a coding-agent tool call");

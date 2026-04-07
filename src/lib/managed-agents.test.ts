@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.1.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, project-over-global prompt resolution, and missing prompt failures.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added scoped managed prompt tests for guardian and memory-reviewer runtime loading.]
+//   LAST_CHANGE: [v0.1.1 - Updated the bundled guardian template expectation for hidden subagent registration.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -32,7 +32,8 @@ describe("managed agent prompts", () => {
   test("loads bundled guardian template", async () => {
     const template = await loadManagedAgentPromptTemplate("guardian");
     expect(template).toStartWith("---\n");
-    expect(template).toContain("mode: primary");
+    expect(template).toContain("mode: subagent");
+    expect(template).toContain("hidden: true");
     expect(template).toContain("You are performing a risk assessment of a coding-agent tool call.");
   });
 

@@ -1173,9 +1173,6 @@ function getManagedSubagentRegistration(
     prompt: getManagedSubagentPromptReference(paths, agentName),
   };
 
-  if (definition.steps !== undefined) {
-    registration.steps = definition.steps;
-  }
   if (definition.permission) {
     registration.permission = definition.permission;
   }

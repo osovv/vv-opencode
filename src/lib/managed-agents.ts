@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
 //   SCOPE: Built-in subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added guardian and memory-reviewer prompt management with scoped vvoc config loading and no bundled runtime fallback.]
+//   LAST_CHANGE: [v0.2.1 - Removed explicit steps from vvoc-managed subagents so only guardian keeps a hard step limit.]
 // END_CHANGE_SUMMARY
 
 import { readFile } from "node:fs/promises";
@@ -51,7 +51,6 @@ export type ManagedSubagentDefinition = {
   name: ManagedSubagentName;
   description: string;
   promptFileName: `${ManagedSubagentName}.md`;
-  steps?: number;
   permission?: Record<string, unknown>;
 };
 
@@ -60,14 +59,12 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     name: "implementer",
     description: "Implements approved changes with focused verification and a minimal diff.",
     promptFileName: "implementer.md",
-    steps: 8,
   },
   {
     name: "spec-reviewer",
     description:
       "Checks an implementation against the requested spec and flags missing or extra behavior.",
     promptFileName: "spec-reviewer.md",
-    steps: 6,
     permission: {
       edit: "deny",
     },
@@ -76,7 +73,6 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     name: "code-reviewer",
     description: "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
     promptFileName: "code-reviewer.md",
-    steps: 6,
     permission: {
       edit: "deny",
     },
@@ -85,7 +81,6 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     name: "investitagor",
     description: "Investigates bugs and unclear behavior before implementation work begins.",
     promptFileName: "investitagor.md",
-    steps: 6,
     permission: {
       edit: "deny",
     },

@@ -1,6 +1,7 @@
 ---
 description: Risk assessment agent used by the Guardian plugin for permission reviews.
-mode: primary
+mode: subagent
+hidden: true
 steps: 2
 permission:
   edit: deny
