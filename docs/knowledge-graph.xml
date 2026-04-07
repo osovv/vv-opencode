@@ -4,19 +4,31 @@
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
+      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, managed subagent registration/prompt scaffolding, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-paths.ts</path>
-      <depends>none</depends>
+      <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
+        <fn-syncManagedSubagentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed subagent registrations with prompt file references." />
         <fn-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </annotations>
     </M-CLI-CONFIG>
 
+    <M-CLI-MANAGED-AGENTS NAME="ManagedSubagents" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Define bundled implementer/spec-reviewer/code-reviewer/investitagor metadata and load their prompt templates from package assets.</purpose>
+      <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
+      <depends>none</depends>
+      <verification-ref>V-M-CLI-CONFIG</verification-ref>
+      <annotations>
+        <const-MANAGED_SUBAGENTS PURPOSE="Canonical managed subagent definitions used for OpenCode registration." />
+        <fn-loadManagedSubagentTemplate PURPOSE="Load a bundled prompt template for a managed vvoc subagent." />
+      </annotations>
+    </M-CLI-MANAGED-AGENTS>
+
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, completion, and upgrade commands.</purpose>
+      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, completion, and upgrade commands.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
@@ -199,6 +211,7 @@
     </M-CLI-UPGRADE>
 
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-CLI-CONFIG" to="M-CLI-MANAGED-AGENTS" relation="uses" />
     <CrossLink from="M-CLI-CONFIG-VALIDATE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-PLUGIN-LIST" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-COMPLETION" to="M-CLI-COMMANDS" relation="uses" />

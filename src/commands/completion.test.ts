@@ -84,6 +84,21 @@ test("generateZshCompletion - contains plugin subcommand", () => {
 
 test("generateFishCompletion - handles nested subcommands", () => {
   const output = generateFishCompletion();
+  expect(output).toContain("__fish_seen_subcommand_from agent");
   expect(output).toContain("__fish_seen_subcommand_from config");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
+});
+
+test("generateBashCompletion - contains agent subcommands", () => {
+  const output = generateBashCompletion();
+  expect(output).toContain("implementer spec-reviewer code-reviewer investitagor");
+  expect(output).toContain("_vvoc_agent_action_commands");
+});
+
+test("generateZshCompletion - contains agent action commands", () => {
+  const output = generateZshCompletion();
+  expect(output).toContain(
+    "guardian|memory-reviewer|implementer|spec-reviewer|code-reviewer|investitagor",
+  );
+  expect(output).toContain("set unset");
 });

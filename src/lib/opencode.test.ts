@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.2.5
+// VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
-//   SCOPE: Plugin specifier writes, Guardian config round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -11,23 +11,31 @@
 //
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
+//   managed subagent config helpers tests - Verify registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE test markup so config helper verification can be navigated alongside runtime modules.]
+//   LAST_CHANGE: [v0.2.6 - Added verification for managed subagent registration and prompt scaffolding.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
   ensurePackageConfigText,
+  ensureManagedSubagentsConfigText,
+  installManagedSubagentPrompts,
   parseGuardianConfigText,
+  readManagedSubagentModels,
   renderGuardianConfig,
   resolvePaths,
+  writeManagedSubagentModel,
 } from "./opencode.js";
 
 describe("ensurePackageConfigText", () => {
@@ -83,6 +91,71 @@ describe("guardian config helpers", () => {
   });
 });
 
+describe("managed subagent config helpers", () => {
+  test("creates managed subagent registrations with vvoc prompt refs", async () => {
+    const paths = await resolvePaths({
+      scope: "global",
+      cwd: "/workspace/project",
+      configDir: "/tmp/vvoc-config-home",
+    });
+
+    const output = ensureManagedSubagentsConfigText(undefined, paths);
+    const parsed = parse(output) as {
+      $schema?: string;
+      agent?: Record<
+        string,
+        { mode?: string; prompt?: string; permission?: Record<string, unknown> }
+      >;
+    };
+
+    expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
+    expect(parsed.agent?.implementer?.mode).toBe("subagent");
+    expect(parsed.agent?.implementer?.prompt).toBe("{file:../vvoc/agents/implementer.md}");
+    expect(parsed.agent?.["spec-reviewer"]?.permission).toEqual({ edit: "deny" });
+    expect(parsed.agent?.investitagor?.prompt).toBe("{file:../vvoc/agents/investitagor.md}");
+  });
+
+  test("writes managed prompt files and round-trips model overrides", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-agents-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+      });
+
+      const promptResults = await installManagedSubagentPrompts(paths, { force: true });
+      expect(promptResults).toHaveLength(4);
+
+      const implementerPrompt = await readFile(
+        join(projectDir, ".vvoc", "agents", "implementer.md"),
+        "utf8",
+      );
+      expect(implementerPrompt).toContain("Managed by vvoc");
+      expect(implementerPrompt).toContain("You are the implementer subagent.");
+
+      const setResult = await writeManagedSubagentModel(paths, "implementer", {
+        model: "openai/gpt-5",
+        ensureEntry: true,
+      });
+      expect(setResult.action).toBe("created");
+
+      const models = await readManagedSubagentModels(paths);
+      expect(models.implementer).toBe("openai/gpt-5");
+
+      const unsetResult = await writeManagedSubagentModel(paths, "implementer", {
+        ensureEntry: false,
+      });
+      expect(unsetResult.action).toBe("updated");
+
+      const modelsAfterUnset = await readManagedSubagentModels(paths);
+      expect(modelsAfterUnset.implementer).toBeUndefined();
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("resolvePaths", () => {
   test("separates global opencode and vvoc config roots", async () => {
     const paths = await resolvePaths({
@@ -94,6 +167,7 @@ describe("resolvePaths", () => {
     expect(paths.configHome).toBe("/tmp/vvoc-config-home");
     expect(paths.opencodeBaseDir).toBe("/tmp/vvoc-config-home/opencode");
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
+    expect(paths.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
     expect(paths.guardianConfigPath).toBe("/tmp/vvoc-config-home/vvoc/guardian.jsonc");
     expect(paths.memoryConfigPath).toBe("/tmp/vvoc-config-home/vvoc/memory.jsonc");
@@ -107,6 +181,7 @@ describe("resolvePaths", () => {
 
     expect(paths.opencodeBaseDir).toBe("/workspace/project");
     expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
+    expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
     expect(paths.guardianConfigPath).toBe("/workspace/project/.vvoc/guardian.jsonc");
     expect(paths.memoryConfigPath).toBe("/workspace/project/.vvoc/memory.jsonc");
   });

@@ -1,8 +1,8 @@
 // FILE: src/commands/init.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds initial vvoc config files. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, config file scaffolding, and idempotent re-run handling.
+//   SCOPE: Scope selection, plugin registration, managed subagent registration, config file scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Initial GRACE implementation for init command.]
+//   LAST_CHANGE: [v0.4.1 - Added managed subagent registration and prompt scaffolding to init.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,9 +23,11 @@ import * as p from "@clack/prompts";
 import {
   ensurePackageInstalled,
   installGuardianConfig,
+  installManagedSubagentPrompts,
   installMemoryConfig,
   inspectInstallation,
   resolvePaths,
+  syncManagedSubagentRegistrations,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -130,6 +132,17 @@ async function runInit(options: {
   const pkgResult = await ensurePackageInstalled(finalPaths);
   p.log.info(pkgResult.path + " - " + (pkgResult.changed ? "updated" : "already up to date"));
 
+  p.log.step("Registering managed subagents...");
+  const agentRegistration = await syncManagedSubagentRegistrations(finalPaths);
+  p.log.info(
+    agentRegistration.path + " - " + (agentRegistration.changed ? "updated" : "already up to date"),
+  );
+
+  p.log.step("Scaffolding managed subagent prompts...");
+  for (const result of await installManagedSubagentPrompts(finalPaths, { force: true })) {
+    p.log.info(result.path + " - " + result.action);
+  }
+
   p.log.step("Scaffolding Guardian config...");
   const guardianResult = await installGuardianConfig(finalPaths, { force: true });
   p.log.info(guardianResult.path + " - " + guardianResult.action);
@@ -160,6 +173,8 @@ export async function runInitNonInteractive(options: {
   }
 
   await ensurePackageInstalled(paths);
+  await syncManagedSubagentRegistrations(paths);
+  await installManagedSubagentPrompts(paths, { force: true });
   await installGuardianConfig(paths, { force: true });
   await installMemoryConfig(paths, { force: true });
 }

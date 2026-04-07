@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.1
+// VERSION: 0.5.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, and rc file patching.
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.1 - Fixed zsh completion registration, added a resilient zsh loader block, and synced completion commands with the real CLI surface.]
+//   LAST_CHANGE: [v0.5.2 - Added nested completion support for vvoc-managed agent subcommands.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -43,6 +43,16 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
+const VVOC_AGENT_COMMANDS = [
+  "guardian",
+  "memory-reviewer",
+  "implementer",
+  "spec-reviewer",
+  "code-reviewer",
+  "investitagor",
+  "list",
+];
+const VVOC_AGENT_ACTION_COMMANDS = ["set", "unset"];
 
 export default defineCommand({
   meta: {
@@ -155,6 +165,8 @@ export function generateBashCompletion(): string {
   const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
   const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
+  const agentCommands = VVOC_AGENT_COMMANDS.join(" ");
+  const agentActionCommands = VVOC_AGENT_ACTION_COMMANDS.join(" ");
 
   return (
     "# bash completion for vvoc\n" +
@@ -168,11 +180,21 @@ export function generateBashCompletion(): string {
     "      ;;\n" +
     "    2)\n" +
     '      case "${words[1]}" in\n' +
+    "        agent)\n" +
+    "          _vvoc_agent_commands\n" +
+    "          ;;\n" +
     "        config)\n" +
     "          _vvoc_config_commands\n" +
     "          ;;\n" +
     "        plugin)\n" +
     "          _vvoc_plugin_commands\n" +
+    "          ;;\n" +
+    "      esac\n" +
+    "      ;;\n" +
+    "    3)\n" +
+    '      case "${words[1]}:${words[2]}" in\n' +
+    "        agent:guardian|agent:memory-reviewer|agent:implementer|agent:spec-reviewer|agent:code-reviewer|agent:investitagor)\n" +
+    "          _vvoc_agent_action_commands\n" +
     "          ;;\n" +
     "      esac\n" +
     "      ;;\n" +
@@ -189,6 +211,20 @@ export function generateBashCompletion(): string {
     "_vvoc_config_commands() {\n" +
     '  local commands="' +
     configCommands +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_agent_commands() {\n" +
+    '  local commands="' +
+    agentCommands +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_agent_action_commands() {\n" +
+    '  local commands="' +
+    agentActionCommands +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -226,6 +262,9 @@ export function generateZshCompletion(): string {
     '    "*::arg:->args"',
     "",
     "  case $line[1] in",
+    "    agent)",
+    "      _vvoc_agent_cmds",
+    "      ;;",
     "    config)",
     "      _vvoc_config_cmds",
     "      ;;",
@@ -239,6 +278,17 @@ export function generateZshCompletion(): string {
     "  local -a config_commands",
     "  config_commands=(" + VVOC_CONFIG_COMMANDS.join(" ") + ")",
     '  _arguments "1: :(' + VVOC_CONFIG_COMMANDS.join(" ") + ')"',
+    "}",
+    "",
+    "_vvoc_agent_cmds() {",
+    "  case $words[2] in",
+    "    guardian|memory-reviewer|implementer|spec-reviewer|code-reviewer|investitagor)",
+    '      _arguments "1: :(' + VVOC_AGENT_ACTION_COMMANDS.join(" ") + ')"',
+    "      ;;",
+    "    *)",
+    '      _arguments "1: :(' + VVOC_AGENT_COMMANDS.join(" ") + ')"',
+    "      ;;",
+    "  esac",
     "}",
     "",
     "_vvoc_plugin_cmds() {",
@@ -267,11 +317,21 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_CONFIG_COMMANDS.join(" "),
     "end",
     "",
+    "function __vvoc_agent_cmds",
+    "  echo " + VVOC_AGENT_COMMANDS.join(" "),
+    "end",
+    "",
+    "function __vvoc_agent_action_cmds",
+    "  echo " + VVOC_AGENT_ACTION_COMMANDS.join(" "),
+    "end",
+    "",
     "function __vvoc_plugin_cmds",
     "  echo " + VVOC_PLUGIN_COMMANDS.join(" "),
     "end",
     "",
     'complete -c vvoc -f -a "(__vvoc_commands)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from agent" -f -a "(__vvoc_agent_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from guardian memory-reviewer implementer spec-reviewer code-reviewer investitagor" -f -a "(__vvoc_agent_action_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',
   );

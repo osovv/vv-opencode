@@ -7,6 +7,7 @@ Current package scope:
 - `GuardianPlugin` for permission review
 - `MemoryPlugin` for explicit persistent memory
 - built-in `memory-reviewer` subagent for report-only memory audits
+- vvoc-managed subagents: `implementer`, `spec-reviewer`, `code-reviewer`, `investitagor`
 - `vvoc` CLI for bootstrap, sync, and diagnostics
 - vvoc-managed config kept separate from OpenCode config
 
@@ -85,6 +86,8 @@ Examples:
 - project-local memory data: `~/.local/share/vvoc/projects/<project-id>/memory/`
 - global shared memory data: `~/.local/share/vvoc/memory/shared/<namespace>/`
 - project memory settings: `./.vvoc/memory.jsonc`
+- global managed subagent prompts: `~/.config/vvoc/agents/*.md`
+- project managed subagent prompts: `./.vvoc/agents/*.md`
 
 This keeps vvoc state clearly separated from native OpenCode config and avoids future clashes if OpenCode adds its own memory features.
 
@@ -102,14 +105,14 @@ Show the installed `vvoc` package version:
 vvoc version
 ```
 
-Install package config and bootstrap Guardian + Memory config:
+Install package config and bootstrap Guardian + Memory config plus managed subagents:
 
 ```bash
 vvoc install
 ```
 
 `install` writes the current installed package version into the OpenCode `plugin` array instead of using an unpinned `latest` reference.
-It also creates managed `guardian.jsonc` and `memory.jsonc` files when they are missing.
+It also registers vvoc-managed subagents in OpenCode config and creates managed `guardian.jsonc`, `memory.jsonc`, and `.vvoc/agents/*.md` prompt files when they are missing.
 
 Use project scope instead of global scope:
 
@@ -128,11 +131,24 @@ This writes:
 - `/tmp/vvoc-home/opencode/opencode.json`
 - `/tmp/vvoc-home/vvoc/guardian.jsonc`
 - `/tmp/vvoc-home/vvoc/memory.jsonc`
+- `/tmp/vvoc-home/vvoc/agents/implementer.md`
+- `/tmp/vvoc-home/vvoc/agents/spec-reviewer.md`
+- `/tmp/vvoc-home/vvoc/agents/code-reviewer.md`
+- `/tmp/vvoc-home/vvoc/agents/investitagor.md`
 
 Sync managed config files:
 
 ```bash
 vvoc sync
+```
+
+Manage model overrides for bundled agents:
+
+```bash
+vvoc agent list
+vvoc agent implementer set openai/gpt-5
+vvoc agent code-reviewer set anthropic/claude-sonnet-4-20250514
+vvoc agent spec-reviewer unset
 ```
 
 Inspect current setup:
@@ -228,6 +244,24 @@ Use it when you want a report-only audit of stored memory:
 ```
 
 The reviewer can read memory with `memory_list`, `memory_get`, and `memory_search`, but it does not modify entries.
+
+## Managed subagents
+
+`vvoc install` and `vvoc sync` also register four OpenCode subagents in `opencode.json`:
+
+- `implementer`
+- `spec-reviewer`
+- `code-reviewer`
+- `investitagor`
+
+Their prompt files live under vvoc-managed config roots instead of being embedded directly into the TypeScript command code:
+
+- global: `~/.config/vvoc/agents/*.md`
+- project: `./.vvoc/agents/*.md`
+
+OpenCode registration stays in `opencode.json`, but each agent points its `prompt` field at the vvoc-managed file with a relative `{file:...}` reference.
+
+Model overrides for these four subagents are written into the corresponding `agent.<name>.model` entry inside OpenCode config via `vvoc agent ... set|unset`.
 
 ## Package API
 

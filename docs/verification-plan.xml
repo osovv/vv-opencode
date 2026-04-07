@@ -1,8 +1,8 @@
-<VerificationPlan VERSION="0.4.0">
+<VerificationPlan VERSION="0.4.1">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc config layout, Guardian config rendering, memory CRUD, and reviewer registration.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc config layout, managed subagent registration, Guardian config rendering, memory CRUD, and reviewer registration.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated change.</wave-level-focus>
     <phase-level-focus>Buildable package output plus stable command behavior for installation, Guardian review, and explicit memory workflows.</phase-level-focus>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
@@ -11,16 +11,16 @@
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User runs `vvoc init` to bootstrap the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array and initial Guardian and Memory configs live under the vvoc config root.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, managed subagents are registered in OpenCode config, and initial Guardian, Memory, and managed agent prompt files live under the vvoc config root.</expected-outcome>
       <required-signals>
-        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
+        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedSubagentRegistrations -&gt; installManagedSubagentPrompts -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
       </required-signals>
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
-      <scenario>User syncs a managed Guardian config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>The managed file is rewritten canonically and current values survive the rewrite.</expected-outcome>
+      <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
+      <expected-outcome>Managed config and prompt files are rewritten canonically, agent registration stays present in OpenCode config, and current explicit values survive the rewrite where applicable.</expected-outcome>
       <required-signals>
-        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC</trace-sequence>
+        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC/markdown -&gt; syncManagedSubagentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
     <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-001" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
@@ -72,6 +72,8 @@
         <scenario-2 kind="success">Existing JSONC comments survive plugin insertion.</scenario-2>
         <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
+        <scenario-5 kind="success">Managed subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references.</scenario-5>
+        <scenario-6 kind="success">Managed subagent prompt files are scaffolded under the vvoc config root and model overrides round-trip through OpenCode config.</scenario-6>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -94,6 +96,7 @@
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
+        <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -316,9 +319,11 @@
         <command-2>bun run lint</command-2>
         <command-3>bun run fmt:check</command-3>
         <command-4>bun run build</command-4>
+        <command-5>bun run pack:check</command-5>
       </commands>
       <required-evidence>
         <evidence-1>`src/plugins/guardian/index.ts` is present and package root exports `GuardianPlugin`.</evidence-1>
+        <evidence-2>The built package contains Guardian runtime prompt assets so `dist/plugins/guardian/index.js` imports cleanly.</evidence-2>
       </required-evidence>
     </Gate-Phase-2>
     <Gate-Phase-3 PHASE="Phase-3">
@@ -329,9 +334,11 @@
         <command-3>bun run fmt:check</command-3>
         <command-4>bun test</command-4>
         <command-5>bun run build</command-5>
+        <command-6>bun run pack:check</command-6>
       </commands>
       <required-evidence>
         <evidence-1>`src/plugins/memory/index.ts` and `src/plugins/memory-store.ts` are present and package root exports `MemoryPlugin`.</evidence-1>
+        <evidence-2>The built package contains Memory runtime prompt assets so `dist/plugins/memory/index.js` imports cleanly.</evidence-2>
       </required-evidence>
     </Gate-Phase-3>
     <Gate-Phase-4 PHASE="Phase-4">

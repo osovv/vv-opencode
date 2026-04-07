@@ -1,8 +1,8 @@
 // FILE: src/lib/vvoc-paths.ts
-// VERSION: 0.2.5
+// VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and project-local conventions.
-//   SCOPE: XDG config/data home lookup, vvoc root derivation, and deterministic project data directory naming.
+//   SCOPE: XDG config/data home lookup, vvoc root derivation, managed agent directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-MEMORY-STORE, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -15,6 +15,7 @@
 //   getDataHome - Resolves the effective XDG data home.
 //   getGlobalOpencodeDir - Resolves the global OpenCode config directory.
 //   getGlobalVvocDir - Resolves the global vvoc config directory.
+//   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getGlobalVvocDataDir - Resolves the global vvoc data directory.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
 //   getProjectVvocDir - Resolves the project-local vvoc config directory.
@@ -22,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup around vvoc path helpers for deterministic XDG/navigation context.]
+//   LAST_CHANGE: [v0.2.6 - Added a shared helper for managed vvoc subagent prompt directories.]
 // END_CHANGE_SUMMARY
 
 import { homedir } from "node:os";
@@ -61,6 +62,10 @@ export function getGlobalOpencodeDir(configHomeOverride?: string): string {
 
 export function getGlobalVvocDir(configHomeOverride?: string): string {
   return join(getConfigHome(configHomeOverride), "vvoc");
+}
+
+export function getVvocAgentsDir(vvocDir: string): string {
+  return join(vvocDir, "agents");
 }
 
 export function getGlobalVvocDataDir(dataHomeOverride?: string): string {

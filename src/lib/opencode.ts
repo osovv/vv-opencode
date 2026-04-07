@@ -1,9 +1,9 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.2.5
+// VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode plugin registration and vvoc-owned config files.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, Guardian/Memory config rendering and sync, and installation inspection.
-//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, managed subagent registration/prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
+//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -20,9 +20,15 @@
 //   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
 //   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
+//   ensureManagedSubagentsConfigText - Ensures OpenCode config contains the vvoc-managed subagent registrations.
 //   parseGuardianConfigText - Parses Guardian config JSONC into typed overrides.
 //   renderGuardianConfig - Renders managed Guardian config JSONC.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
+//   syncManagedSubagentRegistrations - Syncs the canonical vvoc-managed subagent registrations into OpenCode config.
+//   installManagedSubagentPrompts - Creates managed vvoc prompt files for the bundled subagents when missing.
+//   syncManagedSubagentPrompts - Rewrites managed vvoc prompt files for the bundled subagents.
+//   readManagedSubagentModels - Reads model overrides for the bundled vvoc subagents from OpenCode config.
+//   writeManagedSubagentModel - Writes or removes a bundled vvoc subagent model override in OpenCode config.
 //   installGuardianConfig - Creates or preserves managed Guardian config.
 //   syncGuardianConfig - Rewrites managed Guardian config while preserving current values.
 //   writeGuardianConfig - Writes explicit Guardian overrides to managed config.
@@ -33,12 +39,18 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and symbol-accurate export mapping for OpenCode/vvoc config helpers.]
+//   LAST_CHANGE: [v0.2.6 - Added vvoc-managed OpenCode subagent registration, prompt scaffolding, and model override helpers.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
+import {
+  MANAGED_SUBAGENTS,
+  type ManagedSubagentName,
+  getManagedSubagentDefinition,
+  loadManagedSubagentTemplate,
+} from "./managed-agents.js";
 import {
   parseMemoryConfigText,
   renderMemoryConfig,
@@ -50,6 +62,7 @@ import {
   getGlobalOpencodeDir,
   getGlobalVvocDir,
   getProjectVvocDir,
+  getVvocAgentsDir,
 } from "./vvoc-paths.js";
 
 export const CLI_NAME = "vvoc";
@@ -82,6 +95,7 @@ export type ResolvedPaths = {
   configHome: string;
   opencodeBaseDir: string;
   vvocBaseDir: string;
+  managedAgentsDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
   guardianConfigPath: string;
@@ -105,6 +119,8 @@ export type WriteResult = {
   path: string;
   reason?: string;
 };
+
+export type ManagedSubagentModelMap = Record<ManagedSubagentName, string | undefined>;
 
 export type InstallationInspection = {
   scope: Scope;
@@ -156,6 +172,7 @@ export async function resolvePaths(options: {
     options.scope === "global"
       ? getGlobalVvocDir(options.configDir)
       : getProjectVvocDir(options.cwd);
+  const managedAgentsDirPath = getVvocAgentsDir(vvocBaseDir);
   const opencodeSelection = await selectPrimaryPath(
     OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
   );
@@ -175,6 +192,7 @@ export async function resolvePaths(options: {
     configHome,
     opencodeBaseDir,
     vvocBaseDir,
+    managedAgentsDirPath,
     opencodeConfigPath: opencodeSelection.primary,
     opencodeAlternatePaths: opencodeSelection.alternates,
     guardianConfigPath: guardianSelection.primary,
@@ -226,6 +244,196 @@ export function ensurePackageConfigText(
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 // END_BLOCK_ENSURE_OPENCODE_PLUGIN_CONFIG
+
+// START_BLOCK_ENSURE_MANAGED_SUBAGENT_CONFIG
+export function ensureManagedSubagentsConfigText(
+  text: string | undefined,
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+): string {
+  if (!text?.trim()) {
+    return renderJson({
+      $schema: OPENCODE_SCHEMA_URL,
+      agent: Object.fromEntries(
+        MANAGED_SUBAGENTS.map((definition) => [
+          definition.name,
+          getManagedSubagentRegistration(paths, definition.name),
+        ]),
+      ),
+    });
+  }
+
+  const document = parseObjectDocument(text, "OpenCode config");
+  const currentAgents = readAgentMap(document, "OpenCode config");
+  let nextText = text;
+
+  if (!Object.hasOwn(document, "$schema")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
+  }
+
+  for (const definition of MANAGED_SUBAGENTS) {
+    const currentEntry = currentAgents[definition.name];
+    const nextEntry = {
+      ...getManagedSubagentRegistration(paths, definition.name),
+      ...currentEntry,
+    };
+
+    if (JSON.stringify(currentEntry) === JSON.stringify(nextEntry)) {
+      continue;
+    }
+
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["agent", definition.name], nextEntry, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+export async function syncManagedSubagentRegistrations(paths: ResolvedPaths): Promise<{
+  path: string;
+  changed: boolean;
+}> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+  const nextText = ensureManagedSubagentsConfigText(currentText, paths);
+
+  if (currentText === nextText) {
+    return { path: paths.opencodeConfigPath, changed: false };
+  }
+
+  await writeText(paths.opencodeConfigPath, nextText);
+  return { path: paths.opencodeConfigPath, changed: true };
+}
+
+export async function installManagedSubagentPrompts(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult[]> {
+  const results: WriteResult[] = [];
+
+  for (const definition of MANAGED_SUBAGENTS) {
+    const promptPath = getManagedSubagentPromptPath(paths, definition.name);
+    const currentText = await readOptionalText(promptPath);
+    if (!currentText) {
+      await writeText(promptPath, await renderManagedSubagentPrompt(definition.name));
+      results.push({ action: "created", path: promptPath });
+      continue;
+    }
+
+    if (!options.force) {
+      if (!isManagedFile(currentText)) {
+        results.push({
+          action: "skipped",
+          path: promptPath,
+          reason: "existing file is not managed by vvoc",
+        });
+      } else {
+        results.push({ action: "kept", path: promptPath });
+      }
+      continue;
+    }
+
+    results.push(await syncManagedSubagentPrompt(paths, definition.name, options));
+  }
+
+  return results;
+}
+
+export async function syncManagedSubagentPrompts(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult[]> {
+  const results: WriteResult[] = [];
+
+  for (const definition of MANAGED_SUBAGENTS) {
+    results.push(await syncManagedSubagentPrompt(paths, definition.name, options));
+  }
+
+  return results;
+}
+
+export async function readManagedSubagentModels(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+): Promise<ManagedSubagentModelMap> {
+  const models = Object.fromEntries(
+    MANAGED_SUBAGENTS.map((definition) => [definition.name, undefined]),
+  ) as ManagedSubagentModelMap;
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+
+  if (!currentText) {
+    return models;
+  }
+
+  const document = parseObjectDocument(currentText, paths.opencodeConfigPath);
+  const agentMap = readAgentMap(document, paths.opencodeConfigPath);
+
+  for (const definition of MANAGED_SUBAGENTS) {
+    const currentEntry = agentMap[definition.name];
+    if (currentEntry?.model !== undefined) {
+      models[definition.name] = readNonEmptyString(currentEntry.model, `${definition.name}: model`);
+    }
+  }
+
+  return models;
+}
+
+export async function writeManagedSubagentModel(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  agentName: ManagedSubagentName,
+  options: { model?: string; ensureEntry: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+  if (!currentText && !options.ensureEntry) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const baseText = options.ensureEntry
+    ? ensureManagedSubagentsConfigText(currentText, paths)
+    : currentText;
+  if (!baseText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const document = parseObjectDocument(baseText, paths.opencodeConfigPath);
+  const agentMap = readAgentMap(document, paths.opencodeConfigPath);
+  const currentEntry = agentMap[agentName];
+
+  if (!currentEntry && !options.ensureEntry) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const nextEntry = {
+    ...getManagedSubagentRegistration(paths, agentName),
+    ...currentEntry,
+  };
+
+  if (options.model) {
+    nextEntry.model = options.model;
+  } else {
+    delete nextEntry.model;
+  }
+
+  const nextText = updateAgentEntryText(baseText, agentName, nextEntry);
+
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  await writeText(paths.opencodeConfigPath, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path: paths.opencodeConfigPath,
+  };
+}
+// END_BLOCK_ENSURE_MANAGED_SUBAGENT_CONFIG
 
 export function parseGuardianConfigText(text: string, label: string): GuardianConfigOverrides {
   return normalizeGuardianOverrides(parseObjectDocument(text, label), label);
@@ -720,6 +928,115 @@ function normalizePluginList(currentPlugins: string[], packageSpecifier: string)
 function isPackagePluginSpecifier(value: string): boolean {
   return value === PACKAGE_NAME || value.startsWith(`${PACKAGE_NAME}@`);
 }
+
+// START_BLOCK_MANAGED_SUBAGENT_HELPERS
+function readAgentMap(document: JsonObject, label: string): Record<string, JsonObject> {
+  const raw = document.agent;
+  if (raw === undefined) {
+    return {};
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${label}: expected "agent" to be an object`);
+  }
+
+  const entries: Record<string, JsonObject> = {};
+  for (const [name, value] of Object.entries(raw as JsonObject)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${label}: expected "agent.${name}" to be an object`);
+    }
+    entries[name] = value as JsonObject;
+  }
+  return entries;
+}
+
+function getManagedSubagentPromptPath(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath">,
+  agentName: ManagedSubagentName,
+): string {
+  return join(paths.managedAgentsDirPath, getManagedSubagentDefinition(agentName).promptFileName);
+}
+
+function getManagedSubagentPromptReference(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  agentName: ManagedSubagentName,
+): string {
+  const promptPath = getManagedSubagentPromptPath(paths, agentName);
+  const promptRef = relative(dirname(paths.opencodeConfigPath), promptPath).replaceAll("\\", "/");
+  return `{file:${promptRef.startsWith(".") ? promptRef : `./${promptRef}`}}`;
+}
+
+function getManagedSubagentRegistration(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  agentName: ManagedSubagentName,
+): JsonObject {
+  const definition = getManagedSubagentDefinition(agentName);
+  const registration: JsonObject = {
+    description: definition.description,
+    mode: "subagent",
+    prompt: getManagedSubagentPromptReference(paths, agentName),
+  };
+
+  if (definition.steps !== undefined) {
+    registration.steps = definition.steps;
+  }
+  if (definition.permission) {
+    registration.permission = definition.permission;
+  }
+
+  return registration;
+}
+
+async function renderManagedSubagentPrompt(agentName: ManagedSubagentName): Promise<string> {
+  const template = (await loadManagedSubagentTemplate(agentName)).trim();
+  const header = [
+    "<!-- Managed by vvoc.",
+    "`vvoc sync` rewrites files with this marker while preserving agent registration and model settings elsewhere.",
+    "Remove this comment if you want to manage the file manually.",
+    "-->",
+    "",
+  ].join("\n");
+  return `${header}${template}\n`;
+}
+
+async function syncManagedSubagentPrompt(
+  paths: ResolvedPaths,
+  agentName: ManagedSubagentName,
+  options: { force: boolean },
+): Promise<WriteResult> {
+  const promptPath = getManagedSubagentPromptPath(paths, agentName);
+  const currentText = await readOptionalText(promptPath);
+  if (!currentText) {
+    await writeText(promptPath, await renderManagedSubagentPrompt(agentName));
+    return { action: "created", path: promptPath };
+  }
+
+  if (!options.force && !isManagedFile(currentText)) {
+    return {
+      action: "skipped",
+      path: promptPath,
+      reason: "existing file is not managed by vvoc",
+    };
+  }
+
+  const nextText = await renderManagedSubagentPrompt(agentName);
+  if (currentText === nextText) {
+    return { action: "kept", path: promptPath };
+  }
+
+  await writeText(promptPath, nextText);
+  return { action: "updated", path: promptPath };
+}
+
+function updateAgentEntryText(text: string, agentName: string, entry: JsonObject): string {
+  const nextText = applyEdits(
+    text,
+    modify(text, ["agent", agentName], entry, {
+      formattingOptions: JSON_FORMAT,
+    }),
+  );
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+// END_BLOCK_MANAGED_SUBAGENT_HELPERS
 
 function normalizeGuardianOverrides(raw: unknown, label: string): GuardianConfigOverrides {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {

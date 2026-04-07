@@ -1,9 +1,9 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.3.4
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage agent model overrides for guardian and memory-reviewer agents.
-//   SCOPE: Agent model setting, unsetting, and listing via vvoc agent command tree.
-//   DEPENDS: [citty, src/lib/opencode.ts, src/plugins/memory-store.ts]
+//   PURPOSE: Manage model overrides for vvoc-owned OpenCode agents.
+//   SCOPE: Guardian and memory-reviewer config writes plus managed OpenCode subagent model setting, unsetting, and listing via the vvoc agent command tree.
+//   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,22 +14,44 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.4 - Added granular agent model configuration via vvoc agent command.]
+//   LAST_CHANGE: [v0.4.0 - Added vvoc-managed implementer/spec-reviewer/code-reviewer/investitagor subagent model management.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
+import { MANAGED_SUBAGENTS, type ManagedSubagentName } from "../lib/managed-agents.js";
 import {
   describeWriteResult,
+  installManagedSubagentPrompts,
   parseGuardianConfigText,
+  readManagedSubagentModels,
   renderGuardianConfig,
   resolvePaths,
   type Scope,
+  writeManagedSubagentModel,
 } from "../lib/opencode.js";
 import {
   parseMemoryConfigText,
   renderMemoryConfig,
   type MemoryConfigOverrides,
 } from "../plugins/memory-store.js";
+
+const scopeArg = {
+  type: "enum" as const,
+  options: ["global", "project"],
+  default: "global",
+  description: "Write global or project config.",
+};
+
+const configDirArg = {
+  type: "string" as const,
+  description: "Override the global config home.",
+};
+
+const modelArg = {
+  type: "positional" as const,
+  required: true,
+  description: "Model in provider/model-id format.",
+};
 
 const guardianSet = defineCommand({
   meta: {
@@ -38,27 +60,15 @@ const guardianSet = defineCommand({
   },
   args: {
     model: {
-      type: "positional",
-      required: true,
+      ...modelArg,
       description: "Model in provider/model-id[:variant] format.",
     },
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Write global or project config.",
-    },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home.",
-    },
+    scope: scopeArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
-    const { model, variant } = parseModelArg(args.model, "set");
-
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({ scope: scope as Scope, cwd: process.cwd(), configDir });
+    const { model, variant } = parseGuardianStyleModelArg(args.model, "set");
+    const paths = await resolveCommandPaths(args);
 
     const currentText = await Bun.file(paths.guardianConfigPath)
       .text()
@@ -90,21 +100,11 @@ const guardianUnset = defineCommand({
     description: "Remove the Guardian agent model override.",
   },
   args: {
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Write global or project config.",
-    },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home.",
-    },
+    scope: scopeArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({ scope: scope as Scope, cwd: process.cwd(), configDir });
+    const paths = await resolveCommandPaths(args);
 
     const currentText = await Bun.file(paths.guardianConfigPath)
       .text()
@@ -146,32 +146,15 @@ const memoryReviewerSet = defineCommand({
   },
   args: {
     model: {
-      type: "positional",
-      required: true,
+      ...modelArg,
       description: "Model in provider/model-id[:variant] format.",
     },
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Write global or project config.",
-    },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home.",
-    },
+    scope: scopeArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
-    const { model, variant } = parseModelArg(args.model, "set");
-
-    const overrides: MemoryConfigOverrides = { reviewerModel: model };
-    if (variant) {
-      overrides.reviewerVariant = variant;
-    }
-
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({ scope: scope as Scope, cwd: process.cwd(), configDir });
+    const { model, variant } = parseGuardianStyleModelArg(args.model, "set");
+    const paths = await resolveCommandPaths(args);
 
     const currentText = await Bun.file(paths.memoryConfigPath)
       .text()
@@ -206,21 +189,11 @@ const memoryReviewerUnset = defineCommand({
     description: "Remove the memory-reviewer agent model override.",
   },
   args: {
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Write global or project config.",
-    },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home.",
-    },
+    scope: scopeArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({ scope: scope as Scope, cwd: process.cwd(), configDir });
+    const paths = await resolveCommandPaths(args);
 
     const currentText = await Bun.file(paths.memoryConfigPath)
       .text()
@@ -257,6 +230,22 @@ const memoryReviewerCmd = defineCommand({
   },
 });
 
+const managedSubagentCommands = Object.fromEntries(
+  MANAGED_SUBAGENTS.map((definition) => [
+    definition.name,
+    defineCommand({
+      meta: {
+        name: definition.name,
+        description: `Manage the ${definition.name} agent.`,
+      },
+      subCommands: {
+        set: createManagedSubagentSetCommand(definition.name),
+        unset: createManagedSubagentUnsetCommand(definition.name),
+      },
+    }),
+  ]),
+);
+
 const agentList = defineCommand({
   meta: {
     name: "list",
@@ -264,20 +253,14 @@ const agentList = defineCommand({
   },
   args: {
     scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
+      ...scopeArg,
       description: "Show global or project config.",
     },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home.",
-    },
+    "config-dir": configDirArg,
   },
   async run({ args }) {
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({ scope: scope as Scope, cwd: process.cwd(), configDir });
+    const scope = resolveScope(args.scope);
+    const paths = await resolveCommandPaths(args);
 
     const guardianText = await Bun.file(paths.guardianConfigPath)
       .text()
@@ -292,12 +275,17 @@ const agentList = defineCommand({
     const memoryConfig = memoryText
       ? parseMemoryConfigText(memoryText, paths.memoryConfigPath)
       : {};
+    const managedModels = await readManagedSubagentModels(paths);
 
     console.log(`Agent models (${scope}):`);
     console.log(`  guardian: ${formatAgentModel(guardianConfig.model, guardianConfig.variant)}`);
     console.log(
       `  memory-reviewer: ${formatAgentModel(memoryConfig.reviewerModel, memoryConfig.reviewerVariant)}`,
     );
+
+    for (const definition of MANAGED_SUBAGENTS) {
+      console.log(`  ${definition.name}: ${formatAgentModel(managedModels[definition.name])}`);
+    }
   },
 });
 
@@ -309,16 +297,78 @@ export default defineCommand({
   subCommands: {
     guardian: guardianCmd,
     "memory-reviewer": memoryReviewerCmd,
+    ...managedSubagentCommands,
     list: agentList,
   },
 });
+
+function createManagedSubagentSetCommand(agentName: ManagedSubagentName) {
+  return defineCommand({
+    meta: {
+      name: "set",
+      description: `Set the ${agentName} agent model override.`,
+    },
+    args: {
+      model: modelArg,
+      scope: scopeArg,
+      "config-dir": configDirArg,
+    },
+    async run({ args }) {
+      const model = parseOpenCodeModelArg(args.model, "set");
+      const paths = await resolveCommandPaths(args);
+
+      await installManagedSubagentPrompts(paths, { force: false });
+      const result = await writeManagedSubagentModel(paths, agentName, {
+        model,
+        ensureEntry: true,
+      });
+      console.log(describeWriteResult(result));
+    },
+  });
+}
+
+function createManagedSubagentUnsetCommand(agentName: ManagedSubagentName) {
+  return defineCommand({
+    meta: {
+      name: "unset",
+      description: `Remove the ${agentName} agent model override.`,
+    },
+    args: {
+      scope: scopeArg,
+      "config-dir": configDirArg,
+    },
+    async run({ args }) {
+      const paths = await resolveCommandPaths(args);
+      const result = await writeManagedSubagentModel(paths, agentName, {
+        ensureEntry: false,
+      });
+      console.log(describeWriteResult(result));
+    },
+  });
+}
+
+function resolveScope(value: unknown): Scope {
+  return value === "project" ? "project" : "global";
+}
+
+async function resolveCommandPaths(args: Record<string, unknown>) {
+  const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+  return resolvePaths({
+    scope: resolveScope(args.scope),
+    cwd: process.cwd(),
+    configDir,
+  });
+}
 
 function formatAgentModel(model?: string, variant?: string): string {
   if (!model) return "default";
   return variant ? `${model}:${variant}` : model;
 }
 
-function parseModelArg(value: unknown, operation: string): { model: string; variant?: string } {
+function parseGuardianStyleModelArg(
+  value: unknown,
+  operation: string,
+): { model: string; variant?: string } {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`model argument required for ${operation}`);
   }
@@ -340,4 +390,17 @@ function parseModelArg(value: unknown, operation: string): { model: string; vari
   }
 
   return { model: trimmed };
+}
+
+function parseOpenCodeModelArg(value: unknown, operation: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`model argument required for ${operation}`);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.includes("/")) {
+    throw new Error(`model must be in provider/model-id format, got: ${trimmed}`);
+  }
+
+  return trimmed;
 }

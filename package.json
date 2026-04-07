@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,6 +25,7 @@
   },
   "files": [
     "dist",
+    "templates",
     "README.md"
   ],
   "exports": {
@@ -46,14 +47,14 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/plugins/guardian dist/plugins/memory && cp src/plugins/guardian/policy.md dist/plugins/guardian/policy.md && cp src/plugins/memory/system-instruction.md dist/plugins/memory/system-instruction.md && cp src/plugins/memory/reviewer.md dist/plugins/memory/reviewer.md",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --deny warnings src",
     "fmt": "oxfmt --write src",
     "fmt:check": "oxfmt --check src",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test",
-    "pack:check": "npm pack --dry-run",
+    "pack:check": "bun run build && bun -e \"await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/memory/index.js')\" && npm pack --dry-run",
     "prepare": "lefthook install --force"
   },
   "dependencies": {
