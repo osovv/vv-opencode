@@ -134,7 +134,68 @@
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION>
 
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Validate guardian.jsonc and memory.jsonc with human-readable error reporting.</purpose>
+      <path>src/commands/config-validate.ts</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
+      <annotations>
+        <fn-validateGuardianConfig PURPOSE="Parse guardian.jsonc and report schema violations." />
+        <fn-validateMemoryConfig PURPOSE="Parse memory.jsonc and report schema violations." />
+      </annotations>
+    </M-CLI-CONFIG-VALIDATE>
+
+    <M-CLI-PLUGIN-LIST NAME="PluginList" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Display all installed OpenCode plugins with enabled/disabled status and source paths.</purpose>
+      <path>src/commands/plugin-list.ts</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
+      <annotations>
+        <fn-listPlugins PURPOSE="Scan OpenCode config and display plugin table." />
+      </annotations>
+    </M-CLI-PLUGIN-LIST>
+
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Generate shell completion scripts for bash, zsh, and fish.</purpose>
+      <path>src/commands/completion.ts</path>
+      <depends>M-CLI-COMMANDS</depends>
+      <verification-ref>V-M-CLI-COMPLETION</verification-ref>
+      <annotations>
+        <fn-generateBashCompletion PURPOSE="Generate bash completion script." />
+        <fn-generateZshCompletion PURPOSE="Generate zsh completion script." />
+        <fn-generateFishCompletion PURPOSE="Generate fish completion script." />
+      </annotations>
+    </M-CLI-COMPLETION>
+
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Interactive project setup with prompts for scope, plugins, and initial configuration.</purpose>
+      <path>src/commands/init.ts</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-CLI-INIT</verification-ref>
+      <annotations>
+        <fn-promptScope PURPOSE="Ask user for global or project scope." />
+        <fn-promptPlugins PURPOSE="Ask user which plugins to enable." />
+        <fn-writeInitialConfigs PURPOSE="Write guardian.jsonc and memory.jsonc with user choices." />
+      </annotations>
+    </M-CLI-INIT>
+
+    <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Check npm for updates and offer upgrade with changelog display.</purpose>
+      <path>src/commands/upgrade.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-CLI-UPGRADE</verification-ref>
+      <annotations>
+        <fn-fetchLatestVersion PURPOSE="Query npm registry for latest @osovv/vv-opencode version." />
+        <fn-fetchChangelog PURPOSE="Fetch changelog content from npm." />
+        <fn-printUpgradeStatus PURPOSE="Print up-to-date or upgrade available message." />
+      </annotations>
+    </M-CLI-UPGRADE>
+
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-CLI-CONFIG-VALIDATE" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-CLI-PLUGIN-LIST" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-CLI-COMPLETION" to="M-CLI-COMMANDS" relation="uses" />
+    <CrossLink from="M-CLI-INIT" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-GUARDIAN" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-MEMORY" to="M-PLUGIN-MEMORY-STORE" relation="uses" />
     <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION" relation="uses" />

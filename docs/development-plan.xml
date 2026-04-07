@@ -1,4 +1,4 @@
-<DevelopmentPlan VERSION="0.3.0">
+<DevelopmentPlan VERSION="0.4.0">
   <ArchitectureNotes>
     <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config.</objective>
     <non-goal>Do not expand into a large monorepo or broad profile manager before plugin packaging, explicit memory, and vvoc config boundaries are stable.</non-goal>
@@ -175,6 +175,151 @@
         <note-1>The reviewer is implemented as a bundled subagent, and the main chat path receives only a short memory policy reminder instead of prompt-injected memory entries.</note-1>
       </notes>
     </M-PLUGIN-MEMORY>
+
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+      <contract>
+        <purpose>Validate guardian.jsonc and memory.jsonc configuration files with human-readable error reporting.</purpose>
+        <inputs>
+          <param name="scope" type="global | project | all" />
+          <param name="cwd" type="string" />
+        </inputs>
+        <outputs>
+          <param name="stdout" type="terminal output with pass/fail status per file" />
+        </outputs>
+        <errors>
+          <error code="INVALID_JSONC" />
+          <error code="MISSING_REQUIRED_FIELD" />
+          <error code="INVALID_FIELD_TYPE" />
+        </errors>
+      </contract>
+      <interface>
+        <export-validateGuardianConfig PURPOSE="Parse guardian.jsonc and report schema violations." />
+        <export-validateMemoryConfig PURPOSE="Parse memory.jsonc and report schema violations." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/commands/config-validate.ts</source>
+        <tests>src/commands/config-validate.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[config-validate]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
+    </M-CLI-CONFIG-VALIDATE>
+
+    <M-CLI-PLUGIN-LIST NAME="PluginList" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+      <contract>
+        <purpose>Display all installed OpenCode plugins with their status (enabled/disabled) and source paths.</purpose>
+        <inputs>
+          <param name="cwd" type="string" />
+          <param name="verbose" type="boolean" />
+        </inputs>
+        <outputs>
+          <param name="stdout" type="terminal table output" />
+        </outputs>
+        <errors>
+          <error code="CONFIG_NOT_FOUND" />
+        </errors>
+      </contract>
+      <interface>
+        <export-listPlugins PURPOSE="Scan OpenCode config and display plugin list with status." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/commands/plugin-list.ts</source>
+        <tests>src/commands/plugin-list.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[plugin-list]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
+    </M-CLI-PLUGIN-LIST>
+
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+      <contract>
+        <purpose>Generate and print shell completion scripts for bash, zsh, and fish.</purpose>
+        <inputs>
+          <param name="shell" type="bash | zsh | fish" />
+        </inputs>
+        <outputs>
+          <param name="stdout" type="completion script" />
+        </outputs>
+        <errors>
+          <error code="UNSUPPORTED_SHELL" />
+        </errors>
+      </contract>
+      <interface>
+        <export-generateCompletion PURPOSE="Generate completion script for the specified shell." />
+      </interface>
+      <depends>M-CLI-COMMANDS</depends>
+      <target>
+        <source>src/commands/completion.ts</source>
+        <tests>src/commands/completion.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[completion]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-COMPLETION</verification-ref>
+    </M-CLI-COMPLETION>
+
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+      <contract>
+        <purpose>Interactive project initialization with prompts for config location, plugin selection, and initial configuration.</purpose>
+        <inputs>
+          <param name="cwd" type="string" />
+          <param name="scope" type="global | project" />
+          <param name="plugins" type="string[]" />
+        </inputs>
+        <outputs>
+          <param name="stdout" type="interactive prompts and confirmation" />
+        </outputs>
+        <errors>
+          <error code="ABORTED" />
+          <error code="WRITE_FAILED" />
+        </errors>
+      </contract>
+      <interface>
+        <export-promptInit PURPOSE="Run interactive initialization flow." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/commands/init.ts</source>
+        <tests>src/commands/init.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[init]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-INIT</verification-ref>
+    </M-CLI-INIT>
+
+    <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+      <contract>
+        <purpose>Check npm registry for the latest vvoc version and offer in-place upgrade with changelog.</purpose>
+        <inputs>
+          <param name="currentVersion" type="string" />
+        </inputs>
+        <outputs>
+          <param name="stdout" type="upgrade status and changelog" />
+        </outputs>
+        <errors>
+          <error code="NETWORK_ERROR" />
+          <error code="ALREADY_LATEST" />
+        </errors>
+      </contract>
+      <interface>
+        <export-checkLatestVersion PURPOSE="Query npm for the latest @osovv/vv-opencode version." />
+        <export-printChangelog PURPOSE="Fetch and display changelog between current and latest version." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/commands/upgrade.ts</source>
+        <tests>src/commands/upgrade.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[upgrade]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-UPGRADE</verification-ref>
+    </M-CLI-UPGRADE>
   </Modules>
 
   <DataFlow>
@@ -209,6 +354,39 @@
       <step-3>The reviewer returns a keep/update/merge/delete report without modifying entries.</step-3>
       <evidence>Bundled `memory-reviewer` agent with read-only memory tooling.</evidence>
     </DF-MEMORY-REVIEW>
+    <DF-PLUGIN-LIST NAME="PluginList" TRIGGER="vvoc plugin list">
+      <step-1>Resolve OpenCode config path for the current scope.</step-1>
+      <step-2>Parse plugin array and extract each plugin's source.</step-2>
+      <step-3>Display plugin table with name, source, and enabled status.</step-3>
+      <evidence>Correct plugin table when plugins are installed, and graceful empty state when none are configured.</evidence>
+    </DF-PLUGIN-LIST>
+    <DF-CONFIG-VALIDATE NAME="ConfigValidate" TRIGGER="vvoc config validate">
+      <step-1>Resolve guardian.jsonc and memory.jsonc paths for the selected scope.</step-1>
+      <step-2>Parse each file with JSONC parser.</step-2>
+      <step-3>Validate required fields and types against expected schema.</step-3>
+      <step-4>Report human-readable errors per file or pass with OK status.</step-4>
+      <evidence>Invalid JSONC is caught and reported with line/column info; valid configs pass silently.</evidence>
+    </DF-CONFIG-VALIDATE>
+    <DF-COMPLETION NAME="ShellCompletion" TRIGGER="vvoc completion [bash|zsh|fish]">
+      <step-1>Receive shell type argument.</step-1>
+      <step-2>Generate completion script using citty built-in completion support.</step-2>
+      <step-3>Print script to stdout for user to pipe to the appropriate completion file.</step-3>
+      <evidence>Generated script contains all vvoc commands and flags; bash/zsh/fish variants are syntactically correct.</evidence>
+    </DF-COMPLETION>
+    <DF-INIT NAME="InteractiveInit" TRIGGER="vvoc init --interactive">
+      <step-1>Detect TTY and prompt for scope selection (global/project).</step-1>
+      <step-2>Prompt for plugin selection to enable.</step-2>
+      <step-3>Write initial configs to the appropriate vvoc paths.</step-3>
+      <step-4>Confirm successful initialization.</step-4>
+      <evidence>Configs are valid JSONC after init; Ctrl+C aborts cleanly; re-running init is idempotent.</evidence>
+    </DF-INIT>
+    <DF-UPGRADE NAME="UpgradeCheck" TRIGGER="vvoc upgrade">
+      <step-1>Query npm registry for @osovv/vv-opencode dist-tags latest.</step-1>
+      <step-2>Compare with current installed version.</step-2>
+      <step-3>If newer, fetch changelog and prompt user to upgrade.</step-3>
+      <step-4>If up-to-date or user declines, print version status.</step-4>
+      <evidence>Network failure is handled gracefully; already-latest case prints OK; outdated case shows changelog excerpt.</evidence>
+    </DF-UPGRADE>
   </DataFlow>
 
   <ImplementationOrder>
@@ -226,6 +404,14 @@
       <step-1 module="M-PLUGIN-MEMORY-STORE" status="done" verification="V-M-PLUGIN-MEMORY-STORE">Implement file-based scoped memory storage and lexical search.</step-1>
       <step-2 module="M-PLUGIN-MEMORY" status="done" verification="V-M-PLUGIN-MEMORY">Register memory tools and the `memory-reviewer` subagent via OpenCode plugin hooks.</step-2>
     </Phase-3>
+    <Phase-4 name="CLI Enhancement Suite" status="planned">
+      <goal>Add plugin list, config validate, shell completion, interactive init, and upgrade commands to improve developer UX.</goal>
+      <step-1 module="M-CLI-CONFIG-VALIDATE" status="planned" verification="V-M-CLI-CONFIG-VALIDATE">Validate guardian.jsonc and memory.jsonc with human-readable errors.</step-1>
+      <step-2 module="M-CLI-PLUGIN-LIST" status="planned" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
+      <step-3 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Generate shell completion scripts for bash, zsh, and fish.</step-3>
+      <step-4 module="M-CLI-INIT" status="planned" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-4>
+      <step-5 module="M-CLI-UPGRADE" status="planned" verification="V-M-CLI-UPGRADE">Check npm for updates and offer upgrade with changelog display.</step-5>
+    </Phase-4>
   </ImplementationOrder>
 
   <ExecutionPolicy>

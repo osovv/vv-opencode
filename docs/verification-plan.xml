@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.3.0">
+<VerificationPlan VERSION="0.4.0">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -201,6 +201,98 @@
       <wave-follow-up>Add isolated unit tests for PlaceholderSession, redactText, and pattern matching.</wave-follow-up>
       <phase-follow-up>Consider integration tests with a mock OpenCode plugin context.</phase-follow-up>
     </V-M-PLUGIN-SECRETS-REDACTION>
+
+    <V-M-CLI-CONFIG-VALIDATE MODULE="M-CLI-CONFIG-VALIDATE" PRIORITY="medium">
+      <test-files>
+        <file>src/commands/config-validate.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Valid guardian.jsonc and memory.jsonc both report OK.</scenario-1>
+        <scenario-2 kind="failure">Invalid JSONC reports parse error with line/column.</scenario-2>
+        <scenario-3 kind="failure">Missing required field reports field name and expected type.</scenario-3>
+      </scenarios>
+      <required-log-markers />
+      <wave-follow-up>Run against real config files in the repository.</wave-follow-up>
+    </V-M-CLI-CONFIG-VALIDATE>
+
+    <V-M-CLI-PLUGIN-LIST MODULE="M-CLI-PLUGIN-LIST" PRIORITY="medium">
+      <test-files>
+        <file>src/commands/plugin-list.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Lists all plugins when OpenCode config has a populated plugin array.</scenario-1>
+        <scenario-2 kind="success">Shows "no plugins" when plugin array is empty.</scenario-2>
+        <scenario-3 kind="success">Correctly shows plugin source path for package-based and file-based plugins.</scenario-3>
+      </scenarios>
+      <required-log-markers />
+      <wave-follow-up>Run against a temp config with known plugin entries.</wave-follow-up>
+    </V-M-CLI-PLUGIN-LIST>
+
+    <V-M-CLI-COMPLETION MODULE="M-CLI-COMPLETION" PRIORITY="low">
+      <test-files>
+        <file>src/commands/completion.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Bash completion script contains all vvoc commands and flags.</scenario-1>
+        <scenario-2 kind="success">Zsh completion script is valid zsh syntax.</scenario-2>
+        <scenario-3 kind="success">Fish completion script is valid fish syntax.</scenario-3>
+        <scenario-4 kind="failure">Unsupported shell type prints error and exits non-zero.</scenario-4>
+      </scenarios>
+      <required-log-markers />
+      <wave-follow-up>Validate generated scripts by sourcing/eval in test environment.</wave-follow-up>
+    </V-M-CLI-COMPLETION>
+
+    <V-M-CLI-INIT MODULE="M-CLI-INIT" PRIORITY="medium">
+      <test-files>
+        <file>src/commands/init.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Interactive prompts are shown when TTY is available.</scenario-1>
+        <scenario-2 kind="success">Ctrl+C aborts cleanly without partial file writes.</scenario-2>
+        <scenario-3 kind="success">Re-running init does not clobber existing valid config.</scenario-3>
+        <scenario-4 kind="success">Generated configs are valid JSONC with correct schema.</scenario-4>
+      </scenarios>
+      <required-log-markers />
+      <wave-follow-up>Test with a temp directory and verify file contents.</wave-follow-up>
+    </V-M-CLI-INIT>
+
+    <V-M-CLI-UPGRADE MODULE="M-CLI-UPGRADE" PRIORITY="low">
+      <test-files>
+        <file>src/commands/upgrade.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run lint</check-1>
+        <check-2>bun run fmt:check</check-2>
+        <check-3>bun run build</check-3>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Reports "already latest" when npm returns same version.</scenario-1>
+        <scenario-2 kind="success">Shows upgrade available with changelog when newer version exists.</scenario-2>
+        <scenario-3 kind="failure">Network error is caught and reported gracefully.</scenario-3>
+      </scenarios>
+      <required-log-markers />
+      <wave-follow-up>Mock npm registry responses for deterministic testing.</wave-follow-up>
+    </V-M-CLI-UPGRADE>
   </ModuleVerification>
 
   <PhaseGates>
@@ -241,6 +333,21 @@
         <evidence-1>`src/plugins/memory/index.ts` and `src/plugins/memory-store.ts` are present and package root exports `MemoryPlugin`.</evidence-1>
       </required-evidence>
     </Gate-Phase-3>
+    <Gate-Phase-4 PHASE="Phase-4">
+      <goal>All five CLI enhancement commands are implemented, buildable, and integrated into the CLI.</goal>
+      <commands>
+        <command-1>bun x tsc --noEmit</command-1>
+        <command-2>bun run lint</command-2>
+        <command-3>bun run fmt:check</command-3>
+        <command-4>bun test</command-4>
+        <command-5>bun run build</command-5>
+        <command-6>bun run scripts/check-exports.ts</command-6>
+      </commands>
+      <required-evidence>
+        <evidence-1>`vvoc plugin list`, `vvoc config validate`, `vvoc completion`, `vvoc init`, and `vvoc upgrade` all register as CLI commands.</evidence-1>
+        <evidence-2>Each command has at least one passing module-level test.</evidence-2>
+      </required-evidence>
+    </Gate-Phase-4>
   </PhaseGates>
 
   <FailurePackets>
