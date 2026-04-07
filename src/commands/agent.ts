@@ -1,5 +1,5 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
 //   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode subagent model setting, unsetting, and listing via the vvoc agent command tree.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.1 - Added built-in OpenCode explore subagent model management alongside vvoc-managed agents.]
+//   LAST_CHANGE: [v0.4.2 - Added built-in OpenCode general subagent model management alongside explore and vvoc-managed agents.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -55,7 +55,7 @@ const modelArg = {
   description: "Model in provider/model-id format.",
 };
 
-const CONFIGURABLE_OPENCODE_SUBAGENTS = ["explore"] as const;
+const CONFIGURABLE_OPENCODE_SUBAGENTS = ["general", "explore"] as const;
 type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
 
 const guardianSet = defineCommand({
@@ -296,7 +296,6 @@ const agentList = defineCommand({
     const memoryConfig = memoryText
       ? parseMemoryConfigText(memoryText, paths.memoryConfigPath)
       : {};
-    const exploreModel = await readOpenCodeAgentModel(paths, "explore");
     const managedModels = await readManagedSubagentModels(paths);
 
     console.log(`Agent models (${scope}):`);
@@ -304,7 +303,11 @@ const agentList = defineCommand({
     console.log(
       `  memory-reviewer: ${formatAgentModel(memoryConfig.reviewerModel, memoryConfig.reviewerVariant)}`,
     );
-    console.log(`  explore: ${formatAgentModel(exploreModel)}`);
+
+    for (const agentName of CONFIGURABLE_OPENCODE_SUBAGENTS) {
+      const model = await readOpenCodeAgentModel(paths, agentName);
+      console.log(`  ${agentName}: ${formatAgentModel(model)}`);
+    }
 
     for (const definition of MANAGED_SUBAGENTS) {
       console.log(`  ${definition.name}: ${formatAgentModel(managedModels[definition.name])}`);

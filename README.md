@@ -158,13 +158,14 @@ Manage model overrides for built-in and bundled agents:
 
 ```bash
 vvoc agent list
+vvoc agent general set openai/gpt-5-nano
 vvoc agent explore set openai/gpt-5-nano
 vvoc agent implementer set openai/gpt-5
 vvoc agent code-reviewer set anthropic/claude-sonnet-4-20250514
 vvoc agent spec-reviewer unset
 ```
 
-`vvoc agent explore set ...` writes `agent.explore.model` into OpenCode config so the built-in read-only explorer does not inherit the main session model.
+`vvoc agent general set ...` and `vvoc agent explore set ...` write `agent.general.model` and `agent.explore.model` into OpenCode config so the built-in subagents do not inherit the main session model.
 
 Inspect current setup:
 
@@ -292,7 +293,7 @@ Their prompt files also live under the same vvoc-managed `agents/` directory ins
 
 OpenCode registration stays in `opencode.json`, but each agent points its `prompt` field at the vvoc-managed file with a relative `{file:...}` reference.
 
-Model overrides for these four subagents, plus the built-in `explore` subagent, are written into the corresponding `agent.<name>.model` entry inside OpenCode config via `vvoc agent ... set|unset`.
+Model overrides for these four subagents, plus the built-in `general` and `explore` subagents, are written into the corresponding `agent.<name>.model` entry inside OpenCode config via `vvoc agent ... set|unset`.
 
 ## Package API
 

@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.2.8
+// VERSION: 0.2.9
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
 //   SCOPE: Plugin specifier writes, provider baseURL patching, OpenCode agent model overrides, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
@@ -12,14 +12,14 @@
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
 //   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
-//   built-in OpenCode agent model helper tests - Verify explore model overrides round-trip through OpenCode config.
+//   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
 //   managed subagent config helpers tests - Verify registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.8 - Added verification for built-in OpenCode agent model overrides such as explore.]
+//   LAST_CHANGE: [v0.2.9 - Extended built-in OpenCode agent model override verification to cover general alongside explore.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -256,7 +256,7 @@ describe("managed subagent config helpers", () => {
 });
 
 describe("built-in OpenCode agent model helpers", () => {
-  test("writes and removes a model override for explore", async () => {
+  test("writes and removes model overrides for general and explore", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-agent-model-"));
 
     try {
@@ -266,22 +266,28 @@ describe("built-in OpenCode agent model helpers", () => {
         configDir: configHome,
       });
 
-      const setResult = await writeOpenCodeAgentModel(paths, "explore", {
-        model: "openai/gpt-5-nano",
-        ensureEntry: true,
-      });
-      const model = await readOpenCodeAgentModel(paths, "explore");
+      const builtInAgents = ["general", "explore"] as const;
 
-      expect(setResult.action).toBe("created");
-      expect(model).toBe("openai/gpt-5-nano");
+      for (const agentName of builtInAgents) {
+        const setResult = await writeOpenCodeAgentModel(paths, agentName, {
+          model: "openai/gpt-5-nano",
+          ensureEntry: true,
+        });
+        const model = await readOpenCodeAgentModel(paths, agentName);
 
-      const unsetResult = await writeOpenCodeAgentModel(paths, "explore", {
-        ensureEntry: false,
-      });
-      const modelAfterUnset = await readOpenCodeAgentModel(paths, "explore");
+        expect(model).toBe("openai/gpt-5-nano");
+        expect(["created", "updated"]).toContain(setResult.action);
+      }
 
-      expect(unsetResult.action).toBe("updated");
-      expect(modelAfterUnset).toBeUndefined();
+      for (const agentName of builtInAgents) {
+        const unsetResult = await writeOpenCodeAgentModel(paths, agentName, {
+          ensureEntry: false,
+        });
+        const modelAfterUnset = await readOpenCodeAgentModel(paths, agentName);
+
+        expect(unsetResult.action).toBe("updated");
+        expect(modelAfterUnset).toBeUndefined();
+      }
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
