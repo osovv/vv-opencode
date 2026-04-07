@@ -211,8 +211,6 @@ export function generateZshCompletion(): string {
     "  plugin_commands=(list)",
     '  _arguments "1: :(list)"',
     "}",
-    "",
-    "compdef _vvoc vvoc",
   );
 
   return lines.join("\n") + "\n";
