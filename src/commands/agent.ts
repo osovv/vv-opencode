@@ -1,8 +1,8 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.4.2
+// VERSION: 0.4.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
-//   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode subagent model setting, unsetting, and listing via the vvoc agent command tree.
+//   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode subagent model set/unset/list operations via the vvoc agent command tree.
 //   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.2 - Added built-in OpenCode general subagent model management alongside explore and vvoc-managed agents.]
+//   LAST_CHANGE: [v0.4.3 - Reworked agent CLI shape to `vvoc agent set|unset <agent-id>` while keeping support for guardian, memory-reviewer, built-in, and managed subagents.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -28,14 +28,24 @@ import {
   renderGuardianConfig,
   resolvePaths,
   type Scope,
-  writeOpenCodeAgentModel,
   writeManagedSubagentModel,
+  writeOpenCodeAgentModel,
 } from "../lib/opencode.js";
-import {
-  parseMemoryConfigText,
-  renderMemoryConfig,
-  type MemoryConfigOverrides,
-} from "../plugins/memory-store.js";
+import { parseMemoryConfigText, renderMemoryConfig } from "../plugins/memory-store.js";
+
+const SPECIAL_AGENT_NAMES = ["guardian", "memory-reviewer"] as const;
+type SpecialAgentName = (typeof SPECIAL_AGENT_NAMES)[number];
+
+const CONFIGURABLE_OPENCODE_SUBAGENTS = ["general", "explore"] as const;
+type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
+
+type AgentName = SpecialAgentName | ConfigurableOpenCodeSubagentName | ManagedSubagentName;
+
+const AGENT_NAME_CHOICES = [
+  ...SPECIAL_AGENT_NAMES,
+  ...CONFIGURABLE_OPENCODE_SUBAGENTS,
+  ...MANAGED_SUBAGENTS.map((definition) => definition.name),
+].join(", ");
 
 const scopeArg = {
   type: "enum" as const,
@@ -49,223 +59,102 @@ const configDirArg = {
   description: "Override the global config home.",
 };
 
+const agentArg = {
+  type: "positional" as const,
+  required: true,
+  description: `Agent ID (${AGENT_NAME_CHOICES}).`,
+};
+
 const modelArg = {
   type: "positional" as const,
   required: true,
-  description: "Model in provider/model-id format.",
+  description:
+    "Model in provider/model-id format. Guardian and memory-reviewer also accept provider/model-id[:variant].",
 };
 
-const CONFIGURABLE_OPENCODE_SUBAGENTS = ["general", "explore"] as const;
-type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
-
-const guardianSet = defineCommand({
+const agentSet = defineCommand({
   meta: {
     name: "set",
-    description: "Set the Guardian agent model override.",
+    description: "Set an agent model override.",
   },
   args: {
-    model: {
-      ...modelArg,
-      description: "Model in provider/model-id[:variant] format.",
-    },
+    agent: agentArg,
+    model: modelArg,
     scope: scopeArg,
     "config-dir": configDirArg,
   },
   async run({ args }) {
-    const { model, variant } = parseGuardianStyleModelArg(args.model, "set");
+    const agentName = parseAgentName(args.agent, "set");
     const paths = await resolveCommandPaths(args);
 
-    const currentText = await Bun.file(paths.guardianConfigPath)
-      .text()
-      .catch(() => "");
-    const current = currentText
-      ? parseGuardianConfigText(currentText, paths.guardianConfigPath)
-      : {};
-    const merged = { ...current, model, variant };
-
-    const nextText = renderGuardianConfig(merged);
-    if (currentText.trim() === nextText.trim()) {
-      console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
+    if (agentName === "guardian") {
+      await setGuardianModelOverride(paths, args.model);
       return;
     }
 
-    await Bun.write(paths.guardianConfigPath, nextText);
-    console.log(
-      describeWriteResult({
-        action: currentText ? "updated" : "created",
-        path: paths.guardianConfigPath,
-      }),
-    );
-  },
-});
-
-const guardianUnset = defineCommand({
-  meta: {
-    name: "unset",
-    description: "Remove the Guardian agent model override.",
-  },
-  args: {
-    scope: scopeArg,
-    "config-dir": configDirArg,
-  },
-  async run({ args }) {
-    const paths = await resolveCommandPaths(args);
-
-    const currentText = await Bun.file(paths.guardianConfigPath)
-      .text()
-      .catch(() => "");
-    if (!currentText) {
-      console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
+    if (agentName === "memory-reviewer") {
+      await setMemoryReviewerModelOverride(paths, args.model);
       return;
     }
 
-    const current = parseGuardianConfigText(currentText, paths.guardianConfigPath);
-    const { model: _model, variant: _variant, ...rest } = current;
-    const nextText = renderGuardianConfig(rest);
+    const model = parseOpenCodeModelArg(args.model, "set");
 
-    if (currentText.trim() === nextText.trim()) {
-      console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
+    if (isConfigurableOpenCodeSubagentName(agentName)) {
+      const result = await writeOpenCodeAgentModel(paths, agentName, {
+        model,
+        ensureEntry: true,
+      });
+      console.log(describeWriteResult(result));
       return;
     }
 
-    await Bun.write(paths.guardianConfigPath, nextText);
-    console.log(describeWriteResult({ action: "updated", path: paths.guardianConfigPath }));
-  },
-});
-
-const guardianCmd = defineCommand({
-  meta: {
-    name: "guardian",
-    description: "Manage the Guardian agent.",
-  },
-  subCommands: {
-    set: guardianSet,
-    unset: guardianUnset,
-  },
-});
-
-const memoryReviewerSet = defineCommand({
-  meta: {
-    name: "set",
-    description: "Set the memory-reviewer agent model override.",
-  },
-  args: {
-    model: {
-      ...modelArg,
-      description: "Model in provider/model-id[:variant] format.",
-    },
-    scope: scopeArg,
-    "config-dir": configDirArg,
-  },
-  async run({ args }) {
-    const { model, variant } = parseGuardianStyleModelArg(args.model, "set");
-    const paths = await resolveCommandPaths(args);
-
-    const currentText = await Bun.file(paths.memoryConfigPath)
-      .text()
-      .catch(() => "");
-    const current = currentText ? parseMemoryConfigText(currentText, paths.memoryConfigPath) : {};
-    const merged: MemoryConfigOverrides = {
-      enabled: current.enabled ?? true,
-      defaultSearchLimit: current.defaultSearchLimit,
-      reviewerModel: model,
-      reviewerVariant: variant,
-    };
-
-    const nextText = renderMemoryConfig(merged);
-    if (currentText.trim() === nextText.trim()) {
-      console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
-      return;
-    }
-
-    await Bun.write(paths.memoryConfigPath, nextText);
-    console.log(
-      describeWriteResult({
-        action: currentText ? "updated" : "created",
-        path: paths.memoryConfigPath,
-      }),
-    );
-  },
-});
-
-const memoryReviewerUnset = defineCommand({
-  meta: {
-    name: "unset",
-    description: "Remove the memory-reviewer agent model override.",
-  },
-  args: {
-    scope: scopeArg,
-    "config-dir": configDirArg,
-  },
-  async run({ args }) {
-    const paths = await resolveCommandPaths(args);
-
-    const currentText = await Bun.file(paths.memoryConfigPath)
-      .text()
-      .catch(() => "");
-    if (!currentText) {
-      console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
-      return;
-    }
-
-    const current = parseMemoryConfigText(currentText, paths.memoryConfigPath);
-    const nextText = renderMemoryConfig({
-      enabled: current.enabled ?? true,
-      defaultSearchLimit: current.defaultSearchLimit,
+    await installManagedAgentPrompts(paths, { force: false });
+    const result = await writeManagedSubagentModel(paths, agentName, {
+      model,
+      ensureEntry: true,
     });
+    console.log(describeWriteResult(result));
+  },
+});
 
-    if (currentText.trim() === nextText.trim()) {
-      console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
+const agentUnset = defineCommand({
+  meta: {
+    name: "unset",
+    description: "Remove an agent model override.",
+  },
+  args: {
+    agent: agentArg,
+    scope: scopeArg,
+    "config-dir": configDirArg,
+  },
+  async run({ args }) {
+    const agentName = parseAgentName(args.agent, "unset");
+    const paths = await resolveCommandPaths(args);
+
+    if (agentName === "guardian") {
+      await unsetGuardianModelOverride(paths);
       return;
     }
 
-    await Bun.write(paths.memoryConfigPath, nextText);
-    console.log(describeWriteResult({ action: "updated", path: paths.memoryConfigPath }));
+    if (agentName === "memory-reviewer") {
+      await unsetMemoryReviewerModelOverride(paths);
+      return;
+    }
+
+    if (isConfigurableOpenCodeSubagentName(agentName)) {
+      const result = await writeOpenCodeAgentModel(paths, agentName, {
+        ensureEntry: false,
+      });
+      console.log(describeWriteResult(result));
+      return;
+    }
+
+    const result = await writeManagedSubagentModel(paths, agentName, {
+      ensureEntry: false,
+    });
+    console.log(describeWriteResult(result));
   },
 });
-
-const memoryReviewerCmd = defineCommand({
-  meta: {
-    name: "memory-reviewer",
-    description: "Manage the memory-reviewer agent.",
-  },
-  subCommands: {
-    set: memoryReviewerSet,
-    unset: memoryReviewerUnset,
-  },
-});
-
-const managedSubagentCommands = Object.fromEntries(
-  MANAGED_SUBAGENTS.map((definition) => [
-    definition.name,
-    defineCommand({
-      meta: {
-        name: definition.name,
-        description: `Manage the ${definition.name} agent.`,
-      },
-      subCommands: {
-        set: createManagedSubagentSetCommand(definition.name),
-        unset: createManagedSubagentUnsetCommand(definition.name),
-      },
-    }),
-  ]),
-);
-
-const configurableOpenCodeSubagentCommands = Object.fromEntries(
-  CONFIGURABLE_OPENCODE_SUBAGENTS.map((agentName) => [
-    agentName,
-    defineCommand({
-      meta: {
-        name: agentName,
-        description: `Manage the built-in ${agentName} agent.`,
-      },
-      subCommands: {
-        set: createOpenCodeSubagentSetCommand(agentName),
-        unset: createOpenCodeSubagentUnsetCommand(agentName),
-      },
-    }),
-  ]),
-);
 
 const agentList = defineCommand({
   meta: {
@@ -321,100 +210,113 @@ export default defineCommand({
     description: "Manage agent model overrides.",
   },
   subCommands: {
-    guardian: guardianCmd,
-    "memory-reviewer": memoryReviewerCmd,
-    ...configurableOpenCodeSubagentCommands,
-    ...managedSubagentCommands,
+    set: agentSet,
+    unset: agentUnset,
     list: agentList,
   },
 });
 
-function createManagedSubagentSetCommand(agentName: ManagedSubagentName) {
-  return defineCommand({
-    meta: {
-      name: "set",
-      description: `Set the ${agentName} agent model override.`,
-    },
-    args: {
-      model: modelArg,
-      scope: scopeArg,
-      "config-dir": configDirArg,
-    },
-    async run({ args }) {
-      const model = parseOpenCodeModelArg(args.model, "set");
-      const paths = await resolveCommandPaths(args);
+async function setGuardianModelOverride(
+  paths: Awaited<ReturnType<typeof resolveCommandPaths>>,
+  value: unknown,
+) {
+  const { model, variant } = parseGuardianStyleModelArg(value, "set");
+  const currentText = await Bun.file(paths.guardianConfigPath)
+    .text()
+    .catch(() => "");
+  const current = currentText ? parseGuardianConfigText(currentText, paths.guardianConfigPath) : {};
+  const nextText = renderGuardianConfig({ ...current, model, variant });
 
-      await installManagedAgentPrompts(paths, { force: false });
-      const result = await writeManagedSubagentModel(paths, agentName, {
-        model,
-        ensureEntry: true,
-      });
-      console.log(describeWriteResult(result));
-    },
-  });
+  if (currentText.trim() === nextText.trim()) {
+    console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
+    return;
+  }
+
+  await Bun.write(paths.guardianConfigPath, nextText);
+  console.log(
+    describeWriteResult({
+      action: currentText ? "updated" : "created",
+      path: paths.guardianConfigPath,
+    }),
+  );
 }
 
-function createManagedSubagentUnsetCommand(agentName: ManagedSubagentName) {
-  return defineCommand({
-    meta: {
-      name: "unset",
-      description: `Remove the ${agentName} agent model override.`,
-    },
-    args: {
-      scope: scopeArg,
-      "config-dir": configDirArg,
-    },
-    async run({ args }) {
-      const paths = await resolveCommandPaths(args);
-      const result = await writeManagedSubagentModel(paths, agentName, {
-        ensureEntry: false,
-      });
-      console.log(describeWriteResult(result));
-    },
-  });
+async function unsetGuardianModelOverride(paths: Awaited<ReturnType<typeof resolveCommandPaths>>) {
+  const currentText = await Bun.file(paths.guardianConfigPath)
+    .text()
+    .catch(() => "");
+  if (!currentText) {
+    console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
+    return;
+  }
+
+  const current = parseGuardianConfigText(currentText, paths.guardianConfigPath);
+  const { model: _model, variant: _variant, ...rest } = current;
+  const nextText = renderGuardianConfig(rest);
+
+  if (currentText.trim() === nextText.trim()) {
+    console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
+    return;
+  }
+
+  await Bun.write(paths.guardianConfigPath, nextText);
+  console.log(describeWriteResult({ action: "updated", path: paths.guardianConfigPath }));
 }
 
-function createOpenCodeSubagentSetCommand(agentName: ConfigurableOpenCodeSubagentName) {
-  return defineCommand({
-    meta: {
-      name: "set",
-      description: `Set the ${agentName} agent model override.`,
-    },
-    args: {
-      model: modelArg,
-      scope: scopeArg,
-      "config-dir": configDirArg,
-    },
-    async run({ args }) {
-      const model = parseOpenCodeModelArg(args.model, "set");
-      const paths = await resolveCommandPaths(args);
-      const result = await writeOpenCodeAgentModel(paths, agentName, {
-        model,
-        ensureEntry: true,
-      });
-      console.log(describeWriteResult(result));
-    },
+async function setMemoryReviewerModelOverride(
+  paths: Awaited<ReturnType<typeof resolveCommandPaths>>,
+  value: unknown,
+) {
+  const { model, variant } = parseGuardianStyleModelArg(value, "set");
+  const currentText = await Bun.file(paths.memoryConfigPath)
+    .text()
+    .catch(() => "");
+  const current = currentText ? parseMemoryConfigText(currentText, paths.memoryConfigPath) : {};
+  const nextText = renderMemoryConfig({
+    enabled: current.enabled ?? true,
+    defaultSearchLimit: current.defaultSearchLimit,
+    reviewerModel: model,
+    reviewerVariant: variant,
   });
+
+  if (currentText.trim() === nextText.trim()) {
+    console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
+    return;
+  }
+
+  await Bun.write(paths.memoryConfigPath, nextText);
+  console.log(
+    describeWriteResult({
+      action: currentText ? "updated" : "created",
+      path: paths.memoryConfigPath,
+    }),
+  );
 }
 
-function createOpenCodeSubagentUnsetCommand(agentName: ConfigurableOpenCodeSubagentName) {
-  return defineCommand({
-    meta: {
-      name: "unset",
-      description: `Remove the ${agentName} agent model override.`,
-    },
-    args: {
-      scope: scopeArg,
-      "config-dir": configDirArg,
-    },
-    async run({ args }) {
-      const paths = await resolveCommandPaths(args);
-      const result = await writeOpenCodeAgentModel(paths, agentName, {
-        ensureEntry: false,
-      });
-      console.log(describeWriteResult(result));
-    },
+async function unsetMemoryReviewerModelOverride(
+  paths: Awaited<ReturnType<typeof resolveCommandPaths>>,
+) {
+  const currentText = await Bun.file(paths.memoryConfigPath)
+    .text()
+    .catch(() => "");
+  if (!currentText) {
+    console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
+    return;
+  }
+
+  const current = parseMemoryConfigText(currentText, paths.memoryConfigPath);
+  const nextText = renderMemoryConfig({
+    enabled: current.enabled ?? true,
+    defaultSearchLimit: current.defaultSearchLimit,
   });
+
+  if (currentText.trim() === nextText.trim()) {
+    console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
+    return;
+  }
+
+  await Bun.write(paths.memoryConfigPath, nextText);
+  console.log(describeWriteResult({ action: "updated", path: paths.memoryConfigPath }));
 }
 
 function resolveScope(value: unknown): Scope {
@@ -433,6 +335,34 @@ async function resolveCommandPaths(args: Record<string, unknown>) {
 function formatAgentModel(model?: string, variant?: string): string {
   if (!model) return "default";
   return variant ? `${model}:${variant}` : model;
+}
+
+function parseAgentName(value: unknown, operation: string): AgentName {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`agent argument required for ${operation}`);
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed === "guardian" || trimmed === "memory-reviewer") {
+    return trimmed;
+  }
+
+  if (isConfigurableOpenCodeSubagentName(trimmed) || isManagedSubagentName(trimmed)) {
+    return trimmed;
+  }
+
+  throw new Error(`unsupported agent: ${trimmed}. Expected one of: ${AGENT_NAME_CHOICES}`);
+}
+
+function isConfigurableOpenCodeSubagentName(
+  value: string,
+): value is ConfigurableOpenCodeSubagentName {
+  return CONFIGURABLE_OPENCODE_SUBAGENTS.includes(value as ConfigurableOpenCodeSubagentName);
+}
+
+function isManagedSubagentName(value: string): value is ManagedSubagentName {
+  return MANAGED_SUBAGENTS.some((definition) => definition.name === value);
 }
 
 function parseGuardianStyleModelArg(

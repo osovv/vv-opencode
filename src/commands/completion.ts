@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.4
+// VERSION: 0.5.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command/preset completion generation for config/plugin/path-provider/agent, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command/preset completion generation for config/plugin/path-provider and the `agent set|unset <agent-id>` flow, and rc file patching.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,13 +18,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.4 - Synced agent completions with built-in general/explore model override commands and derived action targets from one canonical list.]
+//   LAST_CHANGE: [v0.5.5 - Reworked agent completions for the new `vvoc agent set|unset <agent-id>` command shape.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { resolve } from "node:path";
 
 const VVOC_TOP_LEVEL_COMMANDS = [
   "agent",
@@ -45,7 +45,8 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PATH_PROVIDER_PRESETS = ["stepfun-ai"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
-const VVOC_AGENT_ACTION_TARGETS = [
+const VVOC_AGENT_COMMANDS = ["set", "unset", "list"];
+const VVOC_AGENT_TARGETS = [
   "guardian",
   "memory-reviewer",
   "general",
@@ -55,8 +56,6 @@ const VVOC_AGENT_ACTION_TARGETS = [
   "code-reviewer",
   "investitagor",
 ];
-const VVOC_AGENT_COMMANDS = [...VVOC_AGENT_ACTION_TARGETS, "list"];
-const VVOC_AGENT_ACTION_COMMANDS = ["set", "unset"];
 
 export default defineCommand({
   meta: {
@@ -171,8 +170,7 @@ export function generateBashCompletion(): string {
   const pathProviderPresets = VVOC_PATH_PROVIDER_PRESETS.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
   const agentCommands = VVOC_AGENT_COMMANDS.join(" ");
-  const agentActionTargets = VVOC_AGENT_ACTION_TARGETS.map((target) => `agent:${target}`).join("|");
-  const agentActionCommands = VVOC_AGENT_ACTION_COMMANDS.join(" ");
+  const agentTargets = VVOC_AGENT_TARGETS.join(" ");
 
   return (
     "# bash completion for vvoc\n" +
@@ -202,10 +200,8 @@ export function generateBashCompletion(): string {
     "      ;;\n" +
     "    3)\n" +
     '      case "${words[1]}:${words[2]}" in\n' +
-    "        " +
-    agentActionTargets +
-    ")\n" +
-    "          _vvoc_agent_action_commands\n" +
+    "        agent:set|agent:unset)\n" +
+    "          _vvoc_agent_target_commands\n" +
     "          ;;\n" +
     "      esac\n" +
     "      ;;\n" +
@@ -240,9 +236,9 @@ export function generateBashCompletion(): string {
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
     "\n" +
-    "_vvoc_agent_action_commands() {\n" +
+    "_vvoc_agent_target_commands() {\n" +
     '  local commands="' +
-    agentActionCommands +
+    agentTargets +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -275,9 +271,7 @@ export function generateZshCompletion(): string {
   lines.push(
     "  )",
     "",
-    "  _arguments -C \\",
-    '    "1: :(' + VVOC_TOP_LEVEL_COMMANDS.join(" ") + ')" \\',
-    '    "*::arg:->args"',
+    '  _arguments -C "1: :(' + VVOC_TOP_LEVEL_COMMANDS.join(" ") + ')" "*::arg:->args"',
     "",
     "  case $line[1] in",
     "    agent)",
@@ -307,8 +301,8 @@ export function generateZshCompletion(): string {
     "",
     "_vvoc_agent_cmds() {",
     "  case $words[2] in",
-    `    ${VVOC_AGENT_ACTION_TARGETS.join("|")})`,
-    '      _arguments "1: :(' + VVOC_AGENT_ACTION_COMMANDS.join(" ") + ')"',
+    "    set|unset)",
+    '      _arguments "1: :(' + VVOC_AGENT_TARGETS.join(" ") + ')"',
     "      ;;",
     "    *)",
     '      _arguments "1: :(' + VVOC_AGENT_COMMANDS.join(" ") + ')"',
@@ -350,8 +344,8 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_AGENT_COMMANDS.join(" "),
     "end",
     "",
-    "function __vvoc_agent_action_cmds",
-    "  echo " + VVOC_AGENT_ACTION_COMMANDS.join(" "),
+    "function __vvoc_agent_target_cmds",
+    "  echo " + VVOC_AGENT_TARGETS.join(" "),
     "end",
     "",
     "function __vvoc_plugin_cmds",
@@ -359,10 +353,8 @@ export function generateFishCompletion(): string {
     "end",
     "",
     'complete -c vvoc -f -a "(__vvoc_commands)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from agent" -f -a "(__vvoc_agent_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from ' +
-      VVOC_AGENT_ACTION_TARGETS.join(" ") +
-      '" -f -a "(__vvoc_agent_action_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and not __fish_seen_subcommand_from set unset list" -f -a "(__vvoc_agent_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_agent_target_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from path-provider" -f -a "(__vvoc_path_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',

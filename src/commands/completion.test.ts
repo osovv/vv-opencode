@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.3
+// VERSION: 0.4.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets and nested agent completions.
+//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets and the `agent set|unset <agent-id>` flow.
 //   DEPENDS: [src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.3 - Added assertions for built-in general/explore agent completions across bash, zsh, and fish.]
+//   LAST_CHANGE: [v0.4.4 - Updated assertions for the `vvoc agent set|unset <agent-id>` completion shape.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -97,25 +97,31 @@ test("generateFishCompletion - handles nested subcommands", () => {
   expect(output).toContain("__fish_seen_subcommand_from plugin");
 });
 
-test("generateBashCompletion - contains agent subcommands", () => {
+test("generateBashCompletion - contains agent command flow", () => {
   const output = generateBashCompletion();
-  expect(output).toContain("general explore implementer spec-reviewer code-reviewer investitagor");
-  expect(output).toContain("agent:general|agent:explore");
-  expect(output).toContain("_vvoc_agent_action_commands");
-});
-
-test("generateZshCompletion - contains agent action commands", () => {
-  const output = generateZshCompletion();
-  expect(output).toContain("guardian|memory-reviewer|general|explore");
-  expect(output).toContain("set unset");
-});
-
-test("generateFishCompletion - contains built-in agent action targets", () => {
-  const output = generateFishCompletion();
-  expect(output).toContain("echo guardian memory-reviewer general explore");
+  expect(output).toContain('local commands="set unset list"');
+  expect(output).toContain("agent:set|agent:unset");
   expect(output).toContain(
-    "__fish_seen_subcommand_from guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+    "guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
   );
+  expect(output).toContain("_vvoc_agent_target_commands");
+});
+
+test("generateZshCompletion - contains agent target commands", () => {
+  const output = generateZshCompletion();
+  expect(output).toContain("set|unset");
+  expect(output).toContain(
+    "guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+  );
+});
+
+test("generateFishCompletion - contains agent target completions", () => {
+  const output = generateFishCompletion();
+  expect(output).toContain("function __vvoc_agent_target_cmds");
+  expect(output).toContain(
+    "echo guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+  );
+  expect(output).toContain("__fish_seen_subcommand_from set unset");
 });
 
 test("completion scripts - contain path-provider presets", () => {
