@@ -31,6 +31,7 @@ import install from "./commands/install.js";
 import plugin from "./commands/plugin.js";
 import status from "./commands/status.js";
 import sync from "./commands/sync.js";
+import upgrade from "./commands/upgrade.js";
 import version from "./commands/version.js";
 import { getPackageVersion } from "./lib/package.js";
 
@@ -52,8 +53,9 @@ const main = defineCommand({
     init,
     install,
     plugin,
-    sync,
     status,
+    sync,
+    upgrade,
     version,
   },
 });
