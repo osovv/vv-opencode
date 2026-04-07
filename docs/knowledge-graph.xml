@@ -1,5 +1,5 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.3.2">
+  <Project NAME="@osovv/vv-opencode" VERSION="0.3.3">
     <keywords>opencode, plugins, workflow</keywords>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
@@ -187,7 +187,7 @@
     </M-CLI-PATH-PROVIDER>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including path-provider presets.</purpose>
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including path-provider presets and nested agent completions.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>

@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.3
+// VERSION: 0.5.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command/preset completion generation, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command/preset completion generation for config/plugin/path-provider/agent, and rc file patching.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.3 - Added path-provider preset completions for the stepfun-ai provider patch command.]
+//   LAST_CHANGE: [v0.5.4 - Synced agent completions with built-in general/explore model override commands and derived action targets from one canonical list.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -45,15 +45,17 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PATH_PROVIDER_PRESETS = ["stepfun-ai"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
-const VVOC_AGENT_COMMANDS = [
+const VVOC_AGENT_ACTION_TARGETS = [
   "guardian",
   "memory-reviewer",
+  "general",
+  "explore",
   "implementer",
   "spec-reviewer",
   "code-reviewer",
   "investitagor",
-  "list",
 ];
+const VVOC_AGENT_COMMANDS = [...VVOC_AGENT_ACTION_TARGETS, "list"];
 const VVOC_AGENT_ACTION_COMMANDS = ["set", "unset"];
 
 export default defineCommand({
@@ -169,6 +171,7 @@ export function generateBashCompletion(): string {
   const pathProviderPresets = VVOC_PATH_PROVIDER_PRESETS.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
   const agentCommands = VVOC_AGENT_COMMANDS.join(" ");
+  const agentActionTargets = VVOC_AGENT_ACTION_TARGETS.map((target) => `agent:${target}`).join("|");
   const agentActionCommands = VVOC_AGENT_ACTION_COMMANDS.join(" ");
 
   return (
@@ -199,7 +202,9 @@ export function generateBashCompletion(): string {
     "      ;;\n" +
     "    3)\n" +
     '      case "${words[1]}:${words[2]}" in\n' +
-    "        agent:guardian|agent:memory-reviewer|agent:implementer|agent:spec-reviewer|agent:code-reviewer|agent:investitagor)\n" +
+    "        " +
+    agentActionTargets +
+    ")\n" +
     "          _vvoc_agent_action_commands\n" +
     "          ;;\n" +
     "      esac\n" +
@@ -302,7 +307,7 @@ export function generateZshCompletion(): string {
     "",
     "_vvoc_agent_cmds() {",
     "  case $words[2] in",
-    "    guardian|memory-reviewer|implementer|spec-reviewer|code-reviewer|investitagor)",
+    `    ${VVOC_AGENT_ACTION_TARGETS.join("|")})`,
     '      _arguments "1: :(' + VVOC_AGENT_ACTION_COMMANDS.join(" ") + ')"',
     "      ;;",
     "    *)",
@@ -355,7 +360,9 @@ export function generateFishCompletion(): string {
     "",
     'complete -c vvoc -f -a "(__vvoc_commands)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from agent" -f -a "(__vvoc_agent_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from guardian memory-reviewer implementer spec-reviewer code-reviewer investitagor" -f -a "(__vvoc_agent_action_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from ' +
+      VVOC_AGENT_ACTION_TARGETS.join(" ") +
+      '" -f -a "(__vvoc_agent_action_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from path-provider" -f -a "(__vvoc_path_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',

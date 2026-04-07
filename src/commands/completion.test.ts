@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.2
+// VERSION: 0.4.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets.
+//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets and nested agent completions.
 //   DEPENDS: [src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.2 - Added assertions for the path-provider top-level command and stepfun-ai preset completions.]
+//   LAST_CHANGE: [v0.4.3 - Added assertions for built-in general/explore agent completions across bash, zsh, and fish.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -99,16 +99,23 @@ test("generateFishCompletion - handles nested subcommands", () => {
 
 test("generateBashCompletion - contains agent subcommands", () => {
   const output = generateBashCompletion();
-  expect(output).toContain("implementer spec-reviewer code-reviewer investitagor");
+  expect(output).toContain("general explore implementer spec-reviewer code-reviewer investitagor");
+  expect(output).toContain("agent:general|agent:explore");
   expect(output).toContain("_vvoc_agent_action_commands");
 });
 
 test("generateZshCompletion - contains agent action commands", () => {
   const output = generateZshCompletion();
-  expect(output).toContain(
-    "guardian|memory-reviewer|implementer|spec-reviewer|code-reviewer|investitagor",
-  );
+  expect(output).toContain("guardian|memory-reviewer|general|explore");
   expect(output).toContain("set unset");
+});
+
+test("generateFishCompletion - contains built-in agent action targets", () => {
+  const output = generateFishCompletion();
+  expect(output).toContain("echo guardian memory-reviewer general explore");
+  expect(output).toContain(
+    "__fish_seen_subcommand_from guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+  );
 });
 
 test("completion scripts - contain path-provider presets", () => {
