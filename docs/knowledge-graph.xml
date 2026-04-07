@@ -160,7 +160,7 @@
       </annotations>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Generate shell completion scripts for bash, zsh, and fish.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
