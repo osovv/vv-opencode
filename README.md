@@ -154,14 +154,17 @@ vvoc path-provider stepfun-ai
 This writes `provider.stepfun.options.baseURL = "https://api.stepfun.ai/v1"` into the global OpenCode config.
 It does not manage auth for you, so keep using OpenCode's normal StepFun credential flow.
 
-Manage model overrides for bundled agents:
+Manage model overrides for built-in and bundled agents:
 
 ```bash
 vvoc agent list
+vvoc agent explore set openai/gpt-5-nano
 vvoc agent implementer set openai/gpt-5
 vvoc agent code-reviewer set anthropic/claude-sonnet-4-20250514
 vvoc agent spec-reviewer unset
 ```
+
+`vvoc agent explore set ...` writes `agent.explore.model` into OpenCode config so the built-in read-only explorer does not inherit the main session model.
 
 Inspect current setup:
 
@@ -289,7 +292,7 @@ Their prompt files also live under the same vvoc-managed `agents/` directory ins
 
 OpenCode registration stays in `opencode.json`, but each agent points its `prompt` field at the vvoc-managed file with a relative `{file:...}` reference.
 
-Model overrides for these four subagents are written into the corresponding `agent.<name>.model` entry inside OpenCode config via `vvoc agent ... set|unset`.
+Model overrides for these four subagents, plus the built-in `explore` subagent, are written into the corresponding `agent.<name>.model` entry inside OpenCode config via `vvoc agent ... set|unset`.
 
 ## Package API
 

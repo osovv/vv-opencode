@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.2.8
+// VERSION: 0.2.9
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage OpenCode plugin registration, provider patching, and vvoc-owned config files.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed subagent registration, managed agent prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
+//   PURPOSE: Manage OpenCode config mutation, provider patching, and vvoc-owned config files.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, OpenCode agent model overrides, managed subagent registration, managed agent prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -29,6 +29,8 @@
 //   syncManagedSubagentRegistrations - Syncs the canonical vvoc-managed subagent registrations into OpenCode config.
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian/subagent agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian/subagent agents.
+//   readOpenCodeAgentModel - Reads a model override for any OpenCode agent from config.
+//   writeOpenCodeAgentModel - Writes or removes a model override for any OpenCode agent in config.
 //   readManagedSubagentModels - Reads model overrides for the bundled vvoc subagents from OpenCode config.
 //   writeManagedSubagentModel - Writes or removes a bundled vvoc subagent model override in OpenCode config.
 //   installGuardianConfig - Creates or preserves managed Guardian config.
@@ -41,7 +43,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.8 - Added conservative OpenCode provider baseURL patch helpers for provider presets like stepfun-ai.]
+//   LAST_CHANGE: [v0.2.9 - Added generic OpenCode agent model override helpers so built-in subagents like explore can be configured from vvoc.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -388,6 +390,74 @@ export async function readManagedSubagentModels(
   }
 
   return models;
+}
+
+export async function readOpenCodeAgentModel(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  agentName: string,
+): Promise<string | undefined> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+
+  if (!currentText) {
+    return undefined;
+  }
+
+  const document = parseObjectDocument(currentText, paths.opencodeConfigPath);
+  const agentMap = readAgentMap(document, paths.opencodeConfigPath);
+  const currentEntry = agentMap[agentName];
+
+  if (currentEntry?.model === undefined) {
+    return undefined;
+  }
+
+  return readNonEmptyString(
+    currentEntry.model,
+    `${paths.opencodeConfigPath}: agent.${agentName}.model`,
+  );
+}
+
+export async function writeOpenCodeAgentModel(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  agentName: string,
+  options: { model?: string; ensureEntry: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+  if (!currentText && !options.ensureEntry) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const baseText = options.ensureEntry ? ensureAgentConfigText(currentText) : currentText;
+  if (!baseText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const document = parseObjectDocument(baseText, paths.opencodeConfigPath);
+  const agentMap = readAgentMap(document, paths.opencodeConfigPath);
+  const currentEntry = agentMap[agentName];
+
+  if (!currentEntry && !options.ensureEntry) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const nextEntry = currentEntry ? { ...currentEntry } : {};
+
+  if (options.model) {
+    nextEntry.model = options.model;
+  } else {
+    delete nextEntry.model;
+  }
+
+  const nextText = updateAgentEntryText(baseText, agentName, nextEntry);
+
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  await writeText(paths.opencodeConfigPath, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path: paths.opencodeConfigPath,
+  };
 }
 
 export async function writeManagedSubagentModel(
@@ -1047,6 +1117,40 @@ function getManagedPromptPath(
   agentName: ManagedAgentPromptName,
 ): string {
   return getManagedAgentPromptPath(paths.managedAgentsDirPath, agentName);
+}
+
+function ensureAgentConfigText(text: string | undefined): string {
+  if (!text?.trim()) {
+    return renderJson({
+      $schema: OPENCODE_SCHEMA_URL,
+      agent: {},
+    });
+  }
+
+  const document = parseObjectDocument(text, "OpenCode config");
+  const currentAgents = readAgentMap(document, "OpenCode config");
+  let nextText = text;
+
+  if (!Object.hasOwn(document, "$schema")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
+  }
+
+  if (!Object.hasOwn(document, "agent")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["agent"], currentAgents, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 
 function getManagedSubagentPromptReference(

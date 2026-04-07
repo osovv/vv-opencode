@@ -1,8 +1,8 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage model overrides for vvoc-owned OpenCode agents.
-//   SCOPE: Guardian and memory-reviewer config writes plus managed OpenCode subagent model setting, unsetting, and listing via the vvoc agent command tree.
+//   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
+//   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode subagent model setting, unsetting, and listing via the vvoc agent command tree.
 //   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Added vvoc-managed implementer/spec-reviewer/code-reviewer/investitagor subagent model management.]
+//   LAST_CHANGE: [v0.4.1 - Added built-in OpenCode explore subagent model management alongside vvoc-managed agents.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,10 +23,12 @@ import {
   describeWriteResult,
   installManagedAgentPrompts,
   parseGuardianConfigText,
+  readOpenCodeAgentModel,
   readManagedSubagentModels,
   renderGuardianConfig,
   resolvePaths,
   type Scope,
+  writeOpenCodeAgentModel,
   writeManagedSubagentModel,
 } from "../lib/opencode.js";
 import {
@@ -52,6 +54,9 @@ const modelArg = {
   required: true,
   description: "Model in provider/model-id format.",
 };
+
+const CONFIGURABLE_OPENCODE_SUBAGENTS = ["explore"] as const;
+type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
 
 const guardianSet = defineCommand({
   meta: {
@@ -246,6 +251,22 @@ const managedSubagentCommands = Object.fromEntries(
   ]),
 );
 
+const configurableOpenCodeSubagentCommands = Object.fromEntries(
+  CONFIGURABLE_OPENCODE_SUBAGENTS.map((agentName) => [
+    agentName,
+    defineCommand({
+      meta: {
+        name: agentName,
+        description: `Manage the built-in ${agentName} agent.`,
+      },
+      subCommands: {
+        set: createOpenCodeSubagentSetCommand(agentName),
+        unset: createOpenCodeSubagentUnsetCommand(agentName),
+      },
+    }),
+  ]),
+);
+
 const agentList = defineCommand({
   meta: {
     name: "list",
@@ -275,6 +296,7 @@ const agentList = defineCommand({
     const memoryConfig = memoryText
       ? parseMemoryConfigText(memoryText, paths.memoryConfigPath)
       : {};
+    const exploreModel = await readOpenCodeAgentModel(paths, "explore");
     const managedModels = await readManagedSubagentModels(paths);
 
     console.log(`Agent models (${scope}):`);
@@ -282,6 +304,7 @@ const agentList = defineCommand({
     console.log(
       `  memory-reviewer: ${formatAgentModel(memoryConfig.reviewerModel, memoryConfig.reviewerVariant)}`,
     );
+    console.log(`  explore: ${formatAgentModel(exploreModel)}`);
 
     for (const definition of MANAGED_SUBAGENTS) {
       console.log(`  ${definition.name}: ${formatAgentModel(managedModels[definition.name])}`);
@@ -297,6 +320,7 @@ export default defineCommand({
   subCommands: {
     guardian: guardianCmd,
     "memory-reviewer": memoryReviewerCmd,
+    ...configurableOpenCodeSubagentCommands,
     ...managedSubagentCommands,
     list: agentList,
   },
@@ -340,6 +364,49 @@ function createManagedSubagentUnsetCommand(agentName: ManagedSubagentName) {
     async run({ args }) {
       const paths = await resolveCommandPaths(args);
       const result = await writeManagedSubagentModel(paths, agentName, {
+        ensureEntry: false,
+      });
+      console.log(describeWriteResult(result));
+    },
+  });
+}
+
+function createOpenCodeSubagentSetCommand(agentName: ConfigurableOpenCodeSubagentName) {
+  return defineCommand({
+    meta: {
+      name: "set",
+      description: `Set the ${agentName} agent model override.`,
+    },
+    args: {
+      model: modelArg,
+      scope: scopeArg,
+      "config-dir": configDirArg,
+    },
+    async run({ args }) {
+      const model = parseOpenCodeModelArg(args.model, "set");
+      const paths = await resolveCommandPaths(args);
+      const result = await writeOpenCodeAgentModel(paths, agentName, {
+        model,
+        ensureEntry: true,
+      });
+      console.log(describeWriteResult(result));
+    },
+  });
+}
+
+function createOpenCodeSubagentUnsetCommand(agentName: ConfigurableOpenCodeSubagentName) {
+  return defineCommand({
+    meta: {
+      name: "unset",
+      description: `Remove the ${agentName} agent model override.`,
+    },
+    args: {
+      scope: scopeArg,
+      "config-dir": configDirArg,
+    },
+    async run({ args }) {
+      const paths = await resolveCommandPaths(args);
+      const result = await writeOpenCodeAgentModel(paths, agentName, {
         ensureEntry: false,
       });
       console.log(describeWriteResult(result));

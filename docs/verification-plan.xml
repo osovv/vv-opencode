@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.4.1">
+<VerificationPlan VERSION="0.4.2">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -75,7 +75,7 @@
         <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
         <scenario-5 kind="success">Managed subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references.</scenario-5>
-        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root and model overrides round-trip through OpenCode config.</scenario-6>
+        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root, and model overrides round-trip through OpenCode config for both vvoc-managed subagents and the built-in `explore` subagent.</scenario-6>
         <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
       </scenarios>
       <required-log-markers />
@@ -99,7 +99,7 @@
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version` and `path-provider`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
-        <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, and the four vvoc-managed OpenCode subagents.</scenario-3>
+        <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, the built-in `explore` subagent, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
