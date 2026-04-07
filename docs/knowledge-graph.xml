@@ -168,14 +168,12 @@
     </M-CLI-COMPLETION>
 
     <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="planned">
-      <purpose>Interactive project setup with prompts for scope, plugins, and initial configuration.</purpose>
+      <purpose>Interactive project setup with prompts for scope, plugins, and initial configuration. Uses @clack/prompts. Interactive mode is default; --non-interactive enables batch mode.</purpose>
       <path>src/commands/init.ts</path>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, @clack/prompts</depends>
       <verification-ref>V-M-CLI-INIT</verification-ref>
       <annotations>
-        <fn-promptScope PURPOSE="Ask user for global or project scope." />
-        <fn-promptPlugins PURPOSE="Ask user which plugins to enable." />
-        <fn-writeInitialConfigs PURPOSE="Write guardian.jsonc and memory.jsonc with user choices." />
+        <fn-runInit PURPOSE="Run interactive initialization using @clack/prompts. Interactive by default, --non-interactive for batch." />
       </annotations>
     </M-CLI-INIT>
 

@@ -264,11 +264,12 @@
 
     <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>
-        <purpose>Interactive project initialization with prompts for config location, plugin selection, and initial configuration.</purpose>
+        <purpose>Interactive project initialization with prompts for config location, plugin selection, and initial configuration. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
         <inputs>
           <param name="cwd" type="string" />
           <param name="scope" type="global | project" />
           <param name="plugins" type="string[]" />
+          <param name="nonInteractive" type="boolean" />
         </inputs>
         <outputs>
           <param name="stdout" type="interactive prompts and confirmation" />
@@ -279,9 +280,9 @@
         </errors>
       </contract>
       <interface>
-        <export-promptInit PURPOSE="Run interactive initialization flow." />
+        <export-runInit PURPOSE="Run interactive initialization flow with @clack/prompts." />
       </interface>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, @clack/prompts</depends>
       <target>
         <source>src/commands/init.ts</source>
         <tests>src/commands/init.test.ts</tests>
@@ -290,6 +291,10 @@
         <log-prefix>[init]</log-prefix>
       </observability>
       <verification-ref>V-M-CLI-INIT</verification-ref>
+      <notes>
+        <note-1>Interactive mode is the default. Pass --non-interactive for batch/scripted use.</note-1>
+        <note-2>Uses @clack/prompts for cross-shell TTY prompts with Ctrl+C handling.</note-2>
+      </notes>
     </M-CLI-INIT>
 
     <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
@@ -373,12 +378,13 @@
       <step-3>Print script to stdout for user to pipe to the appropriate completion file.</step-3>
       <evidence>Generated script contains all vvoc commands and flags; bash/zsh/fish variants are syntactically correct.</evidence>
     </DF-COMPLETION>
-    <DF-INIT NAME="InteractiveInit" TRIGGER="vvoc init --interactive">
-      <step-1>Detect TTY and prompt for scope selection (global/project).</step-1>
-      <step-2>Prompt for plugin selection to enable.</step-2>
-      <step-3>Write initial configs to the appropriate vvoc paths.</step-3>
-      <step-4>Confirm successful initialization.</step-4>
-      <evidence>Configs are valid JSONC after init; Ctrl+C aborts cleanly; re-running init is idempotent.</evidence>
+    <DF-INIT NAME="InteractiveInit" TRIGGER="vvoc init [--non-interactive]">
+      <step-1>Check --non-interactive flag. If absent and TTY detected, enter interactive mode with @clack/prompts.</step-1>
+      <step-2>Prompt for scope selection (global/project) if interactive.</step-2>
+      <step-3>Prompt for plugin selection to enable if interactive; accept --plugins flag in non-interactive mode.</step-3>
+      <step-4>Write initial configs to the appropriate vvoc paths.</step-4>
+      <step-5>Confirm successful initialization.</step-5>
+      <evidence>Configs are valid JSONC after init; Ctrl+C aborts cleanly; re-running init is idempotent; non-interactive mode works without TTY.</evidence>
     </DF-INIT>
     <DF-UPGRADE NAME="UpgradeCheck" TRIGGER="vvoc upgrade">
       <step-1>Query npm registry for @osovv/vv-opencode dist-tags latest.</step-1>
