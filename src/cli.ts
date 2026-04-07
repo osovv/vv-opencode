@@ -26,6 +26,7 @@ import completion from "./commands/completion.js";
 import config from "./commands/config.js";
 import doctor from "./commands/doctor.js";
 import guardian from "./commands/guardian.js";
+import init from "./commands/init.js";
 import install from "./commands/install.js";
 import plugin from "./commands/plugin.js";
 import status from "./commands/status.js";
@@ -46,12 +47,13 @@ const main = defineCommand({
     agent,
     completion,
     config,
+    doctor,
+    guardian,
+    init,
     install,
     plugin,
     sync,
     status,
-    doctor,
-    guardian,
     version,
   },
 });

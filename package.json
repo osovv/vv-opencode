@@ -57,6 +57,7 @@
     "prepare": "lefthook install --force"
   },
   "dependencies": {
+    "@clack/prompts": "^1.2.0",
     "@opencode-ai/plugin": "1.3.17",
     "@opencode-ai/sdk": "1.3.17",
     "citty": "0.2.2",
