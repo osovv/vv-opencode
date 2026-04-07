@@ -303,3 +303,24 @@ npm publish
 - `src/` is the source of truth
 - `dist/` is generated output for packaging and local smoke tests
 - if you change CLI behavior, plugin exports, vvoc config paths, or memory workflow, keep this README in sync
+
+## Highly Recommended Addons
+
+### RTK — LLM Token Optimizer
+
+[RTK](https://github.com/rtk-ai/rtk) is a CLI proxy that reduces LLM token consumption by 60-90% on common dev commands like `git`, `ls`, `cat`, `rg`, `grep`, `pytest`, `cargo test`, and 100+ more. Single Rust binary, zero dependencies.
+
+**Why use it with vvoc:**
+- Transparent command rewriting — no workflow changes needed
+- Works alongside vvoc's Guardian and Memory plugins
+- Minimal overhead (<10ms)
+
+**Quick install:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+rtk init -g --opencode
+```
+
+After install, commands like `git status` and `cargo test` are automatically rewritten to their RTK equivalents, producing compact output that costs 60-90% fewer tokens.
+
+For more commands and details, see the [RTK documentation](https://github.com/rtk-ai/rtk).

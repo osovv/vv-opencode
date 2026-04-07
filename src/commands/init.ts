@@ -137,6 +137,12 @@ async function runInit(options: {
   p.log.step("Scaffolding Memory config...");
   const memoryResult = await installMemoryConfig(finalPaths, { force: true });
   p.log.info(memoryResult.path + " - " + memoryResult.action);
+
+  p.outro(`vvoc initialized successfully
+
+💡 Highly recommended: Install RTK for 60-90% token savings on git/test/lint commands
+   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+   rtk init -g --opencode`);
 }
 
 export async function runInitNonInteractive(options: {
