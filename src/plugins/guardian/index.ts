@@ -1371,7 +1371,7 @@ function installGuardianAgent(
     mode: "primary",
     description: "Risk assessment agent used by the Guardian plugin for permission reviews.",
     prompt: guardianPrompt.trim(),
-    maxSteps: 2,
+    steps: 2,
     permission: createGuardianPermissionConfig(),
     tools: createGuardianToolsConfig(),
     ...(guardianConfig.model ? { model: guardianConfig.model } : {}),

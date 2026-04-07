@@ -140,6 +140,8 @@ describe("managed subagent config helpers", () => {
         "utf8",
       );
       expect(implementerPrompt).toContain("Managed by vvoc");
+      expect(implementerPrompt).not.toContain("mode: subagent");
+      expect(implementerPrompt).not.toStartWith("---\n");
       expect(implementerPrompt).toContain("You are the implementer subagent.");
       expect(guardianPrompt).toContain("risk assessment of a coding-agent tool call");
       expect(memoryReviewerPrompt).toContain(

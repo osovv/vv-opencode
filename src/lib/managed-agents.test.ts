@@ -31,6 +31,8 @@ import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-pa
 describe("managed agent prompts", () => {
   test("loads bundled guardian template", async () => {
     const template = await loadManagedAgentPromptTemplate("guardian");
+    expect(template).toStartWith("---\n");
+    expect(template).toContain("mode: primary");
     expect(template).toContain("You are performing a risk assessment of a coding-agent tool call.");
   });
 

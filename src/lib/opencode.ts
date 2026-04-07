@@ -990,7 +990,7 @@ function getManagedSubagentRegistration(
 }
 
 async function renderManagedPrompt(agentName: ManagedAgentPromptName): Promise<string> {
-  const template = (await loadManagedAgentPromptTemplate(agentName)).trim();
+  const template = stripMarkdownFrontmatter(await loadManagedAgentPromptTemplate(agentName)).trim();
   const header = [
     "<!-- Managed by vvoc.",
     "`vvoc sync` rewrites files with this marker while preserving agent registration and model settings elsewhere.",
@@ -1103,6 +1103,11 @@ function isManagedFile(text: string): boolean {
 
 function renderJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function stripMarkdownFrontmatter(text: string): string {
+  const normalized = text.replaceAll("\r\n", "\n");
+  return normalized.replace(/^---\n[\s\S]*?\n---\n?/, "");
 }
 
 function ensureTrailingNewline(text: string): string {
