@@ -172,13 +172,15 @@
       </annotations>
     </M-CLI-COMPLETION>
 
-    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Interactive project setup with prompts for scope, plugins, and initial configuration. Uses @clack/prompts. Interactive mode is default; --non-interactive enables batch mode.</purpose>
       <path>src/commands/init.ts</path>
       <depends>M-CLI-CONFIG, @clack/prompts</depends>
       <verification-ref>V-M-CLI-INIT</verification-ref>
       <annotations>
         <fn-runInit PURPOSE="Run interactive initialization using @clack/prompts. Interactive by default, --non-interactive for batch." />
+        <fn-runInitNonInteractive PURPOSE="Run non-interactive initialization." />
+        <cmd-init PURPOSE="vvoc init - CLI command for project initialization." />
       </annotations>
     </M-CLI-INIT>
 
