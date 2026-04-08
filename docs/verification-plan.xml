@@ -1,4 +1,4 @@
-  <VerificationPlan VERSION="0.4.9">
+  <VerificationPlan VERSION="0.4.10">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -223,17 +223,20 @@
         <scenario-3 kind="success">Builtin patterns detect email, uuid, ipv4, mac, openai_key, anthropic_key, github_token, aws_access_key, stripe_key, bearer_token, bearer_dot, syn_key, hex_token.</scenario-3>
         <scenario-4 kind="success">Config file loads from $XDG_CONFIG_HOME/vvoc/secrets-redaction.config.json.</scenario-4>
         <scenario-5 kind="failure">Disabled config makes plugin a no-op.</scenario-5>
+        <scenario-6 kind="success">A user text part containing a builtin secret such as an email is replaced with a `__VVOC_SECRET_*` placeholder before model message conversion.</scenario-6>
+        <scenario-7 kind="success">Exact placeholders are restored in assistant text completions and tool arguments before they reach the user or the tool runtime.</scenario-7>
       </scenarios>
       <required-log-markers>
         <marker-1>secrets-redaction</marker-1>
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>HMAC hash is irreversible without the session secret.</assertion-1>
-        <assertion-2>TTL eviction removes expired mappings.</assertion-1>
-        <assertion-2>Max-mappings eviction removes oldest entries when limit is reached.</assertion-2>
+        <assertion-2>TTL eviction removes expired mappings.</assertion-2>
+        <assertion-3>Max-mappings eviction removes oldest entries when limit is reached.</assertion-3>
+        <assertion-4>Overlap handling must not skip the first match or prefer a later inner match over a wider earlier secret span.</assertion-4>
       </required-trace-assertions>
-      <wave-follow-up>Add isolated unit tests for PlaceholderSession, redactText, and pattern matching.</wave-follow-up>
-      <phase-follow-up>Consider integration tests with a mock OpenCode plugin context.</phase-follow-up>
+      <wave-follow-up>Add live session smoke coverage once a safe harness exists for observing provider-bound payloads.</wave-follow-up>
+      <phase-follow-up>Consider opt-in safe debug logs if future redaction regressions need lower-friction runtime diagnosis.</phase-follow-up>
     </V-M-PLUGIN-SECRETS-REDACTION>
 
     <V-M-CLI-CONFIG-VALIDATE MODULE="M-CLI-CONFIG-VALIDATE" PRIORITY="medium">

@@ -1,8 +1,8 @@
 // FILE: src/plugins/secrets-redaction/engine.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Core redaction engine — performs find/replace of secrets with placeholders in text.
-//   SCOPE: text scanning, match sorting, interval arithmetic, replacement
+//   SCOPE: text scanning, overlap resolution, match sorting, and replacement
 //   DEPENDS: session, patterns
 //   LINKS: knowledge-graph://plugins/secrets-redaction
 //   ROLE: RUNTIME
@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   redactText - replaces secrets in text with placeholders, returns changed text + match list
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Fixed overlap handling so first and wider earlier matches redact correctly instead of being skipped entirely.]
+// END_CHANGE_SUMMARY
 
 import { type PatternRule, type PatternSet } from "./patterns.js";
 import { type PlaceholderSession } from "./session.js";
@@ -29,46 +33,7 @@ export interface RedactResult {
   matches: Match[];
 }
 
-function subtractCovered(intervals: [number, number][]): [number, number][] {
-  if (intervals.length === 0) return [];
-
-  intervals.sort((a, b) => a[0] - b[0]);
-
-  const result: [number, number][] = [];
-  let currentEnd = intervals[0][0];
-
-  for (const [start, end] of intervals) {
-    if (start > currentEnd) {
-      result.push([currentEnd, start]);
-    }
-    if (end > currentEnd) {
-      currentEnd = end;
-    }
-  }
-
-  return result;
-}
-
-function insertCovered(
-  intervals: [number, number][],
-  newInterval: [number, number],
-): [number, number][] {
-  const merged = [...intervals, newInterval];
-  merged.sort((a, b) => a[0] - b[0]);
-
-  const result: [number, number][] = [];
-  for (const interval of merged) {
-    if (result.length > 0 && interval[0] <= result[result.length - 1][1]) {
-      result[result.length - 1][1] = Math.max(result[result.length - 1][1], interval[1]);
-    } else {
-      result.push([...interval]);
-    }
-  }
-
-  return result;
-}
-
-function sortByPositionDesc(
+function sortByPositionAsc(
   rules: PatternRule[],
   text: string,
 ): Array<{ rule: PatternRule; matches: RegExpMatchArray }> {
@@ -88,11 +53,20 @@ function sortByPositionDesc(
   allMatches.sort((a, b) => {
     const aStart = a.match.index!;
     const bStart = b.match.index!;
-    if (aStart !== bStart) return bStart - aStart;
+    if (aStart !== bStart) return aStart - bStart;
     return b.match[0].length - a.match[0].length;
   });
 
   return allMatches.map((x) => ({ rule: x.rule, matches: x.match }));
+}
+
+function overlapsSelected(start: number, selected: Match[]): boolean {
+  const lastSelected = selected[selected.length - 1];
+  if (!lastSelected) {
+    return false;
+  }
+
+  return start < lastSelected.end;
 }
 
 export function redactText(
@@ -104,9 +78,7 @@ export function redactText(
     return { text: input, matches: [] };
   }
 
-  const sorted = sortByPositionDesc(patternSet.rules, input);
-
-  const covered: [number, number][] = [];
+  const sorted = sortByPositionAsc(patternSet.rules, input);
   const matches: Match[] = [];
 
   for (const { rule, matches: match } of sorted) {
@@ -118,44 +90,23 @@ export function redactText(
       continue;
     }
 
-    const gaps = subtractCovered(covered);
-    const isInside = gaps.every(([gStart, gEnd]) => start >= gStart && end <= gEnd);
-    if (isInside) continue;
+    if (overlapsSelected(start, matches)) {
+      continue;
+    }
 
     const placeholder = session.getOrCreatePlaceholder(value, rule.category);
     matches.push({ start, end, original: value, placeholder, category: rule.category });
-
-    const remainingGaps: [number, number][] = [];
-    for (const [gStart, gEnd] of gaps) {
-      if (start >= gEnd || end <= gStart) {
-        remainingGaps.push([gStart, gEnd]);
-      } else {
-        if (start > gStart) {
-          remainingGaps.push([gStart, start]);
-        }
-        if (end < gEnd) {
-          remainingGaps.push([end, gEnd]);
-        }
-      }
-    }
-
-    covered.length = 0;
-    for (const g of remainingGaps) {
-      insertCovered(covered, g);
-    }
   }
-
-  const sortedMatches = [...matches].sort((a, b) => a.start - b.start);
 
   let result = "";
   let lastIndex = 0;
 
-  for (const m of sortedMatches) {
+  for (const m of matches) {
     result += input.slice(lastIndex, m.start);
     result += m.placeholder;
     lastIndex = m.end;
   }
   result += input.slice(lastIndex);
 
-  return { text: result, matches: sortedMatches };
+  return { text: result, matches };
 }
