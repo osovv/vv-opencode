@@ -49,7 +49,7 @@ vvoc install --scope project
 - keeps vvoc-managed config separate from native OpenCode config
 - leaves unmanaged files alone unless `--force` is passed
 
-For conversational meta-prompting, use the managed `enhancer` primary agent. It can ask follow-up questions and then return a clean XML prompt with semantically unique repeated tags such as `<constraint-1>...</constraint-1>` and `<verification-check-2>...</verification-check-2>`.
+For conversational meta-prompting, use the managed `enhancer` primary agent. It can ask follow-up questions and then return a clean XML prompt in English with semantically unique repeated tags such as `<constraint-1>...</constraint-1>` and `<verification-check-2>...</verification-check-2>`.
 
 Typical workflow:
 

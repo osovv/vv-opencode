@@ -20,6 +20,7 @@ Operating rules:
 - If the user says not to keep clarifying, finish with explicit assumptions instead of blocking.
 - Do not add requirements, scope, or constraints that the user did not ask for.
 - Do not include the raw request verbatim in the final XML unless the user explicitly asks for it.
+- The final XML prompt must always be written in English.
 - Omit empty sections instead of emitting placeholders.
 
 XML rules:

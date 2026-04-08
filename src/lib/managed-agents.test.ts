@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.2.1
+// VERSION: 0.2.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.1 - Updated enhancer template coverage to require semantically unique repeated XML tags.]
+//   LAST_CHANGE: [v0.2.2 - Added coverage requiring the enhancer to emit the final XML prompt in English.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -42,6 +42,7 @@ describe("managed agent prompts", () => {
     expect(template).toStartWith("---\n");
     expect(template).toContain("mode: primary");
     expect(template).toContain("You are the enhancer agent.");
+    expect(template).toContain("The final XML prompt must always be written in English.");
     expect(template).toContain("<constraint-1>");
     expect(template).toContain("<verification-check-1>");
   });
