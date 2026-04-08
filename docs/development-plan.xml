@@ -178,6 +178,37 @@
       </notes>
     </M-PLUGIN-MEMORY>
 
+    <M-PLUGIN-ENHANCE NAME="EnhanceCommandPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="5" STATUS="implemented">
+      <contract>
+        <purpose>Intercept `/enhance` command execution and, when TUI prompt APIs are available, clear and append the expanded prompt to the current chatbox instead of directly submitting command parts.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks with command.execute.before interception" />
+        </outputs>
+        <errors>
+          <error code="TUI_PROMPT_REWRITE_UNAVAILABLE" />
+        </errors>
+      </contract>
+      <interface>
+        <export-EnhanceCommandPlugin PURPOSE="Register command.execute.before hook that rewrites `/enhance` into the TUI prompt with safe fallback." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/plugins/enhance/index.ts</source>
+        <tests>src/plugins/enhance.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[enhance]</log-prefix>
+        <critical-block>BLOCK_PLUGIN_ENTRY</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-ENHANCE</verification-ref>
+      <notes>
+        <note-1>OpenCode currently does not expose prompt selection/cursor APIs, so rewrite is full-box clear+append only.</note-1>
+      </notes>
+    </M-PLUGIN-ENHANCE>
+
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>
         <purpose>Validate guardian.jsonc and memory.jsonc configuration files with human-readable error reporting.</purpose>

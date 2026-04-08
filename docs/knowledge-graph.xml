@@ -73,6 +73,16 @@
       </annotations>
     </M-PLUGIN-MEMORY>
 
+    <M-PLUGIN-ENHANCE NAME="EnhanceCommandPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Intercept `/enhance` command execution and rewrite the TUI prompt via clear+append when available, with fallback to default command submission if TUI rewrite fails.</purpose>
+      <path>src/plugins/enhance/index.ts</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-PLUGIN-ENHANCE</verification-ref>
+      <annotations>
+        <export-EnhanceCommandPlugin PURPOSE="Registers command.execute.before hook for `/enhance` prompt rewrite flow." />
+      </annotations>
+    </M-PLUGIN-ENHANCE>
+
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION NAME="PlaceholderSession" TYPE="UTILITY" STATUS="implemented">
       <purpose>Manages secret-to-placeholder mappings with HMAC-SHA256 hashing, TTL eviction, and max-mappings limits.</purpose>
       <path>src/plugins/secrets-redaction/session.ts</path>

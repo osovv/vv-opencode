@@ -45,6 +45,13 @@
         <trace-sequence>plugin config registers memory-reviewer -&gt; reviewer uses memory_list/get/search only</trace-sequence>
       </required-signals>
     </VF-MEMORY-REVIEW>
+    <VF-ENHANCE-COMMAND-RUNTIME NAME="EnhanceCommandRuntime" USE_CASES="UC-006" DATA_FLOW="DF-ENHANCE-COMMAND" PRIORITY="medium">
+      <scenario>User runs `/enhance ...` in OpenCode TUI with vvoc plugin package installed.</scenario>
+      <expected-outcome>When TUI prompt APIs are available, the command output is rewritten into the current prompt box via clear+append and direct command submission is skipped; when rewrite fails, default slash-command submission remains available.</expected-outcome>
+      <required-signals>
+        <trace-sequence>command.execute.before -&gt; clearPrompt -&gt; appendPrompt -&gt; (success: output.parts emptied) OR (failure: fallback to default behavior)</trace-sequence>
+      </required-signals>
+    </VF-ENHANCE-COMMAND-RUNTIME>
     <VF-SECRETS-REDACTION NAME="SecretsRedaction" USE_CASES="UC-005" DATA_FLOW="DF-SECRETS-REDACTION" PRIORITY="high">
       <scenario>LLM request is sent with secrets in message history, tool inputs, or tool outputs.</scenario>
       <expected-outcome>Secrets are replaced with `__VVOC_SECRET_*` placeholders before LLM request, restored after LLM response, and restored before tool execution.</expected-outcome>
@@ -179,6 +186,26 @@
       <wave-follow-up>Consider adding a smoke test around custom tool execution in a live OpenCode session.</wave-follow-up>
       <phase-follow-up>Add coverage for memory config warnings and disabled mode if the config surface grows.</phase-follow-up>
     </V-M-PLUGIN-MEMORY>
+
+    <V-M-PLUGIN-ENHANCE MODULE="M-PLUGIN-ENHANCE" PRIORITY="medium">
+      <test-files>
+        <file>src/plugins/enhance.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/plugins/enhance.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">`/enhance` command hook clears and appends the expanded prompt into the TUI prompt box, then empties command output parts to avoid direct command submission.</scenario-1>
+        <scenario-2 kind="failure">When TUI clear/append fails, the hook preserves output parts so default slash-command submission still works.</scenario-2>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>No rewrite attempt occurs for non-`/enhance` commands.</assertion-1>
+      </required-trace-assertions>
+      <wave-follow-up>Add a live OpenCode smoke test once an API harness exists for TUI prompt state assertions.</wave-follow-up>
+      <phase-follow-up>Revisit behavior if OpenCode exposes prompt selection/cursor APIs.</phase-follow-up>
+    </V-M-PLUGIN-ENHANCE>
 
     <V-M-PLUGIN-SECRETS-REDACTION MODULE="M-PLUGIN-SECRETS-REDACTION" PRIORITY="high">
       <test-files>

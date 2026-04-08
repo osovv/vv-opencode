@@ -10,7 +10,7 @@ Portable OpenCode workflow package with plugins and a Bun CLI for setup, sync, d
 - `SecretsRedactionPlugin` for redacting secrets before LLM requests
 - report-only `memory-reviewer` subagent
 - vvoc-managed prompt files and OpenCode subagent registrations
-- vvoc-managed OpenCode slash command: `/enhance`
+- vvoc-managed OpenCode slash command: `/enhance` with runtime chatbox rewrite when available
 
 ## Quick Start
 
@@ -56,6 +56,10 @@ Use `/enhance` inside the OpenCode TUI to wrap a raw request in vvoc's structure
 /enhance fix the failing memory plugin tests and keep the diff minimal
 ```
 
+When the vvoc runtime plugin can reach OpenCode TUI APIs, `/enhance` clears the current prompt box and inserts the expanded XML prompt there (instead of appending the slash-command expansion to chat history). This lets you review/edit before sending.
+
+If TUI rewrite APIs are unavailable or fail in the current runtime, vvoc falls back to default OpenCode command behavior and `/enhance` submits normally.
+
 The raw request is preserved inside `command.enhance` as a CDATA payload, so multi-word input is passed through without hand-writing the XML envelope yourself.
 
 The OpenCode config entry written by `install` looks like this:
@@ -67,7 +71,7 @@ The OpenCode config entry written by `install` looks like this:
 }
 ```
 
-That package entry points at the package root, which exports `GuardianPlugin`, `MemoryPlugin`, and `SecretsRedactionPlugin`.
+That package entry points at the package root, which exports `GuardianPlugin`, `MemoryPlugin`, `EnhanceCommandPlugin`, and `SecretsRedactionPlugin`.
 
 ## Common Workflows
 
@@ -368,6 +372,7 @@ Root exports:
 import {
   GuardianPlugin,
   MemoryPlugin,
+  EnhanceCommandPlugin,
   SecretsRedactionPlugin,
 } from "@osovv/vv-opencode";
 ```
@@ -377,6 +382,7 @@ Subpath exports:
 ```ts
 import { GuardianPlugin } from "@osovv/vv-opencode/plugins/guardian";
 import { MemoryPlugin } from "@osovv/vv-opencode/plugins/memory";
+import { EnhanceCommandPlugin } from "@osovv/vv-opencode/plugins/enhance";
 import { SecretsRedactionPlugin } from "@osovv/vv-opencode/plugins/secrets-redaction";
 ```
 
