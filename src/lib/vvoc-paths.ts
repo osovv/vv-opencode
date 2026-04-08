@@ -1,8 +1,8 @@
 // FILE: src/lib/vvoc-paths.ts
-// VERSION: 0.2.6
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and project-local conventions.
-//   SCOPE: XDG config/data home lookup, vvoc root derivation, managed agent directory resolution, and deterministic project data directory naming.
+//   SCOPE: XDG config/data home lookup, canonical vvoc config path derivation, managed agent directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-MEMORY-STORE, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -14,7 +14,9 @@
 //   getConfigHome - Resolves the effective XDG config home.
 //   getDataHome - Resolves the effective XDG data home.
 //   getGlobalOpencodeDir - Resolves the global OpenCode config directory.
+//   VVOC_CONFIG_FILE_NAME - Canonical vvoc config file name.
 //   getGlobalVvocDir - Resolves the global vvoc config directory.
+//   getGlobalVvocConfigPath - Resolves the canonical global vvoc config file path.
 //   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getGlobalVvocDataDir - Resolves the global vvoc data directory.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
@@ -23,7 +25,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added a shared helper for managed vvoc subagent prompt directories.]
+//   LAST_CHANGE: [v0.3.0 - Added the canonical global vvoc config file path helper for vvoc.json.]
 // END_CHANGE_SUMMARY
 
 import { homedir } from "node:os";
@@ -31,6 +33,7 @@ import { basename, join, resolve } from "node:path";
 import crypto from "node:crypto";
 
 export const VVOC_DIRECTORY_NAME = ".vvoc";
+export const VVOC_CONFIG_FILE_NAME = "vvoc.json";
 
 export function getConfigHome(configHomeOverride?: string): string {
   if (typeof configHomeOverride === "string" && configHomeOverride.trim()) {
@@ -62,6 +65,10 @@ export function getGlobalOpencodeDir(configHomeOverride?: string): string {
 
 export function getGlobalVvocDir(configHomeOverride?: string): string {
   return join(getConfigHome(configHomeOverride), "vvoc");
+}
+
+export function getGlobalVvocConfigPath(configHomeOverride?: string): string {
+  return join(getGlobalVvocDir(configHomeOverride), VVOC_CONFIG_FILE_NAME);
 }
 
 export function getVvocAgentsDir(vvocDir: string): string {

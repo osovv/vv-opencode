@@ -190,7 +190,7 @@ function getMemoryConfigWarningLines(memoryConfig: MemoryRuntimeConfig): string[
 // START_BLOCK_VALIDATE_MEMORY_ENABLED
 function assertEnabled(memoryConfig: MemoryRuntimeConfig): void {
   if (!memoryConfig.enabled) {
-    throw new Error("vvoc memory is disabled in memory.jsonc");
+    throw new Error("vvoc memory is disabled in vvoc.json");
   }
 }
 // END_BLOCK_VALIDATE_MEMORY_ENABLED

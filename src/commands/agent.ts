@@ -1,9 +1,9 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
-//   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
-//   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/plugins/memory-store.ts]
+//   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
+//   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Added the managed enhancer primary agent to vvoc agent model management commands.]
+//   LAST_CHANGE: [v0.6.0 - Switched guardian and memory-reviewer model overrides to the canonical vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -26,16 +26,17 @@ import {
 import {
   describeWriteResult,
   installManagedAgentPrompts,
-  parseGuardianConfigText,
   readOpenCodeAgentModel,
   readManagedAgentModels,
-  renderGuardianConfig,
+  readVvocConfig,
   resolvePaths,
   type Scope,
+  writeGuardianConfig,
   writeManagedAgentModel,
+  writeMemoryConfig,
   writeOpenCodeAgentModel,
 } from "../lib/opencode.js";
-import { parseMemoryConfigText, renderMemoryConfig } from "../plugins/memory-store.js";
+import { createGuardianConfig, createMemoryConfig } from "../lib/vvoc-config.js";
 
 const SPECIAL_AGENT_NAMES = ["guardian", "memory-reviewer"] as const;
 type SpecialAgentName = (typeof SPECIAL_AGENT_NAMES)[number];
@@ -176,25 +177,15 @@ const agentList = defineCommand({
     const scope = resolveScope(args.scope);
     const paths = await resolveCommandPaths(args);
 
-    const guardianText = await Bun.file(paths.guardianConfigPath)
-      .text()
-      .catch(() => "");
-    const memoryText = await Bun.file(paths.memoryConfigPath)
-      .text()
-      .catch(() => "");
-
-    const guardianConfig = guardianText
-      ? parseGuardianConfigText(guardianText, paths.guardianConfigPath)
-      : {};
-    const memoryConfig = memoryText
-      ? parseMemoryConfigText(memoryText, paths.memoryConfigPath)
-      : {};
+    const vvocConfig = await readVvocConfig(paths);
+    const guardianConfig = vvocConfig?.guardian;
+    const memoryConfig = vvocConfig?.memory;
     const managedModels = await readManagedAgentModels(paths);
 
     console.log(`Agent models (${scope}):`);
-    console.log(`  guardian: ${formatAgentModel(guardianConfig.model, guardianConfig.variant)}`);
+    console.log(`  guardian: ${formatAgentModel(guardianConfig?.model, guardianConfig?.variant)}`);
     console.log(
-      `  memory-reviewer: ${formatAgentModel(memoryConfig.reviewerModel, memoryConfig.reviewerVariant)}`,
+      `  memory-reviewer: ${formatAgentModel(memoryConfig?.reviewerModel, memoryConfig?.reviewerVariant)}`,
     );
 
     for (const agentName of CONFIGURABLE_OPENCODE_SUBAGENTS) {
@@ -225,46 +216,15 @@ async function setGuardianModelOverride(
   value: unknown,
 ) {
   const { model, variant } = parseGuardianStyleModelArg(value, "set");
-  const currentText = await Bun.file(paths.guardianConfigPath)
-    .text()
-    .catch(() => "");
-  const current = currentText ? parseGuardianConfigText(currentText, paths.guardianConfigPath) : {};
-  const nextText = renderGuardianConfig({ ...current, model, variant });
-
-  if (currentText.trim() === nextText.trim()) {
-    console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
-    return;
-  }
-
-  await Bun.write(paths.guardianConfigPath, nextText);
-  console.log(
-    describeWriteResult({
-      action: currentText ? "updated" : "created",
-      path: paths.guardianConfigPath,
-    }),
-  );
+  const result = await writeGuardianConfig(paths, { model, variant }, { merge: true });
+  console.log(describeWriteResult(result));
 }
 
 async function unsetGuardianModelOverride(paths: Awaited<ReturnType<typeof resolveCommandPaths>>) {
-  const currentText = await Bun.file(paths.guardianConfigPath)
-    .text()
-    .catch(() => "");
-  if (!currentText) {
-    console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
-    return;
-  }
-
-  const current = parseGuardianConfigText(currentText, paths.guardianConfigPath);
-  const { model: _model, variant: _variant, ...rest } = current;
-  const nextText = renderGuardianConfig(rest);
-
-  if (currentText.trim() === nextText.trim()) {
-    console.log(describeWriteResult({ action: "kept", path: paths.guardianConfigPath }));
-    return;
-  }
-
-  await Bun.write(paths.guardianConfigPath, nextText);
-  console.log(describeWriteResult({ action: "updated", path: paths.guardianConfigPath }));
+  const currentGuardian = (await readVvocConfig(paths))?.guardian ?? createGuardianConfig();
+  const { model: _model, variant: _variant, ...rest } = currentGuardian;
+  const result = await writeGuardianConfig(paths, rest);
+  console.log(describeWriteResult(result));
 }
 
 async function setMemoryReviewerModelOverride(
@@ -272,55 +232,25 @@ async function setMemoryReviewerModelOverride(
   value: unknown,
 ) {
   const { model, variant } = parseGuardianStyleModelArg(value, "set");
-  const currentText = await Bun.file(paths.memoryConfigPath)
-    .text()
-    .catch(() => "");
-  const current = currentText ? parseMemoryConfigText(currentText, paths.memoryConfigPath) : {};
-  const nextText = renderMemoryConfig({
-    enabled: current.enabled ?? true,
-    defaultSearchLimit: current.defaultSearchLimit,
-    reviewerModel: model,
-    reviewerVariant: variant,
-  });
-
-  if (currentText.trim() === nextText.trim()) {
-    console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
-    return;
-  }
-
-  await Bun.write(paths.memoryConfigPath, nextText);
-  console.log(
-    describeWriteResult({
-      action: currentText ? "updated" : "created",
-      path: paths.memoryConfigPath,
-    }),
+  const result = await writeMemoryConfig(
+    paths,
+    { reviewerModel: model, reviewerVariant: variant },
+    { merge: true },
   );
+  console.log(describeWriteResult(result));
 }
 
 async function unsetMemoryReviewerModelOverride(
   paths: Awaited<ReturnType<typeof resolveCommandPaths>>,
 ) {
-  const currentText = await Bun.file(paths.memoryConfigPath)
-    .text()
-    .catch(() => "");
-  if (!currentText) {
-    console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
-    return;
-  }
-
-  const current = parseMemoryConfigText(currentText, paths.memoryConfigPath);
-  const nextText = renderMemoryConfig({
-    enabled: current.enabled ?? true,
-    defaultSearchLimit: current.defaultSearchLimit,
-  });
-
-  if (currentText.trim() === nextText.trim()) {
-    console.log(describeWriteResult({ action: "kept", path: paths.memoryConfigPath }));
-    return;
-  }
-
-  await Bun.write(paths.memoryConfigPath, nextText);
-  console.log(describeWriteResult({ action: "updated", path: paths.memoryConfigPath }));
+  const currentMemory = (await readVvocConfig(paths))?.memory ?? createMemoryConfig();
+  const {
+    reviewerModel: _reviewerModel,
+    reviewerVariant: _reviewerVariant,
+    ...rest
+  } = currentMemory;
+  const result = await writeMemoryConfig(paths, rest);
+  console.log(describeWriteResult(result));
 }
 
 function resolveScope(value: unknown): Scope {

@@ -11,16 +11,16 @@
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User runs `vvoc init` to bootstrap the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed enhancer agent and managed subagents are registered in OpenCode config, and initial Guardian, memory-reviewer, and managed agent prompt files live under the vvoc config root.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed enhancer agent and managed subagents are registered in OpenCode config, managed prompts exist in the scope-correct agents directory, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded.</expected-outcome>
       <required-signals>
-        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedAgentRegistrations -&gt; installManagedAgentPrompts -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
+        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedAgentRegistrations -&gt; installManagedAgentPrompts -&gt; installVvocConfig -&gt; status reports configured</trace-sequence>
       </required-signals>
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Managed config and prompt files are rewritten canonically, the managed enhancer/subagent registration stays present in OpenCode config, and current explicit values survive the rewrite where applicable.</expected-outcome>
+      <expected-outcome>Canonical vvoc.json and managed prompt files are rewritten canonically, the managed enhancer/subagent registration stays present in OpenCode config, and current explicit values survive the vvoc.json rewrite where applicable.</expected-outcome>
       <required-signals>
-        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC/markdown -&gt; syncManagedAgentRegistrations</trace-sequence>
+        <trace-sequence>inspect canonical config -&gt; parse current values -&gt; render canonical JSON/markdown -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
     <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-001" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
@@ -79,15 +79,15 @@
       <scenarios>
         <scenario-1 kind="success">Fresh install config renders with schema and a pinned vvoc package specifier in the plugin array.</scenario-1>
         <scenario-2 kind="success">Existing JSONC comments survive plugin insertion.</scenario-2>
-        <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
-        <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
+        <scenario-3 kind="success">Guardian section rendering round-trips explicit override values.</scenario-3>
+        <scenario-4 kind="success">Global path resolution separates `opencode/` from the canonical `vvoc/vvoc.json` path while project scope still uses `./.vvoc/agents/` for prompts.</scenario-4>
         <scenario-5 kind="success">Managed enhancer/subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references and correct `primary` versus `subagent` modes.</scenario-5>
-        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, enhancer, and the vvoc subagents are scaffolded under the vvoc config root, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
+        <scenario-6 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, managed prompt files are scaffolded in the scope-correct agents directory, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
         <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
-        <assertion-1>Sync must not overwrite unmanaged Guardian config without force.</assertion-1>
+        <assertion-1>Sync must rewrite the canonical vvoc.json file instead of depending on separate guardian, memory, or secrets-redaction config files.</assertion-1>
       </required-trace-assertions>
       <wave-follow-up>Smoke command output for `status` and `doctor` after build.</wave-follow-up>
       <phase-follow-up>Extend tests to cover more path and scope permutations.</phase-follow-up>
@@ -105,7 +105,7 @@
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version` and `path-provider`.</scenario-1>
-        <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
+        <scenario-2 kind="success">`guardian config --print` emits valid guardian section JSON content.</scenario-2>
         <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, the built-in `general` and `explore` agents, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
       <required-log-markers />
@@ -221,7 +221,7 @@
         <scenario-1 kind="success">Plugin exports compile against current OpenCode plugin and SDK types.</scenario-1>
         <scenario-2 kind="success">Placeholders are stable within a session (same secret maps to same placeholder).</scenario-2>
         <scenario-3 kind="success">Builtin patterns detect email, uuid, ipv4, mac, openai_key, anthropic_key, github_token, aws_access_key, stripe_key, bearer_token, bearer_dot, syn_key, hex_token.</scenario-3>
-        <scenario-4 kind="success">Config file loads from $XDG_CONFIG_HOME/vvoc/secrets-redaction.config.json.</scenario-4>
+        <scenario-4 kind="success">Secrets-redaction config loads from the `secretsRedaction` section in $XDG_CONFIG_HOME/vvoc/vvoc.json.</scenario-4>
         <scenario-5 kind="failure">Disabled config makes plugin a no-op.</scenario-5>
         <scenario-6 kind="success">A user text part containing a builtin secret such as an email is replaced with a `__VVOC_SECRET_*` placeholder before model message conversion.</scenario-6>
         <scenario-7 kind="success">Exact placeholders are restored in assistant text completions and tool arguments before they reach the user or the tool runtime.</scenario-7>
@@ -249,9 +249,9 @@
         <check-3>bun run build</check-3>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Valid guardian.jsonc and memory.jsonc both report OK.</scenario-1>
-        <scenario-2 kind="failure">Invalid JSONC reports parse error with line/column.</scenario-2>
-        <scenario-3 kind="failure">Missing required field reports field name and expected type.</scenario-3>
+        <scenario-1 kind="success">A fully seeded canonical vvoc.json reports OK.</scenario-1>
+        <scenario-2 kind="failure">Invalid JSON reports parse error with line/column.</scenario-2>
+        <scenario-3 kind="failure">Missing required section or invalid field type reports the schema path and error.</scenario-3>
       </scenarios>
       <required-log-markers />
       <wave-follow-up>Run against real config files in the repository.</wave-follow-up>
@@ -331,8 +331,8 @@
       <scenarios>
         <scenario-1 kind="success">Interactive prompts are shown when TTY is available.</scenario-1>
         <scenario-2 kind="success">Ctrl+C aborts cleanly without partial file writes.</scenario-2>
-        <scenario-3 kind="success">Re-running init does not clobber existing valid config.</scenario-3>
-        <scenario-4 kind="success">Generated configs are valid JSONC with correct schema.</scenario-4>
+        <scenario-3 kind="success">Re-running init does not require legacy per-feature config files and does not clobber existing valid canonical config.</scenario-3>
+        <scenario-4 kind="success">Generated canonical config is valid JSON with the correct versioned schema URL.</scenario-4>
         <scenario-5 kind="success">Non-interactive init seeds the managed `enhancer` primary agent alongside the managed subagent registrations.</scenario-5>
       </scenarios>
       <required-log-markers />

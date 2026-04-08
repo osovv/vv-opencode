@@ -1,8 +1,8 @@
 // FILE: src/commands/guardian.ts
-// VERSION: 0.2.5
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Expose Guardian-specific vvoc CLI helpers.
-//   SCOPE: Guardian config command wiring plus CLI argument normalization for Guardian config values.
+//   PURPOSE: Expose Guardian-specific vvoc CLI helpers backed by the canonical vvoc.json config file.
+//   SCOPE: Guardian config command wiring plus CLI argument normalization for guardian section values.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE command markup around Guardian CLI helpers and argument normalization.]
+//   LAST_CHANGE: [v0.3.0 - Switched Guardian config writes to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -30,7 +30,7 @@ import {
 const config = defineCommand({
   meta: {
     name: "config",
-    description: "Write or print guardian.jsonc.",
+    description: "Write or print the guardian section of vvoc.json.",
   },
   args: {
     scope: {
@@ -42,10 +42,6 @@ const config = defineCommand({
     "config-dir": {
       type: "string",
       description: "Override the global config home used for opencode/ and vvoc/.",
-    },
-    force: {
-      type: "boolean",
-      description: "Allow overwriting an unmanaged guardian config.",
     },
     print: {
       type: "boolean",
@@ -87,12 +83,9 @@ const config = defineCommand({
       cwd: process.cwd(),
       configDir,
     });
-    const result = await writeGuardianConfig(paths, overrides, { force: Boolean(args.force) });
+    const result = await writeGuardianConfig(paths, overrides);
 
     console.log(describeWriteResult(result));
-    if (result.action === "skipped") {
-      process.exitCode = 1;
-    }
     // END_BLOCK_APPLY_GUARDIAN_CONFIG_COMMAND
   },
 });

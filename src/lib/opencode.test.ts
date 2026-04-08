@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.5.1
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
-//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, OpenCode agent model overrides, Guardian config round-trips, and path resolution behavior.
+//   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
+//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.1 - Updated enhancer prompt scaffolding coverage to require semantically unique repeated XML tags.]
+//   LAST_CHANGE: [v0.6.0 - Added coverage for the canonical vvoc.json config path and unified config writes.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -33,16 +33,21 @@ import {
   ensurePackageConfigText,
   ensureProviderBaseUrlConfigText,
   ensureManagedAgentRegistrationsConfigText,
+  installVvocConfig,
   installManagedAgentPrompts,
   parseGuardianConfigText,
+  readVvocConfig,
   readOpenCodeAgentModel,
   readManagedAgentModels,
   renderGuardianConfig,
   resolvePaths,
+  writeGuardianConfig,
+  writeMemoryConfig,
   writeOpenCodeAgentModel,
   writeProviderBaseUrl,
   writeManagedAgentModel,
 } from "./opencode.js";
+import { VVOC_CONFIG_SCHEMA_URL } from "./vvoc-config.js";
 
 describe("ensurePackageConfigText", () => {
   test("creates a new config when none exists", () => {
@@ -94,6 +99,60 @@ describe("guardian config helpers", () => {
       approvalRiskThreshold: 55,
       reviewToastDurationMs: 6_789,
     });
+  });
+});
+
+describe("canonical vvoc config helpers", () => {
+  test("ships a versioned schema file at the canonical hosted URL", async () => {
+    const schemaText = await readFile(
+      new URL("../../schemas/vvoc/v1.json", import.meta.url),
+      "utf8",
+    );
+    const schema = JSON.parse(schemaText) as {
+      $id?: string;
+      properties?: { version?: { const?: number } };
+    };
+
+    expect(schema.$id).toBe(VVOC_CONFIG_SCHEMA_URL);
+    expect(schema.properties?.version?.const).toBe(1);
+  });
+
+  test("installVvocConfig creates a fully seeded canonical config and preserves other sections", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-canonical-config-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      const installResult = await installVvocConfig(paths);
+      expect(installResult.action).toBe("created");
+
+      const memoryResult = await writeMemoryConfig(paths, {
+        enabled: false,
+        defaultSearchLimit: 12,
+      });
+      expect(memoryResult.action).toBe("updated");
+
+      const guardianResult = await writeGuardianConfig(
+        paths,
+        { model: "anthropic/claude-sonnet-4-5", variant: "high" },
+        { merge: true },
+      );
+      expect(guardianResult.action).toBe("updated");
+
+      const config = await readVvocConfig(paths);
+
+      expect(config?.guardian.model).toBe("anthropic/claude-sonnet-4-5");
+      expect(config?.guardian.variant).toBe("high");
+      expect(config?.memory.enabled).toBe(false);
+      expect(config?.memory.defaultSearchLimit).toBe(12);
+      expect(config?.secretsRedaction.secret).toBe("${VVOC_SECRET}");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
   });
 });
 
@@ -323,22 +382,21 @@ describe("resolvePaths", () => {
     expect(paths.configHome).toBe("/tmp/vvoc-config-home");
     expect(paths.opencodeBaseDir).toBe("/tmp/vvoc-config-home/opencode");
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
+    expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
-    expect(paths.guardianConfigPath).toBe("/tmp/vvoc-config-home/vvoc/guardian.jsonc");
-    expect(paths.memoryConfigPath).toBe("/tmp/vvoc-config-home/vvoc/memory.jsonc");
   });
 
-  test("uses .vvoc for project-scoped vvoc config", async () => {
+  test("keeps project prompts in .vvoc but canonical config global", async () => {
     const paths = await resolvePaths({
       scope: "project",
       cwd: "/workspace/project",
+      configDir: "/tmp/vvoc-config-home",
     });
 
     expect(paths.opencodeBaseDir).toBe("/workspace/project");
-    expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
+    expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
+    expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
-    expect(paths.guardianConfigPath).toBe("/workspace/project/.vvoc/guardian.jsonc");
-    expect(paths.memoryConfigPath).toBe("/workspace/project/.vvoc/memory.jsonc");
   });
 });

@@ -46,8 +46,8 @@ vvoc install --scope project
 - adds a pinned `@osovv/vv-opencode@<installed-version>` entry to the OpenCode `plugin` array
 - registers vvoc-managed OpenCode agents, including the primary `enhancer` agent
 - creates managed prompt files under `vvoc/agents/` when missing
-- creates `guardian.jsonc`, `memory.jsonc`, and `secrets-redaction.config.json` when missing
-- keeps vvoc-managed config separate from native OpenCode config
+- creates and fully seeds the canonical `vvoc.json` file at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
+- keeps vvoc-managed config in one canonical file separate from native OpenCode config
 - leaves unmanaged files alone unless `--force` is passed
 
 For conversational meta-prompting, use the managed `enhancer` primary agent. It can ask follow-up questions and then return a clean XML prompt in English with semantically unique repeated tags such as `<constraint-1>...</constraint-1>` and `<verification-check-2>...</verification-check-2>`.
@@ -101,9 +101,11 @@ vvoc install --config-dir /tmp/vvoc-home
 
 When `--config-dir` is used for global scope, `vvoc` writes under the supplied root for both `opencode/` and `vvoc/`.
 
+Regardless of scope, vvoc-owned settings are written to the canonical `vvoc.json` file under the effective XDG config root.
+
 ### Sync Managed Files
 
-Refresh the pinned package entry, managed agent registrations, managed prompt files, and managed `guardian.jsonc` / `memory.jsonc` files:
+Refresh the pinned package entry, managed agent registrations, managed prompt files, and the canonical `vvoc.json` file:
 
 ```bash
 vvoc sync
@@ -120,15 +122,7 @@ vvoc config validate
 
 - `status` shows the current installation state
 - `doctor` reports parse problems and missing required setup
-- `config validate` validates `guardian.jsonc` and `memory.jsonc` in global, project, or both scopes
-
-Validate a specific scope or config type:
-
-```bash
-vvoc config validate --scope global
-vvoc config validate --scope project --guardian-only
-vvoc config validate --scope project --memory-only
-```
+- `config validate` validates `$XDG_CONFIG_HOME/vvoc/vvoc.json` against the versioned vvoc JSON Schema
 
 ### Manage Agent Models
 
@@ -202,8 +196,8 @@ vvoc version
 | `vvoc status` | Show current installation state |
 | `vvoc doctor` | Diagnose setup problems |
 | `vvoc agent list/set/unset` | Manage model overrides |
-| `vvoc guardian config` | Print or write `guardian.jsonc` |
-| `vvoc config validate` | Validate `guardian.jsonc` and `memory.jsonc` |
+| `vvoc guardian config` | Print or write the `guardian` section of `vvoc.json` |
+| `vvoc config validate` | Validate canonical `vvoc.json` |
 | `vvoc plugin list` | List OpenCode plugins from config |
 | `vvoc path-provider stepfun-ai` | Patch a global provider endpoint preset |
 | `vvoc completion` | Install shell completions |
@@ -217,10 +211,11 @@ OpenCode config stays in OpenCode-managed paths:
 - global: `$XDG_CONFIG_HOME/opencode/opencode.json` or `~/.config/opencode/opencode.json`
 - project: `./opencode.json` or `./opencode.jsonc`
 
-vvoc-managed config stays separate:
+vvoc-managed config stays separate from OpenCode config and now has one canonical file:
 
-- global: `$XDG_CONFIG_HOME/vvoc/` or `~/.config/vvoc/`
-- project: `./.vvoc/`
+- canonical config: `$XDG_CONFIG_HOME/vvoc/vvoc.json` or `~/.config/vvoc/vvoc.json`
+
+Project scope still uses `./.vvoc/agents/` for managed prompt files, but vvoc's own settings always live in the canonical global config file.
 
 Persisted vvoc data lives under the XDG data root:
 
@@ -233,20 +228,29 @@ Managed prompt files live here:
 - global: `~/.config/vvoc/agents/*.md`
 - project: `./.vvoc/agents/*.md`
 
-Common managed config files:
-
-- global Guardian config: `~/.config/vvoc/guardian.jsonc`
-- project Guardian config: `./.vvoc/guardian.jsonc`
-- global Memory config: `~/.config/vvoc/memory.jsonc`
-- project Memory config: `./.vvoc/memory.jsonc`
-- global Secrets Redaction config: `~/.config/vvoc/secrets-redaction.config.json`
-- project Secrets Redaction config: `./.vvoc/secrets-redaction.config.json`
-
 Scope rules:
 
-- project config overrides global config for vvoc-managed settings
-- managed files include a marker header so `vvoc` can recognize them safely
-- existing unmanaged files are not rewritten unless `--force` is passed
+- vvoc settings are always read from the canonical global `vvoc.json` file
+- project scope only changes the OpenCode config target and the managed prompt directory
+- existing unmanaged prompt files are not rewritten unless `--force` is passed
+
+## JSON Schema
+
+`vvoc.json` includes a versioned `$schema` URL:
+
+```json
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v1.json",
+  "version": 1
+}
+```
+
+Schema source of truth and hosting strategy:
+
+- the schema is checked into this repository at `schemas/vvoc/v1.json`
+- the package publishes that file to npm by shipping the `schemas/` directory
+- the canonical hosted schema URL is version-pinned: `https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v1.json`
+- `v1.json` is immutable once published; breaking schema changes must ship as `v2.json` instead of rewriting `v1.json`
 
 ## Plugins Included
 
@@ -254,7 +258,7 @@ Scope rules:
 
 `GuardianPlugin` reviews OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
 
-Generate or rewrite a managed `guardian.jsonc` file:
+Print or rewrite the `guardian` section of canonical `vvoc.json`:
 
 ```bash
 vvoc guardian config --print
@@ -269,7 +273,7 @@ Supported Guardian config fields:
 - `approvalRiskThreshold`
 - `reviewToastDurationMs`
 
-`guardian.jsonc` is only auto-rewritten when it is clearly vvoc-managed, unless you pass `--force`.
+The `guardian` section lives under `$XDG_CONFIG_HOME/vvoc/vvoc.json`.
 
 ### MemoryPlugin
 
@@ -288,7 +292,7 @@ Memory is explicit-only:
 
 - stored entries are never injected into the prompt automatically
 - the agent must call memory tools directly when durable context is useful
-- settings live in `./.vvoc/memory.jsonc` or `$XDG_CONFIG_HOME/vvoc/memory.jsonc`
+- settings live in `$XDG_CONFIG_HOME/vvoc/vvoc.json` under the `memory` section
 
 Supported scopes:
 
@@ -297,7 +301,7 @@ Supported scopes:
 - `project` for repository-specific memory
 - `shared` for cross-project memory
 
-`memory.jsonc` supports these fields:
+The `memory` section supports these fields:
 
 - `enabled`
 - `defaultSearchLimit`
@@ -326,7 +330,7 @@ The plugin currently injects guidance through the `chat.message` hook so it can 
 
 `SecretsRedactionPlugin` redacts secrets from chat content before LLM requests and restores placeholders after the request lifecycle where needed.
 
-`vvoc install` scaffolds a managed `secrets-redaction.config.json` file. The generated config uses:
+`vvoc install` and `vvoc sync` seed the `secretsRedaction` section in canonical `vvoc.json`. The generated config uses:
 
 ```json
 {
@@ -336,7 +340,7 @@ The plugin currently injects guidance through the `chat.message` hook so it can 
 
 Set `VVOC_SECRET` if you want placeholder restoration to stay stable across restarts.
 
-If no config file exists, the plugin falls back to defaults and generates a random secret for the current runtime.
+If no canonical config file exists, the plugin falls back to defaults and generates a random secret for the current runtime.
 
 Built-in patterns cover common identifiers and tokens such as:
 

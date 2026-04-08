@@ -1,8 +1,8 @@
 // FILE: src/commands/sync.ts
-// VERSION: 0.2.9
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Sync managed vvoc config files and keep the OpenCode plugin specifier current.
-//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, and managed Guardian/Memory config rewrites.
+//   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep the OpenCode plugin specifier current.
+//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, and canonical vvoc config rewrite.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.9 - Removed legacy enhance command syncing and kept enhancer as the managed primary agent path.]
+//   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config syncing with canonical vvoc.json refresh.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -24,8 +24,7 @@ import {
   resolvePaths,
   syncManagedAgentPrompts,
   syncManagedAgentRegistrations,
-  syncGuardianConfig,
-  syncMemoryConfig,
+  syncVvocConfig,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -47,7 +46,7 @@ export default defineCommand({
     },
     force: {
       type: "boolean",
-      description: "Allow rewriting unmanaged vvoc config files.",
+      description: "Allow rewriting unmanaged managed-prompt files.",
     },
   },
   async run({ args }) {
@@ -62,8 +61,7 @@ export default defineCommand({
     const opencode = await ensurePackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
-    const guardian = await syncGuardianConfig(paths, { force: Boolean(args.force) });
-    const memory = await syncMemoryConfig(paths, { force: Boolean(args.force) });
+    const vvocConfig = await syncVvocConfig(paths);
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
     console.log(
@@ -72,8 +70,7 @@ export default defineCommand({
     for (const result of managedPrompts) {
       console.log(describeWriteResult(result));
     }
-    console.log(describeWriteResult(guardian));
-    console.log(describeWriteResult(memory));
+    console.log(describeWriteResult(vvocConfig));
     // END_BLOCK_APPLY_SYNC_COMMAND
   },
 });

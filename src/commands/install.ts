@@ -1,8 +1,8 @@
 // FILE: src/commands/install.ts
-// VERSION: 0.2.9
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Install vv-opencode into OpenCode config and bootstrap vvoc-managed config files.
-//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, and initial Guardian/Memory config creation.
+//   PURPOSE: Install vv-opencode into OpenCode config and bootstrap the canonical vvoc.json config plus managed prompts.
+//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, and canonical vvoc config creation.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,17 +14,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.9 - Removed legacy enhance command installation and kept enhancer as the managed primary agent path.]
+//   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config scaffolding with canonical vvoc.json creation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
   describeWriteResult,
   ensurePackageInstalled,
-  installGuardianConfig,
   installManagedAgentPrompts,
-  installMemoryConfig,
-  installSecretsRedactionConfig,
+  installVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
   type Scope,
@@ -48,22 +46,7 @@ export default defineCommand({
     },
     force: {
       type: "boolean",
-      description: "Allow overwriting an existing guardian config when needed.",
-    },
-    "guardian-config": {
-      type: "boolean",
-      default: true,
-      description: "Create guardian.jsonc when missing.",
-    },
-    "memory-config": {
-      type: "boolean",
-      default: true,
-      description: "Create memory.jsonc when missing.",
-    },
-    "secrets-redaction-config": {
-      type: "boolean",
-      default: true,
-      description: "Create secrets-redaction.config.json when missing.",
+      description: "Allow overwriting managed prompt files when needed.",
     },
   },
   async run({ args }) {
@@ -89,30 +72,8 @@ export default defineCommand({
       console.log(describeWriteResult(result));
     }
 
-    if (args["guardian-config"] === false) {
-      console.log(`Skipped ${paths.guardianConfigPath} (guardian config disabled)`);
-    } else {
-      const guardian = await installGuardianConfig(paths, { force: Boolean(args.force) });
-      console.log(describeWriteResult(guardian));
-    }
-
-    if (args["memory-config"] === false) {
-      console.log(`Skipped ${paths.memoryConfigPath} (memory config disabled)`);
-    } else {
-      const memory = await installMemoryConfig(paths, { force: Boolean(args.force) });
-      console.log(describeWriteResult(memory));
-    }
-
-    if (args["secrets-redaction-config"] === false) {
-      console.log(
-        `Skipped ${paths.secretsRedactionConfigPath} (secrets-redaction config disabled)`,
-      );
-    } else {
-      const secretsRedaction = await installSecretsRedactionConfig(paths, {
-        force: Boolean(args.force),
-      });
-      console.log(describeWriteResult(secretsRedaction));
-    }
+    const vvocConfig = await installVvocConfig(paths);
+    console.log(describeWriteResult(vvocConfig));
     // END_BLOCK_APPLY_INSTALL_COMMAND
   },
 });

@@ -1,9 +1,9 @@
 // FILE: src/plugins/guardian/guardian.ts
-// VERSION: 0.2.7
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
-//   SCOPE: Guardian runtime config loading, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
-//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
+//   SCOPE: Guardian runtime config loading from canonical vvoc.json, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
+//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,28 +14,29 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.7 - Registered Guardian as a hidden subagent while preserving its explicit two-step limit.]
+//   LAST_CHANGE: [v0.3.0 - Switched Guardian runtime config loading to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import type { Message, Part } from "@opencode-ai/sdk";
 import { appendFile, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
 import { loadManagedAgentPromptText } from "../../lib/managed-agents.js";
-import { getGlobalVvocDir, getProjectVvocDir } from "../../lib/vvoc-paths.js";
+import {
+  createGuardianConfig,
+  loadLenientVvocConfigText,
+  type GuardianConfigOverrides,
+} from "../../lib/vvoc-config.js";
+import { getGlobalVvocConfigPath } from "../../lib/vvoc-paths.js";
 
 const GUARDIAN_AGENT = "guardian";
 const GUARDIAN_DISABLED_ENV = "OPENCODE_GUARDIAN_DISABLED";
 const GUARDIAN_RUN_DIRECTORY = "/tmp";
-const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
-const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
 const GUARDIAN_DEBUG_LOG_PATH = "/tmp/opencode-guardian-debug.log";
 const GUARDIAN_MODEL_ENV = "OPENCODE_GUARDIAN_MODEL";
 const GUARDIAN_VARIANT_ENV = "OPENCODE_GUARDIAN_VARIANT";
 const GUARDIAN_TIMEOUT_MS_ENV = "OPENCODE_GUARDIAN_TIMEOUT_MS";
 const GUARDIAN_APPROVAL_RISK_THRESHOLD_ENV = "OPENCODE_GUARDIAN_APPROVAL_RISK_THRESHOLD";
 const GUARDIAN_REVIEW_TOAST_DURATION_MS_ENV = "OPENCODE_GUARDIAN_REVIEW_TOAST_DURATION_MS";
-const GUARDIAN_CONFIG_FILE_NAMES = ["guardian.jsonc", "guardian.json"] as const;
 
 const MAX_TRANSCRIPT_MESSAGES = 12;
 const MAX_TRANSCRIPT_ENTRY_CHARS = 1_500;
@@ -114,14 +115,6 @@ type GuardianRuntimeConfig = {
   warnings: string[];
 };
 
-type GuardianConfigOverrides = {
-  model?: string;
-  variant?: string;
-  timeoutMs?: number;
-  approvalRiskThreshold?: number;
-  reviewToastDurationMs?: number;
-};
-
 // START_BLOCK_GUARDIAN_AGENT_CONFIGURATION
 function createGuardianPermissionConfig() {
   return {
@@ -155,123 +148,6 @@ function createGuardianToolsConfig() {
 // END_BLOCK_GUARDIAN_AGENT_CONFIGURATION
 
 // START_BLOCK_PARSE_JSONC_UTILITIES
-function stripJsonComments(text: string): string {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-
-    if (inLineComment) {
-      if (char === "\n") {
-        inLineComment = false;
-        result += char;
-      }
-      continue;
-    }
-
-    if (inBlockComment) {
-      if (char === "*" && next === "/") {
-        inBlockComment = false;
-        index += 1;
-      }
-      continue;
-    }
-
-    if (inString) {
-      result += char;
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      result += char;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      inLineComment = true;
-      index += 1;
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      inBlockComment = true;
-      index += 1;
-      continue;
-    }
-
-    result += char;
-  }
-
-  return result;
-}
-
-function stripTrailingCommas(text: string): string {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-
-    if (inString) {
-      result += char;
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      result += char;
-      continue;
-    }
-
-    if (char === ",") {
-      let lookahead = index + 1;
-      while (lookahead < text.length && /\s/.test(text[lookahead])) {
-        lookahead += 1;
-      }
-      if (text[lookahead] === "}" || text[lookahead] === "]") {
-        continue;
-      }
-    }
-
-    result += char;
-  }
-
-  return result;
-}
-
-function parseJsonc(text: string): unknown {
-  return JSON.parse(stripTrailingCommas(stripJsonComments(text)));
-}
-
 function parsePositiveInteger(value: unknown, fallback: number | undefined): number | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return Math.round(value);
@@ -306,108 +182,6 @@ function readStringOverride(value: unknown): string | undefined {
 // END_BLOCK_PARSE_JSONC_UTILITIES
 
 // START_BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG
-function normalizeGuardianConfigOverrides(
-  source: string,
-  raw: unknown,
-  warnings: string[],
-): GuardianConfigOverrides {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    warnings.push(`${source}: expected an object`);
-    return {};
-  }
-
-  const record = raw as Record<string, unknown>;
-  const overrides: GuardianConfigOverrides = {};
-
-  const model = readStringOverride(record.model);
-  if ("model" in record) {
-    if (model) {
-      overrides.model = model;
-    } else {
-      warnings.push(`${source}: ignored invalid "model" value`);
-    }
-  }
-
-  const variant = readStringOverride(record.variant);
-  if ("variant" in record) {
-    if (variant) {
-      overrides.variant = variant;
-    } else {
-      warnings.push(`${source}: ignored invalid "variant" value`);
-    }
-  }
-
-  if ("timeoutMs" in record) {
-    const timeoutMs = parsePositiveInteger(record.timeoutMs, undefined);
-    if (timeoutMs) {
-      overrides.timeoutMs = timeoutMs;
-    } else {
-      warnings.push(`${source}: ignored invalid "timeoutMs" value`);
-    }
-  }
-
-  if ("approvalRiskThreshold" in record) {
-    const approvalRiskThreshold = parseThreshold(record.approvalRiskThreshold, undefined);
-    if (typeof approvalRiskThreshold === "number") {
-      overrides.approvalRiskThreshold = approvalRiskThreshold;
-    } else {
-      warnings.push(`${source}: ignored invalid "approvalRiskThreshold" value`);
-    }
-  }
-
-  if ("reviewToastDurationMs" in record) {
-    const reviewToastDurationMs = parsePositiveInteger(record.reviewToastDurationMs, undefined);
-    if (reviewToastDurationMs) {
-      overrides.reviewToastDurationMs = reviewToastDurationMs;
-    } else {
-      warnings.push(`${source}: ignored invalid "reviewToastDurationMs" value`);
-    }
-  }
-
-  return overrides;
-}
-
-async function loadGuardianConfigFile(
-  path: string,
-  warnings: string[],
-): Promise<GuardianConfigOverrides | undefined> {
-  let contents: string;
-  try {
-    contents = await readFile(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
-    warnings.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
-    return undefined;
-  }
-
-  try {
-    const parsed = parseJsonc(contents);
-    return normalizeGuardianConfigOverrides(path, parsed, warnings);
-  } catch (error) {
-    warnings.push(
-      `${path}: failed to parse JSONC (${error instanceof Error ? error.message : String(error)})`,
-    );
-    return undefined;
-  }
-}
-
-async function loadScopedGuardianConfig(
-  paths: string[],
-  sources: string[],
-  warnings: string[],
-): Promise<GuardianConfigOverrides> {
-  for (const path of paths) {
-    const config = await loadGuardianConfigFile(path, warnings);
-    if (!config) continue;
-    sources.push(path);
-    return config;
-  }
-
-  return {};
-}
-
 function readGuardianEnvConfig(sources: string[], warnings: string[]): GuardianConfigOverrides {
   const overrides: GuardianConfigOverrides = {};
 
@@ -470,35 +244,32 @@ function readGuardianEnvConfig(sources: string[], warnings: string[]): GuardianC
   return overrides;
 }
 
-async function loadGuardianRuntimeConfig(directory: string): Promise<GuardianRuntimeConfig> {
+async function loadGuardianRuntimeConfig(_directory: string): Promise<GuardianRuntimeConfig> {
   const sources: string[] = [];
   const warnings: string[] = [];
-  const globalConfig = await loadScopedGuardianConfig(
-    GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(getGlobalVvocDir(), name)),
-    sources,
-    warnings,
-  );
-  const projectConfig = directory
-    ? await loadScopedGuardianConfig(
-        GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(getProjectVvocDir(directory), name)),
-        sources,
-        warnings,
-      )
-    : {};
+  const configPath = getGlobalVvocConfigPath();
+  const configText = await readFile(configPath, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  });
+  const baseConfig = configText
+    ? (sources.push(configPath),
+      loadLenientVvocConfigText(configText, configPath, warnings).guardian)
+    : createGuardianConfig();
   const envConfig = readGuardianEnvConfig(sources, warnings);
-  const merged = {
-    ...globalConfig,
-    ...projectConfig,
+  const merged = createGuardianConfig({
+    ...baseConfig,
     ...envConfig,
-  };
-  const timeoutMs = merged.timeoutMs ?? DEFAULT_GUARDIAN_TIMEOUT_MS;
+  });
 
   return {
     model: merged.model,
     variant: merged.variant,
-    timeoutMs,
-    approvalRiskThreshold: merged.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD,
-    reviewToastDurationMs: merged.reviewToastDurationMs ?? timeoutMs,
+    timeoutMs: merged.timeoutMs,
+    approvalRiskThreshold: merged.approvalRiskThreshold,
+    reviewToastDurationMs: merged.reviewToastDurationMs,
     sources,
     warnings,
   };

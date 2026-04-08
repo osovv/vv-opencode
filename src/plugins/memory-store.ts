@@ -1,9 +1,9 @@
 // FILE: src/plugins/memory-store.ts
-// VERSION: 0.2.5
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Persist and query explicit vvoc memory entries across local and shared scopes.
-//   SCOPE: Memory config loading, scope-aware storage roots, CRUD operations, lexical search, and JSON-backed filesystem helpers.
-//   DEPENDS: [node:child_process, node:crypto, node:fs/promises, node:path, jsonc-parser, src/lib/vvoc-paths.ts]
+//   SCOPE: Canonical vvoc memory config loading, scope-aware storage roots, CRUD operations, lexical search, and JSON-backed filesystem helpers.
+//   DEPENDS: [node:child_process, node:crypto, node:fs/promises, node:path, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-MEMORY-STORE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -17,9 +17,9 @@
 //   MemoryRuntimeConfig - Resolved runtime config including local and shared storage roots.
 //   MemoryFilters - Shared filter shape for list/search operations.
 //   MemoryConfigOverrides - Parsed memory config override values.
-//   loadMemoryRuntimeConfig - Loads merged global/project memory settings and storage roots.
-//   parseMemoryConfigText - Parses managed memory config JSONC.
-//   renderMemoryConfig - Renders managed memory config JSONC.
+//   loadMemoryRuntimeConfig - Loads canonical vvoc memory settings and storage roots.
+//   parseMemoryConfigText - Parses a memory section JSON snippet.
+//   renderMemoryConfig - Renders a memory section JSON snippet.
 //   getDefaultSearchLimit - Returns the effective default limit for memory list/search operations.
 //   getDefaultProjectScopeKey - Returns the canonical project scope key.
 //   getDefaultSharedScopeKey - Returns the canonical shared scope fallback key.
@@ -35,27 +35,30 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE runtime markup and symbol-accurate export mapping for explicit memory storage helpers.]
+//   LAST_CHANGE: [v0.3.0 - Switched memory settings to the canonical global vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { parse, type ParseError } from "jsonc-parser";
 import {
   getGlobalVvocDataDir,
-  getGlobalVvocDir,
+  getGlobalVvocConfigPath,
   getGlobalVvocProjectDataDir,
-  getProjectVvocDir,
 } from "../lib/vvoc-paths.js";
+import {
+  createMemoryConfig,
+  loadLenientVvocConfigText,
+  parseMemoryConfigText,
+  renderMemoryConfig,
+  type MemoryConfigOverrides,
+} from "../lib/vvoc-config.js";
 
 const MEMORY_SCOPE_TYPES = ["session", "branch", "project", "shared"] as const;
 const MEMORY_SCOPE_TYPES_WITH_ALL = [...MEMORY_SCOPE_TYPES, "all"] as const;
-const DEFAULT_SEARCH_LIMIT = 8;
 const DEFAULT_PROJECT_SCOPE_KEY = "project";
 const DEFAULT_SHARED_SCOPE_KEY = "default";
-const MEMORY_CONFIG_FILE_NAMES = ["memory.jsonc", "memory.json"] as const;
 const SCOPE_PRIORITY: Record<MemoryScopeType, number> = {
   session: 4,
   branch: 3,
@@ -100,12 +103,7 @@ export type MemoryFilters = {
   limit?: number;
 };
 
-export type MemoryConfigOverrides = {
-  enabled?: boolean;
-  defaultSearchLimit?: number;
-  reviewerModel?: string;
-  reviewerVariant?: string;
-};
+export { parseMemoryConfigText, renderMemoryConfig, type MemoryConfigOverrides };
 
 type MemoryRecord = {
   entry: MemoryEntry;
@@ -118,61 +116,25 @@ type JsonObject = Record<string, unknown>;
 export async function loadMemoryRuntimeConfig(directory: string): Promise<MemoryRuntimeConfig> {
   const sources: string[] = [];
   const warnings: string[] = [];
-  const globalConfig = await loadScopedMemoryConfig(
-    MEMORY_CONFIG_FILE_NAMES.map((name) => join(getGlobalVvocDir(), name)),
-    sources,
-    warnings,
-  );
-  const projectConfig = directory
-    ? await loadScopedMemoryConfig(
-        MEMORY_CONFIG_FILE_NAMES.map((name) => join(getProjectVvocDir(directory), name)),
-        sources,
-        warnings,
-      )
-    : {};
+  const configPath = getGlobalVvocConfigPath();
+  const currentText = await readOptionalText(configPath);
+  const memoryConfig = currentText
+    ? (sources.push(configPath),
+      loadLenientVvocConfigText(currentText, configPath, warnings).memory)
+    : createMemoryConfig();
 
   return {
-    enabled: projectConfig.enabled ?? globalConfig.enabled ?? true,
+    enabled: memoryConfig.enabled,
     projectStorageRoot: join(getGlobalVvocProjectDataDir(directory), "memory"),
     sharedStorageRoot: join(getGlobalVvocDataDir(), "memory"),
-    defaultSearchLimit:
-      projectConfig.defaultSearchLimit ?? globalConfig.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT,
-    reviewerModel: projectConfig.reviewerModel ?? globalConfig.reviewerModel,
-    reviewerVariant: projectConfig.reviewerVariant ?? globalConfig.reviewerVariant,
+    defaultSearchLimit: memoryConfig.defaultSearchLimit,
+    reviewerModel: memoryConfig.reviewerModel,
+    reviewerVariant: memoryConfig.reviewerVariant,
     sources,
     warnings,
   };
 }
 // END_BLOCK_LOAD_MEMORY_RUNTIME_CONFIG
-
-export function parseMemoryConfigText(text: string, label: string): MemoryConfigOverrides {
-  return normalizeMemoryConfigDocument(parseMemoryConfigDocument(text, label), label);
-}
-
-// START_BLOCK_RENDER_MEMORY_CONFIG
-export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): string {
-  const lines = [
-    "// Managed by vvoc.",
-    "// `vvoc sync` rewrites files with this marker while preserving current values.",
-    "// Remove this header if you want to manage the file manually.",
-    "",
-    "{",
-    `  "enabled": ${JSON.stringify(overrides.enabled ?? true)},`,
-    `  "defaultSearchLimit": ${overrides.defaultSearchLimit ?? DEFAULT_SEARCH_LIMIT},`,
-  ];
-
-  if (overrides.reviewerModel !== undefined) {
-    lines.push(`  "reviewerModel": ${JSON.stringify(overrides.reviewerModel)},`);
-  }
-
-  if (overrides.reviewerVariant !== undefined) {
-    lines.push(`  "reviewerVariant": ${JSON.stringify(overrides.reviewerVariant)},`);
-  }
-
-  lines.push("}");
-  return `${lines.join("\n")}\n`;
-}
-// END_BLOCK_RENDER_MEMORY_CONFIG
 
 export function getDefaultSearchLimit(config: MemoryRuntimeConfig): number {
   return config.defaultSearchLimit;
@@ -335,99 +297,6 @@ function clamp(value: number, min = 0, max = 1): number {
 
 function isPlainObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function parseMemoryConfigDocument(text: string, label: string): JsonObject {
-  const errors: ParseError[] = [];
-  const value = parse(text, errors, {
-    allowEmptyContent: false,
-    allowTrailingComma: true,
-    disallowComments: false,
-  }) as unknown;
-
-  if (errors.length > 0) {
-    throw new Error(`${label}: failed to parse JSONC (${errors.length} error(s))`);
-  }
-  if (!isPlainObject(value)) {
-    throw new Error(`${label}: expected a top-level object`);
-  }
-
-  return value;
-}
-
-function normalizeMemoryConfigDocument(raw: unknown, label: string): MemoryConfigOverrides {
-  if (!isPlainObject(raw)) {
-    throw new Error(`${label}: expected a top-level object`);
-  }
-
-  const overrides: MemoryConfigOverrides = {};
-
-  if (Object.hasOwn(raw, "enabled")) {
-    if (typeof raw.enabled !== "boolean") {
-      throw new Error(`${label}: expected "enabled" to be a boolean`);
-    }
-    overrides.enabled = raw.enabled;
-  }
-
-  if (Object.hasOwn(raw, "defaultSearchLimit")) {
-    const limit = readPositiveInteger(raw.defaultSearchLimit);
-    if (!limit) {
-      throw new Error(`${label}: expected "defaultSearchLimit" to be a positive integer`);
-    }
-    overrides.defaultSearchLimit = limit;
-  }
-
-  if (Object.hasOwn(raw, "reviewerModel")) {
-    const model = readStringValue(raw.reviewerModel);
-    if (model !== undefined) {
-      overrides.reviewerModel = model;
-    }
-  }
-
-  if (Object.hasOwn(raw, "reviewerVariant")) {
-    const variant = readStringValue(raw.reviewerVariant);
-    if (variant !== undefined) {
-      overrides.reviewerVariant = variant;
-    }
-  }
-
-  return overrides;
-}
-
-function normalizeMemoryConfigOverrides(
-  source: string,
-  raw: unknown,
-  warnings: string[],
-): MemoryConfigOverrides {
-  try {
-    return normalizeMemoryConfigDocument(raw, source);
-  } catch (error) {
-    warnings.push(error instanceof Error ? error.message : `${source}: invalid memory config`);
-    return {};
-  }
-}
-
-async function loadScopedMemoryConfig(
-  candidates: string[],
-  sources: string[],
-  warnings: string[],
-): Promise<MemoryConfigOverrides> {
-  for (const candidate of candidates) {
-    const text = await readOptionalText(candidate);
-    if (!text) continue;
-
-    try {
-      const parsed = parseMemoryConfigDocument(text, candidate);
-      sources.push(candidate);
-      return normalizeMemoryConfigOverrides(candidate, parsed, warnings);
-    } catch (error) {
-      warnings.push(
-        `${candidate}: failed to parse JSONC (${error instanceof Error ? error.message : String(error)})`,
-      );
-    }
-  }
-
-  return {};
 }
 // END_BLOCK_MEMORY_CONFIG_NORMALIZATION
 
@@ -742,21 +611,6 @@ function resolveLimit(config: MemoryRuntimeConfig, value: unknown): number {
   const fallback = config.defaultSearchLimit;
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(1, Math.floor(value));
-}
-
-function readPositiveInteger(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return Math.round(value);
-  }
-
-  return undefined;
-}
-
-function readStringValue(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-  return undefined;
 }
 
 async function readOptionalText(path: string): Promise<string | undefined> {

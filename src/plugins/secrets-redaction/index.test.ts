@@ -1,5 +1,5 @@
 // FILE: src/plugins/secrets-redaction/index.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
 //   SCOPE: chat message redaction, assistant state redaction, text completion restore, and tool arg restore.
@@ -14,19 +14,21 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.0.0 - Added plugin-level hook coverage for redaction before LLM requests and restore before responses/tools.]
+//   LAST_CHANGE: [v1.1.0 - Switched test fixtures to the canonical vvoc.json config file and ignored legacy local config files.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { VVOC_CONFIG_SCHEMA_URL } from "../../lib/vvoc-config.js";
 import { SecretsRedactionPlugin } from "./index.js";
 
 const EMAIL = "qa-redaction-check-884271@example.invalid";
 const PLACEHOLDER_PATTERN = /__VVOC_SECRET_EMAIL_[0-9a-f]{12}__/;
 
 const tempDirs: string[] = [];
+const previousConfigHome = process.env.XDG_CONFIG_HOME;
 
 afterEach(async () => {
   while (tempDirs.length > 0) {
@@ -35,24 +37,51 @@ afterEach(async () => {
       await rm(dir, { recursive: true, force: true });
     }
   }
+
+  if (previousConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = previousConfigHome;
+  }
 });
 
 async function createPlugin() {
   const directory = await mkdtemp(join(tmpdir(), "vvoc-secrets-redaction-"));
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-secrets-config-"));
   tempDirs.push(directory);
+  tempDirs.push(configHome);
 
+  process.env.XDG_CONFIG_HOME = configHome;
+  await mkdir(join(configHome, "vvoc"), { recursive: true });
+
+  await writeFile(join(directory, "secrets-redaction.config.json"), "not json");
   await writeFile(
-    join(directory, "secrets-redaction.config.json"),
+    join(configHome, "vvoc", "vvoc.json"),
     JSON.stringify(
       {
-        enabled: true,
-        secret: "test-secret-for-redaction",
-        ttlMs: 0,
-        patterns: {
-          builtin: ["email"],
-          keywords: [],
-          regex: [],
-          exclude: [],
+        $schema: VVOC_CONFIG_SCHEMA_URL,
+        version: 1,
+        guardian: {
+          timeoutMs: 90000,
+          approvalRiskThreshold: 80,
+          reviewToastDurationMs: 90000,
+        },
+        memory: {
+          enabled: true,
+          defaultSearchLimit: 8,
+        },
+        secretsRedaction: {
+          enabled: true,
+          secret: "test-secret-for-redaction",
+          ttlMs: 0,
+          maxMappings: 10000,
+          patterns: {
+            builtin: ["email"],
+            keywords: [],
+            regex: [],
+            exclude: [],
+          },
+          debug: false,
         },
       },
       null,

@@ -4,17 +4,17 @@
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt scaffolding, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
-      <path>src/lib/opencode.ts + src/lib/vvoc-paths.ts</path>
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt scaffolding, canonical vvoc.json rendering, and installation inspection with a single vvoc-owned config file.</purpose>
+      <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
-        <fn-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
+        <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
         <fn-writeProviderBaseUrl PURPOSE="Write or preserve an OpenCode provider options.baseURL override conservatively." />
         <fn-writeOpenCodeAgentModel PURPOSE="Write or remove a model override for a built-in OpenCode agent such as general or explore." />
         <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed OpenCode agent registrations such as the primary enhancer agent and the bundled subagents." />
-        <fn-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
+        <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid current values." />
       </annotations>
     </M-CLI-CONFIG>
 
@@ -56,7 +56,7 @@
       <depends>none</depends>
       <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
       <annotations>
-        <fn-loadMemoryRuntimeConfig PURPOSE="Load global and project vvoc memory settings." />
+        <fn-loadMemoryRuntimeConfig PURPOSE="Load canonical vvoc memory settings from vvoc.json." />
         <fn-putMemory PURPOSE="Create a scoped memory entry in the vvoc XDG data root." />
         <fn-searchMemories PURPOSE="Return ranked lexical matches across scoped entries." />
       </annotations>
@@ -137,13 +137,13 @@
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG NAME="ConfigLoader" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Loads secrets-redaction.config.json from XDG config paths with environment variable substitution.</purpose>
+      <purpose>Loads the secretsRedaction section from canonical vvoc.json with environment variable substitution.</purpose>
       <path>src/plugins/secrets-redaction/config.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
         <fn-loadConfig PURPOSE="Loads and returns normalized config with warnings." />
-        <fn-getConfigCandidates PURPOSE="Returns ordered candidate paths for config file." />
+        <fn-getConfigCandidates PURPOSE="Returns the canonical vvoc.json path candidate." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG>
 
@@ -158,15 +158,13 @@
     </M-PLUGIN-SECRETS-REDACTION>
 
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Validate guardian.jsonc and memory.jsonc with human-readable error reporting.</purpose>
+      <purpose>Validate canonical vvoc.json against the versioned vvoc JSON Schema with human-readable error reporting.</purpose>
       <path>src/commands/config-validate.ts + src/commands/config.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
       <annotations>
-        <fn-validateGuardianConfigContent PURPOSE="Validate guardian.jsonc content and report schema violations with line/col." />
-        <fn-validateMemoryConfigContent PURPOSE="Validate memory.jsonc content and report schema violations with line/col." />
-        <fn-validateGuardianConfigFile PURPOSE="Validate guardian.jsonc file and report schema violations." />
-        <fn-validateMemoryConfigFile PURPOSE="Validate memory.jsonc file and report schema violations." />
+        <fn-validateVvocConfigContent PURPOSE="Validate vvoc.json content and report schema violations with line/col." />
+        <fn-validateVvocConfigFile PURPOSE="Validate vvoc.json and report schema violations." />
         <cmd-config_validate PURPOSE="vvoc config validate - CLI command for config validation." />
       </annotations>
     </M-CLI-CONFIG-VALIDATE>

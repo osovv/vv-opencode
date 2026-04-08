@@ -1,8 +1,8 @@
 // FILE: src/plugins/memory.test.ts
-// VERSION: 0.2.7
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc memory runtime config, scope semantics, and plugin registration behavior.
-//   SCOPE: Memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer prompt setup.
+//   SCOPE: Canonical memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer prompt setup.
 //   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/plugins/memory.ts, src/plugins/memory-store.ts]
 //   LINKS: [V-M-PLUGIN-MEMORY-STORE, V-M-PLUGIN-MEMORY]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.7 - Added coverage ensuring the memory-reviewer registration no longer sets explicit steps.]
+//   LAST_CHANGE: [v0.3.0 - Updated memory config coverage for the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -25,6 +25,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { MemoryPlugin } from "./memory/index.js";
+import { VVOC_CONFIG_SCHEMA_URL } from "../lib/vvoc-config.js";
 import {
   deleteMemory,
   getMemory,
@@ -38,7 +39,7 @@ import {
 } from "./memory-store.js";
 
 describe("loadMemoryRuntimeConfig", () => {
-  test("uses global and project vvoc config files", async () => {
+  test("uses the canonical global vvoc config file and ignores legacy project config files", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-config-home-"));
     const dataHome = await mkdtemp(join(tmpdir(), "vvoc-data-home-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-project-"));
@@ -47,8 +48,37 @@ describe("loadMemoryRuntimeConfig", () => {
       await mkdir(join(configHome, "vvoc"), { recursive: true });
       await mkdir(join(projectDir, ".vvoc"), { recursive: true });
       await writeFile(
-        join(configHome, "vvoc", "memory.jsonc"),
-        '{\n  "defaultSearchLimit": 4\n}\n',
+        join(configHome, "vvoc", "vvoc.json"),
+        JSON.stringify(
+          {
+            $schema: VVOC_CONFIG_SCHEMA_URL,
+            version: 1,
+            guardian: {
+              timeoutMs: 90000,
+              approvalRiskThreshold: 80,
+              reviewToastDurationMs: 90000,
+            },
+            memory: {
+              enabled: true,
+              defaultSearchLimit: 4,
+            },
+            secretsRedaction: {
+              enabled: true,
+              secret: "${VVOC_SECRET}",
+              ttlMs: 3600000,
+              maxMappings: 10000,
+              patterns: {
+                keywords: [],
+                regex: [],
+                builtin: ["email"],
+                exclude: [],
+              },
+              debug: false,
+            },
+          },
+          null,
+          2,
+        ),
         "utf8",
       );
       await writeFile(
@@ -66,15 +96,12 @@ describe("loadMemoryRuntimeConfig", () => {
         const memoryConfig = await loadMemoryRuntimeConfig(projectDir);
 
         expect(memoryConfig.enabled).toBe(true);
-        expect(memoryConfig.defaultSearchLimit).toBe(2);
+        expect(memoryConfig.defaultSearchLimit).toBe(4);
         expect(memoryConfig.projectStorageRoot).toContain(join(dataHome, "vvoc", "projects"));
         expect(memoryConfig.projectStorageRoot).toContain("vvoc-memory-project-");
         expect(memoryConfig.projectStorageRoot.endsWith("/memory")).toBe(true);
         expect(memoryConfig.sharedStorageRoot).toBe(join(dataHome, "vvoc", "memory"));
-        expect(memoryConfig.sources).toEqual([
-          join(configHome, "vvoc", "memory.jsonc"),
-          join(projectDir, ".vvoc", "memory.jsonc"),
-        ]);
+        expect(memoryConfig.sources).toEqual([join(configHome, "vvoc", "vvoc.json")]);
       } finally {
         if (previousConfigHome === undefined) {
           delete process.env.XDG_CONFIG_HOME;

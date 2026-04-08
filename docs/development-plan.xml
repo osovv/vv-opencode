@@ -9,7 +9,7 @@
   <Modules>
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, register managed OpenCode agents conservatively, patch provider baseURLs conservatively, render managed Guardian config, and inspect installation state.</purpose>
+        <purpose>Resolve OpenCode and canonical vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, register managed OpenCode agents conservatively, patch provider baseURLs conservatively, render canonical vvoc.json, and inspect installation state.</purpose>
         <inputs>
           <param name="scope" type="global | project" />
           <param name="cwd" type="string" />
@@ -20,28 +20,29 @@
         </outputs>
         <errors>
           <error code="INVALID_JSONC" />
-          <error code="INVALID_GUARDIAN_CONFIG" />
+          <error code="INVALID_VVOC_CONFIG" />
         </errors>
       </contract>
       <interface>
-        <export-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
+        <export-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <export-ensurePackageInstalled PURPOSE="Ensure the npm package is registered in OpenCode config with a pinned package version." />
         <export-writeProviderBaseUrl PURPOSE="Write a conservative provider options.baseURL override into OpenCode config." />
         <export-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains the managed enhancer primary agent plus the bundled managed subagents." />
-        <export-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
+        <export-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid current values." />
       </interface>
       <depends>none</depends>
       <target>
-        <source>src/lib/opencode.ts + src/lib/vvoc-paths.ts</source>
+        <source>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json</source>
         <tests>src/lib/opencode.test.ts</tests>
       </target>
       <observability>
         <log-prefix>[OpenCodeConfigTools]</log-prefix>
-        <critical-block>BLOCK_SYNC_GUARDIAN_CONFIG</critical-block>
+        <critical-block>BLOCK_SYNC_VVOC_CONFIG</critical-block>
       </observability>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <notes>
-        <note-1>Main config edits should preserve comments when only the plugin array changes.</note-1>
+        <note-1>Main OpenCode config edits should preserve comments when only the plugin array changes.</note-1>
+        <note-2>vvoc-owned settings now live only in $XDG_CONFIG_HOME/vvoc/vvoc.json.</note-2>
       </notes>
     </M-CLI-CONFIG>
 
@@ -60,7 +61,7 @@
       </contract>
       <interface>
         <export-init PURPOSE="Bootstrap package registration and config scaffolding (interactive by default)." />
-        <export-sync PURPOSE="Refresh managed vvoc config files." />
+        <export-sync PURPOSE="Refresh canonical vvoc.json plus managed prompt files." />
         <export-doctor PURPOSE="Diagnose installation drift or invalid config." />
       </interface>
       <depends>M-CLI-CONFIG</depends>
@@ -211,23 +212,20 @@
 
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>
-        <purpose>Validate guardian.jsonc and memory.jsonc configuration files with human-readable error reporting.</purpose>
+        <purpose>Validate the canonical vvoc.json configuration file with human-readable error reporting against the versioned vvoc JSON Schema.</purpose>
         <inputs>
-          <param name="scope" type="global | project | all" />
           <param name="cwd" type="string" />
         </inputs>
         <outputs>
-          <param name="stdout" type="terminal output with pass/fail status per file" />
+          <param name="stdout" type="terminal output with pass/fail status for vvoc.json" />
         </outputs>
         <errors>
-          <error code="INVALID_JSONC" />
-          <error code="MISSING_REQUIRED_FIELD" />
-          <error code="INVALID_FIELD_TYPE" />
+          <error code="INVALID_JSON" />
+          <error code="INVALID_SCHEMA_FIELD" />
         </errors>
       </contract>
       <interface>
-        <export-validateGuardianConfig PURPOSE="Parse guardian.jsonc and report schema violations." />
-        <export-validateMemoryConfig PURPOSE="Parse memory.jsonc and report schema violations." />
+        <export-validateVvocConfig PURPOSE="Parse vvoc.json and report schema violations." />
       </interface>
       <depends>M-CLI-CONFIG</depends>
       <target>
@@ -336,7 +334,7 @@
 
     <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>
-        <purpose>Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds initial vvoc config files. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
+        <purpose>Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds managed prompts plus canonical vvoc.json. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
         <inputs>
           <param name="cwd" type="string" />
           <param name="scope" type="global | project" />
@@ -401,16 +399,16 @@
 
   <DataFlow>
     <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc init">
-      <step-1>Resolve scope-specific OpenCode config paths and vvoc config paths.</step-1>
+      <step-1>Resolve scope-specific OpenCode config paths plus the canonical vvoc.json path.</step-1>
       <step-2>Ensure `@osovv/vv-opencode@<installed-version>` exists in the OpenCode `plugin` array.</step-2>
-      <step-3>Create initial `guardian.jsonc` and `memory.jsonc` under the vvoc config root.</step-3>
+      <step-3>Create a fully seeded canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</step-3>
       <evidence>`vvoc status`, parsed config content, and successful typecheck/build.</evidence>
     </DF-PLUGIN-INSTALL>
     <DF-CONFIG-SYNC NAME="ManagedConfigSync" TRIGGER="vvoc sync">
-      <step-1>Inspect whether Guardian config is CLI-managed.</step-1>
-      <step-2>Parse current Guardian values from JSONC.</step-2>
-      <step-3>Rewrite managed file canonically while preserving current values.</step-3>
-      <evidence>Stable rewritten `guardian.jsonc` and no overwrite of unmanaged files without force.</evidence>
+      <step-1>Inspect the canonical vvoc.json file.</step-1>
+      <step-2>Parse current vvoc.json values.</step-2>
+      <step-3>Rewrite vvoc.json canonically while preserving current values.</step-3>
+      <evidence>Stable rewritten `vvoc.json` and scope-correct managed prompt sync.</evidence>
     </DF-CONFIG-SYNC>
     <DF-GUARDIAN-REVIEW NAME="GuardianPermissionReview" TRIGGER="permission.asked event">
       <step-1>Capture relevant tool and command intent for the session.</step-1>
@@ -420,7 +418,7 @@
     </DF-GUARDIAN-REVIEW>
     <DF-MEMORY-ACCESS NAME="MemoryAccess" TRIGGER="memory_* tool call">
       <step-0>Before model turns, the plugin appends a short system reminder that explicit memory tools exist, without injecting stored memory entries.</step-0>
-      <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/memory.jsonc` and project `.vvoc/memory.jsonc`.</step-1>
+      <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/vvoc.json`.</step-1>
       <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
       <step-3>Read or mutate session, branch, and project entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`, and shared entries under `$XDG_DATA_HOME/vvoc/memory/shared/<namespace>/`.</step-3>
       <evidence>Correct file layout, deterministic CRUD/search behavior, and no automatic prompt injection.</evidence>
@@ -438,11 +436,11 @@
       <evidence>Correct plugin table when plugins are installed, and graceful empty state when none are configured.</evidence>
     </DF-PLUGIN-LIST>
     <DF-CONFIG-VALIDATE NAME="ConfigValidate" TRIGGER="vvoc config validate">
-      <step-1>Resolve guardian.jsonc and memory.jsonc paths for the selected scope.</step-1>
-      <step-2>Parse each file with JSONC parser.</step-2>
-      <step-3>Validate required fields and types against expected schema.</step-3>
-      <step-4>Report human-readable errors per file or pass with OK status.</step-4>
-      <evidence>Invalid JSONC is caught and reported with line/column info; valid configs pass silently.</evidence>
+      <step-1>Resolve the canonical vvoc.json path.</step-1>
+      <step-2>Parse the file with strict JSON rules.</step-2>
+      <step-3>Validate required fields and types against the versioned vvoc JSON Schema.</step-3>
+      <step-4>Report human-readable errors for vvoc.json or pass with OK status.</step-4>
+      <evidence>Invalid JSON is caught and reported with line/column info; valid canonical configs pass silently.</evidence>
     </DF-CONFIG-VALIDATE>
     <DF-COMPLETION NAME="ShellCompletion" TRIGGER="vvoc completion">
       <step-1>Detect the current shell from environment variables.</step-1>
@@ -455,9 +453,9 @@
       <step-1>Check --non-interactive flag. If absent and TTY detected, enter interactive mode with @clack/prompts.</step-1>
       <step-2>Prompt for scope selection (global/project) if interactive.</step-2>
       <step-3>Prompt for plugin selection to enable if interactive; accept --plugins flag in non-interactive mode.</step-3>
-      <step-4>Write initial configs to the appropriate vvoc paths.</step-4>
+      <step-4>Write initial managed prompts plus canonical vvoc.json.</step-4>
       <step-5>Confirm successful initialization.</step-5>
-      <evidence>Configs are valid JSONC after init; Ctrl+C aborts cleanly; re-running init is idempotent; non-interactive mode works without TTY.</evidence>
+      <evidence>Canonical config is valid JSON after init; Ctrl+C aborts cleanly; re-running init is idempotent; non-interactive mode works without TTY.</evidence>
     </DF-INIT>
     <DF-UPGRADE NAME="UpgradeCheck" TRIGGER="vvoc upgrade">
       <step-1>Query npm registry for @osovv/vv-opencode dist-tags latest.</step-1>
@@ -471,12 +469,12 @@
   <ImplementationOrder>
     <Phase-1 name="CLI Foundation" status="done">
       <goal>Establish safe config mutation helpers and wire them into a usable Bun CLI.</goal>
-      <step-1 module="M-CLI-CONFIG" status="done" verification="V-M-CLI-CONFIG">Implement path resolution, JSONC edits, inspection, and Guardian template helpers.</step-1>
+      <step-1 module="M-CLI-CONFIG" status="done" verification="V-M-CLI-CONFIG">Implement path resolution, JSONC OpenCode edits, canonical vvoc.json helpers, and installation inspection.</step-1>
       <step-2 module="M-CLI-COMMANDS" status="done" verification="V-M-CLI-COMMANDS">Expose install, sync, status, doctor, and Guardian config commands.</step-2>
     </Phase-1>
     <Phase-2 name="Guardian Packaging" status="done">
       <goal>Move the existing standalone Guardian plugin into the repository and export it from the package.</goal>
-      <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port Guardian and move runtime config to vvoc-owned paths.</step-1>
+      <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port Guardian and move runtime config to the canonical vvoc.json path.</step-1>
     </Phase-2>
     <Phase-3 name="Explicit Memory" status="done">
       <goal>Add explicit persistent memory, store it in the vvoc XDG data root, and expose a report-only reviewer subagent.</goal>
@@ -485,7 +483,7 @@
     </Phase-3>
     <Phase-4 name="CLI Enhancement Suite" status="done">
       <goal>Add plugin list, config validate, shell completion, interactive init, and upgrade commands to improve developer UX.</goal>
-      <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate guardian.jsonc and memory.jsonc with human-readable errors.</step-1>
+      <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate canonical vvoc.json with human-readable schema errors.</step-1>
       <step-2 module="M-CLI-PLUGIN-LIST" status="implemented" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
       <step-3 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Install shell completions for bash, zsh, and fish with shell auto-detection.</step-3>
       <step-4 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-4>

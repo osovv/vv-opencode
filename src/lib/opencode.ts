@@ -1,9 +1,9 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage OpenCode config mutation, provider patching, and vvoc-owned config files.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, Guardian/Memory config rendering and sync, and installation inspection.
-//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
+//   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, canonical vvoc config rendering and sync, and installation inspection.
+//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -15,16 +15,16 @@
 //   OPENCODE_SCHEMA_URL - OpenCode config schema URL.
 //   Scope - Supported installation scopes for vvoc config writes.
 //   ResolvedPaths - Scope-aware path bundle for OpenCode and vvoc config locations.
-//   GuardianConfigOverrides - Guardian config override shape parsed from managed JSONC.
 //   WriteResult - Result shape returned by managed config write operations.
 //   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
 //   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
 //   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations.
-//   parseGuardianConfigText - Parses Guardian config JSONC into typed overrides.
-//   renderGuardianConfig - Renders managed Guardian config JSONC.
+//   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
+//   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
+//   syncVvocConfig - Rewrites the canonical vvoc.json document while preserving valid current values.
 //   writeProviderBaseUrl - Writes a provider options.baseURL override into OpenCode config.
 //   syncManagedAgentRegistrations - Syncs the canonical vvoc-managed OpenCode agent registrations into OpenCode config.
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian and managed OpenCode agents when missing.
@@ -33,17 +33,14 @@
 //   writeOpenCodeAgentModel - Writes or removes a model override for any OpenCode agent in config.
 //   readManagedAgentModels - Reads model overrides for the bundled vvoc-managed OpenCode agents from OpenCode config.
 //   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model override in OpenCode config.
-//   installGuardianConfig - Creates or preserves managed Guardian config.
-//   syncGuardianConfig - Rewrites managed Guardian config while preserving current values.
-//   writeGuardianConfig - Writes explicit Guardian overrides to managed config.
-//   installMemoryConfig - Creates or preserves managed Memory config.
-//   syncMemoryConfig - Rewrites managed Memory config while preserving current values.
+//   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
+//   writeMemoryConfig - Writes the memory section into the canonical vvoc.json document.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
 //   describeWriteResult - Formats config write outcomes for CLI output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Removed the legacy enhance command path and kept enhancer as a managed primary agent only.]
+//   LAST_CHANGE: [v0.6.0 - Replaced per-feature vvoc config files with a single canonical vvoc.json document.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -59,14 +56,23 @@ import {
   type ManagedOpenCodeAgentName,
 } from "./managed-agents.js";
 import {
-  parseMemoryConfigText,
-  renderMemoryConfig,
+  createDefaultVvocConfig,
+  createGuardianConfig,
+  createMemoryConfig,
+  parseVvocConfigText,
+  renderVvocConfig,
+  type GuardianConfig,
+  type GuardianConfigOverrides,
+  type MemoryConfig,
   type MemoryConfigOverrides,
-} from "../plugins/memory-store.js";
+  type SecretsRedactionConfig,
+  type VvocConfig,
+} from "./vvoc-config.js";
 import { getPinnedPackageSpecifier, PACKAGE_NAME } from "./package.js";
 import {
   getConfigHome,
   getGlobalOpencodeDir,
+  getGlobalVvocConfigPath,
   getGlobalVvocDir,
   getProjectVvocDir,
   getVvocAgentsDir,
@@ -76,15 +82,7 @@ export const CLI_NAME = "vvoc";
 export { PACKAGE_NAME };
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
 const MANAGED_MARKER = "Managed by vvoc";
-const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
-const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
-const GUARDIAN_CONFIG_FILE_NAMES = ["guardian.jsonc", "guardian.json"] as const;
-const MEMORY_CONFIG_FILE_NAMES = ["memory.jsonc", "memory.json"] as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
-const SECRETS_REDACTION_CONFIG_FILE_NAMES = [
-  "secrets-redaction.config.json",
-  "secrets-redaction.config.jsonc",
-] as const;
 
 const JSON_FORMAT = {
   insertSpaces: true,
@@ -102,23 +100,10 @@ export type ResolvedPaths = {
   configHome: string;
   opencodeBaseDir: string;
   vvocBaseDir: string;
+  vvocConfigPath: string;
   managedAgentsDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
-  guardianConfigPath: string;
-  guardianAlternatePaths: string[];
-  memoryConfigPath: string;
-  memoryConfigAlternates: string[];
-  secretsRedactionConfigPath: string;
-  secretsRedactionConfigAlternates: string[];
-};
-
-export type GuardianConfigOverrides = {
-  model?: string;
-  variant?: string;
-  timeoutMs?: number;
-  approvalRiskThreshold?: number;
-  reviewToastDurationMs?: number;
 };
 
 export type WriteResult = {
@@ -139,28 +124,21 @@ export type InstallationInspection = {
     pluginConfigured: boolean;
     plugins: string[];
   };
-  guardian: {
+  vvoc: {
     path: string;
     exists: boolean;
-    alternates: string[];
-    managed: boolean;
     parseError?: string;
-    overrides?: GuardianConfigOverrides;
+    schema?: string;
+    version?: number;
+  };
+  guardian: {
+    config?: GuardianConfig;
   };
   memory: {
-    path: string;
-    exists: boolean;
-    alternates: string[];
-    managed: boolean;
-    parseError?: string;
-    overrides?: MemoryConfigOverrides;
+    config?: MemoryConfig;
   };
   secretsRedaction: {
-    path: string;
-    exists: boolean;
-    alternates: string[];
-    managed: boolean;
-    parseError?: string;
+    config?: SecretsRedactionConfig;
   };
   warnings: string[];
   problems: string[];
@@ -173,24 +151,14 @@ export async function resolvePaths(options: {
   configDir?: string;
 }): Promise<ResolvedPaths> {
   const configHome = getConfigHome(options.configDir);
+  const vvocBaseDir = getGlobalVvocDir(options.configDir);
   const opencodeBaseDir =
     options.scope === "global" ? getGlobalOpencodeDir(options.configDir) : options.cwd;
-  const vvocBaseDir =
-    options.scope === "global"
-      ? getGlobalVvocDir(options.configDir)
-      : getProjectVvocDir(options.cwd);
-  const managedAgentsDirPath = getVvocAgentsDir(vvocBaseDir);
+  const managedAgentsBaseDir =
+    options.scope === "global" ? vvocBaseDir : getProjectVvocDir(options.cwd);
+  const managedAgentsDirPath = getVvocAgentsDir(managedAgentsBaseDir);
   const opencodeSelection = await selectPrimaryPath(
     OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
-  );
-  const guardianSelection = await selectPrimaryPath(
-    GUARDIAN_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
-  );
-  const memorySelection = await selectPrimaryPath(
-    MEMORY_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
-  );
-  const secretsRedactionSelection = await selectPrimaryPath(
-    SECRETS_REDACTION_CONFIG_FILE_NAMES.map((name) => join(vvocBaseDir, name)),
   );
 
   return {
@@ -199,15 +167,10 @@ export async function resolvePaths(options: {
     configHome,
     opencodeBaseDir,
     vvocBaseDir,
+    vvocConfigPath: getGlobalVvocConfigPath(options.configDir),
     managedAgentsDirPath,
     opencodeConfigPath: opencodeSelection.primary,
     opencodeAlternatePaths: opencodeSelection.alternates,
-    guardianConfigPath: guardianSelection.primary,
-    guardianAlternatePaths: guardianSelection.alternates,
-    memoryConfigPath: memorySelection.primary,
-    memoryConfigAlternates: memorySelection.alternates,
-    secretsRedactionConfigPath: secretsRedactionSelection.primary,
-    secretsRedactionConfigAlternates: secretsRedactionSelection.alternates,
   };
 }
 // END_BLOCK_RESOLVE_CONFIG_PATHS
@@ -511,47 +474,11 @@ export async function writeManagedAgentModel(
 }
 // END_BLOCK_ENSURE_MANAGED_SUBAGENT_CONFIG
 
-export function parseGuardianConfigText(text: string, label: string): GuardianConfigOverrides {
-  return normalizeGuardianOverrides(parseObjectDocument(text, label), label);
-}
-
-// START_BLOCK_RENDER_GUARDIAN_CONFIG
-export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): string {
-  const timeoutMs = overrides.timeoutMs ?? DEFAULT_GUARDIAN_TIMEOUT_MS;
-  const approvalRiskThreshold =
-    overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD;
-  const reviewToastDurationMs = overrides.reviewToastDurationMs ?? timeoutMs;
-  const lines = [
-    "// Managed by vvoc.",
-    "// `vvoc sync` rewrites files with this marker while preserving current values.",
-    "// Remove this header if you want to manage the file manually.",
-    "",
-    "{",
-  ];
-
-  if (overrides.model) {
-    lines.push(`  "model": ${JSON.stringify(overrides.model)},`);
-  } else {
-    lines.push('  // "model": "anthropic/claude-sonnet-4-5",');
-  }
-
-  lines.push("");
-
-  if (overrides.variant) {
-    lines.push(`  "variant": ${JSON.stringify(overrides.variant)},`);
-  } else {
-    lines.push('  // "variant": "high",');
-  }
-
-  lines.push("");
-  lines.push(`  "timeoutMs": ${timeoutMs},`);
-  lines.push(`  "approvalRiskThreshold": ${approvalRiskThreshold},`);
-  lines.push(`  "reviewToastDurationMs": ${reviewToastDurationMs}`);
-  lines.push("}");
-
-  return `${lines.join("\n")}\n`;
-}
-// END_BLOCK_RENDER_GUARDIAN_CONFIG
+export {
+  parseGuardianConfigText,
+  renderGuardianConfig,
+  type GuardianConfigOverrides,
+} from "./vvoc-config.js";
 
 // START_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 export async function ensurePackageInstalled(paths: ResolvedPaths): Promise<{
@@ -638,229 +565,71 @@ export async function writeProviderBaseUrl(
 }
 // END_BLOCK_ENSURE_PROVIDER_BASE_URL_CONFIG
 
-export async function installGuardianConfig(
-  paths: ResolvedPaths,
-  options: { force: boolean },
-): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.guardianConfigPath);
-  if (!currentText) {
-    await writeText(paths.guardianConfigPath, renderGuardianConfig());
-    return { action: "created", path: paths.guardianConfigPath };
-  }
-
-  if (!options.force) {
-    if (!isManagedFile(currentText)) {
-      return {
-        action: "skipped",
-        path: paths.guardianConfigPath,
-        reason: "existing file is not managed by vvoc",
-      };
-    }
-    return { action: "kept", path: paths.guardianConfigPath };
-  }
-
-  return syncGuardianConfig(paths, options);
+export async function readVvocConfig(
+  paths: Pick<ResolvedPaths, "vvocConfigPath">,
+): Promise<VvocConfig | undefined> {
+  const currentText = await readOptionalText(paths.vvocConfigPath);
+  return currentText ? parseVvocConfigText(currentText, paths.vvocConfigPath) : undefined;
 }
 
-export async function syncGuardianConfig(
-  paths: ResolvedPaths,
-  options: { force: boolean },
+export async function installVvocConfig(
+  paths: Pick<ResolvedPaths, "vvocConfigPath">,
 ): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.guardianConfigPath);
-  if (!currentText) {
-    await writeText(paths.guardianConfigPath, renderGuardianConfig());
-    return { action: "created", path: paths.guardianConfigPath };
-  }
+  return syncVvocConfig(paths);
+}
 
-  if (!options.force && !isManagedFile(currentText)) {
-    return {
-      action: "skipped",
-      path: paths.guardianConfigPath,
-      reason: "existing file is not managed by vvoc",
-    };
-  }
-
-  const nextText = renderGuardianConfig(
-    parseGuardianConfigText(currentText, paths.guardianConfigPath),
-  );
-  if (currentText === nextText) {
-    return { action: "kept", path: paths.guardianConfigPath };
-  }
-
-  await writeText(paths.guardianConfigPath, nextText);
-  return { action: "updated", path: paths.guardianConfigPath };
+export async function syncVvocConfig(
+  paths: Pick<ResolvedPaths, "vvocConfigPath">,
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.vvocConfigPath);
+  const nextConfig = currentText
+    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
+    : createDefaultVvocConfig();
+  return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
 
 export async function writeGuardianConfig(
-  paths: ResolvedPaths,
+  paths: Pick<ResolvedPaths, "vvocConfigPath">,
   overrides: GuardianConfigOverrides,
-  options: { force: boolean },
+  options: { merge?: boolean } = {},
 ): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.guardianConfigPath);
-  if (currentText && !options.force && !isManagedFile(currentText)) {
-    return {
-      action: "skipped",
-      path: paths.guardianConfigPath,
-      reason: "existing file is not managed by vvoc",
-    };
-  }
-
-  const nextText = renderGuardianConfig(overrides);
-  if (currentText === nextText) {
-    return { action: "kept", path: paths.guardianConfigPath };
-  }
-
-  await writeText(paths.guardianConfigPath, nextText);
-  return {
-    action: currentText ? "updated" : "created",
-    path: paths.guardianConfigPath,
+  const currentText = await readOptionalText(paths.vvocConfigPath);
+  const currentConfig = currentText
+    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
+    : createDefaultVvocConfig();
+  const nextConfig: VvocConfig = {
+    ...currentConfig,
+    guardian: options.merge
+      ? createGuardianConfig({ ...currentConfig.guardian, ...overrides })
+      : createGuardianConfig(overrides),
   };
+
+  return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
 // END_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 
 // START_BLOCK_INSTALL_MEMORY_CONFIG
-export async function installMemoryConfig(
-  paths: ResolvedPaths,
-  options: { force: boolean },
+export { type MemoryConfigOverrides } from "./vvoc-config.js";
+
+export async function writeMemoryConfig(
+  paths: Pick<ResolvedPaths, "vvocConfigPath">,
+  overrides: MemoryConfigOverrides,
+  options: { merge?: boolean } = {},
 ): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.memoryConfigPath);
-  if (!currentText) {
-    await writeText(paths.memoryConfigPath, renderMemoryConfig());
-    return { action: "created", path: paths.memoryConfigPath };
-  }
+  const currentText = await readOptionalText(paths.vvocConfigPath);
+  const currentConfig = currentText
+    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
+    : createDefaultVvocConfig();
+  const nextConfig: VvocConfig = {
+    ...currentConfig,
+    memory: options.merge
+      ? createMemoryConfig({ ...currentConfig.memory, ...overrides })
+      : createMemoryConfig(overrides),
+  };
 
-  if (!options.force) {
-    if (!isManagedFile(currentText)) {
-      return {
-        action: "skipped",
-        path: paths.memoryConfigPath,
-        reason: "existing file is not managed by vvoc",
-      };
-    }
-    return { action: "kept", path: paths.memoryConfigPath };
-  }
-
-  return syncMemoryConfig(paths, options);
-}
-
-export async function syncMemoryConfig(
-  paths: ResolvedPaths,
-  options: { force: boolean },
-): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.memoryConfigPath);
-  if (!currentText) {
-    await writeText(paths.memoryConfigPath, renderMemoryConfig());
-    return { action: "created", path: paths.memoryConfigPath };
-  }
-
-  if (!options.force && !isManagedFile(currentText)) {
-    return {
-      action: "skipped",
-      path: paths.memoryConfigPath,
-      reason: "existing file is not managed by vvoc",
-    };
-  }
-
-  const nextText = renderMemoryConfig(parseMemoryConfigText(currentText, paths.memoryConfigPath));
-  if (currentText === nextText) {
-    return { action: "kept", path: paths.memoryConfigPath };
-  }
-
-  await writeText(paths.memoryConfigPath, nextText);
-  return { action: "updated", path: paths.memoryConfigPath };
+  return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
 // END_BLOCK_INSTALL_MEMORY_CONFIG
-
-// START_BLOCK_INSTALL_SECRETS_REDACTION_CONFIG
-export function renderSecretsRedactionConfig(): string {
-  const lines = [
-    "// Managed by vvoc.",
-    "// `vvoc sync` rewrites files with this marker while preserving current values.",
-    "// Remove this header if you want to manage the file manually.",
-    "",
-    "{",
-    '  "enabled": true,',
-    '  "secret": "${VVOC_SECRET}",',
-    '  "ttlMs": 3600000,',
-    '  "maxMappings": 10000,',
-    '  "patterns": {',
-    '    "keywords": [],',
-    '    "regex": [],',
-    '    "builtin": ["email", "uuid", "ipv4", "mac", "openai_key", "anthropic_key", "github_token", "aws_access_key", "stripe_key", "bearer_token", "bearer_dot", "syn_key", "hex_token"],',
-    '    "exclude": []',
-    "  },",
-    '  "debug": false',
-    "}",
-  ];
-  return `${lines.join("\n")}\n`;
-}
-
-export function parseSecretsRedactionConfigText(
-  text: string,
-  _filePath: string,
-): Record<string, unknown> {
-  const errors: ParseError[] = [];
-  const result = parse(text, errors, { allowTrailingComma: true });
-  if (errors.length > 0) {
-    throw new Error(`parse error at offset ${errors[0].offset}`);
-  }
-  if (typeof result !== "object" || result === null) {
-    throw new Error("root must be an object");
-  }
-  return result as Record<string, unknown>;
-}
-
-export async function installSecretsRedactionConfig(
-  paths: ResolvedPaths,
-  options: { force: boolean },
-): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.secretsRedactionConfigPath);
-  if (!currentText) {
-    await writeText(paths.secretsRedactionConfigPath, renderSecretsRedactionConfig());
-    return { action: "created", path: paths.secretsRedactionConfigPath };
-  }
-
-  if (!options.force) {
-    if (!isManagedFile(currentText)) {
-      return {
-        action: "skipped",
-        path: paths.secretsRedactionConfigPath,
-        reason: "existing file is not managed by vvoc",
-      };
-    }
-    return { action: "kept", path: paths.secretsRedactionConfigPath };
-  }
-
-  return syncSecretsRedactionConfig(paths, options);
-}
-
-export async function syncSecretsRedactionConfig(
-  paths: ResolvedPaths,
-  options: { force: boolean },
-): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.secretsRedactionConfigPath);
-  if (!currentText) {
-    await writeText(paths.secretsRedactionConfigPath, renderSecretsRedactionConfig());
-    return { action: "created", path: paths.secretsRedactionConfigPath };
-  }
-
-  if (!options.force && !isManagedFile(currentText)) {
-    return {
-      action: "skipped",
-      path: paths.secretsRedactionConfigPath,
-      reason: "existing file is not managed by vvoc",
-    };
-  }
-
-  const nextText = renderSecretsRedactionConfig();
-  if (currentText === nextText) {
-    return { action: "kept", path: paths.secretsRedactionConfigPath };
-  }
-
-  await writeText(paths.secretsRedactionConfigPath, nextText);
-  return { action: "updated", path: paths.secretsRedactionConfigPath };
-}
-// END_BLOCK_INSTALL_SECRETS_REDACTION_CONFIG
 
 // START_BLOCK_INSPECT_INSTALLATION_STATE
 export async function inspectInstallation(paths: ResolvedPaths): Promise<InstallationInspection> {
@@ -870,21 +639,6 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   if (paths.opencodeAlternatePaths.length > 0) {
     warnings.push(
       `multiple OpenCode config files exist: ${[paths.opencodeConfigPath, ...paths.opencodeAlternatePaths].join(", ")}`,
-    );
-  }
-  if (paths.guardianAlternatePaths.length > 0) {
-    warnings.push(
-      `multiple Guardian config files exist: ${[paths.guardianConfigPath, ...paths.guardianAlternatePaths].join(", ")}`,
-    );
-  }
-  if (paths.memoryConfigAlternates.length > 0) {
-    warnings.push(
-      `multiple Memory config files exist: ${[paths.memoryConfigPath, ...paths.memoryConfigAlternates].join(", ")}`,
-    );
-  }
-  if (paths.secretsRedactionConfigAlternates.length > 0) {
-    warnings.push(
-      `multiple SecretsRedaction config files exist: ${[paths.secretsRedactionConfigPath, ...paths.secretsRedactionConfigAlternates].join(", ")}`,
     );
   }
 
@@ -904,51 +658,24 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     }
   }
 
-  const guardianText = await readOptionalText(paths.guardianConfigPath);
-  let guardianParseError: string | undefined;
-  let guardianOverrides: GuardianConfigOverrides | undefined;
-  const guardianManaged = guardianText ? isManagedFile(guardianText) : false;
+  const vvocText = await readOptionalText(paths.vvocConfigPath);
+  let vvocParseError: string | undefined;
+  let vvocConfig: VvocConfig | undefined;
 
-  if (guardianText) {
+  if (vvocText) {
     try {
-      guardianOverrides = parseGuardianConfigText(guardianText, paths.guardianConfigPath);
+      vvocConfig = parseVvocConfigText(vvocText, paths.vvocConfigPath);
     } catch (error) {
-      guardianParseError = error instanceof Error ? error.message : String(error);
-      problems.push(guardianParseError);
-    }
-  }
-
-  const memoryText = await readOptionalText(paths.memoryConfigPath);
-  let memoryParseError: string | undefined;
-  let memoryOverrides: MemoryConfigOverrides | undefined;
-  const memoryManaged = memoryText ? isManagedFile(memoryText) : false;
-
-  if (memoryText) {
-    try {
-      memoryOverrides = parseMemoryConfigText(memoryText, paths.memoryConfigPath);
-    } catch (error) {
-      memoryParseError = error instanceof Error ? error.message : String(error);
-      problems.push(memoryParseError);
-    }
-  }
-
-  const secretsRedactionText = await readOptionalText(paths.secretsRedactionConfigPath);
-  let secretsRedactionParseError: string | undefined;
-  const secretsRedactionManaged = secretsRedactionText
-    ? isManagedFile(secretsRedactionText)
-    : false;
-
-  if (secretsRedactionText) {
-    try {
-      parseSecretsRedactionConfigText(secretsRedactionText, paths.secretsRedactionConfigPath);
-    } catch (error) {
-      secretsRedactionParseError = error instanceof Error ? error.message : String(error);
-      problems.push(secretsRedactionParseError);
+      vvocParseError = error instanceof Error ? error.message : String(error);
+      problems.push(vvocParseError);
     }
   }
 
   if (!pluginConfigured) {
     problems.push(`${PACKAGE_NAME} is not configured in ${paths.opencodeConfigPath}`);
+  }
+  if (!vvocText) {
+    problems.push(`vvoc config is missing at ${paths.vvocConfigPath}`);
   }
 
   return {
@@ -961,28 +688,21 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
       pluginConfigured,
       plugins,
     },
+    vvoc: {
+      path: paths.vvocConfigPath,
+      exists: Boolean(vvocText),
+      parseError: vvocParseError,
+      schema: vvocConfig?.$schema,
+      version: vvocConfig?.version,
+    },
     guardian: {
-      path: paths.guardianConfigPath,
-      exists: Boolean(guardianText),
-      alternates: paths.guardianAlternatePaths,
-      managed: guardianManaged,
-      parseError: guardianParseError,
-      overrides: guardianOverrides,
+      config: vvocConfig?.guardian,
     },
     memory: {
-      path: paths.memoryConfigPath,
-      exists: Boolean(memoryText),
-      alternates: paths.memoryConfigAlternates,
-      managed: memoryManaged,
-      parseError: memoryParseError,
-      overrides: memoryOverrides,
+      config: vvocConfig?.memory,
     },
     secretsRedaction: {
-      path: paths.secretsRedactionConfigPath,
-      exists: Boolean(secretsRedactionText),
-      alternates: paths.secretsRedactionConfigAlternates,
-      managed: secretsRedactionManaged,
-      parseError: secretsRedactionParseError,
+      config: vvocConfig?.secretsRedaction,
     },
     warnings,
     problems,
@@ -1233,39 +953,6 @@ function updateAgentEntryText(text: string, agentName: string, entry: JsonObject
 }
 // END_BLOCK_MANAGED_AGENT_HELPERS
 
-function normalizeGuardianOverrides(raw: unknown, label: string): GuardianConfigOverrides {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`${label}: expected a top-level object`);
-  }
-
-  const record = raw as Record<string, unknown>;
-  const overrides: GuardianConfigOverrides = {};
-
-  if (Object.hasOwn(record, "model")) {
-    overrides.model = readNonEmptyString(record.model, `${label}: model`);
-  }
-  if (Object.hasOwn(record, "variant")) {
-    overrides.variant = readNonEmptyString(record.variant, `${label}: variant`);
-  }
-  if (Object.hasOwn(record, "timeoutMs")) {
-    overrides.timeoutMs = readPositiveInteger(record.timeoutMs, `${label}: timeoutMs`);
-  }
-  if (Object.hasOwn(record, "approvalRiskThreshold")) {
-    overrides.approvalRiskThreshold = readThreshold(
-      record.approvalRiskThreshold,
-      `${label}: approvalRiskThreshold`,
-    );
-  }
-  if (Object.hasOwn(record, "reviewToastDurationMs")) {
-    overrides.reviewToastDurationMs = readPositiveInteger(
-      record.reviewToastDurationMs,
-      `${label}: reviewToastDurationMs`,
-    );
-  }
-
-  return overrides;
-}
-
 function readNonEmptyString(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${label}: expected a non-empty string`);
@@ -1287,20 +974,6 @@ function readOptionalObject(
   }
   return value as JsonObject;
 }
-
-function readPositiveInteger(value: unknown, label: string): number {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return Math.round(value);
-  }
-  throw new Error(`${label}: expected a positive integer`);
-}
-
-function readThreshold(value: unknown, label: string): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, Math.min(100, Math.round(value)));
-  }
-  throw new Error(`${label}: expected a number between 0 and 100`);
-}
 // END_BLOCK_PARSE_AND_NORMALIZE_CONFIG_VALUES
 
 // START_BLOCK_FILESYSTEM_HELPERS
@@ -1319,6 +992,24 @@ function stripMarkdownFrontmatter(text: string): string {
 
 function ensureTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+async function writeResolvedVvocConfig(
+  path: string,
+  currentText: string | undefined,
+  config: VvocConfig,
+): Promise<WriteResult> {
+  const nextText = renderVvocConfig(config);
+
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path };
+  }
+
+  await writeText(path, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path,
+  };
 }
 
 async function readOptionalText(path: string): Promise<string | undefined> {

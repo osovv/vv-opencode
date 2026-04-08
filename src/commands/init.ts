@@ -1,8 +1,8 @@
 // FILE: src/commands/init.ts
-// VERSION: 0.4.4
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds initial vvoc config files. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, config file scaffolding, and idempotent re-run handling.
+//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds the canonical vvoc.json config plus managed prompts. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
+//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,16 +15,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.4 - Removed legacy enhance command setup from init and kept enhancer as the managed primary agent path.]
+//   LAST_CHANGE: [v0.5.0 - Switched init to seed the canonical global vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import {
   ensurePackageInstalled,
-  installGuardianConfig,
   installManagedAgentPrompts,
-  installMemoryConfig,
+  installVvocConfig,
   inspectInstallation,
   resolvePaths,
   syncManagedAgentRegistrations,
@@ -110,7 +109,7 @@ async function runInit(options: {
     const reloadedPaths = await resolvePaths({ scope: selectedScope, cwd, configDir });
     const inspection = await inspectInstallation(reloadedPaths);
 
-    if (inspection.opencode.pluginConfigured) {
+    if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
       const overwrite = await p.confirm({
         message: `@osovv/vv-opencode is already configured. Overwrite?`,
         initialValue: false,
@@ -143,13 +142,9 @@ async function runInit(options: {
     p.log.info(result.path + " - " + result.action);
   }
 
-  p.log.step("Scaffolding Guardian config...");
-  const guardianResult = await installGuardianConfig(finalPaths, { force: true });
-  p.log.info(guardianResult.path + " - " + guardianResult.action);
-
-  p.log.step("Scaffolding Memory config...");
-  const memoryResult = await installMemoryConfig(finalPaths, { force: true });
-  p.log.info(memoryResult.path + " - " + memoryResult.action);
+  p.log.step("Scaffolding canonical vvoc config...");
+  const vvocConfigResult = await installVvocConfig(finalPaths);
+  p.log.info(vvocConfigResult.path + " - " + vvocConfigResult.action);
 
   p.outro(`vvoc initialized successfully
 
@@ -167,7 +162,7 @@ export async function runInitNonInteractive(options: {
   const paths = await resolvePaths({ scope, cwd, configDir });
 
   const inspection = await inspectInstallation(paths);
-  if (inspection.opencode.pluginConfigured) {
+  if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
     console.log("Already configured. Run `vvoc sync` to update configs.");
     return;
   }
@@ -175,6 +170,5 @@ export async function runInitNonInteractive(options: {
   await ensurePackageInstalled(paths);
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
-  await installGuardianConfig(paths, { force: true });
-  await installMemoryConfig(paths, { force: true });
+  await installVvocConfig(paths);
 }

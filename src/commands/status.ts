@@ -1,8 +1,8 @@
 // FILE: src/commands/status.ts
-// VERSION: 0.2.5
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Show the current vv-opencode installation status.
-//   SCOPE: Scope parsing, inspection lookup, and human-readable status output for OpenCode, Guardian, and Memory config.
+//   SCOPE: Scope parsing, inspection lookup, and human-readable status output for OpenCode and the canonical vvoc.json config.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE command markup around status reporting for easier operational inspection.]
+//   LAST_CHANGE: [v0.3.0 - Updated status reporting for the canonical vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -52,12 +52,18 @@ export default defineCommand({
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(`OpenCode config exists: ${inspection.opencode.exists ? "yes" : "no"}`);
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
-    console.log(`Guardian config: ${inspection.guardian.path}`);
-    console.log(`Guardian config exists: ${inspection.guardian.exists ? "yes" : "no"}`);
-    console.log(`Guardian config managed by vvoc: ${inspection.guardian.managed ? "yes" : "no"}`);
-    console.log(`Memory config: ${inspection.memory.path}`);
-    console.log(`Memory config exists: ${inspection.memory.exists ? "yes" : "no"}`);
-    console.log(`Memory config managed by vvoc: ${inspection.memory.managed ? "yes" : "no"}`);
+    console.log(`vvoc config: ${inspection.vvoc.path}`);
+    console.log(`vvoc config exists: ${inspection.vvoc.exists ? "yes" : "no"}`);
+    console.log(`vvoc config version: ${inspection.vvoc.version ?? "missing"}`);
+    console.log(
+      `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
+    );
+    console.log(
+      `Memory enabled: ${inspection.memory.config ? (inspection.memory.config.enabled ? "yes" : "no") : "unknown"}`,
+    );
+    console.log(
+      `Secrets Redaction enabled: ${inspection.secretsRedaction.config ? (inspection.secretsRedaction.config.enabled ? "yes" : "no") : "unknown"}`,
+    );
 
     if (inspection.warnings.length > 0) {
       console.log("Warnings:");

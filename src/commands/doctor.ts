@@ -1,8 +1,8 @@
 // FILE: src/commands/doctor.ts
-// VERSION: 0.2.5
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Diagnose vv-opencode installation problems and surface actionable failures.
-//   SCOPE: Scope parsing, installation inspection, warning/problem reporting, and non-zero exit signaling.
+//   SCOPE: Scope parsing, installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode plus the canonical vvoc.json config.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.5 - Added GRACE command markup around doctor diagnostics for deterministic troubleshooting navigation.]
+//   LAST_CHANGE: [v0.3.0 - Updated doctor diagnostics for the canonical vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -56,16 +56,21 @@ export default defineCommand({
     console.log(
       `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.join(", ") : "<none>"}`,
     );
-    console.log(`Guardian config: ${inspection.guardian.path}`);
+    console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(
-      `Guardian config parse: ${inspection.guardian.parseError ? inspection.guardian.parseError : inspection.guardian.exists ? "ok" : "missing"}`,
+      `vvoc config parse: ${inspection.vvoc.parseError ? inspection.vvoc.parseError : inspection.vvoc.exists ? "ok" : "missing"}`,
     );
-    console.log(`Guardian config managed by vvoc: ${inspection.guardian.managed ? "yes" : "no"}`);
-    console.log(`Memory config: ${inspection.memory.path}`);
+    console.log(`vvoc schema: ${inspection.vvoc.schema ?? "missing"}`);
+    console.log(`vvoc version: ${inspection.vvoc.version ?? "missing"}`);
     console.log(
-      `Memory config parse: ${inspection.memory.parseError ? inspection.memory.parseError : inspection.memory.exists ? "ok" : "missing"}`,
+      `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
     );
-    console.log(`Memory config managed by vvoc: ${inspection.memory.managed ? "yes" : "no"}`);
+    console.log(
+      `Memory enabled: ${inspection.memory.config ? (inspection.memory.config.enabled ? "yes" : "no") : "unknown"}`,
+    );
+    console.log(
+      `Secrets Redaction enabled: ${inspection.secretsRedaction.config ? (inspection.secretsRedaction.config.enabled ? "yes" : "no") : "unknown"}`,
+    );
 
     if (inspection.warnings.length > 0) {
       console.log("Warnings:");
