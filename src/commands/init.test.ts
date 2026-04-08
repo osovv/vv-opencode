@@ -1,8 +1,8 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
-//   SCOPE: Non-interactive init path, managed agent prompt scaffolding, config scaffolding, and idempotent re-run handling.
+//   SCOPE: Non-interactive init path, managed command/subagent registration, managed agent prompt scaffolding, config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [src/commands/init.ts]
 //   LINKS: [M-CLI-INIT]
 //   ROLE: TEST
@@ -52,6 +52,8 @@ describe("init scenarios", () => {
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
       expect(opencodeContent).toContain("@osovv/vv-opencode");
+      expect(opencodeContent).toContain('"enhance"');
+      expect(opencodeContent).toContain('<vvoc_enhance version=\\"1.0\\">');
       expect(opencodeContent).toContain('"implementer"');
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });

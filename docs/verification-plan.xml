@@ -11,16 +11,16 @@
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User runs `vvoc init` to bootstrap the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, managed subagents are registered in OpenCode config, and initial Guardian, memory-reviewer, and managed subagent prompt files live under the vvoc config root.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed `/enhance` command and managed subagents are registered in OpenCode config, and initial Guardian, memory-reviewer, and managed subagent prompt files live under the vvoc config root.</expected-outcome>
       <required-signals>
-        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedSubagentRegistrations -&gt; installManagedAgentPrompts -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
+        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedCommandRegistrations -&gt; syncManagedSubagentRegistrations -&gt; installManagedAgentPrompts -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
       </required-signals>
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Managed config and prompt files are rewritten canonically, agent registration stays present in OpenCode config, and current explicit values survive the rewrite where applicable.</expected-outcome>
+      <expected-outcome>Managed config and prompt files are rewritten canonically, the managed `/enhance` command and agent registration stay present in OpenCode config, and current explicit values survive the rewrite where applicable.</expected-outcome>
       <required-signals>
-        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC/markdown -&gt; syncManagedSubagentRegistrations</trace-sequence>
+        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC/markdown -&gt; syncManagedCommandRegistrations -&gt; syncManagedSubagentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
     <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-001" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
@@ -76,7 +76,8 @@
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
         <scenario-5 kind="success">Managed subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references.</scenario-5>
         <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root, model overrides round-trip through OpenCode config for both vvoc-managed subagents and the built-in `general` and `explore` subagents, and only guardian keeps an explicit `steps` limit.</scenario-6>
-        <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
+        <scenario-7 kind="success">The managed `/enhance` command is registered in OpenCode config with a structured XML template that preserves the raw request inside a CDATA block and merges conservatively with existing command overrides.</scenario-7>
+        <scenario-8 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-8>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -295,12 +296,14 @@
         <check-1>bun run lint</check-1>
         <check-2>bun run fmt:check</check-2>
         <check-3>bun run build</check-3>
+        <check-4>bun test src/commands/init.test.ts</check-4>
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">Interactive prompts are shown when TTY is available.</scenario-1>
         <scenario-2 kind="success">Ctrl+C aborts cleanly without partial file writes.</scenario-2>
         <scenario-3 kind="success">Re-running init does not clobber existing valid config.</scenario-3>
         <scenario-4 kind="success">Generated configs are valid JSONC with correct schema.</scenario-4>
+        <scenario-5 kind="success">Non-interactive init seeds `command.enhance` alongside the managed subagent registrations.</scenario-5>
       </scenarios>
       <required-log-markers />
       <wave-follow-up>Test with a temp directory and verify file contents.</wave-follow-up>

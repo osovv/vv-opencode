@@ -4,13 +4,14 @@
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, provider baseURL patching, OpenCode agent model overrides, managed subagent registration, managed agent prompt scaffolding, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
+      <purpose>Path resolution, JSONC-aware config mutation, pinned plugin registration, provider baseURL patching, managed OpenCode command registration, OpenCode agent model overrides, managed subagent registration, managed agent prompt scaffolding, managed Guardian config rendering, and installation inspection with separated vvoc roots.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-paths.ts</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
+        <fn-syncManagedCommandRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed slash commands such as /enhance with a structured XML execution template." />
         <fn-writeProviderBaseUrl PURPOSE="Write or preserve an OpenCode provider options.baseURL override conservatively." />
         <fn-writeOpenCodeAgentModel PURPOSE="Write or remove a model override for a built-in OpenCode agent such as general or explore." />
         <fn-syncManagedSubagentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed subagent registrations with prompt file references." />
@@ -30,7 +31,7 @@
     </M-CLI-MANAGED-AGENTS>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, path-provider, completion, and upgrade commands, including model overrides for built-in general/explore and vvoc-managed subagents.</purpose>
+      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, path-provider, completion, and upgrade commands, including model overrides for built-in general/explore plus registration of vvoc-managed OpenCode commands and subagents.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>

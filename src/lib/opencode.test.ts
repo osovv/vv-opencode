@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.2.9
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
-//   SCOPE: Plugin specifier writes, provider baseURL patching, OpenCode agent model overrides, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode command registration, OpenCode agent model overrides, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -12,6 +12,7 @@
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
 //   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
+//   managed command config helpers tests - Verify /enhance registration with a structured XML template and conservative merge behavior.
 //   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
 //   managed subagent config helpers tests - Verify registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
@@ -19,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.9 - Extended built-in OpenCode agent model override verification to cover general alongside explore.]
+//   LAST_CHANGE: [v0.3.0 - Added verification for the managed /enhance OpenCode command registration.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -30,6 +31,7 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
+  ensureManagedCommandsConfigText,
   ensurePackageConfigText,
   ensureProviderBaseUrlConfigText,
   ensureManagedSubagentsConfigText,
@@ -173,6 +175,44 @@ describe("provider baseURL helpers", () => {
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe("managed command config helpers", () => {
+  test("creates the managed /enhance command with a structured XML template", () => {
+    const output = ensureManagedCommandsConfigText(undefined);
+    const parsed = parse(output) as {
+      $schema?: string;
+      command?: Record<string, { description?: string; template?: string }>;
+    };
+
+    expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
+    expect(parsed.command?.enhance?.description).toBe(
+      "Wrap a raw request in vvoc's structured XML execution prompt.",
+    );
+    expect(parsed.command?.enhance?.template).toContain('<vvoc_enhance version="1.0">');
+    expect(parsed.command?.enhance?.template).toContain("<![CDATA[$ARGUMENTS]]>");
+  });
+
+  test("preserves existing /enhance overrides while backfilling managed metadata", () => {
+    const input = `{
+  // keep custom command docs
+  "command": {
+    "enhance": {
+      "template": "custom template"
+    }
+  }
+}\n`;
+    const output = ensureManagedCommandsConfigText(input);
+    const parsed = parse(output) as {
+      command?: Record<string, { description?: string; template?: string }>;
+    };
+
+    expect(output).toContain("// keep custom command docs");
+    expect(parsed.command?.enhance?.template).toBe("custom template");
+    expect(parsed.command?.enhance?.description).toBe(
+      "Wrap a raw request in vvoc's structured XML execution prompt.",
+    );
   });
 });
 

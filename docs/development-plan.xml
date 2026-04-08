@@ -9,7 +9,7 @@
   <Modules>
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, patch provider baseURLs conservatively, render managed Guardian config, and inspect installation state.</purpose>
+        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, register managed OpenCode commands conservatively, patch provider baseURLs conservatively, render managed Guardian config, and inspect installation state.</purpose>
         <inputs>
           <param name="scope" type="global | project" />
           <param name="cwd" type="string" />
@@ -26,6 +26,7 @@
       <interface>
         <export-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
         <export-ensurePackageInstalled PURPOSE="Ensure the npm package is registered in OpenCode config with a pinned package version." />
+        <export-syncManagedCommandRegistrations PURPOSE="Ensure OpenCode config contains the managed /enhance command with the canonical XML prompt template." />
         <export-writeProviderBaseUrl PURPOSE="Write a conservative provider options.baseURL override into OpenCode config." />
         <export-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </interface>
@@ -46,7 +47,7 @@
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty.</purpose>
+        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty while delegating managed `/enhance` command and subagent registration to the helper layer.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
