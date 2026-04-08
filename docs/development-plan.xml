@@ -178,6 +178,37 @@
       </notes>
     </M-PLUGIN-MEMORY>
 
+    <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="5" STATUS="implemented">
+      <contract>
+        <purpose>Inject reusable vvoc system guidance into primary chat sessions while skipping known subagents, using agent-aware message hooks instead of the global system transform hook.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks with config-aware chat.message mutation" />
+        </outputs>
+        <errors>
+          <error code="UNSUPPORTED_AGENT_MODE_FILTER" />
+        </errors>
+      </contract>
+      <interface>
+        <export-SystemContextInjectionPlugin PURPOSE="Inject main-session guidance such as proactive explore usage into `message.system` for eligible primary agents." />
+      </interface>
+      <depends>M-CLI-MANAGED-AGENTS</depends>
+      <target>
+        <source>src/plugins/system-context-injection/index.ts</source>
+        <tests>src/plugins/system-context-injection.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[system-context]</log-prefix>
+        <critical-block>BLOCK_PLUGIN_ENTRY</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
+      <notes>
+        <note-1>`experimental.chat.system.transform` lacks agent context, so this plugin uses `chat.message` to target primary sessions without polluting known subagents.</note-1>
+      </notes>
+    </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
+
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>
         <purpose>Validate guardian.jsonc and memory.jsonc configuration files with human-readable error reporting.</purpose>

@@ -72,6 +72,16 @@
       </annotations>
     </M-PLUGIN-MEMORY>
 
+    <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Inject reusable system guidance into primary chat sessions while skipping known subagents so main-session behavior can be steered globally.</purpose>
+      <path>src/plugins/system-context-injection/index.ts</path>
+      <depends>M-CLI-MANAGED-AGENTS</depends>
+      <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
+      <annotations>
+        <export-SystemContextInjectionPlugin PURPOSE="Inject main-session system guidance such as proactive explore instructions without polluting known subagents." />
+      </annotations>
+    </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
+
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION NAME="PlaceholderSession" TYPE="UTILITY" STATUS="implemented">
       <purpose>Manages secret-to-placeholder mappings with HMAC-SHA256 hashing, TTL eviction, and max-mappings limits.</purpose>
       <path>src/plugins/secrets-redaction/session.ts</path>

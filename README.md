@@ -7,6 +7,7 @@ Portable OpenCode workflow package with plugins and a Bun CLI for setup, sync, d
 - `vvoc` CLI for bootstrap, sync, inspection, and model overrides
 - `GuardianPlugin` for permission review
 - `MemoryPlugin` for explicit persistent memory
+- `SystemContextInjectionPlugin` for reusable primary-session system guidance
 - `SecretsRedactionPlugin` for redacting secrets before LLM requests
 - report-only `memory-reviewer` subagent
 - vvoc-managed prompt files and OpenCode agent registrations
@@ -69,7 +70,7 @@ The OpenCode config entry written by `install` looks like this:
 }
 ```
 
-That package entry points at the package root, which exports `GuardianPlugin`, `MemoryPlugin`, and `SecretsRedactionPlugin`.
+That package entry points at the package root, which exports `GuardianPlugin`, `MemoryPlugin`, `SystemContextInjectionPlugin`, and `SecretsRedactionPlugin`.
 
 ## Common Workflows
 
@@ -313,6 +314,14 @@ Example:
 
 The reviewer can read memory but cannot modify it.
 
+### SystemContextInjectionPlugin
+
+`SystemContextInjectionPlugin` injects reusable system guidance into primary chat sessions without polluting known subagent prompts.
+
+The default injected guidance tells the main session to proactively use the `explore` subagent when the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.
+
+The plugin currently injects guidance through the `chat.message` hook so it can inspect the resolved agent name and skip known subagents such as `general`, `explore`, `implementer`, and `memory-reviewer`.
+
 ### SecretsRedactionPlugin
 
 `SecretsRedactionPlugin` redacts secrets from chat content before LLM requests and restores placeholders after the request lifecycle where needed.
@@ -372,6 +381,7 @@ Root exports:
 import {
   GuardianPlugin,
   MemoryPlugin,
+  SystemContextInjectionPlugin,
   SecretsRedactionPlugin,
 } from "@osovv/vv-opencode";
 ```
@@ -381,6 +391,7 @@ Subpath exports:
 ```ts
 import { GuardianPlugin } from "@osovv/vv-opencode/plugins/guardian";
 import { MemoryPlugin } from "@osovv/vv-opencode/plugins/memory";
+import { SystemContextInjectionPlugin } from "@osovv/vv-opencode/plugins/system-context-injection";
 import { SecretsRedactionPlugin } from "@osovv/vv-opencode/plugins/secrets-redaction";
 ```
 

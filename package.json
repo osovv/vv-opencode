@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,6 +41,10 @@
       "types": "./dist/plugins/memory/index.d.ts",
       "import": "./dist/plugins/memory/index.js"
     },
+    "./plugins/system-context-injection": {
+      "types": "./dist/plugins/system-context-injection/index.d.ts",
+      "import": "./dist/plugins/system-context-injection/index.js"
+    },
     "./plugins/secrets-redaction": {
       "types": "./dist/plugins/secrets-redaction/index.d.ts",
       "import": "./dist/plugins/secrets-redaction/index.js"
@@ -54,7 +58,7 @@
     "fmt:check": "oxfmt --check src",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test",
-    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('MemoryPlugin' in root)) throw new Error('dist root export missing MemoryPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/memory/index.js')\" && npm pack --dry-run",
+    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('MemoryPlugin' in root)) throw new Error('dist root export missing MemoryPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/memory/index.js'); await import('./dist/plugins/system-context-injection/index.js')\" && npm pack --dry-run",
     "prepare": "lefthook install --force"
   },
   "dependencies": {
