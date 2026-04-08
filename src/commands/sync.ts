@@ -1,8 +1,8 @@
 // FILE: src/commands/sync.ts
-// VERSION: 0.2.7
+// VERSION: 0.2.9
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync managed vvoc config files and keep the OpenCode plugin specifier current.
-//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode command sync, managed agent prompt sync, and managed Guardian/Memory config rewrites.
+//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, and managed Guardian/Memory config rewrites.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.7 - Added managed /enhance OpenCode command syncing to vvoc sync.]
+//   LAST_CHANGE: [v0.2.9 - Removed legacy enhance command syncing and kept enhancer as the managed primary agent path.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,8 +23,7 @@ import {
   ensurePackageInstalled,
   resolvePaths,
   syncManagedAgentPrompts,
-  syncManagedCommandRegistrations,
-  syncManagedSubagentRegistrations,
+  syncManagedAgentRegistrations,
   syncGuardianConfig,
   syncMemoryConfig,
   type Scope,
@@ -61,18 +60,14 @@ export default defineCommand({
       configDir,
     });
     const opencode = await ensurePackageInstalled(paths);
-    const managedCommands = await syncManagedCommandRegistrations(paths);
-    const managedSubagents = await syncManagedSubagentRegistrations(paths);
+    const managedAgents = await syncManagedAgentRegistrations(paths);
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
     const guardian = await syncGuardianConfig(paths, { force: Boolean(args.force) });
     const memory = await syncMemoryConfig(paths, { force: Boolean(args.force) });
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
     console.log(
-      `${managedCommands.changed ? "Updated" : "Kept"} ${managedCommands.path} (managed commands)`,
-    );
-    console.log(
-      `${managedSubagents.changed ? "Updated" : "Kept"} ${managedSubagents.path} (managed subagents)`,
+      `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
     );
     for (const result of managedPrompts) {
       console.log(describeWriteResult(result));

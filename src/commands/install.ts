@@ -1,8 +1,8 @@
 // FILE: src/commands/install.ts
-// VERSION: 0.2.7
+// VERSION: 0.2.9
 // START_MODULE_CONTRACT
 //   PURPOSE: Install vv-opencode into OpenCode config and bootstrap vvoc-managed config files.
-//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode command registration, managed agent prompt scaffolding, and initial Guardian/Memory config creation.
+//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, and initial Guardian/Memory config creation.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.7 - Added managed /enhance OpenCode command registration to install.]
+//   LAST_CHANGE: [v0.2.9 - Removed legacy enhance command installation and kept enhancer as the managed primary agent path.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -26,8 +26,7 @@ import {
   installMemoryConfig,
   installSecretsRedactionConfig,
   resolvePaths,
-  syncManagedCommandRegistrations,
-  syncManagedSubagentRegistrations,
+  syncManagedAgentRegistrations,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -77,15 +76,11 @@ export default defineCommand({
       configDir,
     });
     const opencode = await ensurePackageInstalled(paths);
-    const managedCommands = await syncManagedCommandRegistrations(paths);
-    const managedSubagents = await syncManagedSubagentRegistrations(paths);
+    const managedAgents = await syncManagedAgentRegistrations(paths);
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
     console.log(
-      `${managedCommands.changed ? "Updated" : "Kept"} ${managedCommands.path} (managed commands)`,
-    );
-    console.log(
-      `${managedSubagents.changed ? "Updated" : "Kept"} ${managedSubagents.path} (managed subagents)`,
+      `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
     );
 
     for (const result of await installManagedAgentPrompts(paths, {

@@ -1,8 +1,8 @@
 // FILE: src/commands/init.ts
-// VERSION: 0.4.2
+// VERSION: 0.4.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds initial vvoc config files. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, managed OpenCode command registration, managed subagent registration, managed agent prompt scaffolding, config file scaffolding, and idempotent re-run handling.
+//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, config file scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.2 - Added managed /enhance OpenCode command registration to init.]
+//   LAST_CHANGE: [v0.4.4 - Removed legacy enhance command setup from init and kept enhancer as the managed primary agent path.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -27,8 +27,7 @@ import {
   installMemoryConfig,
   inspectInstallation,
   resolvePaths,
-  syncManagedCommandRegistrations,
-  syncManagedSubagentRegistrations,
+  syncManagedAgentRegistrations,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -133,16 +132,8 @@ async function runInit(options: {
   const pkgResult = await ensurePackageInstalled(finalPaths);
   p.log.info(pkgResult.path + " - " + (pkgResult.changed ? "updated" : "already up to date"));
 
-  p.log.step("Registering managed commands...");
-  const commandRegistration = await syncManagedCommandRegistrations(finalPaths);
-  p.log.info(
-    commandRegistration.path +
-      " - " +
-      (commandRegistration.changed ? "updated" : "already up to date"),
-  );
-
-  p.log.step("Registering managed subagents...");
-  const agentRegistration = await syncManagedSubagentRegistrations(finalPaths);
+  p.log.step("Registering managed agents...");
+  const agentRegistration = await syncManagedAgentRegistrations(finalPaths);
   p.log.info(
     agentRegistration.path + " - " + (agentRegistration.changed ? "updated" : "already up to date"),
   );
@@ -182,8 +173,7 @@ export async function runInitNonInteractive(options: {
   }
 
   await ensurePackageInstalled(paths);
-  await syncManagedCommandRegistrations(paths);
-  await syncManagedSubagentRegistrations(paths);
+  await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
   await installGuardianConfig(paths, { force: true });
   await installMemoryConfig(paths, { force: true });

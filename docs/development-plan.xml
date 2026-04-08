@@ -9,7 +9,7 @@
   <Modules>
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, register managed OpenCode commands conservatively, patch provider baseURLs conservatively, render managed Guardian config, and inspect installation state.</purpose>
+        <purpose>Resolve OpenCode and vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, register managed OpenCode agents conservatively, patch provider baseURLs conservatively, render managed Guardian config, and inspect installation state.</purpose>
         <inputs>
           <param name="scope" type="global | project" />
           <param name="cwd" type="string" />
@@ -26,8 +26,8 @@
       <interface>
         <export-resolvePaths PURPOSE="Resolve OpenCode config paths and vvoc-managed config paths for the selected scope." />
         <export-ensurePackageInstalled PURPOSE="Ensure the npm package is registered in OpenCode config with a pinned package version." />
-        <export-syncManagedCommandRegistrations PURPOSE="Ensure OpenCode config contains the managed /enhance command with the canonical XML prompt template." />
         <export-writeProviderBaseUrl PURPOSE="Write a conservative provider options.baseURL override into OpenCode config." />
+        <export-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains the managed enhancer primary agent plus the bundled managed subagents." />
         <export-syncGuardianConfig PURPOSE="Rewrite managed Guardian config while preserving current values." />
       </interface>
       <depends>none</depends>
@@ -47,7 +47,7 @@
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty while delegating managed `/enhance` command and subagent registration to the helper layer.</purpose>
+        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty while delegating managed enhancer/subagent registration to the helper layer.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
@@ -177,37 +177,6 @@
         <note-1>The reviewer is implemented as a bundled subagent, and the main chat path receives only a short memory policy reminder instead of prompt-injected memory entries.</note-1>
       </notes>
     </M-PLUGIN-MEMORY>
-
-    <M-PLUGIN-ENHANCE NAME="EnhanceCommandPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="5" STATUS="implemented">
-      <contract>
-        <purpose>Intercept `/enhance` command execution and, when TUI prompt APIs are available, clear and append the expanded prompt to the current chatbox instead of directly submitting command parts.</purpose>
-        <inputs>
-          <param name="PluginInput" type="@opencode-ai/plugin input" />
-        </inputs>
-        <outputs>
-          <param name="Hooks" type="OpenCode plugin hooks with command.execute.before interception" />
-        </outputs>
-        <errors>
-          <error code="TUI_PROMPT_REWRITE_UNAVAILABLE" />
-        </errors>
-      </contract>
-      <interface>
-        <export-EnhanceCommandPlugin PURPOSE="Register command.execute.before hook that rewrites `/enhance` into the TUI prompt with safe fallback." />
-      </interface>
-      <depends>M-CLI-CONFIG</depends>
-      <target>
-        <source>src/plugins/enhance/index.ts</source>
-        <tests>src/plugins/enhance.test.ts</tests>
-      </target>
-      <observability>
-        <log-prefix>[enhance]</log-prefix>
-        <critical-block>BLOCK_PLUGIN_ENTRY</critical-block>
-      </observability>
-      <verification-ref>V-M-PLUGIN-ENHANCE</verification-ref>
-      <notes>
-        <note-1>OpenCode currently does not expose prompt selection/cursor APIs, so rewrite is full-box clear+append only.</note-1>
-      </notes>
-    </M-PLUGIN-ENHANCE>
 
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
       <contract>

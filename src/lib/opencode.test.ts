@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.5.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and vvoc config path helpers.
-//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode command registration, OpenCode agent model overrides, managed subagent registration/prompt scaffolding, Guardian config round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, OpenCode agent model overrides, Guardian config round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -12,15 +12,14 @@
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
 //   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
-//   managed command config helpers tests - Verify /enhance registration with a structured XML template and conservative merge behavior.
 //   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
-//   managed subagent config helpers tests - Verify registration, prompt scaffolding, and model override round-trips.
+//   managed agent registration helpers tests - Verify primary/subagent registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Added verification for the managed /enhance OpenCode command registration.]
+//   LAST_CHANGE: [v0.5.1 - Updated enhancer prompt scaffolding coverage to require semantically unique repeated XML tags.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -31,19 +30,18 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
-  ensureManagedCommandsConfigText,
   ensurePackageConfigText,
   ensureProviderBaseUrlConfigText,
-  ensureManagedSubagentsConfigText,
+  ensureManagedAgentRegistrationsConfigText,
   installManagedAgentPrompts,
   parseGuardianConfigText,
   readOpenCodeAgentModel,
-  readManagedSubagentModels,
+  readManagedAgentModels,
   renderGuardianConfig,
   resolvePaths,
   writeOpenCodeAgentModel,
   writeProviderBaseUrl,
-  writeManagedSubagentModel,
+  writeManagedAgentModel,
 } from "./opencode.js";
 
 describe("ensurePackageConfigText", () => {
@@ -178,53 +176,15 @@ describe("provider baseURL helpers", () => {
   });
 });
 
-describe("managed command config helpers", () => {
-  test("creates the managed /enhance command with a structured XML template", () => {
-    const output = ensureManagedCommandsConfigText(undefined);
-    const parsed = parse(output) as {
-      $schema?: string;
-      command?: Record<string, { description?: string; template?: string }>;
-    };
-
-    expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
-    expect(parsed.command?.enhance?.description).toBe(
-      "Wrap a raw request in vvoc's structured XML execution prompt.",
-    );
-    expect(parsed.command?.enhance?.template).toContain('<vvoc_enhance version="1.0">');
-    expect(parsed.command?.enhance?.template).toContain("<![CDATA[$ARGUMENTS]]>");
-  });
-
-  test("preserves existing /enhance overrides while backfilling managed metadata", () => {
-    const input = `{
-  // keep custom command docs
-  "command": {
-    "enhance": {
-      "template": "custom template"
-    }
-  }
-}\n`;
-    const output = ensureManagedCommandsConfigText(input);
-    const parsed = parse(output) as {
-      command?: Record<string, { description?: string; template?: string }>;
-    };
-
-    expect(output).toContain("// keep custom command docs");
-    expect(parsed.command?.enhance?.template).toBe("custom template");
-    expect(parsed.command?.enhance?.description).toBe(
-      "Wrap a raw request in vvoc's structured XML execution prompt.",
-    );
-  });
-});
-
-describe("managed subagent config helpers", () => {
-  test("creates managed subagent registrations with vvoc prompt refs", async () => {
+describe("managed agent registration helpers", () => {
+  test("creates managed agent registrations with vvoc prompt refs", async () => {
     const paths = await resolvePaths({
       scope: "global",
       cwd: "/workspace/project",
       configDir: "/tmp/vvoc-config-home",
     });
 
-    const output = ensureManagedSubagentsConfigText(undefined, paths);
+    const output = ensureManagedAgentRegistrationsConfigText(undefined, paths);
     const parsed = parse(output) as {
       $schema?: string;
       agent?: Record<
@@ -234,6 +194,14 @@ describe("managed subagent config helpers", () => {
     };
 
     expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
+    expect(parsed.agent?.enhancer?.mode).toBe("primary");
+    expect(parsed.agent?.enhancer?.prompt).toBe("{file:../vvoc/agents/enhancer.md}");
+    expect(parsed.agent?.enhancer?.permission).toEqual({
+      edit: "deny",
+      bash: "deny",
+      task: "deny",
+      todowrite: "deny",
+    });
     expect(parsed.agent?.implementer?.mode).toBe("subagent");
     expect(parsed.agent?.implementer?.prompt).toBe("{file:../vvoc/agents/implementer.md}");
     expect(parsed.agent?.implementer?.steps).toBeUndefined();
@@ -251,7 +219,12 @@ describe("managed subagent config helpers", () => {
       });
 
       const promptResults = await installManagedAgentPrompts(paths, { force: true });
-      expect(promptResults).toHaveLength(6);
+      expect(promptResults).toHaveLength(7);
+
+      const enhancerPrompt = await readFile(
+        join(projectDir, ".vvoc", "agents", "enhancer.md"),
+        "utf8",
+      );
 
       const implementerPrompt = await readFile(
         join(projectDir, ".vvoc", "agents", "implementer.md"),
@@ -270,27 +243,30 @@ describe("managed subagent config helpers", () => {
       expect(implementerPrompt).not.toContain("steps:");
       expect(implementerPrompt).not.toStartWith("---\n");
       expect(implementerPrompt).toContain("You are the implementer subagent.");
+      expect(enhancerPrompt).toContain("You are the enhancer agent.");
+      expect(enhancerPrompt).toContain("<constraint-1>");
+      expect(enhancerPrompt).toContain("<acceptance-criterion-1>");
       expect(guardianPrompt).toContain("risk assessment of a coding-agent tool call");
       expect(memoryReviewerPrompt).toContain(
         "You review explicit persistent memory managed by vvoc.",
       );
 
-      const setResult = await writeManagedSubagentModel(paths, "implementer", {
+      const setResult = await writeManagedAgentModel(paths, "enhancer", {
         model: "openai/gpt-5",
         ensureEntry: true,
       });
       expect(setResult.action).toBe("created");
 
-      const models = await readManagedSubagentModels(paths);
-      expect(models.implementer).toBe("openai/gpt-5");
+      const models = await readManagedAgentModels(paths);
+      expect(models.enhancer).toBe("openai/gpt-5");
 
-      const unsetResult = await writeManagedSubagentModel(paths, "implementer", {
+      const unsetResult = await writeManagedAgentModel(paths, "enhancer", {
         ensureEntry: false,
       });
       expect(unsetResult.action).toBe("updated");
 
-      const modelsAfterUnset = await readManagedSubagentModels(paths);
-      expect(modelsAfterUnset.implementer).toBeUndefined();
+      const modelsAfterUnset = await readManagedAgentModels(paths);
+      expect(modelsAfterUnset.enhancer).toBeUndefined();
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }

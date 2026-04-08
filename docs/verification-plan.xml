@@ -1,26 +1,26 @@
-<VerificationPlan VERSION="0.4.7">
+  <VerificationPlan VERSION="0.4.8">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc config layout, managed agent prompt scaffolding, managed subagent registration, Guardian config rendering, memory CRUD, and reviewer registration.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc config layout, managed agent prompt scaffolding, managed agent registration, Guardian config rendering, memory CRUD, and reviewer registration.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated change.</wave-level-focus>
-    <phase-level-focus>Buildable package output plus stable command behavior for installation, Guardian review, and explicit memory workflows.</phase-level-focus>
+    <phase-level-focus>Buildable package output plus stable command behavior for installation, enhancer prompting, Guardian review, and explicit memory workflows.</phase-level-focus>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
 
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User runs `vvoc init` to bootstrap the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed `/enhance` command and managed subagents are registered in OpenCode config, and initial Guardian, memory-reviewer, and managed subagent prompt files live under the vvoc config root.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed enhancer agent and managed subagents are registered in OpenCode config, and initial Guardian, memory-reviewer, and managed agent prompt files live under the vvoc config root.</expected-outcome>
       <required-signals>
-        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedCommandRegistrations -&gt; syncManagedSubagentRegistrations -&gt; installManagedAgentPrompts -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
+        <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedAgentRegistrations -&gt; installManagedAgentPrompts -&gt; installGuardianConfig -&gt; status reports configured</trace-sequence>
       </required-signals>
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Managed config and prompt files are rewritten canonically, the managed `/enhance` command and agent registration stay present in OpenCode config, and current explicit values survive the rewrite where applicable.</expected-outcome>
+      <expected-outcome>Managed config and prompt files are rewritten canonically, the managed enhancer/subagent registration stays present in OpenCode config, and current explicit values survive the rewrite where applicable.</expected-outcome>
       <required-signals>
-        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC/markdown -&gt; syncManagedCommandRegistrations -&gt; syncManagedSubagentRegistrations</trace-sequence>
+        <trace-sequence>inspect managed file -&gt; parse current values -&gt; render canonical JSONC/markdown -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
     <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-001" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
@@ -45,13 +45,6 @@
         <trace-sequence>plugin config registers memory-reviewer -&gt; reviewer uses memory_list/get/search only</trace-sequence>
       </required-signals>
     </VF-MEMORY-REVIEW>
-    <VF-ENHANCE-COMMAND-RUNTIME NAME="EnhanceCommandRuntime" USE_CASES="UC-006" DATA_FLOW="DF-ENHANCE-COMMAND" PRIORITY="medium">
-      <scenario>User runs `/enhance ...` in OpenCode TUI with vvoc plugin package installed.</scenario>
-      <expected-outcome>When TUI prompt APIs are available, the command output is rewritten into the current prompt box via clear+append and direct command submission is skipped; when rewrite fails, default slash-command submission remains available.</expected-outcome>
-      <required-signals>
-        <trace-sequence>command.execute.before -&gt; clearPrompt -&gt; appendPrompt -&gt; (success: output.parts emptied) OR (failure: fallback to default behavior)</trace-sequence>
-      </required-signals>
-    </VF-ENHANCE-COMMAND-RUNTIME>
     <VF-SECRETS-REDACTION NAME="SecretsRedaction" USE_CASES="UC-005" DATA_FLOW="DF-SECRETS-REDACTION" PRIORITY="high">
       <scenario>LLM request is sent with secrets in message history, tool inputs, or tool outputs.</scenario>
       <expected-outcome>Secrets are replaced with `__VVOC_SECRET_*` placeholders before LLM request, restored after LLM response, and restored before tool execution.</expected-outcome>
@@ -81,10 +74,9 @@
         <scenario-2 kind="success">Existing JSONC comments survive plugin insertion.</scenario-2>
         <scenario-3 kind="success">Guardian config round-trips explicit override values.</scenario-3>
         <scenario-4 kind="success">Global path resolution separates `opencode/` and `vvoc/` roots.</scenario-4>
-        <scenario-5 kind="success">Managed subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references.</scenario-5>
-        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, and the vvoc subagents are scaffolded under the vvoc config root, model overrides round-trip through OpenCode config for both vvoc-managed subagents and the built-in `general` and `explore` subagents, and only guardian keeps an explicit `steps` limit.</scenario-6>
-        <scenario-7 kind="success">The managed `/enhance` command is registered in OpenCode config with a structured XML template that preserves the raw request inside a CDATA block and merges conservatively with existing command overrides.</scenario-7>
-        <scenario-8 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-8>
+        <scenario-5 kind="success">Managed enhancer/subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references and correct `primary` versus `subagent` modes.</scenario-5>
+        <scenario-6 kind="success">Managed prompt files for guardian, memory-reviewer, enhancer, and the vvoc subagents are scaffolded under the vvoc config root, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
+        <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -107,7 +99,7 @@
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version` and `path-provider`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid JSONC content.</scenario-2>
-        <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, the built-in `general` and `explore` subagents, and the four vvoc-managed OpenCode subagents.</scenario-3>
+        <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, the built-in `general` and `explore` agents, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -186,26 +178,6 @@
       <wave-follow-up>Consider adding a smoke test around custom tool execution in a live OpenCode session.</wave-follow-up>
       <phase-follow-up>Add coverage for memory config warnings and disabled mode if the config surface grows.</phase-follow-up>
     </V-M-PLUGIN-MEMORY>
-
-    <V-M-PLUGIN-ENHANCE MODULE="M-PLUGIN-ENHANCE" PRIORITY="medium">
-      <test-files>
-        <file>src/plugins/enhance.test.ts</file>
-      </test-files>
-      <module-checks>
-        <check-1>bun test src/plugins/enhance.test.ts</check-1>
-        <check-2>bun x tsc --noEmit</check-2>
-      </module-checks>
-      <scenarios>
-        <scenario-1 kind="success">`/enhance` command hook clears and appends the expanded prompt into the TUI prompt box, then empties command output parts to avoid direct command submission.</scenario-1>
-        <scenario-2 kind="failure">When TUI clear/append fails, the hook preserves output parts so default slash-command submission still works.</scenario-2>
-      </scenarios>
-      <required-log-markers />
-      <required-trace-assertions>
-        <assertion-1>No rewrite attempt occurs for non-`/enhance` commands.</assertion-1>
-      </required-trace-assertions>
-      <wave-follow-up>Add a live OpenCode smoke test once an API harness exists for TUI prompt state assertions.</wave-follow-up>
-      <phase-follow-up>Revisit behavior if OpenCode exposes prompt selection/cursor APIs.</phase-follow-up>
-    </V-M-PLUGIN-ENHANCE>
 
     <V-M-PLUGIN-SECRETS-REDACTION MODULE="M-PLUGIN-SECRETS-REDACTION" PRIORITY="high">
       <test-files>
@@ -330,7 +302,7 @@
         <scenario-2 kind="success">Ctrl+C aborts cleanly without partial file writes.</scenario-2>
         <scenario-3 kind="success">Re-running init does not clobber existing valid config.</scenario-3>
         <scenario-4 kind="success">Generated configs are valid JSONC with correct schema.</scenario-4>
-        <scenario-5 kind="success">Non-interactive init seeds `command.enhance` alongside the managed subagent registrations.</scenario-5>
+        <scenario-5 kind="success">Non-interactive init seeds the managed `enhancer` primary agent alongside the managed subagent registrations.</scenario-5>
       </scenarios>
       <required-log-markers />
       <wave-follow-up>Test with a temp directory and verify file contents.</wave-follow-up>

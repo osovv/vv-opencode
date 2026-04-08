@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.5
+// VERSION: 0.5.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, nested command/preset completion generation for config/plugin/path-provider and the `agent set|unset <agent-id>` flow, and rc file patching.
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.5 - Reworked agent completions for the new `vvoc agent set|unset <agent-id>` command shape.]
+//   LAST_CHANGE: [v0.5.6 - Added the managed enhancer primary agent to `vvoc agent` shell completions.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -51,6 +51,7 @@ const VVOC_AGENT_TARGETS = [
   "memory-reviewer",
   "general",
   "explore",
+  "enhancer",
   "implementer",
   "spec-reviewer",
   "code-reviewer",

@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.ts
-// VERSION: 0.2.1
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
-//   SCOPE: Built-in subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
+//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY]
 //   ROLE: RUNTIME
@@ -11,20 +11,29 @@
 //
 // START_MODULE_MAP
 //   ManagedSubagentName - Canonical vvoc-managed subagent names.
+//   ManagedPrimaryAgentName - Canonical vvoc-managed primary agent names.
+//   ManagedOpenCodeAgentName - Canonical vvoc-managed OpenCode agent registration names.
 //   ManagedAgentPromptName - Canonical vvoc-managed agent prompt names including Guardian and memory-reviewer.
 //   ManagedSubagentDefinition - Metadata used to register a managed subagent in OpenCode config.
+//   ManagedPrimaryAgentDefinition - Metadata used to register a managed primary agent in OpenCode config.
 //   MANAGED_SUBAGENT_NAMES - Ordered managed subagent names.
+//   MANAGED_PRIMARY_AGENT_NAMES - Ordered managed primary agent names.
+//   MANAGED_OPENCODE_AGENT_NAMES - Ordered managed OpenCode agent registration names.
 //   MANAGED_AGENT_PROMPT_NAMES - Ordered managed agent prompt names.
 //   MANAGED_SUBAGENTS - Built-in managed subagent definitions.
+//   MANAGED_PRIMARY_AGENTS - Built-in managed primary agent definitions.
+//   MANAGED_OPENCODE_AGENTS - Built-in managed OpenCode agent definitions.
 //   isManagedSubagentName - Checks whether a string is one of the managed subagent names.
+//   isManagedOpenCodeAgentName - Checks whether a string is one of the managed OpenCode agent names.
 //   getManagedSubagentDefinition - Returns metadata for a managed subagent.
+//   getManagedOpenCodeAgentDefinition - Returns metadata for a managed OpenCode agent.
 //   getManagedAgentPromptPath - Resolves the prompt file path inside a vvoc agents directory.
 //   loadManagedAgentPromptTemplate - Loads the bundled prompt template for a managed agent prompt.
 //   loadManagedAgentPromptText - Loads a managed prompt from project or global vvoc config and errors if neither exists.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.1 - Removed explicit steps from vvoc-managed subagents so only guardian keeps a hard step limit.]
+//   LAST_CHANGE: [v0.3.0 - Added the managed enhancer primary agent alongside the existing vvoc subagent definitions.]
 // END_CHANGE_SUMMARY
 
 import { readFile } from "node:fs/promises";
@@ -39,10 +48,19 @@ export const MANAGED_SUBAGENT_NAMES = [
 ] as const;
 
 export type ManagedSubagentName = (typeof MANAGED_SUBAGENT_NAMES)[number];
+export const MANAGED_PRIMARY_AGENT_NAMES = ["enhancer"] as const;
+
+export type ManagedPrimaryAgentName = (typeof MANAGED_PRIMARY_AGENT_NAMES)[number];
+export const MANAGED_OPENCODE_AGENT_NAMES = [
+  ...MANAGED_PRIMARY_AGENT_NAMES,
+  ...MANAGED_SUBAGENT_NAMES,
+] as const;
+
+export type ManagedOpenCodeAgentName = (typeof MANAGED_OPENCODE_AGENT_NAMES)[number];
 export const MANAGED_AGENT_PROMPT_NAMES = [
   "guardian",
   "memory-reviewer",
-  ...MANAGED_SUBAGENT_NAMES,
+  ...MANAGED_OPENCODE_AGENT_NAMES,
 ] as const;
 
 export type ManagedAgentPromptName = (typeof MANAGED_AGENT_PROMPT_NAMES)[number];
@@ -51,6 +69,15 @@ export type ManagedSubagentDefinition = {
   name: ManagedSubagentName;
   description: string;
   promptFileName: `${ManagedSubagentName}.md`;
+  mode: "subagent";
+  permission?: Record<string, unknown>;
+};
+
+export type ManagedPrimaryAgentDefinition = {
+  name: ManagedPrimaryAgentName;
+  description: string;
+  promptFileName: `${ManagedPrimaryAgentName}.md`;
+  mode: "primary";
   permission?: Record<string, unknown>;
 };
 
@@ -59,12 +86,14 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     name: "implementer",
     description: "Implements approved changes with focused verification and a minimal diff.",
     promptFileName: "implementer.md",
+    mode: "subagent",
   },
   {
     name: "spec-reviewer",
     description:
       "Checks an implementation against the requested spec and flags missing or extra behavior.",
     promptFileName: "spec-reviewer.md",
+    mode: "subagent",
     permission: {
       edit: "deny",
     },
@@ -73,6 +102,7 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     name: "code-reviewer",
     description: "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
     promptFileName: "code-reviewer.md",
+    mode: "subagent",
     permission: {
       edit: "deny",
     },
@@ -81,14 +111,35 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     name: "investitagor",
     description: "Investigates bugs and unclear behavior before implementation work begins.",
     promptFileName: "investitagor.md",
+    mode: "subagent",
     permission: {
       edit: "deny",
     },
   },
 ];
 
+export const MANAGED_PRIMARY_AGENTS: readonly ManagedPrimaryAgentDefinition[] = [
+  {
+    name: "enhancer",
+    description: "Turns raw user intent into a structured XML prompt for a follow-up agent.",
+    promptFileName: "enhancer.md",
+    mode: "primary",
+    permission: {
+      edit: "deny",
+      bash: "deny",
+      task: "deny",
+      todowrite: "deny",
+    },
+  },
+];
+
+export const MANAGED_OPENCODE_AGENTS = [...MANAGED_PRIMARY_AGENTS, ...MANAGED_SUBAGENTS] as const;
+
 const MANAGED_SUBAGENT_MAP = new Map(
   MANAGED_SUBAGENTS.map((definition) => [definition.name, definition]),
+);
+const MANAGED_OPENCODE_AGENT_MAP = new Map(
+  MANAGED_OPENCODE_AGENTS.map((definition) => [definition.name, definition]),
 );
 const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   ManagedAgentPromptName,
@@ -96,6 +147,7 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
 >([
   ["guardian", "guardian.md"],
   ["memory-reviewer", "memory-reviewer.md"],
+  ["enhancer", "enhancer.md"],
   ["implementer", "implementer.md"],
   ["spec-reviewer", "spec-reviewer.md"],
   ["code-reviewer", "code-reviewer.md"],
@@ -106,10 +158,24 @@ export function isManagedSubagentName(value: string): value is ManagedSubagentNa
   return MANAGED_SUBAGENT_MAP.has(value as ManagedSubagentName);
 }
 
+export function isManagedOpenCodeAgentName(value: string): value is ManagedOpenCodeAgentName {
+  return MANAGED_OPENCODE_AGENT_MAP.has(value as ManagedOpenCodeAgentName);
+}
+
 export function getManagedSubagentDefinition(name: ManagedSubagentName): ManagedSubagentDefinition {
   const definition = MANAGED_SUBAGENT_MAP.get(name);
   if (!definition) {
     throw new Error(`unknown managed subagent: ${name}`);
+  }
+  return definition;
+}
+
+export function getManagedOpenCodeAgentDefinition(
+  name: ManagedOpenCodeAgentName,
+): ManagedPrimaryAgentDefinition | ManagedSubagentDefinition {
+  const definition = MANAGED_OPENCODE_AGENT_MAP.get(name);
+  if (!definition) {
+    throw new Error(`unknown managed OpenCode agent: ${name}`);
   }
   return definition;
 }

@@ -1,8 +1,8 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.4.3
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
-//   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode subagent model set/unset/list operations via the vvoc agent command tree.
+//   SCOPE: Guardian and memory-reviewer config writes plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
 //   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -14,21 +14,25 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.3 - Reworked agent CLI shape to `vvoc agent set|unset <agent-id>` while keeping support for guardian, memory-reviewer, built-in, and managed subagents.]
+//   LAST_CHANGE: [v0.5.0 - Added the managed enhancer primary agent to vvoc agent model management commands.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
-import { MANAGED_SUBAGENTS, type ManagedSubagentName } from "../lib/managed-agents.js";
+import {
+  MANAGED_OPENCODE_AGENTS,
+  isManagedOpenCodeAgentName,
+  type ManagedOpenCodeAgentName,
+} from "../lib/managed-agents.js";
 import {
   describeWriteResult,
   installManagedAgentPrompts,
   parseGuardianConfigText,
   readOpenCodeAgentModel,
-  readManagedSubagentModels,
+  readManagedAgentModels,
   renderGuardianConfig,
   resolvePaths,
   type Scope,
-  writeManagedSubagentModel,
+  writeManagedAgentModel,
   writeOpenCodeAgentModel,
 } from "../lib/opencode.js";
 import { parseMemoryConfigText, renderMemoryConfig } from "../plugins/memory-store.js";
@@ -39,12 +43,12 @@ type SpecialAgentName = (typeof SPECIAL_AGENT_NAMES)[number];
 const CONFIGURABLE_OPENCODE_SUBAGENTS = ["general", "explore"] as const;
 type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
 
-type AgentName = SpecialAgentName | ConfigurableOpenCodeSubagentName | ManagedSubagentName;
+type AgentName = SpecialAgentName | ConfigurableOpenCodeSubagentName | ManagedOpenCodeAgentName;
 
 const AGENT_NAME_CHOICES = [
   ...SPECIAL_AGENT_NAMES,
   ...CONFIGURABLE_OPENCODE_SUBAGENTS,
-  ...MANAGED_SUBAGENTS.map((definition) => definition.name),
+  ...MANAGED_OPENCODE_AGENTS.map((definition) => definition.name),
 ].join(", ");
 
 const scopeArg = {
@@ -109,7 +113,7 @@ const agentSet = defineCommand({
     }
 
     await installManagedAgentPrompts(paths, { force: false });
-    const result = await writeManagedSubagentModel(paths, agentName, {
+    const result = await writeManagedAgentModel(paths, agentName, {
       model,
       ensureEntry: true,
     });
@@ -149,7 +153,7 @@ const agentUnset = defineCommand({
       return;
     }
 
-    const result = await writeManagedSubagentModel(paths, agentName, {
+    const result = await writeManagedAgentModel(paths, agentName, {
       ensureEntry: false,
     });
     console.log(describeWriteResult(result));
@@ -185,7 +189,7 @@ const agentList = defineCommand({
     const memoryConfig = memoryText
       ? parseMemoryConfigText(memoryText, paths.memoryConfigPath)
       : {};
-    const managedModels = await readManagedSubagentModels(paths);
+    const managedModels = await readManagedAgentModels(paths);
 
     console.log(`Agent models (${scope}):`);
     console.log(`  guardian: ${formatAgentModel(guardianConfig.model, guardianConfig.variant)}`);
@@ -198,7 +202,7 @@ const agentList = defineCommand({
       console.log(`  ${agentName}: ${formatAgentModel(model)}`);
     }
 
-    for (const definition of MANAGED_SUBAGENTS) {
+    for (const definition of MANAGED_OPENCODE_AGENTS) {
       console.log(`  ${definition.name}: ${formatAgentModel(managedModels[definition.name])}`);
     }
   },
@@ -348,7 +352,7 @@ function parseAgentName(value: unknown, operation: string): AgentName {
     return trimmed;
   }
 
-  if (isConfigurableOpenCodeSubagentName(trimmed) || isManagedSubagentName(trimmed)) {
+  if (isConfigurableOpenCodeSubagentName(trimmed) || isManagedOpenCodeAgentName(trimmed)) {
     return trimmed;
   }
 
@@ -359,10 +363,6 @@ function isConfigurableOpenCodeSubagentName(
   value: string,
 ): value is ConfigurableOpenCodeSubagentName {
   return CONFIGURABLE_OPENCODE_SUBAGENTS.includes(value as ConfigurableOpenCodeSubagentName);
-}
-
-function isManagedSubagentName(value: string): value is ManagedSubagentName {
-  return MANAGED_SUBAGENTS.some((definition) => definition.name === value);
 }
 
 function parseGuardianStyleModelArg(

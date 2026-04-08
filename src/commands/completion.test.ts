@@ -102,7 +102,7 @@ test("generateBashCompletion - contains agent command flow", () => {
   expect(output).toContain('local commands="set unset list"');
   expect(output).toContain("agent:set|agent:unset");
   expect(output).toContain(
-    "guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+    "guardian memory-reviewer general explore enhancer implementer spec-reviewer code-reviewer investitagor",
   );
   expect(output).toContain("_vvoc_agent_target_commands");
 });
@@ -111,7 +111,7 @@ test("generateZshCompletion - contains agent target commands", () => {
   const output = generateZshCompletion();
   expect(output).toContain("set|unset");
   expect(output).toContain(
-    "guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+    "guardian memory-reviewer general explore enhancer implementer spec-reviewer code-reviewer investitagor",
   );
 });
 
@@ -119,7 +119,7 @@ test("generateFishCompletion - contains agent target completions", () => {
   const output = generateFishCompletion();
   expect(output).toContain("function __vvoc_agent_target_cmds");
   expect(output).toContain(
-    "echo guardian memory-reviewer general explore implementer spec-reviewer code-reviewer investitagor",
+    "echo guardian memory-reviewer general explore enhancer implementer spec-reviewer code-reviewer investitagor",
   );
   expect(output).toContain("__fish_seen_subcommand_from set unset");
 });

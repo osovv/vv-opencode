@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.1.1
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
-//   SCOPE: Bundled template reads, project-over-global prompt resolution, and missing prompt failures.
+//   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.1 - Updated the bundled guardian template expectation for hidden subagent registration.]
+//   LAST_CHANGE: [v0.2.1 - Updated enhancer template coverage to require semantically unique repeated XML tags.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -35,6 +35,15 @@ describe("managed agent prompts", () => {
     expect(template).toContain("mode: subagent");
     expect(template).toContain("hidden: true");
     expect(template).toContain("You are performing a risk assessment of a coding-agent tool call.");
+  });
+
+  test("loads bundled enhancer template", async () => {
+    const template = await loadManagedAgentPromptTemplate("enhancer");
+    expect(template).toStartWith("---\n");
+    expect(template).toContain("mode: primary");
+    expect(template).toContain("You are the enhancer agent.");
+    expect(template).toContain("<constraint-1>");
+    expect(template).toContain("<verification-check-1>");
   });
 
   test("prefers project managed prompt over global prompt", async () => {

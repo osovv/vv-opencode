@@ -9,8 +9,8 @@ Portable OpenCode workflow package with plugins and a Bun CLI for setup, sync, d
 - `MemoryPlugin` for explicit persistent memory
 - `SecretsRedactionPlugin` for redacting secrets before LLM requests
 - report-only `memory-reviewer` subagent
-- vvoc-managed prompt files and OpenCode subagent registrations
-- vvoc-managed OpenCode slash command: `/enhance` with runtime chatbox rewrite when available
+- vvoc-managed prompt files and OpenCode agent registrations
+- managed primary agent `enhancer` for meta-prompting raw intent into structured XML
 
 ## Quick Start
 
@@ -43,24 +43,22 @@ vvoc install --scope project
 `vvoc install` does the following:
 
 - adds a pinned `@osovv/vv-opencode@<installed-version>` entry to the OpenCode `plugin` array
-- registers the vvoc-managed `/enhance` command in OpenCode config
-- registers vvoc-managed OpenCode subagents
+- registers vvoc-managed OpenCode agents, including the primary `enhancer` agent
 - creates managed prompt files under `vvoc/agents/` when missing
 - creates `guardian.jsonc`, `memory.jsonc`, and `secrets-redaction.config.json` when missing
 - keeps vvoc-managed config separate from native OpenCode config
 - leaves unmanaged files alone unless `--force` is passed
 
-Use `/enhance` inside the OpenCode TUI to wrap a raw request in vvoc's structured XML execution prompt before it is sent to the current agent:
+For conversational meta-prompting, use the managed `enhancer` primary agent. It can ask follow-up questions and then return a clean XML prompt with semantically unique repeated tags such as `<constraint-1>...</constraint-1>` and `<verification-check-2>...</verification-check-2>`.
+
+Typical workflow:
 
 ```text
-/enhance fix the failing memory plugin tests and keep the diff minimal
+1. Start a fresh session with the enhancer agent
+2. Paste the rough request in plain language
+3. Answer any short follow-up questions
+4. Copy the final XML prompt into the execution session
 ```
-
-When the vvoc runtime plugin can reach OpenCode TUI APIs, `/enhance` clears the current prompt box and inserts the expanded XML prompt there (instead of appending the slash-command expansion to chat history). This lets you review/edit before sending.
-
-If TUI rewrite APIs are unavailable or fail in the current runtime, vvoc falls back to default OpenCode command behavior and `/enhance` submits normally.
-
-The raw request is preserved inside `command.enhance` as a CDATA payload, so multi-word input is passed through without hand-writing the XML envelope yourself.
 
 The OpenCode config entry written by `install` looks like this:
 
@@ -71,7 +69,7 @@ The OpenCode config entry written by `install` looks like this:
 }
 ```
 
-That package entry points at the package root, which exports `GuardianPlugin`, `MemoryPlugin`, `EnhanceCommandPlugin`, and `SecretsRedactionPlugin`.
+That package entry points at the package root, which exports `GuardianPlugin`, `MemoryPlugin`, and `SecretsRedactionPlugin`.
 
 ## Common Workflows
 
@@ -104,7 +102,7 @@ When `--config-dir` is used for global scope, `vvoc` writes under the supplied r
 
 ### Sync Managed Files
 
-Refresh the pinned package entry, managed subagent registrations, managed prompt files, and managed `guardian.jsonc` / `memory.jsonc` files:
+Refresh the pinned package entry, managed agent registrations, managed prompt files, and managed `guardian.jsonc` / `memory.jsonc` files:
 
 ```bash
 vvoc sync
@@ -144,6 +142,7 @@ Set model overrides:
 ```bash
 vvoc agent set general openai/gpt-5-nano
 vvoc agent set explore openai/gpt-5-nano
+vvoc agent set enhancer openai/gpt-5
 vvoc agent set implementer openai/gpt-5
 vvoc agent set code-reviewer anthropic/claude-sonnet-4-20250514
 vvoc agent set guardian anthropic/claude-sonnet-4-5:high
@@ -164,6 +163,7 @@ Supported agent IDs:
 - `memory-reviewer`
 - `general`
 - `explore`
+- `enhancer`
 - `implementer`
 - `spec-reviewer`
 - `code-reviewer`
@@ -372,7 +372,6 @@ Root exports:
 import {
   GuardianPlugin,
   MemoryPlugin,
-  EnhanceCommandPlugin,
   SecretsRedactionPlugin,
 } from "@osovv/vv-opencode";
 ```
@@ -382,7 +381,6 @@ Subpath exports:
 ```ts
 import { GuardianPlugin } from "@osovv/vv-opencode/plugins/guardian";
 import { MemoryPlugin } from "@osovv/vv-opencode/plugins/memory";
-import { EnhanceCommandPlugin } from "@osovv/vv-opencode/plugins/enhance";
 import { SecretsRedactionPlugin } from "@osovv/vv-opencode/plugins/secrets-redaction";
 ```
 
