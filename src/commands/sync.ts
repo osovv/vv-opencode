@@ -1,8 +1,8 @@
 // FILE: src/commands/sync.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep the OpenCode plugin specifier current.
-//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, and canonical vvoc config rewrite.
+//   SCOPE: Global path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, and canonical vvoc config rewrite.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config syncing with canonical vvoc.json refresh.]
+//   LAST_CHANGE: [v0.4.0 - Simplified sync to refresh the canonical global OpenCode and vvoc config paths only.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -25,25 +25,14 @@ import {
   syncManagedAgentPrompts,
   syncManagedAgentRegistrations,
   syncVvocConfig,
-  type Scope,
 } from "../lib/opencode.js";
 
 export default defineCommand({
   meta: {
     name: "sync",
-    description: "Sync managed vv-opencode config files.",
+    description: "Sync managed global vv-opencode config files.",
   },
   args: {
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Sync global or project config.",
-    },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home used for opencode/ and vvoc/.",
-    },
     force: {
       type: "boolean",
       description: "Allow rewriting unmanaged managed-prompt files.",
@@ -51,13 +40,7 @@ export default defineCommand({
   },
   async run({ args }) {
     // START_BLOCK_APPLY_SYNC_COMMAND
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({
-      scope: scope as Scope,
-      cwd: process.cwd(),
-      configDir,
-    });
+    const paths = await resolvePaths();
     const opencode = await ensurePackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });

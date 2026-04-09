@@ -331,10 +331,10 @@ describe("MemoryPlugin", () => {
 
     try {
       process.env.XDG_CONFIG_HOME = configHome;
-      await mkdir(join(projectDir, ".vvoc", "agents"), { recursive: true });
+      await mkdir(join(configHome, "vvoc", "agents"), { recursive: true });
       await writeFile(
-        join(projectDir, ".vvoc", "agents", "memory-reviewer.md"),
-        "Custom project memory reviewer prompt.\n",
+        join(configHome, "vvoc", "agents", "memory-reviewer.md"),
+        "Custom global memory reviewer prompt.\n",
         "utf8",
       );
 
@@ -372,7 +372,7 @@ describe("MemoryPlugin", () => {
       ).toBeUndefined();
       expect(
         (config.agent as Record<string, { prompt?: string }>)?.["memory-reviewer"]?.prompt,
-      ).toBe("Custom project memory reviewer prompt.");
+      ).toBe("Custom global memory reviewer prompt.");
 
       const system = { system: ["base system prompt"] };
       await plugin["experimental.chat.system.transform"]?.(

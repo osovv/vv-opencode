@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
@@ -15,11 +15,11 @@
 //   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
 //   managed agent registration helpers tests - Verify primary/subagent registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
-//   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
+//   resolvePaths tests - Verify canonical global vvoc/OpenCode root separation.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Added coverage for the canonical vvoc.json config path and unified config writes.]
+//   LAST_CHANGE: [v0.7.0 - Updated config helper coverage for the canonical global OpenCode and managed-agent layout.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -121,11 +121,7 @@ describe("canonical vvoc config helpers", () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-canonical-config-"));
 
     try {
-      const paths = await resolvePaths({
-        scope: "project",
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
+      const paths = await resolvePaths({ configDir: configHome });
 
       const installResult = await installVvocConfig(paths);
       expect(installResult.action).toBe("created");
@@ -213,11 +209,7 @@ describe("provider baseURL helpers", () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-provider-patch-"));
 
     try {
-      const paths = await resolvePaths({
-        scope: "global",
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
+      const paths = await resolvePaths({ configDir: configHome });
 
       const first = await writeProviderBaseUrl(paths, "stepfun", "https://api.stepfun.ai/v1");
       const second = await writeProviderBaseUrl(paths, "stepfun", "https://api.stepfun.ai/v1");
@@ -237,11 +229,7 @@ describe("provider baseURL helpers", () => {
 
 describe("managed agent registration helpers", () => {
   test("creates managed agent registrations with vvoc prompt refs", async () => {
-    const paths = await resolvePaths({
-      scope: "global",
-      cwd: "/workspace/project",
-      configDir: "/tmp/vvoc-config-home",
-    });
+    const paths = await resolvePaths({ configDir: "/tmp/vvoc-config-home" });
 
     const output = ensureManagedAgentRegistrationsConfigText(undefined, paths);
     const parsed = parse(output) as {
@@ -269,32 +257,29 @@ describe("managed agent registration helpers", () => {
   });
 
   test("writes managed prompt files and round-trips model overrides", async () => {
-    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-agents-"));
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-agents-"));
 
     try {
-      const paths = await resolvePaths({
-        scope: "project",
-        cwd: projectDir,
-      });
+      const paths = await resolvePaths({ configDir: configHome });
 
       const promptResults = await installManagedAgentPrompts(paths, { force: true });
       expect(promptResults).toHaveLength(7);
 
       const enhancerPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "enhancer.md"),
+        join(configHome, "vvoc", "agents", "enhancer.md"),
         "utf8",
       );
 
       const implementerPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "implementer.md"),
+        join(configHome, "vvoc", "agents", "implementer.md"),
         "utf8",
       );
       const guardianPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "guardian.md"),
+        join(configHome, "vvoc", "agents", "guardian.md"),
         "utf8",
       );
       const memoryReviewerPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "memory-reviewer.md"),
+        join(configHome, "vvoc", "agents", "memory-reviewer.md"),
         "utf8",
       );
       expect(implementerPrompt).toContain("Managed by vvoc");
@@ -327,7 +312,7 @@ describe("managed agent registration helpers", () => {
       const modelsAfterUnset = await readManagedAgentModels(paths);
       expect(modelsAfterUnset.enhancer).toBeUndefined();
     } finally {
-      await rm(projectDir, { recursive: true, force: true });
+      await rm(configHome, { recursive: true, force: true });
     }
   });
 });
@@ -337,11 +322,7 @@ describe("built-in OpenCode agent model helpers", () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-agent-model-"));
 
     try {
-      const paths = await resolvePaths({
-        scope: "global",
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
+      const paths = await resolvePaths({ configDir: configHome });
 
       const builtInAgents = ["general", "explore"] as const;
 
@@ -373,11 +354,7 @@ describe("built-in OpenCode agent model helpers", () => {
 
 describe("resolvePaths", () => {
   test("separates global opencode and vvoc config roots", async () => {
-    const paths = await resolvePaths({
-      scope: "global",
-      cwd: "/workspace/project",
-      configDir: "/tmp/vvoc-config-home",
-    });
+    const paths = await resolvePaths({ configDir: "/tmp/vvoc-config-home" });
 
     expect(paths.configHome).toBe("/tmp/vvoc-config-home");
     expect(paths.opencodeBaseDir).toBe("/tmp/vvoc-config-home/opencode");
@@ -385,18 +362,5 @@ describe("resolvePaths", () => {
     expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
-  });
-
-  test("keeps project prompts in .vvoc but canonical config global", async () => {
-    const paths = await resolvePaths({
-      scope: "project",
-      cwd: "/workspace/project",
-      configDir: "/tmp/vvoc-config-home",
-    });
-
-    expect(paths.opencodeBaseDir).toBe("/workspace/project");
-    expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
-    expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
-    expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
   });
 });

@@ -1,8 +1,8 @@
 // FILE: src/commands/plugin-list.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Display all installed OpenCode plugins with their status (enabled/disabled) and source paths.
-//   SCOPE: Scope parsing, plugin array inspection, table rendering, and graceful handling of missing config.
+//   SCOPE: Global plugin array inspection, table rendering, and graceful handling of missing config.
 //   DEPENDS: [citty, src/lib/opencode.js]
 //   LINKS: [M-CLI-PLUGIN-LIST, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -16,11 +16,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Initial GRACE implementation for plugin list command.]
+//   LAST_CHANGE: [v0.5.0 - Removed scope/config-dir flags from plugin list output and target the global OpenCode config.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
-import { resolvePaths, type Scope } from "../lib/opencode.js";
+import { resolvePaths } from "../lib/opencode.js";
 
 export type PluginEntry = {
   name: string;
@@ -34,16 +34,6 @@ export default defineCommand({
     description: "List installed OpenCode plugins.",
   },
   args: {
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "List plugins from global or project config.",
-    },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home used for opencode/",
-    },
     verbose: {
       type: "boolean",
       default: false,
@@ -52,16 +42,12 @@ export default defineCommand({
   },
   async run({ args }) {
     // START_BLOCK_RUN_PLUGIN_LIST
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
     const verbose = args.verbose === true;
-    const cwd = process.cwd();
 
-    const paths = await resolvePaths({ scope, cwd, configDir });
-    const plugins = await listPlugins(scope, cwd, configDir);
+    const paths = await resolvePaths();
+    const plugins = await listPlugins();
 
     if (verbose) {
-      console.log(`Scope: ${scope}`);
       console.log(`OpenCode config: ${paths.opencodeConfigPath}`);
     }
 
@@ -70,12 +56,8 @@ export default defineCommand({
   },
 });
 
-export async function listPlugins(
-  scope: Scope,
-  cwd: string,
-  configDir?: string,
-): Promise<PluginEntry[]> {
-  const paths = await resolvePaths({ scope, cwd, configDir });
+export async function listPlugins(configDir?: string): Promise<PluginEntry[]> {
+  const paths = await resolvePaths({ configDir });
 
   try {
     const { readFileSync } = await import("node:fs");

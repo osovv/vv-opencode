@@ -23,7 +23,7 @@ Install the package:
 bun add -g @osovv/vv-opencode
 ```
 
-Bootstrap the default global setup:
+Bootstrap the default setup:
 
 ```bash
 vvoc install
@@ -33,12 +33,6 @@ Inspect the result:
 
 ```bash
 vvoc status
-```
-
-Use project-local scope instead of global scope:
-
-```bash
-vvoc install --scope project
 ```
 
 `vvoc install` does the following:
@@ -80,13 +74,12 @@ Use `init` when you want an interactive setup flow:
 
 ```bash
 vvoc init
-vvoc init --scope project
 ```
 
 Use `--non-interactive` if you want `init` without prompts:
 
 ```bash
-vvoc init --non-interactive --scope project
+vvoc init --non-interactive
 ```
 
 ### Scripted Install
@@ -95,13 +88,10 @@ vvoc init --non-interactive --scope project
 
 ```bash
 vvoc install
-vvoc install --scope project
-vvoc install --config-dir /tmp/vvoc-home
+XDG_CONFIG_HOME=/tmp/vvoc-home vvoc install
 ```
 
-When `--config-dir` is used for global scope, `vvoc` writes under the supplied root for both `opencode/` and `vvoc/`.
-
-Regardless of scope, vvoc-owned settings are written to the canonical `vvoc.json` file under the effective XDG config root.
+If you need a temporary config root for testing, set `XDG_CONFIG_HOME` before running `vvoc`.
 
 ### Sync Managed Files
 
@@ -109,7 +99,6 @@ Refresh the pinned package entry, managed agent registrations, managed prompt fi
 
 ```bash
 vvoc sync
-vvoc sync --scope project
 ```
 
 ### Inspect And Validate Setup
@@ -206,16 +195,13 @@ vvoc version
 
 ## Config And Data Layout
 
-OpenCode config stays in OpenCode-managed paths:
+vvoc manages the global OpenCode config in the standard XDG path:
 
-- global: `$XDG_CONFIG_HOME/opencode/opencode.json` or `~/.config/opencode/opencode.json`
-- project: `./opencode.json` or `./opencode.jsonc`
+- `$XDG_CONFIG_HOME/opencode/opencode.json` or `~/.config/opencode/opencode.json`
 
-vvoc-managed config stays separate from OpenCode config and now has one canonical file:
+vvoc-managed config stays separate from OpenCode config and uses one canonical file:
 
 - canonical config: `$XDG_CONFIG_HOME/vvoc/vvoc.json` or `~/.config/vvoc/vvoc.json`
-
-Project scope still uses `./.vvoc/agents/` for managed prompt files, but vvoc's own settings always live in the canonical global config file.
 
 Persisted vvoc data lives under the XDG data root:
 
@@ -225,13 +211,13 @@ Persisted vvoc data lives under the XDG data root:
 
 Managed prompt files live here:
 
-- global: `~/.config/vvoc/agents/*.md`
-- project: `./.vvoc/agents/*.md`
+- `~/.config/vvoc/agents/*.md`
 
-Scope rules:
+Config rules:
 
+- vvoc writes OpenCode config only in the global XDG path
 - vvoc settings are always read from the canonical global `vvoc.json` file
-- project scope only changes the OpenCode config target and the managed prompt directory
+- managed prompts are written to and loaded from the global `vvoc/agents/` directory
 - existing unmanaged prompt files are not rewritten unless `--force` is passed
 
 ## JSON Schema
@@ -434,8 +420,8 @@ Smoke-test the built CLI against a temporary config root:
 ```bash
 tmpdir="$(mktemp -d)"
 bun run build
-bun dist/cli.js install --config-dir "$tmpdir"
-bun dist/cli.js status --config-dir "$tmpdir"
+XDG_CONFIG_HOME="$tmpdir" bun dist/cli.js install
+XDG_CONFIG_HOME="$tmpdir" bun dist/cli.js status
 ```
 
 ## Publishing

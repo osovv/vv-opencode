@@ -1,5 +1,5 @@
 // FILE: src/commands/path-provider.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PATH-PROVIDER - global provider patch presets.
 //   SCOPE: Preset validation and global OpenCode baseURL patch application.
@@ -39,10 +39,7 @@ describe("applyPathProviderPreset", () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-path-provider-"));
 
     try {
-      const { result } = await applyPathProviderPreset("stepfun-ai", {
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
+      const { result } = await applyPathProviderPreset("stepfun-ai", { configDir: configHome });
       const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
 
       expect(result.action).toBe("created");

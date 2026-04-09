@@ -1,8 +1,8 @@
 // FILE: src/commands/init.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds the canonical vvoc.json config plus managed prompts. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
+//   PURPOSE: Interactive global initialization: register @osovv/vv-opencode in OpenCode config and scaffold the canonical vvoc.json config plus managed prompts. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
+//   SCOPE: Global plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -12,10 +12,11 @@
 // START_MODULE_MAP
 //   default - Init command definition for vvoc.
 //   runInit - Run the initialization flow.
+//   runInitNonInteractive - Run the non-interactive initialization flow.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Switched init to seed the canonical global vvoc.json config file.]
+//   LAST_CHANGE: [v0.6.0 - Removed scope/config-dir prompts and always initialize the canonical global config layout.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -27,21 +28,14 @@ import {
   inspectInstallation,
   resolvePaths,
   syncManagedAgentRegistrations,
-  type Scope,
 } from "../lib/opencode.js";
 
 export default defineCommand({
   meta: {
     name: "init",
-    description: "Initialize vvoc in a project or globally.",
+    description: "Initialize vvoc globally.",
   },
   args: {
-    scope: {
-      type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Initialize globally or per-project.",
-    },
     plugins: {
       type: "string",
       default: "@osovv/vv-opencode",
@@ -52,22 +46,15 @@ export default defineCommand({
       default: false,
       description: "Skip interactive prompts and use defaults.",
     },
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home.",
-    },
   },
   async run({ args }) {
     // START_BLOCK_RUN_INIT
     const nonInteractive = args["non-interactive"] === true;
-    const scope = (args.scope === "project" ? "project" : "global") as Scope;
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const cwd = process.cwd();
 
     p.intro("Initializing vvoc");
 
     try {
-      await runInit({ scope, cwd, configDir, nonInteractive });
+      await runInit({ nonInteractive });
       p.outro("vvoc initialized successfully");
     } catch (err) {
       if (err instanceof Error && err.message === "ABORTED") {
@@ -82,31 +69,11 @@ export default defineCommand({
   },
 });
 
-async function runInit(options: {
-  scope: Scope;
-  cwd: string;
-  configDir?: string;
-  nonInteractive: boolean;
-}): Promise<void> {
-  const { scope, cwd, configDir, nonInteractive } = options;
+async function runInit(options: { configDir?: string; nonInteractive: boolean }): Promise<void> {
+  const { configDir, nonInteractive } = options;
 
-  let selectedScope: Scope = scope;
   if (!nonInteractive) {
-    const scopeAnswer = await p.select({
-      message: "Select installation scope:",
-      options: [
-        { label: "Global (all projects)", value: "global" },
-        { label: "Project (current directory only)", value: "project" },
-      ],
-      initialValue: scope,
-    });
-
-    if (p.isCancel(scopeAnswer)) {
-      throw new Error("ABORTED");
-    }
-    selectedScope = scopeAnswer as Scope;
-
-    const reloadedPaths = await resolvePaths({ scope: selectedScope, cwd, configDir });
+    const reloadedPaths = await resolvePaths({ configDir });
     const inspection = await inspectInstallation(reloadedPaths);
 
     if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
@@ -125,7 +92,7 @@ async function runInit(options: {
     }
   }
 
-  const finalPaths = await resolvePaths({ scope: selectedScope, cwd, configDir });
+  const finalPaths = await resolvePaths({ configDir });
 
   p.log.step("Registering plugin in OpenCode config...");
   const pkgResult = await ensurePackageInstalled(finalPaths);
@@ -153,13 +120,13 @@ async function runInit(options: {
    rtk init -g --opencode`);
 }
 
-export async function runInitNonInteractive(options: {
-  scope: Scope;
-  cwd: string;
-  configDir?: string;
-}): Promise<void> {
-  const { scope, cwd, configDir } = options;
-  const paths = await resolvePaths({ scope, cwd, configDir });
+export async function runInitNonInteractive(
+  options: {
+    configDir?: string;
+  } = {},
+): Promise<void> {
+  const { configDir } = options;
+  const paths = await resolvePaths({ configDir });
 
   const inspection = await inspectInstallation(paths);
   if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {

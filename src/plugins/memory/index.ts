@@ -220,7 +220,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
   }
 
   const metadataWarnings = getMemoryConfigWarningLines(memoryConfig);
-  const memoryReviewerPrompt = await loadManagedAgentPromptText(directory, MEMORY_REVIEW_AGENT);
+  const memoryReviewerPrompt = await loadManagedAgentPromptText(MEMORY_REVIEW_AGENT);
   // END_BLOCK_INITIALIZE_MEMORY_PLUGIN
 
   return {

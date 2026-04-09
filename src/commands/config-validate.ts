@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate the canonical vvoc.json configuration file with human-readable error reporting.
 //   SCOPE: Canonical vvoc config file discovery, strict JSON parse error reporting, JSON Schema validation, and pass/fail terminal output.
@@ -11,14 +11,14 @@
 //
 // START_MODULE_MAP
 //   default - ConfigValidate command definition for vvoc.
-//   validateVvocConfig - Validate the canonical vvoc.json file for the selected config root.
+//   validateVvocConfig - Validate the canonical global vvoc.json file.
 //   validateVvocConfigContent - Validate vvoc.json content and report schema violations.
 //   validateVvocConfigFile - Validate a vvoc.json file path and report schema violations.
 //   ConfigValidateResult - Outcome of a canonical vvoc config validation run.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Switched config validation to the canonical vvoc.json document and versioned JSON Schema.]
+//   LAST_CHANGE: [v0.6.0 - Removed the config-dir flag from config validation and always target the canonical global vvoc.json path.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -40,16 +40,9 @@ export default defineCommand({
     name: "validate",
     description: "Validate the canonical vvoc.json configuration file.",
   },
-  args: {
-    "config-dir": {
-      type: "string",
-      description: "Override the global config home used for vvoc/.",
-    },
-  },
-  async run({ args }) {
+  async run() {
     // START_BLOCK_RUN_VALIDATE
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const result = await validateVvocConfig(process.cwd(), configDir);
+    const result = await validateVvocConfig();
 
     printResult(result);
     process.exitCode = result.valid ? 0 : 1;
@@ -57,11 +50,8 @@ export default defineCommand({
   },
 });
 
-export async function validateVvocConfig(
-  cwd: string,
-  configDir?: string,
-): Promise<ConfigValidateResult> {
-  const paths = await resolvePaths({ scope: "global", cwd, configDir });
+export async function validateVvocConfig(configDir?: string): Promise<ConfigValidateResult> {
+  const paths = await resolvePaths({ configDir });
   return validateVvocConfigFile(paths.vvocConfigPath);
 }
 
