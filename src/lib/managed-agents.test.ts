@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.2.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify vvoc-managed agent prompt template loading and global runtime lookup.
-//   SCOPE: Bundled template reads, primary/subagent template metadata checks, global prompt resolution, and missing prompt failures.
+//   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
+//   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -10,11 +10,11 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   managed prompt lookup tests - Verify bundled template loading plus global runtime prompt resolution.
+//   managed prompt lookup tests - Verify bundled template loading plus project/global runtime prompt resolution.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Updated runtime prompt lookup coverage for the canonical global agents directory only.]
+//   LAST_CHANGE: [v0.2.2 - Added coverage requiring the enhancer to emit the final XML prompt in English.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -26,7 +26,7 @@ import {
   loadManagedAgentPromptTemplate,
   loadManagedAgentPromptText,
 } from "./managed-agents.js";
-import { getGlobalVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
+import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
 
 describe("managed agent prompts", () => {
   test("loads bundled guardian template", async () => {
@@ -47,8 +47,46 @@ describe("managed agent prompts", () => {
     expect(template).toContain("<verification-check-1>");
   });
 
-  test("loads a managed prompt from the global agents directory", async () => {
+  test("prefers project managed prompt over global prompt", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-home-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-project-"));
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
+
+    try {
+      process.env.XDG_CONFIG_HOME = configHome;
+
+      const globalAgentsDir = getVvocAgentsDir(getGlobalVvocDir());
+      const projectAgentsDir = getVvocAgentsDir(getProjectVvocDir(projectDir));
+      await mkdir(globalAgentsDir, { recursive: true });
+      await mkdir(projectAgentsDir, { recursive: true });
+      await writeFile(
+        getManagedAgentPromptPath(globalAgentsDir, "guardian"),
+        "Global guardian prompt.\n",
+        "utf8",
+      );
+      await writeFile(
+        getManagedAgentPromptPath(projectAgentsDir, "guardian"),
+        "Project guardian prompt.\n",
+        "utf8",
+      );
+
+      expect(await loadManagedAgentPromptText(projectDir, "guardian")).toBe(
+        "Project guardian prompt.\n",
+      );
+    } finally {
+      if (previousConfigHome === undefined) {
+        delete process.env.XDG_CONFIG_HOME;
+      } else {
+        process.env.XDG_CONFIG_HOME = previousConfigHome;
+      }
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to global managed prompt when project prompt is missing", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-home-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-project-"));
     const previousConfigHome = process.env.XDG_CONFIG_HOME;
 
     try {
@@ -57,31 +95,13 @@ describe("managed agent prompts", () => {
       const globalAgentsDir = getVvocAgentsDir(getGlobalVvocDir());
       await mkdir(globalAgentsDir, { recursive: true });
       await writeFile(
-        getManagedAgentPromptPath(globalAgentsDir, "guardian"),
-        "Global guardian prompt.\n",
+        getManagedAgentPromptPath(globalAgentsDir, "memory-reviewer"),
+        "Global memory reviewer prompt.\n",
         "utf8",
       );
 
-      expect(await loadManagedAgentPromptText("guardian")).toBe("Global guardian prompt.\n");
-    } finally {
-      if (previousConfigHome === undefined) {
-        delete process.env.XDG_CONFIG_HOME;
-      } else {
-        process.env.XDG_CONFIG_HOME = previousConfigHome;
-      }
-      await rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  test("throws when the global managed prompt is missing", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-home-"));
-    const previousConfigHome = process.env.XDG_CONFIG_HOME;
-
-    try {
-      process.env.XDG_CONFIG_HOME = configHome;
-
-      await expect(loadManagedAgentPromptText("memory-reviewer")).rejects.toThrow(
-        "vvoc managed prompt not found for memory-reviewer",
+      expect(await loadManagedAgentPromptText(projectDir, "memory-reviewer")).toBe(
+        "Global memory reviewer prompt.\n",
       );
     } finally {
       if (previousConfigHome === undefined) {
@@ -90,6 +110,7 @@ describe("managed agent prompts", () => {
         process.env.XDG_CONFIG_HOME = previousConfigHome;
       }
       await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
     }
   });
 });

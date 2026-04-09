@@ -1,4 +1,4 @@
-<RequirementsAnalysis VERSION="0.4.0">
+<RequirementsAnalysis VERSION="0.3.0">
   <Project>
     <name>@osovv/vv-opencode</name>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
@@ -13,7 +13,7 @@
   <UseCases>
     <UC-001>
       <Actor>User</Actor>
-      <Action>Runs `vvoc install` against the canonical global OpenCode and vvoc config roots.</Action>
+      <Action>Runs `vvoc install` for global or project scope.</Action>
       <Goal>To register `@osovv/vv-opencode` in OpenCode config while keeping vvoc-managed settings in the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</Goal>
       <Preconditions>Bun and OpenCode are available, and the target config locations are writable.</Preconditions>
       <AcceptanceCriteria>The package name appears in the resolved OpenCode config and canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`.</AcceptanceCriteria>
@@ -56,7 +56,7 @@
   </NonGoals>
 
   <Constraints>
-    <constraint-1>OpenCode config integration must follow the documented global XDG path convention.</constraint-1>
+    <constraint-1>OpenCode config integration must follow documented global and project path conventions.</constraint-1>
     <constraint-2>vvoc-managed settings must live in the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</constraint-2>
     <constraint-3>Persisted vvoc data must live under `$XDG_DATA_HOME/vvoc/`, not inside the OpenCode config tree.</constraint-3>
     <constraint-4>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-4>

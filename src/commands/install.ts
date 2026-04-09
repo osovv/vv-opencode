@@ -1,8 +1,8 @@
 // FILE: src/commands/install.ts
-// VERSION: 0.4.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Install vv-opencode into OpenCode config and bootstrap the canonical vvoc.json config plus managed prompts.
-//   SCOPE: Global path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, and canonical vvoc config creation.
+//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, and canonical vvoc config creation.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Simplified install to target the canonical global OpenCode and vvoc config paths only.]
+//   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config scaffolding with canonical vvoc.json creation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -25,14 +25,25 @@ import {
   installVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
+  type Scope,
 } from "../lib/opencode.js";
 
 export default defineCommand({
   meta: {
     name: "install",
-    description: "Install vv-opencode into global OpenCode config.",
+    description: "Install vv-opencode into OpenCode config.",
   },
   args: {
+    scope: {
+      type: "enum",
+      options: ["global", "project"],
+      default: "global",
+      description: "Write to global or project config.",
+    },
+    "config-dir": {
+      type: "string",
+      description: "Override the global config home used for opencode/ and vvoc/.",
+    },
     force: {
       type: "boolean",
       description: "Allow overwriting managed prompt files when needed.",
@@ -40,7 +51,13 @@ export default defineCommand({
   },
   async run({ args }) {
     // START_BLOCK_APPLY_INSTALL_COMMAND
-    const paths = await resolvePaths();
+    const scope = args.scope === "project" ? "project" : "global";
+    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+    const paths = await resolvePaths({
+      scope: scope as Scope,
+      cwd: process.cwd(),
+      configDir,
+    });
     const opencode = await ensurePackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
 

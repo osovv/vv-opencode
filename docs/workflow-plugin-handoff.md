@@ -120,7 +120,8 @@ Prompt templates are bundled in:
 
 At runtime, `vvoc install` / `vvoc sync` materialize them into:
 
-- `~/.config/vvoc/agents/*.md`
+- global: `~/.config/vvoc/agents/*.md`
+- project: `./.vvoc/agents/*.md`
 
 Relevant source:
 

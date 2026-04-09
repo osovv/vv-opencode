@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.ts
-// VERSION: 0.4.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or the global vvoc config root.
-//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and global prompt lookup.
+//   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
+//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY]
 //   ROLE: RUNTIME
@@ -29,16 +29,16 @@
 //   getManagedOpenCodeAgentDefinition - Returns metadata for a managed OpenCode agent.
 //   getManagedAgentPromptPath - Resolves the prompt file path inside a vvoc agents directory.
 //   loadManagedAgentPromptTemplate - Loads the bundled prompt template for a managed agent prompt.
-//   loadManagedAgentPromptText - Loads a managed prompt from the global vvoc config and errors if it does not exist.
+//   loadManagedAgentPromptText - Loads a managed prompt from project or global vvoc config and errors if neither exists.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Removed project-local managed prompt lookup in favor of the canonical global agents directory.]
+//   LAST_CHANGE: [v0.3.0 - Added the managed enhancer primary agent alongside the existing vvoc subagent definitions.]
 // END_CHANGE_SUMMARY
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getGlobalVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
+import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
 
 export const MANAGED_SUBAGENT_NAMES = [
   "implementer",
@@ -197,19 +197,28 @@ export async function loadManagedAgentPromptTemplate(
   return readFile(assetUrl, "utf8");
 }
 
-export async function loadManagedAgentPromptText(name: ManagedAgentPromptName): Promise<string> {
-  const candidatePath = getManagedAgentPromptPath(getVvocAgentsDir(getGlobalVvocDir()), name);
+export async function loadManagedAgentPromptText(
+  directory: string,
+  name: ManagedAgentPromptName,
+): Promise<string> {
+  const candidatePaths = [
+    getManagedAgentPromptPath(getVvocAgentsDir(getProjectVvocDir(directory)), name),
+    getManagedAgentPromptPath(getVvocAgentsDir(getGlobalVvocDir()), name),
+  ];
 
-  try {
-    return await readFile(candidatePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+  for (const candidatePath of candidatePaths) {
+    try {
+      return await readFile(candidatePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
       throw error;
     }
   }
 
   throw new Error(
-    `vvoc managed prompt not found for ${name}. Run \`vvoc install\` or \`vvoc sync\`. Checked: ${candidatePath}`,
+    `vvoc managed prompt not found for ${name}. Run \`vvoc install\` or \`vvoc sync\`. Checked: ${candidatePaths.join(", ")}`,
   );
 }
 

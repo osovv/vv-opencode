@@ -1,8 +1,8 @@
 // FILE: src/commands/guardian.ts
-// VERSION: 0.4.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Expose Guardian-specific vvoc CLI helpers backed by the canonical vvoc.json config file.
-//   SCOPE: Guardian config command wiring plus CLI argument normalization for canonical global guardian section values.
+//   SCOPE: Guardian config command wiring plus CLI argument normalization for guardian section values.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Removed scope/config-dir options from Guardian config writes.]
+//   LAST_CHANGE: [v0.3.0 - Switched Guardian config writes to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -24,6 +24,7 @@ import {
   resolvePaths,
   writeGuardianConfig,
   type GuardianConfigOverrides,
+  type Scope,
 } from "../lib/opencode.js";
 
 const config = defineCommand({
@@ -32,6 +33,16 @@ const config = defineCommand({
     description: "Write or print the guardian section of vvoc.json.",
   },
   args: {
+    scope: {
+      type: "enum",
+      options: ["global", "project"],
+      default: "global",
+      description: "Write global or project Guardian config.",
+    },
+    "config-dir": {
+      type: "string",
+      description: "Override the global config home used for opencode/ and vvoc/.",
+    },
     print: {
       type: "boolean",
       description: "Print the config instead of writing it.",
@@ -65,7 +76,13 @@ const config = defineCommand({
       return;
     }
 
-    const paths = await resolvePaths();
+    const scope = args.scope === "project" ? "project" : "global";
+    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+    const paths = await resolvePaths({
+      scope: scope as Scope,
+      cwd: process.cwd(),
+      configDir,
+    });
     const result = await writeGuardianConfig(paths, overrides);
 
     console.log(describeWriteResult(result));

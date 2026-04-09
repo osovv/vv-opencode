@@ -1,5 +1,5 @@
 // FILE: src/commands/path-provider.ts
-// VERSION: 0.2.0
+// VERSION: 0.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply global OpenCode provider endpoint patch presets.
 //   SCOPE: Provider preset validation, global OpenCode config path resolution, baseURL patch writes, and CLI output.
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Removed the config-dir flag from the global path-provider command.]
+//   LAST_CHANGE: [v0.1.0 - Added the global path-provider command with the stepfun-ai preset.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -42,6 +42,11 @@ const presetArg = {
   description: "Provider patch preset to apply.",
 };
 
+const configDirArg = {
+  type: "string" as const,
+  description: "Override the global config home used for opencode/.",
+};
+
 // START_BLOCK_PROVIDER_PRESET_RESOLUTION
 export function resolvePathProviderPreset(name: string): ProviderPatchPreset {
   const presetName = name.trim() as PathProviderPresetName;
@@ -55,10 +60,14 @@ export function resolvePathProviderPreset(name: string): ProviderPatchPreset {
 
 export async function applyPathProviderPreset(
   presetName: string,
-  options: { configDir?: string } = {},
+  options: { cwd?: string; configDir?: string } = {},
 ) {
   const preset = resolvePathProviderPreset(presetName);
-  const paths = await resolvePaths({ configDir: options.configDir });
+  const paths = await resolvePaths({
+    scope: "global",
+    cwd: options.cwd ?? process.cwd(),
+    configDir: options.configDir,
+  });
 
   const result = await writeProviderBaseUrl(paths, preset.providerID, preset.baseURL);
   return { preset, result };
@@ -72,10 +81,15 @@ export default defineCommand({
   },
   args: {
     preset: presetArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
     const presetName = typeof args.preset === "string" ? args.preset : "";
-    const { preset, result } = await applyPathProviderPreset(presetName);
+    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+    const { preset, result } = await applyPathProviderPreset(presetName, {
+      cwd: process.cwd(),
+      configDir,
+    });
 
     console.log(
       `${describeWriteResult(result)} (provider.${preset.providerID}.options.baseURL=${preset.baseURL})`,

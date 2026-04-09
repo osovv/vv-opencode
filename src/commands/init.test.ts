@@ -1,7 +1,7 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Tests for M-CLI-INIT - interactive global initialization.
+//   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, managed agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [src/commands/init.ts]
 //   LINKS: [M-CLI-INIT]
@@ -12,19 +12,22 @@
 // START_MODULE_MAP
 //   Test suite for init command.
 // END_MODULE_MAP
-//
-// START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Updated init coverage for the canonical global OpenCode and managed-agent layout.]
-// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { resolvePaths } from "../lib/opencode.js";
 
-test("resolvePaths resolves the canonical global layout", async () => {
-  const result = await resolvePaths({ configDir: "/tmp/vvoc-config-home" });
-  expect(result.opencodeBaseDir).toBe("/tmp/vvoc-config-home/opencode");
-  expect(result.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
-  expect(result.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
+test("resolvePaths - global scope resolves correctly", async () => {
+  const result = await resolvePaths({ scope: "global", cwd: "/tmp/test" });
+  expect(result.scope).toBe("global");
+});
+
+test("resolvePaths - project scope resolves correctly", async () => {
+  const result = await resolvePaths({
+    scope: "project",
+    cwd: "/tmp/test",
+    configDir: "/tmp/vvoc-config-home",
+  });
+  expect(result.scope).toBe("project");
 });
 
 describe("init scenarios", () => {
@@ -33,13 +36,18 @@ describe("init scenarios", () => {
     const { join } = await import("node:path");
     const os = await import("node:os");
 
+    const tmpDir = mkdtempSync(join(os.tmpdir(), "vvoc-test-"));
     const configHome = mkdtempSync(join(os.tmpdir(), "vvoc-config-home-"));
     try {
       const { runInitNonInteractive } = await import("./init.js");
-      await runInitNonInteractive({ configDir: configHome });
+      await runInitNonInteractive({
+        scope: "project",
+        cwd: tmpDir,
+        configDir: configHome,
+      });
 
       const { readFileSync, existsSync } = await import("node:fs");
-      const paths = await resolvePaths({ configDir: configHome });
+      const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
 
       expect(existsSync(paths.opencodeConfigPath)).toBe(true);
       expect(existsSync(paths.vvocConfigPath)).toBe(true);
@@ -47,6 +55,9 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/memory-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/enhancer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/implementer.md")).toBe(true);
+      expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
+      expect(existsSync(join(tmpDir, ".vvoc", "memory.jsonc"))).toBe(false);
+      expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
       const vvocContent = readFileSync(paths.vvocConfigPath, "utf8");
@@ -58,6 +69,7 @@ describe("init scenarios", () => {
       expect(vvocContent).toContain('"secretsRedaction"');
     } finally {
       rmSync(configHome, { recursive: true, force: true });
+      rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
@@ -66,20 +78,30 @@ describe("init scenarios", () => {
     const { join } = await import("node:path");
     const os = await import("node:os");
 
+    const tmpDir = mkdtempSync(join(os.tmpdir(), "vvoc-test-"));
     const configHome = mkdtempSync(join(os.tmpdir(), "vvoc-config-home-"));
     try {
       const { runInitNonInteractive } = await import("./init.js");
 
-      await runInitNonInteractive({ configDir: configHome });
+      await runInitNonInteractive({
+        scope: "project",
+        cwd: tmpDir,
+        configDir: configHome,
+      });
 
-      await runInitNonInteractive({ configDir: configHome });
+      await runInitNonInteractive({
+        scope: "project",
+        cwd: tmpDir,
+        configDir: configHome,
+      });
 
       const { readFileSync } = await import("node:fs");
-      const paths = await resolvePaths({ configDir: configHome });
+      const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
       expect(opencodeContent).toContain("@osovv/vv-opencode");
     } finally {
       rmSync(configHome, { recursive: true, force: true });
+      rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

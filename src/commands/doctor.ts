@@ -1,8 +1,8 @@
 // FILE: src/commands/doctor.ts
-// VERSION: 0.4.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Diagnose vv-opencode installation problems and surface actionable failures.
-//   SCOPE: Global installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode plus the canonical vvoc.json config.
+//   SCOPE: Scope parsing, installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode plus the canonical vvoc.json config.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,22 +14,41 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Simplified doctor diagnostics to the canonical global config layout.]
+//   LAST_CHANGE: [v0.3.0 - Updated doctor diagnostics for the canonical vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
-import { inspectInstallation, resolvePaths } from "../lib/opencode.js";
+import { inspectInstallation, resolvePaths, type Scope } from "../lib/opencode.js";
 
 export default defineCommand({
   meta: {
     name: "doctor",
     description: "Diagnose vv-opencode installation issues.",
   },
-  async run() {
+  args: {
+    scope: {
+      type: "enum",
+      options: ["global", "project"],
+      default: "global",
+      description: "Inspect global or project config.",
+    },
+    "config-dir": {
+      type: "string",
+      description: "Override the global config home used for opencode/ and vvoc/.",
+    },
+  },
+  async run({ args }) {
     // START_BLOCK_PRINT_DIAGNOSTIC_REPORT
-    const paths = await resolvePaths();
+    const scope = args.scope === "project" ? "project" : "global";
+    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+    const paths = await resolvePaths({
+      scope: scope as Scope,
+      cwd: process.cwd(),
+      configDir,
+    });
     const inspection = await inspectInstallation(paths);
 
+    console.log(`Scope: ${inspection.scope}`);
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(
       `OpenCode config parse: ${inspection.opencode.parseError ? inspection.opencode.parseError : "ok"}`,

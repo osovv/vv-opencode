@@ -1157,7 +1157,7 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
   const latestCommandIntentBySessionID = new Map<string, CommandIntent>();
   const activeReviews = new Map<string, ActiveReview>();
   const guardianConfig = await loadGuardianRuntimeConfig(directory);
-  const guardianPrompt = await loadManagedAgentPromptText(GUARDIAN_AGENT);
+  const guardianPrompt = await loadManagedAgentPromptText(directory, GUARDIAN_AGENT);
 
   if (process.env[GUARDIAN_DISABLED_ENV] === "1") {
     return {

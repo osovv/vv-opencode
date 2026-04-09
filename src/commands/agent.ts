@@ -1,8 +1,8 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.7.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
-//   SCOPE: Guardian and memory-reviewer section writes within canonical vvoc.json plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
+//   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
 //   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Removed scope/config-dir options from agent model management.]
+//   LAST_CHANGE: [v0.6.0 - Switched guardian and memory-reviewer model overrides to the canonical vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -30,6 +30,7 @@ import {
   readManagedAgentModels,
   readVvocConfig,
   resolvePaths,
+  type Scope,
   writeGuardianConfig,
   writeManagedAgentModel,
   writeMemoryConfig,
@@ -50,6 +51,18 @@ const AGENT_NAME_CHOICES = [
   ...CONFIGURABLE_OPENCODE_SUBAGENTS,
   ...MANAGED_OPENCODE_AGENTS.map((definition) => definition.name),
 ].join(", ");
+
+const scopeArg = {
+  type: "enum" as const,
+  options: ["global", "project"],
+  default: "global",
+  description: "Write global or project config.",
+};
+
+const configDirArg = {
+  type: "string" as const,
+  description: "Override the global config home.",
+};
 
 const agentArg = {
   type: "positional" as const,
@@ -72,10 +85,12 @@ const agentSet = defineCommand({
   args: {
     agent: agentArg,
     model: modelArg,
+    scope: scopeArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
     const agentName = parseAgentName(args.agent, "set");
-    const paths = await resolveCommandPaths();
+    const paths = await resolveCommandPaths(args);
 
     if (agentName === "guardian") {
       await setGuardianModelOverride(paths, args.model);
@@ -114,10 +129,12 @@ const agentUnset = defineCommand({
   },
   args: {
     agent: agentArg,
+    scope: scopeArg,
+    "config-dir": configDirArg,
   },
   async run({ args }) {
     const agentName = parseAgentName(args.agent, "unset");
-    const paths = await resolveCommandPaths();
+    const paths = await resolveCommandPaths(args);
 
     if (agentName === "guardian") {
       await unsetGuardianModelOverride(paths);
@@ -149,15 +166,23 @@ const agentList = defineCommand({
     name: "list",
     description: "List configured agent models.",
   },
-  async run() {
-    const paths = await resolveCommandPaths();
+  args: {
+    scope: {
+      ...scopeArg,
+      description: "Show global or project config.",
+    },
+    "config-dir": configDirArg,
+  },
+  async run({ args }) {
+    const scope = resolveScope(args.scope);
+    const paths = await resolveCommandPaths(args);
 
     const vvocConfig = await readVvocConfig(paths);
     const guardianConfig = vvocConfig?.guardian;
     const memoryConfig = vvocConfig?.memory;
     const managedModels = await readManagedAgentModels(paths);
 
-    console.log("Agent models:");
+    console.log(`Agent models (${scope}):`);
     console.log(`  guardian: ${formatAgentModel(guardianConfig?.model, guardianConfig?.variant)}`);
     console.log(
       `  memory-reviewer: ${formatAgentModel(memoryConfig?.reviewerModel, memoryConfig?.reviewerVariant)}`,
@@ -228,8 +253,17 @@ async function unsetMemoryReviewerModelOverride(
   console.log(describeWriteResult(result));
 }
 
-async function resolveCommandPaths() {
-  return resolvePaths();
+function resolveScope(value: unknown): Scope {
+  return value === "project" ? "project" : "global";
+}
+
+async function resolveCommandPaths(args: Record<string, unknown>) {
+  const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+  return resolvePaths({
+    scope: resolveScope(args.scope),
+    cwd: process.cwd(),
+    configDir,
+  });
 }
 
 function formatAgentModel(model?: string, variant?: string): string {

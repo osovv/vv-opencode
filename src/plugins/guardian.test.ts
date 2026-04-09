@@ -24,15 +24,12 @@ import { join } from "node:path";
 import { GuardianPlugin } from "./guardian/index.js";
 
 test("GuardianPlugin registers guardian as a hidden subagent", async () => {
-  const configHome = await mkdtemp(join(tmpdir(), "vvoc-guardian-config-home-"));
   const projectDir = await mkdtemp(join(tmpdir(), "vvoc-guardian-plugin-"));
-  const previousConfigHome = process.env.XDG_CONFIG_HOME;
 
   try {
-    process.env.XDG_CONFIG_HOME = configHome;
-    await mkdir(join(configHome, "vvoc", "agents"), { recursive: true });
+    await mkdir(join(projectDir, ".vvoc", "agents"), { recursive: true });
     await writeFile(
-      join(configHome, "vvoc", "agents", "guardian.md"),
+      join(projectDir, ".vvoc", "agents", "guardian.md"),
       "Custom guardian prompt.\n",
       "utf8",
     );
@@ -59,12 +56,6 @@ test("GuardianPlugin registers guardian as a hidden subagent", async () => {
     expect(guardian?.steps).toBe(2);
     expect(guardian?.prompt).toBe("Custom guardian prompt.");
   } finally {
-    if (previousConfigHome === undefined) {
-      delete process.env.XDG_CONFIG_HOME;
-    } else {
-      process.env.XDG_CONFIG_HOME = previousConfigHome;
-    }
-    await rm(configHome, { recursive: true, force: true });
     await rm(projectDir, { recursive: true, force: true });
   }
 });

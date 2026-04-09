@@ -1,4 +1,4 @@
-  <VerificationPlan VERSION="0.4.11">
+  <VerificationPlan VERSION="0.4.10">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -10,8 +10,8 @@
 
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
-      <scenario>User runs `vvoc init` to bootstrap the package into a fresh global config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed enhancer agent and managed subagents are registered in OpenCode config, managed prompts exist in `$XDG_CONFIG_HOME/vvoc/agents/`, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded.</expected-outcome>
+      <scenario>User runs `vvoc init` to bootstrap the package into a fresh global or project config root.</scenario>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed enhancer agent and managed subagents are registered in OpenCode config, managed prompts exist in the scope-correct agents directory, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded.</expected-outcome>
       <required-signals>
         <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedAgentRegistrations -&gt; installManagedAgentPrompts -&gt; installVvocConfig -&gt; status reports configured</trace-sequence>
       </required-signals>
@@ -80,9 +80,9 @@
         <scenario-1 kind="success">Fresh install config renders with schema and a pinned vvoc package specifier in the plugin array.</scenario-1>
         <scenario-2 kind="success">Existing JSONC comments survive plugin insertion.</scenario-2>
         <scenario-3 kind="success">Guardian section rendering round-trips explicit override values.</scenario-3>
-        <scenario-4 kind="success">Global path resolution separates `opencode/` from the canonical `vvoc/vvoc.json` path and uses `$XDG_CONFIG_HOME/vvoc/agents/` for managed prompts.</scenario-4>
-        <scenario-5 kind="success">Managed enhancer/subagent registrations point OpenCode at `$XDG_CONFIG_HOME/vvoc/agents/*.md` with correct relative prompt references and correct `primary` versus `subagent` modes.</scenario-5>
-        <scenario-6 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, managed prompt files are scaffolded in the canonical global agents directory, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
+        <scenario-4 kind="success">Global path resolution separates `opencode/` from the canonical `vvoc/vvoc.json` path while project scope still uses `./.vvoc/agents/` for prompts.</scenario-4>
+        <scenario-5 kind="success">Managed enhancer/subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references and correct `primary` versus `subagent` modes.</scenario-5>
+        <scenario-6 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, managed prompt files are scaffolded in the scope-correct agents directory, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
         <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
       </scenarios>
       <required-log-markers />
@@ -90,7 +90,7 @@
         <assertion-1>Sync must rewrite the canonical vvoc.json file instead of depending on separate guardian, memory, or secrets-redaction config files.</assertion-1>
       </required-trace-assertions>
       <wave-follow-up>Smoke command output for `status` and `doctor` after build.</wave-follow-up>
-      <phase-follow-up>Extend tests to cover more global-path permutations.</phase-follow-up>
+      <phase-follow-up>Extend tests to cover more path and scope permutations.</phase-follow-up>
     </V-M-CLI-CONFIG>
 
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
@@ -344,17 +344,22 @@
         <file>src/commands/upgrade.test.ts</file>
       </test-files>
       <module-checks>
-        <check-1>bun run lint</check-1>
-        <check-2>bun run fmt:check</check-2>
-        <check-3>bun run build</check-3>
+        <check-1>bun run typecheck</check-1>
+        <check-2>bun run lint</check-2>
+        <check-3>bun run fmt:check</check-3>
+        <check-4>bun test src/commands/upgrade.test.ts</check-4>
+        <check-5>bun run build</check-5>
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">Reports "already latest" when npm returns same version.</scenario-1>
-        <scenario-2 kind="success">Shows upgrade available with changelog when newer version exists.</scenario-2>
-        <scenario-3 kind="failure">Network error is caught and reported gracefully.</scenario-3>
+        <scenario-2 kind="success">When npm returns a newer version, the command runs exactly `bun add -g @osovv/vv-opencode@&lt;latest&gt;` and then runs `vvoc sync` without project scope arguments.</scenario-2>
+        <scenario-3 kind="failure">Registry or network failure is caught and reported gracefully.</scenario-3>
+        <scenario-4 kind="failure">Install failure exits non-zero and does not attempt sync.</scenario-4>
+        <scenario-5 kind="success">If post-install sync fails or cannot launch, the command still exits successfully with manual `vvoc sync` guidance.</scenario-5>
+        <scenario-6 kind="success">Best-effort changelog output preserves placeholder-like strings such as `install-success-plus-sync-warning`.</scenario-6>
       </scenarios>
       <required-log-markers />
-      <wave-follow-up>Mock npm registry responses for deterministic testing.</wave-follow-up>
+      <wave-follow-up>Mock npm registry responses and subprocess execution so upgrade coverage never performs real global installs.</wave-follow-up>
     </V-M-CLI-UPGRADE>
   </ModuleVerification>
 

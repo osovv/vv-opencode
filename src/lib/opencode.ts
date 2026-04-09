@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.7.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage global OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Global path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, canonical vvoc config rendering and sync, and installation inspection.
+//   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, canonical vvoc config rendering and sync, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -13,10 +13,11 @@
 //   CLI_NAME - Canonical vvoc CLI binary name.
 //   PACKAGE_NAME - Canonical vvoc npm package name.
 //   OPENCODE_SCHEMA_URL - OpenCode config schema URL.
-//   ResolvedPaths - Global path bundle for OpenCode and vvoc config locations.
+//   Scope - Supported installation scopes for vvoc config writes.
+//   ResolvedPaths - Scope-aware path bundle for OpenCode and vvoc config locations.
 //   WriteResult - Result shape returned by managed config write operations.
 //   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
-//   resolvePaths - Resolves global OpenCode and vvoc config paths.
+//   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
 //   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations.
@@ -39,7 +40,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Removed project-scoped OpenCode and managed-agent path resolution in favor of the canonical global layout.]
+//   LAST_CHANGE: [v0.6.0 - Replaced per-feature vvoc config files with a single canonical vvoc.json document.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -73,6 +74,7 @@ import {
   getGlobalOpencodeDir,
   getGlobalVvocConfigPath,
   getGlobalVvocDir,
+  getProjectVvocDir,
   getVvocAgentsDir,
 } from "./vvoc-paths.js";
 
@@ -90,7 +92,11 @@ const JSON_FORMAT = {
 
 type JsonObject = Record<string, unknown>;
 
+export type Scope = "global" | "project";
+
 export type ResolvedPaths = {
+  scope: Scope;
+  cwd: string;
   configHome: string;
   opencodeBaseDir: string;
   vvocBaseDir: string;
@@ -109,6 +115,7 @@ export type WriteResult = {
 export type ManagedAgentModelMap = Record<ManagedOpenCodeAgentName, string | undefined>;
 
 export type InstallationInspection = {
+  scope: Scope;
   opencode: {
     path: string;
     exists: boolean;
@@ -138,16 +145,25 @@ export type InstallationInspection = {
 };
 
 // START_BLOCK_RESOLVE_CONFIG_PATHS
-export async function resolvePaths(options: { configDir?: string } = {}): Promise<ResolvedPaths> {
+export async function resolvePaths(options: {
+  scope: Scope;
+  cwd: string;
+  configDir?: string;
+}): Promise<ResolvedPaths> {
   const configHome = getConfigHome(options.configDir);
   const vvocBaseDir = getGlobalVvocDir(options.configDir);
-  const opencodeBaseDir = getGlobalOpencodeDir(options.configDir);
-  const managedAgentsDirPath = getVvocAgentsDir(vvocBaseDir);
+  const opencodeBaseDir =
+    options.scope === "global" ? getGlobalOpencodeDir(options.configDir) : options.cwd;
+  const managedAgentsBaseDir =
+    options.scope === "global" ? vvocBaseDir : getProjectVvocDir(options.cwd);
+  const managedAgentsDirPath = getVvocAgentsDir(managedAgentsBaseDir);
   const opencodeSelection = await selectPrimaryPath(
     OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
   );
 
   return {
+    scope: options.scope,
+    cwd: options.cwd,
     configHome,
     opencodeBaseDir,
     vvocBaseDir,
@@ -663,6 +679,7 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   }
 
   return {
+    scope: paths.scope,
     opencode: {
       path: paths.opencodeConfigPath,
       exists: Boolean(opencodeText),
