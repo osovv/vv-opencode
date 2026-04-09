@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, partial preset application including OpenCode default targets, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added coverage for presets that write OpenCode default and small-model targets.]
+//   LAST_CHANGE: [v0.2.1 - Synced preset expectations with the canonical seeded guardian model values.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -34,7 +34,7 @@ import {
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 describe("preset helpers", () => {
-  test("listConfiguredPresets shows the seeded openai and zai presets", () => {
+  test("listConfiguredPresets shows the seeded openai, zai, and minimax presets", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
@@ -50,7 +50,7 @@ describe("preset helpers", () => {
     );
     expect(output).toContain('"default": "openai/gpt-5.4:xhigh"');
     expect(output).toContain('"small-model": "openai/gpt-5.4-mini"');
-    expect(output).toContain('"guardian": "openaig/gpt-5.4-mini"');
+    expect(output).toContain('"guardian": "openai/gpt-5.4-mini"');
     expect(output).toContain('"explore": "openai/gpt-5.4-mini"');
   });
 });
@@ -79,7 +79,7 @@ describe("applyPreset", () => {
               description: "Partial OpenAI preset",
               agents: {
                 default: "openai/gpt-5.4:xhigh",
-                guardian: "openaig/gpt-5.4-mini",
+                guardian: "openai/gpt-5.4-mini",
                 explore: "openai/gpt-5.4-mini",
               },
             },
@@ -121,7 +121,7 @@ describe("applyPreset", () => {
       ]);
 
       const vvocConfig = await readVvocConfig(paths);
-      expect(vvocConfig?.guardian.model).toBe("openaig/gpt-5.4-mini");
+      expect(vvocConfig?.guardian.model).toBe("openai/gpt-5.4-mini");
       expect(vvocConfig?.guardian.variant).toBeUndefined();
       expect(vvocConfig?.memory.reviewerModel).toBe("anthropic/claude-sonnet-4-5");
       expect(vvocConfig?.memory.reviewerVariant).toBe("high");

@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.7.0
+// VERSION: 0.7.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
 //   SCOPE: Strict JSON parse error reporting, version-aware schema validation, preset semantic validation, and pass/fail terminal output.
@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   Test suite for config validation - canonical vvoc.json schema validation.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.1 - Synced preset schema fixtures with the canonical seeded guardian model values.]
+// END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
 import {
@@ -79,7 +83,7 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
             agents: {
               default: "openai/gpt-5.4:xhigh",
               "small-model": "openai/gpt-5.4-mini",
-              guardian: "openaig/gpt-5.4-mini",
+              guardian: "openai/gpt-5.4-mini",
               explore: "openai/gpt-5.4-mini",
             },
           },
@@ -87,7 +91,7 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
             agents: {
               default: "zai-coding-plan/glm-5.1",
               "small-model": "zai-coding-plan/glm-4.7-flashx",
-              guardian: "zai-coding-plan/glm-4.7-flash-x",
+              guardian: "zai-coding-plan/glm-4.7-flashx",
               explore: "zai-coding-plan/glm-4.7-flashx",
             },
           },

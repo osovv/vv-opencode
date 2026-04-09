@@ -1,4 +1,4 @@
-  <VerificationPlan VERSION="0.4.10">
+  <VerificationPlan VERSION="0.4.11">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -257,7 +257,7 @@
         <check-3>bun run build</check-3>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">A fully seeded canonical vvoc.json reports OK.</scenario-1>
+        <scenario-1 kind="success">A fully seeded canonical vvoc.json, including the seeded preset map, reports OK.</scenario-1>
         <scenario-2 kind="failure">Invalid JSON reports parse error with line/column.</scenario-2>
         <scenario-3 kind="failure">Missing required section or invalid field type reports the schema path and error.</scenario-3>
       </scenarios>
