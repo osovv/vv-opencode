@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
 // FILE: src/cli.ts
-// VERSION: 0.2.6
+// VERSION: 0.2.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble and run the vvoc CLI entrypoint.
 //   SCOPE: Package version lookup, top-level command registration, and main command execution.
-//   DEPENDS: [citty, src/commands/install.ts, src/commands/sync.ts, src/commands/status.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/path-provider.ts, src/commands/version.ts, src/lib/package.ts]
+//   DEPENDS: [citty, src/commands/install.ts, src/commands/preset.ts, src/commands/sync.ts, src/commands/status.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/path-provider.ts, src/commands/version.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.6 - Added the path-provider top-level command for global provider endpoint presets.]
+//   LAST_CHANGE: [v0.2.7 - Added the top-level preset command for declarative multi-agent model switching.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
@@ -29,6 +29,7 @@ import guardian from "./commands/guardian.js";
 import init from "./commands/init.js";
 import install from "./commands/install.js";
 import pathProvider from "./commands/path-provider.js";
+import preset from "./commands/preset.js";
 import plugin from "./commands/plugin.js";
 import status from "./commands/status.js";
 import sync from "./commands/sync.js";
@@ -54,6 +55,7 @@ const main = defineCommand({
     init,
     install,
     "path-provider": pathProvider,
+    preset,
     plugin,
     status,
     sync,

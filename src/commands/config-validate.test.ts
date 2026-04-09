@@ -1,8 +1,8 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
-//   SCOPE: Strict JSON parse error reporting, schema field validation, and pass/fail terminal output.
+//   SCOPE: Strict JSON parse error reporting, version-aware schema validation, preset semantic validation, and pass/fail terminal output.
 //   DEPENDS: [src/commands/config-validate.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-CONFIG-VALIDATE]
 //   ROLE: TEST
@@ -29,11 +29,11 @@ test("validateVvocConfigContent - generated canonical config passes", () => {
   expect(result.errors).toHaveLength(0);
 });
 
-test("validateVvocConfigContent - missing required section fails", () => {
+test("validateVvocConfigContent - legacy v1 config still passes", () => {
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
-        $schema: VVOC_CONFIG_SCHEMA_URL,
+        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.16.0/schemas/vvoc/v1.json",
         version: 1,
         guardian: {
           timeoutMs: 90000,
@@ -43,6 +43,82 @@ test("validateVvocConfigContent - missing required section fails", () => {
         memory: {
           enabled: true,
           defaultSearchLimit: 8,
+        },
+        secretsRedaction: {
+          enabled: true,
+          secret: "${VVOC_SECRET}",
+          ttlMs: 3600000,
+          maxMappings: 10000,
+          patterns: {
+            keywords: [],
+            regex: [],
+            builtin: ["email"],
+            exclude: [],
+          },
+          debug: false,
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(true);
+  expect(result.errors).toHaveLength(0);
+});
+
+test("validateVvocConfigContent - v2 presets pass schema validation", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        ...createDefaultVvocConfig(),
+        presets: {
+          openai: {
+            description: "Starter OpenAI preset",
+            agents: {
+              guardian: "openai/gpt-5:high",
+              general: "openai/gpt-5-mini",
+            },
+          },
+          zai: {
+            agents: {
+              explore: "zai/glm-4.5-air",
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(true);
+  expect(result.errors).toHaveLength(0);
+});
+
+test("validateVvocConfigContent - missing required section fails", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        $schema: VVOC_CONFIG_SCHEMA_URL,
+        version: 2,
+        guardian: {
+          timeoutMs: 90000,
+          approvalRiskThreshold: 80,
+          reviewToastDurationMs: 90000,
+        },
+        memory: {
+          enabled: true,
+          defaultSearchLimit: 8,
+        },
+        presets: {
+          openai: {
+            agents: {
+              general: "openai/gpt-5-mini",
+            },
+          },
         },
       },
       null,
@@ -103,4 +179,33 @@ test("validateVvocConfigContent - unsupported property fails", () => {
   expect(result.errors.some((error) => error.includes('unsupported property "unexpected"'))).toBe(
     true,
   );
+});
+
+test("validateVvocConfigContent - invalid preset special-agent syntax fails", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        ...createDefaultVvocConfig(),
+        presets: {
+          invalid: {
+            agents: {
+              guardian: "not-a-model",
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(false);
+  expect(
+    result.errors.some(
+      (error) =>
+        error.includes("/presets/invalid/agents/guardian") &&
+        error.includes("provider/model-id format"),
+    ),
+  ).toBe(true);
 });

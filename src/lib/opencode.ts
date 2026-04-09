@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, canonical vvoc config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -40,7 +40,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Replaced per-feature vvoc config files with a single canonical vvoc.json document.]
+//   LAST_CHANGE: [v0.7.0 - Made canonical vvoc config reads version-aware so v1 documents can load until sync rewrites them to v2.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -59,6 +59,7 @@ import {
   createDefaultVvocConfig,
   createGuardianConfig,
   createMemoryConfig,
+  parseVersionedVvocConfigText,
   parseVvocConfigText,
   renderVvocConfig,
   type GuardianConfig,
@@ -661,10 +662,15 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   const vvocText = await readOptionalText(paths.vvocConfigPath);
   let vvocParseError: string | undefined;
   let vvocConfig: VvocConfig | undefined;
+  let vvocSourceSchema: string | undefined;
+  let vvocSourceVersion: number | undefined;
 
   if (vvocText) {
     try {
-      vvocConfig = parseVvocConfigText(vvocText, paths.vvocConfigPath);
+      const parsedConfig = parseVersionedVvocConfigText(vvocText, paths.vvocConfigPath);
+      vvocConfig = parsedConfig.config;
+      vvocSourceSchema = parsedConfig.sourceSchema;
+      vvocSourceVersion = parsedConfig.sourceVersion;
     } catch (error) {
       vvocParseError = error instanceof Error ? error.message : String(error);
       problems.push(vvocParseError);
@@ -692,8 +698,8 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
       path: paths.vvocConfigPath,
       exists: Boolean(vvocText),
       parseError: vvocParseError,
-      schema: vvocConfig?.$schema,
-      version: vvocConfig?.version,
+      schema: vvocSourceSchema,
+      version: vvocSourceVersion,
     },
     guardian: {
       config: vvocConfig?.guardian,

@@ -25,7 +25,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { MemoryPlugin } from "./memory/index.js";
-import { VVOC_CONFIG_SCHEMA_URL } from "../lib/vvoc-config.js";
+import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import {
   deleteMemory,
   getMemory,
@@ -51,29 +51,10 @@ describe("loadMemoryRuntimeConfig", () => {
         join(configHome, "vvoc", "vvoc.json"),
         JSON.stringify(
           {
-            $schema: VVOC_CONFIG_SCHEMA_URL,
-            version: 1,
-            guardian: {
-              timeoutMs: 90000,
-              approvalRiskThreshold: 80,
-              reviewToastDurationMs: 90000,
-            },
+            ...createDefaultVvocConfig(),
             memory: {
               enabled: true,
               defaultSearchLimit: 4,
-            },
-            secretsRedaction: {
-              enabled: true,
-              secret: "${VVOC_SECRET}",
-              ttlMs: 3600000,
-              maxMappings: 10000,
-              patterns: {
-                keywords: [],
-                regex: [],
-                builtin: ["email"],
-                exclude: [],
-              },
-              debug: false,
             },
           },
           null,

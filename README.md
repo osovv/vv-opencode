@@ -4,7 +4,7 @@ Portable OpenCode workflow package with plugins and a Bun CLI for setup, sync, d
 
 ## What You Get
 
-- `vvoc` CLI for bootstrap, sync, inspection, and model overrides
+- `vvoc` CLI for bootstrap, sync, inspection, model overrides, and named presets
 - `GuardianPlugin` for permission review
 - `MemoryPlugin` for explicit persistent memory
 - `SystemContextInjectionPlugin` for reusable primary-session system guidance
@@ -47,6 +47,7 @@ vvoc install --scope project
 - registers vvoc-managed OpenCode agents, including the primary `enhancer` agent
 - creates managed prompt files under `vvoc/agents/` when missing
 - creates and fully seeds the canonical `vvoc.json` file at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
+- seeds default `openai` and `zai` agent-model presets inside canonical `vvoc.json`
 - keeps vvoc-managed config in one canonical file separate from native OpenCode config
 - leaves unmanaged files alone unless `--force` is passed
 
@@ -166,6 +167,75 @@ Supported agent IDs:
 
 `guardian` and `memory-reviewer` accept `provider/model[:variant]` syntax. The other agent targets use `provider/model`.
 
+### Switch Named Presets
+
+List the presets stored in canonical `vvoc.json`:
+
+```bash
+vvoc preset list
+```
+
+Show a preset definition:
+
+```bash
+vvoc preset show openai
+```
+
+Apply a preset in one command:
+
+```bash
+vvoc preset openai
+vvoc preset zai --scope project
+```
+
+Preset rules in v1:
+
+- presets live only in canonical `vvoc.json`
+- presets manage only agent model overrides in v1
+- presets may be partial
+- `vvoc preset <name>` only changes the agents listed in that preset
+- agents not listed in the selected preset are left untouched
+- `--scope` behaves like `vvoc agent set`: it changes the OpenCode target for OpenCode-managed agents, while canonical `vvoc.json` stays global
+
+This replaces the common workflow of running many `vvoc agent set ...` commands when you want to switch a known group of agent models together.
+
+The canonical config ships with starter `openai` and `zai` presets and uses this format:
+
+```json
+{
+  "presets": {
+    "openai": {
+      "description": "Starter OpenAI overrides for common vvoc agents.",
+      "agents": {
+        "guardian": "openai/gpt-5:high",
+        "memory-reviewer": "openai/gpt-5-mini:high",
+        "general": "openai/gpt-5-mini",
+        "explore": "openai/gpt-5-mini"
+      }
+    },
+    "zai": {
+      "description": "Starter ZAI overrides for common vvoc agents.",
+      "agents": {
+        "guardian": "zai/glm-4.5:thinking",
+        "general": "zai/glm-4.5-air"
+      }
+    }
+  }
+}
+```
+
+Preset `agents` support the same agent IDs as `vvoc agent set`:
+
+- `guardian`
+- `memory-reviewer`
+- `general`
+- `explore`
+- `enhancer`
+- `implementer`
+- `spec-reviewer`
+- `code-reviewer`
+- `investitagor`
+
 ### Plugin Inspection, Provider Presets, And Shell Completion
 
 ```bash
@@ -199,6 +269,7 @@ vvoc version
 | `vvoc status` | Show current installation state |
 | `vvoc doctor` | Diagnose setup problems |
 | `vvoc agent list/set/unset` | Manage model overrides |
+| `vvoc preset <name>/list/show <name>` | Switch or inspect declarative named presets |
 | `vvoc guardian config` | Print or write the `guardian` section of `vvoc.json` |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
 | `vvoc plugin list` | List OpenCode plugins from config |
@@ -217,6 +288,8 @@ OpenCode config stays in OpenCode-managed paths:
 vvoc-managed config stays separate from OpenCode config and now has one canonical file:
 
 - canonical config: `$XDG_CONFIG_HOME/vvoc/vvoc.json` or `~/.config/vvoc/vvoc.json`
+
+That canonical config contains the `guardian`, `memory`, `secretsRedaction`, and `presets` sections.
 
 Project scope still uses `./.vvoc/agents/` for managed prompt files, but vvoc's own settings always live in the canonical global config file.
 
@@ -243,17 +316,19 @@ Scope rules:
 
 ```json
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v1.json",
-  "version": 1
+  "$schema": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v2.json",
+  "version": 2
 }
 ```
 
 Schema source of truth and hosting strategy:
 
-- the schema is checked into this repository at `schemas/vvoc/v1.json`
+- the current schema is checked into this repository at `schemas/vvoc/v2.json`
+- the legacy schema remains checked in at `schemas/vvoc/v1.json`
 - the package publishes that file to npm by shipping the `schemas/` directory
-- the canonical hosted schema URL is version-pinned: `https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v1.json`
+- the canonical hosted schema URL is version-pinned: `https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v2.json`
 - `v1.json` is immutable once published; breaking schema changes must ship as `v2.json` instead of rewriting `v1.json`
+- existing `version: 1` configs still load during the migration window, and `vvoc install` or `vvoc sync` rewrites them to canonical `version: 2`
 
 ## Plugins Included
 

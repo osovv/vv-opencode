@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -19,11 +19,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Added coverage for the canonical vvoc.json config path and unified config writes.]
+//   LAST_CHANGE: [v0.7.0 - Added coverage for vvoc schema v2 and v1-to-v2 canonical config migration.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "jsonc-parser";
@@ -41,6 +41,7 @@ import {
   readManagedAgentModels,
   renderGuardianConfig,
   resolvePaths,
+  syncVvocConfig,
   writeGuardianConfig,
   writeMemoryConfig,
   writeOpenCodeAgentModel,
@@ -105,7 +106,7 @@ describe("guardian config helpers", () => {
 describe("canonical vvoc config helpers", () => {
   test("ships a versioned schema file at the canonical hosted URL", async () => {
     const schemaText = await readFile(
-      new URL("../../schemas/vvoc/v1.json", import.meta.url),
+      new URL("../../schemas/vvoc/v2.json", import.meta.url),
       "utf8",
     );
     const schema = JSON.parse(schemaText) as {
@@ -114,7 +115,7 @@ describe("canonical vvoc config helpers", () => {
     };
 
     expect(schema.$id).toBe(VVOC_CONFIG_SCHEMA_URL);
-    expect(schema.properties?.version?.const).toBe(1);
+    expect(schema.properties?.version?.const).toBe(2);
   });
 
   test("installVvocConfig creates a fully seeded canonical config and preserves other sections", async () => {
@@ -150,6 +151,94 @@ describe("canonical vvoc config helpers", () => {
       expect(config?.memory.enabled).toBe(false);
       expect(config?.memory.defaultSearchLimit).toBe(12);
       expect(config?.secretsRedaction.secret).toBe("${VVOC_SECRET}");
+      expect(Object.keys(config?.presets ?? {})).toEqual(["openai", "zai"]);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("readVvocConfig loads v1 docs and syncVvocConfig rewrites them to v2", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-v1-migration-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+
+      await writeFile(
+        paths.vvocConfigPath,
+        JSON.stringify(
+          {
+            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.16.0/schemas/vvoc/v1.json",
+            version: 1,
+            guardian: {
+              model: "anthropic/claude-sonnet-4-5",
+              variant: "high",
+              timeoutMs: 12345,
+              approvalRiskThreshold: 70,
+              reviewToastDurationMs: 54321,
+            },
+            memory: {
+              enabled: false,
+              defaultSearchLimit: 12,
+              reviewerModel: "openai/gpt-5",
+              reviewerVariant: "high",
+            },
+            secretsRedaction: {
+              enabled: true,
+              secret: "${VVOC_SECRET}",
+              ttlMs: 60000,
+              maxMappings: 77,
+              patterns: {
+                keywords: [],
+                regex: [],
+                builtin: ["email"],
+                exclude: [],
+              },
+              debug: true,
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const loaded = await readVvocConfig(paths);
+      expect(loaded?.guardian.timeoutMs).toBe(12345);
+      expect(loaded?.memory.defaultSearchLimit).toBe(12);
+      expect(Object.keys(loaded?.presets ?? {})).toEqual(["openai", "zai"]);
+
+      const syncResult = await syncVvocConfig(paths);
+      expect(syncResult.action).toBe("updated");
+
+      const rawText = await readFile(paths.vvocConfigPath, "utf8");
+      const parsed = JSON.parse(rawText) as {
+        version: number;
+        guardian: {
+          timeoutMs: number;
+          approvalRiskThreshold: number;
+          reviewToastDurationMs: number;
+        };
+        memory: { enabled: boolean; defaultSearchLimit: number };
+        secretsRedaction: { ttlMs: number; maxMappings: number; debug: boolean };
+        presets?: Record<string, unknown>;
+      };
+
+      expect(parsed.version).toBe(2);
+      expect(parsed.guardian.timeoutMs).toBe(12345);
+      expect(parsed.guardian.approvalRiskThreshold).toBe(70);
+      expect(parsed.guardian.reviewToastDurationMs).toBe(54321);
+      expect(parsed.memory.enabled).toBe(false);
+      expect(parsed.memory.defaultSearchLimit).toBe(12);
+      expect(parsed.secretsRedaction.ttlMs).toBe(60000);
+      expect(parsed.secretsRedaction.maxMappings).toBe(77);
+      expect(parsed.secretsRedaction.debug).toBe(true);
+      expect(Object.keys(parsed.presets ?? {})).toEqual(["openai", "zai"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

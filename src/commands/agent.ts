@@ -1,9 +1,9 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
 //   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
-//   DEPENDS: [citty, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
+//   DEPENDS: [citty, src/lib/agent-models.ts, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,15 +14,20 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Switched guardian and memory-reviewer model overrides to the canonical vvoc.json config file.]
+//   LAST_CHANGE: [v0.7.0 - Moved agent ID and model validation into shared helpers for reuse by presets and vvoc config validation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
-  MANAGED_OPENCODE_AGENTS,
-  isManagedOpenCodeAgentName,
-  type ManagedOpenCodeAgentName,
-} from "../lib/managed-agents.js";
+  AGENT_NAME_CHOICES,
+  CONFIGURABLE_OPENCODE_SUBAGENTS,
+  isConfigurableOpenCodeSubagentName,
+  parseAgentName,
+  parseGuardianStyleModelArg,
+  parseOpenCodeModelArg,
+  formatAgentModel,
+} from "../lib/agent-models.js";
+import { MANAGED_OPENCODE_AGENTS } from "../lib/managed-agents.js";
 import {
   describeWriteResult,
   installManagedAgentPrompts,
@@ -37,20 +42,6 @@ import {
   writeOpenCodeAgentModel,
 } from "../lib/opencode.js";
 import { createGuardianConfig, createMemoryConfig } from "../lib/vvoc-config.js";
-
-const SPECIAL_AGENT_NAMES = ["guardian", "memory-reviewer"] as const;
-type SpecialAgentName = (typeof SPECIAL_AGENT_NAMES)[number];
-
-const CONFIGURABLE_OPENCODE_SUBAGENTS = ["general", "explore"] as const;
-type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
-
-type AgentName = SpecialAgentName | ConfigurableOpenCodeSubagentName | ManagedOpenCodeAgentName;
-
-const AGENT_NAME_CHOICES = [
-  ...SPECIAL_AGENT_NAMES,
-  ...CONFIGURABLE_OPENCODE_SUBAGENTS,
-  ...MANAGED_OPENCODE_AGENTS.map((definition) => definition.name),
-].join(", ");
 
 const scopeArg = {
   type: "enum" as const,
@@ -264,73 +255,4 @@ async function resolveCommandPaths(args: Record<string, unknown>) {
     cwd: process.cwd(),
     configDir,
   });
-}
-
-function formatAgentModel(model?: string, variant?: string): string {
-  if (!model) return "default";
-  return variant ? `${model}:${variant}` : model;
-}
-
-function parseAgentName(value: unknown, operation: string): AgentName {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`agent argument required for ${operation}`);
-  }
-
-  const trimmed = value.trim();
-
-  if (trimmed === "guardian" || trimmed === "memory-reviewer") {
-    return trimmed;
-  }
-
-  if (isConfigurableOpenCodeSubagentName(trimmed) || isManagedOpenCodeAgentName(trimmed)) {
-    return trimmed;
-  }
-
-  throw new Error(`unsupported agent: ${trimmed}. Expected one of: ${AGENT_NAME_CHOICES}`);
-}
-
-function isConfigurableOpenCodeSubagentName(
-  value: string,
-): value is ConfigurableOpenCodeSubagentName {
-  return CONFIGURABLE_OPENCODE_SUBAGENTS.includes(value as ConfigurableOpenCodeSubagentName);
-}
-
-function parseGuardianStyleModelArg(
-  value: unknown,
-  operation: string,
-): { model: string; variant?: string } {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`model argument required for ${operation}`);
-  }
-
-  const trimmed = value.trim();
-
-  if (trimmed.includes(":")) {
-    const lastColon = trimmed.lastIndexOf(":");
-    const model = trimmed.slice(0, lastColon);
-    const variant = trimmed.slice(lastColon + 1);
-    if (!model.includes("/")) {
-      throw new Error(`model must be in provider/model-id format, got: ${trimmed}`);
-    }
-    return { model, variant };
-  }
-
-  if (!trimmed.includes("/")) {
-    throw new Error(`model must be in provider/model-id format, got: ${trimmed}`);
-  }
-
-  return { model: trimmed };
-}
-
-function parseOpenCodeModelArg(value: unknown, operation: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`model argument required for ${operation}`);
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed.includes("/")) {
-    throw new Error(`model must be in provider/model-id format, got: ${trimmed}`);
-  }
-
-  return trimmed;
 }

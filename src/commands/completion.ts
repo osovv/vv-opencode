@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.6
+// VERSION: 0.5.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command/preset completion generation for config/plugin/path-provider and the `agent set|unset <agent-id>` flow, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/path-provider/preset and the `agent set|unset <agent-id>` flow, and rc file patching.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.6 - Added the managed enhancer primary agent to `vvoc agent` shell completions.]
+//   LAST_CHANGE: [v0.5.7 - Added shell completions for the top-level preset command and its default preset names.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -35,6 +35,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
   "init",
   "install",
   "path-provider",
+  "preset",
   "plugin",
   "status",
   "sync",
@@ -44,6 +45,8 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PATH_PROVIDER_PRESETS = ["stepfun-ai"];
+const VVOC_PRESET_COMMANDS = ["list", "show"];
+const VVOC_PRESET_NAMES = ["openai", "zai"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_AGENT_COMMANDS = ["set", "unset", "list"];
 const VVOC_AGENT_TARGETS = [
@@ -169,6 +172,8 @@ export function generateBashCompletion(): string {
   const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
   const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
   const pathProviderPresets = VVOC_PATH_PROVIDER_PRESETS.join(" ");
+  const presetCommands = [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ");
+  const presetNames = VVOC_PRESET_NAMES.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
   const agentCommands = VVOC_AGENT_COMMANDS.join(" ");
   const agentTargets = VVOC_AGENT_TARGETS.join(" ");
@@ -194,6 +199,9 @@ export function generateBashCompletion(): string {
     "        path-provider)\n" +
     "          _vvoc_path_provider_presets\n" +
     "          ;;\n" +
+    "        preset)\n" +
+    "          _vvoc_preset_commands\n" +
+    "          ;;\n" +
     "        plugin)\n" +
     "          _vvoc_plugin_commands\n" +
     "          ;;\n" +
@@ -203,6 +211,9 @@ export function generateBashCompletion(): string {
     '      case "${words[1]}:${words[2]}" in\n' +
     "        agent:set|agent:unset)\n" +
     "          _vvoc_agent_target_commands\n" +
+    "          ;;\n" +
+    "        preset:show)\n" +
+    "          _vvoc_preset_names\n" +
     "          ;;\n" +
     "      esac\n" +
     "      ;;\n" +
@@ -226,6 +237,20 @@ export function generateBashCompletion(): string {
     "_vvoc_path_provider_presets() {\n" +
     '  local commands="' +
     pathProviderPresets +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_preset_commands() {\n" +
+    '  local commands="' +
+    presetCommands +
+    '"\n' +
+    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
+    "}\n" +
+    "\n" +
+    "_vvoc_preset_names() {\n" +
+    '  local commands="' +
+    presetNames +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -284,6 +309,9 @@ export function generateZshCompletion(): string {
     "    path-provider)",
     "      _vvoc_path_provider_cmds",
     "      ;;",
+    "    preset)",
+    "      _vvoc_preset_cmds",
+    "      ;;",
     "    plugin)",
     "      _vvoc_plugin_cmds",
     "      ;;",
@@ -298,6 +326,17 @@ export function generateZshCompletion(): string {
     "",
     "_vvoc_path_provider_cmds() {",
     '  _arguments "1: :(' + VVOC_PATH_PROVIDER_PRESETS.join(" ") + ')"',
+    "}",
+    "",
+    "_vvoc_preset_cmds() {",
+    "  case $words[2] in",
+    "    show)",
+    '      _arguments "1: :(' + VVOC_PRESET_NAMES.join(" ") + ')"',
+    "      ;;",
+    "    *)",
+    '      _arguments "1: :(' + [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ") + ')"',
+    "      ;;",
+    "  esac",
     "}",
     "",
     "_vvoc_agent_cmds() {",
@@ -341,6 +380,14 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_PATH_PROVIDER_PRESETS.join(" "),
     "end",
     "",
+    "function __vvoc_preset_cmds",
+    "  echo " + [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" "),
+    "end",
+    "",
+    "function __vvoc_preset_names",
+    "  echo " + VVOC_PRESET_NAMES.join(" "),
+    "end",
+    "",
     "function __vvoc_agent_cmds",
     "  echo " + VVOC_AGENT_COMMANDS.join(" "),
     "end",
@@ -358,6 +405,8 @@ export function generateFishCompletion(): string {
     'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_agent_target_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from path-provider" -f -a "(__vvoc_path_provider_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from list show openai zai" -f -a "(__vvoc_preset_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from preset; and __fish_seen_subcommand_from show" -f -a "(__vvoc_preset_names)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',
   );
 

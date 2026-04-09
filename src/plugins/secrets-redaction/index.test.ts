@@ -21,7 +21,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VVOC_CONFIG_SCHEMA_URL } from "../../lib/vvoc-config.js";
+import { createDefaultVvocConfig } from "../../lib/vvoc-config.js";
 import { SecretsRedactionPlugin } from "./index.js";
 
 const EMAIL = "qa-redaction-check-884271@example.invalid";
@@ -59,17 +59,7 @@ async function createPlugin() {
     join(configHome, "vvoc", "vvoc.json"),
     JSON.stringify(
       {
-        $schema: VVOC_CONFIG_SCHEMA_URL,
-        version: 1,
-        guardian: {
-          timeoutMs: 90000,
-          approvalRiskThreshold: 80,
-          reviewToastDurationMs: 90000,
-        },
-        memory: {
-          enabled: true,
-          defaultSearchLimit: 8,
-        },
+        ...createDefaultVvocConfig(),
         secretsRedaction: {
           enabled: true,
           secret: "test-secret-for-redaction",

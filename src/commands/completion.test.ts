@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.4
+// VERSION: 0.4.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets and the `agent set|unset <agent-id>` flow.
+//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets, top-level preset completions, and the `agent set|unset <agent-id>` flow.
 //   DEPENDS: [src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.4 - Updated assertions for the `vvoc agent set|unset <agent-id>` completion shape.]
+//   LAST_CHANGE: [v0.4.5 - Added assertions for the top-level preset command and default preset completions.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -31,6 +31,7 @@ test("generateBashCompletion - contains vvoc command", () => {
   expect(output).toContain("completion");
   expect(output).toContain("config");
   expect(output).toContain("path-provider");
+  expect(output).toContain("preset");
   expect(output).toContain("plugin");
 });
 
@@ -46,6 +47,7 @@ test("generateZshCompletion - contains vvoc command", () => {
   expect(output).toContain("agent");
   expect(output).toContain("config");
   expect(output).toContain("path-provider");
+  expect(output).toContain("preset");
   expect(output).toContain("plugin");
 });
 
@@ -63,6 +65,7 @@ test("generateFishCompletion - contains vvoc command", () => {
   expect(output).toContain("completion");
   expect(output).toContain("config");
   expect(output).toContain("path-provider");
+  expect(output).toContain("preset");
   expect(output).toContain("plugin");
 });
 
@@ -80,7 +83,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="agent completion config doctor guardian init install path-provider plugin status sync upgrade version"',
+    'local commands="agent completion config doctor guardian init install path-provider preset plugin status sync upgrade version"',
   );
 });
 
@@ -94,6 +97,7 @@ test("generateFishCompletion - handles nested subcommands", () => {
   expect(output).toContain("__fish_seen_subcommand_from agent");
   expect(output).toContain("__fish_seen_subcommand_from config");
   expect(output).toContain("__fish_seen_subcommand_from path-provider");
+  expect(output).toContain("__fish_seen_subcommand_from preset");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
 });
 
@@ -129,4 +133,14 @@ test("completion scripts - contain path-provider presets", () => {
   expect(generateZshCompletion()).toContain("_vvoc_path_provider_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_path_provider_cmds");
   expect(generateBashCompletion()).toContain("stepfun-ai");
+});
+
+test("completion scripts - contain preset commands and default preset names", () => {
+  expect(generateBashCompletion()).toContain("_vvoc_preset_commands");
+  expect(generateBashCompletion()).toContain("_vvoc_preset_names");
+  expect(generateZshCompletion()).toContain("_vvoc_preset_cmds");
+  expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
+  expect(generateFishCompletion()).toContain("__vvoc_preset_names");
+  expect(generateBashCompletion()).toContain("list show openai zai");
+  expect(generateZshCompletion()).toContain("openai zai");
 });

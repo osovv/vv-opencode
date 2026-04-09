@@ -1,10 +1,10 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 1.1.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the canonical vvoc.json document shape, normalization rules, JSON Schema, and validation helpers.
-//   SCOPE: Versioned schema constants, default section generation, strict and lenient config parsing, section rendering/parsing helpers, and schema-based validation errors for vvoc-owned configuration.
-//   DEPENDS: [ajv/dist/2020, src/lib/package.ts]
-//   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY-STORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
+//   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
+//   SCOPE: Versioned schema constants, preset-aware default config generation, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration.
+//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts]
+//   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY-STORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -13,20 +13,26 @@
 //   VVOC_CONFIG_VERSION - Canonical vvoc config document version.
 //   VVOC_CONFIG_SCHEMA_URL - Hosted JSON Schema URL for the canonical vvoc config.
 //   VVOC_CONFIG_SCHEMA - JSON Schema document for vvoc.json.
+//   VvocPresetAgents - Partial per-agent model override map for a named preset.
+//   VvocPreset - Declarative preset shape stored in vvoc.json.
+//   VvocPresets - Top-level preset map stored in vvoc.json.
 //   GuardianConfig - Fully seeded guardian section shape.
 //   GuardianConfigOverrides - Partial guardian section override shape.
 //   MemoryConfig - Fully seeded memory section shape.
 //   MemoryConfigOverrides - Partial memory section override shape.
 //   SecretsRedactionConfig - Fully seeded secrets-redaction section shape.
 //   VvocConfig - Fully seeded canonical vvoc config document shape.
+//   ParsedVvocConfig - Parsed vvoc config plus the document schema/version found on disk.
 //   createGuardianConfig - Builds a fully seeded guardian section from optional overrides.
 //   createMemoryConfig - Builds a fully seeded memory section from optional overrides.
 //   createDefaultSecretsRedactionConfig - Builds the seeded secrets-redaction section.
+//   createDefaultVvocPresets - Builds the seeded named preset map.
 //   createDefaultVvocConfig - Builds the fully seeded canonical vvoc config document.
 //   parseGuardianConfigText - Strictly parses a guardian section JSON snippet.
 //   renderGuardianConfig - Renders a guardian section JSON snippet.
 //   parseMemoryConfigText - Strictly parses a memory section JSON snippet.
 //   renderMemoryConfig - Renders a memory section JSON snippet.
+//   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns the source version plus normalized config.
 //   parseVvocConfigText - Strictly parses the canonical vvoc config document.
 //   loadLenientVvocConfigText - Parses vvoc.json leniently for runtime fallback with warnings.
 //   renderVvocConfig - Renders canonical vvoc.json.
@@ -34,10 +40,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.1.0 - Switched canonical vvoc schema URLs to package-version-pinned jsDelivr URLs.]
+//   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
+import {
+  SUPPORTED_AGENT_NAMES,
+  normalizeAgentModelOverride,
+  type SupportedAgentName,
+} from "./agent-models.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
 
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
@@ -46,8 +57,10 @@ const DEFAULT_MEMORY_SEARCH_LIMIT = 8;
 const DEFAULT_SECRETS_REDACTION_TTL_MS = 3_600_000;
 const DEFAULT_SECRETS_REDACTION_MAX_MAPPINGS = 10_000;
 
-export const VVOC_CONFIG_VERSION = 1;
-export const VVOC_CONFIG_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v1.json`;
+const VVOC_CONFIG_V1_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v1.json`;
+
+export const VVOC_CONFIG_VERSION = 2;
+export const VVOC_CONFIG_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v2.json`;
 
 const JSON_SCHEMA_DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 const BUILTIN_SECRETS_REDACTION_PATTERNS = [
@@ -67,6 +80,16 @@ const BUILTIN_SECRETS_REDACTION_PATTERNS = [
 ] as const;
 
 type JsonObject = Record<string, unknown>;
+type VvocConfigVersion = 1 | 2;
+
+export type VvocPresetAgents = Partial<Record<SupportedAgentName, string>>;
+
+export type VvocPreset = {
+  description?: string;
+  agents: VvocPresetAgents;
+};
+
+export type VvocPresets = Record<string, VvocPreset>;
 
 export type GuardianConfig = {
   model?: string;
@@ -117,13 +140,116 @@ export type VvocConfig = {
   guardian: GuardianConfig;
   memory: MemoryConfig;
   secretsRedaction: SecretsRedactionConfig;
+  presets: VvocPresets;
 };
 
-export const VVOC_CONFIG_SCHEMA = {
+export type ParsedVvocConfig = {
+  sourceSchema: string;
+  sourceVersion: VvocConfigVersion;
+  config: VvocConfig;
+};
+
+const GUARDIAN_CONFIG_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
+  properties: {
+    model: { type: "string", minLength: 1 },
+    variant: { type: "string", minLength: 1 },
+    timeoutMs: { type: "integer", minimum: 1 },
+    approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
+    reviewToastDurationMs: { type: "integer", minimum: 1 },
+  },
+};
+
+const MEMORY_CONFIG_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["enabled", "defaultSearchLimit"],
+  properties: {
+    enabled: { type: "boolean" },
+    defaultSearchLimit: { type: "integer", minimum: 1 },
+    reviewerModel: { type: "string", minLength: 1 },
+    reviewerVariant: { type: "string", minLength: 1 },
+  },
+};
+
+const SECRETS_REDACTION_CONFIG_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["enabled", "secret", "ttlMs", "maxMappings", "patterns", "debug"],
+  properties: {
+    enabled: { type: "boolean" },
+    secret: { type: "string", minLength: 1 },
+    ttlMs: { type: "integer", minimum: 0 },
+    maxMappings: { type: "integer", minimum: 1 },
+    debug: { type: "boolean" },
+    patterns: {
+      type: "object",
+      additionalProperties: false,
+      required: ["keywords", "regex", "builtin", "exclude"],
+      properties: {
+        keywords: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["value"],
+            properties: {
+              value: { type: "string", minLength: 1 },
+              category: { type: "string", minLength: 1 },
+            },
+          },
+        },
+        regex: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["pattern", "category"],
+            properties: {
+              pattern: { type: "string", minLength: 1 },
+              category: { type: "string", minLength: 1 },
+            },
+          },
+        },
+        builtin: {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+        },
+        exclude: {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+        },
+      },
+    },
+  },
+};
+
+const VVOC_PRESET_AGENTS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  minProperties: 1,
+  properties: Object.fromEntries(
+    SUPPORTED_AGENT_NAMES.map((agentName) => [agentName, { type: "string", minLength: 1 }]),
+  ),
+};
+
+const VVOC_PRESET_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["agents"],
+  properties: {
+    description: { type: "string", minLength: 1 },
+    agents: VVOC_PRESET_AGENTS_SCHEMA,
+  },
+};
+
+const VVOC_CONFIG_V1_SCHEMA = {
   $schema: JSON_SCHEMA_DRAFT_2020_12,
-  $id: VVOC_CONFIG_SCHEMA_URL,
+  $id: VVOC_CONFIG_V1_SCHEMA_URL,
   title: "vvoc config",
-  description: "Canonical vvoc configuration document.",
+  description: "Canonical vvoc configuration document (v1).",
   type: "object",
   additionalProperties: false,
   required: ["$schema", "version", "guardian", "memory", "secretsRedaction"],
@@ -135,86 +261,45 @@ export const VVOC_CONFIG_SCHEMA = {
     },
     version: {
       type: "integer",
+      const: 1,
+    },
+    guardian: GUARDIAN_CONFIG_SCHEMA,
+    memory: MEMORY_CONFIG_SCHEMA,
+    secretsRedaction: SECRETS_REDACTION_CONFIG_SCHEMA,
+  },
+};
+
+export const VVOC_CONFIG_SCHEMA = {
+  $schema: JSON_SCHEMA_DRAFT_2020_12,
+  $id: VVOC_CONFIG_SCHEMA_URL,
+  title: "vvoc config",
+  description: "Canonical vvoc configuration document.",
+  type: "object",
+  additionalProperties: false,
+  required: ["$schema", "version", "guardian", "memory", "secretsRedaction", "presets"],
+  properties: {
+    $schema: {
+      type: "string",
+      minLength: 1,
+      description: "Hosted JSON Schema URL for vvoc.json.",
+    },
+    version: {
+      type: "integer",
       const: VVOC_CONFIG_VERSION,
     },
-    guardian: {
+    guardian: GUARDIAN_CONFIG_SCHEMA,
+    memory: MEMORY_CONFIG_SCHEMA,
+    secretsRedaction: SECRETS_REDACTION_CONFIG_SCHEMA,
+    presets: {
       type: "object",
-      additionalProperties: false,
-      required: ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
-      properties: {
-        model: { type: "string", minLength: 1 },
-        variant: { type: "string", minLength: 1 },
-        timeoutMs: { type: "integer", minimum: 1 },
-        approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
-        reviewToastDurationMs: { type: "integer", minimum: 1 },
-      },
-    },
-    memory: {
-      type: "object",
-      additionalProperties: false,
-      required: ["enabled", "defaultSearchLimit"],
-      properties: {
-        enabled: { type: "boolean" },
-        defaultSearchLimit: { type: "integer", minimum: 1 },
-        reviewerModel: { type: "string", minLength: 1 },
-        reviewerVariant: { type: "string", minLength: 1 },
-      },
-    },
-    secretsRedaction: {
-      type: "object",
-      additionalProperties: false,
-      required: ["enabled", "secret", "ttlMs", "maxMappings", "patterns", "debug"],
-      properties: {
-        enabled: { type: "boolean" },
-        secret: { type: "string", minLength: 1 },
-        ttlMs: { type: "integer", minimum: 0 },
-        maxMappings: { type: "integer", minimum: 1 },
-        debug: { type: "boolean" },
-        patterns: {
-          type: "object",
-          additionalProperties: false,
-          required: ["keywords", "regex", "builtin", "exclude"],
-          properties: {
-            keywords: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["value"],
-                properties: {
-                  value: { type: "string", minLength: 1 },
-                  category: { type: "string", minLength: 1 },
-                },
-              },
-            },
-            regex: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["pattern", "category"],
-                properties: {
-                  pattern: { type: "string", minLength: 1 },
-                  category: { type: "string", minLength: 1 },
-                },
-              },
-            },
-            builtin: {
-              type: "array",
-              items: { type: "string", minLength: 1 },
-            },
-            exclude: {
-              type: "array",
-              items: { type: "string", minLength: 1 },
-            },
-          },
-        },
-      },
+      propertyNames: { minLength: 1 },
+      additionalProperties: VVOC_PRESET_SCHEMA,
     },
   },
-} as const;
+};
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
+const validateWithV1Schema = ajv.compile(VVOC_CONFIG_V1_SCHEMA);
 const validateWithSchema = ajv.compile(VVOC_CONFIG_SCHEMA);
 
 // START_BLOCK_DEFAULT_CONFIG_BUILDERS
@@ -256,6 +341,39 @@ export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
   };
 }
 
+export function createDefaultVvocPresets(): VvocPresets {
+  return createVvocPresets({
+    openai: {
+      description: "Starter OpenAI overrides for common vvoc agents.",
+      agents: {
+        guardian: "openai/gpt-5:high",
+        "memory-reviewer": "openai/gpt-5-mini:high",
+        general: "openai/gpt-5-mini",
+        explore: "openai/gpt-5-mini",
+        enhancer: "openai/gpt-5",
+        implementer: "openai/gpt-5",
+        "spec-reviewer": "openai/gpt-5",
+        "code-reviewer": "openai/gpt-5",
+        investitagor: "openai/gpt-5-mini",
+      },
+    },
+    zai: {
+      description: "Starter ZAI overrides for common vvoc agents.",
+      agents: {
+        guardian: "zai/glm-4.5:thinking",
+        "memory-reviewer": "zai/glm-4.5-air:thinking",
+        general: "zai/glm-4.5-air",
+        explore: "zai/glm-4.5-air",
+        enhancer: "zai/glm-4.5",
+        implementer: "zai/glm-4.5",
+        "spec-reviewer": "zai/glm-4.5",
+        "code-reviewer": "zai/glm-4.5",
+        investitagor: "zai/glm-4.5-air",
+      },
+    },
+  });
+}
+
 export function createDefaultVvocConfig(): VvocConfig {
   return {
     $schema: VVOC_CONFIG_SCHEMA_URL,
@@ -263,6 +381,7 @@ export function createDefaultVvocConfig(): VvocConfig {
     guardian: createGuardianConfig(),
     memory: createMemoryConfig(),
     secretsRedaction: createDefaultSecretsRedactionConfig(),
+    presets: createDefaultVvocPresets(),
   };
 }
 // END_BLOCK_DEFAULT_CONFIG_BUILDERS
@@ -356,7 +475,7 @@ export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): strin
 // END_BLOCK_SECTION_PARSE_AND_RENDER
 
 // START_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
-export function parseVvocConfigText(text: string, label: string): VvocConfig {
+export function parseVersionedVvocConfigText(text: string, label: string): ParsedVvocConfig {
   const value = parseStrictJson(text, label);
   const errors = validateVvocConfigDocument(value);
 
@@ -365,6 +484,10 @@ export function parseVvocConfigText(text: string, label: string): VvocConfig {
   }
 
   return normalizeStrictVvocConfig(value as JsonObject);
+}
+
+export function parseVvocConfigText(text: string, label: string): VvocConfig {
+  return parseVersionedVvocConfigText(text, label).config;
 }
 
 export function loadLenientVvocConfigText(
@@ -386,9 +509,11 @@ export function loadLenientVvocConfigText(
     return createDefaultVvocConfig();
   }
 
+  const sourceVersion = readLenientSupportedVersion(value.version, `${label}: version`, warnings);
+
   return {
-    $schema: readLenientSchemaUrl(value.$schema, `${label}: $schema`, warnings),
-    version: readLenientVersion(value.version, `${label}: version`, warnings),
+    $schema: VVOC_CONFIG_SCHEMA_URL,
+    version: VVOC_CONFIG_VERSION,
     guardian: loadLenientGuardianConfig(value.guardian, `${label}: guardian`, warnings),
     memory: loadLenientMemoryConfig(value.memory, `${label}: memory`, warnings),
     secretsRedaction: loadLenientSecretsRedactionConfig(
@@ -396,6 +521,10 @@ export function loadLenientVvocConfigText(
       `${label}: secretsRedaction`,
       warnings,
     ),
+    presets:
+      sourceVersion === 2
+        ? loadLenientVvocPresets(value.presets, `${label}: presets`, warnings)
+        : createDefaultVvocPresets(),
   };
 }
 
@@ -406,29 +535,53 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     guardian: createGuardianConfig(config.guardian),
     memory: createMemoryConfig(config.memory),
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
+    presets: createVvocPresets(config.presets),
   });
 }
 // END_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
 
 // START_BLOCK_SCHEMA_VALIDATION
 export function validateVvocConfigDocument(document: unknown): string[] {
-  if (validateWithSchema(document)) {
-    return [];
+  const validator =
+    isPlainObject(document) && document.version === 1 ? validateWithV1Schema : validateWithSchema;
+
+  if (!validator(document)) {
+    return (validator.errors ?? []).map(formatSchemaError);
   }
 
-  return (validateWithSchema.errors ?? []).map(formatSchemaError);
+  if (isPlainObject(document) && document.version === VVOC_CONFIG_VERSION) {
+    return validatePresetSemantics(document);
+  }
+
+  return [];
 }
 // END_BLOCK_SCHEMA_VALIDATION
 
-function normalizeStrictVvocConfig(value: JsonObject): VvocConfig {
-  return {
-    $schema: readNonEmptyString(value.$schema, "$schema"),
-    version: readExactVersion(value.version, "version"),
+function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
+  const sourceVersion = readSupportedVersion(value.version, "version");
+  const baseConfig = {
+    $schema: VVOC_CONFIG_SCHEMA_URL,
+    version: VVOC_CONFIG_VERSION,
     guardian: createGuardianConfig(value.guardian as GuardianConfig),
     memory: createMemoryConfig(value.memory as MemoryConfig),
     secretsRedaction: createSecretsRedactionConfig(
       value.secretsRedaction as SecretsRedactionConfig,
     ),
+  };
+
+  return {
+    sourceSchema: readNonEmptyString(value.$schema, "$schema"),
+    sourceVersion,
+    config:
+      sourceVersion === 1
+        ? {
+            ...baseConfig,
+            presets: createDefaultVvocPresets(),
+          }
+        : {
+            ...baseConfig,
+            presets: createVvocPresets(value.presets as VvocPresets),
+          },
   };
 }
 
@@ -451,6 +604,38 @@ function createSecretsRedactionConfig(
     },
     debug: overrides.debug ?? defaults.debug,
   };
+}
+
+function createVvocPresets(overrides: VvocPresets = {}): VvocPresets {
+  const presets: VvocPresets = {};
+
+  for (const [presetName, preset] of Object.entries(overrides)) {
+    presets[presetName] = createVvocPreset(preset);
+  }
+
+  return presets;
+}
+
+function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {
+  return compactObject({
+    description: normalizeOptionalString(overrides.description),
+    agents: createVvocPresetAgents(overrides.agents),
+  });
+}
+
+function createVvocPresetAgents(overrides: VvocPresetAgents = {}): VvocPresetAgents {
+  const agents: VvocPresetAgents = {};
+
+  for (const agentName of SUPPORTED_AGENT_NAMES) {
+    const value = overrides[agentName];
+    if (value === undefined) {
+      continue;
+    }
+
+    agents[agentName] = normalizeAgentModelOverride(agentName, value, `preset ${agentName}`);
+  }
+
+  return agents;
 }
 
 function cloneKeywordRules(rules: SecretsRedactionKeywordRule[]): SecretsRedactionKeywordRule[] {
@@ -748,19 +933,95 @@ function loadLenientStringArray(
   return entries;
 }
 
-function readLenientSchemaUrl(value: unknown, label: string, warnings: string[]): string {
-  const normalized = readLenientOptionalString(value, label, warnings);
-  return normalized ?? VVOC_CONFIG_SCHEMA_URL;
+function loadLenientVvocPresets(value: unknown, label: string, warnings: string[]): VvocPresets {
+  if (!isPlainObject(value)) {
+    warnings.push(`${label}: expected an object`);
+    return createDefaultVvocPresets();
+  }
+
+  const presets: VvocPresets = {};
+
+  for (const [presetName, presetValue] of Object.entries(value)) {
+    if (!presetName.trim()) {
+      warnings.push(`${label}: preset names must be non-empty strings`);
+      continue;
+    }
+    if (!isPlainObject(presetValue)) {
+      warnings.push(`${label}.${presetName}: expected an object`);
+      continue;
+    }
+
+    const description = Object.hasOwn(presetValue, "description")
+      ? readLenientOptionalString(
+          presetValue.description,
+          `${label}.${presetName}.description`,
+          warnings,
+        )
+      : undefined;
+    const agents = loadLenientVvocPresetAgents(
+      presetValue.agents,
+      `${label}.${presetName}.agents`,
+      warnings,
+    );
+
+    if (Object.keys(agents).length === 0) {
+      warnings.push(`${label}.${presetName}.agents: expected at least one supported agent`);
+      continue;
+    }
+
+    presets[presetName] = createVvocPreset({ description, agents });
+  }
+
+  return Object.keys(presets).length > 0 ? presets : createDefaultVvocPresets();
 }
 
-function readLenientVersion(value: unknown, label: string, warnings: string[]): number {
+function loadLenientVvocPresetAgents(
+  value: unknown,
+  label: string,
+  warnings: string[],
+): VvocPresetAgents {
+  if (!isPlainObject(value)) {
+    warnings.push(`${label}: expected an object`);
+    return {};
+  }
+
+  const agents: VvocPresetAgents = {};
+
+  for (const [agentName, modelValue] of Object.entries(value)) {
+    if (!SUPPORTED_AGENT_NAMES.includes(agentName as SupportedAgentName)) {
+      warnings.push(`${label}: unsupported agent "${agentName}"`);
+      continue;
+    }
+
+    try {
+      agents[agentName as SupportedAgentName] = normalizeAgentModelOverride(
+        agentName as SupportedAgentName,
+        modelValue,
+        `${label}.${agentName}`,
+      );
+    } catch (error) {
+      warnings.push(
+        `${label}.${agentName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  return agents;
+}
+
+function readLenientSupportedVersion(
+  value: unknown,
+  label: string,
+  warnings: string[],
+): VvocConfigVersion {
   if (value === undefined) {
     return VVOC_CONFIG_VERSION;
   }
-  if (value === VVOC_CONFIG_VERSION) {
-    return VVOC_CONFIG_VERSION;
+  if (value === 1 || value === VVOC_CONFIG_VERSION) {
+    return value;
   }
-  warnings.push(`${label}: expected ${VVOC_CONFIG_VERSION}`);
+
+  warnings.push(`${label}: expected 1 or ${VVOC_CONFIG_VERSION}`);
   return VVOC_CONFIG_VERSION;
 }
 
@@ -822,12 +1083,12 @@ function parseStrictJson(text: string, label: string): unknown {
   }
 }
 
-function readExactVersion(value: unknown, label: string): number {
-  if (value !== VVOC_CONFIG_VERSION) {
-    throw new Error(`${label}: expected ${VVOC_CONFIG_VERSION}`);
+function readSupportedVersion(value: unknown, label: string): VvocConfigVersion {
+  if (value === 1 || value === VVOC_CONFIG_VERSION) {
+    return value;
   }
 
-  return VVOC_CONFIG_VERSION;
+  throw new Error(`${label}: expected 1 or ${VVOC_CONFIG_VERSION}`);
 }
 
 function readNonEmptyString(value: unknown, label: string): string {
@@ -884,6 +1145,33 @@ function compactObject<T extends JsonObject>(value: T): T {
 
 function renderJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function validatePresetSemantics(document: JsonObject): string[] {
+  const presetsValue = document.presets;
+  if (!isPlainObject(presetsValue)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+
+  for (const [presetName, presetValue] of Object.entries(presetsValue)) {
+    if (!isPlainObject(presetValue) || !isPlainObject(presetValue.agents)) {
+      continue;
+    }
+
+    for (const [agentName, modelValue] of Object.entries(presetValue.agents)) {
+      const location = `/presets/${presetName}/agents/${agentName}`;
+
+      try {
+        normalizeAgentModelOverride(agentName as SupportedAgentName, modelValue, location);
+      } catch (error) {
+        errors.push(`${location} ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  return errors;
 }
 
 function formatSchemaError(error: ErrorObject): string {
