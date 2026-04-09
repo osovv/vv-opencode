@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -13,12 +13,15 @@
 //   CLI_NAME - Canonical vvoc CLI binary name.
 //   PACKAGE_NAME - Canonical vvoc npm package name.
 //   OPENCODE_SCHEMA_URL - OpenCode config schema URL.
+//   OpenCodeDefaultModelKey - Supported top-level OpenCode default model fields.
 //   Scope - Supported installation scopes for vvoc config writes.
 //   ResolvedPaths - Scope-aware path bundle for OpenCode and vvoc config locations.
 //   WriteResult - Result shape returned by managed config write operations.
 //   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
 //   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
+//   readOpenCodeDefaultModel - Reads a top-level OpenCode model or small_model override.
+//   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
 //   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
@@ -40,7 +43,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Made canonical vvoc config reads version-aware so v1 documents can load until sync rewrites them to v2.]
+//   LAST_CHANGE: [v0.8.0 - Added top-level OpenCode model and small_model read-write helpers for default model switching.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -92,6 +95,7 @@ const JSON_FORMAT = {
 } as const;
 
 type JsonObject = Record<string, unknown>;
+export type OpenCodeDefaultModelKey = "model" | "small_model";
 
 export type Scope = "global" | "project";
 
@@ -381,6 +385,26 @@ export async function readOpenCodeAgentModel(
   );
 }
 
+export async function readOpenCodeDefaultModel(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  key: OpenCodeDefaultModelKey,
+): Promise<string | undefined> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+
+  if (!currentText) {
+    return undefined;
+  }
+
+  const document = parseObjectDocument(currentText, paths.opencodeConfigPath);
+  const value = document[key];
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return readNonEmptyString(value, `${paths.opencodeConfigPath}: ${key}`);
+}
+
 export async function writeOpenCodeAgentModel(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
   agentName: string,
@@ -413,6 +437,34 @@ export async function writeOpenCodeAgentModel(
   }
 
   const nextText = updateAgentEntryText(baseText, agentName, nextEntry);
+
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  await writeText(paths.opencodeConfigPath, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path: paths.opencodeConfigPath,
+  };
+}
+
+export async function writeOpenCodeDefaultModel(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  key: OpenCodeDefaultModelKey,
+  options: { model?: string; ensureEntry: boolean },
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+  if (!currentText && !options.ensureEntry) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const baseText = options.ensureEntry ? ensureOpenCodeConfigText(currentText) : currentText;
+  if (!baseText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  const nextText = updateTopLevelStringFieldText(baseText, key, options.model);
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -847,37 +899,23 @@ function getManagedPromptPath(
 }
 
 function ensureAgentConfigText(text: string | undefined): string {
-  if (!text?.trim()) {
-    return renderJson({
-      $schema: OPENCODE_SCHEMA_URL,
-      agent: {},
-    });
-  }
-
-  const document = parseObjectDocument(text, "OpenCode config");
+  const nextText = ensureOpenCodeConfigText(text);
+  const document = parseObjectDocument(nextText, "OpenCode config");
   const currentAgents = readAgentMap(document, "OpenCode config");
-  let nextText = text;
-
-  if (!Object.hasOwn(document, "$schema")) {
-    nextText = applyEdits(
-      nextText,
-      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
-        formattingOptions: JSON_FORMAT,
-        getInsertionIndex: () => 0,
-      }),
-    );
-  }
+  let nextAgentText = nextText;
 
   if (!Object.hasOwn(document, "agent")) {
-    nextText = applyEdits(
-      nextText,
-      modify(nextText, ["agent"], currentAgents, {
+    nextAgentText = applyEdits(
+      nextAgentText,
+      modify(nextAgentText, ["agent"], currentAgents, {
         formattingOptions: JSON_FORMAT,
       }),
     );
   }
 
-  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+  return ensureTrailingNewline(
+    applyEdits(nextAgentText, format(nextAgentText, undefined, JSON_FORMAT)),
+  );
 }
 
 function getManagedOpenCodeAgentPromptReference(
@@ -952,6 +990,43 @@ function updateAgentEntryText(text: string, agentName: string, entry: JsonObject
   const nextText = applyEdits(
     text,
     modify(text, ["agent", agentName], entry, {
+      formattingOptions: JSON_FORMAT,
+    }),
+  );
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+function ensureOpenCodeConfigText(text: string | undefined): string {
+  if (!text?.trim()) {
+    return renderJson({
+      $schema: OPENCODE_SCHEMA_URL,
+    });
+  }
+
+  const document = parseObjectDocument(text, "OpenCode config");
+  let nextText = text;
+
+  if (!Object.hasOwn(document, "$schema")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+function updateTopLevelStringFieldText(
+  text: string,
+  key: OpenCodeDefaultModelKey,
+  value: string | undefined,
+): string {
+  const nextText = applyEdits(
+    text,
+    modify(text, [key], value, {
       formattingOptions: JSON_FORMAT,
     }),
   );

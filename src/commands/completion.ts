@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.7
+// VERSION: 0.5.8
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/path-provider/preset and the `agent set|unset <agent-id>` flow, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/path-provider/preset and the `agent set|unset <target-id>` flow, and rc file patching.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,13 +18,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.7 - Added shell completions for the top-level preset command and its default preset names.]
+//   LAST_CHANGE: [v0.5.8 - Added OpenCode default and small-model targets to `vvoc agent` shell completions.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { SUPPORTED_MODEL_TARGET_NAMES } from "../lib/agent-models.js";
 
 const VVOC_TOP_LEVEL_COMMANDS = [
   "agent",
@@ -46,20 +47,10 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PATH_PROVIDER_PRESETS = ["stepfun-ai"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
-const VVOC_PRESET_NAMES = ["openai", "zai"];
+const VVOC_PRESET_NAMES = ["openai", "zai", "minimax"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_AGENT_COMMANDS = ["set", "unset", "list"];
-const VVOC_AGENT_TARGETS = [
-  "guardian",
-  "memory-reviewer",
-  "general",
-  "explore",
-  "enhancer",
-  "implementer",
-  "spec-reviewer",
-  "code-reviewer",
-  "investitagor",
-];
+const VVOC_AGENT_TARGETS = [...SUPPORTED_MODEL_TARGET_NAMES];
 
 export default defineCommand({
   meta: {

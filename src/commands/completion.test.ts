@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.5
+// VERSION: 0.4.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets, top-level preset completions, and the `agent set|unset <agent-id>` flow.
+//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets, top-level preset completions, and the `agent set|unset <target-id>` flow.
 //   DEPENDS: [src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.5 - Added assertions for the top-level preset command and default preset completions.]
+//   LAST_CHANGE: [v0.4.6 - Added assertions for the OpenCode default and small-model agent targets.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -106,7 +106,7 @@ test("generateBashCompletion - contains agent command flow", () => {
   expect(output).toContain('local commands="set unset list"');
   expect(output).toContain("agent:set|agent:unset");
   expect(output).toContain(
-    "guardian memory-reviewer general explore enhancer implementer spec-reviewer code-reviewer investitagor",
+    "guardian memory-reviewer default small-model general explore enhancer implementer spec-reviewer code-reviewer investitagor",
   );
   expect(output).toContain("_vvoc_agent_target_commands");
 });
@@ -115,7 +115,7 @@ test("generateZshCompletion - contains agent target commands", () => {
   const output = generateZshCompletion();
   expect(output).toContain("set|unset");
   expect(output).toContain(
-    "guardian memory-reviewer general explore enhancer implementer spec-reviewer code-reviewer investitagor",
+    "guardian memory-reviewer default small-model general explore enhancer implementer spec-reviewer code-reviewer investitagor",
   );
 });
 
@@ -123,7 +123,7 @@ test("generateFishCompletion - contains agent target completions", () => {
   const output = generateFishCompletion();
   expect(output).toContain("function __vvoc_agent_target_cmds");
   expect(output).toContain(
-    "echo guardian memory-reviewer general explore enhancer implementer spec-reviewer code-reviewer investitagor",
+    "echo guardian memory-reviewer default small-model general explore enhancer implementer spec-reviewer code-reviewer investitagor",
   );
   expect(output).toContain("__fish_seen_subcommand_from set unset");
 });
@@ -141,6 +141,6 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateZshCompletion()).toContain("_vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
-  expect(generateBashCompletion()).toContain("list show openai zai");
-  expect(generateZshCompletion()).toContain("openai zai");
+  expect(generateBashCompletion()).toContain("list show openai zai minimax");
+  expect(generateZshCompletion()).toContain("openai zai minimax");
 });

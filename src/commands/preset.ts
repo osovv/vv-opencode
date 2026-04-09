@@ -1,8 +1,8 @@
 // FILE: src/commands/preset.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: List, show, and apply declarative named agent presets from canonical vvoc.json.
-//   SCOPE: Canonical preset lookup, preset rendering, scope-aware preset application, and per-agent summary output through existing vvoc and OpenCode write paths.
+//   PURPOSE: List, show, and apply declarative named model-target presets from canonical vvoc.json.
+//   SCOPE: Canonical preset lookup, preset rendering, scope-aware preset application, and per-target summary output through existing vvoc and OpenCode write paths.
 //   DEPENDS: [citty, src/lib/agent-models.ts, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-PRESET, M-CLI-CONFIG, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,17 +18,19 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added declarative vvoc preset list/show/apply commands backed by vvoc.json.]
+//   LAST_CHANGE: [v0.2.0 - Added OpenCode default and small-model target support to declarative presets.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
   formatAgentModel,
   isConfigurableOpenCodeSubagentName,
+  isOpenCodeDefaultModelTargetName,
   isSpecialAgentName,
-  normalizeAgentModelOverride,
+  normalizeModelTargetOverride,
   parseGuardianStyleModelArg,
-  type SupportedAgentName,
+  type OpenCodeDefaultModelTargetName,
+  type SupportedModelTargetName,
 } from "../lib/agent-models.js";
 import { isManagedOpenCodeAgentName } from "../lib/managed-agents.js";
 import {
@@ -36,9 +38,11 @@ import {
   installManagedAgentPrompts,
   readVvocConfig,
   resolvePaths,
+  type OpenCodeDefaultModelKey,
   type Scope,
   type WriteResult,
   writeGuardianConfig,
+  writeOpenCodeDefaultModel,
   writeManagedAgentModel,
   writeMemoryConfig,
   writeOpenCodeAgentModel,
@@ -51,7 +55,7 @@ type ListedPreset = {
 };
 
 type AppliedPresetChange = {
-  agentName: SupportedAgentName;
+  targetName: SupportedModelTargetName;
   model: string;
   result: WriteResult;
 };
@@ -96,8 +100,8 @@ const presetList = defineCommand({
     console.log("Available presets:");
     for (const { name, preset } of presets) {
       const description = preset.description ? ` - ${preset.description}` : "";
-      const agentCount = Object.keys(preset.agents).length;
-      console.log(`  ${name}${description} (${agentCount} agent${agentCount === 1 ? "" : "s"})`);
+      const targetCount = Object.keys(preset.agents).length;
+      console.log(`  ${name}${description} (${targetCount} target${targetCount === 1 ? "" : "s"})`);
     }
   },
 });
@@ -144,7 +148,9 @@ export default defineCommand({
 
     console.log(`Applied preset ${applied.name} (${scope}):`);
     for (const change of applied.changes) {
-      console.log(`  ${change.agentName}: ${describeWriteResult(change.result)} (${change.model})`);
+      console.log(
+        `  ${change.targetName}: ${describeWriteResult(change.result)} (${change.model})`,
+      );
     }
   },
 });
@@ -193,32 +199,34 @@ export async function applyPreset(
     configDir: options.configDir,
   });
   const resolved = resolvePreset(presetName, presets);
-  const entries = Object.entries(resolved.preset.agents) as Array<[SupportedAgentName, string]>;
+  const entries = Object.entries(resolved.preset.agents) as Array<
+    [SupportedModelTargetName, string]
+  >;
 
-  if (entries.some(([agentName]) => isManagedOpenCodeAgentName(agentName))) {
+  if (entries.some(([targetName]) => isManagedOpenCodeAgentName(targetName))) {
     await installManagedAgentPrompts(paths, { force: false });
   }
 
   const changes: AppliedPresetChange[] = [];
 
-  for (const [agentName, configuredValue] of entries) {
-    const normalizedValue = normalizeAgentModelOverride(
-      agentName,
+  for (const [targetName, configuredValue] of entries) {
+    const normalizedValue = normalizeModelTargetOverride(
+      targetName,
       configuredValue,
-      `preset ${resolved.name} ${agentName}`,
+      `preset ${resolved.name} ${targetName}`,
     );
 
-    if (agentName === "guardian") {
+    if (targetName === "guardian") {
       const { model, variant } = parseGuardianStyleModelArg(
         normalizedValue,
         `preset ${resolved.name}`,
       );
       const result = await writeGuardianConfig(paths, { model, variant }, { merge: true });
-      changes.push({ agentName, model: formatAgentModel(model, variant), result });
+      changes.push({ targetName, model: formatAgentModel(model, variant), result });
       continue;
     }
 
-    if (agentName === "memory-reviewer") {
+    if (targetName === "memory-reviewer") {
       const { model, variant } = parseGuardianStyleModelArg(
         normalizedValue,
         `preset ${resolved.name}`,
@@ -228,30 +236,39 @@ export async function applyPreset(
         { reviewerModel: model, reviewerVariant: variant },
         { merge: true },
       );
-      changes.push({ agentName, model: formatAgentModel(model, variant), result });
+      changes.push({ targetName, model: formatAgentModel(model, variant), result });
       continue;
     }
 
-    if (isConfigurableOpenCodeSubagentName(agentName)) {
-      const result = await writeOpenCodeAgentModel(paths, agentName, {
+    if (isOpenCodeDefaultModelTargetName(targetName)) {
+      const result = await writeOpenCodeDefaultModel(paths, resolveDefaultModelKey(targetName), {
         model: normalizedValue,
         ensureEntry: true,
       });
-      changes.push({ agentName, model: normalizedValue, result });
+      changes.push({ targetName, model: normalizedValue, result });
       continue;
     }
 
-    if (isManagedOpenCodeAgentName(agentName)) {
-      const result = await writeManagedAgentModel(paths, agentName, {
+    if (isConfigurableOpenCodeSubagentName(targetName)) {
+      const result = await writeOpenCodeAgentModel(paths, targetName, {
         model: normalizedValue,
         ensureEntry: true,
       });
-      changes.push({ agentName, model: normalizedValue, result });
+      changes.push({ targetName, model: normalizedValue, result });
       continue;
     }
 
-    if (isSpecialAgentName(agentName)) {
-      throw new Error(`unsupported preset agent: ${agentName}`);
+    if (isManagedOpenCodeAgentName(targetName)) {
+      const result = await writeManagedAgentModel(paths, targetName, {
+        model: normalizedValue,
+        ensureEntry: true,
+      });
+      changes.push({ targetName, model: normalizedValue, result });
+      continue;
+    }
+
+    if (isSpecialAgentName(targetName)) {
+      throw new Error(`unsupported preset target: ${targetName}`);
     }
   }
 
@@ -285,4 +302,10 @@ async function readConfiguredPresets(
 
 function resolveScope(value: unknown): Scope {
   return value === "project" ? "project" : "global";
+}
+
+function resolveDefaultModelKey(
+  targetName: OpenCodeDefaultModelTargetName,
+): OpenCodeDefaultModelKey {
+  return targetName === "default" ? "model" : "small_model";
 }

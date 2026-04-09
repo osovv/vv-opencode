@@ -1,8 +1,8 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
-//   SCOPE: Default preset listing, preset rendering, partial preset application, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
+//   SCOPE: Default preset listing, preset rendering, partial preset application including OpenCode default targets, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [V-M-CLI-PRESET]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added coverage for default preset discovery, show formatting, partial application, and validation failures.]
+//   LAST_CHANGE: [v0.2.0 - Added coverage for presets that write OpenCode default and small-model targets.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyPreset, formatPreset, listConfiguredPresets, resolvePreset } from "./preset.js";
 import {
+  readOpenCodeDefaultModel,
   readOpenCodeAgentModel,
   readVvocConfig,
   resolvePaths,
@@ -37,21 +38,25 @@ describe("preset helpers", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual(["openai", "zai"]);
+    expect(presets).toEqual(["minimax", "openai", "zai"]);
   });
 
   test("formatPreset renders the expected preset object", () => {
     const resolved = resolvePreset("openai", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
 
-    expect(output).toContain('"description": "Starter OpenAI overrides for common vvoc agents."');
-    expect(output).toContain('"guardian": "openai/gpt-5:high"');
-    expect(output).toContain('"general": "openai/gpt-5-mini"');
+    expect(output).toContain(
+      '"description": "Starter OpenAI overrides for common vvoc model targets."',
+    );
+    expect(output).toContain('"default": "openai/gpt-5.4:xhigh"');
+    expect(output).toContain('"small-model": "openai/gpt-5.4-mini"');
+    expect(output).toContain('"guardian": "openaig/gpt-5.4-mini"');
+    expect(output).toContain('"explore": "openai/gpt-5.4-mini"');
   });
 });
 
 describe("applyPreset", () => {
-  test("applies only the agents listed in the selected preset", async () => {
+  test("applies only the targets listed in the selected preset", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-config-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-project-"));
 
@@ -73,8 +78,9 @@ describe("applyPreset", () => {
             openai: {
               description: "Partial OpenAI preset",
               agents: {
-                guardian: "openai/gpt-5:high",
-                general: "openai/gpt-5-mini",
+                default: "openai/gpt-5.4:xhigh",
+                guardian: "openaig/gpt-5.4-mini",
+                explore: "openai/gpt-5.4-mini",
               },
             },
             zai: defaultConfig.presets.zai,
@@ -108,16 +114,21 @@ describe("applyPreset", () => {
         scope: "project",
       });
 
-      expect(applied.changes.map((change) => change.agentName)).toEqual(["guardian", "general"]);
+      expect(applied.changes.map((change) => change.targetName)).toEqual([
+        "guardian",
+        "default",
+        "explore",
+      ]);
 
       const vvocConfig = await readVvocConfig(paths);
-      expect(vvocConfig?.guardian.model).toBe("openai/gpt-5");
-      expect(vvocConfig?.guardian.variant).toBe("high");
+      expect(vvocConfig?.guardian.model).toBe("openaig/gpt-5.4-mini");
+      expect(vvocConfig?.guardian.variant).toBeUndefined();
       expect(vvocConfig?.memory.reviewerModel).toBe("anthropic/claude-sonnet-4-5");
       expect(vvocConfig?.memory.reviewerVariant).toBe("high");
 
-      expect(await readOpenCodeAgentModel(paths, "general")).toBe("openai/gpt-5-mini");
-      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("anthropic/claude-sonnet-4-5");
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-5.4:xhigh");
+      expect(await readOpenCodeAgentModel(paths, "general")).toBe("anthropic/claude-sonnet-4-5");
+      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("openai/gpt-5.4-mini");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
@@ -212,7 +223,8 @@ describe("applyPreset", () => {
       });
 
       const opencodeText = await readFile(paths.opencodeConfigPath, "utf8");
-      expect(opencodeText).toContain('"general"');
+      expect(opencodeText).toContain('"model": "openai/gpt-5.4:xhigh"');
+      expect(opencodeText).toContain('"small_model": "openai/gpt-5.4-mini"');
       expect(opencodeText).toContain('"explore"');
     } finally {
       await rm(configHome, { recursive: true, force: true });

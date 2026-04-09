@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -13,13 +13,14 @@
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
 //   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
 //   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
+//   top-level OpenCode model helper tests - Verify default model and small_model overrides round-trip through OpenCode config.
 //   managed agent registration helpers tests - Verify primary/subagent registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Added coverage for vvoc schema v2 and v1-to-v2 canonical config migration.]
+//   LAST_CHANGE: [v0.8.0 - Added coverage for OpenCode top-level model and small_model writes.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -36,12 +37,14 @@ import {
   installVvocConfig,
   installManagedAgentPrompts,
   parseGuardianConfigText,
+  readOpenCodeDefaultModel,
   readVvocConfig,
   readOpenCodeAgentModel,
   readManagedAgentModels,
   renderGuardianConfig,
   resolvePaths,
   syncVvocConfig,
+  writeOpenCodeDefaultModel,
   writeGuardianConfig,
   writeMemoryConfig,
   writeOpenCodeAgentModel,
@@ -151,7 +154,7 @@ describe("canonical vvoc config helpers", () => {
       expect(config?.memory.enabled).toBe(false);
       expect(config?.memory.defaultSearchLimit).toBe(12);
       expect(config?.secretsRedaction.secret).toBe("${VVOC_SECRET}");
-      expect(Object.keys(config?.presets ?? {})).toEqual(["openai", "zai"]);
+      expect(Object.keys(config?.presets ?? {})).toEqual(["openai", "zai", "minimax"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -211,7 +214,7 @@ describe("canonical vvoc config helpers", () => {
       const loaded = await readVvocConfig(paths);
       expect(loaded?.guardian.timeoutMs).toBe(12345);
       expect(loaded?.memory.defaultSearchLimit).toBe(12);
-      expect(Object.keys(loaded?.presets ?? {})).toEqual(["openai", "zai"]);
+      expect(Object.keys(loaded?.presets ?? {})).toEqual(["openai", "zai", "minimax"]);
 
       const syncResult = await syncVvocConfig(paths);
       expect(syncResult.action).toBe("updated");
@@ -238,7 +241,7 @@ describe("canonical vvoc config helpers", () => {
       expect(parsed.secretsRedaction.ttlMs).toBe(60000);
       expect(parsed.secretsRedaction.maxMappings).toBe(77);
       expect(parsed.secretsRedaction.debug).toBe(true);
-      expect(Object.keys(parsed.presets ?? {})).toEqual(["openai", "zai"]);
+      expect(Object.keys(parsed.presets ?? {})).toEqual(["openai", "zai", "minimax"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -454,6 +457,52 @@ describe("built-in OpenCode agent model helpers", () => {
         expect(unsetResult.action).toBe("updated");
         expect(modelAfterUnset).toBeUndefined();
       }
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("top-level OpenCode model helpers", () => {
+  test("writes and removes default model and small_model overrides", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-default-model-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      const defaultSetResult = await writeOpenCodeDefaultModel(paths, "model", {
+        model: "openai/gpt-5",
+        ensureEntry: true,
+      });
+      const smallSetResult = await writeOpenCodeDefaultModel(paths, "small_model", {
+        model: "openai/gpt-5-mini",
+        ensureEntry: true,
+      });
+
+      expect(["created", "updated"]).toContain(defaultSetResult.action);
+      expect(["created", "updated"]).toContain(smallSetResult.action);
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-5");
+      expect(await readOpenCodeDefaultModel(paths, "small_model")).toBe("openai/gpt-5-mini");
+
+      const content = await readFile(paths.opencodeConfigPath, "utf8");
+      expect(content).toContain('"model": "openai/gpt-5"');
+      expect(content).toContain('"small_model": "openai/gpt-5-mini"');
+
+      const defaultUnsetResult = await writeOpenCodeDefaultModel(paths, "model", {
+        ensureEntry: false,
+      });
+      const smallUnsetResult = await writeOpenCodeDefaultModel(paths, "small_model", {
+        ensureEntry: false,
+      });
+
+      expect(defaultUnsetResult.action).toBe("updated");
+      expect(smallUnsetResult.action).toBe("updated");
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBeUndefined();
+      expect(await readOpenCodeDefaultModel(paths, "small_model")).toBeUndefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

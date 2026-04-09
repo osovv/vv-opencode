@@ -1,8 +1,8 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage model overrides for vvoc-owned and selected built-in OpenCode agents.
-//   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in and managed OpenCode agent model set/unset/list operations via the vvoc agent command tree.
+//   PURPOSE: Manage model overrides for vvoc-owned agents plus selected OpenCode model targets.
+//   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in, managed, and top-level OpenCode model set/unset/list operations via the vvoc agent command tree.
 //   DEPENDS: [citty, src/lib/agent-models.ts, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -14,15 +14,16 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Moved agent ID and model validation into shared helpers for reuse by presets and vvoc config validation.]
+//   LAST_CHANGE: [v0.8.0 - Added OpenCode default and small-model targets to the vvoc agent command tree.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
-  AGENT_NAME_CHOICES,
   CONFIGURABLE_OPENCODE_SUBAGENTS,
   isConfigurableOpenCodeSubagentName,
-  parseAgentName,
+  isOpenCodeDefaultModelTargetName,
+  MODEL_TARGET_NAME_CHOICES,
+  parseModelTargetName,
   parseGuardianStyleModelArg,
   parseOpenCodeModelArg,
   formatAgentModel,
@@ -31,12 +32,15 @@ import { MANAGED_OPENCODE_AGENTS } from "../lib/managed-agents.js";
 import {
   describeWriteResult,
   installManagedAgentPrompts,
+  readOpenCodeDefaultModel,
   readOpenCodeAgentModel,
   readManagedAgentModels,
   readVvocConfig,
   resolvePaths,
   type Scope,
+  type OpenCodeDefaultModelKey,
   writeGuardianConfig,
+  writeOpenCodeDefaultModel,
   writeManagedAgentModel,
   writeMemoryConfig,
   writeOpenCodeAgentModel,
@@ -58,7 +62,7 @@ const configDirArg = {
 const agentArg = {
   type: "positional" as const,
   required: true,
-  description: `Agent ID (${AGENT_NAME_CHOICES}).`,
+  description: `Model target ID (${MODEL_TARGET_NAME_CHOICES}).`,
 };
 
 const modelArg = {
@@ -71,7 +75,7 @@ const modelArg = {
 const agentSet = defineCommand({
   meta: {
     name: "set",
-    description: "Set an agent model override.",
+    description: "Set a model target override.",
   },
   args: {
     agent: agentArg,
@@ -80,7 +84,7 @@ const agentSet = defineCommand({
     "config-dir": configDirArg,
   },
   async run({ args }) {
-    const agentName = parseAgentName(args.agent, "set");
+    const agentName = parseModelTargetName(args.agent, "set");
     const paths = await resolveCommandPaths(args);
 
     if (agentName === "guardian") {
@@ -90,6 +94,16 @@ const agentSet = defineCommand({
 
     if (agentName === "memory-reviewer") {
       await setMemoryReviewerModelOverride(paths, args.model);
+      return;
+    }
+
+    if (isOpenCodeDefaultModelTargetName(agentName)) {
+      const model = parseOpenCodeModelArg(args.model, "set");
+      const result = await writeOpenCodeDefaultModel(paths, resolveDefaultModelKey(agentName), {
+        model,
+        ensureEntry: true,
+      });
+      console.log(describeWriteResult(result));
       return;
     }
 
@@ -116,7 +130,7 @@ const agentSet = defineCommand({
 const agentUnset = defineCommand({
   meta: {
     name: "unset",
-    description: "Remove an agent model override.",
+    description: "Remove a model target override.",
   },
   args: {
     agent: agentArg,
@@ -124,7 +138,7 @@ const agentUnset = defineCommand({
     "config-dir": configDirArg,
   },
   async run({ args }) {
-    const agentName = parseAgentName(args.agent, "unset");
+    const agentName = parseModelTargetName(args.agent, "unset");
     const paths = await resolveCommandPaths(args);
 
     if (agentName === "guardian") {
@@ -134,6 +148,14 @@ const agentUnset = defineCommand({
 
     if (agentName === "memory-reviewer") {
       await unsetMemoryReviewerModelOverride(paths);
+      return;
+    }
+
+    if (isOpenCodeDefaultModelTargetName(agentName)) {
+      const result = await writeOpenCodeDefaultModel(paths, resolveDefaultModelKey(agentName), {
+        ensureEntry: false,
+      });
+      console.log(describeWriteResult(result));
       return;
     }
 
@@ -155,7 +177,7 @@ const agentUnset = defineCommand({
 const agentList = defineCommand({
   meta: {
     name: "list",
-    description: "List configured agent models.",
+    description: "List configured model targets.",
   },
   args: {
     scope: {
@@ -173,7 +195,11 @@ const agentList = defineCommand({
     const memoryConfig = vvocConfig?.memory;
     const managedModels = await readManagedAgentModels(paths);
 
-    console.log(`Agent models (${scope}):`);
+    console.log(`Model targets (${scope}):`);
+    console.log(`  default: ${formatAgentModel(await readOpenCodeDefaultModel(paths, "model"))}`);
+    console.log(
+      `  small-model: ${formatAgentModel(await readOpenCodeDefaultModel(paths, "small_model"))}`,
+    );
     console.log(`  guardian: ${formatAgentModel(guardianConfig?.model, guardianConfig?.variant)}`);
     console.log(
       `  memory-reviewer: ${formatAgentModel(memoryConfig?.reviewerModel, memoryConfig?.reviewerVariant)}`,
@@ -193,7 +219,7 @@ const agentList = defineCommand({
 export default defineCommand({
   meta: {
     name: "agent",
-    description: "Manage agent model overrides.",
+    description: "Manage model target overrides.",
   },
   subCommands: {
     set: agentSet,
@@ -246,6 +272,10 @@ async function unsetMemoryReviewerModelOverride(
 
 function resolveScope(value: unknown): Scope {
   return value === "project" ? "project" : "global";
+}
+
+function resolveDefaultModelKey(targetName: "default" | "small-model"): OpenCodeDefaultModelKey {
+  return targetName === "default" ? "model" : "small_model";
 }
 
 async function resolveCommandPaths(args: Record<string, unknown>) {

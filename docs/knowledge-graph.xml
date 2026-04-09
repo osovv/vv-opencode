@@ -4,13 +4,14 @@
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, provider baseURL patching, managed OpenCode agent registration/model overrides, shared agent model validation, managed agent prompt scaffolding, canonical vvoc.json rendering with preset support, and installation inspection with a single vvoc-owned config file.</purpose>
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model overrides, shared model target validation, managed agent prompt scaffolding, canonical vvoc.json rendering with preset support, and installation inspection with a single vvoc-owned config file.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/agent-models.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json + schemas/vvoc/v2.json</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
+        <fn-writeOpenCodeDefaultModel PURPOSE="Write or remove a top-level OpenCode `model` or `small_model` override for default model switching." />
         <fn-writeProviderBaseUrl PURPOSE="Write or preserve an OpenCode provider options.baseURL override conservatively." />
         <fn-writeOpenCodeAgentModel PURPOSE="Write or remove a model override for a built-in OpenCode agent such as general or explore." />
         <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v1 or v2 and normalize it into the current in-memory config shape." />
@@ -31,7 +32,7 @@
     </M-CLI-MANAGED-AGENTS>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, preset, path-provider, completion, and upgrade commands, including model overrides for built-in general/explore plus registration of vvoc-managed OpenCode agents.</purpose>
+      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, preset, path-provider, completion, and upgrade commands, including OpenCode default-model targets, model overrides for built-in general/explore, and registration of vvoc-managed OpenCode agents.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
@@ -42,14 +43,14 @@
     </M-CLI-COMMANDS>
 
     <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>List, show, and apply declarative named model presets stored in canonical vvoc.json without resetting agents that are not listed in the selected preset.</purpose>
+      <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json without resetting targets that are not listed in the selected preset.</purpose>
       <path>src/commands/preset.ts + src/lib/agent-models.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
       <annotations>
         <fn-resolvePreset PURPOSE="Validate a preset name against the current vvoc.json preset map." />
-        <fn-applyPreset PURPOSE="Apply only the listed preset agents through existing vvoc and OpenCode write helpers." />
-        <cmd-preset PURPOSE="vvoc preset &lt;name&gt; - CLI command for declarative multi-agent model switching." />
+        <fn-applyPreset PURPOSE="Apply only the listed preset targets through existing vvoc and OpenCode write helpers." />
+        <cmd-preset PURPOSE="vvoc preset &lt;name&gt; - CLI command for declarative multi-target model switching." />
       </annotations>
     </M-CLI-PRESET>
 
@@ -208,7 +209,7 @@
     </M-CLI-PATH-PROVIDER>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including path-provider presets, the top-level preset command with default preset names, and the `agent set|unset <agent-id>` flow.</purpose>
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including path-provider presets, the top-level preset command with default preset names, and the `agent set|unset <target-id>` flow.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>

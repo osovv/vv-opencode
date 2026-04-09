@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.16.0/schemas/vvoc/v2.json",
+  "$id": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.17.0/schemas/vvoc/v2.json",
   "title": "vvoc config",
   "description": "Canonical vvoc configuration document.",
   "type": "object",
@@ -104,6 +104,8 @@
             "additionalProperties": false,
             "minProperties": 1,
             "properties": {
+              "default": { "type": "string", "minLength": 1 },
+              "small-model": { "type": "string", "minLength": 1 },
               "guardian": { "type": "string", "minLength": 1 },
               "memory-reviewer": { "type": "string", "minLength": 1 },
               "general": { "type": "string", "minLength": 1 },

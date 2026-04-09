@@ -1,8 +1,8 @@
 // FILE: src/lib/agent-models.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define supported vvoc agent IDs and shared model override validation helpers.
-//   SCOPE: Agent ID lists, type guards, model formatting, and model-argument parsing reused by CLI commands and vvoc config validation.
+//   PURPOSE: Define supported vvoc model target IDs and shared model override validation helpers.
+//   SCOPE: Model target ID lists, type guards, model formatting, and model-argument parsing reused by CLI commands and vvoc config validation.
 //   DEPENDS: [src/lib/managed-agents.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-COMMANDS, M-CLI-PRESET]
 //   ROLE: RUNTIME
@@ -10,21 +10,23 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SPECIAL_AGENT_NAMES - Agent IDs that support provider/model[:variant] syntax.
+//   SPECIAL_AGENT_NAMES - Target IDs that support provider/model[:variant] syntax.
+//   OPENCODE_DEFAULT_MODEL_TARGETS - Target IDs that map to top-level OpenCode model fields.
 //   CONFIGURABLE_OPENCODE_SUBAGENTS - Built-in OpenCode agent IDs vvoc can override directly.
-//   SupportedAgentName - Union of every preset-compatible agent ID.
-//   AGENT_NAME_CHOICES - Human-readable supported agent list for CLI errors.
-//   isSpecialAgentName - Checks whether an agent uses Guardian-style model syntax.
-//   isConfigurableOpenCodeSubagentName - Checks whether an agent is a built-in OpenCode target.
-//   parseAgentName - Validates a user-supplied agent ID.
+//   SupportedModelTargetName - Union of every preset-compatible model target ID.
+//   MODEL_TARGET_NAME_CHOICES - Human-readable supported target list for CLI errors.
+//   isSpecialAgentName - Checks whether a target uses Guardian-style model syntax.
+//   isOpenCodeDefaultModelTargetName - Checks whether a target maps to top-level OpenCode model fields.
+//   isConfigurableOpenCodeSubagentName - Checks whether a target is a built-in OpenCode agent override.
+//   parseModelTargetName - Validates a user-supplied model target ID.
 //   parseGuardianStyleModelArg - Validates provider/model[:variant] syntax.
 //   parseOpenCodeModelArg - Validates provider/model syntax.
-//   normalizeAgentModelOverride - Validates and canonicalizes a stored model override string for any supported agent.
+//   normalizeModelTargetOverride - Validates and canonicalizes a stored model override string for any supported target.
 //   formatAgentModel - Formats a model and optional variant for CLI output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added shared agent ID and model validation helpers for agent and preset commands.]
+//   LAST_CHANGE: [v0.2.0 - Added OpenCode default and small-model targets to shared validation helpers.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -36,24 +38,35 @@ import {
 export const SPECIAL_AGENT_NAMES = ["guardian", "memory-reviewer"] as const;
 export type SpecialAgentName = (typeof SPECIAL_AGENT_NAMES)[number];
 
+export const OPENCODE_DEFAULT_MODEL_TARGETS = ["default", "small-model"] as const;
+export type OpenCodeDefaultModelTargetName = (typeof OPENCODE_DEFAULT_MODEL_TARGETS)[number];
+
 export const CONFIGURABLE_OPENCODE_SUBAGENTS = ["general", "explore"] as const;
 export type ConfigurableOpenCodeSubagentName = (typeof CONFIGURABLE_OPENCODE_SUBAGENTS)[number];
 
-export type SupportedAgentName =
+export type SupportedModelTargetName =
   | SpecialAgentName
+  | OpenCodeDefaultModelTargetName
   | ConfigurableOpenCodeSubagentName
   | ManagedOpenCodeAgentName;
 
-export const SUPPORTED_AGENT_NAMES: readonly SupportedAgentName[] = [
+export const SUPPORTED_MODEL_TARGET_NAMES: readonly SupportedModelTargetName[] = [
   ...SPECIAL_AGENT_NAMES,
+  ...OPENCODE_DEFAULT_MODEL_TARGETS,
   ...CONFIGURABLE_OPENCODE_SUBAGENTS,
   ...MANAGED_OPENCODE_AGENTS.map((definition) => definition.name),
 ];
 
-export const AGENT_NAME_CHOICES = SUPPORTED_AGENT_NAMES.join(", ");
+export const MODEL_TARGET_NAME_CHOICES = SUPPORTED_MODEL_TARGET_NAMES.join(", ");
 
 export function isSpecialAgentName(value: string): value is SpecialAgentName {
   return SPECIAL_AGENT_NAMES.includes(value as SpecialAgentName);
+}
+
+export function isOpenCodeDefaultModelTargetName(
+  value: string,
+): value is OpenCodeDefaultModelTargetName {
+  return OPENCODE_DEFAULT_MODEL_TARGETS.includes(value as OpenCodeDefaultModelTargetName);
 }
 
 export function isConfigurableOpenCodeSubagentName(
@@ -62,22 +75,23 @@ export function isConfigurableOpenCodeSubagentName(
   return CONFIGURABLE_OPENCODE_SUBAGENTS.includes(value as ConfigurableOpenCodeSubagentName);
 }
 
-export function parseAgentName(value: unknown, operation: string): SupportedAgentName {
+export function parseModelTargetName(value: unknown, operation: string): SupportedModelTargetName {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`agent argument required for ${operation}`);
+    throw new Error(`target argument required for ${operation}`);
   }
 
   const trimmed = value.trim();
 
   if (
     isSpecialAgentName(trimmed) ||
+    isOpenCodeDefaultModelTargetName(trimmed) ||
     isConfigurableOpenCodeSubagentName(trimmed) ||
     isManagedOpenCodeAgentName(trimmed)
   ) {
     return trimmed;
   }
 
-  throw new Error(`unsupported agent: ${trimmed}. Expected one of: ${AGENT_NAME_CHOICES}`);
+  throw new Error(`unsupported target: ${trimmed}. Expected one of: ${MODEL_TARGET_NAME_CHOICES}`);
 }
 
 export function parseGuardianStyleModelArg(
@@ -120,12 +134,12 @@ export function parseOpenCodeModelArg(value: unknown, operation: string): string
   return trimmed;
 }
 
-export function normalizeAgentModelOverride(
-  agentName: SupportedAgentName,
+export function normalizeModelTargetOverride(
+  targetName: SupportedModelTargetName,
   value: unknown,
   operation: string,
 ): string {
-  if (isSpecialAgentName(agentName)) {
+  if (isSpecialAgentName(targetName)) {
     const { model, variant } = parseGuardianStyleModelArg(value, operation);
     return formatAgentModel(model, variant);
   }

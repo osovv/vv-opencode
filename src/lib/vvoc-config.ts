@@ -13,7 +13,7 @@
 //   VVOC_CONFIG_VERSION - Canonical vvoc config document version.
 //   VVOC_CONFIG_SCHEMA_URL - Hosted JSON Schema URL for the canonical vvoc config.
 //   VVOC_CONFIG_SCHEMA - JSON Schema document for vvoc.json.
-//   VvocPresetAgents - Partial per-agent model override map for a named preset.
+//   VvocPresetAgents - Partial per-target model override map for a named preset.
 //   VvocPreset - Declarative preset shape stored in vvoc.json.
 //   VvocPresets - Top-level preset map stored in vvoc.json.
 //   GuardianConfig - Fully seeded guardian section shape.
@@ -45,9 +45,9 @@
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import {
-  SUPPORTED_AGENT_NAMES,
-  normalizeAgentModelOverride,
-  type SupportedAgentName,
+  SUPPORTED_MODEL_TARGET_NAMES,
+  normalizeModelTargetOverride,
+  type SupportedModelTargetName,
 } from "./agent-models.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
 
@@ -82,7 +82,7 @@ const BUILTIN_SECRETS_REDACTION_PATTERNS = [
 type JsonObject = Record<string, unknown>;
 type VvocConfigVersion = 1 | 2;
 
-export type VvocPresetAgents = Partial<Record<SupportedAgentName, string>>;
+export type VvocPresetAgents = Partial<Record<SupportedModelTargetName, string>>;
 
 export type VvocPreset = {
   description?: string;
@@ -231,7 +231,7 @@ const VVOC_PRESET_AGENTS_SCHEMA = {
   additionalProperties: false,
   minProperties: 1,
   properties: Object.fromEntries(
-    SUPPORTED_AGENT_NAMES.map((agentName) => [agentName, { type: "string", minLength: 1 }]),
+    SUPPORTED_MODEL_TARGET_NAMES.map((agentName) => [agentName, { type: "string", minLength: 1 }]),
   ),
 };
 
@@ -344,31 +344,30 @@ export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
 export function createDefaultVvocPresets(): VvocPresets {
   return createVvocPresets({
     openai: {
-      description: "Starter OpenAI overrides for common vvoc agents.",
+      description: "Starter OpenAI overrides for common vvoc model targets.",
       agents: {
-        guardian: "openai/gpt-5:high",
-        "memory-reviewer": "openai/gpt-5-mini:high",
-        general: "openai/gpt-5-mini",
-        explore: "openai/gpt-5-mini",
-        enhancer: "openai/gpt-5",
-        implementer: "openai/gpt-5",
-        "spec-reviewer": "openai/gpt-5",
-        "code-reviewer": "openai/gpt-5",
-        investitagor: "openai/gpt-5-mini",
+        default: "openai/gpt-5.4:xhigh",
+        "small-model": "openai/gpt-5.4-mini",
+        guardian: "openai/gpt-5.4-mini",
+        explore: "openai/gpt-5.4-mini",
       },
     },
     zai: {
-      description: "Starter ZAI overrides for common vvoc agents.",
+      description: "Starter ZAI overrides for common vvoc model targets.",
       agents: {
-        guardian: "zai/glm-4.5:thinking",
-        "memory-reviewer": "zai/glm-4.5-air:thinking",
-        general: "zai/glm-4.5-air",
-        explore: "zai/glm-4.5-air",
-        enhancer: "zai/glm-4.5",
-        implementer: "zai/glm-4.5",
-        "spec-reviewer": "zai/glm-4.5",
-        "code-reviewer": "zai/glm-4.5",
-        investitagor: "zai/glm-4.5-air",
+        default: "zai-coding-plan/glm-5.1",
+        "small-model": "zai-coding-plan/glm-4.7-flashx",
+        guardian: "zai-coding-plan/glm-4.7-flashx",
+        explore: "zai-coding-plan/glm-4.7-flashx",
+      },
+    },
+    minimax: {
+      description: "Starter MiniMax overrides for common vvoc model targets.",
+      agents: {
+        default: "minimax-coding-plan/minimax-m2.7",
+        "small-model": "minimax-coding-plan/minimax-m2.1",
+        guardian: "minimax-coding-plan/minimax-m2.1",
+        explore: "minimax-coding-plan/minimax-m2.1",
       },
     },
   });
@@ -626,13 +625,13 @@ function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {
 function createVvocPresetAgents(overrides: VvocPresetAgents = {}): VvocPresetAgents {
   const agents: VvocPresetAgents = {};
 
-  for (const agentName of SUPPORTED_AGENT_NAMES) {
+  for (const agentName of SUPPORTED_MODEL_TARGET_NAMES) {
     const value = overrides[agentName];
     if (value === undefined) {
       continue;
     }
 
-    agents[agentName] = normalizeAgentModelOverride(agentName, value, `preset ${agentName}`);
+    agents[agentName] = normalizeModelTargetOverride(agentName, value, `preset ${agentName}`);
   }
 
   return agents;
@@ -965,7 +964,7 @@ function loadLenientVvocPresets(value: unknown, label: string, warnings: string[
     );
 
     if (Object.keys(agents).length === 0) {
-      warnings.push(`${label}.${presetName}.agents: expected at least one supported agent`);
+      warnings.push(`${label}.${presetName}.agents: expected at least one supported target`);
       continue;
     }
 
@@ -988,14 +987,14 @@ function loadLenientVvocPresetAgents(
   const agents: VvocPresetAgents = {};
 
   for (const [agentName, modelValue] of Object.entries(value)) {
-    if (!SUPPORTED_AGENT_NAMES.includes(agentName as SupportedAgentName)) {
-      warnings.push(`${label}: unsupported agent "${agentName}"`);
+    if (!SUPPORTED_MODEL_TARGET_NAMES.includes(agentName as SupportedModelTargetName)) {
+      warnings.push(`${label}: unsupported target "${agentName}"`);
       continue;
     }
 
     try {
-      agents[agentName as SupportedAgentName] = normalizeAgentModelOverride(
-        agentName as SupportedAgentName,
+      agents[agentName as SupportedModelTargetName] = normalizeModelTargetOverride(
+        agentName as SupportedModelTargetName,
         modelValue,
         `${label}.${agentName}`,
       );
@@ -1164,7 +1163,7 @@ function validatePresetSemantics(document: JsonObject): string[] {
       const location = `/presets/${presetName}/agents/${agentName}`;
 
       try {
-        normalizeAgentModelOverride(agentName as SupportedAgentName, modelValue, location);
+        normalizeModelTargetOverride(agentName as SupportedModelTargetName, modelValue, location);
       } catch (error) {
         errors.push(`${location} ${error instanceof Error ? error.message : String(error)}`);
       }

@@ -25,9 +25,9 @@
     </VF-CONFIG-SYNC>
     <VF-PRESET-SWITCH NAME="PresetSwitch" USE_CASES="UC-007" DATA_FLOW="DF-PRESET-SWITCH" PRIORITY="medium">
       <scenario>User applies a named preset such as `vvoc preset openai` or `vvoc preset zai`.</scenario>
-      <expected-outcome>Only the agents declared in the selected preset change, unlisted agents remain untouched, and existing vvoc/OpenCode write paths are reused for canonical and OpenCode-managed targets.</expected-outcome>
+      <expected-outcome>Only the targets declared in the selected preset change, unlisted targets remain untouched, and existing vvoc/OpenCode write paths are reused for canonical and OpenCode-managed targets including top-level OpenCode model defaults.</expected-outcome>
       <required-signals>
-        <trace-sequence>read canonical vvoc.json -&gt; resolve preset -&gt; write listed guardian/memory/OpenCode agent overrides -&gt; print per-agent summary</trace-sequence>
+        <trace-sequence>read canonical vvoc.json -&gt; resolve preset -&gt; write listed guardian/memory/OpenCode target overrides -&gt; print per-target summary</trace-sequence>
       </required-signals>
     </VF-PRESET-SWITCH>
     <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-001" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
@@ -114,7 +114,7 @@
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`, `path-provider`, and `preset`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid guardian section JSON content.</scenario-2>
-        <scenario-3 kind="success">`vvoc agent list` reports Guardian, memory-reviewer, the built-in `general` and `explore` agents, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents.</scenario-3>
+        <scenario-3 kind="success">`vvoc agent list` reports top-level `default` and `small-model`, Guardian, memory-reviewer, the built-in `general` and `explore` agents, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -278,14 +278,14 @@
       <scenarios>
         <scenario-1 kind="success">`preset list` shows the default `openai` and `zai` presets.</scenario-1>
         <scenario-2 kind="success">`preset show openai` renders the stored preset object from canonical vvoc.json.</scenario-2>
-        <scenario-3 kind="success">Applying a partial preset only changes the agents listed in that preset and leaves unlisted agents untouched.</scenario-3>
+        <scenario-3 kind="success">Applying a partial preset only changes the targets listed in that preset and leaves unlisted targets untouched, including top-level OpenCode defaults.</scenario-3>
         <scenario-4 kind="failure">Unknown preset names fail with a clear error that includes the available preset names.</scenario-4>
-        <scenario-5 kind="failure">Malformed `guardian` or `memory-reviewer` preset model strings fail through the same validation rules used by `vvoc agent set`.</scenario-5>
+        <scenario-5 kind="failure">Malformed `guardian`, `memory-reviewer`, or `default` preset model strings fail through the same validation rules used by `vvoc agent set`.</scenario-5>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>Preset application must reuse existing vvoc/OpenCode write helpers instead of introducing a parallel mutation path.</assertion-1>
-        <assertion-2>Preset application must never reset agents that are not explicitly listed in the selected preset.</assertion-2>
+        <assertion-2>Preset application must never reset targets that are not explicitly listed in the selected preset.</assertion-2>
       </required-trace-assertions>
       <wave-follow-up>Consider dynamic shell completion for custom user-defined preset names if the CLI grows a config-discovery completion layer.</wave-follow-up>
     </V-M-CLI-PRESET>

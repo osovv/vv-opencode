@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
 //   SCOPE: Strict JSON parse error reporting, version-aware schema validation, preset semantic validation, and pass/fail terminal output.
@@ -77,13 +77,26 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
           openai: {
             description: "Starter OpenAI preset",
             agents: {
-              guardian: "openai/gpt-5:high",
-              general: "openai/gpt-5-mini",
+              default: "openai/gpt-5.4:xhigh",
+              "small-model": "openai/gpt-5.4-mini",
+              guardian: "openaig/gpt-5.4-mini",
+              explore: "openai/gpt-5.4-mini",
             },
           },
           zai: {
             agents: {
-              explore: "zai/glm-4.5-air",
+              default: "zai-coding-plan/glm-5.1",
+              "small-model": "zai-coding-plan/glm-4.7-flashx",
+              guardian: "zai-coding-plan/glm-4.7-flash-x",
+              explore: "zai-coding-plan/glm-4.7-flashx",
+            },
+          },
+          minimax: {
+            agents: {
+              default: "minimax-coding-plan/minimax-m2.7",
+              "small-model": "minimax-coding-plan/minimax-m2.1",
+              guardian: "minimax-coding-plan/minimax-m2.1",
+              explore: "minimax-coding-plan/minimax-m2.1",
             },
           },
         },
@@ -205,6 +218,35 @@ test("validateVvocConfigContent - invalid preset special-agent syntax fails", ()
     result.errors.some(
       (error) =>
         error.includes("/presets/invalid/agents/guardian") &&
+        error.includes("provider/model-id format"),
+    ),
+  ).toBe(true);
+});
+
+test("validateVvocConfigContent - invalid preset default-model syntax fails", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        ...createDefaultVvocConfig(),
+        presets: {
+          invalid: {
+            agents: {
+              default: "not-a-model",
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(false);
+  expect(
+    result.errors.some(
+      (error) =>
+        error.includes("/presets/invalid/agents/default") &&
         error.includes("provider/model-id format"),
     ),
   ).toBe(true);

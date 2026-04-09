@@ -125,7 +125,7 @@ vvoc config validate
 - `doctor` reports parse problems and missing required setup
 - `config validate` validates `$XDG_CONFIG_HOME/vvoc/vvoc.json` against the versioned vvoc JSON Schema
 
-### Manage Agent Models
+### Manage Model Targets
 
 List configured model overrides:
 
@@ -136,6 +136,8 @@ vvoc agent list
 Set model overrides:
 
 ```bash
+vvoc agent set default openai/gpt-5
+vvoc agent set small-model openai/gpt-5-mini
 vvoc agent set general openai/gpt-5-nano
 vvoc agent set explore openai/gpt-5-nano
 vvoc agent set enhancer openai/gpt-5
@@ -148,13 +150,17 @@ vvoc agent set memory-reviewer openai/gpt-5:high
 Remove overrides:
 
 ```bash
+vvoc agent unset default
+vvoc agent unset small-model
 vvoc agent unset spec-reviewer
 vvoc agent unset guardian
 vvoc agent unset memory-reviewer
 ```
 
-Supported agent IDs:
+Supported model target IDs:
 
+- `default`
+- `small-model`
 - `guardian`
 - `memory-reviewer`
 - `general`
@@ -165,7 +171,9 @@ Supported agent IDs:
 - `code-reviewer`
 - `investitagor`
 
-`guardian` and `memory-reviewer` accept `provider/model[:variant]` syntax. The other agent targets use `provider/model`.
+`default` writes OpenCode `model`, and `small-model` writes OpenCode `small_model`.
+
+`guardian` and `memory-reviewer` accept `provider/model[:variant]` syntax. The other targets use `provider/model`.
 
 ### Switch Named Presets
 
@@ -186,46 +194,60 @@ Apply a preset in one command:
 ```bash
 vvoc preset openai
 vvoc preset zai --scope project
+vvoc preset minimax
 ```
 
 Preset rules in v1:
 
 - presets live only in canonical `vvoc.json`
-- presets manage only agent model overrides in v1
+- presets manage only model-target overrides in v1
 - presets may be partial
-- `vvoc preset <name>` only changes the agents listed in that preset
-- agents not listed in the selected preset are left untouched
-- `--scope` behaves like `vvoc agent set`: it changes the OpenCode target for OpenCode-managed agents, while canonical `vvoc.json` stays global
+- `vvoc preset <name>` only changes the targets listed in that preset
+- targets not listed in the selected preset are left untouched
+- `--scope` behaves like `vvoc agent set`: it changes the OpenCode target for OpenCode-managed targets, while canonical `vvoc.json` stays global
 
-This replaces the common workflow of running many `vvoc agent set ...` commands when you want to switch a known group of agent models together.
+This replaces the common workflow of running many `vvoc agent set ...` commands when you want to switch a known group of model targets together.
 
-The canonical config ships with starter `openai` and `zai` presets and uses this format:
+The canonical config ships with starter `openai`, `zai`, and `minimax` presets and uses this format:
 
 ```json
 {
   "presets": {
     "openai": {
-      "description": "Starter OpenAI overrides for common vvoc agents.",
+      "description": "Starter OpenAI overrides for common vvoc model targets.",
       "agents": {
-        "guardian": "openai/gpt-5:high",
-        "memory-reviewer": "openai/gpt-5-mini:high",
-        "general": "openai/gpt-5-mini",
-        "explore": "openai/gpt-5-mini"
+        "default": "openai/gpt-5.4:xhigh",
+        "small-model": "openai/gpt-5.4-mini",
+        "guardian": "openaig/gpt-5.4-mini",
+        "explore": "openai/gpt-5.4-mini"
       }
     },
     "zai": {
-      "description": "Starter ZAI overrides for common vvoc agents.",
+      "description": "Starter ZAI overrides for common vvoc model targets.",
       "agents": {
-        "guardian": "zai/glm-4.5:thinking",
-        "general": "zai/glm-4.5-air"
+        "default": "zai-coding-plan/glm-5.1",
+        "small-model": "zai-coding-plan/glm-4.7-flashx",
+        "guardian": "zai-coding-plan/glm-4.7-flash-x",
+        "explore": "zai-coding-plan/glm-4.7-flashx"
+      }
+    },
+    "minimax": {
+      "description": "Starter MiniMax overrides for common vvoc model targets.",
+      "agents": {
+        "default": "minimax-coding-plan/minimax-m2.7",
+        "small-model": "minimax-coding-plan/minimax-m2.1",
+        "guardian": "minimax-coding-plan/minimax-m2.1",
+        "explore": "minimax-coding-plan/minimax-m2.1"
       }
     }
   }
 }
 ```
 
-Preset `agents` support the same agent IDs as `vvoc agent set`:
+Preset `agents` support the same target IDs as `vvoc agent set`:
 
+- `default`
+- `small-model`
 - `guardian`
 - `memory-reviewer`
 - `general`
@@ -268,7 +290,7 @@ vvoc version
 | `vvoc sync` | Refresh managed config and prompt files |
 | `vvoc status` | Show current installation state |
 | `vvoc doctor` | Diagnose setup problems |
-| `vvoc agent list/set/unset` | Manage model overrides |
+| `vvoc agent list/set/unset` | Manage model targets and overrides |
 | `vvoc preset <name>/list/show <name>` | Switch or inspect declarative named presets |
 | `vvoc guardian config` | Print or write the `guardian` section of `vvoc.json` |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
