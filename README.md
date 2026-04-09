@@ -218,7 +218,7 @@ The canonical config ships with starter `openai`, `zai`, and `minimax` presets a
       "agents": {
         "default": "openai/gpt-5.4:xhigh",
         "small-model": "openai/gpt-5.4-mini",
-        "guardian": "openaig/gpt-5.4-mini",
+        "guardian": "openai/gpt-5.4-mini",
         "explore": "openai/gpt-5.4-mini"
       }
     },
@@ -227,7 +227,7 @@ The canonical config ships with starter `openai`, `zai`, and `minimax` presets a
       "agents": {
         "default": "zai-coding-plan/glm-5.1",
         "small-model": "zai-coding-plan/glm-4.7-flashx",
-        "guardian": "zai-coding-plan/glm-4.7-flash-x",
+        "guardian": "zai-coding-plan/glm-4.7-flashx",
         "explore": "zai-coding-plan/glm-4.7-flashx"
       }
     },

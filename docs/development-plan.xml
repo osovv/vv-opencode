@@ -32,7 +32,7 @@
       </interface>
       <depends>none</depends>
       <target>
-        <source>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json</source>
+        <source>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/agent-models.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json + schemas/vvoc/v2.json</source>
         <tests>src/lib/opencode.test.ts</tests>
       </target>
       <observability>
@@ -48,7 +48,7 @@
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Expose init (with install + scaffold), sync, status, doctor, version, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty while delegating managed enhancer/subagent registration to the helper layer.</purpose>
+        <purpose>Expose init, install, sync, status, doctor, version, agent, preset, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty while delegating managed enhancer/subagent registration to the helper layer.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
@@ -210,7 +210,38 @@
       </notes>
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
-    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+      <contract>
+        <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json without resetting targets that are not listed in the selected preset.</purpose>
+        <inputs>
+          <param name="presetName" type="string" />
+          <param name="scope" type="global | project" />
+          <param name="configDir" type="string | undefined" />
+        </inputs>
+        <outputs>
+          <param name="AppliedPresetChange[]" type="per-target write summary" />
+        </outputs>
+        <errors>
+          <error code="UNKNOWN_PRESET" />
+          <error code="INVALID_MODEL_TARGET" />
+        </errors>
+      </contract>
+      <interface>
+        <export-resolvePreset PURPOSE="Validate a preset name against the current canonical vvoc.json preset map." />
+        <export-applyPreset PURPOSE="Apply only the listed preset targets through existing vvoc and OpenCode write helpers." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/commands/preset.ts + src/lib/agent-models.ts</source>
+        <tests>src/commands/preset.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[preset]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-PRESET</verification-ref>
+    </M-CLI-PRESET>
+
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
         <purpose>Validate the canonical vvoc.json configuration file with human-readable error reporting against the versioned vvoc JSON Schema.</purpose>
         <inputs>
@@ -238,7 +269,7 @@
       <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
     </M-CLI-CONFIG-VALIDATE>
 
-    <M-CLI-PLUGIN-LIST NAME="PluginList" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+    <M-CLI-PLUGIN-LIST NAME="PluginList" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
         <purpose>Display all installed OpenCode plugins with their status (enabled/disabled) and source paths.</purpose>
         <inputs>
@@ -301,7 +332,7 @@
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
-        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including path-provider presets.</purpose>
+        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including path-provider presets, preset names, and the `agent set|unset <target-id>` flow.</purpose>
         <inputs>
           <param name="env.SHELL" type="string" />
           <param name="homeDir" type="string" />
@@ -332,7 +363,7 @@
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
     </M-CLI-COMPLETION>
 
-    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="planned">
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
         <purpose>Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds managed prompts plus canonical vvoc.json. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
         <inputs>
@@ -411,6 +442,13 @@
       <step-3>Rewrite vvoc.json canonically while preserving current values.</step-3>
       <evidence>Stable rewritten `vvoc.json` and scope-correct managed prompt sync.</evidence>
     </DF-CONFIG-SYNC>
+    <DF-PRESET-SWITCH NAME="PresetSwitch" TRIGGER="vvoc preset &lt;name&gt;">
+      <step-1>Resolve the selected scope plus the canonical vvoc.json path.</step-1>
+      <step-2>Read configured presets and validate the requested preset name.</step-2>
+      <step-3>Install managed prompts first if the preset touches vvoc-managed agents.</step-3>
+      <step-4>Apply only the listed model-target overrides through the existing vvoc and OpenCode write helpers.</step-4>
+      <evidence>Selected targets change, unlisted targets remain untouched, and CLI output prints a per-target summary.</evidence>
+    </DF-PRESET-SWITCH>
     <DF-GUARDIAN-REVIEW NAME="GuardianPermissionReview" TRIGGER="permission.asked event">
       <step-1>Capture relevant tool and command intent for the session.</step-1>
       <step-2>Build a bounded transcript and planned action prompt.</step-2>
@@ -430,6 +468,20 @@
       <step-3>The reviewer returns a keep/update/merge/delete report without modifying entries.</step-3>
       <evidence>Bundled `memory-reviewer` agent with read-only memory tooling.</evidence>
     </DF-MEMORY-REVIEW>
+    <DF-SYSTEM-CONTEXT NAME="SystemContextInjection" TRIGGER="chat.message for eligible primary agents">
+      <step-1>Build the known-subagent set from built-ins, plugin-managed agents, and config-defined subagents.</step-1>
+      <step-2>Inspect the resolved agent name on each outgoing chat message.</step-2>
+      <step-3>Append reusable vvoc system guidance only for eligible primary agents.</step-3>
+      <step-4>Skip known subagents and internal helper agents so their prompts stay isolated.</step-4>
+      <evidence>Primary agents receive one reusable guidance block; known subagents do not inherit it.</evidence>
+    </DF-SYSTEM-CONTEXT>
+    <DF-SECRETS-REDACTION NAME="SecretsRedaction" TRIGGER="provider-bound request or tool execution with secrets present">
+      <step-1>Load the secrets-redaction section from canonical vvoc.json with environment-variable substitution.</step-1>
+      <step-2>Replace detected secrets in model-bound chat payloads with stable session placeholders.</step-2>
+      <step-3>Restore placeholders in model completions and in tool arguments before local execution.</step-3>
+      <step-4>Preserve session-local placeholder mappings with TTL and bounded cache behavior.</step-4>
+      <evidence>Provider-bound payloads are redacted, while local tool execution and user-visible responses receive restored values where needed.</evidence>
+    </DF-SECRETS-REDACTION>
     <DF-PLUGIN-LIST NAME="PluginList" TRIGGER="vvoc plugin list">
       <step-1>Resolve OpenCode config path for the current scope.</step-1>
       <step-2>Parse plugin array and extract each plugin's source.</step-2>
@@ -484,13 +536,20 @@
       <step-2 module="M-PLUGIN-MEMORY" status="done" verification="V-M-PLUGIN-MEMORY">Register memory tools and the `memory-reviewer` subagent via OpenCode plugin hooks.</step-2>
     </Phase-3>
     <Phase-4 name="CLI Enhancement Suite" status="done">
-      <goal>Add plugin list, config validate, shell completion, interactive init, and upgrade commands to improve developer UX.</goal>
+      <goal>Add preset/configuration helpers and developer-experience commands to improve setup, inspection, and switching flows.</goal>
       <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate canonical vvoc.json with human-readable schema errors.</step-1>
       <step-2 module="M-CLI-PLUGIN-LIST" status="implemented" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
-      <step-3 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Install shell completions for bash, zsh, and fish with shell auto-detection.</step-3>
-      <step-4 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-4>
-      <step-5 module="M-CLI-UPGRADE" status="implemented" verification="V-M-CLI-UPGRADE">Check npm for updates, install the global package with Bun, and run post-install sync from a fresh subprocess.</step-5>
+      <step-3 module="M-CLI-PATH-PROVIDER" status="implemented" verification="V-M-CLI-PATH-PROVIDER">Apply supported provider baseURL patch presets conservatively to the global OpenCode config.</step-3>
+      <step-4 module="M-CLI-PRESET" status="implemented" verification="V-M-CLI-PRESET">List, inspect, and apply named model-target presets from canonical vvoc.json.</step-4>
+      <step-5 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Install shell completions for bash, zsh, and fish with shell auto-detection.</step-5>
+      <step-6 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-6>
+      <step-7 module="M-CLI-UPGRADE" status="implemented" verification="V-M-CLI-UPGRADE">Check npm for updates, install the global package with Bun, and run post-install sync from a fresh subprocess.</step-7>
     </Phase-4>
+    <Phase-5 name="Session Guidance And Safety" status="done">
+      <goal>Inject reusable main-session guidance and keep provider-bound payloads free of raw secrets.</goal>
+      <step-1 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="implemented" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Append reusable vvoc system guidance only for eligible primary agents via `chat.message`.</step-1>
+      <step-2 module="M-PLUGIN-SECRETS-REDACTION" status="implemented" verification="V-M-PLUGIN-SECRETS-REDACTION">Redact secrets before LLM requests and restore placeholders after completion and before tool execution.</step-2>
+    </Phase-5>
   </ImplementationOrder>
 
   <ExecutionPolicy>

@@ -47,6 +47,33 @@
       <Priority>medium</Priority>
       <RelatedFlows>DF-MEMORY-REVIEW</RelatedFlows>
     </UC-004>
+    <UC-005>
+      <Actor>User</Actor>
+      <Action>Sends chat content or tool payloads that contain secrets while `SecretsRedactionPlugin` is active.</Action>
+      <Goal>To prevent raw secrets from being sent to LLM providers while still restoring placeholders where the local runtime needs the original values.</Goal>
+      <Preconditions>The package is enabled in OpenCode and secrets redaction is not disabled in canonical `vvoc.json`.</Preconditions>
+      <AcceptanceCriteria>Secrets are replaced with placeholders before provider-bound requests, restored after completions and before tool execution, and remain stable across restarts when the configured secret is stable.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-SECRETS-REDACTION</RelatedFlows>
+    </UC-005>
+    <UC-006>
+      <Actor>User</Actor>
+      <Action>Starts a primary chat session with vvoc installed.</Action>
+      <Goal>To inject reusable main-session guidance such as proactive explore usage without polluting known subagent prompts.</Goal>
+      <Preconditions>The package is enabled in OpenCode and a primary agent session is being created.</Preconditions>
+      <AcceptanceCriteria>Eligible primary agents receive the reusable guidance exactly once, while known subagents and internal helper agents do not inherit it.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-SYSTEM-CONTEXT</RelatedFlows>
+    </UC-006>
+    <UC-007>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc preset list`, `vvoc preset show <name>`, or `vvoc preset <name>`.</Action>
+      <Goal>To inspect and apply declarative named model-target presets stored in canonical `vvoc.json` without resetting unrelated targets.</Goal>
+      <Preconditions>The canonical vvoc config exists and contains preset definitions.</Preconditions>
+      <AcceptanceCriteria>The selected preset resolves by name, only the listed targets are changed, and existing vvoc/OpenCode write paths are reused for both canonical and OpenCode-managed targets.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-PRESET-SWITCH</RelatedFlows>
+    </UC-007>
   </UseCases>
 
   <NonGoals>
