@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.2.1
+// VERSION: 0.2.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, partial preset application including OpenCode default targets, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
@@ -14,13 +14,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.1 - Synced preset expectations with the canonical seeded guardian model values.]
+//   LAST_CHANGE: [v0.2.2 - Added a CLI regression test for bare `vvoc preset <name>` dispatch.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { applyPreset, formatPreset, listConfiguredPresets, resolvePreset } from "./preset.js";
 import {
   readOpenCodeDefaultModel,
@@ -226,6 +227,59 @@ describe("applyPreset", () => {
       expect(opencodeText).toContain('"model": "openai/gpt-5.4:xhigh"');
       expect(opencodeText).toContain('"small_model": "openai/gpt-5.4-mini"');
       expect(opencodeText).toContain('"explore"');
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("cli applies a bare preset name without treating it as a subcommand", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-cli-config-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-cli-project-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
+
+      const cliPath = fileURLToPath(new URL("../cli.ts", import.meta.url));
+      const command = Bun.spawn({
+        cmd: [
+          process.execPath,
+          "run",
+          cliPath,
+          "preset",
+          "zai",
+          "--scope",
+          "project",
+          "--config-dir",
+          configHome,
+        ],
+        cwd: projectDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(command.stdout).text(),
+        new Response(command.stderr).text(),
+        command.exited,
+      ]);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      expect(stdout).toContain("Applied preset zai (project):");
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("zai-coding-plan/glm-5.1");
+      expect(await readOpenCodeDefaultModel(paths, "small_model")).toBe(
+        "zai-coding-plan/glm-4.7-flashx",
+      );
+      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("zai-coding-plan/glm-4.7-flashx");
+      expect((await readVvocConfig(paths))?.guardian.model).toBe("zai-coding-plan/glm-4.7-flashx");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });

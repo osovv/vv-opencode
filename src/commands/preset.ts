@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: List, show, and apply declarative named model-target presets from canonical vvoc.json.
 //   SCOPE: Canonical preset lookup, preset rendering, scope-aware preset application, and per-target summary output through existing vvoc and OpenCode write paths.
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added OpenCode default and small-model target support to declarative presets.]
+//   LAST_CHANGE: [v0.2.1 - Fixed `vvoc preset <name>` dispatch so bare preset names are applied instead of being parsed as unknown subcommands.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -60,10 +60,16 @@ type AppliedPresetChange = {
   result: WriteResult;
 };
 
+const commandArg = {
+  type: "positional" as const,
+  required: false,
+  description: "Preset name or one of: list, show.",
+};
+
 const presetArg = {
   type: "positional" as const,
-  required: true,
-  description: "Preset name.",
+  required: false,
+  description: "Preset name for `show`.",
 };
 
 const scopeArg = {
@@ -78,80 +84,19 @@ const configDirArg = {
   description: "Override the global config home.",
 };
 
-const presetList = defineCommand({
-  meta: {
-    name: "list",
-    description: "List configured presets.",
-  },
-  args: {
-    "config-dir": configDirArg,
-  },
-  async run({ args }) {
-    const presets = await listPresets({
-      cwd: process.cwd(),
-      configDir: typeof args["config-dir"] === "string" ? args["config-dir"] : undefined,
-    });
-
-    if (presets.length === 0) {
-      console.log("No presets configured.");
-      return;
-    }
-
-    console.log("Available presets:");
-    for (const { name, preset } of presets) {
-      const description = preset.description ? ` - ${preset.description}` : "";
-      const targetCount = Object.keys(preset.agents).length;
-      console.log(`  ${name}${description} (${targetCount} target${targetCount === 1 ? "" : "s"})`);
-    }
-  },
-});
-
-const presetShow = defineCommand({
-  meta: {
-    name: "show",
-    description: "Show a configured preset.",
-  },
-  args: {
-    preset: presetArg,
-    "config-dir": configDirArg,
-  },
-  async run({ args }) {
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const presets = await readConfiguredPresets({ cwd: process.cwd(), configDir });
-    const resolved = resolvePreset(typeof args.preset === "string" ? args.preset : "", presets);
-    process.stdout.write(formatPreset(resolved.name, resolved.preset));
-  },
-});
-
 export default defineCommand({
   meta: {
     name: "preset",
     description: "List, show, or apply named agent presets from vvoc.json.",
   },
   args: {
+    command: commandArg,
     preset: presetArg,
     scope: scopeArg,
     "config-dir": configDirArg,
   },
-  subCommands: {
-    list: presetList,
-    show: presetShow,
-  },
   async run({ args }) {
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const scope = resolveScope(args.scope);
-    const applied = await applyPreset(typeof args.preset === "string" ? args.preset : "", {
-      cwd: process.cwd(),
-      configDir,
-      scope,
-    });
-
-    console.log(`Applied preset ${applied.name} (${scope}):`);
-    for (const change of applied.changes) {
-      console.log(
-        `  ${change.targetName}: ${describeWriteResult(change.result)} (${change.model})`,
-      );
-    }
+    await runPresetCommand(args);
   },
 });
 
@@ -279,6 +224,60 @@ async function listPresets(
   options: { cwd?: string; configDir?: string } = {},
 ): Promise<ListedPreset[]> {
   return listConfiguredPresets(await readConfiguredPresets(options));
+}
+
+async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
+  const command = typeof args.command === "string" ? args.command.trim() : "";
+  const presetName = typeof args.preset === "string" ? args.preset.trim() : "";
+  const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+
+  if (!command || command === "list") {
+    if (presetName) {
+      throw new Error(`unexpected extra argument for \`vvoc preset list\`: ${presetName}`);
+    }
+
+    const presets = await listPresets({ cwd: process.cwd(), configDir });
+
+    if (presets.length === 0) {
+      console.log("No presets configured.");
+      return;
+    }
+
+    console.log("Available presets:");
+    for (const { name, preset } of presets) {
+      const description = preset.description ? ` - ${preset.description}` : "";
+      const targetCount = Object.keys(preset.agents).length;
+      console.log(`  ${name}${description} (${targetCount} target${targetCount === 1 ? "" : "s"})`);
+    }
+    return;
+  }
+
+  if (command === "show") {
+    if (!presetName) {
+      throw new Error("preset name required for `vvoc preset show <name>`");
+    }
+
+    const presets = await readConfiguredPresets({ cwd: process.cwd(), configDir });
+    const resolved = resolvePreset(presetName, presets);
+    process.stdout.write(formatPreset(resolved.name, resolved.preset));
+    return;
+  }
+
+  if (presetName) {
+    throw new Error(`unexpected extra argument for \`vvoc preset <name>\`: ${presetName}`);
+  }
+
+  const scope = resolveScope(args.scope);
+  const applied = await applyPreset(command, {
+    cwd: process.cwd(),
+    configDir,
+    scope,
+  });
+
+  console.log(`Applied preset ${applied.name} (${scope}):`);
+  for (const change of applied.changes) {
+    console.log(`  ${change.targetName}: ${describeWriteResult(change.result)} (${change.model})`);
+  }
 }
 
 async function readConfiguredPresets(
