@@ -112,7 +112,7 @@
         <check-4>bun test</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`, `path-provider`, and `preset`.</scenario-1>
+        <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`, `patch-provider`, and `preset`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid guardian section JSON content.</scenario-2>
         <scenario-3 kind="success">`vvoc agent list` reports top-level `default` and `small-model`, Guardian, memory-reviewer, the built-in `general` and `explore` agents, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents.</scenario-3>
       </scenarios>
@@ -308,28 +308,30 @@
       <wave-follow-up>Run against a temp config with known plugin entries.</wave-follow-up>
     </V-M-CLI-PLUGIN-LIST>
 
-    <V-M-CLI-PATH-PROVIDER MODULE="M-CLI-PATH-PROVIDER" PRIORITY="medium">
+    <V-M-CLI-PATCH-PROVIDER MODULE="M-CLI-PATCH-PROVIDER" PRIORITY="medium">
       <test-files>
-        <file>src/commands/path-provider.test.ts</file>
+        <file>src/commands/patch-provider.test.ts</file>
         <file>src/lib/opencode.test.ts</file>
       </test-files>
       <module-checks>
         <check-1>bun run lint</check-1>
         <check-2>bun run fmt:check</check-2>
         <check-3>bun run build</check-3>
-        <check-4>bun test src/commands/path-provider.test.ts src/lib/opencode.test.ts</check-4>
+        <check-4>bun test src/commands/patch-provider.test.ts src/lib/opencode.test.ts</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">`vvoc path-provider stepfun-ai` writes `provider.stepfun.options.baseURL = https://api.stepfun.ai/v1` into the global OpenCode config.</scenario-1>
-        <scenario-2 kind="success">Reapplying the same preset is idempotent and reports a kept result.</scenario-2>
-        <scenario-3 kind="failure">Unsupported preset names fail with a clear list of supported presets.</scenario-3>
+        <scenario-1 kind="success">`vvoc patch-provider stepfun-ai` writes `provider.stepfun.options.baseURL = https://api.stepfun.ai/v1` into the global OpenCode config.</scenario-1>
+        <scenario-2 kind="success">`vvoc patch-provider zai` writes the `provider.zai-coding-plan.models.glm-4.5-airx` patch into the global OpenCode config without clobbering sibling model entries.</scenario-2>
+        <scenario-3 kind="success">Reapplying the same preset is idempotent and reports a kept result.</scenario-3>
+        <scenario-4 kind="failure">Unsupported preset names fail with a clear list of supported presets.</scenario-4>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>The command must fail rather than overwrite non-object `provider` or `provider.<id>.options` config shapes.</assertion-1>
+        <assertion-2>The command must fail rather than overwrite a non-object `provider.<id>` config shape such as `provider.zai-coding-plan`.</assertion-2>
       </required-trace-assertions>
       <wave-follow-up>Add more presets only when a concrete endpoint mismatch needs a one-shot patch.</wave-follow-up>
-    </V-M-CLI-PATH-PROVIDER>
+    </V-M-CLI-PATCH-PROVIDER>
 
     <V-M-CLI-COMPLETION MODULE="M-CLI-COMPLETION" PRIORITY="low">
       <test-files>
@@ -342,9 +344,9 @@
         <check-4>bun test src/commands/completion.test.ts</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, `path-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-1>
+        <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, `patch-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-1>
         <scenario-2 kind="success">Zsh completion script registers `vvoc` via `#compdef` and `compdef` markers so the installed file works when sourced or loaded from completion paths.</scenario-2>
-        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, `path-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-3>
+        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, `patch-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-3>
         <scenario-4 kind="success">The zsh install flow appends an idempotent loader block that initializes completion support before sourcing `_vvoc`.</scenario-4>
       </scenarios>
       <required-log-markers />

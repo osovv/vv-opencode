@@ -107,7 +107,7 @@ Schema source of truth lives in this repository at `schemas/vvoc/v2.json`.
 | `vvoc preset list`, `vvoc preset show <name>`, `vvoc preset <name>` | Inspect or apply named presets |
 | `vvoc guardian config` | Print or write the `guardian` section of `vvoc.json` |
 | `vvoc plugin list` | List plugin entries from OpenCode config |
-| `vvoc path-provider stepfun-ai` | Patch a global provider `baseURL` preset |
+| `vvoc patch-provider stepfun-ai|zai` | Patch a global OpenCode config preset |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade the global package and run a follow-up sync |
 | `vvoc version` | Print the installed package version |

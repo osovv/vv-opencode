@@ -1,8 +1,10 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.8
+// VERSION: 0.5.9
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/path-provider/preset and the `agent set|unset <target-id>` flow, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `agent set|unset <target-id>` flow, and rc file patching.
+//   INPUTS: Current shell environment plus built-in vvoc command and preset names.
+//   OUTPUTS: Shell-specific completion scripts and idempotent rc/config patches.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.8 - Added OpenCode default and small-model targets to `vvoc agent` shell completions.]
+//   LAST_CHANGE: [v0.5.9 - Renamed the patch command completions and added the zai patch preset.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -35,7 +37,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
   "guardian",
   "init",
   "install",
-  "path-provider",
+  "patch-provider",
   "preset",
   "plugin",
   "status",
@@ -45,7 +47,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 ];
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
-const VVOC_PATH_PROVIDER_PRESETS = ["stepfun-ai"];
+const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
 const VVOC_PRESET_NAMES = ["openai", "zai", "minimax"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
@@ -162,7 +164,7 @@ async function installFishCompletion(): Promise<void> {
 export function generateBashCompletion(): string {
   const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
   const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
-  const pathProviderPresets = VVOC_PATH_PROVIDER_PRESETS.join(" ");
+  const patchProviderPresets = VVOC_PATCH_PROVIDER_PRESETS.join(" ");
   const presetCommands = [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ");
   const presetNames = VVOC_PRESET_NAMES.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
@@ -187,8 +189,8 @@ export function generateBashCompletion(): string {
     "        config)\n" +
     "          _vvoc_config_commands\n" +
     "          ;;\n" +
-    "        path-provider)\n" +
-    "          _vvoc_path_provider_presets\n" +
+    "        patch-provider)\n" +
+    "          _vvoc_patch_provider_presets\n" +
     "          ;;\n" +
     "        preset)\n" +
     "          _vvoc_preset_commands\n" +
@@ -225,9 +227,9 @@ export function generateBashCompletion(): string {
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
     "\n" +
-    "_vvoc_path_provider_presets() {\n" +
+    "_vvoc_patch_provider_presets() {\n" +
     '  local commands="' +
-    pathProviderPresets +
+    patchProviderPresets +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -297,8 +299,8 @@ export function generateZshCompletion(): string {
     "    config)",
     "      _vvoc_config_cmds",
     "      ;;",
-    "    path-provider)",
-    "      _vvoc_path_provider_cmds",
+    "    patch-provider)",
+    "      _vvoc_patch_provider_cmds",
     "      ;;",
     "    preset)",
     "      _vvoc_preset_cmds",
@@ -315,8 +317,8 @@ export function generateZshCompletion(): string {
     '  _arguments "1: :(' + VVOC_CONFIG_COMMANDS.join(" ") + ')"',
     "}",
     "",
-    "_vvoc_path_provider_cmds() {",
-    '  _arguments "1: :(' + VVOC_PATH_PROVIDER_PRESETS.join(" ") + ')"',
+    "_vvoc_patch_provider_cmds() {",
+    '  _arguments "1: :(' + VVOC_PATCH_PROVIDER_PRESETS.join(" ") + ')"',
     "}",
     "",
     "_vvoc_preset_cmds() {",
@@ -367,8 +369,8 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_CONFIG_COMMANDS.join(" "),
     "end",
     "",
-    "function __vvoc_path_provider_cmds",
-    "  echo " + VVOC_PATH_PROVIDER_PRESETS.join(" "),
+    "function __vvoc_patch_provider_cmds",
+    "  echo " + VVOC_PATCH_PROVIDER_PRESETS.join(" "),
     "end",
     "",
     "function __vvoc_preset_cmds",
@@ -395,7 +397,7 @@ export function generateFishCompletion(): string {
     'complete -c vvoc -n "__fish_seen_subcommand_from agent; and not __fish_seen_subcommand_from set unset list" -f -a "(__vvoc_agent_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_agent_target_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from path-provider" -f -a "(__vvoc_path_provider_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from patch-provider" -f -a "(__vvoc_patch_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from list show openai zai" -f -a "(__vvoc_preset_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from preset; and __fish_seen_subcommand_from show" -f -a "(__vvoc_preset_names)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',

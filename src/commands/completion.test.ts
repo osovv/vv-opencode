@@ -1,8 +1,10 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.6
+// VERSION: 0.4.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including path-provider presets, top-level preset completions, and the `agent set|unset <target-id>` flow.
+//   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `agent set|unset <target-id>` flow.
+//   INPUTS: Generated completion scripts for bash, zsh, and fish.
+//   OUTPUTS: Assertions over exposed commands, nested completions, and syntax markers.
 //   DEPENDS: [src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -14,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.6 - Added assertions for the OpenCode default and small-model agent targets.]
+//   LAST_CHANGE: [v0.4.7 - Renamed the patch command completions and added the zai patch preset.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -30,7 +32,7 @@ test("generateBashCompletion - contains vvoc command", () => {
   expect(output).toContain("agent");
   expect(output).toContain("completion");
   expect(output).toContain("config");
-  expect(output).toContain("path-provider");
+  expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
 });
@@ -46,7 +48,7 @@ test("generateZshCompletion - contains vvoc command", () => {
   expect(output).toContain("vvoc");
   expect(output).toContain("agent");
   expect(output).toContain("config");
-  expect(output).toContain("path-provider");
+  expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
 });
@@ -64,7 +66,7 @@ test("generateFishCompletion - contains vvoc command", () => {
   expect(output).toContain("agent");
   expect(output).toContain("completion");
   expect(output).toContain("config");
-  expect(output).toContain("path-provider");
+  expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
 });
@@ -83,7 +85,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="agent completion config doctor guardian init install path-provider preset plugin status sync upgrade version"',
+    'local commands="agent completion config doctor guardian init install patch-provider preset plugin status sync upgrade version"',
   );
 });
 
@@ -96,7 +98,7 @@ test("generateFishCompletion - handles nested subcommands", () => {
   const output = generateFishCompletion();
   expect(output).toContain("__fish_seen_subcommand_from agent");
   expect(output).toContain("__fish_seen_subcommand_from config");
-  expect(output).toContain("__fish_seen_subcommand_from path-provider");
+  expect(output).toContain("__fish_seen_subcommand_from patch-provider");
   expect(output).toContain("__fish_seen_subcommand_from preset");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
 });
@@ -128,11 +130,11 @@ test("generateFishCompletion - contains agent target completions", () => {
   expect(output).toContain("__fish_seen_subcommand_from set unset");
 });
 
-test("completion scripts - contain path-provider presets", () => {
-  expect(generateBashCompletion()).toContain("_vvoc_path_provider_presets");
-  expect(generateZshCompletion()).toContain("_vvoc_path_provider_cmds");
-  expect(generateFishCompletion()).toContain("__vvoc_path_provider_cmds");
-  expect(generateBashCompletion()).toContain("stepfun-ai");
+test("completion scripts - contain patch-provider presets", () => {
+  expect(generateBashCompletion()).toContain("_vvoc_patch_provider_presets");
+  expect(generateZshCompletion()).toContain("_vvoc_patch_provider_cmds");
+  expect(generateFishCompletion()).toContain("__vvoc_patch_provider_cmds");
+  expect(generateBashCompletion()).toContain('local commands="stepfun-ai zai"');
 });
 
 test("completion scripts - contain preset commands and default preset names", () => {

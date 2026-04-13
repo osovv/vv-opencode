@@ -48,7 +48,7 @@
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
-        <purpose>Expose init, install, sync, status, doctor, version, agent, preset, plugin list, config validate, path-provider, completion, and upgrade subcommands through citty while delegating managed enhancer/subagent registration to the helper layer.</purpose>
+        <purpose>Expose init, install, sync, status, doctor, version, agent, preset, plugin list, config validate, patch-provider, completion, and upgrade subcommands through citty while delegating managed enhancer/subagent registration to the helper layer.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
@@ -297,9 +297,9 @@
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PATH-PROVIDER NAME="PathProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
-        <purpose>Apply global OpenCode provider patch presets that rewrite provider.options.baseURL conservatively.</purpose>
+        <purpose>Apply global OpenCode patch presets that rewrite provider.options.baseURL or merge provider-specific config under `provider` conservatively.</purpose>
         <inputs>
           <param name="preset" type="string" />
           <param name="configDir" type="string | undefined" />
@@ -308,31 +308,32 @@
           <param name="WriteResult" type="created | updated | kept for global opencode.json/jsonc" />
         </outputs>
         <errors>
-          <error code="UNSUPPORTED_PROVIDER_PRESET" />
+          <error code="UNSUPPORTED_PATCH_PRESET" />
           <error code="INVALID_PROVIDER_CONFIG" />
+          <error code="INVALID_PROVIDER_OBJECT_CONFIG" />
         </errors>
       </contract>
       <interface>
-        <export-resolvePathProviderPreset PURPOSE="Map a supported preset like stepfun-ai to provider/baseURL config." />
-        <export-applyPathProviderPreset PURPOSE="Resolve global OpenCode config paths and apply the preset." />
+        <export-resolvePatchProviderPreset PURPOSE="Map a supported preset like stepfun-ai or zai to concrete OpenCode config writes." />
+        <export-applyPatchProviderPreset PURPOSE="Resolve global OpenCode config paths and apply the preset." />
       </interface>
       <depends>M-CLI-CONFIG</depends>
       <target>
-        <source>src/commands/path-provider.ts</source>
-        <tests>src/commands/path-provider.test.ts</tests>
+        <source>src/commands/patch-provider.ts</source>
+        <tests>src/commands/patch-provider.test.ts</tests>
       </target>
       <observability>
-        <log-prefix>[path-provider]</log-prefix>
+        <log-prefix>[patch-provider]</log-prefix>
       </observability>
-      <verification-ref>V-M-CLI-PATH-PROVIDER</verification-ref>
+      <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>
       <notes>
-        <note-1>The command is global-only on purpose so the same endpoint patch can be applied consistently across machines.</note-1>
+        <note-1>The command is global-only on purpose so the same OpenCode patch can be applied consistently across machines.</note-1>
       </notes>
-    </M-CLI-PATH-PROVIDER>
+    </M-CLI-PATCH-PROVIDER>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
       <contract>
-        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including path-provider presets, preset names, and the `agent set|unset <target-id>` flow.</purpose>
+        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including patch-provider presets, preset names, and the `agent set|unset <target-id>` flow.</purpose>
         <inputs>
           <param name="env.SHELL" type="string" />
           <param name="homeDir" type="string" />
@@ -539,7 +540,7 @@
       <goal>Add preset/configuration helpers and developer-experience commands to improve setup, inspection, and switching flows.</goal>
       <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate canonical vvoc.json with human-readable schema errors.</step-1>
       <step-2 module="M-CLI-PLUGIN-LIST" status="implemented" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
-      <step-3 module="M-CLI-PATH-PROVIDER" status="implemented" verification="V-M-CLI-PATH-PROVIDER">Apply supported provider baseURL patch presets conservatively to the global OpenCode config.</step-3>
+      <step-3 module="M-CLI-PATCH-PROVIDER" status="implemented" verification="V-M-CLI-PATCH-PROVIDER">Apply supported OpenCode patch presets conservatively to the global OpenCode config.</step-3>
       <step-4 module="M-CLI-PRESET" status="implemented" verification="V-M-CLI-PRESET">List, inspect, and apply named model-target presets from canonical vvoc.json.</step-4>
       <step-5 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Install shell completions for bash, zsh, and fish with shell auto-detection.</step-5>
       <step-6 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-6>

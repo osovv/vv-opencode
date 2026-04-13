@@ -32,7 +32,7 @@
     </M-CLI-MANAGED-AGENTS>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, preset, path-provider, completion, and upgrade commands, including OpenCode default-model targets, model overrides for built-in general/explore, and registration of vvoc-managed OpenCode agents.</purpose>
+      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, preset, patch-provider, completion, and upgrade commands, including OpenCode default-model targets, model overrides for built-in general/explore, and registration of vvoc-managed OpenCode agents.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
@@ -196,20 +196,20 @@
       </annotations>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PATH-PROVIDER NAME="PathProvider" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Apply global OpenCode provider endpoint patch presets such as the `stepfun-ai` baseURL override.</purpose>
-      <path>src/commands/path-provider.ts</path>
+    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="implemented">
+      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override and the `zai` provider model patch.</purpose>
+      <path>src/commands/patch-provider.ts</path>
       <depends>M-CLI-CONFIG</depends>
-      <verification-ref>V-M-CLI-PATH-PROVIDER</verification-ref>
+      <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>
       <annotations>
-        <fn-resolvePathProviderPreset PURPOSE="Validate supported provider patch preset names and map them to concrete provider/baseURL writes." />
-        <fn-applyPathProviderPreset PURPOSE="Resolve the global OpenCode config path and apply the selected provider preset." />
-        <cmd-path_provider PURPOSE="vvoc path-provider stepfun-ai - CLI command for the global StepFun endpoint patch." />
+        <fn-resolvePatchProviderPreset PURPOSE="Validate supported patch preset names and map them to concrete OpenCode writes." />
+        <fn-applyPatchProviderPreset PURPOSE="Resolve the global OpenCode config path and apply the selected preset." />
+        <cmd-patch_provider PURPOSE="vvoc patch-provider stepfun-ai|zai - CLI command for global OpenCode patch presets." />
       </annotations>
-    </M-CLI-PATH-PROVIDER>
+    </M-CLI-PATCH-PROVIDER>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including path-provider presets, the top-level preset command with default preset names, and the `agent set|unset <target-id>` flow.</purpose>
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, the top-level preset command with default preset names, and the `agent set|unset <target-id>` flow.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
@@ -251,7 +251,7 @@
     <CrossLink from="M-CLI-PRESET" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG-VALIDATE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-PLUGIN-LIST" to="M-CLI-CONFIG" relation="uses" />
-    <CrossLink from="M-CLI-PATH-PROVIDER" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-CLI-PATCH-PROVIDER" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-COMPLETION" to="M-CLI-COMMANDS" relation="uses" />
     <CrossLink from="M-CLI-INIT" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-UPGRADE" to="M-CLI-CONFIG" relation="uses" />

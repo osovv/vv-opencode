@@ -1,8 +1,10 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.8.0
+// VERSION: 0.8.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider object/baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
+//   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
+//   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -14,13 +16,14 @@
 //   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
 //   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
 //   top-level OpenCode model helper tests - Verify default model and small_model overrides round-trip through OpenCode config.
+//   provider object helper tests - Verify provider-specific object patches merge safely.
 //   managed agent registration helpers tests - Verify primary/subagent registration, prompt scaffolding, and model override round-trips.
 //   guardian config helpers tests - Verify Guardian config render/parse round-trips.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Added coverage for OpenCode top-level model and small_model writes.]
+//   LAST_CHANGE: [v0.8.2 - Added coverage for provider object patch writes used by patch-provider.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -45,6 +48,7 @@ import {
   resolvePaths,
   syncVvocConfig,
   writeOpenCodeDefaultModel,
+  writeOpenCodeProviderObject,
   writeGuardianConfig,
   writeMemoryConfig,
   writeOpenCodeAgentModel,
@@ -503,6 +507,78 @@ describe("top-level OpenCode model helpers", () => {
       expect(smallUnsetResult.action).toBe("updated");
       expect(await readOpenCodeDefaultModel(paths, "model")).toBeUndefined();
       expect(await readOpenCodeDefaultModel(paths, "small_model")).toBeUndefined();
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("provider object helpers", () => {
+  test("merges provider-specific object patches without clobbering sibling models", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-provider-object-"));
+    const zaiPatch = {
+      models: {
+        "glm-4.5-airx": {
+          "name: glm-4.5-airx": {
+            limit: {
+              context: 128000,
+              output: 96000,
+            },
+          },
+        },
+      },
+    };
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "opencode"), { recursive: true });
+
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify(
+          {
+            $schema: OPENCODE_SCHEMA_URL,
+            provider: {
+              "zai-coding-plan": {
+                models: {
+                  Existing: {
+                    name: "Existing",
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const first = await writeOpenCodeProviderObject(paths, "zai-coding-plan", zaiPatch);
+      const second = await writeOpenCodeProviderObject(paths, "zai-coding-plan", zaiPatch);
+      const content = await readFile(paths.opencodeConfigPath, "utf8");
+      const parsed = JSON.parse(content) as {
+        provider?: Record<string, { models?: Record<string, Record<string, unknown>> }>;
+      };
+
+      expect(first.action).toBe("updated");
+      expect(second.action).toBe("kept");
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.Existing).toEqual({
+        name: "Existing",
+      });
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.["glm-4.5-airx"]).toEqual({
+        "name: glm-4.5-airx": {
+          limit: {
+            context: 128000,
+            output: 96000,
+          },
+        },
+      });
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

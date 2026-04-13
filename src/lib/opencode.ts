@@ -1,8 +1,10 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.8.0
+// VERSION: 0.8.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   INPUTS: Scope-aware filesystem paths, current OpenCode/vvoc config text, and validated config override values.
+//   OUTPUTS: Normalized OpenCode/vvoc config text, persisted config writes, and installation inspection snapshots.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -22,6 +24,7 @@
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
 //   readOpenCodeDefaultModel - Reads a top-level OpenCode model or small_model override.
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
+//   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
 //   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
@@ -43,7 +46,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Added top-level OpenCode model and small_model read-write helpers for default model switching.]
+//   LAST_CHANGE: [v0.8.2 - Added a reusable provider object writer for patch-provider presets.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -465,6 +468,25 @@ export async function writeOpenCodeDefaultModel(
   }
 
   const nextText = updateTopLevelStringFieldText(baseText, key, options.model);
+
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path: paths.opencodeConfigPath };
+  }
+
+  await writeText(paths.opencodeConfigPath, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path: paths.opencodeConfigPath,
+  };
+}
+
+export async function writeOpenCodeProviderObject(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  providerID: string,
+  value: JsonObject,
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.opencodeConfigPath);
+  const nextText = ensureProviderObjectConfigText(currentText, providerID, value);
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -1019,6 +1041,48 @@ function ensureOpenCodeConfigText(text: string | undefined): string {
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 
+function ensureProviderObjectConfigText(
+  text: string | undefined,
+  providerID: string,
+  value: JsonObject,
+): string {
+  if (!text?.trim()) {
+    return renderJson({
+      $schema: OPENCODE_SCHEMA_URL,
+      provider: {
+        [providerID]: value,
+      },
+    });
+  }
+
+  const document = parseObjectDocument(text, "OpenCode config");
+  const currentProviders = readProviderMap(document, "OpenCode config");
+  const currentValue = currentProviders[providerID];
+  const nextValue = currentValue ? mergeJsonObjects(currentValue, value) : value;
+  let nextText = text;
+
+  if (!Object.hasOwn(document, "$schema")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
+  }
+
+  if (JSON.stringify(currentValue) !== JSON.stringify(nextValue)) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["provider", providerID], nextValue, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
 function updateTopLevelStringFieldText(
   text: string,
   key: OpenCodeDefaultModelKey,
@@ -1039,6 +1103,24 @@ function readNonEmptyString(value: unknown, label: string): string {
     throw new Error(`${label}: expected a non-empty string`);
   }
   return value.trim();
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeJsonObjects(current: JsonObject, patch: JsonObject): JsonObject {
+  const merged: JsonObject = { ...current };
+
+  for (const [key, patchValue] of Object.entries(patch)) {
+    const currentValue = merged[key];
+    merged[key] =
+      isJsonObject(currentValue) && isJsonObject(patchValue)
+        ? mergeJsonObjects(currentValue, patchValue)
+        : patchValue;
+  }
+
+  return merged;
 }
 
 function readOptionalObject(
