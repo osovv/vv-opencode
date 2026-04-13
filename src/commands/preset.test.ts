@@ -276,10 +276,10 @@ describe("applyPreset", () => {
       expect(stdout).toContain("Applied preset zai (project):");
       expect(await readOpenCodeDefaultModel(paths, "model")).toBe("zai-coding-plan/glm-5.1");
       expect(await readOpenCodeDefaultModel(paths, "small_model")).toBe(
-        "zai-coding-plan/glm-4.7-flashx",
+        "zai-coding-plan/glm-4.5-air",
       );
-      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("zai-coding-plan/glm-4.7-flashx");
-      expect((await readVvocConfig(paths))?.guardian.model).toBe("zai-coding-plan/glm-4.7-flashx");
+      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("zai-coding-plan/glm-4.5-air");
+      expect((await readVvocConfig(paths))?.guardian.model).toBe("zai-coding-plan/glm-4.5-air");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });

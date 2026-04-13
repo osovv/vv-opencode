@@ -226,9 +226,9 @@ The canonical config ships with starter `openai`, `zai`, and `minimax` presets a
       "description": "Starter ZAI overrides for common vvoc model targets.",
       "agents": {
         "default": "zai-coding-plan/glm-5.1",
-        "small-model": "zai-coding-plan/glm-4.7-flashx",
-        "guardian": "zai-coding-plan/glm-4.7-flashx",
-        "explore": "zai-coding-plan/glm-4.7-flashx"
+        "small-model": "zai-coding-plan/glm-4.5-air",
+        "guardian": "zai-coding-plan/glm-4.5-air",
+        "explore": "zai-coding-plan/glm-4.5-air"
       }
     },
     "minimax": {
