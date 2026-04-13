@@ -364,10 +364,10 @@ export function createDefaultVvocPresets(): VvocPresets {
     minimax: {
       description: "Starter MiniMax overrides for common vvoc model targets.",
       agents: {
-        default: "minimax-coding-plan/minimax-m2.7",
-        "small-model": "minimax-coding-plan/minimax-m2.1",
-        guardian: "minimax-coding-plan/minimax-m2.1",
-        explore: "minimax-coding-plan/minimax-m2.1",
+        default: "minimax-coding-plan/MiniMax-M2.7",
+        "small-model": "minimax-coding-plan/MiniMax-M2.1",
+        guardian: "minimax-coding-plan/MiniMax-M2.1",
+        explore: "minimax-coding-plan/MiniMax-M2.1",
       },
     },
   });
