@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.7.1
+// VERSION: 0.7.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
 //   SCOPE: Strict JSON parse error reporting, version-aware schema validation, preset semantic validation, and pass/fail terminal output.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.1 - Synced preset schema fixtures with the canonical seeded guardian model values.]
+//   LAST_CHANGE: [v0.7.2 - Updated canonical preset fixtures to the managed `vv-*` names and documented managed preset validation behavior.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -78,7 +78,7 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
       {
         ...createDefaultVvocConfig(),
         presets: {
-          openai: {
+          "vv-openai": {
             description: "Starter OpenAI preset",
             agents: {
               default: "openai/gpt-5.4:xhigh",
@@ -87,7 +87,7 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
               explore: "openai/gpt-5.4-mini",
             },
           },
-          zai: {
+          "vv-zai": {
             agents: {
               default: "zai-coding-plan/glm-5.1",
               "small-model": "zai-coding-plan/glm-4.5-airx",
@@ -95,12 +95,35 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
               explore: "zai-coding-plan/glm-4.5-airx",
             },
           },
-          minimax: {
+          "vv-minimax": {
             agents: {
               default: "minimax-coding-plan/MiniMax-M2.7",
               "small-model": "minimax-coding-plan/MiniMax-M2.1",
               guardian: "minimax-coding-plan/MiniMax-M2.1",
               explore: "minimax-coding-plan/MiniMax-M2.1",
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(true);
+  expect(result.errors).toHaveLength(0);
+});
+
+test("validateVvocConfigContent - managed vv presets do not block canonical refresh", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        ...createDefaultVvocConfig(),
+        presets: {
+          "vv-openai": {
+            agents: {
+              default: "not-a-model",
             },
           },
         },

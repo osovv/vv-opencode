@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.7
+// VERSION: 0.4.8
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `agent set|unset <target-id>` flow.
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.7 - Renamed the patch command completions and added the zai patch preset.]
+//   LAST_CHANGE: [v0.4.8 - Updated built-in preset completion fixtures to the managed `vv-*` preset names.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -143,6 +143,6 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateZshCompletion()).toContain("_vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
-  expect(generateBashCompletion()).toContain("list show openai zai minimax");
-  expect(generateZshCompletion()).toContain("openai zai minimax");
+  expect(generateBashCompletion()).toContain("list show vv-openai vv-zai vv-minimax");
+  expect(generateZshCompletion()).toContain("vv-openai vv-zai vv-minimax");
 });

@@ -1,8 +1,8 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 2.0.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
-//   SCOPE: Versioned schema constants, preset-aware default config generation, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration.
+//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration.
 //   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY-STORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
@@ -41,6 +41,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
+//   LAST_CHANGE: [v2.1.0 - Switched managed built-in presets to `vv-*` names and refresh them on canonical config rewrites while preserving user presets.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -78,6 +79,7 @@ const BUILTIN_SECRETS_REDACTION_PATTERNS = [
   "syn_key",
   "hex_token",
 ] as const;
+const BUILTIN_VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax"] as const;
 
 type JsonObject = Record<string, unknown>;
 type VvocConfigVersion = 1 | 2;
@@ -342,8 +344,12 @@ export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
 }
 
 export function createDefaultVvocPresets(): VvocPresets {
-  return createVvocPresets({
-    openai: {
+  return createBuiltinVvocPresets();
+}
+
+function createBuiltinVvocPresets(): VvocPresets {
+  return {
+    "vv-openai": createVvocPreset({
       description: "Starter OpenAI overrides for common vvoc model targets.",
       agents: {
         default: "openai/gpt-5.4:xhigh",
@@ -351,8 +357,8 @@ export function createDefaultVvocPresets(): VvocPresets {
         guardian: "openai/gpt-5.4-mini",
         explore: "openai/gpt-5.4-mini",
       },
-    },
-    zai: {
+    }),
+    "vv-zai": createVvocPreset({
       description: "Starter ZAI overrides for common vvoc model targets.",
       agents: {
         default: "zai-coding-plan/glm-5.1",
@@ -360,8 +366,8 @@ export function createDefaultVvocPresets(): VvocPresets {
         guardian: "zai-coding-plan/glm-4.5-airx",
         explore: "zai-coding-plan/glm-4.5-airx",
       },
-    },
-    minimax: {
+    }),
+    "vv-minimax": createVvocPreset({
       description: "Starter MiniMax overrides for common vvoc model targets.",
       agents: {
         default: "minimax-coding-plan/MiniMax-M2.7",
@@ -369,8 +375,8 @@ export function createDefaultVvocPresets(): VvocPresets {
         guardian: "minimax-coding-plan/MiniMax-M2.1",
         explore: "minimax-coding-plan/MiniMax-M2.1",
       },
-    },
-  });
+    }),
+  };
 }
 
 export function createDefaultVvocConfig(): VvocConfig {
@@ -606,13 +612,21 @@ function createSecretsRedactionConfig(
 }
 
 function createVvocPresets(overrides: VvocPresets = {}): VvocPresets {
-  const presets: VvocPresets = {};
+  const presets = createBuiltinVvocPresets();
 
   for (const [presetName, preset] of Object.entries(overrides)) {
+    // Managed built-ins are always rewritten from vvoc defaults.
+    if (isBuiltinVvocPresetName(presetName)) {
+      continue;
+    }
     presets[presetName] = createVvocPreset(preset);
   }
 
   return presets;
+}
+
+function isBuiltinVvocPresetName(name: string): boolean {
+  return BUILTIN_VVOC_PRESET_NAMES.includes(name as (typeof BUILTIN_VVOC_PRESET_NAMES)[number]);
 }
 
 function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {
@@ -945,6 +959,9 @@ function loadLenientVvocPresets(value: unknown, label: string, warnings: string[
       warnings.push(`${label}: preset names must be non-empty strings`);
       continue;
     }
+    if (isBuiltinVvocPresetName(presetName)) {
+      continue;
+    }
     if (!isPlainObject(presetValue)) {
       warnings.push(`${label}.${presetName}: expected an object`);
       continue;
@@ -971,7 +988,7 @@ function loadLenientVvocPresets(value: unknown, label: string, warnings: string[
     presets[presetName] = createVvocPreset({ description, agents });
   }
 
-  return Object.keys(presets).length > 0 ? presets : createDefaultVvocPresets();
+  return createVvocPresets(presets);
 }
 
 function loadLenientVvocPresetAgents(
@@ -1155,6 +1172,9 @@ function validatePresetSemantics(document: JsonObject): string[] {
   const errors: string[] = [];
 
   for (const [presetName, presetValue] of Object.entries(presetsValue)) {
+    if (isBuiltinVvocPresetName(presetName)) {
+      continue;
+    }
     if (!isPlainObject(presetValue) || !isPlainObject(presetValue.agents)) {
       continue;
     }

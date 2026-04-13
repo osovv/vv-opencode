@@ -1,10 +1,10 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.3.5">
+  <Project NAME="@osovv/vv-opencode" VERSION="0.3.6">
     <keywords>opencode, plugins, workflow</keywords>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model overrides, shared model target validation, managed agent prompt scaffolding, canonical vvoc.json rendering with preset support, and installation inspection with a single vvoc-owned config file.</purpose>
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model overrides, shared model target validation, managed agent prompt scaffolding, canonical vvoc.json rendering with managed `vv-*` built-in preset refresh, and installation inspection with a single vvoc-owned config file.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/agent-models.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json + schemas/vvoc/v2.json</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
@@ -16,7 +16,7 @@
         <fn-writeOpenCodeAgentModel PURPOSE="Write or remove a model override for a built-in OpenCode agent such as general or explore." />
         <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v1 or v2 and normalize it into the current in-memory config shape." />
         <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed OpenCode agent registrations such as the primary enhancer agent and the bundled subagents." />
-        <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid current values and migrating legacy v1 documents to v2." />
+        <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid user-owned values, refreshing managed `vv-*` presets, and migrating legacy v1 documents to v2." />
       </annotations>
     </M-CLI-CONFIG>
 
@@ -43,7 +43,7 @@
     </M-CLI-COMMANDS>
 
     <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json without resetting targets that are not listed in the selected preset.</purpose>
+      <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json, including managed `vv-*` built-ins, without resetting targets that are not listed in the selected preset.</purpose>
       <path>src/commands/preset.ts + src/lib/agent-models.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
@@ -209,7 +209,7 @@
     </M-CLI-PATCH-PROVIDER>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, the top-level preset command with default preset names, and the `agent set|unset <target-id>` flow.</purpose>
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, the top-level preset command with managed `vv-*` built-in preset names, and the `agent set|unset <target-id>` flow.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>

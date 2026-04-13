@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.2.2
+// VERSION: 0.2.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, partial preset application including OpenCode default targets, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.2 - Added a CLI regression test for bare `vvoc preset <name>` dispatch.]
+//   LAST_CHANGE: [v0.2.3 - Updated built-in preset fixtures to the managed `vv-*` names while keeping coverage for custom user presets.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -35,15 +35,15 @@ import {
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 describe("preset helpers", () => {
-  test("listConfiguredPresets shows the seeded openai, zai, and minimax presets", () => {
+  test("listConfiguredPresets shows the seeded vv-openai, vv-zai, and vv-minimax presets", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual(["minimax", "openai", "zai"]);
+    expect(presets).toEqual(["vv-minimax", "vv-openai", "vv-zai"]);
   });
 
   test("formatPreset renders the expected preset object", () => {
-    const resolved = resolvePreset("openai", createDefaultVvocConfig().presets);
+    const resolved = resolvePreset("vv-openai", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
 
     expect(output).toContain(
@@ -84,7 +84,7 @@ describe("applyPreset", () => {
                 explore: "openai/gpt-5.4-mini",
               },
             },
-            zai: defaultConfig.presets.zai,
+            zai: defaultConfig.presets["vv-zai"],
           },
         }),
         "utf8",
@@ -217,7 +217,7 @@ describe("applyPreset", () => {
       await mkdir(join(configHome, "vvoc"), { recursive: true });
 
       await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
-      await applyPreset("openai", {
+      await applyPreset("vv-openai", {
         cwd: projectDir,
         configDir: configHome,
         scope: "project",
@@ -254,7 +254,7 @@ describe("applyPreset", () => {
           "run",
           cliPath,
           "preset",
-          "zai",
+          "vv-zai",
           "--scope",
           "project",
           "--config-dir",
@@ -273,7 +273,7 @@ describe("applyPreset", () => {
 
       expect(exitCode).toBe(0);
       expect(stderr).toBe("");
-      expect(stdout).toContain("Applied preset zai (project):");
+      expect(stdout).toContain("Applied preset vv-zai (project):");
       expect(await readOpenCodeDefaultModel(paths, "model")).toBe("zai-coding-plan/glm-5.1");
       expect(await readOpenCodeDefaultModel(paths, "small_model")).toBe(
         "zai-coding-plan/glm-4.5-airx",

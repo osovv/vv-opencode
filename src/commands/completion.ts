@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.9
+// VERSION: 0.5.10
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `agent set|unset <target-id>` flow, and rc file patching.
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.9 - Renamed the patch command completions and added the zai patch preset.]
+//   LAST_CHANGE: [v0.5.10 - Updated built-in preset completions to the managed `vv-*` preset names.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -49,7 +49,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
-const VVOC_PRESET_NAMES = ["openai", "zai", "minimax"];
+const VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_AGENT_COMMANDS = ["set", "unset", "list"];
 const VVOC_AGENT_TARGETS = [...SUPPORTED_MODEL_TARGET_NAMES];
@@ -356,6 +356,7 @@ export function generateZshCompletion(): string {
 }
 
 export function generateFishCompletion(): string {
+  const presetCommands = [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ");
   const lines: string[] = ["# fish completion for vvoc", "", "function __vvoc_commands"];
 
   for (const cmd of VVOC_TOP_LEVEL_COMMANDS) {
@@ -374,7 +375,7 @@ export function generateFishCompletion(): string {
     "end",
     "",
     "function __vvoc_preset_cmds",
-    "  echo " + [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" "),
+    "  echo " + presetCommands,
     "end",
     "",
     "function __vvoc_preset_names",
@@ -398,7 +399,9 @@ export function generateFishCompletion(): string {
     'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_agent_target_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from patch-provider" -f -a "(__vvoc_patch_provider_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from list show openai zai" -f -a "(__vvoc_preset_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from ' +
+      presetCommands +
+      '" -f -a "(__vvoc_preset_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from preset; and __fish_seen_subcommand_from show" -f -a "(__vvoc_preset_names)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from plugin" -f -a "(__vvoc_plugin_cmds)"',
   );

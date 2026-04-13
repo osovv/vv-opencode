@@ -1,4 +1,4 @@
-  <VerificationPlan VERSION="0.4.11">
+  <VerificationPlan VERSION="0.4.12">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -18,13 +18,13 @@
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Canonical vvoc.json and managed prompt files are rewritten canonically, the managed enhancer/subagent registration stays present in OpenCode config, legacy v1 docs migrate to v2 with seeded default presets, and current explicit values survive the vvoc.json rewrite where applicable.</expected-outcome>
+      <expected-outcome>Canonical vvoc.json and managed prompt files are rewritten canonically, the managed enhancer/subagent registration stays present in OpenCode config, legacy v1 docs migrate to v2 with seeded managed `vv-*` presets, those managed presets are refreshed to vvoc defaults, and current explicit user-owned values survive the vvoc.json rewrite where applicable.</expected-outcome>
       <required-signals>
         <trace-sequence>inspect canonical config -&gt; parse current values -&gt; render canonical JSON/markdown -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
     <VF-PRESET-SWITCH NAME="PresetSwitch" USE_CASES="UC-007" DATA_FLOW="DF-PRESET-SWITCH" PRIORITY="medium">
-      <scenario>User applies a named preset such as `vvoc preset openai` or `vvoc preset zai`.</scenario>
+      <scenario>User applies a named preset such as `vvoc preset vv-openai` or `vvoc preset vv-zai`.</scenario>
       <expected-outcome>Only the targets declared in the selected preset change, unlisted targets remain untouched, and existing vvoc/OpenCode write paths are reused for canonical and OpenCode-managed targets including top-level OpenCode model defaults.</expected-outcome>
       <required-signals>
         <trace-sequence>read canonical vvoc.json -&gt; resolve preset -&gt; write listed guardian/memory/OpenCode target overrides -&gt; print per-target summary</trace-sequence>
@@ -91,7 +91,7 @@
         <scenario-5 kind="success">Managed enhancer/subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references and correct `primary` versus `subagent` modes.</scenario-5>
         <scenario-6 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, managed prompt files are scaffolded in the scope-correct agents directory, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
         <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
-        <scenario-8 kind="success">Schema v2 accepts the `presets` map, shared agent validation rejects malformed special-agent model syntax, and strict reads normalize legacy v1 documents until sync rewrites them to v2.</scenario-8>
+        <scenario-8 kind="success">Schema v2 accepts the `presets` map, shared agent validation rejects malformed special-agent model syntax for user presets, managed `vv-*` presets are refreshed during canonical rewrites, and strict reads normalize legacy v1 documents until sync rewrites them to v2.</scenario-8>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -257,7 +257,7 @@
         <check-3>bun run build</check-3>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">A fully seeded canonical vvoc.json, including the seeded preset map, reports OK.</scenario-1>
+        <scenario-1 kind="success">A fully seeded canonical vvoc.json, including the managed `vv-*` preset map, reports OK.</scenario-1>
         <scenario-2 kind="failure">Invalid JSON reports parse error with line/column.</scenario-2>
         <scenario-3 kind="failure">Missing required section or invalid field type reports the schema path and error.</scenario-3>
       </scenarios>
@@ -276,8 +276,8 @@
         <check-4>bun run build</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">`preset list` shows the default `openai`, `zai`, and `minimax` presets.</scenario-1>
-        <scenario-2 kind="success">`preset show openai` renders the stored preset object from canonical vvoc.json.</scenario-2>
+        <scenario-1 kind="success">`preset list` shows the default `vv-openai`, `vv-zai`, and `vv-minimax` presets.</scenario-1>
+        <scenario-2 kind="success">`preset show vv-openai` renders the stored preset object from canonical vvoc.json.</scenario-2>
         <scenario-3 kind="success">Applying a partial preset only changes the targets listed in that preset and leaves unlisted targets untouched, including top-level OpenCode defaults.</scenario-3>
         <scenario-4 kind="failure">Unknown preset names fail with a clear error that includes the available preset names.</scenario-4>
         <scenario-5 kind="failure">Malformed `guardian`, `memory-reviewer`, or `default` preset model strings fail through the same validation rules used by `vvoc agent set`.</scenario-5>

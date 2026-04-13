@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.8.2
+// VERSION: 0.8.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider object/baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider object/baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, managed built-in preset refresh, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
 //   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
 //   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.2 - Added coverage for provider object patch writes used by patch-provider.]
+//   LAST_CHANGE: [v0.8.3 - Added coverage for managed `vv-*` preset refresh while preserving user-defined presets.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -55,7 +55,7 @@ import {
   writeProviderBaseUrl,
   writeManagedAgentModel,
 } from "./opencode.js";
-import { VVOC_CONFIG_SCHEMA_URL } from "./vvoc-config.js";
+import { createDefaultVvocConfig, VVOC_CONFIG_SCHEMA_URL } from "./vvoc-config.js";
 
 describe("ensurePackageConfigText", () => {
   test("creates a new config when none exists", () => {
@@ -158,7 +158,7 @@ describe("canonical vvoc config helpers", () => {
       expect(config?.memory.enabled).toBe(false);
       expect(config?.memory.defaultSearchLimit).toBe(12);
       expect(config?.secretsRedaction.secret).toBe("${VVOC_SECRET}");
-      expect(Object.keys(config?.presets ?? {})).toEqual(["openai", "zai", "minimax"]);
+      expect(Object.keys(config?.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -218,7 +218,7 @@ describe("canonical vvoc config helpers", () => {
       const loaded = await readVvocConfig(paths);
       expect(loaded?.guardian.timeoutMs).toBe(12345);
       expect(loaded?.memory.defaultSearchLimit).toBe(12);
-      expect(Object.keys(loaded?.presets ?? {})).toEqual(["openai", "zai", "minimax"]);
+      expect(Object.keys(loaded?.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
 
       const syncResult = await syncVvocConfig(paths);
       expect(syncResult.action).toBe("updated");
@@ -245,7 +245,81 @@ describe("canonical vvoc config helpers", () => {
       expect(parsed.secretsRedaction.ttlMs).toBe(60000);
       expect(parsed.secretsRedaction.maxMappings).toBe(77);
       expect(parsed.secretsRedaction.debug).toBe(true);
-      expect(Object.keys(parsed.presets ?? {})).toEqual(["openai", "zai", "minimax"]);
+      expect(Object.keys(parsed.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("syncVvocConfig refreshes managed vv presets while preserving user presets", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-v2-managed-preset-refresh-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+
+      await writeFile(
+        paths.vvocConfigPath,
+        JSON.stringify(
+          {
+            ...createDefaultVvocConfig(),
+            presets: {
+              "vv-zai": {
+                description: "User-edited managed preset",
+                agents: {
+                  default: "openai/gpt-5.4",
+                  "small-model": "openai/gpt-5.4-mini",
+                  guardian: "openai/gpt-5.4-mini",
+                  explore: "openai/gpt-5.4-mini",
+                },
+              },
+              zai: {
+                description: "User-owned legacy preset",
+                agents: {
+                  default: "openai/gpt-5.4",
+                  guardian: "openai/gpt-5.4-mini",
+                  explore: "openai/gpt-5.4-mini",
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const loaded = await readVvocConfig(paths);
+      expect(Object.keys(loaded?.presets ?? {})).toEqual([
+        "vv-openai",
+        "vv-zai",
+        "vv-minimax",
+        "zai",
+      ]);
+      expect(loaded?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.1");
+      expect(loaded?.presets.zai?.agents.default).toBe("openai/gpt-5.4");
+
+      const syncResult = await syncVvocConfig(paths);
+      expect(syncResult.action).toBe("updated");
+
+      const rawText = await readFile(paths.vvocConfigPath, "utf8");
+      const parsed = JSON.parse(rawText) as {
+        presets?: Record<string, { agents?: Record<string, string> }>;
+      };
+
+      expect(Object.keys(parsed.presets ?? {})).toEqual([
+        "vv-openai",
+        "vv-zai",
+        "vv-minimax",
+        "zai",
+      ]);
+      expect(parsed.presets?.["vv-zai"]?.agents?.default).toBe("zai-coding-plan/glm-5.1");
+      expect(parsed.presets?.zai?.agents?.default).toBe("openai/gpt-5.4");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

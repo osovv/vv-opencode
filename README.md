@@ -42,7 +42,7 @@ vvoc install --scope project
 - ensure OpenCode has a pinned `@osovv/vv-opencode@<version>` package entry
 - register managed agents and scaffold their prompt files
 - create or refresh canonical `vvoc.json`
-- seed starter presets: `openai`, `zai`, `minimax`
+- refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
 
 That package entry exports four plugins:
 
@@ -163,14 +163,16 @@ Presets are stored in canonical `vvoc.json` and are useful when you want to swit
 
 ```bash
 vvoc preset list
-vvoc preset show openai
-vvoc preset openai
-vvoc preset zai --scope project
+vvoc preset show vv-openai
+vvoc preset vv-openai
+vvoc preset vv-zai --scope project
 ```
 
 Preset rules:
 
-- starter presets are `openai`, `zai`, and `minimax`
+- managed built-in presets are `vv-openai`, `vv-zai`, and `vv-minimax`
+- `vvoc install` and `vvoc sync` always refresh those managed `vv-*` presets back to vvoc defaults
+- user-defined presets with other names are preserved as-is, including legacy names such as `openai`, `zai`, and `minimax`
 - presets may be partial
 - applying a preset only changes the targets listed in that preset
 - OpenCode-side targets respect `--scope`
