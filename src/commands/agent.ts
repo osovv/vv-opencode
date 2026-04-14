@@ -1,8 +1,8 @@
 // FILE: src/commands/agent.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage model overrides for vvoc-owned agents plus selected OpenCode model targets.
-//   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in, managed, and top-level OpenCode model set/unset/list operations via the vvoc agent command tree.
+//   SCOPE: Guardian and memory-reviewer section writes within vvoc.json plus built-in, managed, and top-level OpenCode model plus variant set/unset/list operations via the vvoc agent command tree.
 //   DEPENDS: [citty, src/lib/agent-models.ts, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -14,27 +14,28 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Added OpenCode default and small-model targets to the vvoc agent command tree.]
+//   LAST_CHANGE: [v0.9.0 - Added build/plan targets and variant-aware OpenCode agent overrides while keeping top-level default model fields plain.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
-  CONFIGURABLE_OPENCODE_SUBAGENTS,
-  isConfigurableOpenCodeSubagentName,
+  CONFIGURABLE_OPENCODE_AGENTS,
+  isConfigurableOpenCodeAgentName,
   isOpenCodeDefaultModelTargetName,
   MODEL_TARGET_NAME_CHOICES,
   parseModelTargetName,
   parseGuardianStyleModelArg,
   parseOpenCodeModelArg,
+  parseOpenCodeAgentModelArg,
   formatAgentModel,
 } from "../lib/agent-models.js";
 import { MANAGED_OPENCODE_AGENTS } from "../lib/managed-agents.js";
 import {
   describeWriteResult,
   installManagedAgentPrompts,
+  readManagedAgentOverrides,
+  readOpenCodeAgentOverride,
   readOpenCodeDefaultModel,
-  readOpenCodeAgentModel,
-  readManagedAgentModels,
   readVvocConfig,
   resolvePaths,
   type Scope,
@@ -69,7 +70,7 @@ const modelArg = {
   type: "positional" as const,
   required: true,
   description:
-    "Model in provider/model-id format. Guardian and memory-reviewer also accept provider/model-id[:variant].",
+    "Model in provider/model-id format. Guardian, memory-reviewer, build, plan, general, explore, and managed OpenCode agents also accept provider/model-id[:variant].",
 };
 
 const agentSet = defineCommand({
@@ -107,11 +108,11 @@ const agentSet = defineCommand({
       return;
     }
 
-    const model = parseOpenCodeModelArg(args.model, "set");
-
-    if (isConfigurableOpenCodeSubagentName(agentName)) {
+    if (isConfigurableOpenCodeAgentName(agentName)) {
+      const { model, variant } = parseOpenCodeAgentModelArg(args.model, "set");
       const result = await writeOpenCodeAgentModel(paths, agentName, {
         model,
+        variant,
         ensureEntry: true,
       });
       console.log(describeWriteResult(result));
@@ -119,8 +120,10 @@ const agentSet = defineCommand({
     }
 
     await installManagedAgentPrompts(paths, { force: false });
+    const { model, variant } = parseOpenCodeAgentModelArg(args.model, "set");
     const result = await writeManagedAgentModel(paths, agentName, {
       model,
+      variant,
       ensureEntry: true,
     });
     console.log(describeWriteResult(result));
@@ -159,7 +162,7 @@ const agentUnset = defineCommand({
       return;
     }
 
-    if (isConfigurableOpenCodeSubagentName(agentName)) {
+    if (isConfigurableOpenCodeAgentName(agentName)) {
       const result = await writeOpenCodeAgentModel(paths, agentName, {
         ensureEntry: false,
       });
@@ -193,7 +196,7 @@ const agentList = defineCommand({
     const vvocConfig = await readVvocConfig(paths);
     const guardianConfig = vvocConfig?.guardian;
     const memoryConfig = vvocConfig?.memory;
-    const managedModels = await readManagedAgentModels(paths);
+    const managedModels = await readManagedAgentOverrides(paths);
 
     console.log(`Model targets (${scope}):`);
     console.log(`  default: ${formatAgentModel(await readOpenCodeDefaultModel(paths, "model"))}`);
@@ -205,13 +208,18 @@ const agentList = defineCommand({
       `  memory-reviewer: ${formatAgentModel(memoryConfig?.reviewerModel, memoryConfig?.reviewerVariant)}`,
     );
 
-    for (const agentName of CONFIGURABLE_OPENCODE_SUBAGENTS) {
-      const model = await readOpenCodeAgentModel(paths, agentName);
-      console.log(`  ${agentName}: ${formatAgentModel(model)}`);
+    for (const agentName of CONFIGURABLE_OPENCODE_AGENTS) {
+      const { model, variant } = await readOpenCodeAgentOverride(paths, agentName);
+      console.log(`  ${agentName}: ${formatAgentModel(model, variant)}`);
     }
 
     for (const definition of MANAGED_OPENCODE_AGENTS) {
-      console.log(`  ${definition.name}: ${formatAgentModel(managedModels[definition.name])}`);
+      console.log(
+        `  ${definition.name}: ${formatAgentModel(
+          managedModels[definition.name].model,
+          managedModels[definition.name].variant,
+        )}`,
+      );
     }
   },
 });

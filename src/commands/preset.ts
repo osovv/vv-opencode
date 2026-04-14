@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.ts
-// VERSION: 0.2.1
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: List, show, and apply declarative named model-target presets from canonical vvoc.json.
 //   SCOPE: Canonical preset lookup, preset rendering, scope-aware preset application, and per-target summary output through existing vvoc and OpenCode write paths.
@@ -18,17 +18,18 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.1 - Fixed `vvoc preset <name>` dispatch so bare preset names are applied instead of being parsed as unknown subcommands.]
+//   LAST_CHANGE: [v0.3.0 - Added variant-aware OpenCode agent preset application while keeping top-level default model fields plain.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
   formatAgentModel,
-  isConfigurableOpenCodeSubagentName,
+  isConfigurableOpenCodeAgentName,
   isOpenCodeDefaultModelTargetName,
   isSpecialAgentName,
   normalizeModelTargetOverride,
   parseGuardianStyleModelArg,
+  parseOpenCodeAgentModelArg,
   type OpenCodeDefaultModelTargetName,
   type SupportedModelTargetName,
 } from "../lib/agent-models.js";
@@ -194,21 +195,31 @@ export async function applyPreset(
       continue;
     }
 
-    if (isConfigurableOpenCodeSubagentName(targetName)) {
+    if (isConfigurableOpenCodeAgentName(targetName)) {
+      const { model, variant } = parseOpenCodeAgentModelArg(
+        normalizedValue,
+        `preset ${resolved.name}`,
+      );
       const result = await writeOpenCodeAgentModel(paths, targetName, {
-        model: normalizedValue,
+        model,
+        variant,
         ensureEntry: true,
       });
-      changes.push({ targetName, model: normalizedValue, result });
+      changes.push({ targetName, model: formatAgentModel(model, variant), result });
       continue;
     }
 
     if (isManagedOpenCodeAgentName(targetName)) {
+      const { model, variant } = parseOpenCodeAgentModelArg(
+        normalizedValue,
+        `preset ${resolved.name}`,
+      );
       const result = await writeManagedAgentModel(paths, targetName, {
-        model: normalizedValue,
+        model,
+        variant,
         ensureEntry: true,
       });
-      changes.push({ targetName, model: normalizedValue, result });
+      changes.push({ targetName, model: formatAgentModel(model, variant), result });
       continue;
     }
 

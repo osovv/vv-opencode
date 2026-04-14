@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.2.3
+// VERSION: 0.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, partial preset application including OpenCode default targets, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.3 - Updated built-in preset fixtures to the managed `vv-*` names while keeping coverage for custom user presets.]
+//   LAST_CHANGE: [v0.3.1 - Updated the built-in vv-openai preset to use the vv-managed GPT-5.4 xhigh alias model as the default target.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -49,7 +49,7 @@ describe("preset helpers", () => {
     expect(output).toContain(
       '"description": "Starter OpenAI overrides for common vvoc model targets."',
     );
-    expect(output).toContain('"default": "openai/gpt-5.4:xhigh"');
+    expect(output).toContain('"default": "openai/vv-gpt-5.4-xhigh"');
     expect(output).toContain('"small-model": "openai/gpt-5.4-mini"');
     expect(output).toContain('"guardian": "openai/gpt-5.4-mini"');
     expect(output).toContain('"explore": "openai/gpt-5.4-mini"');
@@ -79,7 +79,8 @@ describe("applyPreset", () => {
             openai: {
               description: "Partial OpenAI preset",
               agents: {
-                default: "openai/gpt-5.4:xhigh",
+                default: "openai/gpt-5.4",
+                build: "openai/gpt-5.4:xhigh",
                 guardian: "openai/gpt-5.4-mini",
                 explore: "openai/gpt-5.4-mini",
               },
@@ -118,6 +119,7 @@ describe("applyPreset", () => {
       expect(applied.changes.map((change) => change.targetName)).toEqual([
         "guardian",
         "default",
+        "build",
         "explore",
       ]);
 
@@ -127,7 +129,7 @@ describe("applyPreset", () => {
       expect(vvocConfig?.memory.reviewerModel).toBe("anthropic/claude-sonnet-4-5");
       expect(vvocConfig?.memory.reviewerVariant).toBe("high");
 
-      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-5.4:xhigh");
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-5.4");
       expect(await readOpenCodeAgentModel(paths, "general")).toBe("anthropic/claude-sonnet-4-5");
       expect(await readOpenCodeAgentModel(paths, "explore")).toBe("openai/gpt-5.4-mini");
     } finally {
@@ -224,7 +226,7 @@ describe("applyPreset", () => {
       });
 
       const opencodeText = await readFile(paths.opencodeConfigPath, "utf8");
-      expect(opencodeText).toContain('"model": "openai/gpt-5.4:xhigh"');
+      expect(opencodeText).toContain('"model": "openai/vv-gpt-5.4-xhigh"');
       expect(opencodeText).toContain('"small_model": "openai/gpt-5.4-mini"');
       expect(opencodeText).toContain('"explore"');
     } finally {

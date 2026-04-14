@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.10
+// VERSION: 0.5.12
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `agent set|unset <target-id>` flow, and rc file patching.
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.10 - Updated built-in preset completions to the managed `vv-*` preset names.]
+//   LAST_CHANGE: [v0.5.12 - Added the openai patch-provider preset to shell completion output.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -47,7 +47,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 ];
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
-const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai"];
+const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai", "openai"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
 const VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax"];
 const VVOC_PLUGIN_COMMANDS = ["list"];

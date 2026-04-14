@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.7.2
+// VERSION: 0.8.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
 //   SCOPE: Strict JSON parse error reporting, version-aware schema validation, preset semantic validation, and pass/fail terminal output.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.2 - Updated canonical preset fixtures to the managed `vv-*` names and documented managed preset validation behavior.]
+//   LAST_CHANGE: [v0.8.1 - Updated the canonical vv-openai fixture to the vv-managed OpenAI alias model used for the default target.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -81,7 +81,7 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
           "vv-openai": {
             description: "Starter OpenAI preset",
             agents: {
-              default: "openai/gpt-5.4:xhigh",
+              default: "openai/vv-gpt-5.4-xhigh",
               "small-model": "openai/gpt-5.4-mini",
               guardian: "openai/gpt-5.4-mini",
               explore: "openai/gpt-5.4-mini",
@@ -101,6 +101,31 @@ test("validateVvocConfigContent - v2 presets pass schema validation", () => {
               "small-model": "minimax-coding-plan/MiniMax-M2.1",
               guardian: "minimax-coding-plan/MiniMax-M2.1",
               explore: "minimax-coding-plan/MiniMax-M2.1",
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(true);
+  expect(result.errors).toHaveLength(0);
+});
+
+test("validateVvocConfigContent - user preset OpenCode agent variants pass schema validation", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        ...createDefaultVvocConfig(),
+        presets: {
+          custom: {
+            agents: {
+              build: "openai/gpt-5.4:xhigh",
+              plan: "openai/gpt-5.4:high",
+              general: "openai/gpt-5.4:medium",
             },
           },
         },
@@ -258,7 +283,7 @@ test("validateVvocConfigContent - invalid preset default-model syntax fails", ()
         presets: {
           invalid: {
             agents: {
-              default: "not-a-model",
+              default: "openai/gpt-5.4:xhigh",
             },
           },
         },
@@ -273,8 +298,7 @@ test("validateVvocConfigContent - invalid preset default-model syntax fails", ()
   expect(
     result.errors.some(
       (error) =>
-        error.includes("/presets/invalid/agents/default") &&
-        error.includes("provider/model-id format"),
+        error.includes("/presets/invalid/agents/default") && error.includes("without :variant"),
     ),
   ).toBe(true);
 });

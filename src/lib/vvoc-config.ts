@@ -1,8 +1,8 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 2.1.0
+// VERSION: 2.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
-//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration.
+//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
 //   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY-STORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
@@ -41,7 +41,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
-//   LAST_CHANGE: [v2.1.0 - Switched managed built-in presets to `vv-*` names and refresh them on canonical config rewrites while preserving user presets.]
+//   LAST_CHANGE: [v2.3.0 - Switched the built-in vv-openai preset to the vv-managed OpenAI alias model so the default target can carry xhigh reasoning exactly.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -352,7 +352,7 @@ function createBuiltinVvocPresets(): VvocPresets {
     "vv-openai": createVvocPreset({
       description: "Starter OpenAI overrides for common vvoc model targets.",
       agents: {
-        default: "openai/gpt-5.4:xhigh",
+        default: "openai/vv-gpt-5.4-xhigh",
         "small-model": "openai/gpt-5.4-mini",
         guardian: "openai/gpt-5.4-mini",
         explore: "openai/gpt-5.4-mini",

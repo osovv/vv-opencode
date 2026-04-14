@@ -1,4 +1,4 @@
-  <VerificationPlan VERSION="0.4.12">
+  <VerificationPlan VERSION="0.4.14">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <deterministic-first>true</deterministic-first>
@@ -25,7 +25,7 @@
     </VF-CONFIG-SYNC>
     <VF-PRESET-SWITCH NAME="PresetSwitch" USE_CASES="UC-007" DATA_FLOW="DF-PRESET-SWITCH" PRIORITY="medium">
       <scenario>User applies a named preset such as `vvoc preset vv-openai` or `vvoc preset vv-zai`.</scenario>
-      <expected-outcome>Only the targets declared in the selected preset change, unlisted targets remain untouched, and existing vvoc/OpenCode write paths are reused for canonical and OpenCode-managed targets including top-level OpenCode model defaults.</expected-outcome>
+      <expected-outcome>Only the targets declared in the selected preset change, unlisted targets remain untouched, existing vvoc/OpenCode write paths are reused for canonical and OpenCode-managed targets including top-level OpenCode model defaults, and variant-aware OpenCode agent targets are translated into native `model` plus `variant` fields.</expected-outcome>
       <required-signals>
         <trace-sequence>read canonical vvoc.json -&gt; resolve preset -&gt; write listed guardian/memory/OpenCode target overrides -&gt; print per-target summary</trace-sequence>
       </required-signals>
@@ -91,7 +91,7 @@
         <scenario-5 kind="success">Managed enhancer/subagent registrations point OpenCode at `./.vvoc/agents/*.md` or `$XDG_CONFIG_HOME/vvoc/agents/*.md` with scope-correct relative prompt references and correct `primary` versus `subagent` modes.</scenario-5>
         <scenario-6 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, managed prompt files are scaffolded in the scope-correct agents directory, model overrides round-trip through OpenCode config for both vvoc-managed agents and the built-in `general` and `explore` agents, and only guardian keeps an explicit `steps` limit.</scenario-6>
         <scenario-7 kind="success">Provider baseURL patching preserves JSONC comments and writes `provider.stepfun.options.baseURL` conservatively.</scenario-7>
-        <scenario-8 kind="success">Schema v2 accepts the `presets` map, shared agent validation rejects malformed special-agent model syntax for user presets, managed `vv-*` presets are refreshed during canonical rewrites, and strict reads normalize legacy v1 documents until sync rewrites them to v2.</scenario-8>
+        <scenario-8 kind="success">Schema v2 accepts the `presets` map, shared agent validation rejects malformed special-agent syntax, user presets may use `provider/model:variant` for OpenCode agent targets such as build/plan/general/explore, managed `vv-*` presets are refreshed during canonical rewrites, and strict reads normalize legacy v1 documents until sync rewrites them to v2.</scenario-8>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -114,7 +114,7 @@
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `version`, `patch-provider`, and `preset`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` emits valid guardian section JSON content.</scenario-2>
-        <scenario-3 kind="success">`vvoc agent list` reports top-level `default` and `small-model`, Guardian, memory-reviewer, the built-in `general` and `explore` agents, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents.</scenario-3>
+        <scenario-3 kind="success">`vvoc agent list` reports top-level `default` and `small-model`, the built-in `build`, `plan`, `general`, and `explore` agents, Guardian, memory-reviewer, the managed `enhancer` primary agent, and the four vvoc-managed OpenCode subagents, rendering configured variants with `provider/model:variant` formatting.</scenario-3>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -277,10 +277,11 @@
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">`preset list` shows the default `vv-openai`, `vv-zai`, and `vv-minimax` presets.</scenario-1>
-        <scenario-2 kind="success">`preset show vv-openai` renders the stored preset object from canonical vvoc.json.</scenario-2>
-        <scenario-3 kind="success">Applying a partial preset only changes the targets listed in that preset and leaves unlisted targets untouched, including top-level OpenCode defaults.</scenario-3>
-        <scenario-4 kind="failure">Unknown preset names fail with a clear error that includes the available preset names.</scenario-4>
-        <scenario-5 kind="failure">Malformed `guardian`, `memory-reviewer`, or `default` preset model strings fail through the same validation rules used by `vvoc agent set`.</scenario-5>
+        <scenario-2 kind="success">`preset show vv-openai` renders the stored preset object from canonical vvoc.json, including the `openai/vv-gpt-5.4-xhigh` default alias model.</scenario-2>
+        <scenario-3 kind="success">Applying a partial preset only changes the targets listed in that preset and leaves unlisted targets untouched, including top-level OpenCode defaults, while OpenCode agent targets with `provider/model:variant` are written as native `model` plus `variant` config fields.</scenario-3>
+        <scenario-4 kind="success">Applying `vv-openai` writes `openai/vv-gpt-5.4-xhigh` as the root OpenCode default model instead of relying on build/plan override workarounds.</scenario-4>
+        <scenario-5 kind="failure">Unknown preset names fail with a clear error that includes the available preset names.</scenario-5>
+        <scenario-6 kind="failure">Malformed `guardian`, `memory-reviewer`, or OpenCode agent preset model strings fail through the same validation rules used by `vvoc agent set`, and `default` / `small-model` reject `:variant` suffixes.</scenario-6>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -322,8 +323,9 @@
       <scenarios>
         <scenario-1 kind="success">`vvoc patch-provider stepfun-ai` writes `provider.stepfun.options.baseURL = https://api.stepfun.ai/v1` into the global OpenCode config.</scenario-1>
         <scenario-2 kind="success">`vvoc patch-provider zai` writes the `provider.zai-coding-plan.models.glm-4.5-airx` patch into the global OpenCode config without clobbering sibling model entries.</scenario-2>
-        <scenario-3 kind="success">Reapplying the same preset is idempotent and reports a kept result.</scenario-3>
-        <scenario-4 kind="failure">Unsupported preset names fail with a clear list of supported presets.</scenario-4>
+        <scenario-3 kind="success">`vvoc patch-provider openai` writes only `provider.openai.models.vv-gpt-5.4-xhigh` and sets root `model = openai/vv-gpt-5.4-xhigh` without changing `small_model`.</scenario-3>
+        <scenario-4 kind="success">Reapplying the same preset is idempotent and reports a kept result.</scenario-4>
+        <scenario-5 kind="failure">Unsupported preset names fail with a clear list of supported presets.</scenario-5>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -346,7 +348,7 @@
       <scenarios>
         <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, `patch-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-1>
         <scenario-2 kind="success">Zsh completion script registers `vvoc` via `#compdef` and `compdef` markers so the installed file works when sourced or loaded from completion paths.</scenario-2>
-        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, `patch-provider`, and the `agent set|unset <agent-id>` flow including built-in `general` and `explore`.</scenario-3>
+        <scenario-3 kind="success">Fish completion script is valid fish syntax and exposes nested completions for `config`, `plugin`, `patch-provider`, and the `agent set|unset <agent-id>` flow including built-in `build`, `plan`, `general`, and `explore`.</scenario-3>
         <scenario-4 kind="success">The zsh install flow appends an idempotent loader block that initializes completion support before sourcing `_vvoc`.</scenario-4>
       </scenarios>
       <required-log-markers />

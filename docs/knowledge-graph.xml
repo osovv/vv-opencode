@@ -1,10 +1,10 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.3.6">
+  <Project NAME="@osovv/vv-opencode" VERSION="0.3.8">
     <keywords>opencode, plugins, workflow</keywords>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model overrides, shared model target validation, managed agent prompt scaffolding, canonical vvoc.json rendering with managed `vv-*` built-in preset refresh, and installation inspection with a single vvoc-owned config file.</purpose>
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model plus variant overrides, shared model target validation, managed agent prompt scaffolding, canonical vvoc.json rendering with managed `vv-*` built-in preset refresh, and installation inspection with a single vvoc-owned config file.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/agent-models.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json + schemas/vvoc/v2.json</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
@@ -43,7 +43,7 @@
     </M-CLI-COMMANDS>
 
     <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json, including managed `vv-*` built-ins, without resetting targets that are not listed in the selected preset.</purpose>
+      <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json, including managed `vv-*` built-ins and variant-aware OpenCode agent targets, without resetting targets that are not listed in the selected preset.</purpose>
       <path>src/commands/preset.ts + src/lib/agent-models.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
@@ -197,19 +197,19 @@
     </M-CLI-PLUGIN-LIST>
 
     <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override and the `zai` provider model patch.</purpose>
+      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override, the `zai` provider model patch, and the OpenAI alias-model patch that installs `openai/vv-gpt-5.4-xhigh` as the root default model.</purpose>
       <path>src/commands/patch-provider.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>
       <annotations>
         <fn-resolvePatchProviderPreset PURPOSE="Validate supported patch preset names and map them to concrete OpenCode writes." />
-        <fn-applyPatchProviderPreset PURPOSE="Resolve the global OpenCode config path and apply the selected preset." />
-        <cmd-patch_provider PURPOSE="vvoc patch-provider stepfun-ai|zai - CLI command for global OpenCode patch presets." />
+        <fn-applyPatchProviderPreset PURPOSE="Resolve the global OpenCode config path and apply the selected preset, including the OpenAI alias-model preset that also updates the root default model." />
+        <cmd-patch_provider PURPOSE="vvoc patch-provider stepfun-ai|zai|openai - CLI command for global OpenCode patch presets." />
       </annotations>
     </M-CLI-PATCH-PROVIDER>
 
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, the top-level preset command with managed `vv-*` built-in preset names, and the `agent set|unset <target-id>` flow.</purpose>
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, the top-level preset command with managed `vv-*` built-in preset names, and the `agent set|unset <target-id>` flow including built-in build/plan/general/explore targets.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>

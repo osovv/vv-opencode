@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.8.2
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, provider object patching, managed OpenCode agent registration/model plus variant overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
 //   INPUTS: Scope-aware filesystem paths, current OpenCode/vvoc config text, and validated config override values.
 //   OUTPUTS: Normalized OpenCode/vvoc config text, persisted config writes, and installation inspection snapshots.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
@@ -36,9 +36,11 @@
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian and managed OpenCode agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian and managed OpenCode agents.
 //   readOpenCodeAgentModel - Reads a model override for any OpenCode agent from config.
-//   writeOpenCodeAgentModel - Writes or removes a model override for any OpenCode agent in config.
+//   readOpenCodeAgentOverride - Reads a model plus variant override for any OpenCode agent from config.
+//   writeOpenCodeAgentModel - Writes or removes a model plus variant override for any OpenCode agent in config.
 //   readManagedAgentModels - Reads model overrides for the bundled vvoc-managed OpenCode agents from OpenCode config.
-//   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model override in OpenCode config.
+//   readManagedAgentOverrides - Reads model plus variant overrides for the bundled vvoc-managed OpenCode agents.
+//   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model plus variant override in OpenCode config.
 //   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
 //   writeMemoryConfig - Writes the memory section into the canonical vvoc.json document.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
@@ -46,7 +48,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.2 - Added a reusable provider object writer for patch-provider presets.]
+//   LAST_CHANGE: [v0.9.0 - Added OpenCode agent variant read/write helpers so vvoc can translate provider/model:variant into native agent config fields.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -121,6 +123,8 @@ export type WriteResult = {
 };
 
 export type ManagedAgentModelMap = Record<ManagedOpenCodeAgentName, string | undefined>;
+export type OpenCodeAgentOverride = { model?: string; variant?: string };
+export type ManagedAgentOverrideMap = Record<ManagedOpenCodeAgentName, OpenCodeAgentOverride>;
 
 export type InstallationInspection = {
   scope: Scope;
@@ -342,50 +346,54 @@ export async function syncManagedAgentPrompts(
 export async function readManagedAgentModels(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
 ): Promise<ManagedAgentModelMap> {
-  const models = Object.fromEntries(
-    MANAGED_OPENCODE_AGENTS.map((definition) => [definition.name, undefined]),
+  const overrides = await readManagedAgentOverrides(paths);
+  return Object.fromEntries(
+    Object.entries(overrides).map(([name, entry]) => [name, entry.model]),
   ) as ManagedAgentModelMap;
+}
+
+export async function readManagedAgentOverrides(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+): Promise<ManagedAgentOverrideMap> {
+  const overrides = Object.fromEntries(
+    MANAGED_OPENCODE_AGENTS.map((definition) => [definition.name, {}]),
+  ) as ManagedAgentOverrideMap;
   const currentText = await readOptionalText(paths.opencodeConfigPath);
 
   if (!currentText) {
-    return models;
+    return overrides;
   }
 
   const document = parseObjectDocument(currentText, paths.opencodeConfigPath);
   const agentMap = readAgentMap(document, paths.opencodeConfigPath);
 
   for (const definition of MANAGED_OPENCODE_AGENTS) {
-    const currentEntry = agentMap[definition.name];
-    if (currentEntry?.model !== undefined) {
-      models[definition.name] = readNonEmptyString(currentEntry.model, `${definition.name}: model`);
-    }
+    overrides[definition.name] = readAgentOverride(agentMap[definition.name], definition.name);
   }
 
-  return models;
+  return overrides;
 }
 
 export async function readOpenCodeAgentModel(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
   agentName: string,
 ): Promise<string | undefined> {
+  return (await readOpenCodeAgentOverride(paths, agentName)).model;
+}
+
+export async function readOpenCodeAgentOverride(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+  agentName: string,
+): Promise<OpenCodeAgentOverride> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
 
   if (!currentText) {
-    return undefined;
+    return {};
   }
 
   const document = parseObjectDocument(currentText, paths.opencodeConfigPath);
   const agentMap = readAgentMap(document, paths.opencodeConfigPath);
-  const currentEntry = agentMap[agentName];
-
-  if (currentEntry?.model === undefined) {
-    return undefined;
-  }
-
-  return readNonEmptyString(
-    currentEntry.model,
-    `${paths.opencodeConfigPath}: agent.${agentName}.model`,
-  );
+  return readAgentOverride(agentMap[agentName], `${paths.opencodeConfigPath}: agent.${agentName}`);
 }
 
 export async function readOpenCodeDefaultModel(
@@ -411,7 +419,7 @@ export async function readOpenCodeDefaultModel(
 export async function writeOpenCodeAgentModel(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
   agentName: string,
-  options: { model?: string; ensureEntry: boolean },
+  options: { model?: string; variant?: string; ensureEntry: boolean },
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
   if (!currentText && !options.ensureEntry) {
@@ -437,6 +445,12 @@ export async function writeOpenCodeAgentModel(
     nextEntry.model = options.model;
   } else {
     delete nextEntry.model;
+  }
+
+  if (options.model && options.variant) {
+    nextEntry.variant = options.variant;
+  } else {
+    delete nextEntry.variant;
   }
 
   const nextText = updateAgentEntryText(baseText, agentName, nextEntry);
@@ -502,7 +516,7 @@ export async function writeOpenCodeProviderObject(
 export async function writeManagedAgentModel(
   paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
   agentName: ManagedOpenCodeAgentName,
-  options: { model?: string; ensureEntry: boolean },
+  options: { model?: string; variant?: string; ensureEntry: boolean },
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
   if (!currentText && !options.ensureEntry) {
@@ -533,6 +547,12 @@ export async function writeManagedAgentModel(
     nextEntry.model = options.model;
   } else {
     delete nextEntry.model;
+  }
+
+  if (options.model && options.variant) {
+    nextEntry.variant = options.variant;
+  } else {
+    delete nextEntry.variant;
   }
 
   const nextText = updateAgentEntryText(baseText, agentName, nextEntry);
@@ -1016,6 +1036,21 @@ function updateAgentEntryText(text: string, agentName: string, entry: JsonObject
     }),
   );
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+function readAgentOverride(entry: JsonObject | undefined, label: string): OpenCodeAgentOverride {
+  if (!entry) {
+    return {};
+  }
+
+  return {
+    model:
+      entry.model === undefined ? undefined : readNonEmptyString(entry.model, `${label}.model`),
+    variant:
+      entry.variant === undefined
+        ? undefined
+        : readNonEmptyString(entry.variant, `${label}.variant`),
+  };
 }
 
 function ensureOpenCodeConfigText(text: string | undefined): string {

@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.8.3
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider object/baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, managed built-in preset refresh, OpenCode agent model overrides, Guardian section round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider object/baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, managed built-in preset refresh, OpenCode agent model plus variant overrides, Guardian section round-trips, and path resolution behavior.
 //   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
 //   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.3 - Added coverage for managed `vv-*` preset refresh while preserving user-defined presets.]
+//   LAST_CHANGE: [v0.9.0 - Added coverage for OpenCode agent variant overrides used by vv-openai and managed preset application.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -40,6 +40,8 @@ import {
   installVvocConfig,
   installManagedAgentPrompts,
   parseGuardianConfigText,
+  readManagedAgentOverrides,
+  readOpenCodeAgentOverride,
   readOpenCodeDefaultModel,
   readVvocConfig,
   readOpenCodeAgentModel,
@@ -438,7 +440,7 @@ describe("managed agent registration helpers", () => {
     expect(parsed.agent?.investitagor?.prompt).toBe("{file:../vvoc/agents/investitagor.md}");
   });
 
-  test("writes managed prompt files and round-trips model overrides", async () => {
+  test("writes managed prompt files and round-trips model plus variant overrides", async () => {
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-agents-"));
 
     try {
@@ -482,12 +484,15 @@ describe("managed agent registration helpers", () => {
 
       const setResult = await writeManagedAgentModel(paths, "enhancer", {
         model: "openai/gpt-5",
+        variant: "xhigh",
         ensureEntry: true,
       });
       expect(setResult.action).toBe("created");
 
       const models = await readManagedAgentModels(paths);
       expect(models.enhancer).toBe("openai/gpt-5");
+      const overrides = await readManagedAgentOverrides(paths);
+      expect(overrides.enhancer).toEqual({ model: "openai/gpt-5", variant: "xhigh" });
 
       const unsetResult = await writeManagedAgentModel(paths, "enhancer", {
         ensureEntry: false,
@@ -503,7 +508,7 @@ describe("managed agent registration helpers", () => {
 });
 
 describe("built-in OpenCode agent model helpers", () => {
-  test("writes and removes model overrides for general and explore", async () => {
+  test("writes and removes model plus variant overrides for build, plan, general, and explore", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-agent-model-"));
 
     try {
@@ -513,16 +518,21 @@ describe("built-in OpenCode agent model helpers", () => {
         configDir: configHome,
       });
 
-      const builtInAgents = ["general", "explore"] as const;
+      const builtInAgents = ["build", "plan", "general", "explore"] as const;
 
       for (const agentName of builtInAgents) {
         const setResult = await writeOpenCodeAgentModel(paths, agentName, {
           model: "openai/gpt-5-nano",
+          variant: agentName === "build" || agentName === "plan" ? "high" : undefined,
           ensureEntry: true,
         });
         const model = await readOpenCodeAgentModel(paths, agentName);
+        const override = await readOpenCodeAgentOverride(paths, agentName);
 
         expect(model).toBe("openai/gpt-5-nano");
+        expect(override.variant).toBe(
+          agentName === "build" || agentName === "plan" ? "high" : undefined,
+        );
         expect(["created", "updated"]).toContain(setResult.action);
       }
 
