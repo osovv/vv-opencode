@@ -1,5 +1,5 @@
 // FILE: src/plugins/guardian/guardian.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
 //   SCOPE: Guardian runtime config loading from canonical vvoc.json, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.1 - Prioritized roles.fast as Guardian's default runtime model while still honoring non-model guardian policy config and env model overrides.]
 //   LAST_CHANGE: [v0.4.0 - Resolved Guardian runtime model from roles.fast before subagent registration and added explicit guardian failure codes.]
 //   LAST_CHANGE: [v0.3.0 - Switched Guardian runtime config loading to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
@@ -368,8 +369,8 @@ async function loadGuardianRuntimeConfig(_directory: string): Promise<GuardianRu
   const baseConfig = canonicalConfig.guardian;
   const envConfig = readGuardianEnvConfig(sources, warnings);
   const merged = createGuardianConfig({
-    ...resolvedRoleSelection,
     ...baseConfig,
+    ...resolvedRoleSelection,
     ...envConfig,
   });
 
