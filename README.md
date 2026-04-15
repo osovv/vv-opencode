@@ -5,7 +5,7 @@ Portable OpenCode workflow package with a Bun CLI that installs and maintains Op
 ## What This Package Does
 
 - installs one pinned `@osovv/vv-opencode@<version>` entry into OpenCode
-- that package entry exports four plugins: `GuardianPlugin`, `MemoryPlugin`, `SystemContextInjectionPlugin`, `SecretsRedactionPlugin`
+- that package entry exports five plugins: `GuardianPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `SecretsRedactionPlugin`
 - creates and maintains canonical `vvoc` config at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
 - scaffolds managed prompt files under `vvoc/agents/`
 - registers managed OpenCode agents: `enhancer`, `implementer`, `spec-reviewer`, `code-reviewer`, `investitagor`
@@ -44,10 +44,11 @@ vvoc install --scope project
 - create or refresh canonical `vvoc.json`
 - refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
 
-That package entry exports four plugins:
+That package entry exports five plugins:
 
 - `GuardianPlugin`
 - `MemoryPlugin`
+- `ModelRolesPlugin`
 - `SystemContextInjectionPlugin`
 - `SecretsRedactionPlugin`
 
@@ -187,6 +188,12 @@ Preset rules:
 - special targets such as `guardian` and `memory-reviewer` still write to canonical `vvoc.json`
 
 ## Plugins Included
+
+### ModelRolesPlugin
+
+`ModelRolesPlugin` resolves `vv-role:*` model references at startup for supported OpenCode config fields (`model`, `small_model`, `agent.*.model`, and `command.*.model`).
+
+Agent role assignments that include `:variant` are translated into native `model` plus `variant` fields.
 
 ### GuardianPlugin
 
