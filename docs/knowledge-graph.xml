@@ -43,7 +43,7 @@
       </annotations>
     </M-CLI-MANAGED-AGENTS>
 
-    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, role, preset, patch-provider, completion, guardian config, and upgrade commands for the role-based model system.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
@@ -77,7 +77,7 @@
       </annotations>
     </M-CLI-ROLE>
 
-    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>List, show, and apply declarative named role presets stored in canonical vvoc.json without rewriting OpenCode config directly.</purpose>
       <path>src/commands/preset.ts + src/lib/model-roles.ts</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>

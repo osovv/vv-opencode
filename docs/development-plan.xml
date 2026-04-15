@@ -87,7 +87,7 @@
       </notes>
     </M-CLI-CONFIG>
 
-    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="planned">
+    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
         <purpose>Expose init, install, sync, status, doctor, version, role, preset, plugin list, config validate, patch-provider, completion, guardian config, and upgrade subcommands through citty while delegating role-aware config mutation to the helper layer.</purpose>
         <inputs>
@@ -343,7 +343,7 @@
       <verification-ref>V-M-CLI-ROLE</verification-ref>
     </M-CLI-ROLE>
 
-    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="3" STATUS="planned">
+    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="3" STATUS="implemented">
       <contract>
         <purpose>List, show, and apply declarative named role presets stored in canonical vvoc.json without mutating OpenCode config directly.</purpose>
         <inputs>
@@ -695,7 +695,7 @@
       <step-1 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="implemented" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Append reusable vvoc system guidance only for eligible primary agents via `chat.message`.</step-1>
       <step-2 module="M-PLUGIN-SECRETS-REDACTION" status="implemented" verification="V-M-PLUGIN-SECRETS-REDACTION">Redact secrets before LLM requests and restore placeholders after completion and before tool execution.</step-2>
     </Phase-5>
-    <Phase-6 name="Role-Based Model Semantics" status="planned">
+    <Phase-6 name="Role-Based Model Semantics" status="done">
       <goal>Replace target-based model overrides with semantic role assignment, runtime `vv-role:*` resolution, and role-centric CLI workflows.</goal>
       <step-1 module="M-MODEL-ROLES" status="implemented" verification="V-M-MODEL-ROLES">Implement the shared role contract, built-in role bindings, and concrete model-selection parsing helpers.</step-1>
       <step-2 module="M-CLI-CONFIG" status="implemented" verification="V-M-CLI-CONFIG">Upgrade canonical vvoc config to schema v3, seed built-in roles, remove target-based config fields, and keep OpenCode defaults and managed agents pinned to `vv-role:*` references.</step-2>
@@ -703,7 +703,7 @@
       <step-4 module="M-PLUGIN-GUARDIAN" status="implemented" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>
       <step-5 module="M-PLUGIN-MEMORY" status="implemented" verification="V-M-PLUGIN-MEMORY">Move memory-reviewer model selection to the built-in role system and drop reviewer model fields from canonical memory config.</step-5>
       <step-6 module="M-CLI-ROLE" status="implemented" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
-      <step-7 module="M-CLI-PRESET" status="planned" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>
+      <step-7 module="M-CLI-PRESET" status="implemented" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>
       <step-8 module="M-CLI-PATCH-PROVIDER" status="implemented" verification="V-M-CLI-PATCH-PROVIDER">Keep provider alias patching as a lower-level helper for concrete role assignments without mutating root OpenCode model fields.</step-8>
       <step-9 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
       <step-10 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
