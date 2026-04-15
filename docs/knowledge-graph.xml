@@ -111,7 +111,7 @@
       </annotations>
     </M-PLUGIN-MEMORY-STORE>
 
-    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="planned">
+    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent using built-in role-driven model selection.</purpose>
       <path>src/plugins/memory/index.ts + src/plugins/memory/system-instruction.md + templates/agents/memory-reviewer.md</path>
       <depends>M-PLUGIN-MEMORY-STORE, M-MODEL-ROLES</depends>
