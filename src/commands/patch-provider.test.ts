@@ -1,8 +1,8 @@
 // FILE: src/commands/patch-provider.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PATCH-PROVIDER - global OpenCode patch presets.
-//   SCOPE: Preset validation plus global OpenCode provider, provider-specific patch application, and OpenAI alias-default patch application.
+//   SCOPE: Preset validation plus global OpenCode provider and provider-specific patch application without root model rewrites.
 //   INPUTS: Built-in patch preset names and temp config homes.
 //   OUTPUTS: Assertions over rewritten global OpenCode config content.
 //   DEPENDS: [bun:test, src/commands/patch-provider.ts]
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Added coverage for the openai patch preset that installs the vv-gpt-5.4-xhigh alias model and makes it the global default.]
+//   LAST_CHANGE: [v0.4.0 - Updated openai coverage to enforce provider-only alias patching while preserving root model role references.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -45,17 +45,15 @@ describe("resolvePatchProviderPreset", () => {
 
   test("returns the built-in openai alias patch", () => {
     expect(resolvePatchProviderPreset("openai")).toMatchObject({
-      kind: "provider-object-and-default-model",
+      kind: "provider-object",
       providerID: "openai",
-      model: "openai/vv-gpt-5.4-xhigh",
-      summary:
-        "provider.openai.models.vv-gpt-5.4-xhigh patched and model set to openai/vv-gpt-5.4-xhigh",
+      summary: "provider.openai.models.vv-gpt-5.4-xhigh patched",
     });
   });
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, zai, openai",
     );
   });
 });
@@ -113,7 +111,7 @@ describe("applyPatchProviderPreset", () => {
     }
   });
 
-  test("writes the global openai alias patch and sets it as the default model", async () => {
+  test("writes the global openai alias patch without mutating root model fields", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -146,7 +144,7 @@ describe("applyPatchProviderPreset", () => {
       };
 
       expect(result.action).toBe("created");
-      expect(parsed.model).toBe("openai/vv-gpt-5.4-xhigh");
+      expect(parsed.model).toBeUndefined();
       expect(parsed.small_model).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]).toEqual({
         name: "VV GPT-5.4-XHigh",
@@ -163,7 +161,7 @@ describe("applyPatchProviderPreset", () => {
     }
   });
 
-  test("reapplying the openai patch keeps sibling models and becomes idempotent", async () => {
+  test("reapplying the openai patch keeps sibling models, preserves root role refs, and becomes idempotent", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -182,8 +180,8 @@ describe("applyPatchProviderPreset", () => {
                 },
               },
             },
-            model: "openai/gpt-5.4",
-            small_model: "openai/gpt-5.4-mini",
+            model: "vv-role:default",
+            small_model: "vv-role:fast",
           },
           null,
           2,
@@ -208,8 +206,8 @@ describe("applyPatchProviderPreset", () => {
 
       expect(first.result.action).toBe("updated");
       expect(second.result.action).toBe("kept");
-      expect(parsed.model).toBe("openai/vv-gpt-5.4-xhigh");
-      expect(parsed.small_model).toBe("openai/gpt-5.4-mini");
+      expect(parsed.model).toBe("vv-role:default");
+      expect(parsed.small_model).toBe("vv-role:fast");
       expect(parsed.provider?.openai?.models?.existing).toEqual({ name: "Existing" });
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]?.name).toBe("VV GPT-5.4-XHigh");
     } finally {
