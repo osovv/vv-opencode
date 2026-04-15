@@ -18,7 +18,7 @@
       </annotations>
     </M-MODEL-ROLES>
 
-    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="planned">
+    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
       <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
       <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
       <depends>M-MODEL-ROLES, M-CLI-MANAGED-AGENTS</depends>
