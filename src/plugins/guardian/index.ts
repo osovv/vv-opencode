@@ -1,5 +1,5 @@
 // FILE: src/plugins/guardian/guardian.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
 //   SCOPE: Guardian runtime config loading from canonical vvoc.json, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Resolved Guardian runtime model from roles.fast before subagent registration and added explicit guardian failure codes.]
 //   LAST_CHANGE: [v0.3.0 - Switched Guardian runtime config loading to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
@@ -22,6 +23,12 @@ import type { Message, Part } from "@opencode-ai/sdk";
 import { appendFile, readFile, unlink } from "node:fs/promises";
 import { loadManagedAgentPromptText } from "../../lib/managed-agents.js";
 import {
+  ROLE_REFERENCE_PREFIX,
+  resolveRoleReference,
+  type ModelRolesError,
+} from "../../lib/model-roles.js";
+import {
+  createDefaultVvocConfig,
   createGuardianConfig,
   loadLenientVvocConfigText,
   type GuardianConfigOverrides,
@@ -37,6 +44,7 @@ const GUARDIAN_VARIANT_ENV = "OPENCODE_GUARDIAN_VARIANT";
 const GUARDIAN_TIMEOUT_MS_ENV = "OPENCODE_GUARDIAN_TIMEOUT_MS";
 const GUARDIAN_APPROVAL_RISK_THRESHOLD_ENV = "OPENCODE_GUARDIAN_APPROVAL_RISK_THRESHOLD";
 const GUARDIAN_REVIEW_TOAST_DURATION_MS_ENV = "OPENCODE_GUARDIAN_REVIEW_TOAST_DURATION_MS";
+const GUARDIAN_RUNTIME_ROLE_REF = `${ROLE_REFERENCE_PREFIX}fast`;
 
 const MAX_TRANSCRIPT_MESSAGES = 12;
 const MAX_TRANSCRIPT_ENTRY_CHARS = 1_500;
@@ -113,6 +121,15 @@ type GuardianRuntimeConfig = {
   reviewToastDurationMs: number;
   sources: string[];
   warnings: string[];
+};
+
+type GuardianPluginErrorCode =
+  | "GUARDIAN_REVIEW_FAILED"
+  | "PERMISSION_REPLY_FAILED"
+  | "UNKNOWN_ROLE";
+
+type GuardianPluginError = Error & {
+  code: GuardianPluginErrorCode;
 };
 
 // START_BLOCK_GUARDIAN_AGENT_CONFIGURATION
@@ -244,6 +261,93 @@ function readGuardianEnvConfig(sources: string[], warnings: string[]): GuardianC
   return overrides;
 }
 
+function createGuardianPluginError(options: {
+  code: GuardianPluginErrorCode;
+  message: string;
+  cause?: unknown;
+}): GuardianPluginError {
+  const error = new Error(options.message) as GuardianPluginError;
+  error.code = options.code;
+  if (options.cause !== undefined) {
+    (error as Error & { cause?: unknown }).cause = options.cause;
+  }
+  return error;
+}
+
+function asModelRolesError(error: unknown): ModelRolesError | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const maybeError = error as Partial<ModelRolesError>;
+  if (typeof maybeError.code !== "string") {
+    return undefined;
+  }
+
+  return maybeError as ModelRolesError;
+}
+
+function resolveGuardianRoleSelection(roleMap: Record<string, string>): {
+  model: string;
+  variant?: string;
+} {
+  try {
+    const resolved = resolveRoleReference(GUARDIAN_RUNTIME_ROLE_REF, roleMap);
+    return {
+      model: `${resolved.provider}/${resolved.model}`,
+      variant: resolved.variant,
+    };
+  } catch (error) {
+    const code = asModelRolesError(error)?.code;
+    throw createGuardianPluginError({
+      code: "UNKNOWN_ROLE",
+      message:
+        code === "UNKNOWN_ROLE"
+          ? `UNKNOWN_ROLE: built-in role reference ${GUARDIAN_RUNTIME_ROLE_REF} could not be resolved`
+          : `UNKNOWN_ROLE: built-in role reference ${GUARDIAN_RUNTIME_ROLE_REF} resolved an invalid model selection`,
+      cause: error,
+    });
+  }
+}
+
+function loadConfiguredRoleMapOrThrow(
+  configText: string,
+  configPath: string,
+): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configText) as unknown;
+  } catch (error) {
+    throw createGuardianPluginError({
+      code: "UNKNOWN_ROLE",
+      message: `UNKNOWN_ROLE: cannot parse ${configPath} to resolve ${GUARDIAN_RUNTIME_ROLE_REF}`,
+      cause: error,
+    });
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw createGuardianPluginError({
+      code: "UNKNOWN_ROLE",
+      message: `UNKNOWN_ROLE: ${configPath} must contain a top-level object with roles`,
+    });
+  }
+
+  const roles = (parsed as { roles?: unknown }).roles;
+  if (!roles || typeof roles !== "object" || Array.isArray(roles)) {
+    throw createGuardianPluginError({
+      code: "UNKNOWN_ROLE",
+      message: `UNKNOWN_ROLE: ${configPath} must contain a roles object with fast role assignment`,
+    });
+  }
+
+  const roleMap: Record<string, string> = {};
+  for (const [roleId, modelSelection] of Object.entries(roles as Record<string, unknown>)) {
+    roleMap[roleId] = String(modelSelection);
+  }
+
+  return roleMap;
+}
+
 async function loadGuardianRuntimeConfig(_directory: string): Promise<GuardianRuntimeConfig> {
   const sources: string[] = [];
   const warnings: string[] = [];
@@ -254,12 +358,17 @@ async function loadGuardianRuntimeConfig(_directory: string): Promise<GuardianRu
     }
     throw error;
   });
-  const baseConfig = configText
-    ? (sources.push(configPath),
-      loadLenientVvocConfigText(configText, configPath, warnings).guardian)
-    : createGuardianConfig();
+  const canonicalConfig = configText
+    ? (sources.push(configPath), loadLenientVvocConfigText(configText, configPath, warnings))
+    : createDefaultVvocConfig();
+  const roleMap = configText
+    ? loadConfiguredRoleMapOrThrow(configText, configPath)
+    : canonicalConfig.roles;
+  const resolvedRoleSelection = resolveGuardianRoleSelection(roleMap);
+  const baseConfig = canonicalConfig.guardian;
   const envConfig = readGuardianEnvConfig(sources, warnings);
   const merged = createGuardianConfig({
+    ...resolvedRoleSelection,
     ...baseConfig,
     ...envConfig,
   });
@@ -946,15 +1055,21 @@ async function reviewPermissionRequest(
       transcript,
     );
 
-    await logGuardian(client, directory, "info", "guardian review started", {
-      requestID: permissionEvent.id,
-      permission: permissionEvent.permission,
-      sessionID: permissionEvent.sessionID,
-      agent: GUARDIAN_AGENT,
-      runDirectory: GUARDIAN_RUN_DIRECTORY,
-      model: guardianConfig.model,
-      variant: guardianConfig.variant,
-    });
+    await logGuardian(
+      client,
+      directory,
+      "info",
+      "[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review started",
+      {
+        requestID: permissionEvent.id,
+        permission: permissionEvent.permission,
+        sessionID: permissionEvent.sessionID,
+        agent: GUARDIAN_AGENT,
+        runDirectory: GUARDIAN_RUN_DIRECTORY,
+        model: guardianConfig.model,
+        variant: guardianConfig.variant,
+      },
+    );
     await writeGuardianDebug({
       phase: "review_started",
       requestID: permissionEvent.id,
@@ -1021,14 +1136,22 @@ async function reviewPermissionRequest(
     if (decision === "allow") {
       activeReview.internalReply = true;
       try {
-        replied = await replyToPermission(
-          client,
-          serverUrl,
-          directory,
-          permissionEvent.sessionID,
-          permissionEvent.id,
-          "allow",
-        );
+        try {
+          replied = await replyToPermission(
+            client,
+            serverUrl,
+            directory,
+            permissionEvent.sessionID,
+            permissionEvent.id,
+            "allow",
+          );
+        } catch (error) {
+          throw createGuardianPluginError({
+            code: "PERMISSION_REPLY_FAILED",
+            message: "PERMISSION_REPLY_FAILED: guardian auto-allow reply was not acknowledged",
+            cause: error,
+          });
+        }
       } finally {
         activeReview.internalReply = false;
       }
@@ -1057,7 +1180,7 @@ async function reviewPermissionRequest(
       client,
       directory,
       decision === "allow" ? "info" : "warn",
-      "guardian review completed",
+      "[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review completed",
       {
         requestID: permissionEvent.id,
         permission: permissionEvent.permission,
@@ -1087,18 +1210,29 @@ async function reviewPermissionRequest(
       stdout: truncateText(stdout, MAX_LOG_CHARS),
     });
   } catch (error) {
+    const reviewError =
+      (error as Partial<GuardianPluginError>)?.code === "PERMISSION_REPLY_FAILED"
+        ? (error as GuardianPluginError)
+        : createGuardianPluginError({
+            code: "GUARDIAN_REVIEW_FAILED",
+            message: "GUARDIAN_REVIEW_FAILED: guardian permission review failed",
+            cause: error,
+          });
+
     if (activeReview.cancelled) {
       await logGuardian(client, directory, "info", "guardian review cancelled", {
         requestID: permissionEvent.id,
         permission: permissionEvent.permission,
         sessionID: permissionEvent.sessionID,
-        error: error instanceof Error ? error.message : String(error),
+        error: reviewError.message,
+        errorCode: reviewError.code,
       });
       await writeGuardianDebug({
         phase: "review_cancelled",
         requestID: permissionEvent.id,
         sessionID: permissionEvent.sessionID,
-        error: error instanceof Error ? error.message : String(error),
+        error: reviewError.message,
+        errorCode: reviewError.code,
       });
       return;
     }
@@ -1114,14 +1248,16 @@ async function reviewPermissionRequest(
       requestID: permissionEvent.id,
       permission: permissionEvent.permission,
       sessionID: permissionEvent.sessionID,
-      error: error instanceof Error ? error.message : String(error),
+      error: reviewError.message,
+      errorCode: reviewError.code,
     });
     await writeGuardianDebug({
       phase: "review_failed_open",
       requestID: permissionEvent.id,
       sessionID: permissionEvent.sessionID,
       permission: permissionEvent.permission,
-      error: error instanceof Error ? error.message : String(error),
+      error: reviewError.message,
+      errorCode: reviewError.code,
     });
   } finally {
     if (activeReviews.get(permissionEvent.id) === activeReview) {
@@ -1147,6 +1283,7 @@ function installGuardianAgent(
     permission: createGuardianPermissionConfig(),
     tools: createGuardianToolsConfig(),
     ...(guardianConfig.model ? { model: guardianConfig.model } : {}),
+    ...(guardianConfig.variant ? { variant: guardianConfig.variant } : {}),
   };
 }
 // END_BLOCK_INSTALL_GUARDIAN_AGENT
@@ -1193,6 +1330,23 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
     configSources: guardianConfig.sources,
     configWarnings: guardianConfig.warnings,
   });
+
+  await logGuardian(
+    client,
+    directory,
+    "info",
+    "[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded",
+    {
+      model: guardianConfig.model,
+      variant: guardianConfig.variant,
+      timeoutMs: guardianConfig.timeoutMs,
+      approvalRiskThreshold: guardianConfig.approvalRiskThreshold,
+      reviewToastDurationMs: guardianConfig.reviewToastDurationMs,
+      configSources: guardianConfig.sources,
+      configWarnings: guardianConfig.warnings,
+      roleReference: GUARDIAN_RUNTIME_ROLE_REF,
+    },
+  );
 
   return {
     config: async (config) => {
