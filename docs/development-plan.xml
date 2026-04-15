@@ -153,7 +153,7 @@
       </notes>
     </M-PLUGIN-MODEL-ROLES>
 
-    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="planned">
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="implemented">
       <contract>
         <purpose>Review OpenCode permission requests with a constrained Guardian agent whose runtime model resolves locally from the built-in `fast` role, while keeping safe fallback behavior and explicit threshold control.</purpose>
         <inputs>
@@ -700,7 +700,7 @@
       <step-1 module="M-MODEL-ROLES" status="implemented" verification="V-M-MODEL-ROLES">Implement the shared role contract, built-in role bindings, and concrete model-selection parsing helpers.</step-1>
       <step-2 module="M-CLI-CONFIG" status="implemented" verification="V-M-CLI-CONFIG">Upgrade canonical vvoc config to schema v3, seed built-in roles, remove target-based config fields, and keep OpenCode defaults and managed agents pinned to `vv-role:*` references.</step-2>
       <step-3 module="M-PLUGIN-MODEL-ROLES" status="implemented" verification="V-M-PLUGIN-MODEL-ROLES">Resolve role references at startup for supported OpenCode config fields and fail loudly for unknown roles.</step-3>
-      <step-4 module="M-PLUGIN-GUARDIAN" status="planned" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>
+      <step-4 module="M-PLUGIN-GUARDIAN" status="implemented" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>
       <step-5 module="M-PLUGIN-MEMORY" status="planned" verification="V-M-PLUGIN-MEMORY">Move memory-reviewer model selection to the built-in role system and drop reviewer model fields from canonical memory config.</step-5>
       <step-6 module="M-CLI-ROLE" status="planned" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
       <step-7 module="M-CLI-PRESET" status="planned" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>

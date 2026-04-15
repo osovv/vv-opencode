@@ -89,7 +89,7 @@
       </annotations>
     </M-CLI-PRESET>
 
-    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="planned">
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role.</purpose>
       <path>src/plugins/guardian/index.ts + templates/agents/guardian.md</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
