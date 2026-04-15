@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate the canonical vvoc.json configuration file with human-readable error reporting.
 //   SCOPE: Canonical vvoc config file discovery, strict JSON parse error reporting, JSON Schema validation, and pass/fail terminal output.
@@ -18,14 +18,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Switched config validation to the canonical vvoc.json document and versioned JSON Schema.]
+//   LAST_CHANGE: [v0.6.0 - Added explicit unsupported-version reporting and path-aware semantic role assignment validation for roles/presets.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { parse, type ParseError } from "jsonc-parser";
 import { readFileSync } from "node:fs";
 import { resolvePaths } from "../lib/opencode.js";
-import { validateVvocConfigDocument } from "../lib/vvoc-config.js";
+import { parseModelSelection } from "../lib/model-roles.js";
+import { VVOC_CONFIG_VERSION, validateVvocConfigDocument } from "../lib/vvoc-config.js";
 
 type ConfigValidateResult = {
   path: string;
@@ -85,11 +86,18 @@ export function validateVvocConfigContent(content: string, filePath: string): Co
   const schemaErrors = validateVvocConfigDocument(parsed).map(
     (message) => `${filePath} - ${message}`,
   );
+  const unsupportedVersionErrors = collectUnsupportedVersionErrors(parsed).map(
+    (message) => `${filePath} - ${message}`,
+  );
+  const roleAssignmentErrors = collectRoleAssignmentErrors(parsed).map(
+    (message) => `${filePath} - ${message}`,
+  );
+  const allErrors = [...schemaErrors, ...unsupportedVersionErrors, ...roleAssignmentErrors];
 
   return {
     path: filePath,
-    valid: schemaErrors.length === 0,
-    errors: schemaErrors,
+    valid: allErrors.length === 0,
+    errors: [...new Set(allErrors)],
   };
 }
 
@@ -131,4 +139,66 @@ function readFileOrEmpty(filePath: string): string {
   } catch {
     return "";
   }
+}
+
+function collectUnsupportedVersionErrors(document: unknown): string[] {
+  if (!isObjectRecord(document) || !Object.hasOwn(document, "version")) {
+    return [];
+  }
+
+  const version = document.version;
+  if (version === VVOC_CONFIG_VERSION) {
+    return [];
+  }
+
+  const formattedVersion = typeof version === "number" ? String(version) : JSON.stringify(version);
+  return [
+    `/version unsupported-version: expected ${VVOC_CONFIG_VERSION} but received ${formattedVersion}`,
+  ];
+}
+
+function collectRoleAssignmentErrors(document: unknown): string[] {
+  if (!isObjectRecord(document)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  collectRoleAssignmentMapErrors(document.roles, "/roles", errors);
+
+  if (!isObjectRecord(document.presets)) {
+    return errors;
+  }
+
+  for (const [presetName, presetValue] of Object.entries(document.presets)) {
+    if (!isObjectRecord(presetValue)) {
+      continue;
+    }
+    collectRoleAssignmentMapErrors(presetValue.agents, `/presets/${presetName}/agents`, errors);
+  }
+
+  return errors;
+}
+
+function collectRoleAssignmentMapErrors(value: unknown, basePath: string, errors: string[]): void {
+  if (!isObjectRecord(value)) {
+    return;
+  }
+
+  for (const [roleId, modelSelection] of Object.entries(value)) {
+    if (typeof modelSelection !== "string") {
+      continue;
+    }
+
+    try {
+      parseModelSelection(modelSelection);
+    } catch (error) {
+      errors.push(
+        `${basePath}/${roleId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

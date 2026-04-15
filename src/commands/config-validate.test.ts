@@ -1,8 +1,8 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.8.1
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
-//   SCOPE: Strict JSON parse error reporting, version-aware schema validation, preset semantic validation, and pass/fail terminal output.
+//   SCOPE: Strict JSON parse error reporting, canonical schema v3 validation, role/preset semantic validation, and pass/fail terminal output.
 //   DEPENDS: [src/commands/config-validate.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-CONFIG-VALIDATE]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.1 - Updated the canonical vv-openai fixture to the vv-managed OpenAI alias model used for the default target.]
+//   LAST_CHANGE: [v0.9.0 - Replaced legacy v1/v2 acceptance checks with canonical v3 role-based failure coverage including unsupported-version and preset role-path errors.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -33,12 +33,12 @@ test("validateVvocConfigContent - generated canonical config passes", () => {
   expect(result.errors).toHaveLength(0);
 });
 
-test("validateVvocConfigContent - legacy v1 config still passes", () => {
+test("validateVvocConfigContent - pre-role schema versions fail as unsupported", () => {
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
-        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.16.0/schemas/vvoc/v1.json",
-        version: 1,
+        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.16.0/schemas/vvoc/v2.json",
+        version: 2,
         guardian: {
           timeoutMs: 90000,
           approvalRiskThreshold: 80,
@@ -68,54 +68,11 @@ test("validateVvocConfigContent - legacy v1 config still passes", () => {
     FP,
   );
 
-  expect(result.valid).toBe(true);
-  expect(result.errors).toHaveLength(0);
+  expect(result.valid).toBe(false);
+  expect(result.errors.some((error) => error.includes("/version unsupported-version"))).toBe(true);
 });
 
-test("validateVvocConfigContent - v2 presets pass schema validation", () => {
-  const result = validateVvocConfigContent(
-    JSON.stringify(
-      {
-        ...createDefaultVvocConfig(),
-        presets: {
-          "vv-openai": {
-            description: "Starter OpenAI preset",
-            agents: {
-              default: "openai/vv-gpt-5.4-xhigh",
-              "small-model": "openai/gpt-5.4-mini",
-              guardian: "openai/gpt-5.4-mini",
-              explore: "openai/gpt-5.4-mini",
-            },
-          },
-          "vv-zai": {
-            agents: {
-              default: "zai-coding-plan/glm-5.1",
-              "small-model": "zai-coding-plan/glm-4.5-airx",
-              guardian: "zai-coding-plan/glm-4.5-airx",
-              explore: "zai-coding-plan/glm-4.5-airx",
-            },
-          },
-          "vv-minimax": {
-            agents: {
-              default: "minimax-coding-plan/MiniMax-M2.7",
-              "small-model": "minimax-coding-plan/MiniMax-M2.1",
-              guardian: "minimax-coding-plan/MiniMax-M2.1",
-              explore: "minimax-coding-plan/MiniMax-M2.1",
-            },
-          },
-        },
-      },
-      null,
-      2,
-    ),
-    FP,
-  );
-
-  expect(result.valid).toBe(true);
-  expect(result.errors).toHaveLength(0);
-});
-
-test("validateVvocConfigContent - user preset OpenCode agent variants pass schema validation", () => {
+test("validateVvocConfigContent - role-based custom preset assignments pass", () => {
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
@@ -123,9 +80,10 @@ test("validateVvocConfigContent - user preset OpenCode agent variants pass schem
         presets: {
           custom: {
             agents: {
-              build: "openai/gpt-5.4:xhigh",
-              plan: "openai/gpt-5.4:high",
-              general: "openai/gpt-5.4:medium",
+              default: "openai/gpt-5.4",
+              smart: "openai/gpt-5.4:xhigh",
+              fast: "openai/gpt-5.4-mini",
+              vision: "openai/gpt-4.1",
             },
           },
         },
@@ -140,17 +98,16 @@ test("validateVvocConfigContent - user preset OpenCode agent variants pass schem
   expect(result.errors).toHaveLength(0);
 });
 
-test("validateVvocConfigContent - managed vv presets do not block canonical refresh", () => {
+test("validateVvocConfigContent - missing required built-in role ids fails with role path", () => {
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
         ...createDefaultVvocConfig(),
-        presets: {
-          "vv-openai": {
-            agents: {
-              default: "not-a-model",
-            },
-          },
+        roles: {
+          default: "openai/vv-gpt-5.4-xhigh",
+          smart: "openai/vv-gpt-5.4-xhigh",
+          fast: "openai/gpt-5.4-mini",
+          helper: "openai/gpt-4.1",
         },
       },
       null,
@@ -159,8 +116,36 @@ test("validateVvocConfigContent - managed vv presets do not block canonical refr
     FP,
   );
 
-  expect(result.valid).toBe(true);
-  expect(result.errors).toHaveLength(0);
+  expect(result.valid).toBe(false);
+  expect(
+    result.errors.some((error) => error.includes('/roles missing required property "vision"')),
+  ).toBe(true);
+});
+
+test("validateVvocConfigContent - invalid role assignment string fails with role path", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify(
+      {
+        ...createDefaultVvocConfig(),
+        roles: {
+          ...createDefaultVvocConfig().roles,
+          default: "not-a-model",
+        },
+      },
+      null,
+      2,
+    ),
+    FP,
+  );
+
+  expect(result.valid).toBe(false);
+  expect(
+    result.errors.some(
+      (error) =>
+        error.includes("/roles/default") &&
+        error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model[:variant]"),
+    ),
+  ).toBe(true);
 });
 
 test("validateVvocConfigContent - missing required section fails", () => {
@@ -227,26 +212,7 @@ test("validateVvocConfigContent - invalid JSON reports parse error with line/col
   expect(result.errors.some((error) => error.includes(":1:"))).toBe(true);
 });
 
-test("validateVvocConfigContent - unsupported property fails", () => {
-  const result = validateVvocConfigContent(
-    JSON.stringify(
-      {
-        ...createDefaultVvocConfig(),
-        unexpected: true,
-      },
-      null,
-      2,
-    ),
-    FP,
-  );
-
-  expect(result.valid).toBe(false);
-  expect(result.errors.some((error) => error.includes('unsupported property "unexpected"'))).toBe(
-    true,
-  );
-});
-
-test("validateVvocConfigContent - invalid preset special-agent syntax fails", () => {
+test("validateVvocConfigContent - malformed preset role assignment fails with preset role path", () => {
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
@@ -270,35 +236,7 @@ test("validateVvocConfigContent - invalid preset special-agent syntax fails", ()
     result.errors.some(
       (error) =>
         error.includes("/presets/invalid/agents/guardian") &&
-        error.includes("provider/model-id format"),
-    ),
-  ).toBe(true);
-});
-
-test("validateVvocConfigContent - invalid preset default-model syntax fails", () => {
-  const result = validateVvocConfigContent(
-    JSON.stringify(
-      {
-        ...createDefaultVvocConfig(),
-        presets: {
-          invalid: {
-            agents: {
-              default: "openai/gpt-5.4:xhigh",
-            },
-          },
-        },
-      },
-      null,
-      2,
-    ),
-    FP,
-  );
-
-  expect(result.valid).toBe(false);
-  expect(
-    result.errors.some(
-      (error) =>
-        error.includes("/presets/invalid/agents/default") && error.includes("without :variant"),
+        error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model[:variant]"),
     ),
   ).toBe(true);
 });
