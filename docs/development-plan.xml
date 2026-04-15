@@ -376,7 +376,7 @@
       </notes>
     </M-CLI-PRESET>
 
-    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="4" STATUS="planned">
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="4" STATUS="implemented">
       <contract>
         <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting and no compatibility mode for older schemas.</purpose>
         <inputs>
@@ -433,7 +433,7 @@
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="6" STATUS="planned">
+    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="6" STATUS="implemented">
       <contract>
         <purpose>Apply global OpenCode patch presets that rewrite provider.options.baseURL or merge provider-specific alias-model config under `provider` conservatively, without overwriting root OpenCode model fields that are now role-reference based.</purpose>
         <inputs>
@@ -496,7 +496,7 @@
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
     </M-CLI-COMPLETION>
 
-    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="8" STATUS="planned">
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="8" STATUS="implemented">
       <contract>
         <purpose>Interactive project initialization that registers @osovv/vv-opencode in the OpenCode plugin array, scaffolds managed prompts, seeds canonical role assignments, and writes role-reference based OpenCode config defaults. Uses @clack/prompts for TTY prompts.</purpose>
         <inputs>
@@ -704,9 +704,9 @@
       <step-5 module="M-PLUGIN-MEMORY" status="implemented" verification="V-M-PLUGIN-MEMORY">Move memory-reviewer model selection to the built-in role system and drop reviewer model fields from canonical memory config.</step-5>
       <step-6 module="M-CLI-ROLE" status="planned" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
       <step-7 module="M-CLI-PRESET" status="planned" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>
-      <step-8 module="M-CLI-PATCH-PROVIDER" status="planned" verification="V-M-CLI-PATCH-PROVIDER">Keep provider alias patching as a lower-level helper for concrete role assignments without mutating root OpenCode model fields.</step-8>
+      <step-8 module="M-CLI-PATCH-PROVIDER" status="implemented" verification="V-M-CLI-PATCH-PROVIDER">Keep provider alias patching as a lower-level helper for concrete role assignments without mutating root OpenCode model fields.</step-8>
       <step-9 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
-      <step-10 module="M-CLI-INIT" status="planned" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
+      <step-10 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
     </Phase-6>
   </ImplementationOrder>
 

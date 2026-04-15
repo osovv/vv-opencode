@@ -202,7 +202,7 @@
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION>
 
-    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting.</purpose>
       <path>src/commands/config-validate.ts + src/commands/config.ts</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
@@ -225,7 +225,7 @@
       </annotations>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override, the `zai` provider model patch, and the OpenAI alias-model patch that installs `openai/vv-gpt-5.4-xhigh` for role assignment use without rewriting root OpenCode model fields.</purpose>
       <path>src/commands/patch-provider.ts</path>
       <depends>M-CLI-CONFIG</depends>
@@ -250,7 +250,7 @@
       </annotations>
     </M-CLI-COMPLETION>
 
-    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Interactive project setup with prompts for scope and initial configuration, seeding canonical built-in roles and role-reference OpenCode defaults. Uses @clack/prompts.</purpose>
       <path>src/commands/init.ts</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES, @clack/prompts</depends>
