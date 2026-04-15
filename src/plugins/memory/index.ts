@@ -1,9 +1,9 @@
 // FILE: src/plugins/memory/memory.ts
-// VERSION: 0.2.6
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register explicit vvoc memory tools and the report-only memory reviewer agent.
 //   SCOPE: Memory reviewer agent config, managed prompt loading, scope resolution, memory tool execution, proactive system instruction injection, and plugin initialization logging.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/memory-store.ts]
+//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/plugins/memory-store.ts]
 //   LINKS: [M-PLUGIN-MEMORY, M-PLUGIN-MEMORY-STORE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,11 +14,20 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Resolved memory-reviewer runtime model from the built-in fast role and added explicit plugin error codes.]
 //   LAST_CHANGE: [v0.2.6 - Switched memory-reviewer to vvoc-managed prompt files with no bundled runtime fallback.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin, tool } from "@opencode-ai/plugin";
+import { readFile } from "node:fs/promises";
 import { loadManagedAgentPromptText } from "../../lib/managed-agents.js";
+import {
+  ROLE_REFERENCE_PREFIX,
+  resolveRoleReference,
+  type ModelRolesError,
+} from "../../lib/model-roles.js";
+import { createDefaultVvocConfig } from "../../lib/vvoc-config.js";
+import { getGlobalVvocConfigPath } from "../../lib/vvoc-paths.js";
 import {
   deleteMemory,
   getDefaultProjectScopeKey,
@@ -40,9 +49,113 @@ import {
 import systemInstructionTemplate from "./system-instruction.md?raw";
 
 const MEMORY_REVIEW_AGENT = "memory-reviewer";
+const MEMORY_REVIEWER_RUNTIME_ROLE_REF = `${ROLE_REFERENCE_PREFIX}fast`;
 const z = tool.schema;
 
 const MEMORY_SYSTEM_INSTRUCTION = systemInstructionTemplate.trim();
+
+type MemoryPluginErrorCode = "MEMORY_DISABLED" | "MEMORY_NOT_FOUND" | "UNKNOWN_ROLE";
+
+type MemoryPluginError = Error & {
+  code: MemoryPluginErrorCode;
+};
+
+// START_BLOCK_MEMORY_PLUGIN_ERROR_HANDLING
+function createMemoryPluginError(options: {
+  code: MemoryPluginErrorCode;
+  message: string;
+  cause?: unknown;
+}): MemoryPluginError {
+  const error = new Error(options.message) as MemoryPluginError;
+  error.code = options.code;
+  if (options.cause !== undefined) {
+    (error as Error & { cause?: unknown }).cause = options.cause;
+  }
+  return error;
+}
+
+function asModelRolesError(error: unknown): ModelRolesError | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const maybeError = error as Partial<ModelRolesError>;
+  if (typeof maybeError.code !== "string") {
+    return undefined;
+  }
+
+  return maybeError as ModelRolesError;
+}
+
+function loadConfiguredRoleMapOrThrow(
+  configText: string,
+  configPath: string,
+): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configText) as unknown;
+  } catch (error) {
+    throw createMemoryPluginError({
+      code: "UNKNOWN_ROLE",
+      message: `UNKNOWN_ROLE: cannot parse ${configPath} to resolve ${MEMORY_REVIEWER_RUNTIME_ROLE_REF}`,
+      cause: error,
+    });
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw createMemoryPluginError({
+      code: "UNKNOWN_ROLE",
+      message: `UNKNOWN_ROLE: ${configPath} must contain a top-level object with roles`,
+    });
+  }
+
+  const roles = (parsed as { roles?: unknown }).roles;
+  if (!roles || typeof roles !== "object" || Array.isArray(roles)) {
+    throw createMemoryPluginError({
+      code: "UNKNOWN_ROLE",
+      message: `UNKNOWN_ROLE: ${configPath} must contain a roles object with fast role assignment`,
+    });
+  }
+
+  const roleMap: Record<string, string> = {};
+  for (const [roleId, modelSelection] of Object.entries(roles as Record<string, unknown>)) {
+    roleMap[roleId] = String(modelSelection);
+  }
+  return roleMap;
+}
+
+async function loadMemoryReviewerRuntimeModel(): Promise<{ model: string; variant?: string }> {
+  const configPath = getGlobalVvocConfigPath();
+  const configText = await readFile(configPath, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  });
+
+  const roleMap = configText
+    ? loadConfiguredRoleMapOrThrow(configText, configPath)
+    : createDefaultVvocConfig().roles;
+
+  try {
+    const resolved = resolveRoleReference(MEMORY_REVIEWER_RUNTIME_ROLE_REF, roleMap);
+    return {
+      model: `${resolved.provider}/${resolved.model}`,
+      variant: resolved.variant,
+    };
+  } catch (error) {
+    const code = asModelRolesError(error)?.code;
+    throw createMemoryPluginError({
+      code: "UNKNOWN_ROLE",
+      message:
+        code === "UNKNOWN_ROLE"
+          ? `UNKNOWN_ROLE: built-in role reference ${MEMORY_REVIEWER_RUNTIME_ROLE_REF} could not be resolved`
+          : `UNKNOWN_ROLE: built-in role reference ${MEMORY_REVIEWER_RUNTIME_ROLE_REF} resolved an invalid model selection`,
+      cause: error,
+    });
+  }
+}
+// END_BLOCK_MEMORY_PLUGIN_ERROR_HANDLING
 
 // START_BLOCK_REVIEWER_AGENT_CONFIGURATION
 function createMemoryReviewerToolsConfig(): Record<string, boolean> {
@@ -74,7 +187,7 @@ function createMemoryReviewerToolsConfig(): Record<string, boolean> {
 function installMemoryReviewerAgent(
   config: Config,
   reviewerPrompt: string,
-  reviewerModel?: string,
+  reviewerModel: string,
   reviewerVariant?: string,
 ): void {
   config.agent ??= {};
@@ -91,7 +204,7 @@ function installMemoryReviewerAgent(
       },
     },
     tools: createMemoryReviewerToolsConfig(),
-    ...(reviewerModel ? { model: reviewerModel } : {}),
+    model: reviewerModel,
     ...(reviewerVariant ? { variant: reviewerVariant } : {}),
   } as never;
 }
@@ -190,7 +303,10 @@ function getMemoryConfigWarningLines(memoryConfig: MemoryRuntimeConfig): string[
 // START_BLOCK_VALIDATE_MEMORY_ENABLED
 function assertEnabled(memoryConfig: MemoryRuntimeConfig): void {
   if (!memoryConfig.enabled) {
-    throw new Error("vvoc memory is disabled in vvoc.json");
+    throw createMemoryPluginError({
+      code: "MEMORY_DISABLED",
+      message: "MEMORY_DISABLED: vvoc memory is disabled in vvoc.json",
+    });
   }
 }
 // END_BLOCK_VALIDATE_MEMORY_ENABLED
@@ -203,7 +319,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
     body: {
       service: "memory",
       level: "info",
-      message: "memory plugin initialized",
+      message: "[memory][MemoryPlugin][BLOCK_INITIALIZE_MEMORY_PLUGIN] memory plugin initialized",
       extra: {
         enabled: memoryConfig.enabled,
         projectStorageRoot: memoryConfig.projectStorageRoot,
@@ -221,6 +337,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
 
   const metadataWarnings = getMemoryConfigWarningLines(memoryConfig);
   const memoryReviewerPrompt = await loadManagedAgentPromptText(directory, MEMORY_REVIEW_AGENT);
+  const memoryReviewerRuntimeModel = await loadMemoryReviewerRuntimeModel();
   // END_BLOCK_INITIALIZE_MEMORY_PLUGIN
 
   return {
@@ -228,9 +345,18 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
       installMemoryReviewerAgent(
         config,
         memoryReviewerPrompt,
-        memoryConfig.reviewerModel,
-        memoryConfig.reviewerVariant,
+        memoryReviewerRuntimeModel.model,
+        memoryReviewerRuntimeModel.variant,
       );
+
+      await client.app.log({
+        body: {
+          service: "memory",
+          level: "info",
+          message:
+            "[memory][installMemoryReviewerAgent][BLOCK_REVIEWER_AGENT_CONFIGURATION] memory reviewer registered",
+        },
+      });
     },
     "experimental.chat.system.transform": async (_input, output) => {
       if (!output.system.includes(MEMORY_SYSTEM_INSTRUCTION)) {
@@ -287,7 +413,10 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
           assertEnabled(memoryConfig);
           const entry = await getMemory(memoryConfig, args.id);
           if (!entry) {
-            throw new Error(`Memory not found: ${args.id}`);
+            throw createMemoryPluginError({
+              code: "MEMORY_NOT_FOUND",
+              message: `MEMORY_NOT_FOUND: Memory not found: ${args.id}`,
+            });
           }
 
           context.metadata({
@@ -363,7 +492,10 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
             meta: args.meta,
           });
           if (!entry) {
-            throw new Error(`Memory not found: ${args.id}`);
+            throw createMemoryPluginError({
+              code: "MEMORY_NOT_FOUND",
+              message: `MEMORY_NOT_FOUND: Memory not found: ${args.id}`,
+            });
           }
 
           context.metadata({
@@ -383,7 +515,10 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
           assertEnabled(memoryConfig);
           const entry = await deleteMemory(memoryConfig, args.id);
           if (!entry) {
-            throw new Error(`Memory not found: ${args.id}`);
+            throw createMemoryPluginError({
+              code: "MEMORY_NOT_FOUND",
+              message: `MEMORY_NOT_FOUND: Memory not found: ${args.id}`,
+            });
           }
 
           context.metadata({

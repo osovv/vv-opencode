@@ -1,5 +1,5 @@
 // FILE: src/plugins/memory-store.ts
-// VERSION: 0.3.0
+// VERSION: 0.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Persist and query explicit vvoc memory entries across local and shared scopes.
 //   SCOPE: Canonical vvoc memory config loading, scope-aware storage roots, CRUD operations, lexical search, and JSON-backed filesystem helpers.
@@ -35,6 +35,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Stopped exposing reviewer model fields from memory runtime config so reviewer model authority comes from roles.fast.]
 //   LAST_CHANGE: [v0.3.0 - Switched memory settings to the canonical global vvoc.json config file.]
 // END_CHANGE_SUMMARY
 
@@ -91,8 +92,6 @@ export type MemoryRuntimeConfig = {
   projectStorageRoot: string;
   sharedStorageRoot: string;
   defaultSearchLimit: number;
-  reviewerModel?: string;
-  reviewerVariant?: string;
   sources: string[];
   warnings: string[];
 };
@@ -128,8 +127,6 @@ export async function loadMemoryRuntimeConfig(directory: string): Promise<Memory
     projectStorageRoot: join(getGlobalVvocProjectDataDir(directory), "memory"),
     sharedStorageRoot: join(getGlobalVvocDataDir(), "memory"),
     defaultSearchLimit: memoryConfig.defaultSearchLimit,
-    reviewerModel: memoryConfig.reviewerModel,
-    reviewerVariant: memoryConfig.reviewerVariant,
     sources,
     warnings,
   };

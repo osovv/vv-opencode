@@ -1,5 +1,5 @@
 // FILE: src/plugins/memory.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc memory runtime config, scope semantics, and plugin registration behavior.
 //   SCOPE: Canonical memory config loading, config round-trips, cross-project shared scope visibility, CRUD/search behavior, and plugin-level system instruction/reviewer prompt setup.
@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Added role-driven memory-reviewer model assertions plus disabled-memory and reviewer read-only tool coverage.]
 //   LAST_CHANGE: [v0.3.0 - Updated memory config coverage for the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
@@ -309,9 +310,31 @@ describe("MemoryPlugin", () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-memory-config-home-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-plugin-"));
     const previousConfigHome = process.env.XDG_CONFIG_HOME;
+    const logs: string[] = [];
 
     try {
       process.env.XDG_CONFIG_HOME = configHome;
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(
+        join(configHome, "vvoc", "vvoc.json"),
+        JSON.stringify(
+          {
+            ...createDefaultVvocConfig(),
+            roles: {
+              ...createDefaultVvocConfig().roles,
+              fast: "anthropic/claude-3-5-haiku-latest:fast-variant",
+            },
+            memory: {
+              ...createDefaultVvocConfig().memory,
+              reviewerModel: "openai/gpt-4o",
+              reviewerVariant: "ignored-memory-field",
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
       await mkdir(join(projectDir, ".vvoc", "agents"), { recursive: true });
       await writeFile(
         join(projectDir, ".vvoc", "agents", "memory-reviewer.md"),
@@ -322,7 +345,11 @@ describe("MemoryPlugin", () => {
       const plugin = await MemoryPlugin({
         client: {
           app: {
-            log: async () => undefined,
+            log: async (payload: { body?: { message?: string } }) => {
+              if (typeof payload.body?.message === "string") {
+                logs.push(payload.body.message);
+              }
+            },
           },
         } as never,
         project: {} as never,
@@ -354,6 +381,38 @@ describe("MemoryPlugin", () => {
       expect(
         (config.agent as Record<string, { prompt?: string }>)?.["memory-reviewer"]?.prompt,
       ).toBe("Custom project memory reviewer prompt.");
+      expect((config.agent as Record<string, { model?: string }>)?.["memory-reviewer"]?.model).toBe(
+        "anthropic/claude-3-5-haiku-latest",
+      );
+      expect(
+        (config.agent as Record<string, { variant?: string }>)?.["memory-reviewer"]?.variant,
+      ).toBe("fast-variant");
+      expect(
+        (config.agent as Record<string, { model?: string }>)?.["memory-reviewer"]?.model,
+      ).not.toBe("openai/gpt-4o");
+
+      const reviewerTools = (config.agent as Record<string, { tools?: Record<string, boolean> }>)?.[
+        "memory-reviewer"
+      ]?.tools;
+      expect(reviewerTools?.memory_search).toBe(true);
+      expect(reviewerTools?.memory_get).toBe(true);
+      expect(reviewerTools?.memory_list).toBe(true);
+      expect(reviewerTools?.memory_put).toBe(false);
+      expect(reviewerTools?.memory_update).toBe(false);
+      expect(reviewerTools?.memory_delete).toBe(false);
+      expect(
+        Object.entries(reviewerTools ?? {})
+          .filter(([, enabled]) => enabled)
+          .map(([name]) => name)
+          .sort(),
+      ).toEqual(["memory_get", "memory_list", "memory_search"]);
+
+      expect(logs).toContain(
+        "[memory][MemoryPlugin][BLOCK_INITIALIZE_MEMORY_PLUGIN] memory plugin initialized",
+      );
+      expect(logs).toContain(
+        "[memory][installMemoryReviewerAgent][BLOCK_REVIEWER_AGENT_CONFIGURATION] memory reviewer registered",
+      );
 
       const system = { system: ["base system prompt"] };
       await plugin["experimental.chat.system.transform"]?.(
@@ -375,6 +434,72 @@ describe("MemoryPlugin", () => {
       expect(system.system.join("\n\n")).toContain(
         "Use shared scope for reusable facts that should be visible across projects.",
       );
+      expect(system.system.join("\n\n")).not.toContain("mem_");
+      expect(system.system.join("\n\n").toLowerCase()).not.toContain("already loaded");
+
+      await plugin["experimental.chat.system.transform"]?.(
+        {
+          sessionID: "session-1",
+          model: {} as never,
+        },
+        system,
+      );
+      expect(
+        system.system.filter((line) =>
+          line.includes("vvoc explicit memory is available in this workspace."),
+        ).length,
+      ).toBe(1);
+    } finally {
+      if (previousConfigHome === undefined) {
+        delete process.env.XDG_CONFIG_HOME;
+      } else {
+        process.env.XDG_CONFIG_HOME = previousConfigHome;
+      }
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("disabled memory config blocks memory tool use", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-memory-config-home-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-memory-plugin-disabled-"));
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
+
+    try {
+      process.env.XDG_CONFIG_HOME = configHome;
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(
+        join(configHome, "vvoc", "vvoc.json"),
+        JSON.stringify(
+          {
+            ...createDefaultVvocConfig(),
+            memory: {
+              ...createDefaultVvocConfig().memory,
+              enabled: false,
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const plugin = await MemoryPlugin({
+        client: {
+          app: {
+            log: async () => undefined,
+          },
+        } as never,
+        project: {} as never,
+        directory: projectDir,
+        worktree: projectDir,
+        serverUrl: new URL("http://localhost"),
+        $: {} as never,
+      });
+
+      expect(plugin.tool).toBeUndefined();
+      expect(plugin.config).toBeUndefined();
+      expect(plugin["experimental.chat.system.transform"]).toBeUndefined();
     } finally {
       if (previousConfigHome === undefined) {
         delete process.env.XDG_CONFIG_HOME;
