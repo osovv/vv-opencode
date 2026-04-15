@@ -63,7 +63,11 @@ import {
   loadManagedAgentPromptTemplate,
   type ManagedOpenCodeAgentName,
 } from "./managed-agents.js";
-import { getBuiltInRoleBindings, ROLE_REFERENCE_PREFIX } from "./model-roles.js";
+import {
+  BUILTIN_ROLE_NAMES,
+  getBuiltInRoleBindings,
+  ROLE_REFERENCE_PREFIX,
+} from "./model-roles.js";
 import {
   createDefaultVvocConfig,
   createGuardianConfig,
@@ -152,6 +156,10 @@ export type InstallationInspection = {
   };
   secretsRedaction: {
     config?: SecretsRedactionConfig;
+  };
+  roles: {
+    assignments: Array<{ roleId: string; model: string; builtIn: boolean }>;
+    unresolvedReferences: Array<{ fieldPath: string; roleRef: string; roleId: string }>;
   };
   warnings: string[];
   problems: string[];
@@ -851,6 +859,7 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   let vvocConfig: VvocConfig | undefined;
   let vvocSourceSchema: string | undefined;
   let vvocSourceVersion: number | undefined;
+  let roleAssignments: Array<{ roleId: string; model: string; builtIn: boolean }> = [];
 
   if (vvocText) {
     try {
@@ -858,10 +867,26 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
       vvocConfig = parsedConfig.config;
       vvocSourceSchema = parsedConfig.sourceSchema;
       vvocSourceVersion = parsedConfig.sourceVersion;
+      roleAssignments = listRoleAssignments(vvocConfig.roles);
     } catch (error) {
       vvocParseError = error instanceof Error ? error.message : String(error);
       problems.push(vvocParseError);
     }
+  }
+
+  const unresolvedRoleReferences =
+    opencodeText && !opencodeParseError
+      ? collectUnresolvedRoleReferences(
+          opencodeText,
+          paths.opencodeConfigPath,
+          vvocConfig?.roles ?? {},
+        )
+      : [];
+
+  for (const unresolved of unresolvedRoleReferences) {
+    problems.push(
+      `unresolved role reference at ${unresolved.fieldPath}: ${unresolved.roleRef} (missing role: ${unresolved.roleId})`,
+    );
   }
 
   if (!pluginConfigured) {
@@ -896,6 +921,10 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     },
     secretsRedaction: {
       config: vvocConfig?.secretsRedaction,
+    },
+    roles: {
+      assignments: roleAssignments,
+      unresolvedReferences: unresolvedRoleReferences,
     },
     warnings,
     problems,
@@ -1024,6 +1053,73 @@ function readProviderMap(document: JsonObject, label: string): Record<string, Js
     entries[name] = value as JsonObject;
   }
   return entries;
+}
+
+function listRoleAssignments(roles: Record<string, string>): Array<{
+  roleId: string;
+  model: string;
+  builtIn: boolean;
+}> {
+  const listed: Array<{ roleId: string; model: string; builtIn: boolean }> = [];
+
+  for (const roleId of BUILTIN_ROLE_NAMES) {
+    if (typeof roles[roleId] === "string") {
+      listed.push({ roleId, model: roles[roleId], builtIn: true });
+    }
+  }
+
+  const customRoleIds = Object.keys(roles)
+    .filter((roleId) => !BUILTIN_ROLE_NAMES.includes(roleId as (typeof BUILTIN_ROLE_NAMES)[number]))
+    .sort((left, right) => left.localeCompare(right));
+
+  for (const roleId of customRoleIds) {
+    listed.push({ roleId, model: roles[roleId], builtIn: false });
+  }
+
+  return listed;
+}
+
+function collectUnresolvedRoleReferences(
+  opencodeText: string,
+  label: string,
+  roleMap: Record<string, string>,
+): Array<{ fieldPath: string; roleRef: string; roleId: string }> {
+  const document = parseObjectDocument(opencodeText, label);
+  const unresolved: Array<{ fieldPath: string; roleRef: string; roleId: string }> = [];
+
+  const collectFromField = (fieldPath: string, value: unknown) => {
+    if (typeof value !== "string") {
+      return;
+    }
+    const trimmed = value.trim();
+    if (!trimmed.startsWith(ROLE_REFERENCE_PREFIX)) {
+      return;
+    }
+
+    const roleId = trimmed.slice(ROLE_REFERENCE_PREFIX.length).trim();
+    if (!roleId || !Object.hasOwn(roleMap, roleId)) {
+      unresolved.push({ fieldPath, roleRef: trimmed, roleId: roleId || "<missing>" });
+    }
+  };
+
+  collectFromField("model", document.model);
+  collectFromField("small_model", document.small_model);
+
+  for (const parentName of ["agent", "command"] as const) {
+    const parent = document[parentName];
+    if (!parent || typeof parent !== "object" || Array.isArray(parent)) {
+      continue;
+    }
+
+    for (const [entryName, entry] of Object.entries(parent as JsonObject)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        continue;
+      }
+      collectFromField(`${parentName}.${entryName}.model`, (entry as JsonObject).model);
+    }
+  }
+
+  return unresolved;
 }
 
 function getManagedPromptPath(

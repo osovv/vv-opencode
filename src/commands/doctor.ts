@@ -1,5 +1,5 @@
 // FILE: src/commands/doctor.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Diagnose vv-opencode installation problems and surface actionable failures.
 //   SCOPE: Scope parsing, installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode plus the canonical vvoc.json config.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Updated doctor diagnostics for the canonical vvoc.json config file.]
+//   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output while keeping unresolved role-reference failures in Problems diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -71,6 +71,14 @@ export default defineCommand({
     console.log(
       `Secrets Redaction enabled: ${inspection.secretsRedaction.config ? (inspection.secretsRedaction.config.enabled ? "yes" : "no") : "unknown"}`,
     );
+    console.log("Roles:");
+    if (inspection.roles.assignments.length === 0) {
+      console.log("  <none>");
+    } else {
+      for (const role of inspection.roles.assignments) {
+        console.log(`  ${role.roleId}: ${role.model}`);
+      }
+    }
 
     if (inspection.warnings.length > 0) {
       console.log("Warnings:");

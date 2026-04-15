@@ -1,5 +1,5 @@
 // FILE: src/commands/status.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Show the current vv-opencode installation status.
 //   SCOPE: Scope parsing, inspection lookup, and human-readable status output for OpenCode and the canonical vvoc.json config.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Updated status reporting for the canonical vvoc.json config file.]
+//   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output and unresolved role-reference reporting sourced from installation inspection.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -64,6 +64,23 @@ export default defineCommand({
     console.log(
       `Secrets Redaction enabled: ${inspection.secretsRedaction.config ? (inspection.secretsRedaction.config.enabled ? "yes" : "no") : "unknown"}`,
     );
+    console.log("Roles:");
+    if (inspection.roles.assignments.length === 0) {
+      console.log("  <none>");
+    } else {
+      for (const role of inspection.roles.assignments) {
+        console.log(`  ${role.roleId}: ${role.model}`);
+      }
+    }
+
+    if (inspection.roles.unresolvedReferences.length > 0) {
+      console.log("Unresolved role references:");
+      for (const unresolved of inspection.roles.unresolvedReferences) {
+        console.log(
+          `- ${unresolved.fieldPath} -> ${unresolved.roleRef} (missing role: ${unresolved.roleId})`,
+        );
+      }
+    }
 
     if (inspection.warnings.length > 0) {
       console.log("Warnings:");

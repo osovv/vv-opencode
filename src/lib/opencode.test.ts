@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent rewrites, managed prompt scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.0.0 - Switched module coverage to role-reference OpenCode writes and canonical vvoc schema v3 behavior with strict pre-role rejection.]
+//   LAST_CHANGE: [v1.1.0 - Added installation inspection coverage for canonical role inventory ordering and unresolved vv-role reference diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -37,6 +37,7 @@ import {
   ensureProviderBaseUrlConfigText,
   installManagedAgentPrompts,
   installVvocConfig,
+  inspectInstallation,
   parseGuardianConfigText,
   readVvocConfig,
   renderGuardianConfig,
@@ -48,7 +49,11 @@ import {
   writeProviderBaseUrl,
   writeOpenCodeProviderObject,
 } from "./opencode.js";
-import { createDefaultVvocConfig, VVOC_CONFIG_SCHEMA_URL } from "./vvoc-config.js";
+import {
+  createDefaultVvocConfig,
+  renderVvocConfig,
+  VVOC_CONFIG_SCHEMA_URL,
+} from "./vvoc-config.js";
 
 describe("ensurePackageConfigText", () => {
   test("creates a new config when none exists", () => {
@@ -559,5 +564,90 @@ describe("resolvePaths", () => {
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
     expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
+  });
+});
+
+describe("inspectInstallation", () => {
+  test("reports canonical role inventory and unresolved vv-role references", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-install-inspect-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-install-inspect-project-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+
+      await writeFile(
+        paths.vvocConfigPath,
+        renderVvocConfig({
+          ...createDefaultVvocConfig(),
+          roles: {
+            ...createDefaultVvocConfig().roles,
+            custom: "openai/gpt-5.4-mini",
+          },
+        }),
+        "utf8",
+      );
+
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify(
+          {
+            $schema: OPENCODE_SCHEMA_URL,
+            plugin: [PACKAGE_NAME],
+            model: "vv-role:missing",
+            small_model: "vv-role:fast",
+            agent: {
+              general: {
+                model: "vv-role:default",
+              },
+            },
+            command: {
+              plan: {
+                model: "vv-role:another-missing",
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const inspection = await inspectInstallation(paths);
+
+      expect(inspection.roles.assignments.map((entry) => entry.roleId)).toEqual([
+        "default",
+        "smart",
+        "fast",
+        "vision",
+        "custom",
+      ]);
+      expect(inspection.roles.unresolvedReferences).toEqual([
+        {
+          fieldPath: "model",
+          roleRef: "vv-role:missing",
+          roleId: "missing",
+        },
+        {
+          fieldPath: "command.plan.model",
+          roleRef: "vv-role:another-missing",
+          roleId: "another-missing",
+        },
+      ]);
+      expect(inspection.problems).toContain(
+        "unresolved role reference at model: vv-role:missing (missing role: missing)",
+      );
+      expect(inspection.problems).toContain(
+        "unresolved role reference at command.plan.model: vv-role:another-missing (missing role: another-missing)",
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
   });
 });
