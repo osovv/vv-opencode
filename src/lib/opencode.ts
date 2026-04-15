@@ -63,6 +63,7 @@ import {
   loadManagedAgentPromptTemplate,
   type ManagedOpenCodeAgentName,
 } from "./managed-agents.js";
+import { getBuiltInRoleBindings, ROLE_REFERENCE_PREFIX } from "./model-roles.js";
 import {
   createDefaultVvocConfig,
   createGuardianConfig,
@@ -232,15 +233,35 @@ export function ensureManagedAgentRegistrationsConfigText(
   text: string | undefined,
   paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
 ): string {
+  const builtInRoleBindings = getBuiltInRoleBindings();
+  const rootRoleRefs = {
+    model: createRoleReference(builtInRoleBindings.opencodeDefaults.model),
+    small_model: createRoleReference(builtInRoleBindings.opencodeDefaults.smallModel),
+  };
+  const builtInAgentModelRefs = {
+    build: createRoleReference(builtInRoleBindings.opencodeAgents.build),
+    plan: createRoleReference(builtInRoleBindings.opencodeAgents.plan),
+    general: createRoleReference(builtInRoleBindings.opencodeAgents.general),
+    explore: createRoleReference(builtInRoleBindings.opencodeAgents.explore),
+  };
+
   if (!text?.trim()) {
+    const managedRegistrations = Object.fromEntries(
+      MANAGED_OPENCODE_AGENTS.map((definition) => [
+        definition.name,
+        getManagedOpenCodeAgentRegistration(paths, definition.name),
+      ]),
+    );
     return renderJson({
       $schema: OPENCODE_SCHEMA_URL,
-      agent: Object.fromEntries(
-        MANAGED_OPENCODE_AGENTS.map((definition) => [
-          definition.name,
-          getManagedOpenCodeAgentRegistration(paths, definition.name),
-        ]),
-      ),
+      model: rootRoleRefs.model,
+      small_model: rootRoleRefs.small_model,
+      agent: {
+        ...Object.fromEntries(
+          Object.entries(builtInAgentModelRefs).map(([name, model]) => [name, { model }]),
+        ),
+        ...managedRegistrations,
+      },
     });
   }
 
@@ -258,12 +279,50 @@ export function ensureManagedAgentRegistrationsConfigText(
     );
   }
 
+  if (document.model !== rootRoleRefs.model) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["model"], rootRoleRefs.model, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  if (document.small_model !== rootRoleRefs.small_model) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["small_model"], rootRoleRefs.small_model, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  for (const [agentName, modelRef] of Object.entries(builtInAgentModelRefs)) {
+    const currentEntry = currentAgents[agentName];
+    const nextEntry: JsonObject = currentEntry
+      ? { ...currentEntry, model: modelRef }
+      : { model: modelRef };
+    delete nextEntry.variant;
+
+    if (JSON.stringify(currentEntry) === JSON.stringify(nextEntry)) {
+      continue;
+    }
+
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["agent", agentName], nextEntry, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
   for (const definition of MANAGED_OPENCODE_AGENTS) {
     const currentEntry = currentAgents[definition.name];
     const nextEntry = {
-      ...getManagedOpenCodeAgentRegistration(paths, definition.name),
       ...currentEntry,
+      ...getManagedOpenCodeAgentRegistration(paths, definition.name),
     };
+    delete nextEntry.variant;
 
     if (JSON.stringify(currentEntry) === JSON.stringify(nextEntry)) {
       continue;
@@ -974,10 +1033,12 @@ function getManagedOpenCodeAgentRegistration(
   agentName: ManagedOpenCodeAgentName,
 ): JsonObject {
   const definition = getManagedOpenCodeAgentDefinition(agentName);
+  const builtInBindings = getBuiltInRoleBindings();
   const registration: JsonObject = {
     description: definition.description,
     mode: definition.mode,
     prompt: getManagedOpenCodeAgentPromptReference(paths, agentName),
+    model: createRoleReference(builtInBindings.managedAgents[agentName]),
   };
 
   if (definition.permission) {
@@ -1130,6 +1191,10 @@ function updateTopLevelStringFieldText(
     }),
   );
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+function createRoleReference(roleId: string): string {
+  return `${ROLE_REFERENCE_PREFIX}${roleId}`;
 }
 // END_BLOCK_MANAGED_AGENT_HELPERS
 

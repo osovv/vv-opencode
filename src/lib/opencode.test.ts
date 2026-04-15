@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 0.9.0
+// VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, top-level OpenCode model writes, provider object/baseURL patching, managed OpenCode agent registration/prompt scaffolding, canonical vvoc config writes and migration, managed built-in preset refresh, OpenCode agent model plus variant overrides, Guardian section round-trips, and path resolution behavior.
+//   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent rewrites, managed prompt scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
 //   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
 //   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
@@ -13,17 +13,14 @@
 //
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
-//   provider baseURL helper tests - Verify conservative provider.options.baseURL patching.
-//   built-in OpenCode agent model helper tests - Verify general/explore model overrides round-trip through OpenCode config.
-//   top-level OpenCode model helper tests - Verify default model and small_model overrides round-trip through OpenCode config.
-//   provider object helper tests - Verify provider-specific object patches merge safely.
-//   managed agent registration helpers tests - Verify primary/subagent registration, prompt scaffolding, and model override round-trips.
-//   guardian config helpers tests - Verify Guardian config render/parse round-trips.
+//   ensureManagedAgentRegistrationsConfigText tests - Verify role-reference defaults and managed agent rewrites while preserving comments.
+//   canonical vvoc config tests - Verify schema v3 seeding, managed preset refresh, and strict pre-role rejection.
+//   provider helper tests - Verify conservative provider patch helpers remain comment-safe.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.9.0 - Added coverage for OpenCode agent variant overrides used by vv-openai and managed preset application.]
+//   LAST_CHANGE: [v1.0.0 - Switched module coverage to role-reference OpenCode writes and canonical vvoc schema v3 behavior with strict pre-role rejection.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -34,28 +31,22 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
-  ensurePackageConfigText,
-  ensureProviderBaseUrlConfigText,
   ensureManagedAgentRegistrationsConfigText,
-  installVvocConfig,
+  ensurePackageConfigText,
+  ensurePackageInstalled,
+  ensureProviderBaseUrlConfigText,
   installManagedAgentPrompts,
+  installVvocConfig,
   parseGuardianConfigText,
-  readManagedAgentOverrides,
-  readOpenCodeAgentOverride,
-  readOpenCodeDefaultModel,
   readVvocConfig,
-  readOpenCodeAgentModel,
-  readManagedAgentModels,
   renderGuardianConfig,
   resolvePaths,
+  syncManagedAgentRegistrations,
   syncVvocConfig,
-  writeOpenCodeDefaultModel,
-  writeOpenCodeProviderObject,
   writeGuardianConfig,
   writeMemoryConfig,
-  writeOpenCodeAgentModel,
   writeProviderBaseUrl,
-  writeManagedAgentModel,
+  writeOpenCodeProviderObject,
 } from "./opencode.js";
 import { createDefaultVvocConfig, VVOC_CONFIG_SCHEMA_URL } from "./vvoc-config.js";
 
@@ -94,8 +85,6 @@ describe("ensurePackageConfigText", () => {
 describe("guardian config helpers", () => {
   test("round-trips managed guardian config values", () => {
     const output = renderGuardianConfig({
-      model: "anthropic/claude-sonnet-4-5",
-      variant: "high",
       timeoutMs: 12_345,
       approvalRiskThreshold: 55,
       reviewToastDurationMs: 6_789,
@@ -103,8 +92,6 @@ describe("guardian config helpers", () => {
     const parsed = parseGuardianConfigText(output, "test guardian config");
 
     expect(parsed).toEqual({
-      model: "anthropic/claude-sonnet-4-5",
-      variant: "high",
       timeoutMs: 12_345,
       approvalRiskThreshold: 55,
       reviewToastDurationMs: 6_789,
@@ -112,10 +99,92 @@ describe("guardian config helpers", () => {
   });
 });
 
+describe("managed OpenCode role-reference rewrites", () => {
+  test("rewrites root defaults, built-in agents, and managed agents to vv-role refs", async () => {
+    const paths = await resolvePaths({
+      scope: "global",
+      cwd: "/workspace/project",
+      configDir: "/tmp/vvoc-config-home",
+    });
+
+    const output = ensureManagedAgentRegistrationsConfigText(undefined, paths);
+    const parsed = parse(output) as {
+      model?: string;
+      small_model?: string;
+      agent?: Record<
+        string,
+        { model?: string; prompt?: string; mode?: string; permission?: unknown }
+      >;
+    };
+
+    expect(parsed.model).toBe("vv-role:default");
+    expect(parsed.small_model).toBe("vv-role:fast");
+    expect(parsed.agent?.build?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.plan?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.general?.model).toBe("vv-role:default");
+    expect(parsed.agent?.explore?.model).toBe("vv-role:fast");
+    expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.enhancer?.mode).toBe("primary");
+    expect(parsed.agent?.enhancer?.prompt).toBe("{file:../vvoc/agents/enhancer.md}");
+    expect(parsed.agent?.enhancer?.permission).toEqual({
+      edit: "deny",
+      bash: "deny",
+      task: "deny",
+      todowrite: "deny",
+    });
+    expect(parsed.agent?.implementer?.model).toBe("vv-role:default");
+    expect(parsed.agent?.["spec-reviewer"]?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.["code-reviewer"]?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.investitagor?.model).toBe("vv-role:smart");
+  });
+
+  test("preserves comments while rewriting drifted model-bearing fields", async () => {
+    const paths = await resolvePaths({
+      scope: "project",
+      cwd: "/workspace/project",
+      configDir: "/tmp/vvoc-config-home",
+    });
+
+    const input = `{
+  // keep root note
+  "model": "openai/gpt-5",
+  // keep root small note
+  "small_model": "openai/gpt-5-mini",
+  "agent": {
+    // keep managed note
+    "enhancer": {
+      "model": "openai/gpt-5",
+      "prompt": "{file:./.vvoc/agents/enhancer.md}"
+    },
+    "build": {
+      // keep build note
+      "model": "openai/gpt-5"
+    }
+  }
+}\n`;
+
+    const output = ensureManagedAgentRegistrationsConfigText(input, paths);
+    const parsed = parse(output) as {
+      model?: string;
+      small_model?: string;
+      agent?: Record<string, { model?: string; prompt?: string }>;
+    };
+
+    expect(output).toContain("// keep root note");
+    expect(output).toContain("// keep root small note");
+    expect(output).toContain("// keep managed note");
+    expect(parsed.model).toBe("vv-role:default");
+    expect(parsed.small_model).toBe("vv-role:fast");
+    expect(parsed.agent?.build?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
+  });
+});
+
 describe("canonical vvoc config helpers", () => {
   test("ships a versioned schema file at the canonical hosted URL", async () => {
     const schemaText = await readFile(
-      new URL("../../schemas/vvoc/v2.json", import.meta.url),
+      new URL("../../schemas/vvoc/v3.json", import.meta.url),
       "utf8",
     );
     const schema = JSON.parse(schemaText) as {
@@ -124,50 +193,58 @@ describe("canonical vvoc config helpers", () => {
     };
 
     expect(schema.$id).toBe(VVOC_CONFIG_SCHEMA_URL);
-    expect(schema.properties?.version?.const).toBe(2);
+    expect(schema.properties?.version?.const).toBe(3);
   });
 
-  test("installVvocConfig creates a fully seeded canonical config and preserves other sections", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-canonical-config-"));
+  test("fresh install creates schema v3 vvoc config and pins package in plugin array", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-fresh-install-v3-"));
 
     try {
       const paths = await resolvePaths({
-        scope: "project",
+        scope: "global",
         cwd: "/workspace/project",
         configDir: configHome,
       });
 
-      const installResult = await installVvocConfig(paths);
-      expect(installResult.action).toBe("created");
+      const pluginResult = await ensurePackageInstalled(paths);
+      const registrationResult = await syncManagedAgentRegistrations(paths);
+      const vvocResult = await installVvocConfig(paths);
 
-      const memoryResult = await writeMemoryConfig(paths, {
-        enabled: false,
-        defaultSearchLimit: 12,
-      });
-      expect(memoryResult.action).toBe("updated");
+      expect(pluginResult.changed).toBe(true);
+      expect(registrationResult.changed).toBe(true);
+      expect(vvocResult.action).toBe("created");
 
-      const guardianResult = await writeGuardianConfig(
-        paths,
-        { model: "anthropic/claude-sonnet-4-5", variant: "high" },
-        { merge: true },
+      const openCodeConfig = parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
+        plugin?: string[];
+        model?: string;
+        small_model?: string;
+        agent?: Record<string, { model?: string }>;
+      };
+      const vvocConfig = await readVvocConfig(paths);
+
+      expect(openCodeConfig.plugin?.some((entry) => entry.startsWith(`${PACKAGE_NAME}@`))).toBe(
+        true,
       );
-      expect(guardianResult.action).toBe("updated");
+      expect(openCodeConfig.model).toBe("vv-role:default");
+      expect(openCodeConfig.small_model).toBe("vv-role:fast");
+      expect(openCodeConfig.agent?.build?.model).toBe("vv-role:smart");
+      expect(openCodeConfig.agent?.general?.model).toBe("vv-role:default");
+      expect(openCodeConfig.agent?.enhancer?.model).toBe("vv-role:smart");
 
-      const config = await readVvocConfig(paths);
-
-      expect(config?.guardian.model).toBe("anthropic/claude-sonnet-4-5");
-      expect(config?.guardian.variant).toBe("high");
-      expect(config?.memory.enabled).toBe(false);
-      expect(config?.memory.defaultSearchLimit).toBe(12);
-      expect(config?.secretsRedaction.secret).toBe("${VVOC_SECRET}");
-      expect(Object.keys(config?.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
+      expect(vvocConfig?.version).toBe(3);
+      expect(vvocConfig?.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);
+      expect(vvocConfig?.roles.default).toBeDefined();
+      expect(vvocConfig?.roles.smart).toBeDefined();
+      expect(vvocConfig?.roles.fast).toBeDefined();
+      expect(vvocConfig?.roles.vision).toBeDefined();
+      expect(Object.keys(vvocConfig?.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("readVvocConfig loads v1 docs and syncVvocConfig rewrites them to v2", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-v1-migration-"));
+  test("canonical writes preserve unrelated sections and refresh managed vv presets", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-v3-preset-refresh-"));
 
     try {
       const paths = await resolvePaths({
@@ -177,16 +254,72 @@ describe("canonical vvoc config helpers", () => {
       });
 
       await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(
+        paths.vvocConfigPath,
+        JSON.stringify(
+          {
+            ...createDefaultVvocConfig(),
+            roles: {
+              ...createDefaultVvocConfig().roles,
+              custom: "openai/gpt-5.4-mini",
+            },
+            presets: {
+              "vv-zai": {
+                description: "user drifted managed preset",
+                agents: {
+                  default: "openai/gpt-5",
+                },
+              },
+              custom: {
+                description: "user preset",
+                agents: {
+                  custom: "openai/gpt-5.4-mini",
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      await writeMemoryConfig(paths, { enabled: false, defaultSearchLimit: 12 });
+      await writeGuardianConfig(paths, { timeoutMs: 12_345 }, { merge: true });
+
+      const syncResult = await syncVvocConfig(paths);
+      expect(["updated", "kept"]).toContain(syncResult.action);
+
+      const synced = await readVvocConfig(paths);
+      expect(synced?.memory.enabled).toBe(false);
+      expect(synced?.memory.defaultSearchLimit).toBe(12);
+      expect(synced?.guardian.timeoutMs).toBe(12_345);
+      expect(synced?.roles.custom).toBe("openai/gpt-5.4-mini");
+      expect(synced?.presets.custom?.agents.custom).toBe("openai/gpt-5.4-mini");
+      expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.1");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("strict reads and sync reject unsupported pre-role vvoc schemas", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-v2-reject-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
 
       await writeFile(
         paths.vvocConfigPath,
         JSON.stringify(
           {
-            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.16.0/schemas/vvoc/v1.json",
-            version: 1,
+            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.18.1/schemas/vvoc/v2.json",
+            version: 2,
             guardian: {
-              model: "anthropic/claude-sonnet-4-5",
-              variant: "high",
               timeoutMs: 12345,
               approvalRiskThreshold: 70,
               reviewToastDurationMs: 54321,
@@ -194,22 +327,9 @@ describe("canonical vvoc config helpers", () => {
             memory: {
               enabled: false,
               defaultSearchLimit: 12,
-              reviewerModel: "openai/gpt-5",
-              reviewerVariant: "high",
             },
-            secretsRedaction: {
-              enabled: true,
-              secret: "${VVOC_SECRET}",
-              ttlMs: 60000,
-              maxMappings: 77,
-              patterns: {
-                keywords: [],
-                regex: [],
-                builtin: ["email"],
-                exclude: [],
-              },
-              debug: true,
-            },
+            secretsRedaction: createDefaultVvocConfig().secretsRedaction,
+            presets: createDefaultVvocConfig().presets,
           },
           null,
           2,
@@ -217,113 +337,33 @@ describe("canonical vvoc config helpers", () => {
         "utf8",
       );
 
-      const loaded = await readVvocConfig(paths);
-      expect(loaded?.guardian.timeoutMs).toBe(12345);
-      expect(loaded?.memory.defaultSearchLimit).toBe(12);
-      expect(Object.keys(loaded?.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
-
-      const syncResult = await syncVvocConfig(paths);
-      expect(syncResult.action).toBe("updated");
-
-      const rawText = await readFile(paths.vvocConfigPath, "utf8");
-      const parsed = JSON.parse(rawText) as {
-        version: number;
-        guardian: {
-          timeoutMs: number;
-          approvalRiskThreshold: number;
-          reviewToastDurationMs: number;
-        };
-        memory: { enabled: boolean; defaultSearchLimit: number };
-        secretsRedaction: { ttlMs: number; maxMappings: number; debug: boolean };
-        presets?: Record<string, unknown>;
-      };
-
-      expect(parsed.version).toBe(2);
-      expect(parsed.guardian.timeoutMs).toBe(12345);
-      expect(parsed.guardian.approvalRiskThreshold).toBe(70);
-      expect(parsed.guardian.reviewToastDurationMs).toBe(54321);
-      expect(parsed.memory.enabled).toBe(false);
-      expect(parsed.memory.defaultSearchLimit).toBe(12);
-      expect(parsed.secretsRedaction.ttlMs).toBe(60000);
-      expect(parsed.secretsRedaction.maxMappings).toBe(77);
-      expect(parsed.secretsRedaction.debug).toBe(true);
-      expect(Object.keys(parsed.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
+      await expect(readVvocConfig(paths)).rejects.toThrow(/version|roles/);
+      await expect(syncVvocConfig(paths)).rejects.toThrow(/version|roles/);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
+});
 
-  test("syncVvocConfig refreshes managed vv presets while preserving user presets", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-v2-managed-preset-refresh-"));
+describe("managed prompt install", () => {
+  test("writes managed prompt files and keeps project-scope prompt refs", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-agents-"));
 
     try {
       const paths = await resolvePaths({
-        scope: "global",
-        cwd: "/workspace/project",
-        configDir: configHome,
+        scope: "project",
+        cwd: projectDir,
       });
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      const promptResults = await installManagedAgentPrompts(paths, { force: true });
+      expect(promptResults).toHaveLength(7);
 
-      await writeFile(
-        paths.vvocConfigPath,
-        JSON.stringify(
-          {
-            ...createDefaultVvocConfig(),
-            presets: {
-              "vv-zai": {
-                description: "User-edited managed preset",
-                agents: {
-                  default: "openai/gpt-5.4",
-                  "small-model": "openai/gpt-5.4-mini",
-                  guardian: "openai/gpt-5.4-mini",
-                  explore: "openai/gpt-5.4-mini",
-                },
-              },
-              zai: {
-                description: "User-owned legacy preset",
-                agents: {
-                  default: "openai/gpt-5.4",
-                  guardian: "openai/gpt-5.4-mini",
-                  explore: "openai/gpt-5.4-mini",
-                },
-              },
-            },
-          },
-          null,
-          2,
-        ) + "\n",
-        "utf8",
-      );
-
-      const loaded = await readVvocConfig(paths);
-      expect(Object.keys(loaded?.presets ?? {})).toEqual([
-        "vv-openai",
-        "vv-zai",
-        "vv-minimax",
-        "zai",
-      ]);
-      expect(loaded?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.1");
-      expect(loaded?.presets.zai?.agents.default).toBe("openai/gpt-5.4");
-
-      const syncResult = await syncVvocConfig(paths);
-      expect(syncResult.action).toBe("updated");
-
-      const rawText = await readFile(paths.vvocConfigPath, "utf8");
-      const parsed = JSON.parse(rawText) as {
-        presets?: Record<string, { agents?: Record<string, string> }>;
-      };
-
-      expect(Object.keys(parsed.presets ?? {})).toEqual([
-        "vv-openai",
-        "vv-zai",
-        "vv-minimax",
-        "zai",
-      ]);
-      expect(parsed.presets?.["vv-zai"]?.agents?.default).toBe("zai-coding-plan/glm-5.1");
-      expect(parsed.presets?.zai?.agents?.default).toBe("openai/gpt-5.4");
+      const openCode = ensureManagedAgentRegistrationsConfigText(undefined, paths);
+      const parsed = parse(openCode) as { agent?: Record<string, { prompt?: string }> };
+      expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
+      expect(parsed.agent?.implementer?.prompt).toBe("{file:.vvoc/agents/implementer.md}");
     } finally {
-      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
     }
   });
 });
@@ -367,20 +407,6 @@ describe("provider baseURL helpers", () => {
     expect(parsed.provider?.stepfun?.options?.baseURL).toBe("https://api.stepfun.ai/v1");
   });
 
-  test("rejects non-object provider options", () => {
-    const input = `{
-  "provider": {
-    "stepfun": {
-      "options": "bad"
-    }
-  }
-}\n`;
-
-    expect(() =>
-      ensureProviderBaseUrlConfigText(input, "stepfun", "https://api.stepfun.ai/v1"),
-    ).toThrow('OpenCode config: provider.stepfun: expected "options" to be an object');
-  });
-
   test("writes provider override idempotently", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-provider-patch-"));
 
@@ -401,196 +427,6 @@ describe("provider baseURL helpers", () => {
       expect(first.action).toBe("created");
       expect(second.action).toBe("kept");
       expect(parsed.provider?.stepfun?.options?.baseURL).toBe("https://api.stepfun.ai/v1");
-    } finally {
-      await rm(configHome, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("managed agent registration helpers", () => {
-  test("creates managed agent registrations with vvoc prompt refs", async () => {
-    const paths = await resolvePaths({
-      scope: "global",
-      cwd: "/workspace/project",
-      configDir: "/tmp/vvoc-config-home",
-    });
-
-    const output = ensureManagedAgentRegistrationsConfigText(undefined, paths);
-    const parsed = parse(output) as {
-      $schema?: string;
-      agent?: Record<
-        string,
-        { mode?: string; prompt?: string; permission?: Record<string, unknown>; steps?: number }
-      >;
-    };
-
-    expect(parsed.$schema).toBe(OPENCODE_SCHEMA_URL);
-    expect(parsed.agent?.enhancer?.mode).toBe("primary");
-    expect(parsed.agent?.enhancer?.prompt).toBe("{file:../vvoc/agents/enhancer.md}");
-    expect(parsed.agent?.enhancer?.permission).toEqual({
-      edit: "deny",
-      bash: "deny",
-      task: "deny",
-      todowrite: "deny",
-    });
-    expect(parsed.agent?.implementer?.mode).toBe("subagent");
-    expect(parsed.agent?.implementer?.prompt).toBe("{file:../vvoc/agents/implementer.md}");
-    expect(parsed.agent?.implementer?.steps).toBeUndefined();
-    expect(parsed.agent?.["spec-reviewer"]?.permission).toEqual({ edit: "deny" });
-    expect(parsed.agent?.investitagor?.prompt).toBe("{file:../vvoc/agents/investitagor.md}");
-  });
-
-  test("writes managed prompt files and round-trips model plus variant overrides", async () => {
-    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-agents-"));
-
-    try {
-      const paths = await resolvePaths({
-        scope: "project",
-        cwd: projectDir,
-      });
-
-      const promptResults = await installManagedAgentPrompts(paths, { force: true });
-      expect(promptResults).toHaveLength(7);
-
-      const enhancerPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "enhancer.md"),
-        "utf8",
-      );
-
-      const implementerPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "implementer.md"),
-        "utf8",
-      );
-      const guardianPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "guardian.md"),
-        "utf8",
-      );
-      const memoryReviewerPrompt = await readFile(
-        join(projectDir, ".vvoc", "agents", "memory-reviewer.md"),
-        "utf8",
-      );
-      expect(implementerPrompt).toContain("Managed by vvoc");
-      expect(implementerPrompt).not.toContain("mode: subagent");
-      expect(implementerPrompt).not.toContain("steps:");
-      expect(implementerPrompt).not.toStartWith("---\n");
-      expect(implementerPrompt).toContain("You are the implementer subagent.");
-      expect(enhancerPrompt).toContain("You are the enhancer agent.");
-      expect(enhancerPrompt).toContain("<constraint-1>");
-      expect(enhancerPrompt).toContain("<acceptance-criterion-1>");
-      expect(guardianPrompt).toContain("risk assessment of a coding-agent tool call");
-      expect(memoryReviewerPrompt).toContain(
-        "You review explicit persistent memory managed by vvoc.",
-      );
-
-      const setResult = await writeManagedAgentModel(paths, "enhancer", {
-        model: "openai/gpt-5",
-        variant: "xhigh",
-        ensureEntry: true,
-      });
-      expect(setResult.action).toBe("created");
-
-      const models = await readManagedAgentModels(paths);
-      expect(models.enhancer).toBe("openai/gpt-5");
-      const overrides = await readManagedAgentOverrides(paths);
-      expect(overrides.enhancer).toEqual({ model: "openai/gpt-5", variant: "xhigh" });
-
-      const unsetResult = await writeManagedAgentModel(paths, "enhancer", {
-        ensureEntry: false,
-      });
-      expect(unsetResult.action).toBe("updated");
-
-      const modelsAfterUnset = await readManagedAgentModels(paths);
-      expect(modelsAfterUnset.enhancer).toBeUndefined();
-    } finally {
-      await rm(projectDir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("built-in OpenCode agent model helpers", () => {
-  test("writes and removes model plus variant overrides for build, plan, general, and explore", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-agent-model-"));
-
-    try {
-      const paths = await resolvePaths({
-        scope: "global",
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-
-      const builtInAgents = ["build", "plan", "general", "explore"] as const;
-
-      for (const agentName of builtInAgents) {
-        const setResult = await writeOpenCodeAgentModel(paths, agentName, {
-          model: "openai/gpt-5-nano",
-          variant: agentName === "build" || agentName === "plan" ? "high" : undefined,
-          ensureEntry: true,
-        });
-        const model = await readOpenCodeAgentModel(paths, agentName);
-        const override = await readOpenCodeAgentOverride(paths, agentName);
-
-        expect(model).toBe("openai/gpt-5-nano");
-        expect(override.variant).toBe(
-          agentName === "build" || agentName === "plan" ? "high" : undefined,
-        );
-        expect(["created", "updated"]).toContain(setResult.action);
-      }
-
-      for (const agentName of builtInAgents) {
-        const unsetResult = await writeOpenCodeAgentModel(paths, agentName, {
-          ensureEntry: false,
-        });
-        const modelAfterUnset = await readOpenCodeAgentModel(paths, agentName);
-
-        expect(unsetResult.action).toBe("updated");
-        expect(modelAfterUnset).toBeUndefined();
-      }
-    } finally {
-      await rm(configHome, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("top-level OpenCode model helpers", () => {
-  test("writes and removes default model and small_model overrides", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-default-model-"));
-
-    try {
-      const paths = await resolvePaths({
-        scope: "global",
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-
-      const defaultSetResult = await writeOpenCodeDefaultModel(paths, "model", {
-        model: "openai/gpt-5",
-        ensureEntry: true,
-      });
-      const smallSetResult = await writeOpenCodeDefaultModel(paths, "small_model", {
-        model: "openai/gpt-5-mini",
-        ensureEntry: true,
-      });
-
-      expect(["created", "updated"]).toContain(defaultSetResult.action);
-      expect(["created", "updated"]).toContain(smallSetResult.action);
-      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-5");
-      expect(await readOpenCodeDefaultModel(paths, "small_model")).toBe("openai/gpt-5-mini");
-
-      const content = await readFile(paths.opencodeConfigPath, "utf8");
-      expect(content).toContain('"model": "openai/gpt-5"');
-      expect(content).toContain('"small_model": "openai/gpt-5-mini"');
-
-      const defaultUnsetResult = await writeOpenCodeDefaultModel(paths, "model", {
-        ensureEntry: false,
-      });
-      const smallUnsetResult = await writeOpenCodeDefaultModel(paths, "small_model", {
-        ensureEntry: false,
-      });
-
-      expect(defaultUnsetResult.action).toBe("updated");
-      expect(smallUnsetResult.action).toBe("updated");
-      expect(await readOpenCodeDefaultModel(paths, "model")).toBeUndefined();
-      expect(await readOpenCodeDefaultModel(paths, "small_model")).toBeUndefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

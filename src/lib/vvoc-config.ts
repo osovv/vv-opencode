@@ -45,11 +45,7 @@
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
-import {
-  SUPPORTED_MODEL_TARGET_NAMES,
-  normalizeModelTargetOverride,
-  type SupportedModelTargetName,
-} from "./agent-models.js";
+import { BUILTIN_ROLE_NAMES, parseModelSelection, type BuiltInRoleName } from "./model-roles.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
 
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
@@ -58,10 +54,8 @@ const DEFAULT_MEMORY_SEARCH_LIMIT = 8;
 const DEFAULT_SECRETS_REDACTION_TTL_MS = 3_600_000;
 const DEFAULT_SECRETS_REDACTION_MAX_MAPPINGS = 10_000;
 
-const VVOC_CONFIG_V1_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v1.json`;
-
-export const VVOC_CONFIG_VERSION = 2;
-export const VVOC_CONFIG_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v2.json`;
+export const VVOC_CONFIG_VERSION = 3;
+export const VVOC_CONFIG_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v3.json`;
 
 const JSON_SCHEMA_DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 const BUILTIN_SECRETS_REDACTION_PATTERNS = [
@@ -82,9 +76,10 @@ const BUILTIN_SECRETS_REDACTION_PATTERNS = [
 const BUILTIN_VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax"] as const;
 
 type JsonObject = Record<string, unknown>;
-type VvocConfigVersion = 1 | 2;
+type VvocConfigVersion = 3;
 
-export type VvocPresetAgents = Partial<Record<SupportedModelTargetName, string>>;
+export type VvocRoleAssignments = Partial<Record<string, string>>;
+export type VvocPresetAgents = VvocRoleAssignments;
 
 export type VvocPreset = {
   description?: string;
@@ -139,6 +134,7 @@ export type SecretsRedactionConfig = {
 export type VvocConfig = {
   $schema: string;
   version: number;
+  roles: Record<string, string>;
   guardian: GuardianConfig;
   memory: MemoryConfig;
   secretsRedaction: SecretsRedactionConfig;
@@ -156,8 +152,6 @@ const GUARDIAN_CONFIG_SCHEMA = {
   additionalProperties: false,
   required: ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
   properties: {
-    model: { type: "string", minLength: 1 },
-    variant: { type: "string", minLength: 1 },
     timeoutMs: { type: "integer", minimum: 1 },
     approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
     reviewToastDurationMs: { type: "integer", minimum: 1 },
@@ -171,8 +165,6 @@ const MEMORY_CONFIG_SCHEMA = {
   properties: {
     enabled: { type: "boolean" },
     defaultSearchLimit: { type: "integer", minimum: 1 },
-    reviewerModel: { type: "string", minLength: 1 },
-    reviewerVariant: { type: "string", minLength: 1 },
   },
 };
 
@@ -228,13 +220,11 @@ const SECRETS_REDACTION_CONFIG_SCHEMA = {
   },
 };
 
-const VVOC_PRESET_AGENTS_SCHEMA = {
+const ROLE_ASSIGNMENTS_SCHEMA = {
   type: "object",
-  additionalProperties: false,
+  propertyNames: { minLength: 1, pattern: "^[a-z][a-z0-9-]*$" },
   minProperties: 1,
-  properties: Object.fromEntries(
-    SUPPORTED_MODEL_TARGET_NAMES.map((agentName) => [agentName, { type: "string", minLength: 1 }]),
-  ),
+  additionalProperties: { type: "string", minLength: 1 },
 };
 
 const VVOC_PRESET_SCHEMA = {
@@ -243,31 +233,7 @@ const VVOC_PRESET_SCHEMA = {
   required: ["agents"],
   properties: {
     description: { type: "string", minLength: 1 },
-    agents: VVOC_PRESET_AGENTS_SCHEMA,
-  },
-};
-
-const VVOC_CONFIG_V1_SCHEMA = {
-  $schema: JSON_SCHEMA_DRAFT_2020_12,
-  $id: VVOC_CONFIG_V1_SCHEMA_URL,
-  title: "vvoc config",
-  description: "Canonical vvoc configuration document (v1).",
-  type: "object",
-  additionalProperties: false,
-  required: ["$schema", "version", "guardian", "memory", "secretsRedaction"],
-  properties: {
-    $schema: {
-      type: "string",
-      minLength: 1,
-      description: "Hosted JSON Schema URL for vvoc.json.",
-    },
-    version: {
-      type: "integer",
-      const: 1,
-    },
-    guardian: GUARDIAN_CONFIG_SCHEMA,
-    memory: MEMORY_CONFIG_SCHEMA,
-    secretsRedaction: SECRETS_REDACTION_CONFIG_SCHEMA,
+    agents: ROLE_ASSIGNMENTS_SCHEMA,
   },
 };
 
@@ -278,7 +244,7 @@ export const VVOC_CONFIG_SCHEMA = {
   description: "Canonical vvoc configuration document.",
   type: "object",
   additionalProperties: false,
-  required: ["$schema", "version", "guardian", "memory", "secretsRedaction", "presets"],
+  required: ["$schema", "version", "roles", "guardian", "memory", "secretsRedaction", "presets"],
   properties: {
     $schema: {
       type: "string",
@@ -288,6 +254,12 @@ export const VVOC_CONFIG_SCHEMA = {
     version: {
       type: "integer",
       const: VVOC_CONFIG_VERSION,
+    },
+    roles: {
+      type: "object",
+      propertyNames: { minLength: 1, pattern: "^[a-z][a-z0-9-]*$" },
+      minProperties: BUILTIN_ROLE_NAMES.length,
+      additionalProperties: { type: "string", minLength: 1 },
     },
     guardian: GUARDIAN_CONFIG_SCHEMA,
     memory: MEMORY_CONFIG_SCHEMA,
@@ -301,30 +273,25 @@ export const VVOC_CONFIG_SCHEMA = {
 };
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
-const validateWithV1Schema = ajv.compile(VVOC_CONFIG_V1_SCHEMA);
 const validateWithSchema = ajv.compile(VVOC_CONFIG_SCHEMA);
 
 // START_BLOCK_DEFAULT_CONFIG_BUILDERS
 export function createGuardianConfig(overrides: GuardianConfigOverrides = {}): GuardianConfig {
   const timeoutMs = overrides.timeoutMs ?? DEFAULT_GUARDIAN_TIMEOUT_MS;
 
-  return compactObject({
-    model: normalizeOptionalString(overrides.model),
-    variant: normalizeOptionalString(overrides.variant),
+  return {
     timeoutMs,
     approvalRiskThreshold:
       overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD,
     reviewToastDurationMs: overrides.reviewToastDurationMs ?? timeoutMs,
-  });
+  };
 }
 
 export function createMemoryConfig(overrides: MemoryConfigOverrides = {}): MemoryConfig {
-  return compactObject({
+  return {
     enabled: overrides.enabled ?? true,
     defaultSearchLimit: overrides.defaultSearchLimit ?? DEFAULT_MEMORY_SEARCH_LIMIT,
-    reviewerModel: normalizeOptionalString(overrides.reviewerModel),
-    reviewerVariant: normalizeOptionalString(overrides.reviewerVariant),
-  });
+  };
 }
 
 export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
@@ -347,33 +314,56 @@ export function createDefaultVvocPresets(): VvocPresets {
   return createBuiltinVvocPresets();
 }
 
+function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Record<string, string> {
+  const defaults: Record<BuiltInRoleName, string> = {
+    default: "openai/vv-gpt-5.4-xhigh",
+    smart: "openai/vv-gpt-5.4-xhigh",
+    fast: "openai/gpt-5.4-mini",
+    vision: "openai/gpt-4.1",
+  };
+  const roles: Record<string, string> = { ...defaults };
+
+  for (const [roleId, modelSelection] of Object.entries(overrides)) {
+    if (typeof modelSelection !== "string") {
+      continue;
+    }
+    const normalizedRoleId = normalizeRoleId(roleId, `role ${roleId}`);
+    roles[normalizedRoleId] = normalizeRoleModelSelection(
+      modelSelection,
+      `role ${normalizedRoleId}`,
+    );
+  }
+
+  return roles;
+}
+
 function createBuiltinVvocPresets(): VvocPresets {
   return {
     "vv-openai": createVvocPreset({
-      description: "Starter OpenAI overrides for common vvoc model targets.",
+      description: "Starter OpenAI role assignments for built-in vvoc roles.",
       agents: {
         default: "openai/vv-gpt-5.4-xhigh",
-        "small-model": "openai/gpt-5.4-mini",
-        guardian: "openai/gpt-5.4-mini",
-        explore: "openai/gpt-5.4-mini",
+        smart: "openai/vv-gpt-5.4-xhigh",
+        fast: "openai/gpt-5.4-mini",
+        vision: "openai/gpt-4.1",
       },
     }),
     "vv-zai": createVvocPreset({
-      description: "Starter ZAI overrides for common vvoc model targets.",
+      description: "Starter ZAI role assignments for built-in vvoc roles.",
       agents: {
         default: "zai-coding-plan/glm-5.1",
-        "small-model": "zai-coding-plan/glm-4.5-airx",
-        guardian: "zai-coding-plan/glm-4.5-airx",
-        explore: "zai-coding-plan/glm-4.5-airx",
+        smart: "zai-coding-plan/glm-5.1",
+        fast: "zai-coding-plan/glm-4.5-airx",
+        vision: "zai-coding-plan/glm-4.5v",
       },
     }),
     "vv-minimax": createVvocPreset({
-      description: "Starter MiniMax overrides for common vvoc model targets.",
+      description: "Starter MiniMax role assignments for built-in vvoc roles.",
       agents: {
         default: "minimax-coding-plan/MiniMax-M2.7",
-        "small-model": "minimax-coding-plan/MiniMax-M2.1",
-        guardian: "minimax-coding-plan/MiniMax-M2.1",
-        explore: "minimax-coding-plan/MiniMax-M2.1",
+        smart: "minimax-coding-plan/MiniMax-M2.7",
+        fast: "minimax-coding-plan/MiniMax-M2.1",
+        vision: "minimax-coding-plan/MiniMax-M2.1",
       },
     }),
   };
@@ -383,6 +373,7 @@ export function createDefaultVvocConfig(): VvocConfig {
   return {
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
+    roles: createDefaultRoleAssignments(),
     guardian: createGuardianConfig(),
     memory: createMemoryConfig(),
     secretsRedaction: createDefaultSecretsRedactionConfig(),
@@ -398,20 +389,10 @@ export function parseGuardianConfigText(text: string, label: string): GuardianCo
     throw new Error(`${label}: expected a top-level object`);
   }
 
-  assertAllowedKeys(
-    value,
-    ["model", "variant", "timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
-    label,
-  );
+  assertAllowedKeys(value, ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"], label);
 
   const overrides: GuardianConfigOverrides = {};
 
-  if (Object.hasOwn(value, "model")) {
-    overrides.model = readNonEmptyString(value.model, `${label}: model`);
-  }
-  if (Object.hasOwn(value, "variant")) {
-    overrides.variant = readNonEmptyString(value.variant, `${label}: variant`);
-  }
   if (Object.hasOwn(value, "timeoutMs")) {
     overrides.timeoutMs = readPositiveInteger(value.timeoutMs, `${label}: timeoutMs`);
   }
@@ -441,11 +422,7 @@ export function parseMemoryConfigText(text: string, label: string): MemoryConfig
     throw new Error(`${label}: expected a top-level object`);
   }
 
-  assertAllowedKeys(
-    value,
-    ["enabled", "defaultSearchLimit", "reviewerModel", "reviewerVariant"],
-    label,
-  );
+  assertAllowedKeys(value, ["enabled", "defaultSearchLimit"], label);
 
   const overrides: MemoryConfigOverrides = {};
 
@@ -461,16 +438,6 @@ export function parseMemoryConfigText(text: string, label: string): MemoryConfig
       `${label}: defaultSearchLimit`,
     );
   }
-  if (Object.hasOwn(value, "reviewerModel")) {
-    overrides.reviewerModel = readNonEmptyString(value.reviewerModel, `${label}: reviewerModel`);
-  }
-  if (Object.hasOwn(value, "reviewerVariant")) {
-    overrides.reviewerVariant = readNonEmptyString(
-      value.reviewerVariant,
-      `${label}: reviewerVariant`,
-    );
-  }
-
   return overrides;
 }
 
@@ -514,11 +481,12 @@ export function loadLenientVvocConfigText(
     return createDefaultVvocConfig();
   }
 
-  const sourceVersion = readLenientSupportedVersion(value.version, `${label}: version`, warnings);
+  readLenientSupportedVersion(value.version, `${label}: version`, warnings);
 
   return {
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
+    roles: loadLenientRoleAssignments(value.roles, `${label}: roles`, warnings),
     guardian: loadLenientGuardianConfig(value.guardian, `${label}: guardian`, warnings),
     memory: loadLenientMemoryConfig(value.memory, `${label}: memory`, warnings),
     secretsRedaction: loadLenientSecretsRedactionConfig(
@@ -526,10 +494,7 @@ export function loadLenientVvocConfigText(
       `${label}: secretsRedaction`,
       warnings,
     ),
-    presets:
-      sourceVersion === 2
-        ? loadLenientVvocPresets(value.presets, `${label}: presets`, warnings)
-        : createDefaultVvocPresets(),
+    presets: loadLenientVvocPresets(value.presets, `${label}: presets`, warnings),
   };
 }
 
@@ -537,6 +502,7 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
   return renderJson({
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
+    roles: createDefaultRoleAssignments(config.roles),
     guardian: createGuardianConfig(config.guardian),
     memory: createMemoryConfig(config.memory),
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
@@ -547,11 +513,8 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
 
 // START_BLOCK_SCHEMA_VALIDATION
 export function validateVvocConfigDocument(document: unknown): string[] {
-  const validator =
-    isPlainObject(document) && document.version === 1 ? validateWithV1Schema : validateWithSchema;
-
-  if (!validator(document)) {
-    return (validator.errors ?? []).map(formatSchemaError);
+  if (!validateWithSchema(document)) {
+    return (validateWithSchema.errors ?? []).map(formatSchemaError);
   }
 
   if (isPlainObject(document) && document.version === VVOC_CONFIG_VERSION) {
@@ -564,29 +527,20 @@ export function validateVvocConfigDocument(document: unknown): string[] {
 
 function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
   const sourceVersion = readSupportedVersion(value.version, "version");
-  const baseConfig = {
-    $schema: VVOC_CONFIG_SCHEMA_URL,
-    version: VVOC_CONFIG_VERSION,
-    guardian: createGuardianConfig(value.guardian as GuardianConfig),
-    memory: createMemoryConfig(value.memory as MemoryConfig),
-    secretsRedaction: createSecretsRedactionConfig(
-      value.secretsRedaction as SecretsRedactionConfig,
-    ),
-  };
-
   return {
     sourceSchema: readNonEmptyString(value.$schema, "$schema"),
     sourceVersion,
-    config:
-      sourceVersion === 1
-        ? {
-            ...baseConfig,
-            presets: createDefaultVvocPresets(),
-          }
-        : {
-            ...baseConfig,
-            presets: createVvocPresets(value.presets as VvocPresets),
-          },
+    config: {
+      $schema: VVOC_CONFIG_SCHEMA_URL,
+      version: VVOC_CONFIG_VERSION,
+      roles: createDefaultRoleAssignments(value.roles as VvocRoleAssignments),
+      guardian: createGuardianConfig(value.guardian as GuardianConfig),
+      memory: createMemoryConfig(value.memory as MemoryConfig),
+      secretsRedaction: createSecretsRedactionConfig(
+        value.secretsRedaction as SecretsRedactionConfig,
+      ),
+      presets: createVvocPresets(value.presets as VvocPresets),
+    },
   };
 }
 
@@ -639,13 +593,16 @@ function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {
 function createVvocPresetAgents(overrides: VvocPresetAgents = {}): VvocPresetAgents {
   const agents: VvocPresetAgents = {};
 
-  for (const agentName of SUPPORTED_MODEL_TARGET_NAMES) {
-    const value = overrides[agentName];
-    if (value === undefined) {
+  for (const [roleId, modelSelection] of Object.entries(overrides)) {
+    if (typeof modelSelection !== "string") {
       continue;
     }
 
-    agents[agentName] = normalizeModelTargetOverride(agentName, value, `preset ${agentName}`);
+    const normalizedRoleId = normalizeRoleId(roleId, `preset role ${roleId}`);
+    agents[normalizedRoleId] = normalizeRoleModelSelection(
+      modelSelection,
+      `preset role ${normalizedRoleId}`,
+    );
   }
 
   return agents;
@@ -675,18 +632,6 @@ function loadLenientGuardianConfig(
 
   const overrides: GuardianConfigOverrides = {};
 
-  if (Object.hasOwn(value, "model")) {
-    const model = readLenientOptionalString(value.model, `${label}.model`, warnings);
-    if (model !== undefined) {
-      overrides.model = model;
-    }
-  }
-  if (Object.hasOwn(value, "variant")) {
-    const variant = readLenientOptionalString(value.variant, `${label}.variant`, warnings);
-    if (variant !== undefined) {
-      overrides.variant = variant;
-    }
-  }
   if (Object.hasOwn(value, "timeoutMs")) {
     const timeoutMs = readLenientPositiveInteger(value.timeoutMs, `${label}.timeoutMs`, warnings);
     if (timeoutMs !== undefined) {
@@ -742,27 +687,6 @@ function loadLenientMemoryConfig(value: unknown, label: string, warnings: string
       overrides.defaultSearchLimit = limit;
     }
   }
-  if (Object.hasOwn(value, "reviewerModel")) {
-    const reviewerModel = readLenientOptionalString(
-      value.reviewerModel,
-      `${label}.reviewerModel`,
-      warnings,
-    );
-    if (reviewerModel !== undefined) {
-      overrides.reviewerModel = reviewerModel;
-    }
-  }
-  if (Object.hasOwn(value, "reviewerVariant")) {
-    const reviewerVariant = readLenientOptionalString(
-      value.reviewerVariant,
-      `${label}.reviewerVariant`,
-      warnings,
-    );
-    if (reviewerVariant !== undefined) {
-      overrides.reviewerVariant = reviewerVariant;
-    }
-  }
-
   return createMemoryConfig(overrides);
 }
 
@@ -1003,21 +927,23 @@ function loadLenientVvocPresetAgents(
 
   const agents: VvocPresetAgents = {};
 
-  for (const [agentName, modelValue] of Object.entries(value)) {
-    if (!SUPPORTED_MODEL_TARGET_NAMES.includes(agentName as SupportedModelTargetName)) {
-      warnings.push(`${label}: unsupported target "${agentName}"`);
+  for (const [roleId, modelValue] of Object.entries(value)) {
+    let normalizedRoleId: string;
+    try {
+      normalizedRoleId = normalizeRoleId(roleId, `${label}.${roleId}`);
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : String(error));
       continue;
     }
 
     try {
-      agents[agentName as SupportedModelTargetName] = normalizeModelTargetOverride(
-        agentName as SupportedModelTargetName,
+      agents[normalizedRoleId] = normalizeRoleModelSelection(
         modelValue,
-        `${label}.${agentName}`,
+        `${label}.${normalizedRoleId}`,
       );
     } catch (error) {
       warnings.push(
-        `${label}.${agentName}: ${error instanceof Error ? error.message : String(error)}`,
+        `${label}.${normalizedRoleId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -1030,15 +956,45 @@ function readLenientSupportedVersion(
   label: string,
   warnings: string[],
 ): VvocConfigVersion {
-  if (value === undefined) {
-    return VVOC_CONFIG_VERSION;
-  }
-  if (value === 1 || value === VVOC_CONFIG_VERSION) {
+  if (value === VVOC_CONFIG_VERSION) {
     return value;
   }
 
-  warnings.push(`${label}: expected 1 or ${VVOC_CONFIG_VERSION}`);
+  warnings.push(`${label}: expected ${VVOC_CONFIG_VERSION}`);
   return VVOC_CONFIG_VERSION;
+}
+
+function loadLenientRoleAssignments(
+  value: unknown,
+  label: string,
+  warnings: string[],
+): Record<string, string> {
+  if (!isPlainObject(value)) {
+    warnings.push(`${label}: expected an object`);
+    return createDefaultRoleAssignments();
+  }
+
+  const roles: VvocRoleAssignments = {};
+  for (const [roleId, modelSelection] of Object.entries(value)) {
+    let normalizedRoleId: string;
+    try {
+      normalizedRoleId = normalizeRoleId(roleId, `${label}.${roleId}`);
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+
+    try {
+      roles[normalizedRoleId] = normalizeRoleModelSelection(
+        modelSelection,
+        `${label}.${normalizedRoleId}`,
+      );
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return createDefaultRoleAssignments(roles);
 }
 
 function readLenientOptionalString(
@@ -1100,11 +1056,11 @@ function parseStrictJson(text: string, label: string): unknown {
 }
 
 function readSupportedVersion(value: unknown, label: string): VvocConfigVersion {
-  if (value === 1 || value === VVOC_CONFIG_VERSION) {
+  if (value === VVOC_CONFIG_VERSION) {
     return value;
   }
 
-  throw new Error(`${label}: expected 1 or ${VVOC_CONFIG_VERSION}`);
+  throw new Error(`${label}: expected ${VVOC_CONFIG_VERSION}`);
 }
 
 function readNonEmptyString(value: unknown, label: string): string {
@@ -1164,33 +1120,64 @@ function renderJson(value: unknown): string {
 }
 
 function validatePresetSemantics(document: JsonObject): string[] {
-  const presetsValue = document.presets;
-  if (!isPlainObject(presetsValue)) {
-    return [];
-  }
-
+  const rolesValue = document.roles;
   const errors: string[] = [];
 
-  for (const [presetName, presetValue] of Object.entries(presetsValue)) {
-    if (isBuiltinVvocPresetName(presetName)) {
-      continue;
+  if (isPlainObject(rolesValue)) {
+    for (const builtInRoleName of BUILTIN_ROLE_NAMES) {
+      if (!Object.hasOwn(rolesValue, builtInRoleName)) {
+        errors.push(`/roles missing required property "${builtInRoleName}"`);
+      }
     }
+
+    for (const [roleId, modelValue] of Object.entries(rolesValue)) {
+      const location = `/roles/${roleId}`;
+      try {
+        normalizeRoleId(roleId, location);
+        normalizeRoleModelSelection(modelValue, location);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  const presetsValue = document.presets;
+  if (!isPlainObject(presetsValue)) {
+    return errors;
+  }
+
+  for (const [presetName, presetValue] of Object.entries(presetsValue)) {
     if (!isPlainObject(presetValue) || !isPlainObject(presetValue.agents)) {
       continue;
     }
 
-    for (const [agentName, modelValue] of Object.entries(presetValue.agents)) {
-      const location = `/presets/${presetName}/agents/${agentName}`;
+    for (const [roleId, modelValue] of Object.entries(presetValue.agents)) {
+      const location = `/presets/${presetName}/agents/${roleId}`;
 
       try {
-        normalizeModelTargetOverride(agentName as SupportedModelTargetName, modelValue, location);
+        normalizeRoleId(roleId, location);
+        normalizeRoleModelSelection(modelValue, location);
       } catch (error) {
-        errors.push(`${location} ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(error instanceof Error ? error.message : String(error));
       }
     }
   }
 
   return errors;
+}
+
+function normalizeRoleModelSelection(value: unknown, label: string): string {
+  const modelSelection = readNonEmptyString(value, label);
+  const parsed = parseModelSelection(modelSelection);
+  return parsed.normalized;
+}
+
+function normalizeRoleId(value: unknown, label: string): string {
+  const roleId = readNonEmptyString(value, label);
+  if (!/^[a-z][a-z0-9-]*$/.test(roleId)) {
+    throw new Error(`${label}: expected lowercase letters, digits, and hyphens`);
+  }
+  return roleId;
 }
 
 function formatSchemaError(error: ErrorObject): string {
