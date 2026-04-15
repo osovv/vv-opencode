@@ -54,7 +54,7 @@
       </annotations>
     </M-CLI-COMMANDS>
 
-    <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" STATUS="planned">
+    <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Resolve `vv-role:*` references in OpenCode root model fields plus agent and command definitions during plugin config hooks.</purpose>
       <path>src/plugins/model-roles/index.ts</path>
       <depends>M-MODEL-ROLES, M-CLI-CONFIG</depends>
