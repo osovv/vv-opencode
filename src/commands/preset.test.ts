@@ -1,8 +1,8 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.3.1
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
-//   SCOPE: Default preset listing, preset rendering, partial preset application including OpenCode default targets, unknown preset failures, and special-agent syntax validation through canonical vvoc.json parsing.
+//   SCOPE: Default preset listing, preset rendering, partial role-only preset application, unknown preset failures, and bare-name CLI invocation.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [V-M-CLI-PRESET]
 //   ROLE: TEST
@@ -14,24 +14,16 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.1 - Updated the built-in vv-openai preset to use the vv-managed GPT-5.4 xhigh alias model as the default target.]
+//   LAST_CHANGE: [v0.4.0 - Switched preset coverage to canonical role-only writes and removed legacy OpenCode target mutation assertions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyPreset, formatPreset, listConfiguredPresets, resolvePreset } from "./preset.js";
-import {
-  readOpenCodeDefaultModel,
-  readOpenCodeAgentModel,
-  readVvocConfig,
-  resolvePaths,
-  writeGuardianConfig,
-  writeMemoryConfig,
-  writeOpenCodeAgentModel,
-} from "../lib/opencode.js";
+import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 describe("preset helpers", () => {
@@ -47,17 +39,17 @@ describe("preset helpers", () => {
     const output = formatPreset(resolved.name, resolved.preset);
 
     expect(output).toContain(
-      '"description": "Starter OpenAI overrides for common vvoc model targets."',
+      '"description": "Starter OpenAI role assignments for built-in vvoc roles."',
     );
     expect(output).toContain('"default": "openai/vv-gpt-5.4-xhigh"');
-    expect(output).toContain('"small-model": "openai/gpt-5.4-mini"');
-    expect(output).toContain('"guardian": "openai/gpt-5.4-mini"');
-    expect(output).toContain('"explore": "openai/gpt-5.4-mini"');
+    expect(output).toContain('"smart": "openai/vv-gpt-5.4-xhigh"');
+    expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
+    expect(output).toContain('"vision": "openai/gpt-4.1"');
   });
 });
 
 describe("applyPreset", () => {
-  test("applies only the targets listed in the selected preset", async () => {
+  test("applies only the roles listed in the selected preset", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-config-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-project-"));
 
@@ -77,61 +69,37 @@ describe("applyPreset", () => {
           ...defaultConfig,
           presets: {
             openai: {
-              description: "Partial OpenAI preset",
+              description: "Partial OpenAI role preset",
               agents: {
                 default: "openai/gpt-5.4",
-                build: "openai/gpt-5.4:xhigh",
-                guardian: "openai/gpt-5.4-mini",
-                explore: "openai/gpt-5.4-mini",
+                smart: "openai/gpt-5.4:xhigh",
               },
             },
             zai: defaultConfig.presets["vv-zai"],
+          },
+          roles: {
+            ...defaultConfig.roles,
+            "team-review": "anthropic/claude-sonnet-4-5:high",
           },
         }),
         "utf8",
       );
 
-      await writeGuardianConfig(
-        paths,
-        { model: "anthropic/claude-sonnet-4-5", variant: "high" },
-        { merge: true },
-      );
-      await writeMemoryConfig(
-        paths,
-        { reviewerModel: "anthropic/claude-sonnet-4-5", reviewerVariant: "high" },
-        { merge: true },
-      );
-      await writeOpenCodeAgentModel(paths, "general", {
-        model: "anthropic/claude-sonnet-4-5",
-        ensureEntry: true,
-      });
-      await writeOpenCodeAgentModel(paths, "explore", {
-        model: "anthropic/claude-sonnet-4-5",
-        ensureEntry: true,
-      });
-
       const applied = await applyPreset("openai", {
         cwd: projectDir,
         configDir: configHome,
-        scope: "project",
       });
 
-      expect(applied.changes.map((change) => change.targetName)).toEqual([
-        "guardian",
-        "default",
-        "build",
-        "explore",
-      ]);
+      expect(applied.changes.map((change) => change.roleId)).toEqual(["default", "smart"]);
 
       const vvocConfig = await readVvocConfig(paths);
-      expect(vvocConfig?.guardian.model).toBe("openai/gpt-5.4-mini");
-      expect(vvocConfig?.guardian.variant).toBeUndefined();
-      expect(vvocConfig?.memory.reviewerModel).toBe("anthropic/claude-sonnet-4-5");
-      expect(vvocConfig?.memory.reviewerVariant).toBe("high");
+      expect(vvocConfig?.roles.default).toBe("openai/gpt-5.4");
+      expect(vvocConfig?.roles.smart).toBe("openai/gpt-5.4:xhigh");
+      expect(vvocConfig?.roles.fast).toBe(defaultConfig.roles.fast);
+      expect(vvocConfig?.roles.vision).toBe(defaultConfig.roles.vision);
+      expect(vvocConfig?.roles["team-review"]).toBe("anthropic/claude-sonnet-4-5:high");
 
-      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-5.4");
-      expect(await readOpenCodeAgentModel(paths, "general")).toBe("anthropic/claude-sonnet-4-5");
-      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("openai/gpt-5.4-mini");
+      await expect(access(paths.opencodeConfigPath)).rejects.toBeDefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
@@ -157,13 +125,15 @@ describe("applyPreset", () => {
           cwd: "/workspace/project",
           configDir: configHome,
         }),
-      ).rejects.toThrow("unknown preset: missing");
+      ).rejects.toThrow(
+        "unknown preset: missing. Available presets: vv-minimax, vv-openai, vv-zai",
+      );
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("reuses special-agent syntax validation for memory-reviewer models", async () => {
+  test("reuses schema validation for preset model selection values", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-invalid-"));
 
     try {
@@ -183,7 +153,7 @@ describe("applyPreset", () => {
             presets: {
               invalid: {
                 agents: {
-                  "memory-reviewer": "not-a-model",
+                  default: "not-a-model",
                 },
               },
             },
@@ -199,39 +169,11 @@ describe("applyPreset", () => {
           cwd: "/workspace/project",
           configDir: configHome,
         }),
-      ).rejects.toThrow("/presets/invalid/agents/memory-reviewer");
+      ).rejects.toThrow(
+        "INVALID_MODEL_SELECTION: modelSelection expected provider/model[:variant]",
+      );
     } finally {
       await rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  test("installs preset changes using the existing OpenCode write path", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-raw-output-"));
-    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-raw-project-"));
-
-    try {
-      const paths = await resolvePaths({
-        scope: "project",
-        cwd: projectDir,
-        configDir: configHome,
-      });
-
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
-
-      await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
-      await applyPreset("vv-openai", {
-        cwd: projectDir,
-        configDir: configHome,
-        scope: "project",
-      });
-
-      const opencodeText = await readFile(paths.opencodeConfigPath, "utf8");
-      expect(opencodeText).toContain('"model": "openai/vv-gpt-5.4-xhigh"');
-      expect(opencodeText).toContain('"small_model": "openai/gpt-5.4-mini"');
-      expect(opencodeText).toContain('"explore"');
-    } finally {
-      await rm(configHome, { recursive: true, force: true });
-      await rm(projectDir, { recursive: true, force: true });
     }
   });
 
@@ -251,17 +193,7 @@ describe("applyPreset", () => {
 
       const cliPath = fileURLToPath(new URL("../cli.ts", import.meta.url));
       const command = Bun.spawn({
-        cmd: [
-          process.execPath,
-          "run",
-          cliPath,
-          "preset",
-          "vv-zai",
-          "--scope",
-          "project",
-          "--config-dir",
-          configHome,
-        ],
+        cmd: [process.execPath, "run", cliPath, "preset", "vv-zai", "--config-dir", configHome],
         cwd: projectDir,
         stdout: "pipe",
         stderr: "pipe",
@@ -275,13 +207,12 @@ describe("applyPreset", () => {
 
       expect(exitCode).toBe(0);
       expect(stderr).toBe("");
-      expect(stdout).toContain("Applied preset vv-zai (project):");
-      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("zai-coding-plan/glm-5.1");
-      expect(await readOpenCodeDefaultModel(paths, "small_model")).toBe(
-        "zai-coding-plan/glm-4.5-airx",
-      );
-      expect(await readOpenCodeAgentModel(paths, "explore")).toBe("zai-coding-plan/glm-4.5-airx");
-      expect((await readVvocConfig(paths))?.guardian.model).toBe("zai-coding-plan/glm-4.5-airx");
+      expect(stdout).toContain("Applied preset vv-zai:");
+      const vvocConfig = await readVvocConfig(paths);
+      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5.1");
+      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.1");
+      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.5-airx");
+      expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.5v");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });

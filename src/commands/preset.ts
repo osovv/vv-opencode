@@ -1,9 +1,9 @@
 // FILE: src/commands/preset.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: List, show, and apply declarative named model-target presets from canonical vvoc.json.
-//   SCOPE: Canonical preset lookup, preset rendering, scope-aware preset application, and per-target summary output through existing vvoc and OpenCode write paths.
-//   DEPENDS: [citty, src/lib/agent-models.ts, src/lib/managed-agents.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
+//   PURPOSE: List, show, and apply declarative named role presets from canonical vvoc.json.
+//   SCOPE: Canonical preset lookup, preset rendering, and role-only preset application against canonical vvoc.json.
+//   DEPENDS: [citty, node:fs/promises, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-PRESET, M-CLI-CONFIG, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,41 +14,23 @@
 //   listConfiguredPresets - Returns configured presets in deterministic name order.
 //   resolvePreset - Validates a preset name and returns the matching preset.
 //   formatPreset - Renders a preset object as JSON for CLI output.
-//   applyPreset - Applies a preset through the existing vvoc/OpenCode write helpers.
+//   applyPreset - Applies a preset by updating only listed canonical role assignments.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Added variant-aware OpenCode agent preset application while keeping top-level default model fields plain.]
+//   LAST_CHANGE: [v0.4.0 - Switched preset application to canonical role-only writes and removed legacy scope/OpenCode target mutation behavior.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
+import { writeFile } from "node:fs/promises";
+import { parseModelSelection } from "../lib/model-roles.js";
+import { readVvocConfig, resolvePaths, syncVvocConfig } from "../lib/opencode.js";
 import {
-  formatAgentModel,
-  isConfigurableOpenCodeAgentName,
-  isOpenCodeDefaultModelTargetName,
-  isSpecialAgentName,
-  normalizeModelTargetOverride,
-  parseGuardianStyleModelArg,
-  parseOpenCodeAgentModelArg,
-  type OpenCodeDefaultModelTargetName,
-  type SupportedModelTargetName,
-} from "../lib/agent-models.js";
-import { isManagedOpenCodeAgentName } from "../lib/managed-agents.js";
-import {
-  describeWriteResult,
-  installManagedAgentPrompts,
-  readVvocConfig,
-  resolvePaths,
-  type OpenCodeDefaultModelKey,
-  type Scope,
-  type WriteResult,
-  writeGuardianConfig,
-  writeOpenCodeDefaultModel,
-  writeManagedAgentModel,
-  writeMemoryConfig,
-  writeOpenCodeAgentModel,
-} from "../lib/opencode.js";
-import { type VvocPreset, type VvocPresets } from "../lib/vvoc-config.js";
+  renderVvocConfig,
+  type VvocConfig,
+  type VvocPreset,
+  type VvocPresets,
+} from "../lib/vvoc-config.js";
 
 type ListedPreset = {
   name: string;
@@ -56,9 +38,9 @@ type ListedPreset = {
 };
 
 type AppliedPresetChange = {
-  targetName: SupportedModelTargetName;
+  roleId: string;
   model: string;
-  result: WriteResult;
+  action: "updated" | "kept";
 };
 
 const commandArg = {
@@ -71,13 +53,6 @@ const presetArg = {
   type: "positional" as const,
   required: false,
   description: "Preset name for `show`.",
-};
-
-const scopeArg = {
-  type: "enum" as const,
-  options: ["global", "project"],
-  default: "global",
-  description: "Write global or project OpenCode config.",
 };
 
 const configDirArg = {
@@ -93,7 +68,6 @@ export default defineCommand({
   args: {
     command: commandArg,
     preset: presetArg,
-    scope: scopeArg,
     "config-dir": configDirArg,
   },
   async run({ args }) {
@@ -133,102 +107,33 @@ export function formatPreset(_name: string, preset: VvocPreset): string {
 
 export async function applyPreset(
   presetName: string,
-  options: { cwd?: string; configDir?: string; scope?: Scope } = {},
-): Promise<{ name: string; preset: VvocPreset; changes: AppliedPresetChange[] }> {
-  const paths = await resolvePaths({
-    scope: options.scope ?? "global",
-    cwd: options.cwd ?? process.cwd(),
-    configDir: options.configDir,
-  });
-  const presets = await readConfiguredPresets({
-    cwd: options.cwd ?? process.cwd(),
-    configDir: options.configDir,
-  });
-  const resolved = resolvePreset(presetName, presets);
-  const entries = Object.entries(resolved.preset.agents) as Array<
-    [SupportedModelTargetName, string]
-  >;
-
-  if (entries.some(([targetName]) => isManagedOpenCodeAgentName(targetName))) {
-    await installManagedAgentPrompts(paths, { force: false });
-  }
-
+  options: { cwd?: string; configDir?: string } = {},
+): Promise<{ name: string; preset: VvocPreset; changes: AppliedPresetChange[]; path: string }> {
+  const { config, paths } = await loadGlobalVvocConfig(options);
+  const resolved = resolvePreset(presetName, config.presets);
+  const entries = Object.entries(resolved.preset.agents);
+  const nextRoles: Record<string, string> = { ...config.roles };
   const changes: AppliedPresetChange[] = [];
 
-  for (const [targetName, configuredValue] of entries) {
-    const normalizedValue = normalizeModelTargetOverride(
-      targetName,
-      configuredValue,
-      `preset ${resolved.name} ${targetName}`,
-    );
-
-    if (targetName === "guardian") {
-      const { model, variant } = parseGuardianStyleModelArg(
-        normalizedValue,
-        `preset ${resolved.name}`,
-      );
-      const result = await writeGuardianConfig(paths, { model, variant }, { merge: true });
-      changes.push({ targetName, model: formatAgentModel(model, variant), result });
-      continue;
-    }
-
-    if (targetName === "memory-reviewer") {
-      const { model, variant } = parseGuardianStyleModelArg(
-        normalizedValue,
-        `preset ${resolved.name}`,
-      );
-      const result = await writeMemoryConfig(
-        paths,
-        { reviewerModel: model, reviewerVariant: variant },
-        { merge: true },
-      );
-      changes.push({ targetName, model: formatAgentModel(model, variant), result });
-      continue;
-    }
-
-    if (isOpenCodeDefaultModelTargetName(targetName)) {
-      const result = await writeOpenCodeDefaultModel(paths, resolveDefaultModelKey(targetName), {
-        model: normalizedValue,
-        ensureEntry: true,
-      });
-      changes.push({ targetName, model: normalizedValue, result });
-      continue;
-    }
-
-    if (isConfigurableOpenCodeAgentName(targetName)) {
-      const { model, variant } = parseOpenCodeAgentModelArg(
-        normalizedValue,
-        `preset ${resolved.name}`,
-      );
-      const result = await writeOpenCodeAgentModel(paths, targetName, {
-        model,
-        variant,
-        ensureEntry: true,
-      });
-      changes.push({ targetName, model: formatAgentModel(model, variant), result });
-      continue;
-    }
-
-    if (isManagedOpenCodeAgentName(targetName)) {
-      const { model, variant } = parseOpenCodeAgentModelArg(
-        normalizedValue,
-        `preset ${resolved.name}`,
-      );
-      const result = await writeManagedAgentModel(paths, targetName, {
-        model,
-        variant,
-        ensureEntry: true,
-      });
-      changes.push({ targetName, model: formatAgentModel(model, variant), result });
-      continue;
-    }
-
-    if (isSpecialAgentName(targetName)) {
-      throw new Error(`unsupported preset target: ${targetName}`);
-    }
+  for (const [rawRoleId, rawModelSelection] of entries) {
+    const roleId = normalizeRoleId(rawRoleId, `preset ${resolved.name}`);
+    const model = parseModelSelection(
+      normalizePresetModelSelection(rawModelSelection, `preset ${resolved.name} role ${roleId}`),
+    ).normalized;
+    const action: "updated" | "kept" = nextRoles[roleId] === model ? "kept" : "updated";
+    nextRoles[roleId] = model;
+    changes.push({ roleId, model, action });
   }
 
-  return { name: resolved.name, preset: resolved.preset, changes };
+  if (changes.some((change) => change.action === "updated")) {
+    const nextConfig: VvocConfig = {
+      ...config,
+      roles: nextRoles,
+    };
+    await writeFile(paths.vvocConfigPath, renderVvocConfig(nextConfig), "utf8");
+  }
+
+  return { name: resolved.name, preset: resolved.preset, changes, path: paths.vvocConfigPath };
 }
 
 async function listPresets(
@@ -257,8 +162,8 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
     console.log("Available presets:");
     for (const { name, preset } of presets) {
       const description = preset.description ? ` - ${preset.description}` : "";
-      const targetCount = Object.keys(preset.agents).length;
-      console.log(`  ${name}${description} (${targetCount} target${targetCount === 1 ? "" : "s"})`);
+      const roleCount = Object.keys(preset.agents).length;
+      console.log(`  ${name}${description} (${roleCount} role${roleCount === 1 ? "" : "s"})`);
     }
     return;
   }
@@ -278,44 +183,54 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
     throw new Error(`unexpected extra argument for \`vvoc preset <name>\`: ${presetName}`);
   }
 
-  const scope = resolveScope(args.scope);
   const applied = await applyPreset(command, {
     cwd: process.cwd(),
     configDir,
-    scope,
   });
 
-  console.log(`Applied preset ${applied.name} (${scope}):`);
+  console.log(`Applied preset ${applied.name}:`);
   for (const change of applied.changes) {
-    console.log(`  ${change.targetName}: ${describeWriteResult(change.result)} (${change.model})`);
+    console.log(`  ${change.roleId}: ${change.action} (${change.model})`);
   }
 }
 
 async function readConfiguredPresets(
   options: { cwd?: string; configDir?: string } = {},
 ): Promise<VvocPresets> {
+  const { config } = await loadGlobalVvocConfig(options);
+  return config.presets;
+}
+
+async function loadGlobalVvocConfig(options: { cwd?: string; configDir?: string }) {
   const paths = await resolvePaths({
     scope: "global",
     cwd: options.cwd ?? process.cwd(),
     configDir: options.configDir,
   });
-  const config = await readVvocConfig(paths);
 
+  await syncVvocConfig(paths);
+
+  const config = await readVvocConfig(paths);
   if (!config) {
-    throw new Error(
-      `vvoc config is missing at ${paths.vvocConfigPath}. Run \`vvoc install\` or \`vvoc sync\`.`,
-    );
+    throw new Error(`failed to load vvoc config at ${paths.vvocConfigPath}`);
   }
 
-  return config.presets;
+  return { config, paths };
 }
 
-function resolveScope(value: unknown): Scope {
-  return value === "project" ? "project" : "global";
+function normalizeRoleId(roleId: string, context: string): string {
+  const normalized = roleId.trim();
+  if (!/^[a-z][a-z0-9-]*$/.test(normalized)) {
+    throw new Error(
+      `${context}: invalid role id \`${roleId}\`; expected lowercase letters, digits, and hyphens`,
+    );
+  }
+  return normalized;
 }
 
-function resolveDefaultModelKey(
-  targetName: OpenCodeDefaultModelTargetName,
-): OpenCodeDefaultModelKey {
-  return targetName === "default" ? "model" : "small_model";
+function normalizePresetModelSelection(value: unknown, context: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${context}: model selection is required`);
+  }
+  return value;
 }

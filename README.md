@@ -10,7 +10,7 @@ Portable OpenCode workflow package with a Bun CLI that installs and maintains Op
 - scaffolds managed prompt files under `vvoc/agents/`
 - registers managed OpenCode agents: `enhancer`, `implementer`, `spec-reviewer`, `code-reviewer`, `investitagor`
 - installs plugin-managed agents: `guardian`, `memory-reviewer`
-- ships model-target presets, diagnostics, and shell completion through the `vvoc` CLI
+- ships role presets, diagnostics, and shell completion through the `vvoc` CLI
 
 ## Quick Start
 
@@ -150,13 +150,13 @@ Role notes:
 - built-in roles cannot be removed with `vvoc role unset`
 - custom role IDs must use lowercase letters, digits, and hyphens
 
-Presets are stored in canonical `vvoc.json` and are useful when you want to switch several model targets together:
+Presets are stored in canonical `vvoc.json` and are useful when you want to switch several role assignments together:
 
 ```bash
 vvoc preset list
 vvoc preset show vv-openai
 vvoc preset vv-openai
-vvoc preset vv-zai --scope project
+vvoc preset vv-zai
 ```
 
 Preset rules:
@@ -167,9 +167,8 @@ Preset rules:
 - run `vvoc patch-provider openai` before applying `vv-openai` if the alias model is not already present in your global OpenCode config
 - user-defined presets with other names are preserved as-is, including legacy names such as `openai`, `zai`, and `minimax`
 - presets may be partial
-- applying a preset only changes the targets listed in that preset
-- OpenCode-side targets respect `--scope`
-- special targets such as `guardian` and `memory-reviewer` still write to canonical `vvoc.json`
+- applying a preset only changes the roles listed in that preset
+- preset application updates only canonical global `vvoc.json` role assignments and does not rewrite OpenCode config directly
 
 ## Plugins Included
 
