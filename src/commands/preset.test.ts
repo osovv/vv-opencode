@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
@@ -16,6 +16,7 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Switched preset coverage to canonical role-only writes and removed legacy OpenCode target mutation assertions.]
 //   LAST_CHANGE: [v0.4.1 - Added guards for no-sync side effects: existing OpenCode byte preservation, vvoc non-role section/preset preservation, and CLI argument error paths.]
+//   LAST_CHANGE: [v0.4.2 - Asserted raw vvoc.json section/preset preservation and first-run bootstrap behavior when the vvoc config path is missing.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -195,6 +196,10 @@ describe("applyPreset", () => {
         },
         presets: {
           ...defaultConfig.presets,
+          "vv-openai": {
+            ...defaultConfig.presets["vv-openai"],
+            description: "user-overridden managed preset description",
+          },
           custom: {
             description: "Custom role preset",
             agents: {
@@ -205,19 +210,49 @@ describe("applyPreset", () => {
       };
 
       await mkdir(join(configHome, "vvoc"), { recursive: true });
-      await writeFile(paths.vvocConfigPath, renderVvocConfig(seededConfig), "utf8");
+      await writeFile(paths.vvocConfigPath, `${JSON.stringify(seededConfig, null, 2)}\n`, "utf8");
 
-      const before = await readVvocConfig(paths);
+      const before = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       await applyPreset("custom", {
         cwd: projectDir,
         configDir: configHome,
       });
-      const after = await readVvocConfig(paths);
+      const after = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
 
-      expect(before?.guardian).toEqual(after?.guardian);
-      expect(before?.memory).toEqual(after?.memory);
-      expect(before?.secretsRedaction).toEqual(after?.secretsRedaction);
-      expect(before?.presets).toEqual(after?.presets);
+      expect(before.guardian).toEqual(after.guardian);
+      expect(before.memory).toEqual(after.memory);
+      expect(before.secretsRedaction).toEqual(after.secretsRedaction);
+      expect(before.presets).toEqual(after.presets);
+      expect(after.presets["vv-openai"].description).toBe(
+        "user-overridden managed preset description",
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("bootstraps canonical vvoc config when missing", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-bootstrap-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-bootstrap-project-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      await rm(join(configHome, "vvoc"), { recursive: true, force: true });
+      await applyPreset("vv-openai", {
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      const bootstrapped = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
+      expect(bootstrapped.version).toBe(3);
+      expect(bootstrapped.roles.default).toBe("openai/vv-gpt-5.4-xhigh");
+      expect(bootstrapped.presets["vv-openai"]).toBeDefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });

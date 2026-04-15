@@ -169,6 +169,7 @@ Preset rules:
 - presets may be partial
 - applying a preset only changes the roles listed in that preset
 - `vvoc preset list/show/apply` reads the current canonical `vvoc.json` as-is and only bootstraps defaults when the file is missing
+- on existing `vvoc.json`, preset commands do not reseed or refresh managed preset definitions as a side effect
 - preset application updates only canonical global `vvoc.json` role assignments and does not rewrite OpenCode config directly
 
 ## Plugins Included

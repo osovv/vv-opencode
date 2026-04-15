@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: List, show, and apply declarative named role presets from canonical vvoc.json.
 //   SCOPE: Canonical preset lookup, preset rendering, and role-only preset application against canonical vvoc.json.
@@ -20,15 +20,18 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Switched preset application to canonical role-only writes and removed legacy scope/OpenCode target mutation behavior.]
 //   LAST_CHANGE: [v0.4.1 - Stopped preset flows from running sync rewrites; now bootstrap vvoc.json only when missing and keep existing config sections untouched unless listed roles change.]
+//   LAST_CHANGE: [v0.4.2 - Switched existing-file preset flows to strict raw vvoc.json validation and role-only document mutation without preset reseeding side effects.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { parseModelSelection } from "../lib/model-roles.js";
-import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
+import { resolvePaths } from "../lib/opencode.js";
 import {
   createDefaultVvocConfig,
   renderVvocConfig,
+  validateVvocConfigDocument,
   type VvocConfig,
   type VvocPreset,
   type VvocPresets,
@@ -128,11 +131,11 @@ export async function applyPreset(
   }
 
   if (changes.some((change) => change.action === "updated")) {
-    const nextConfig: VvocConfig = {
+    const nextConfig = {
       ...config,
       roles: nextRoles,
     };
-    await writeFile(paths.vvocConfigPath, renderVvocConfig(nextConfig), "utf8");
+    await writeFile(paths.vvocConfigPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
   }
 
   return { name: resolved.name, preset: resolved.preset, changes, path: paths.vvocConfigPath };
@@ -210,14 +213,42 @@ async function loadGlobalVvocConfig(options: { cwd?: string; configDir?: string 
     configDir: options.configDir,
   });
 
-  const currentConfig = await readVvocConfig(paths);
-  if (currentConfig) {
-    return { config: currentConfig, paths };
+  try {
+    const text = await readFile(paths.vvocConfigPath, "utf8");
+    return {
+      config: parseRawVvocConfigText(text, paths.vvocConfigPath),
+      paths,
+    };
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
   }
 
   const defaultConfig = createDefaultVvocConfig();
+  await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
   await writeFile(paths.vvocConfigPath, renderVvocConfig(defaultConfig), "utf8");
   return { config: defaultConfig, paths };
+}
+
+function parseRawVvocConfigText(text: string, label: string): VvocConfig {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error(`${label}: invalid JSON`);
+  }
+
+  const errors = validateVvocConfigDocument(value);
+  if (errors.length > 0) {
+    throw new Error(`${label}: ${errors.join("; ")}`);
+  }
+
+  return value as VvocConfig;
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 function normalizeRoleId(roleId: string, context: string): string {
