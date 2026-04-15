@@ -1,11 +1,11 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.13
+// VERSION: 0.5.14
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `role set|unset <role-id>` flow, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `role set|unset` flow, and rc file patching.
 //   INPUTS: Current shell environment plus built-in vvoc command and preset names.
 //   OUTPUTS: Shell-specific completion scripts and idempotent rc/config patches.
-//   DEPENDS: [citty, node:fs/promises, node:path, node:os]
+//   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,13 +14,13 @@
 // START_MODULE_MAP
 //   default - Completion install command definition for vvoc.
 //   detectShell - Detect current shell from SHELL env or process.
-//   installBashCompletion - Install bash completions.
-//   installZshCompletion - Install zsh completions.
-//   installFishCompletion - Install fish completions.
+//   generateBashCompletion - Build the bash completion script.
+//   generateZshCompletion - Build the zsh completion script.
+//   generateFishCompletion - Build the fish completion script.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.13 - Replaced legacy agent completions with role completions including built-in role IDs.]
+//   LAST_CHANGE: [v0.5.14 - Restricted unset-role completions so shell suggestions no longer imply built-in roles are unsettable.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -202,7 +202,7 @@ export function generateBashCompletion(): string {
     "      ;;\n" +
     "    3)\n" +
     '      case "${words[1]}:${words[2]}" in\n' +
-    "        role:set|role:unset)\n" +
+    "        role:set)\n" +
     "          _vvoc_role_ids\n" +
     "          ;;\n" +
     "        preset:show)\n" +
@@ -334,8 +334,11 @@ export function generateZshCompletion(): string {
     "",
     "_vvoc_role_cmds() {",
     "  case $words[2] in",
-    "    set|unset)",
+    "    set)",
     '      _arguments "1: :(' + VVOC_ROLE_IDS.join(" ") + ')"',
+    "      ;;",
+    "    unset)",
+    '      _arguments "1: :<custom-role-id>"',
     "      ;;",
     "    *)",
     '      _arguments "1: :(' + VVOC_ROLE_COMMANDS.join(" ") + ')"',
@@ -396,7 +399,7 @@ export function generateFishCompletion(): string {
     "",
     'complete -c vvoc -f -a "(__vvoc_commands)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from role; and not __fish_seen_subcommand_from set unset list" -f -a "(__vvoc_role_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from role; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_role_ids)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from role; and __fish_seen_subcommand_from set" -f -a "(__vvoc_role_ids)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from patch-provider" -f -a "(__vvoc_patch_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from ' +

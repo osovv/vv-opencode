@@ -1,11 +1,11 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.11
+// VERSION: 0.4.12
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `role set|unset <role-id>` flow.
 //   INPUTS: Generated completion scripts for bash, zsh, and fish.
 //   OUTPUTS: Assertions over exposed commands, nested completions, and syntax markers.
-//   DEPENDS: [src/commands/completion.ts]
+//   DEPENDS: [bun:test, src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.11 - Replaced agent completions with role completions including built-in role IDs.]
+//   LAST_CHANGE: [v0.4.12 - Restricted unset-role completion assertions to avoid built-in role suggestions.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -106,22 +106,28 @@ test("generateFishCompletion - handles nested subcommands", () => {
 test("generateBashCompletion - contains role command flow", () => {
   const output = generateBashCompletion();
   expect(output).toContain('local commands="set unset list"');
-  expect(output).toContain("role:set|role:unset");
+  expect(output).toContain("role:set");
   expect(output).toContain("default smart fast vision");
   expect(output).toContain("_vvoc_role_ids");
+  expect(output).not.toContain("role:unset)");
 });
 
 test("generateZshCompletion - contains role id commands", () => {
   const output = generateZshCompletion();
-  expect(output).toContain("set|unset");
+  expect(output).toContain("set)");
   expect(output).toContain("default smart fast vision");
+  expect(output).toContain("unset)");
+  expect(output).toContain("<custom-role-id>");
 });
 
 test("generateFishCompletion - contains role id completions", () => {
   const output = generateFishCompletion();
   expect(output).toContain("function __vvoc_role_ids");
   expect(output).toContain("echo default smart fast vision");
-  expect(output).toContain("__fish_seen_subcommand_from set unset");
+  expect(output).toContain("__fish_seen_subcommand_from set");
+  expect(output).not.toContain(
+    "__fish_seen_subcommand_from role; and __fish_seen_subcommand_from set unset",
+  );
 });
 
 test("completion scripts - contain patch-provider presets", () => {
