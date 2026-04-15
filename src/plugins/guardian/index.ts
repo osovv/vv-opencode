@@ -1,9 +1,9 @@
-// FILE: src/plugins/guardian/guardian.ts
-// VERSION: 0.4.1
+// FILE: src/plugins/guardian/index.ts
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
 //   SCOPE: Guardian runtime config loading from canonical vvoc.json, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
-//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
+//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.2 - Corrected module metadata annotations to match file path and active dependency usage.]
 //   LAST_CHANGE: [v0.4.1 - Prioritized roles.fast as Guardian's default runtime model while still honoring non-model guardian policy config and env model overrides.]
 //   LAST_CHANGE: [v0.4.0 - Resolved Guardian runtime model from roles.fast before subagent registration and added explicit guardian failure codes.]
 //   LAST_CHANGE: [v0.3.0 - Switched Guardian runtime config loading to the canonical vvoc.json file.]
