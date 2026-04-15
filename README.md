@@ -168,6 +168,7 @@ Preset rules:
 - user-defined presets with other names are preserved as-is, including legacy names such as `openai`, `zai`, and `minimax`
 - presets may be partial
 - applying a preset only changes the roles listed in that preset
+- `vvoc preset list/show/apply` reads the current canonical `vvoc.json` as-is and only bootstraps defaults when the file is missing
 - preset application updates only canonical global `vvoc.json` role assignments and does not rewrite OpenCode config directly
 
 ## Plugins Included

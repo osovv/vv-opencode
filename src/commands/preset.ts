@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: List, show, and apply declarative named role presets from canonical vvoc.json.
 //   SCOPE: Canonical preset lookup, preset rendering, and role-only preset application against canonical vvoc.json.
@@ -19,13 +19,15 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Switched preset application to canonical role-only writes and removed legacy scope/OpenCode target mutation behavior.]
+//   LAST_CHANGE: [v0.4.1 - Stopped preset flows from running sync rewrites; now bootstrap vvoc.json only when missing and keep existing config sections untouched unless listed roles change.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { writeFile } from "node:fs/promises";
 import { parseModelSelection } from "../lib/model-roles.js";
-import { readVvocConfig, resolvePaths, syncVvocConfig } from "../lib/opencode.js";
+import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
 import {
+  createDefaultVvocConfig,
   renderVvocConfig,
   type VvocConfig,
   type VvocPreset,
@@ -208,14 +210,14 @@ async function loadGlobalVvocConfig(options: { cwd?: string; configDir?: string 
     configDir: options.configDir,
   });
 
-  await syncVvocConfig(paths);
-
-  const config = await readVvocConfig(paths);
-  if (!config) {
-    throw new Error(`failed to load vvoc config at ${paths.vvocConfigPath}`);
+  const currentConfig = await readVvocConfig(paths);
+  if (currentConfig) {
+    return { config: currentConfig, paths };
   }
 
-  return { config, paths };
+  const defaultConfig = createDefaultVvocConfig();
+  await writeFile(paths.vvocConfigPath, renderVvocConfig(defaultConfig), "utf8");
+  return { config: defaultConfig, paths };
 }
 
 function normalizeRoleId(roleId: string, context: string): string {

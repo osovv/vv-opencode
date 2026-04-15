@@ -1,8 +1,8 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
-//   SCOPE: Default preset listing, preset rendering, partial role-only preset application, unknown preset failures, and bare-name CLI invocation.
+//   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [V-M-CLI-PRESET]
 //   ROLE: TEST
@@ -15,10 +15,11 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Switched preset coverage to canonical role-only writes and removed legacy OpenCode target mutation assertions.]
+//   LAST_CHANGE: [v0.4.1 - Added guards for no-sync side effects: existing OpenCode byte preservation, vvoc non-role section/preset preservation, and CLI argument error paths.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -133,6 +134,96 @@ describe("applyPreset", () => {
     }
   });
 
+  test("keeps an existing OpenCode config byte-for-byte unchanged", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-opencode-stable-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-opencode-project-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
+
+      const opencodeText =
+        '{\n  "$schema": "https://opencode.ai/config.json",\n  "plugin": ["example/plugin"],\n  "agent": {\n    "general": {\n      "model": "vv-role:default"\n    }\n  }\n}\n';
+      await writeFile(paths.opencodeConfigPath, opencodeText, "utf8");
+
+      await applyPreset("vv-zai", {
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      const afterText = await readFile(paths.opencodeConfigPath, "utf8");
+      expect(afterText).toBe(opencodeText);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves non-role vvoc sections and preset blocks during apply", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-preserve-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-preserve-project-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+      const defaultConfig = createDefaultVvocConfig();
+      const seededConfig = {
+        ...defaultConfig,
+        guardian: {
+          ...defaultConfig.guardian,
+          model: "anthropic/claude-sonnet-4-5",
+          variant: "high",
+          timeoutMs: 120_000,
+        },
+        memory: {
+          ...defaultConfig.memory,
+          reviewerModel: "zai-coding-plan/glm-4.5-airx",
+          reviewerVariant: "high",
+        },
+        secretsRedaction: {
+          ...defaultConfig.secretsRedaction,
+          debug: true,
+        },
+        presets: {
+          ...defaultConfig.presets,
+          custom: {
+            description: "Custom role preset",
+            agents: {
+              default: "openai/gpt-5.4",
+            },
+          },
+        },
+      };
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(paths.vvocConfigPath, renderVvocConfig(seededConfig), "utf8");
+
+      const before = await readVvocConfig(paths);
+      await applyPreset("custom", {
+        cwd: projectDir,
+        configDir: configHome,
+      });
+      const after = await readVvocConfig(paths);
+
+      expect(before?.guardian).toEqual(after?.guardian);
+      expect(before?.memory).toEqual(after?.memory);
+      expect(before?.secretsRedaction).toEqual(after?.secretsRedaction);
+      expect(before?.presets).toEqual(after?.presets);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("reuses schema validation for preset model selection values", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-invalid-"));
 
@@ -213,6 +304,82 @@ describe("applyPreset", () => {
       expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.1");
       expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.5-airx");
       expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.5v");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("cli reports expected argument validation errors", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-cli-errors-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preset-cli-errors-project-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
+
+      const cliPath = fileURLToPath(new URL("../cli.ts", import.meta.url));
+
+      const showMissing = Bun.spawn({
+        cmd: [process.execPath, "run", cliPath, "preset", "show", "--config-dir", configHome],
+        cwd: projectDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const listExtra = Bun.spawn({
+        cmd: [
+          process.execPath,
+          "run",
+          cliPath,
+          "preset",
+          "list",
+          "vv-openai",
+          "--config-dir",
+          configHome,
+        ],
+        cwd: projectDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const bareExtra = Bun.spawn({
+        cmd: [
+          process.execPath,
+          "run",
+          cliPath,
+          "preset",
+          "vv-openai",
+          "extra",
+          "--config-dir",
+          configHome,
+        ],
+        cwd: projectDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const [showStderr, showExit, listStderr, listExit, bareStderr, bareExit] = await Promise.all([
+        new Response(showMissing.stderr).text(),
+        showMissing.exited,
+        new Response(listExtra.stderr).text(),
+        listExtra.exited,
+        new Response(bareExtra.stderr).text(),
+        bareExtra.exited,
+      ]);
+
+      expect(showExit).toBe(1);
+      expect(showStderr).toContain("preset name required for `vvoc preset show <name>`");
+
+      expect(listExit).toBe(1);
+      expect(listStderr).toContain("unexpected extra argument for `vvoc preset list`: vv-openai");
+
+      expect(bareExit).toBe(1);
+      expect(bareStderr).toContain("unexpected extra argument for `vvoc preset <name>`: extra");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
