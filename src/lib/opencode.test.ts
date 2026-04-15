@@ -290,8 +290,25 @@ describe("canonical vvoc config helpers", () => {
         "utf8",
       );
 
-      await writeMemoryConfig(paths, { enabled: false, defaultSearchLimit: 12 });
-      await writeGuardianConfig(paths, { timeoutMs: 12_345 }, { merge: true });
+      await writeMemoryConfig(
+        paths,
+        {
+          enabled: false,
+          defaultSearchLimit: 12,
+          reviewerModel: "openai/gpt-5.4-mini",
+          reviewerVariant: "medium",
+        },
+        { merge: true },
+      );
+      await writeGuardianConfig(
+        paths,
+        {
+          model: "openai/gpt-5.4",
+          variant: "high",
+          timeoutMs: 12_345,
+        },
+        { merge: true },
+      );
 
       const syncResult = await syncVvocConfig(paths);
       expect(["updated", "kept"]).toContain(syncResult.action);
@@ -299,6 +316,10 @@ describe("canonical vvoc config helpers", () => {
       const synced = await readVvocConfig(paths);
       expect(synced?.memory.enabled).toBe(false);
       expect(synced?.memory.defaultSearchLimit).toBe(12);
+      expect(synced?.memory.reviewerModel).toBe("openai/gpt-5.4-mini");
+      expect(synced?.memory.reviewerVariant).toBe("medium");
+      expect(synced?.guardian.model).toBe("openai/gpt-5.4");
+      expect(synced?.guardian.variant).toBe("high");
       expect(synced?.guardian.timeoutMs).toBe(12_345);
       expect(synced?.roles.custom).toBe("openai/gpt-5.4-mini");
       expect(synced?.presets.custom?.agents.custom).toBe("openai/gpt-5.4-mini");

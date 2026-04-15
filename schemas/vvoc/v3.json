@@ -33,6 +33,8 @@
       "additionalProperties": false,
       "required": ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
       "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "variant": { "type": "string", "minLength": 1 },
         "timeoutMs": { "type": "integer", "minimum": 1 },
         "approvalRiskThreshold": { "type": "integer", "minimum": 0, "maximum": 100 },
         "reviewToastDurationMs": { "type": "integer", "minimum": 1 }
@@ -44,7 +46,9 @@
       "required": ["enabled", "defaultSearchLimit"],
       "properties": {
         "enabled": { "type": "boolean" },
-        "defaultSearchLimit": { "type": "integer", "minimum": 1 }
+        "defaultSearchLimit": { "type": "integer", "minimum": 1 },
+        "reviewerModel": { "type": "string", "minLength": 1 },
+        "reviewerVariant": { "type": "string", "minLength": 1 }
       }
     },
     "secretsRedaction": {

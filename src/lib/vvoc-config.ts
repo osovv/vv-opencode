@@ -152,6 +152,8 @@ const GUARDIAN_CONFIG_SCHEMA = {
   additionalProperties: false,
   required: ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
   properties: {
+    model: { type: "string", minLength: 1 },
+    variant: { type: "string", minLength: 1 },
     timeoutMs: { type: "integer", minimum: 1 },
     approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
     reviewToastDurationMs: { type: "integer", minimum: 1 },
@@ -165,6 +167,8 @@ const MEMORY_CONFIG_SCHEMA = {
   properties: {
     enabled: { type: "boolean" },
     defaultSearchLimit: { type: "integer", minimum: 1 },
+    reviewerModel: { type: "string", minLength: 1 },
+    reviewerVariant: { type: "string", minLength: 1 },
   },
 };
 
@@ -279,19 +283,23 @@ const validateWithSchema = ajv.compile(VVOC_CONFIG_SCHEMA);
 export function createGuardianConfig(overrides: GuardianConfigOverrides = {}): GuardianConfig {
   const timeoutMs = overrides.timeoutMs ?? DEFAULT_GUARDIAN_TIMEOUT_MS;
 
-  return {
+  return compactObject({
+    model: normalizeOptionalString(overrides.model),
+    variant: normalizeOptionalString(overrides.variant),
     timeoutMs,
     approvalRiskThreshold:
       overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD,
     reviewToastDurationMs: overrides.reviewToastDurationMs ?? timeoutMs,
-  };
+  });
 }
 
 export function createMemoryConfig(overrides: MemoryConfigOverrides = {}): MemoryConfig {
-  return {
+  return compactObject({
     enabled: overrides.enabled ?? true,
     defaultSearchLimit: overrides.defaultSearchLimit ?? DEFAULT_MEMORY_SEARCH_LIMIT,
-  };
+    reviewerModel: normalizeOptionalString(overrides.reviewerModel),
+    reviewerVariant: normalizeOptionalString(overrides.reviewerVariant),
+  });
 }
 
 export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
@@ -389,10 +397,20 @@ export function parseGuardianConfigText(text: string, label: string): GuardianCo
     throw new Error(`${label}: expected a top-level object`);
   }
 
-  assertAllowedKeys(value, ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"], label);
+  assertAllowedKeys(
+    value,
+    ["model", "variant", "timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
+    label,
+  );
 
   const overrides: GuardianConfigOverrides = {};
 
+  if (Object.hasOwn(value, "model")) {
+    overrides.model = readNonEmptyString(value.model, `${label}: model`);
+  }
+  if (Object.hasOwn(value, "variant")) {
+    overrides.variant = readNonEmptyString(value.variant, `${label}: variant`);
+  }
   if (Object.hasOwn(value, "timeoutMs")) {
     overrides.timeoutMs = readPositiveInteger(value.timeoutMs, `${label}: timeoutMs`);
   }
@@ -422,7 +440,11 @@ export function parseMemoryConfigText(text: string, label: string): MemoryConfig
     throw new Error(`${label}: expected a top-level object`);
   }
 
-  assertAllowedKeys(value, ["enabled", "defaultSearchLimit"], label);
+  assertAllowedKeys(
+    value,
+    ["enabled", "defaultSearchLimit", "reviewerModel", "reviewerVariant"],
+    label,
+  );
 
   const overrides: MemoryConfigOverrides = {};
 
@@ -436,6 +458,15 @@ export function parseMemoryConfigText(text: string, label: string): MemoryConfig
     overrides.defaultSearchLimit = readPositiveInteger(
       value.defaultSearchLimit,
       `${label}: defaultSearchLimit`,
+    );
+  }
+  if (Object.hasOwn(value, "reviewerModel")) {
+    overrides.reviewerModel = readNonEmptyString(value.reviewerModel, `${label}: reviewerModel`);
+  }
+  if (Object.hasOwn(value, "reviewerVariant")) {
+    overrides.reviewerVariant = readNonEmptyString(
+      value.reviewerVariant,
+      `${label}: reviewerVariant`,
     );
   }
   return overrides;
@@ -632,6 +663,18 @@ function loadLenientGuardianConfig(
 
   const overrides: GuardianConfigOverrides = {};
 
+  if (Object.hasOwn(value, "model")) {
+    const model = readLenientOptionalString(value.model, `${label}.model`, warnings);
+    if (model !== undefined) {
+      overrides.model = model;
+    }
+  }
+  if (Object.hasOwn(value, "variant")) {
+    const variant = readLenientOptionalString(value.variant, `${label}.variant`, warnings);
+    if (variant !== undefined) {
+      overrides.variant = variant;
+    }
+  }
   if (Object.hasOwn(value, "timeoutMs")) {
     const timeoutMs = readLenientPositiveInteger(value.timeoutMs, `${label}.timeoutMs`, warnings);
     if (timeoutMs !== undefined) {
@@ -685,6 +728,26 @@ function loadLenientMemoryConfig(value: unknown, label: string, warnings: string
     );
     if (limit !== undefined) {
       overrides.defaultSearchLimit = limit;
+    }
+  }
+  if (Object.hasOwn(value, "reviewerModel")) {
+    const reviewerModel = readLenientOptionalString(
+      value.reviewerModel,
+      `${label}.reviewerModel`,
+      warnings,
+    );
+    if (reviewerModel !== undefined) {
+      overrides.reviewerModel = reviewerModel;
+    }
+  }
+  if (Object.hasOwn(value, "reviewerVariant")) {
+    const reviewerVariant = readLenientOptionalString(
+      value.reviewerVariant,
+      `${label}.reviewerVariant`,
+      warnings,
+    );
+    if (reviewerVariant !== undefined) {
+      overrides.reviewerVariant = reviewerVariant;
     }
   }
   return createMemoryConfig(overrides);
