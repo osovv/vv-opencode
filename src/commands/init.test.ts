@@ -1,5 +1,5 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, managed agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
@@ -14,6 +14,11 @@
 // END_MODULE_MAP
 
 import { describe, expect, test } from "bun:test";
+import {
+  parseVvocConfigText,
+  VVOC_CONFIG_SCHEMA_URL,
+  VVOC_CONFIG_VERSION,
+} from "../lib/vvoc-config.js";
 import { resolvePaths } from "../lib/opencode.js";
 
 test("resolvePaths - global scope resolves correctly", async () => {
@@ -31,7 +36,7 @@ test("resolvePaths - project scope resolves correctly", async () => {
 });
 
 describe("init scenarios", () => {
-  test("init creates configs with correct structure", async () => {
+  test("init creates role-based canonical config and managed OpenCode defaults", async () => {
     const { mkdtempSync, rmSync } = await import("node:fs");
     const { join } = await import("node:path");
     const os = await import("node:os");
@@ -55,18 +60,49 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/memory-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/enhancer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/implementer.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/spec-reviewer.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/code-reviewer.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/investitagor.md")).toBe(true);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "memory.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
       const vvocContent = readFileSync(paths.vvocConfigPath, "utf8");
+      const opencodeConfig = JSON.parse(opencodeContent) as {
+        model: string;
+        small_model: string;
+        agent: Record<string, { model?: string; prompt?: string }>;
+      };
+      const vvocConfig = parseVvocConfigText(vvocContent, paths.vvocConfigPath);
+
       expect(opencodeContent).toContain("@osovv/vv-opencode");
-      expect(opencodeContent).toContain('"enhancer"');
-      expect(opencodeContent).toContain('"implementer"');
-      expect(vvocContent).toContain('"guardian"');
-      expect(vvocContent).toContain('"memory"');
-      expect(vvocContent).toContain('"secretsRedaction"');
+      expect(opencodeConfig.model).toBe("vv-role:default");
+      expect(opencodeConfig.small_model).toBe("vv-role:fast");
+      expect(opencodeConfig.agent.build?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent.plan?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent.general?.model).toBe("vv-role:default");
+      expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
+      expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent.implementer?.model).toBe("vv-role:default");
+      expect(opencodeConfig.agent["spec-reviewer"]?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent["code-reviewer"]?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent.investitagor?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent.enhancer?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent.implementer?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent["spec-reviewer"]?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent["code-reviewer"]?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent.investitagor?.prompt).toContain("{file:");
+
+      expect(vvocConfig.version).toBe(VVOC_CONFIG_VERSION);
+      expect(vvocConfig.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);
+      expect(vvocConfig.roles.default).toBeDefined();
+      expect(vvocConfig.roles.smart).toBeDefined();
+      expect(vvocConfig.roles.fast).toBeDefined();
+      expect(vvocConfig.roles.vision).toBeDefined();
+      expect(vvocConfig.presets["vv-openai"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-minimax"]?.agents.default).toBeDefined();
     } finally {
       rmSync(configHome, { recursive: true, force: true });
       rmSync(tmpDir, { recursive: true, force: true });
@@ -89,16 +125,21 @@ describe("init scenarios", () => {
         configDir: configHome,
       });
 
+      const { readFileSync } = await import("node:fs");
+      const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
+      const beforeOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
+      const beforeVvoc = readFileSync(paths.vvocConfigPath, "utf8");
+
       await runInitNonInteractive({
         scope: "project",
         cwd: tmpDir,
         configDir: configHome,
       });
 
-      const { readFileSync } = await import("node:fs");
-      const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
-      const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
-      expect(opencodeContent).toContain("@osovv/vv-opencode");
+      const afterOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
+      const afterVvoc = readFileSync(paths.vvocConfigPath, "utf8");
+      expect(afterOpenCode).toBe(beforeOpenCode);
+      expect(afterVvoc).toBe(beforeVvoc);
     } finally {
       rmSync(configHome, { recursive: true, force: true });
       rmSync(tmpDir, { recursive: true, force: true });
