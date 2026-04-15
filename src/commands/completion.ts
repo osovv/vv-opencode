@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.12
+// VERSION: 0.5.13
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `agent set|unset <target-id>` flow, and rc file patching.
+//   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `role set|unset <role-id>` flow, and rc file patching.
 //   INPUTS: Current shell environment plus built-in vvoc command and preset names.
 //   OUTPUTS: Shell-specific completion scripts and idempotent rc/config patches.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os]
@@ -20,17 +20,16 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.12 - Added the openai patch-provider preset to shell completion output.]
+//   LAST_CHANGE: [v0.5.13 - Replaced legacy agent completions with role completions including built-in role IDs.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { SUPPORTED_MODEL_TARGET_NAMES } from "../lib/agent-models.js";
+import { BUILTIN_ROLE_NAMES } from "../lib/model-roles.js";
 
 const VVOC_TOP_LEVEL_COMMANDS = [
-  "agent",
   "completion",
   "config",
   "doctor",
@@ -40,6 +39,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
   "patch-provider",
   "preset",
   "plugin",
+  "role",
   "status",
   "sync",
   "upgrade",
@@ -51,8 +51,8 @@ const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai", "openai"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
 const VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
-const VVOC_AGENT_COMMANDS = ["set", "unset", "list"];
-const VVOC_AGENT_TARGETS = [...SUPPORTED_MODEL_TARGET_NAMES];
+const VVOC_ROLE_COMMANDS = ["set", "unset", "list"];
+const VVOC_ROLE_IDS = [...BUILTIN_ROLE_NAMES];
 
 export default defineCommand({
   meta: {
@@ -168,8 +168,8 @@ export function generateBashCompletion(): string {
   const presetCommands = [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ");
   const presetNames = VVOC_PRESET_NAMES.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
-  const agentCommands = VVOC_AGENT_COMMANDS.join(" ");
-  const agentTargets = VVOC_AGENT_TARGETS.join(" ");
+  const roleCommands = VVOC_ROLE_COMMANDS.join(" ");
+  const roleIds = VVOC_ROLE_IDS.join(" ");
 
   return (
     "# bash completion for vvoc\n" +
@@ -183,8 +183,8 @@ export function generateBashCompletion(): string {
     "      ;;\n" +
     "    2)\n" +
     '      case "${words[1]}" in\n' +
-    "        agent)\n" +
-    "          _vvoc_agent_commands\n" +
+    "        role)\n" +
+    "          _vvoc_role_commands\n" +
     "          ;;\n" +
     "        config)\n" +
     "          _vvoc_config_commands\n" +
@@ -202,8 +202,8 @@ export function generateBashCompletion(): string {
     "      ;;\n" +
     "    3)\n" +
     '      case "${words[1]}:${words[2]}" in\n' +
-    "        agent:set|agent:unset)\n" +
-    "          _vvoc_agent_target_commands\n" +
+    "        role:set|role:unset)\n" +
+    "          _vvoc_role_ids\n" +
     "          ;;\n" +
     "        preset:show)\n" +
     "          _vvoc_preset_names\n" +
@@ -248,16 +248,16 @@ export function generateBashCompletion(): string {
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
     "\n" +
-    "_vvoc_agent_commands() {\n" +
+    "_vvoc_role_commands() {\n" +
     '  local commands="' +
-    agentCommands +
+    roleCommands +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
     "\n" +
-    "_vvoc_agent_target_commands() {\n" +
+    "_vvoc_role_ids() {\n" +
     '  local commands="' +
-    agentTargets +
+    roleIds +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -293,8 +293,8 @@ export function generateZshCompletion(): string {
     '  _arguments -C "1: :(' + VVOC_TOP_LEVEL_COMMANDS.join(" ") + ')" "*::arg:->args"',
     "",
     "  case $line[1] in",
-    "    agent)",
-    "      _vvoc_agent_cmds",
+    "    role)",
+    "      _vvoc_role_cmds",
     "      ;;",
     "    config)",
     "      _vvoc_config_cmds",
@@ -332,13 +332,13 @@ export function generateZshCompletion(): string {
     "  esac",
     "}",
     "",
-    "_vvoc_agent_cmds() {",
+    "_vvoc_role_cmds() {",
     "  case $words[2] in",
     "    set|unset)",
-    '      _arguments "1: :(' + VVOC_AGENT_TARGETS.join(" ") + ')"',
+    '      _arguments "1: :(' + VVOC_ROLE_IDS.join(" ") + ')"',
     "      ;;",
     "    *)",
-    '      _arguments "1: :(' + VVOC_AGENT_COMMANDS.join(" ") + ')"',
+    '      _arguments "1: :(' + VVOC_ROLE_COMMANDS.join(" ") + ')"',
     "      ;;",
     "  esac",
     "}",
@@ -382,12 +382,12 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_PRESET_NAMES.join(" "),
     "end",
     "",
-    "function __vvoc_agent_cmds",
-    "  echo " + VVOC_AGENT_COMMANDS.join(" "),
+    "function __vvoc_role_cmds",
+    "  echo " + VVOC_ROLE_COMMANDS.join(" "),
     "end",
     "",
-    "function __vvoc_agent_target_cmds",
-    "  echo " + VVOC_AGENT_TARGETS.join(" "),
+    "function __vvoc_role_ids",
+    "  echo " + VVOC_ROLE_IDS.join(" "),
     "end",
     "",
     "function __vvoc_plugin_cmds",
@@ -395,8 +395,8 @@ export function generateFishCompletion(): string {
     "end",
     "",
     'complete -c vvoc -f -a "(__vvoc_commands)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and not __fish_seen_subcommand_from set unset list" -f -a "(__vvoc_agent_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_agent_target_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from role; and not __fish_seen_subcommand_from set unset list" -f -a "(__vvoc_role_cmds)"',
+    'complete -c vvoc -n "__fish_seen_subcommand_from role; and __fish_seen_subcommand_from set unset" -f -a "(__vvoc_role_ids)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from patch-provider" -f -a "(__vvoc_patch_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from ' +

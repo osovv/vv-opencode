@@ -1,8 +1,8 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.10
+// VERSION: 0.4.11
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `agent set|unset <target-id>` flow.
+//   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `role set|unset <role-id>` flow.
 //   INPUTS: Generated completion scripts for bash, zsh, and fish.
 //   OUTPUTS: Assertions over exposed commands, nested completions, and syntax markers.
 //   DEPENDS: [src/commands/completion.ts]
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.10 - Added the openai patch-provider preset to completion fixtures.]
+//   LAST_CHANGE: [v0.4.11 - Replaced agent completions with role completions including built-in role IDs.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -29,7 +29,7 @@ import {
 test("generateBashCompletion - contains vvoc command", () => {
   const output = generateBashCompletion();
   expect(output).toContain("vvoc");
-  expect(output).toContain("agent");
+  expect(output).toContain("role");
   expect(output).toContain("completion");
   expect(output).toContain("config");
   expect(output).toContain("patch-provider");
@@ -46,7 +46,7 @@ test("generateBashCompletion - valid bash syntax", () => {
 test("generateZshCompletion - contains vvoc command", () => {
   const output = generateZshCompletion();
   expect(output).toContain("vvoc");
-  expect(output).toContain("agent");
+  expect(output).toContain("role");
   expect(output).toContain("config");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
@@ -63,7 +63,7 @@ test("generateZshCompletion - valid zsh syntax", () => {
 test("generateFishCompletion - contains vvoc command", () => {
   const output = generateFishCompletion();
   expect(output).toContain("vvoc");
-  expect(output).toContain("agent");
+  expect(output).toContain("role");
   expect(output).toContain("completion");
   expect(output).toContain("config");
   expect(output).toContain("patch-provider");
@@ -85,7 +85,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="agent completion config doctor guardian init install patch-provider preset plugin status sync upgrade version"',
+    'local commands="completion config doctor guardian init install patch-provider preset plugin role status sync upgrade version"',
   );
 });
 
@@ -96,37 +96,31 @@ test("generateZshCompletion - contains plugin subcommand", () => {
 
 test("generateFishCompletion - handles nested subcommands", () => {
   const output = generateFishCompletion();
-  expect(output).toContain("__fish_seen_subcommand_from agent");
+  expect(output).toContain("__fish_seen_subcommand_from role");
   expect(output).toContain("__fish_seen_subcommand_from config");
   expect(output).toContain("__fish_seen_subcommand_from patch-provider");
   expect(output).toContain("__fish_seen_subcommand_from preset");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
 });
 
-test("generateBashCompletion - contains agent command flow", () => {
+test("generateBashCompletion - contains role command flow", () => {
   const output = generateBashCompletion();
   expect(output).toContain('local commands="set unset list"');
-  expect(output).toContain("agent:set|agent:unset");
-  expect(output).toContain(
-    "guardian memory-reviewer default small-model build plan general explore enhancer implementer spec-reviewer code-reviewer investitagor",
-  );
-  expect(output).toContain("_vvoc_agent_target_commands");
+  expect(output).toContain("role:set|role:unset");
+  expect(output).toContain("default smart fast vision");
+  expect(output).toContain("_vvoc_role_ids");
 });
 
-test("generateZshCompletion - contains agent target commands", () => {
+test("generateZshCompletion - contains role id commands", () => {
   const output = generateZshCompletion();
   expect(output).toContain("set|unset");
-  expect(output).toContain(
-    "guardian memory-reviewer default small-model build plan general explore enhancer implementer spec-reviewer code-reviewer investitagor",
-  );
+  expect(output).toContain("default smart fast vision");
 });
 
-test("generateFishCompletion - contains agent target completions", () => {
+test("generateFishCompletion - contains role id completions", () => {
   const output = generateFishCompletion();
-  expect(output).toContain("function __vvoc_agent_target_cmds");
-  expect(output).toContain(
-    "echo guardian memory-reviewer default small-model build plan general explore enhancer implementer spec-reviewer code-reviewer investitagor",
-  );
+  expect(output).toContain("function __vvoc_role_ids");
+  expect(output).toContain("echo default smart fast vision");
   expect(output).toContain("__fish_seen_subcommand_from set unset");
 });
 

@@ -78,6 +78,7 @@ Persisted vvoc data lives here:
 
 `vvoc.json` currently contains these top-level sections:
 
+- `roles`
 - `guardian`
 - `memory`
 - `secretsRedaction`
@@ -87,12 +88,12 @@ The current schema is versioned and published with the package:
 
 ```json
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v2.json",
-  "version": 2
+  "$schema": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v3.json",
+  "version": 3
 }
 ```
 
-Schema source of truth lives in this repository at `schemas/vvoc/v2.json`.
+Schema source of truth lives in this repository at `schemas/vvoc/v3.json`.
 
 ## CLI Overview
 
@@ -104,7 +105,7 @@ Schema source of truth lives in this repository at `schemas/vvoc/v2.json`.
 | `vvoc status` | Show current installation state |
 | `vvoc doctor` | Diagnose setup problems and exit non-zero if problems are found |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
-| `vvoc agent list/set/unset` | Manage model target overrides |
+| `vvoc role list/set/unset` | Manage canonical role assignments |
 | `vvoc preset list`, `vvoc preset show <name>`, `vvoc preset <name>` | Inspect or apply named presets |
 | `vvoc guardian config` | Print or write the `guardian` section of `vvoc.json` |
 | `vvoc plugin list` | List plugin entries from OpenCode config |
@@ -113,58 +114,41 @@ Schema source of truth lives in this repository at `schemas/vvoc/v2.json`.
 | `vvoc upgrade` | Upgrade the global package and run a follow-up sync |
 | `vvoc version` | Print the installed package version |
 
-## Model Targets And Presets
+## Model Roles And Presets
 
-Inspect current model targets:
-
-```bash
-vvoc agent list
-```
-
-Set overrides:
+Inspect current role assignments:
 
 ```bash
-vvoc agent set default openai/gpt-5.4
-vvoc agent set build openai/gpt-5.4:xhigh
-vvoc agent set plan openai/gpt-5.4:xhigh
-vvoc agent set small-model openai/gpt-5.4-mini
-vvoc agent set guardian anthropic/claude-sonnet-4-5:high
-vvoc agent set memory-reviewer openai/gpt-5:high
-vvoc agent set explore openai/gpt-5.4-mini
+vvoc role list
 ```
 
-Remove overrides:
+Set role assignments (`provider/model[:variant]`):
 
 ```bash
-vvoc agent unset default
-vvoc agent unset explore
-vvoc agent unset guardian
+vvoc role set default openai/gpt-5.4
+vvoc role set smart openai/gpt-5.4:xhigh
+vvoc role set fast openai/gpt-5.4-mini
+vvoc role set team-review anthropic/claude-sonnet-4-5:high
 ```
 
-Supported target IDs:
+Remove custom role assignments:
+
+```bash
+vvoc role unset team-review
+```
+
+Built-in role IDs:
 
 - `default`
-- `small-model`
-- `build`
-- `plan`
-- `guardian`
-- `memory-reviewer`
-- `general`
-- `explore`
-- `enhancer`
-- `implementer`
-- `spec-reviewer`
-- `code-reviewer`
-- `investitagor`
+- `smart`
+- `fast`
+- `vision`
 
-Model syntax rules:
+Role notes:
 
-- `default` and `small-model` use plain `provider/model`
-- `guardian` and `memory-reviewer` accept `provider/model[:variant]`
-- OpenCode agent targets such as `build`, `plan`, `general`, `explore`, `enhancer`, and `implementer` also accept `provider/model[:variant]`; vvoc translates that into native OpenCode `model` plus `variant` fields
-- `vvoc patch-provider openai` installs `openai/vv-gpt-5.4-xhigh` as a vv-managed alias model and makes it the global default without changing `small_model`
-- OpenCode-side targets respect `--scope`
-- `guardian` and `memory-reviewer` live in canonical `vvoc.json`, so they remain global even when `--scope project` is passed
+- `vvoc role` mutates only canonical global `vvoc.json` (`roles` map)
+- built-in roles cannot be removed with `vvoc role unset`
+- custom role IDs must use lowercase letters, digits, and hyphens
 
 Presets are stored in canonical `vvoc.json` and are useful when you want to switch several model targets together:
 
