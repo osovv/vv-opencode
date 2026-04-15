@@ -299,41 +299,74 @@ export function ensureManagedAgentRegistrationsConfigText(
 
   for (const [agentName, modelRef] of Object.entries(builtInAgentModelRefs)) {
     const currentEntry = currentAgents[agentName];
-    const nextEntry: JsonObject = currentEntry
-      ? { ...currentEntry, model: modelRef }
-      : { model: modelRef };
-    delete nextEntry.variant;
-
-    if (JSON.stringify(currentEntry) === JSON.stringify(nextEntry)) {
+    if (!currentEntry) {
+      nextText = applyEdits(
+        nextText,
+        modify(
+          nextText,
+          ["agent", agentName],
+          { model: modelRef },
+          {
+            formattingOptions: JSON_FORMAT,
+          },
+        ),
+      );
       continue;
     }
 
-    nextText = applyEdits(
-      nextText,
-      modify(nextText, ["agent", agentName], nextEntry, {
-        formattingOptions: JSON_FORMAT,
-      }),
-    );
+    if (currentEntry.model !== modelRef) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ["agent", agentName, "model"], modelRef, {
+          formattingOptions: JSON_FORMAT,
+        }),
+      );
+    }
+
+    if (Object.hasOwn(currentEntry, "variant")) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ["agent", agentName, "variant"], undefined, {
+          formattingOptions: JSON_FORMAT,
+        }),
+      );
+    }
   }
 
   for (const definition of MANAGED_OPENCODE_AGENTS) {
     const currentEntry = currentAgents[definition.name];
-    const nextEntry = {
-      ...currentEntry,
-      ...getManagedOpenCodeAgentRegistration(paths, definition.name),
-    };
-    delete nextEntry.variant;
-
-    if (JSON.stringify(currentEntry) === JSON.stringify(nextEntry)) {
+    const registration = getManagedOpenCodeAgentRegistration(paths, definition.name);
+    if (!currentEntry) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ["agent", definition.name], registration, {
+          formattingOptions: JSON_FORMAT,
+        }),
+      );
       continue;
     }
 
-    nextText = applyEdits(
-      nextText,
-      modify(nextText, ["agent", definition.name], nextEntry, {
-        formattingOptions: JSON_FORMAT,
-      }),
-    );
+    for (const [field, nextValue] of Object.entries(registration)) {
+      if (JSON.stringify(currentEntry[field]) === JSON.stringify(nextValue)) {
+        continue;
+      }
+
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ["agent", definition.name, field], nextValue, {
+          formattingOptions: JSON_FORMAT,
+        }),
+      );
+    }
+
+    if (Object.hasOwn(currentEntry, "variant")) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ["agent", definition.name, "variant"], undefined, {
+          formattingOptions: JSON_FORMAT,
+        }),
+      );
+    }
   }
 
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
@@ -572,6 +605,7 @@ export async function writeOpenCodeProviderObject(
   };
 }
 
+// START_BLOCK_MANAGED_AGENT_MODEL_IO
 export async function writeManagedAgentModel(
   paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
   agentName: ManagedOpenCodeAgentName,
@@ -626,7 +660,7 @@ export async function writeManagedAgentModel(
     path: paths.opencodeConfigPath,
   };
 }
-// END_BLOCK_ENSURE_MANAGED_SUBAGENT_CONFIG
+// END_BLOCK_MANAGED_AGENT_MODEL_IO
 
 export {
   parseGuardianConfigText,

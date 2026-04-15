@@ -153,12 +153,15 @@ describe("managed OpenCode role-reference rewrites", () => {
   "agent": {
     // keep managed note
     "enhancer": {
+      // keep managed nested note
       "model": "openai/gpt-5",
       "prompt": "{file:./.vvoc/agents/enhancer.md}"
     },
     "build": {
       // keep build note
-      "model": "openai/gpt-5"
+      "model": "openai/gpt-5",
+      // keep build sibling note
+      "mode": "primary"
     }
   }
 }\n`;
@@ -173,6 +176,9 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(output).toContain("// keep root note");
     expect(output).toContain("// keep root small note");
     expect(output).toContain("// keep managed note");
+    expect(output).toContain("// keep managed nested note");
+    expect(output).toContain("// keep build note");
+    expect(output).toContain("// keep build sibling note");
     expect(parsed.model).toBe("vv-role:default");
     expect(parsed.small_model).toBe("vv-role:fast");
     expect(parsed.agent?.build?.model).toBe("vv-role:smart");
