@@ -9,7 +9,7 @@
   </ArchitectureNotes>
 
   <Modules>
-    <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" LAYER="0" ORDER="1" STATUS="planned">
+    <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" LAYER="0" ORDER="1" STATUS="implemented">
       <contract>
         <purpose>Define built-in role IDs, `vv-role:*` reference syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in agent-to-role mappings.</purpose>
         <inputs>
@@ -697,7 +697,7 @@
     </Phase-5>
     <Phase-6 name="Role-Based Model Semantics" status="planned">
       <goal>Replace target-based model overrides with semantic role assignment, runtime `vv-role:*` resolution, and role-centric CLI workflows.</goal>
-      <step-1 module="M-MODEL-ROLES" status="planned" verification="V-M-MODEL-ROLES">Implement the shared role contract, built-in role bindings, and concrete model-selection parsing helpers.</step-1>
+      <step-1 module="M-MODEL-ROLES" status="implemented" verification="V-M-MODEL-ROLES">Implement the shared role contract, built-in role bindings, and concrete model-selection parsing helpers.</step-1>
       <step-2 module="M-CLI-CONFIG" status="planned" verification="V-M-CLI-CONFIG">Upgrade canonical vvoc config to schema v3, seed built-in roles, remove target-based config fields, and keep OpenCode defaults and managed agents pinned to `vv-role:*` references.</step-2>
       <step-3 module="M-PLUGIN-MODEL-ROLES" status="planned" verification="V-M-PLUGIN-MODEL-ROLES">Resolve role references at startup for supported OpenCode config fields and fail loudly for unknown roles.</step-3>
       <step-4 module="M-PLUGIN-GUARDIAN" status="planned" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>

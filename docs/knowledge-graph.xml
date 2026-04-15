@@ -3,7 +3,7 @@
     <keywords>opencode, plugins, workflow, model-roles</keywords>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, and cross-device setup.</annotation>
 
-    <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" STATUS="planned">
+    <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" STATUS="implemented">
       <purpose>Define built-in role IDs, `vv-role:*` syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in role bindings for managed agents and OpenCode defaults.</purpose>
       <path>src/lib/model-roles.ts</path>
       <depends>none</depends>
