@@ -71,7 +71,7 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     expect(stderr).toContain(
       "unresolved role reference at model: vv-role:missing (missing role: missing)",
     );
-    expect(process.exitCode).toBe(1);
+    expect(process.exitCode ?? 0).toBe(1);
   } finally {
     process.chdir(initialCwd);
     process.exitCode = initialExitCode;
