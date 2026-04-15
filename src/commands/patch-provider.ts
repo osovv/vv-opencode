@@ -1,5 +1,5 @@
 // FILE: src/commands/patch-provider.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply global OpenCode patch presets.
 //   SCOPE: Patch preset validation, global OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
@@ -14,11 +14,12 @@
 // START_MODULE_MAP
 //   default - PatchProvider command definition for vvoc.
 //   resolvePatchProviderPreset - Validate an OpenCode patch preset name and return its config.
+//   PatchProviderPresetName - Supported built-in patch-provider preset names.
 //   applyPatchProviderPreset - Apply the selected OpenCode patch preset to global OpenCode config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Updated the openai preset to patch only provider.openai alias-model entries without mutating root model fields.]
+//   LAST_CHANGE: [v0.4.1 - Synced the module map with the exported PatchProviderPresetName helper type.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

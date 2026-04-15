@@ -44,11 +44,12 @@ describe("init scenarios", () => {
     const tmpDir = mkdtempSync(join(os.tmpdir(), "vvoc-test-"));
     const configHome = mkdtempSync(join(os.tmpdir(), "vvoc-config-home-"));
     try {
-      const { runInitNonInteractive } = await import("./init.js");
-      await runInitNonInteractive({
+      const { runInit } = await import("./init.js");
+      await runInit({
         scope: "project",
         cwd: tmpDir,
         configDir: configHome,
+        nonInteractive: true,
       });
 
       const { readFileSync, existsSync } = await import("node:fs");
@@ -117,12 +118,13 @@ describe("init scenarios", () => {
     const tmpDir = mkdtempSync(join(os.tmpdir(), "vvoc-test-"));
     const configHome = mkdtempSync(join(os.tmpdir(), "vvoc-config-home-"));
     try {
-      const { runInitNonInteractive } = await import("./init.js");
+      const { runInit } = await import("./init.js");
 
-      await runInitNonInteractive({
+      await runInit({
         scope: "project",
         cwd: tmpDir,
         configDir: configHome,
+        nonInteractive: true,
       });
 
       const { readFileSync } = await import("node:fs");
@@ -130,10 +132,11 @@ describe("init scenarios", () => {
       const beforeOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
       const beforeVvoc = readFileSync(paths.vvocConfigPath, "utf8");
 
-      await runInitNonInteractive({
+      await runInit({
         scope: "project",
         cwd: tmpDir,
         configDir: configHome,
+        nonInteractive: true,
       });
 
       const afterOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
