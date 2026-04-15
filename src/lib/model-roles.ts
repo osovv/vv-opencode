@@ -1,5 +1,5 @@
 // FILE: src/lib/model-roles.ts
-// VERSION: 0.1.0
+// VERSION: 0.1.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Define built-in role IDs, role-reference parsing, concrete model-selection parsing, and deterministic built-in role bindings.
 //   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model[:variant] parsing, and hard-coded built-in role binding lookup.
@@ -21,6 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.1 - Distinguished unknown-role from blank configured role bindings and aligned role-reference whitespace handling between checker and resolver.]
 //   LAST_CHANGE: [v0.1.0 - Added role ID validation, role reference resolution helpers, model selection parsing, and deterministic built-in role bindings.]
 // END_CHANGE_SUMMARY
 
@@ -108,7 +109,8 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
 //   LINKS: [fn-isRoleReference, fn-resolveRoleReference]
 // END_CONTRACT: isRoleReference
 export function isRoleReference(value: string): boolean {
-  return value.startsWith(ROLE_REFERENCE_PREFIX) && value.length > ROLE_REFERENCE_PREFIX.length;
+  const trimmed = value.trim();
+  return trimmed.startsWith(ROLE_REFERENCE_PREFIX) && trimmed.length > ROLE_REFERENCE_PREFIX.length;
 }
 
 // START_CONTRACT: parseModelSelection
@@ -149,10 +151,19 @@ export function resolveRoleReference(
 ): ResolvedRoleSelection {
   // START_BLOCK_RESOLVE_ROLE_REFERENCE
   const roleId = parseRoleReference(roleRef);
+  if (!Object.hasOwn(roleMap, roleId)) {
+    throw createModelRolesError("UNKNOWN_ROLE", "roleRef", roleRef, `unknown role: ${roleId}`);
+  }
+
   const rawModelSelection = roleMap[roleId];
 
   if (typeof rawModelSelection !== "string" || !rawModelSelection.trim()) {
-    throw createModelRolesError("UNKNOWN_ROLE", "roleRef", roleRef, `unknown role: ${roleId}`);
+    throw createModelRolesError(
+      "INVALID_MODEL_SELECTION",
+      "modelSelection",
+      typeof rawModelSelection === "string" ? rawModelSelection : String(rawModelSelection),
+      `configured role binding is blank or invalid for role: ${roleId}`,
+    );
   }
 
   if (isRoleReference(rawModelSelection.trim())) {

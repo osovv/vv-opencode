@@ -1,5 +1,5 @@
 // FILE: src/lib/model-roles.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.1.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify role ID/reference parsing, concrete model-selection parsing, built-in bindings, and role-resolution failures.
 //   SCOPE: Deterministic built-in role exposure, vv-role round-trips, model selection normalization, and explicit error-code coverage.
@@ -17,6 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.1 - Added coverage for blank role bindings, whitespace-consistent role references, and full deterministic built-in binding assertions.]
 //   LAST_CHANGE: [v0.1.0 - Added module-local coverage for built-in role exposure, parsing normalization, field-specific errors, and non-transitive role resolution.]
 // END_CHANGE_SUMMARY
 
@@ -36,9 +37,24 @@ describe("built-in roles", () => {
     expect(BUILTIN_ROLE_NAMES).toEqual(["default", "smart", "fast", "vision"]);
 
     const bindings = getBuiltInRoleBindings();
-    expect(bindings.opencodeDefaults).toEqual({ model: "default", smallModel: "fast" });
-    expect(bindings.managedAgents.guardian).toBe("fast");
-    expect(bindings.managedAgents["memory-reviewer"]).toBe("fast");
+    expect(bindings).toEqual({
+      opencodeDefaults: { model: "default", smallModel: "fast" },
+      opencodeAgents: {
+        build: "smart",
+        plan: "smart",
+        general: "default",
+        explore: "fast",
+      },
+      managedAgents: {
+        guardian: "fast",
+        "memory-reviewer": "fast",
+        enhancer: "smart",
+        implementer: "default",
+        "spec-reviewer": "smart",
+        "code-reviewer": "smart",
+        investitagor: "smart",
+      },
+    });
   });
 });
 
@@ -62,6 +78,18 @@ describe("role references", () => {
     });
   });
 
+  test("normalizes surrounding whitespace consistently for checker and resolver", () => {
+    expect(isRoleReference("  vv-role:default  ")).toBe(true);
+
+    const resolved = resolveRoleReference("  vv-role:default  ", {
+      default: "openai/gpt-5",
+    });
+
+    expect(resolved.roleId).toBe("default");
+    expect(resolved.roleRef).toBe("vv-role:default");
+    expect(resolved.normalized).toBe("openai/gpt-5");
+  });
+
   test("fails unknown roles with explicit UNKNOWN_ROLE", () => {
     assertModelRolesError(
       () => resolveRoleReference("vv-role:missing", { default: "openai/gpt-5" }),
@@ -81,6 +109,14 @@ describe("role references", () => {
       () => resolveRoleReference("openai/gpt-5", { default: "openai/gpt-5" }),
       "INVALID_ROLE_REFERENCE",
       "roleRef",
+    );
+  });
+
+  test("fails blank configured role bindings as invalid model selections", () => {
+    assertModelRolesError(
+      () => resolveRoleReference("vv-role:default", { default: "   " }),
+      "INVALID_MODEL_SELECTION",
+      "modelSelection",
     );
   });
 });
