@@ -1,4 +1,4 @@
-// FILE: src/plugins/memory/memory.ts
+// FILE: src/plugins/memory/index.ts
 // VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register explicit vvoc memory tools and the report-only memory reviewer agent.
