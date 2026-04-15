@@ -64,7 +64,7 @@
       </annotations>
     </M-PLUGIN-MODEL-ROLES>
 
-    <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>List, set, and unset semantic role assignments in canonical vvoc.json for built-in and user-defined roles.</purpose>
       <path>src/commands/role.ts + src/lib/model-roles.ts</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
@@ -237,7 +237,7 @@
       </annotations>
     </M-CLI-PATCH-PROVIDER>
 
-    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, preset names, role subcommands, and built-in role ids.</purpose>
       <path>src/commands/completion.ts</path>
       <depends>M-CLI-COMMANDS, M-MODEL-ROLES</depends>

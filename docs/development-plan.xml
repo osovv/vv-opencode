@@ -310,7 +310,7 @@
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
     </M-PLUGIN-SECRETS-REDACTION>
 
-    <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="2" STATUS="planned">
+    <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="2" STATUS="implemented">
       <contract>
         <purpose>List, set, and unset semantic role assignments in canonical vvoc.json for both built-in and user-defined roles.</purpose>
         <inputs>
@@ -463,7 +463,7 @@
       <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>
     </M-CLI-PATCH-PROVIDER>
 
-    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="7" STATUS="planned">
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="7" STATUS="implemented">
       <contract>
         <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including patch-provider presets, role commands, role IDs, and preset names.</purpose>
         <inputs>
@@ -702,10 +702,10 @@
       <step-3 module="M-PLUGIN-MODEL-ROLES" status="implemented" verification="V-M-PLUGIN-MODEL-ROLES">Resolve role references at startup for supported OpenCode config fields and fail loudly for unknown roles.</step-3>
       <step-4 module="M-PLUGIN-GUARDIAN" status="implemented" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>
       <step-5 module="M-PLUGIN-MEMORY" status="implemented" verification="V-M-PLUGIN-MEMORY">Move memory-reviewer model selection to the built-in role system and drop reviewer model fields from canonical memory config.</step-5>
-      <step-6 module="M-CLI-ROLE" status="planned" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
+      <step-6 module="M-CLI-ROLE" status="implemented" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
       <step-7 module="M-CLI-PRESET" status="planned" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>
       <step-8 module="M-CLI-PATCH-PROVIDER" status="implemented" verification="V-M-CLI-PATCH-PROVIDER">Keep provider alias patching as a lower-level helper for concrete role assignments without mutating root OpenCode model fields.</step-8>
-      <step-9 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
+      <step-9 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
       <step-10 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
     </Phase-6>
   </ImplementationOrder>
