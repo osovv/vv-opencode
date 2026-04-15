@@ -1,15 +1,56 @@
-<DevelopmentPlan VERSION="0.4.0">
+<DevelopmentPlan VERSION="0.5.0">
   <ArchitectureNotes>
-    <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config.</objective>
-    <non-goal>Do not expand into a large monorepo or broad profile manager before plugin packaging, explicit memory, and vvoc config boundaries are stable.</non-goal>
+    <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config, and replace target-based model overrides with a semantic role system that resolves `vv-role:*` references at runtime.</objective>
+    <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced.</non-goal>
     <risk-1>Config file mutation must stay conservative because users may already have hand-maintained JSONC with comments.</risk-1>
     <risk-2>The file-based memory store does full scans and should stay explicit, simple, and easy to reason about until scale requires indexing.</risk-2>
+    <risk-3>Shared workflows may reference custom roles that are not assigned on another machine, so runtime role resolution must fail loudly and point at the offending config field.</risk-3>
+    <risk-4>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` remain a separate lower-level mechanism, so the role system must compose with provider patch commands without silently requiring them.</risk-4>
   </ArchitectureNotes>
 
   <Modules>
-    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="1" STATUS="implemented">
+    <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" LAYER="0" ORDER="1" STATUS="planned">
       <contract>
-        <purpose>Resolve OpenCode and canonical vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, register managed OpenCode agents conservatively, patch provider baseURLs conservatively, render canonical vvoc.json, and inspect installation state.</purpose>
+        <purpose>Define built-in role IDs, `vv-role:*` reference syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in agent-to-role mappings.</purpose>
+        <inputs>
+          <param name="roleId | roleRef | modelSelection" type="string" />
+          <param name="roleMap" type="Record&lt;string, string&gt;" />
+        </inputs>
+        <outputs>
+          <param name="normalizedRole | parsedModelSelection | resolvedModelSelection" type="object | string" />
+        </outputs>
+        <errors>
+          <error code="INVALID_ROLE_ID" />
+          <error code="INVALID_ROLE_REFERENCE" />
+          <error code="INVALID_MODEL_SELECTION" />
+          <error code="UNKNOWN_ROLE" />
+        </errors>
+      </contract>
+      <interface>
+        <export-isRoleReference PURPOSE="Check whether a model string uses the `vv-role:*` reference syntax." />
+        <export-parseModelSelection PURPOSE="Parse `provider/model[:variant]` selections used by canonical role assignments." />
+        <export-resolveRoleReference PURPOSE="Resolve a `vv-role:*` reference against the canonical role map and return the concrete model selection." />
+        <export-getBuiltInRoleBindings PURPOSE="Return the hard-coded built-in role mapping used by managed agents and OpenCode defaults." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/lib/model-roles.ts</source>
+        <tests>src/lib/model-roles.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[model-roles]</log-prefix>
+        <critical-block>BLOCK_RESOLVE_ROLE_REFERENCE</critical-block>
+      </observability>
+      <verification-ref>V-M-MODEL-ROLES</verification-ref>
+      <notes>
+        <note-1>Built-in roles are `default`, `smart`, `fast`, and `vision`.</note-1>
+        <note-2>Custom roles are allowed, but roles do not resolve transitively to other roles in v1 of this redesign.</note-2>
+      </notes>
+    </M-MODEL-ROLES>
+
+    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="2" STATUS="planned">
+      <contract>
+        <purpose>Resolve OpenCode and canonical vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, write role-reference based OpenCode defaults and managed agents conservatively, render canonical vvoc schema v3, refresh built-in role presets, and inspect installation state.</purpose>
         <inputs>
           <param name="scope" type="global | project" />
           <param name="cwd" type="string" />
@@ -21,18 +62,18 @@
         <errors>
           <error code="INVALID_JSONC" />
           <error code="INVALID_VVOC_CONFIG" />
+          <error code="UNSUPPORTED_VVOC_CONFIG_VERSION" />
         </errors>
       </contract>
       <interface>
         <export-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <export-ensurePackageInstalled PURPOSE="Ensure the npm package is registered in OpenCode config with a pinned package version." />
-        <export-writeProviderBaseUrl PURPOSE="Write a conservative provider options.baseURL override into OpenCode config." />
-        <export-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains the managed enhancer primary agent plus the bundled managed subagents." />
-        <export-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid current values." />
+        <export-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains the managed enhancer and bundled subagent registrations wired to `vv-role:*` references." />
+        <export-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document as schema v3 while preserving valid current role-based values and refreshing managed `vv-*` role presets." />
       </interface>
-      <depends>none</depends>
+      <depends>M-MODEL-ROLES</depends>
       <target>
-        <source>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/agent-models.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json + schemas/vvoc/v2.json</source>
+        <source>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</source>
         <tests>src/lib/opencode.test.ts</tests>
       </target>
       <observability>
@@ -41,14 +82,14 @@
       </observability>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <notes>
-        <note-1>Main OpenCode config edits should preserve comments when only the plugin array changes.</note-1>
-        <note-2>vvoc-owned settings now live only in $XDG_CONFIG_HOME/vvoc/vvoc.json.</note-2>
+        <note-1>Main OpenCode config edits should preserve comments when only the plugin array, role references, or managed agent registrations change.</note-1>
+        <note-2>Pre-role vvoc schemas are rejected instead of migrated.</note-2>
       </notes>
     </M-CLI-CONFIG>
 
-    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
+    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="planned">
       <contract>
-        <purpose>Expose init, install, sync, status, doctor, version, agent, preset, plugin list, config validate, patch-provider, completion, and upgrade subcommands through citty while delegating managed enhancer/subagent registration to the helper layer.</purpose>
+        <purpose>Expose init, install, sync, status, doctor, version, role, preset, plugin list, config validate, patch-provider, completion, guardian config, and upgrade subcommands through citty while delegating role-aware config mutation to the helper layer.</purpose>
         <inputs>
           <param name="argv" type="string[]" />
         </inputs>
@@ -60,14 +101,14 @@
         </errors>
       </contract>
       <interface>
-        <export-init PURPOSE="Bootstrap package registration and config scaffolding (interactive by default)." />
-        <export-sync PURPOSE="Refresh canonical vvoc.json plus managed prompt files." />
-        <export-doctor PURPOSE="Diagnose installation drift or invalid config." />
+        <export-init PURPOSE="Bootstrap package registration and role-based config scaffolding (interactive by default)." />
+        <export-sync PURPOSE="Refresh canonical vvoc.json, role presets, managed prompts, and role-reference OpenCode config." />
+        <export-doctor PURPOSE="Diagnose installation drift, unsupported vvoc schema versions, invalid role assignments, and unresolved role references." />
       </interface>
       <depends>M-CLI-CONFIG</depends>
       <target>
         <source>src/cli.ts + src/commands/*.ts</source>
-        <tests>src/lib/opencode.test.ts</tests>
+        <tests>src/lib/opencode.test.ts + src/commands/*.test.ts</tests>
       </target>
       <observability>
         <log-prefix>[VVOC]</log-prefix>
@@ -75,13 +116,46 @@
       </observability>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
       <notes>
-        <note-1>Commands should stay thin and delegate file logic to helper utilities.</note-1>
+        <note-1>The `vvoc agent` command tree is removed as part of the hard cut to role-based model semantics.</note-1>
       </notes>
     </M-CLI-COMMANDS>
 
-    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="2" STATUS="implemented">
+    <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="3" STATUS="planned">
       <contract>
-        <purpose>Review OpenCode permission requests with a constrained Guardian agent and auto-allow only low-risk actions.</purpose>
+        <purpose>Resolve `vv-role:*` references inside OpenCode root model fields plus agent and command definitions during plugin config hooks so shared workflows bind semantic model intent to user-local provider choices at startup time.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks with config mutation" />
+        </outputs>
+        <errors>
+          <error code="UNKNOWN_ROLE" />
+          <error code="INVALID_ROLE_ASSIGNMENT" />
+          <error code="UNSUPPORTED_ROLE_TARGET" />
+        </errors>
+      </contract>
+      <interface>
+        <export-ModelRolesPlugin PURPOSE="Register a config hook that resolves `vv-role:*` references in supported OpenCode config fields." />
+      </interface>
+      <depends>M-MODEL-ROLES, M-CLI-CONFIG</depends>
+      <target>
+        <source>src/plugins/model-roles/index.ts</source>
+        <tests>src/plugins/model-roles.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[model-roles]</log-prefix>
+        <critical-block>BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-MODEL-ROLES</verification-ref>
+      <notes>
+        <note-1>The plugin resolves `model`, `small_model`, `agent.*.model`, and `command.*.model` when they use `vv-role:*` syntax.</note-1>
+      </notes>
+    </M-PLUGIN-MODEL-ROLES>
+
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="planned">
+      <contract>
+        <purpose>Review OpenCode permission requests with a constrained Guardian agent whose runtime model resolves locally from the built-in `fast` role, while keeping safe fallback behavior and explicit threshold control.</purpose>
         <inputs>
           <param name="PluginInput" type="@opencode-ai/plugin input" />
         </inputs>
@@ -91,15 +165,16 @@
         <errors>
           <error code="GUARDIAN_REVIEW_FAILED" />
           <error code="PERMISSION_REPLY_FAILED" />
+          <error code="UNKNOWN_ROLE" />
         </errors>
       </contract>
       <interface>
-        <export-GuardianPlugin PURPOSE="Register Guardian hooks, config agent, and permission review flow." />
+        <export-GuardianPlugin PURPOSE="Register Guardian hooks, config agent, built-in-role model selection, and permission review flow." />
       </interface>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <target>
         <source>src/plugins/guardian/index.ts</source>
-        <tests>typecheck-only in v1</tests>
+        <tests>src/plugins/guardian.test.ts</tests>
       </target>
       <observability>
         <log-prefix>[guardian]</log-prefix>
@@ -107,13 +182,13 @@
       </observability>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <notes>
-        <note-1>Guardian now reads vvoc-managed config from `.vvoc/` or `$XDG_CONFIG_HOME/vvoc/` only.</note-1>
+        <note-1>Guardian no longer owns model fields in canonical vvoc config; only its non-model runtime policy remains there.</note-1>
       </notes>
     </M-PLUGIN-GUARDIAN>
 
-    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
+    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="5" STATUS="planned">
       <contract>
-        <purpose>Persist explicit memory entries in the vvoc XDG data root, keep shared scope global across projects, support scope-aware CRUD, and rank lexical search results.</purpose>
+        <purpose>Persist explicit memory entries in the vvoc XDG data root, keep shared scope global across projects, support scope-aware CRUD, and rank lexical search results while loading only non-model memory settings from canonical vvoc config.</purpose>
         <inputs>
           <param name="MemoryRuntimeConfig" type="object" />
           <param name="MemoryEntry or query/filter inputs" type="object" />
@@ -127,11 +202,11 @@
         </errors>
       </contract>
       <interface>
-        <export-loadMemoryRuntimeConfig PURPOSE="Load vvoc memory settings from global and project config files." />
+        <export-loadMemoryRuntimeConfig PURPOSE="Load vvoc memory settings from canonical global vvoc.json." />
         <export-putMemory PURPOSE="Create a scoped memory entry in the vvoc XDG data root." />
         <export-searchMemories PURPOSE="Return ranked lexical matches across relevant memory scopes." />
       </interface>
-      <depends>none</depends>
+      <depends>M-CLI-CONFIG</depends>
       <target>
         <source>src/plugins/memory-store.ts</source>
         <tests>src/plugins/memory.test.ts</tests>
@@ -143,13 +218,12 @@
       <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
       <notes>
         <note-1>Memory remains explicit-only. The store must not inject entries into prompts or system context.</note-1>
-        <note-2>`shared` scope is global across projects. Session, branch, and project scopes remain project-local.</note-2>
       </notes>
     </M-PLUGIN-MEMORY-STORE>
 
-    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="implemented">
+    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="6" STATUS="planned">
       <contract>
-        <purpose>Add explicit memory tools to OpenCode, register a report-only `memory-reviewer` subagent, and inject a short system reminder that encourages proactive memory tool usage without loading stored entries.</purpose>
+        <purpose>Add explicit memory tools to OpenCode, register a report-only `memory-reviewer` subagent whose runtime model resolves from the built-in `fast` role, and inject a short system reminder that encourages proactive memory tool usage without loading stored entries.</purpose>
         <inputs>
           <param name="PluginInput" type="@opencode-ai/plugin input" />
         </inputs>
@@ -159,12 +233,13 @@
         <errors>
           <error code="MEMORY_DISABLED" />
           <error code="MEMORY_NOT_FOUND" />
+          <error code="UNKNOWN_ROLE" />
         </errors>
       </contract>
       <interface>
-        <export-MemoryPlugin PURPOSE="Register explicit memory tools and the `memory-reviewer` subagent." />
+        <export-MemoryPlugin PURPOSE="Register explicit memory tools and the `memory-reviewer` subagent with role-driven model selection." />
       </interface>
-      <depends>M-PLUGIN-MEMORY-STORE</depends>
+      <depends>M-PLUGIN-MEMORY-STORE, M-MODEL-ROLES</depends>
       <target>
         <source>src/plugins/memory/index.ts</source>
         <tests>src/plugins/memory.test.ts</tests>
@@ -175,11 +250,11 @@
       </observability>
       <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
       <notes>
-        <note-1>The reviewer is implemented as a bundled subagent, and the main chat path receives only a short memory policy reminder instead of prompt-injected memory entries.</note-1>
+        <note-1>The `memory` section no longer owns reviewer model fields; reviewer selection comes from the built-in role system.</note-1>
       </notes>
     </M-PLUGIN-MEMORY>
 
-    <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="5" STATUS="implemented">
+    <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="7" STATUS="implemented">
       <contract>
         <purpose>Inject reusable vvoc system guidance into primary chat sessions while skipping known subagents, using agent-aware message hooks instead of the global system transform hook.</purpose>
         <inputs>
@@ -195,7 +270,7 @@
       <interface>
         <export-SystemContextInjectionPlugin PURPOSE="Inject main-session guidance such as proactive explore usage into `message.system` for eligible primary agents." />
       </interface>
-      <depends>M-CLI-MANAGED-AGENTS</depends>
+      <depends>M-CLI-CONFIG</depends>
       <target>
         <source>src/plugins/system-context-injection/index.ts</source>
         <tests>src/plugins/system-context-injection.test.ts</tests>
@@ -205,45 +280,105 @@
         <critical-block>BLOCK_PLUGIN_ENTRY</critical-block>
       </observability>
       <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
-      <notes>
-        <note-1>`experimental.chat.system.transform` lacks agent context, so this plugin uses `chat.message` to target primary sessions without polluting known subagents.</note-1>
-      </notes>
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
-    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-PLUGIN-SECRETS-REDACTION NAME="SecretsRedactionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="8" STATUS="implemented">
       <contract>
-        <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json without resetting targets that are not listed in the selected preset.</purpose>
+        <purpose>Redact secrets from provider-bound payloads and restore placeholders after completions and before local tool execution.</purpose>
         <inputs>
-          <param name="presetName" type="string" />
-          <param name="scope" type="global | project" />
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks" />
+        </outputs>
+        <errors>
+          <error code="INVALID_REDACTION_CONFIG" />
+        </errors>
+      </contract>
+      <interface>
+        <export-SecretsRedactionPlugin PURPOSE="Register secrets-redaction hooks for chat, completions, and tool execution." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/plugins/secrets-redaction/index.ts + src/plugins/secrets-redaction/*.ts</source>
+        <tests>src/plugins/secrets-redaction/*.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[secrets-redaction]</log-prefix>
+        <critical-block>BLOCK_REDACT_TEXT</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
+    </M-PLUGIN-SECRETS-REDACTION>
+
+    <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="2" STATUS="planned">
+      <contract>
+        <purpose>List, set, and unset semantic role assignments in canonical vvoc.json for both built-in and user-defined roles.</purpose>
+        <inputs>
+          <param name="roleId" type="string" />
+          <param name="modelSelection" type="string | undefined" />
           <param name="configDir" type="string | undefined" />
         </inputs>
         <outputs>
-          <param name="AppliedPresetChange[]" type="per-target write summary" />
+          <param name="stdout" type="terminal output with role inventory or write summary" />
+        </outputs>
+        <errors>
+          <error code="INVALID_ROLE_ID" />
+          <error code="INVALID_MODEL_SELECTION" />
+          <error code="BUILTIN_ROLE_UNSET_FORBIDDEN" />
+        </errors>
+      </contract>
+      <interface>
+        <export-listRoles PURPOSE="Render built-in and custom role assignments from canonical vvoc.json." />
+        <export-setRole PURPOSE="Write a normalized concrete model selection for the selected role." />
+        <export-unsetRole PURPOSE="Remove a custom role assignment without allowing built-in role deletion." />
+      </interface>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
+      <target>
+        <source>src/commands/role.ts + src/lib/model-roles.ts</source>
+        <tests>src/commands/role.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[role]</log-prefix>
+      </observability>
+      <verification-ref>V-M-CLI-ROLE</verification-ref>
+    </M-CLI-ROLE>
+
+    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" LAYER="1" ORDER="3" STATUS="planned">
+      <contract>
+        <purpose>List, show, and apply declarative named role presets stored in canonical vvoc.json without mutating OpenCode config directly.</purpose>
+        <inputs>
+          <param name="presetName" type="string" />
+          <param name="configDir" type="string | undefined" />
+        </inputs>
+        <outputs>
+          <param name="AppliedRoleChange[]" type="per-role write summary" />
         </outputs>
         <errors>
           <error code="UNKNOWN_PRESET" />
-          <error code="INVALID_MODEL_TARGET" />
+          <error code="INVALID_MODEL_SELECTION" />
         </errors>
       </contract>
       <interface>
         <export-resolvePreset PURPOSE="Validate a preset name against the current canonical vvoc.json preset map." />
-        <export-applyPreset PURPOSE="Apply only the listed preset targets through existing vvoc and OpenCode write helpers." />
+        <export-applyPreset PURPOSE="Apply only the listed role assignments through canonical vvoc config writes." />
       </interface>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <target>
-        <source>src/commands/preset.ts + src/lib/agent-models.ts</source>
+        <source>src/commands/preset.ts + src/lib/model-roles.ts</source>
         <tests>src/commands/preset.test.ts</tests>
       </target>
       <observability>
         <log-prefix>[preset]</log-prefix>
       </observability>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
+      <notes>
+        <note-1>Built-in presets remain `vv-openai`, `vv-zai`, and `vv-minimax` but now assign roles instead of target overrides.</note-1>
+      </notes>
     </M-CLI-PRESET>
 
-    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" LAYER="1" ORDER="4" STATUS="planned">
       <contract>
-        <purpose>Validate the canonical vvoc.json configuration file with human-readable error reporting against the versioned vvoc JSON Schema.</purpose>
+        <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting and no compatibility mode for older schemas.</purpose>
         <inputs>
           <param name="cwd" type="string" />
         </inputs>
@@ -253,12 +388,13 @@
         <errors>
           <error code="INVALID_JSON" />
           <error code="INVALID_SCHEMA_FIELD" />
+          <error code="UNSUPPORTED_VVOC_CONFIG_VERSION" />
         </errors>
       </contract>
       <interface>
-        <export-validateVvocConfig PURPOSE="Parse vvoc.json and report schema violations." />
+        <export-validateVvocConfig PURPOSE="Parse vvoc.json and report schema or semantic violations for roles and presets." />
       </interface>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <target>
         <source>src/commands/config-validate.ts</source>
         <tests>src/commands/config-validate.test.ts</tests>
@@ -297,9 +433,9 @@
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="6" STATUS="planned">
       <contract>
-        <purpose>Apply global OpenCode patch presets that rewrite provider.options.baseURL or merge provider-specific config under `provider` conservatively.</purpose>
+        <purpose>Apply global OpenCode patch presets that rewrite provider.options.baseURL or merge provider-specific alias-model config under `provider` conservatively, without overwriting root OpenCode model fields that are now role-reference based.</purpose>
         <inputs>
           <param name="preset" type="string" />
           <param name="configDir" type="string | undefined" />
@@ -310,12 +446,11 @@
         <errors>
           <error code="UNSUPPORTED_PATCH_PRESET" />
           <error code="INVALID_PROVIDER_CONFIG" />
-          <error code="INVALID_PROVIDER_OBJECT_CONFIG" />
         </errors>
       </contract>
       <interface>
-        <export-resolvePatchProviderPreset PURPOSE="Map a supported preset like stepfun-ai or zai to concrete OpenCode config writes." />
-        <export-applyPatchProviderPreset PURPOSE="Resolve global OpenCode config paths and apply the preset." />
+        <export-resolvePatchProviderPreset PURPOSE="Map a supported preset like stepfun-ai, zai, or openai to concrete OpenCode provider-object writes." />
+        <export-applyPatchProviderPreset PURPOSE="Resolve global OpenCode config paths and apply the preset without mutating role-reference root defaults." />
       </interface>
       <depends>M-CLI-CONFIG</depends>
       <target>
@@ -326,14 +461,11 @@
         <log-prefix>[patch-provider]</log-prefix>
       </observability>
       <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>
-      <notes>
-        <note-1>The command is global-only on purpose so the same OpenCode patch can be applied consistently across machines.</note-1>
-      </notes>
     </M-CLI-PATCH-PROVIDER>
 
-    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" LAYER="1" ORDER="7" STATUS="planned">
       <contract>
-        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including patch-provider presets, preset names, and the `agent set|unset <target-id>` flow.</purpose>
+        <purpose>Auto-detect the current shell and install vvoc completion files idempotently for bash, zsh, and fish, including patch-provider presets, role commands, role IDs, and preset names.</purpose>
         <inputs>
           <param name="env.SHELL" type="string" />
           <param name="homeDir" type="string" />
@@ -353,7 +485,7 @@
         <export-generateZshCompletion PURPOSE="Generate zsh completion script content." />
         <export-generateFishCompletion PURPOSE="Generate fish completion script content." />
       </interface>
-      <depends>M-CLI-COMMANDS</depends>
+      <depends>M-CLI-COMMANDS, M-MODEL-ROLES</depends>
       <target>
         <source>src/commands/completion.ts</source>
         <tests>src/commands/completion.test.ts</tests>
@@ -364,9 +496,9 @@
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
     </M-CLI-COMPLETION>
 
-    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" LAYER="1" ORDER="8" STATUS="planned">
       <contract>
-        <purpose>Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds managed prompts plus canonical vvoc.json. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.</purpose>
+        <purpose>Interactive project initialization that registers @osovv/vv-opencode in the OpenCode plugin array, scaffolds managed prompts, seeds canonical role assignments, and writes role-reference based OpenCode config defaults. Uses @clack/prompts for TTY prompts.</purpose>
         <inputs>
           <param name="cwd" type="string" />
           <param name="scope" type="global | project" />
@@ -384,7 +516,7 @@
       <interface>
         <export-runInit PURPOSE="Run interactive initialization flow with @clack/prompts." />
       </interface>
-      <depends>M-CLI-CONFIG, @clack/prompts</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES, @clack/prompts</depends>
       <target>
         <source>src/commands/init.ts</source>
         <tests>src/commands/init.test.ts</tests>
@@ -393,13 +525,9 @@
         <log-prefix>[init]</log-prefix>
       </observability>
       <verification-ref>V-M-CLI-INIT</verification-ref>
-      <notes>
-        <note-1>Interactive mode is the default. Pass --non-interactive for batch/scripted use.</note-1>
-        <note-2>Uses @clack/prompts for cross-shell TTY prompts with Ctrl+C handling.</note-2>
-      </notes>
     </M-CLI-INIT>
 
-    <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" LAYER="1" ORDER="5" STATUS="implemented">
+    <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" LAYER="1" ORDER="9" STATUS="implemented">
       <contract>
         <purpose>Check npm for a newer vvoc release, install it globally with Bun, and trigger the default global sync flow from a fresh subprocess.</purpose>
         <inputs>
@@ -431,26 +559,42 @@
   </Modules>
 
   <DataFlow>
-    <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc init">
-      <step-1>Resolve scope-specific OpenCode config paths plus the canonical vvoc.json path.</step-1>
-      <step-2>Ensure `@osovv/vv-opencode@<installed-version>` exists in the OpenCode `plugin` array.</step-2>
-      <step-3>Create a fully seeded canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</step-3>
-      <evidence>`vvoc status`, parsed config content, and successful typecheck/build.</evidence>
+    <DF-PLUGIN-INSTALL NAME="PluginInstall" TRIGGER="vvoc init | vvoc install">
+      <step-1>Resolve scope-specific OpenCode config paths plus the canonical global vvoc.json path.</step-1>
+      <step-2>Ensure `@osovv/vv-opencode@&lt;installed-version&gt;` exists in the OpenCode `plugin` array.</step-2>
+      <step-3>Sync managed agent registrations so OpenCode defaults and managed agents point at `vv-role:*` references instead of concrete provider/model strings.</step-3>
+      <step-4>Create a fully seeded canonical vvoc schema v3 document with built-in roles and managed `vv-*` role presets.</step-4>
+      <evidence>`vvoc status`, parsed config content, and role-reference OpenCode config after install.</evidence>
     </DF-PLUGIN-INSTALL>
     <DF-CONFIG-SYNC NAME="ManagedConfigSync" TRIGGER="vvoc sync">
-      <step-1>Inspect the canonical vvoc.json file.</step-1>
-      <step-2>Parse current vvoc.json values.</step-2>
-      <step-3>Rewrite vvoc.json canonically while preserving current values.</step-3>
-      <evidence>Stable rewritten `vvoc.json` and scope-correct managed prompt sync.</evidence>
+      <step-1>Inspect canonical vvoc.json and reject unsupported pre-role schema versions.</step-1>
+      <step-2>Parse current role-based vvoc.json values.</step-2>
+      <step-3>Rewrite vvoc.json canonically while preserving valid role assignments and refreshing managed `vv-*` role presets.</step-3>
+      <step-4>Rewrite OpenCode defaults and managed agents back to canonical `vv-role:*` references if drift occurred.</step-4>
+      <evidence>Stable rewritten vvoc.json, scope-correct managed prompt sync, and role-reference OpenCode config.</evidence>
     </DF-CONFIG-SYNC>
+    <DF-ROLE-MANAGEMENT NAME="RoleManagement" TRIGGER="vvoc role list | set | unset">
+      <step-1>Load or create the canonical vvoc schema v3 document.</step-1>
+      <step-2>Validate the requested role ID and normalize any concrete `provider/model[:variant]` assignment.</step-2>
+      <step-3>Write the updated role map or render the current role inventory.</step-3>
+      <evidence>Built-in roles are always present, valid custom roles round-trip cleanly, and builtin role deletion is blocked.</evidence>
+    </DF-ROLE-MANAGEMENT>
+    <DF-ROLE-RESOLUTION NAME="RoleResolution" TRIGGER="OpenCode plugin config hook">
+      <step-1>Load the canonical role map from global vvoc.json.</step-1>
+      <step-2>Walk supported OpenCode model-bearing fields and detect `vv-role:*` references.</step-2>
+      <step-3>Resolve each role reference to a concrete model selection, splitting `provider/model:variant` into native `model` plus `variant` fields where the target supports variants.</step-3>
+      <step-4>Throw an explicit error for unknown roles or unsupported concrete assignments instead of silently falling back.</step-4>
+      <evidence>Agent, command, and root model fields materialize user-local model choices from semantic role references.</evidence>
+    </DF-ROLE-RESOLUTION>
     <DF-PRESET-SWITCH NAME="PresetSwitch" TRIGGER="vvoc preset &lt;name&gt;">
-      <step-1>Resolve the selected scope plus the canonical vvoc.json path.</step-1>
-      <step-2>Read configured presets and validate the requested preset name.</step-2>
-      <step-3>Install managed prompts first if the preset touches vvoc-managed agents.</step-3>
-      <step-4>Apply only the listed model-target overrides through the existing vvoc and OpenCode write helpers.</step-4>
-      <evidence>Selected targets change, unlisted targets remain untouched, and CLI output prints a per-target summary.</evidence>
+      <step-1>Read configured presets from canonical vvoc.json and validate the requested preset name.</step-1>
+      <step-2>Normalize the preset's concrete role assignments.</step-2>
+      <step-3>Apply only the listed role assignments to canonical vvoc.json.</step-3>
+      <step-4>Leave OpenCode config untouched because it already points at stable `vv-role:*` references.</step-4>
+      <evidence>Selected roles change, unlisted roles remain untouched, and CLI output prints a per-role summary.</evidence>
     </DF-PRESET-SWITCH>
     <DF-GUARDIAN-REVIEW NAME="GuardianPermissionReview" TRIGGER="permission.asked event">
+      <step-0>Resolve the built-in `fast` role to the concrete Guardian runtime model before registering the hidden subagent.</step-0>
       <step-1>Capture relevant tool and command intent for the session.</step-1>
       <step-2>Build a bounded transcript and planned action prompt.</step-2>
       <step-3>Run Guardian, interpret risk, and auto-reply only when below threshold.</step-3>
@@ -460,14 +604,14 @@
       <step-0>Before model turns, the plugin appends a short system reminder that explicit memory tools exist, without injecting stored memory entries.</step-0>
       <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/vvoc.json`.</step-1>
       <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
-      <step-3>Read or mutate session, branch, and project entries under `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`, and shared entries under `$XDG_DATA_HOME/vvoc/memory/shared/<namespace>/`.</step-3>
+      <step-3>Read or mutate session, branch, and project entries under `$XDG_DATA_HOME/vvoc/projects/&lt;project-id&gt;/memory/`, and shared entries under `$XDG_DATA_HOME/vvoc/memory/shared/&lt;namespace&gt;/`.</step-3>
       <evidence>Correct file layout, deterministic CRUD/search behavior, and no automatic prompt injection.</evidence>
     </DF-MEMORY-ACCESS>
     <DF-MEMORY-REVIEW NAME="MemoryReview" TRIGGER="@memory-reviewer invocation">
-      <step-1>Register the reviewer subagent through plugin config mutation.</step-1>
+      <step-1>Resolve the built-in `fast` role and register the reviewer subagent through plugin config mutation.</step-1>
       <step-2>The reviewer inspects memory with `memory_list`, `memory_get`, and `memory_search` only.</step-2>
       <step-3>The reviewer returns a keep/update/merge/delete report without modifying entries.</step-3>
-      <evidence>Bundled `memory-reviewer` agent with read-only memory tooling.</evidence>
+      <evidence>Bundled `memory-reviewer` agent with read-only memory tooling and built-in role-driven model selection.</evidence>
     </DF-MEMORY-REVIEW>
     <DF-SYSTEM-CONTEXT NAME="SystemContextInjection" TRIGGER="chat.message for eligible primary agents">
       <step-1>Build the known-subagent set from built-ins, plugin-managed agents, and config-defined subagents.</step-1>
@@ -492,22 +636,22 @@
     <DF-CONFIG-VALIDATE NAME="ConfigValidate" TRIGGER="vvoc config validate">
       <step-1>Resolve the canonical vvoc.json path.</step-1>
       <step-2>Parse the file with strict JSON rules.</step-2>
-      <step-3>Validate required fields and types against the versioned vvoc JSON Schema.</step-3>
-      <step-4>Report human-readable errors for vvoc.json or pass with OK status.</step-4>
-      <evidence>Invalid JSON is caught and reported with line/column info; valid canonical configs pass silently.</evidence>
+      <step-3>Validate required fields, built-in role presence, and preset role assignments against the versioned vvoc JSON Schema v3.</step-3>
+      <step-4>Reject unsupported vvoc schema versions instead of migrating them.</step-4>
+      <evidence>Invalid JSON is caught and reported with line/column info; valid canonical role-based configs pass; older schemas fail loudly.</evidence>
     </DF-CONFIG-VALIDATE>
     <DF-COMPLETION NAME="ShellCompletion" TRIGGER="vvoc completion">
       <step-1>Detect the current shell from environment variables.</step-1>
-      <step-2>Generate the shell-specific completion content for bash, zsh, or fish.</step-2>
+      <step-2>Generate shell-specific completion content for bash, zsh, or fish, including `role` subcommands and built-in role IDs.</step-2>
       <step-3>Write the completion file to the shell-specific location.</step-3>
       <step-4>Patch shell init files idempotently when the shell needs an explicit loader.</step-4>
-      <evidence>Installed completion files match the real vvoc command tree; zsh installs a loader block that enables `compdef` before sourcing `_vvoc`.</evidence>
+      <evidence>Installed completion files match the real vvoc command tree and role-centric subcommand surface.</evidence>
     </DF-COMPLETION>
     <DF-INIT NAME="InteractiveInit" TRIGGER="vvoc init [--non-interactive]">
       <step-1>Check --non-interactive flag. If absent and TTY detected, enter interactive mode with @clack/prompts.</step-1>
       <step-2>Prompt for scope selection (global/project) if interactive.</step-2>
-      <step-3>Prompt for plugin selection to enable if interactive; accept --plugins flag in non-interactive mode.</step-3>
-      <step-4>Write initial managed prompts plus canonical vvoc.json.</step-4>
+      <step-3>Write initial managed prompts, managed OpenCode registrations, and canonical built-in role assignments.</step-3>
+      <step-4>Ensure OpenCode defaults and managed agents point at canonical `vv-role:*` references.</step-4>
       <step-5>Confirm successful initialization.</step-5>
       <evidence>Canonical config is valid JSON after init; Ctrl+C aborts cleanly; re-running init is idempotent; non-interactive mode works without TTY.</evidence>
     </DF-INIT>
@@ -541,7 +685,7 @@
       <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate canonical vvoc.json with human-readable schema errors.</step-1>
       <step-2 module="M-CLI-PLUGIN-LIST" status="implemented" verification="V-M-CLI-PLUGIN-LIST">List installed plugins with status, enabled/disabled, and source path.</step-2>
       <step-3 module="M-CLI-PATCH-PROVIDER" status="implemented" verification="V-M-CLI-PATCH-PROVIDER">Apply supported OpenCode patch presets conservatively to the global OpenCode config.</step-3>
-      <step-4 module="M-CLI-PRESET" status="implemented" verification="V-M-CLI-PRESET">List, inspect, and apply named model-target presets from canonical vvoc.json.</step-4>
+      <step-4 module="M-CLI-PRESET" status="implemented" verification="V-M-CLI-PRESET">List, inspect, and apply named presets from canonical vvoc.json.</step-4>
       <step-5 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Install shell completions for bash, zsh, and fish with shell auto-detection.</step-5>
       <step-6 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Interactive project setup with prompts for config location and plugin selection.</step-6>
       <step-7 module="M-CLI-UPGRADE" status="implemented" verification="V-M-CLI-UPGRADE">Check npm for updates, install the global package with Bun, and run post-install sync from a fresh subprocess.</step-7>
@@ -551,6 +695,19 @@
       <step-1 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="implemented" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Append reusable vvoc system guidance only for eligible primary agents via `chat.message`.</step-1>
       <step-2 module="M-PLUGIN-SECRETS-REDACTION" status="implemented" verification="V-M-PLUGIN-SECRETS-REDACTION">Redact secrets before LLM requests and restore placeholders after completion and before tool execution.</step-2>
     </Phase-5>
+    <Phase-6 name="Role-Based Model Semantics" status="planned">
+      <goal>Replace target-based model overrides with semantic role assignment, runtime `vv-role:*` resolution, and role-centric CLI workflows.</goal>
+      <step-1 module="M-MODEL-ROLES" status="planned" verification="V-M-MODEL-ROLES">Implement the shared role contract, built-in role bindings, and concrete model-selection parsing helpers.</step-1>
+      <step-2 module="M-CLI-CONFIG" status="planned" verification="V-M-CLI-CONFIG">Upgrade canonical vvoc config to schema v3, seed built-in roles, remove target-based config fields, and keep OpenCode defaults and managed agents pinned to `vv-role:*` references.</step-2>
+      <step-3 module="M-PLUGIN-MODEL-ROLES" status="planned" verification="V-M-PLUGIN-MODEL-ROLES">Resolve role references at startup for supported OpenCode config fields and fail loudly for unknown roles.</step-3>
+      <step-4 module="M-PLUGIN-GUARDIAN" status="planned" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>
+      <step-5 module="M-PLUGIN-MEMORY" status="planned" verification="V-M-PLUGIN-MEMORY">Move memory-reviewer model selection to the built-in role system and drop reviewer model fields from canonical memory config.</step-5>
+      <step-6 module="M-CLI-ROLE" status="planned" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
+      <step-7 module="M-CLI-PRESET" status="planned" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>
+      <step-8 module="M-CLI-PATCH-PROVIDER" status="planned" verification="V-M-CLI-PATCH-PROVIDER">Keep provider alias patching as a lower-level helper for concrete role assignments without mutating root OpenCode model fields.</step-8>
+      <step-9 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
+      <step-10 module="M-CLI-INIT" status="planned" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
+    </Phase-6>
   </ImplementationOrder>
 
   <ExecutionPolicy>

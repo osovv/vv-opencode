@@ -1,31 +1,31 @@
-<RequirementsAnalysis VERSION="0.3.0">
+<RequirementsAnalysis VERSION="0.4.0">
   <Project>
     <name>@osovv/vv-opencode</name>
-    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
-    <keywords>opencode, plugins, workflow</keywords>
+    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, and cross-device setup.</annotation>
+    <keywords>opencode, plugins, workflow, model-roles</keywords>
   </Project>
 
   <Actors>
-    <actor-User>Engineer who wants a portable OpenCode workflow across devices and repositories.</actor-User>
-    <actor-System>CLI and plugin runtime that install, sync, and execute the configured workflow safely.</actor-System>
+    <actor-User>Engineer who wants a portable OpenCode workflow across devices, providers, and repositories without hardcoding provider-specific model IDs into shared agents or commands.</actor-User>
+    <actor-System>CLI and plugin runtime that install, sync, resolve, and execute the configured workflow safely.</actor-System>
   </Actors>
 
   <UseCases>
     <UC-001>
       <Actor>User</Actor>
       <Action>Runs `vvoc install` for global or project scope.</Action>
-      <Goal>To register `@osovv/vv-opencode` in OpenCode config while keeping vvoc-managed settings in the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</Goal>
+      <Goal>To register `@osovv/vv-opencode` in OpenCode config, seed canonical role assignments in `$XDG_CONFIG_HOME/vvoc/vvoc.json`, and write shared OpenCode model fields and managed agents to `vv-role:*` references instead of concrete provider-specific model IDs.</Goal>
       <Preconditions>Bun and OpenCode are available, and the target config locations are writable.</Preconditions>
-      <AcceptanceCriteria>The package name appears in the resolved OpenCode config and canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`.</AcceptanceCriteria>
+      <AcceptanceCriteria>The package name appears in the resolved OpenCode config, canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`, built-in roles are fully seeded, and OpenCode model-bearing fields reference `vv-role:*` semantics rather than literal target-specific overrides.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-PLUGIN-INSTALL</RelatedFlows>
     </UC-001>
     <UC-002>
       <Actor>User</Actor>
       <Action>Runs `vvoc sync` on another machine or after package updates.</Action>
-      <Goal>To refresh canonical vvoc-owned config and managed prompt files without reintroducing scattered per-feature config files.</Goal>
+      <Goal>To refresh canonical vvoc-owned config, managed prompt files, built-in role presets, and managed OpenCode registrations without reintroducing target-based model config or legacy vvoc schema migrations.</Goal>
       <Preconditions>The target OpenCode config and canonical vvoc config can be created or updated.</Preconditions>
-      <AcceptanceCriteria>The canonical `vvoc.json` file is rewritten canonically and managed prompts are refreshed without requiring legacy config paths.</AcceptanceCriteria>
+      <AcceptanceCriteria>The canonical `vvoc.json` file is rewritten canonically as the current role-based schema, managed prompts are refreshed, and managed OpenCode fields continue to point at `vv-role:*` references.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-CONFIG-SYNC</RelatedFlows>
     </UC-002>
@@ -42,8 +42,8 @@
       <Actor>User</Actor>
       <Action>Invokes the bundled `memory-reviewer` subagent.</Action>
       <Goal>To audit stored memory and get keep/update/merge/delete suggestions without modifying entries.</Goal>
-      <Preconditions>The package is enabled in OpenCode and explicit memory exists in scope.</Preconditions>
-      <AcceptanceCriteria>The reviewer can only read memory tools and returns a report-only audit.</AcceptanceCriteria>
+      <Preconditions>The package is enabled in OpenCode, explicit memory exists in scope, and the built-in `fast` role resolves to a concrete reviewer-capable model.</Preconditions>
+      <AcceptanceCriteria>The reviewer can only read memory tools, resolves its runtime model through the built-in role system, and returns a report-only audit.</AcceptanceCriteria>
       <Priority>medium</Priority>
       <RelatedFlows>DF-MEMORY-REVIEW</RelatedFlows>
     </UC-004>
@@ -67,19 +67,38 @@
     </UC-006>
     <UC-007>
       <Actor>User</Actor>
-      <Action>Runs `vvoc preset list`, `vvoc preset show <name>`, or `vvoc preset <name>`.</Action>
-      <Goal>To inspect and apply declarative named model-target presets stored in canonical `vvoc.json` without resetting unrelated targets.</Goal>
+      <Action>Runs `vvoc preset list`, `vvoc preset show &lt;name&gt;`, or `vvoc preset &lt;name&gt;`.</Action>
+      <Goal>To inspect and apply declarative named role presets stored in canonical `vvoc.json` so that semantic roles like `default`, `smart`, `fast`, and `vision` can be rebound without rewriting OpenCode target fields directly.</Goal>
       <Preconditions>The canonical vvoc config exists and contains preset definitions.</Preconditions>
-      <AcceptanceCriteria>The selected preset resolves by name, only the listed targets are changed, and existing vvoc/OpenCode write paths are reused for both canonical and OpenCode-managed targets.</AcceptanceCriteria>
-      <Priority>medium</Priority>
+      <AcceptanceCriteria>The selected preset resolves by name, only the listed role assignments are changed, unlisted roles are preserved, and OpenCode config remains role-reference based.</AcceptanceCriteria>
+      <Priority>high</Priority>
       <RelatedFlows>DF-PRESET-SWITCH</RelatedFlows>
     </UC-007>
+    <UC-008>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc role list`, `vvoc role set &lt;role-id&gt; &lt;provider/model[:variant]&gt;`, or `vvoc role unset &lt;role-id&gt;`.</Action>
+      <Goal>To manage the built-in and user-defined semantic roles that shared agents, subagents, and commands can reference with `vv-role:&lt;role-id&gt;`.</Goal>
+      <Preconditions>The canonical vvoc config exists or can be created.</Preconditions>
+      <AcceptanceCriteria>Built-in roles are always visible, valid custom roles can be added, model selections are normalized consistently, and built-in roles cannot be removed accidentally.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-ROLE-MANAGEMENT</RelatedFlows>
+    </UC-008>
+    <UC-009>
+      <Actor>User</Actor>
+      <Action>Uses a shared or project-local OpenCode agent, subagent, or command definition that sets `model: vv-role:&lt;role-id&gt;`.</Action>
+      <Goal>To let shared workflow definitions describe semantic model intent while each user resolves those roles into provider-specific concrete models at OpenCode startup time.</Goal>
+      <Preconditions>The referenced role exists in canonical `vvoc.json` and the package plugin set is active.</Preconditions>
+      <AcceptanceCriteria>Supported OpenCode model-bearing fields resolve `vv-role:*` references to concrete model selections at startup, unresolved roles fail loudly, and role resolution works for both built-in and user-defined roles.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-ROLE-RESOLUTION</RelatedFlows>
+    </UC-009>
   </UseCases>
 
   <NonGoals>
     <item-1>No automatic memory injection into prompts.</item-1>
     <item-2>No vector store, embeddings, or indexed retrieval in v1 memory.</item-2>
-    <item-3>No fallback compatibility with old per-feature vvoc config files once canonical `vvoc.json` is introduced.</item-3>
+    <item-3>No backward compatibility or migration path for pre-role vvoc schemas once the role-based schema lands.</item-3>
+    <item-4>No target-based model override UX after the role-based cutover.</item-4>
   </NonGoals>
 
   <Constraints>
@@ -89,17 +108,20 @@
     <constraint-4>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-4>
     <constraint-5>Memory must stay explicit-only. Stored entries must not be injected into prompts automatically.</constraint-5>
     <constraint-6>Generated canonical vvoc config must be fully seeded and versioned by schema rather than split across multiple CLI-managed files.</constraint-6>
+    <constraint-7>Semantic role assignments must live in canonical global vvoc config, while OpenCode config stores `vv-role:*` references that are resolved at runtime.</constraint-7>
+    <constraint-8>Role resolution must fail loudly for unknown roles rather than silently falling back to a provider default.</constraint-8>
   </Constraints>
 
   <Risks>
-    <risk-1>Repositories or machines may contain stale legacy vvoc config files that must be ignored once canonical `vvoc.json` is introduced.</risk-1>
+    <risk-1>Shared workflows may reference custom roles that are not assigned on another machine, causing startup-time resolution failures.</risk-1>
     <risk-2>Unsafe rewrites of user-maintained config could damage trust in the CLI.</risk-2>
     <risk-3>The file-based memory store performs full scans and may degrade as the number of entries grows.</risk-3>
     <risk-4>Guardian and Memory depend on OpenCode plugin and SDK surface area that may evolve over time.</risk-4>
+    <risk-5>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` may be required for certain role assignments, so preset usability depends on explicit provider patch setup when those aliases are not native.</risk-5>
   </Risks>
 
   <OpenQuestions>
-    <question-1>Should future versions also manage OpenCode skills and agents as installable assets in addition to plugin config and vvoc-owned files?</question-1>
-    <question-2>Should memory eventually grow an index or vector-backed search layer once the XDG data-backed store becomes large?</question-2>
+    <question-1>Should future versions allow optional validation against provider-declared capabilities so that `vision` role assignments can be checked more strictly?</question-1>
+    <question-2>Should the role system eventually expose optional diagnostics for discovering which OpenCode config fields currently still contain literal provider/model strings instead of `vv-role:*` references?</question-2>
   </OpenQuestions>
 </RequirementsAnalysis>

@@ -1,29 +1,41 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.3.8">
-    <keywords>opencode, plugins, workflow</keywords>
-    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, and cross-device setup.</annotation>
+  <Project NAME="@osovv/vv-opencode" VERSION="0.4.0">
+    <keywords>opencode, plugins, workflow, model-roles</keywords>
+    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, and cross-device setup.</annotation>
 
-    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, top-level OpenCode model/default writes, provider baseURL patching, managed OpenCode agent registration/model plus variant overrides, shared model target validation, managed agent prompt scaffolding, canonical vvoc.json rendering with managed `vv-*` built-in preset refresh, and installation inspection with a single vvoc-owned config file.</purpose>
-      <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/agent-models.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v1.json + schemas/vvoc/v2.json</path>
-      <depends>M-CLI-MANAGED-AGENTS</depends>
+    <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" STATUS="planned">
+      <purpose>Define built-in role IDs, `vv-role:*` syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in role bindings for managed agents and OpenCode defaults.</purpose>
+      <path>src/lib/model-roles.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-MODEL-ROLES</verification-ref>
+      <annotations>
+        <const-BUILTIN_ROLE_NAMES PURPOSE="Canonical built-in semantic roles: default, smart, fast, vision." />
+        <const-ROLE_REFERENCE_PREFIX PURPOSE="Stable `vv-role:` prefix used by shared workflow config." />
+        <fn-isRoleReference PURPOSE="Detect whether a model string uses the semantic role syntax." />
+        <fn-parseModelSelection PURPOSE="Parse `provider/model[:variant]` used by canonical role assignments." />
+        <fn-resolveRoleReference PURPOSE="Resolve a `vv-role:*` reference against the canonical role map and return a concrete model selection." />
+        <fn-getBuiltInRoleBindings PURPOSE="Return hard-coded built-in role bindings for OpenCode defaults and managed agents." />
+      </annotations>
+    </M-MODEL-ROLES>
+
+    <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="planned">
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
+      <path>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
+      <depends>M-MODEL-ROLES, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
-        <fn-writeOpenCodeDefaultModel PURPOSE="Write or remove a top-level OpenCode `model` or `small_model` override for default model switching." />
-        <fn-writeProviderBaseUrl PURPOSE="Write or preserve an OpenCode provider options.baseURL override conservatively." />
-        <fn-writeOpenCodeAgentModel PURPOSE="Write or remove a model override for a built-in OpenCode agent such as general or explore." />
-        <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v1 or v2 and normalize it into the current in-memory config shape." />
-        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed OpenCode agent registrations such as the primary enhancer agent and the bundled subagents." />
-        <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid user-owned values, refreshing managed `vv-*` presets, and migrating legacy v1 documents to v2." />
+        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed OpenCode agent registrations with `vv-role:*` model references." />
+        <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v3 and reject unsupported pre-role versions." />
+        <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid user-owned role assignments and refreshing managed `vv-*` role presets." />
       </annotations>
     </M-CLI-CONFIG>
 
-    <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled guardian/memory-reviewer/enhancer/implementer/spec-reviewer/code-reviewer/investitagor prompt templates and managed primary/subagent metadata.</purpose>
+    <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="planned">
+      <purpose>Define bundled guardian, memory-reviewer, enhancer, implementer, spec-reviewer, code-reviewer, and investitagor prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
-      <depends>none</depends>
+      <depends>M-MODEL-ROLES</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <const-MANAGED_OPENCODE_AGENTS PURPOSE="Canonical managed OpenCode agent definitions used for enhancer/subagent registration." />
@@ -31,43 +43,66 @@
       </annotations>
     </M-CLI-MANAGED-AGENTS>
 
-    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, agent, preset, patch-provider, completion, and upgrade commands, including OpenCode default-model targets, model overrides for built-in general/explore, and registration of vvoc-managed OpenCode agents.</purpose>
+    <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, role, preset, patch-provider, completion, guardian config, and upgrade commands for the role-based model system.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
       <annotations>
-        <export-init PURPOSE="Bootstrap package registration and config scaffolding (interactive by default)." />
-        <export-sync PURPOSE="Refresh managed vvoc config files." />
+        <export-init PURPOSE="Bootstrap package registration and role-based config scaffolding (interactive by default)." />
+        <export-sync PURPOSE="Refresh managed vvoc config files and role-reference OpenCode config." />
       </annotations>
     </M-CLI-COMMANDS>
 
-    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>List, show, and apply declarative named model-target presets stored in canonical vvoc.json, including managed `vv-*` built-ins and variant-aware OpenCode agent targets, without resetting targets that are not listed in the selected preset.</purpose>
-      <path>src/commands/preset.ts + src/lib/agent-models.ts</path>
-      <depends>M-CLI-CONFIG</depends>
+    <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" STATUS="planned">
+      <purpose>Resolve `vv-role:*` references in OpenCode root model fields plus agent and command definitions during plugin config hooks.</purpose>
+      <path>src/plugins/model-roles/index.ts</path>
+      <depends>M-MODEL-ROLES, M-CLI-CONFIG</depends>
+      <verification-ref>V-M-PLUGIN-MODEL-ROLES</verification-ref>
+      <annotations>
+        <export-ModelRolesPlugin PURPOSE="Config-hook plugin that resolves `vv-role:*` references for supported OpenCode config fields." />
+      </annotations>
+    </M-PLUGIN-MODEL-ROLES>
+
+    <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>List, set, and unset semantic role assignments in canonical vvoc.json for built-in and user-defined roles.</purpose>
+      <path>src/commands/role.ts + src/lib/model-roles.ts</path>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
+      <verification-ref>V-M-CLI-ROLE</verification-ref>
+      <annotations>
+        <fn-listRoles PURPOSE="Render built-in and custom role assignments from canonical vvoc.json." />
+        <fn-setRole PURPOSE="Write a normalized concrete model assignment for a role." />
+        <fn-unsetRole PURPOSE="Remove a custom role assignment while protecting built-in roles." />
+        <cmd-role PURPOSE="vvoc role list|set|unset - CLI command for semantic role management." />
+      </annotations>
+    </M-CLI-ROLE>
+
+    <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>List, show, and apply declarative named role presets stored in canonical vvoc.json without rewriting OpenCode config directly.</purpose>
+      <path>src/commands/preset.ts + src/lib/model-roles.ts</path>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
       <annotations>
         <fn-resolvePreset PURPOSE="Validate a preset name against the current vvoc.json preset map." />
-        <fn-applyPreset PURPOSE="Apply only the listed preset targets through existing vvoc and OpenCode write helpers." />
-        <cmd-preset PURPOSE="vvoc preset &lt;name&gt; - CLI command for declarative multi-target model switching." />
+        <fn-applyPreset PURPOSE="Apply only the listed role assignments through canonical vvoc config writes." />
+        <cmd-preset PURPOSE="vvoc preset &lt;name&gt; - CLI command for declarative multi-role model switching." />
       </annotations>
     </M-CLI-PRESET>
 
-    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent and safe fallback behavior.</purpose>
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="planned">
+      <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role.</purpose>
       <path>src/plugins/guardian/index.ts + templates/agents/guardian.md</path>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <annotations>
         <export-GuardianPlugin PURPOSE="Register Guardian hooks for config, events, tool intent capture, and permission review via a hidden subagent." />
       </annotations>
     </M-PLUGIN-GUARDIAN>
 
-    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="implemented">
+    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="planned">
       <purpose>Store explicit memory under the vvoc XDG data root, keep shared scope global across projects, resolve scopes, and provide lexical ranking for search.</purpose>
       <path>src/plugins/memory-store.ts</path>
-      <depends>none</depends>
+      <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
       <annotations>
         <fn-loadMemoryRuntimeConfig PURPOSE="Load canonical vvoc memory settings from vvoc.json." />
@@ -76,10 +111,10 @@
       </annotations>
     </M-PLUGIN-MEMORY-STORE>
 
-    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent.</purpose>
+    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="planned">
+      <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent using built-in role-driven model selection.</purpose>
       <path>src/plugins/memory/index.ts + src/plugins/memory/system-instruction.md + templates/agents/memory-reviewer.md</path>
-      <depends>M-PLUGIN-MEMORY-STORE</depends>
+      <depends>M-PLUGIN-MEMORY-STORE, M-MODEL-ROLES</depends>
       <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
       <annotations>
         <export-MemoryPlugin PURPOSE="Register memory tools and the report-only reviewer subagent." />
@@ -97,89 +132,85 @@
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION NAME="PlaceholderSession" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Manages secret-to-placeholder mappings with HMAC-SHA256 hashing, TTL eviction, and max-mappings limits.</purpose>
+      <purpose>Manage secret-to-placeholder mappings with HMAC-SHA256 hashing, TTL eviction, and max-mappings limits.</purpose>
       <path>src/plugins/secrets-redaction/session.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <class-PlaceholderSession PURPOSE="Manages placeholder lifecycle — creation, lookup, TTL cleanup." />
-        <fn-getPlaceholderRegex PURPOSE="Returns RegExp to find all placeholders in text." />
-        <fn-generateFallbackSecret PURPOSE="Generates random hex secret when VVOC_SECRET is not set." />
+        <class-PlaceholderSession PURPOSE="Manages placeholder lifecycle - creation, lookup, TTL cleanup." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS NAME="PatternSet" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Builds pattern set from config — keywords, regex rules, and 13 builtin patterns (email, uuid, ipv4, mac, openai_key, anthropic_key, github_token, aws_access_key, stripe_key, bearer_token, bearer_dot, syn_key, hex_token).</purpose>
+      <purpose>Build pattern sets from config keywords, regex rules, and builtin sensitive token detectors.</purpose>
       <path>src/plugins/secrets-redaction/patterns.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <fn-buildPatternSet PURPOSE="Builds pattern set from config with regex normalization." />
-        <const-BUILTIN_PATTERNS PURPOSE="Map of 6 builtin pattern definitions." />
+        <fn-buildPatternSet PURPOSE="Build pattern set from config with regex normalization." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE NAME="RedactEngine" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Core redaction engine — performs find/replace of secrets with placeholders using right-to-left interval arithmetic.</purpose>
+      <purpose>Perform secret find/replace with placeholders using interval-safe redaction.</purpose>
       <path>src/plugins/secrets-redaction/engine.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION, M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <fn-redactText PURPOSE="Replaces secrets in text with placeholders, returns changed text + match list." />
+        <fn-redactText PURPOSE="Replace secrets in text with placeholders and return changed text plus match list." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE NAME="RestoreEngine" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Restores placeholders in a single string back to original secret values.</purpose>
+      <purpose>Restore placeholders in a single string back to original secret values.</purpose>
       <path>src/plugins/secrets-redaction/restore.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <fn-restoreText PURPOSE="Restores all placeholders in a string to original values." />
+        <fn-restoreText PURPOSE="Restore all placeholders in a string to original values." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP NAME="DeepTraversal" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Deep traversal helpers for restoring/redacting placeholders in nested objects and arrays with cycle safety.</purpose>
+      <purpose>Traverse nested objects and arrays for redaction or restoration with cycle safety.</purpose>
       <path>src/plugins/secrets-redaction/deep.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION, M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <fn-restoreDeep PURPOSE="In-place restoration of placeholders in objects/arrays." />
-        <fn-redactDeep PURPOSE="In-place redaction of secrets in objects/arrays." />
+        <fn-restoreDeep PURPOSE="In-place restoration of placeholders in objects and arrays." />
+        <fn-redactDeep PURPOSE="In-place redaction of secrets in objects and arrays." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP>
 
     <M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG NAME="ConfigLoader" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Loads the secretsRedaction section from canonical vvoc.json with environment variable substitution.</purpose>
+      <purpose>Load the secretsRedaction section from canonical vvoc.json with environment variable substitution.</purpose>
       <path>src/plugins/secrets-redaction/config.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <fn-loadConfig PURPOSE="Loads and returns normalized config with warnings." />
-        <fn-getConfigCandidates PURPOSE="Returns the canonical vvoc.json path candidate." />
+        <fn-loadConfig PURPOSE="Load and return normalized secrets-redaction config with warnings." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG>
 
     <M-PLUGIN-SECRETS-REDACTION NAME="SecretsRedactionPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Redacts secrets from messages before LLM requests and restores them after — protects secrets from being sent to LLM providers.</purpose>
+      <purpose>Redact secrets from messages before LLM requests and restore them after, protecting sensitive values from provider-bound payloads.</purpose>
       <path>src/plugins/secrets-redaction/index.ts</path>
       <depends>M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION, M-PLUGIN-SECRETS-REDACTION-INTERNAL-PATTERNS, M-PLUGIN-SECRETS-REDACTION-INTERNAL-ENGINE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-RESTORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-DEEP, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
-        <export-SecretsRedactionPlugin PURPOSE="Main plugin factory — hooks into experimental.chat.messages.transform, experimental.text.complete, tool.execute.before." />
+        <export-SecretsRedactionPlugin PURPOSE="Main plugin factory for chat-message redaction, completion restoration, and tool-argument restoration." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION>
 
-    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Validate canonical vvoc.json against the versioned vvoc JSON Schema with human-readable error reporting.</purpose>
+    <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting.</purpose>
       <path>src/commands/config-validate.ts + src/commands/config.ts</path>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
       <annotations>
-        <fn-validateVvocConfigContent PURPOSE="Validate vvoc.json content and report schema violations with line/col." />
+        <fn-validateVvocConfigContent PURPOSE="Validate vvoc.json content and report schema violations with line/column." />
         <fn-validateVvocConfigFile PURPOSE="Validate vvoc.json and report schema violations." />
-        <cmd-config_validate PURPOSE="vvoc config validate - CLI command for config validation." />
+        <cmd-config_validate PURPOSE="vvoc config validate - CLI command for role-based config validation." />
       </annotations>
     </M-CLI-CONFIG-VALIDATE>
 
@@ -190,28 +221,26 @@
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
       <annotations>
         <fn-listPlugins PURPOSE="Scan OpenCode config and return plugin entries." />
-        <fn-parsePluginSpecifier PURPOSE="Parse plugin specifier string into name/source/enabled." />
-        <fn-renderPluginTable PURPOSE="Render plugin list as aligned Name/Source/Status table." />
         <cmd-plugin_list PURPOSE="vvoc plugin list - CLI command for listing plugins." />
       </annotations>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override, the `zai` provider model patch, and the OpenAI alias-model patch that installs `openai/vv-gpt-5.4-xhigh` as the root default model.</purpose>
+    <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override, the `zai` provider model patch, and the OpenAI alias-model patch that installs `openai/vv-gpt-5.4-xhigh` for role assignment use without rewriting root OpenCode model fields.</purpose>
       <path>src/commands/patch-provider.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>
       <annotations>
-        <fn-resolvePatchProviderPreset PURPOSE="Validate supported patch preset names and map them to concrete OpenCode writes." />
-        <fn-applyPatchProviderPreset PURPOSE="Resolve the global OpenCode config path and apply the selected preset, including the OpenAI alias-model preset that also updates the root default model." />
+        <fn-resolvePatchProviderPreset PURPOSE="Validate supported patch preset names and map them to concrete OpenCode provider-object writes." />
+        <fn-applyPatchProviderPreset PURPOSE="Resolve the global OpenCode config path and apply the selected preset without mutating root role-reference defaults." />
         <cmd-patch_provider PURPOSE="vvoc patch-provider stepfun-ai|zai|openai - CLI command for global OpenCode patch presets." />
       </annotations>
     </M-CLI-PATCH-PROVIDER>
 
-    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, the top-level preset command with managed `vv-*` built-in preset names, and the `agent set|unset <target-id>` flow including built-in build/plan/general/explore targets.</purpose>
+    <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, preset names, role subcommands, and built-in role ids.</purpose>
       <path>src/commands/completion.ts</path>
-      <depends>M-CLI-COMMANDS</depends>
+      <depends>M-CLI-COMMANDS, M-MODEL-ROLES</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
       <annotations>
         <fn-detectShell PURPOSE="Detect the active shell from environment variables." />
@@ -221,13 +250,13 @@
       </annotations>
     </M-CLI-COMPLETION>
 
-    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Interactive project setup with prompts for scope, plugins, and initial configuration. Uses @clack/prompts. Interactive mode is default; --non-interactive enables batch mode.</purpose>
+    <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="planned">
+      <purpose>Interactive project setup with prompts for scope and initial configuration, seeding canonical built-in roles and role-reference OpenCode defaults. Uses @clack/prompts.</purpose>
       <path>src/commands/init.ts</path>
-      <depends>M-CLI-CONFIG, @clack/prompts</depends>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES, @clack/prompts</depends>
       <verification-ref>V-M-CLI-INIT</verification-ref>
       <annotations>
-        <fn-runInit PURPOSE="Run interactive initialization using @clack/prompts. Interactive by default, --non-interactive for batch." />
+        <fn-runInit PURPOSE="Run interactive initialization using @clack/prompts." />
         <fn-runInitNonInteractive PURPOSE="Run non-interactive initialization." />
         <cmd-init PURPOSE="vvoc init - CLI command for project initialization." />
       </annotations>
@@ -240,21 +269,27 @@
       <verification-ref>V-M-CLI-UPGRADE</verification-ref>
       <annotations>
         <fn-runUpgradeFlow PURPOSE="Execute the full upgrade flow, including Bun global install and warning-only post-install sync handling." />
-        <fn-fetchLatestVersion PURPOSE="Query npm registry for latest @osovv/vv-opencode version." />
-        <fn-fetchChangelog PURPOSE="Fetch best-effort release notes from npm." />
         <cmd-upgrade PURPOSE="vvoc upgrade - CLI command for globally upgrading vvoc and then running sync." />
       </annotations>
     </M-CLI-UPGRADE>
 
+    <CrossLink from="M-MODEL-ROLES" to="M-CLI-CONFIG" relation="used-by" />
+    <CrossLink from="M-MODEL-ROLES" to="M-PLUGIN-MODEL-ROLES" relation="used-by" />
+    <CrossLink from="M-MODEL-ROLES" to="M-PLUGIN-GUARDIAN" relation="used-by" />
+    <CrossLink from="M-MODEL-ROLES" to="M-PLUGIN-MEMORY" relation="used-by" />
+    <CrossLink from="M-MODEL-ROLES" to="M-CLI-ROLE" relation="used-by" />
+    <CrossLink from="M-MODEL-ROLES" to="M-CLI-PRESET" relation="used-by" />
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG" to="M-CLI-MANAGED-AGENTS" relation="uses" />
     <CrossLink from="M-CLI-PRESET" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-CLI-ROLE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG-VALIDATE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-PLUGIN-LIST" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-PATCH-PROVIDER" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-COMPLETION" to="M-CLI-COMMANDS" relation="uses" />
     <CrossLink from="M-CLI-INIT" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-UPGRADE" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-PLUGIN-MODEL-ROLES" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-GUARDIAN" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-MEMORY" to="M-PLUGIN-MEMORY-STORE" relation="uses" />
     <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-SECRETS-REDACTION-INTERNAL-SESSION" relation="uses" />
