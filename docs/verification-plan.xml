@@ -1,10 +1,12 @@
 <VerificationPlan VERSION="0.5.0">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
+    <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
     <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, main-session system guidance injection, memory CRUD, and secrets redaction.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system change.</wave-level-focus>
     <phase-level-focus>Buildable package output plus stable command behavior for installation, role management, role resolution, preset switching, primary-session system guidance, Guardian review, explicit memory workflows, and secrets redaction.</phase-level-focus>
+    <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
 
@@ -48,9 +50,9 @@
       <scenario>OpenCode asks for a permission decision while Guardian is active.</scenario>
       <expected-outcome>Guardian resolves its runtime model from the built-in `fast` role, low-risk actions may be auto-approved, and higher-risk actions fall back to manual approval.</expected-outcome>
       <required-signals>
-        <log-marker>guardian plugin initialized</log-marker>
-        <log-marker>guardian review started</log-marker>
-        <log-marker>guardian review completed</log-marker>
+        <log-marker>[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded</log-marker>
+        <log-marker>[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review started</log-marker>
+        <log-marker>[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review completed</log-marker>
       </required-signals>
     </VF-GUARDIAN-REVIEW>
     <VF-MEMORY-ACCESS NAME="MemoryAccess" USE_CASES="UC-003" DATA_FLOW="DF-MEMORY-ACCESS" PRIORITY="high">
@@ -84,6 +86,63 @@
       </required-signals>
     </VF-SECRETS-REDACTION>
   </CriticalFlows>
+
+  <VerificationMatrix SCOPE="Phase-6">
+    <VM-ROLE-PARSING MODULE="M-MODEL-ROLES" FLOW="DF-ROLE-RESOLUTION" PRIORITY="high">
+      <scenario>Parse and normalize built-in and custom role ids, `vv-role:*` references, and concrete `provider/model[:variant]` assignments.</scenario>
+      <primary-evidence>deterministic assertions</primary-evidence>
+      <trajectory-evidence>exception-path assertions for malformed ids, malformed assignments, and unknown roles</trajectory-evidence>
+      <telemetry>none required beyond explicit thrown-error surfaces</telemetry>
+    </VM-ROLE-PARSING>
+    <VM-CONFIG-SEED MODULE="M-CLI-CONFIG" FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
+      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, and role-reference OpenCode defaults plus managed agents.</scenario>
+      <primary-evidence>temp-home integration checks plus exact config assertions</primary-evidence>
+      <trajectory-evidence>OpenCode config diff assertions proving `vv-role:*` writes instead of literal provider/model writes</trajectory-evidence>
+      <telemetry>installation inspection output plus stable config snapshots</telemetry>
+    </VM-CONFIG-SEED>
+    <VM-CONFIG-SYNC MODULE="M-CLI-CONFIG" FLOW="DF-CONFIG-SYNC" PRIORITY="high">
+      <scenario>Sync preserves user-owned custom roles while refreshing managed role presets and rejecting unsupported pre-role schemas.</scenario>
+      <primary-evidence>deterministic config round-trip assertions</primary-evidence>
+      <trajectory-evidence>trace assertions on parse -&gt; refresh -&gt; rewrite order</trajectory-evidence>
+      <telemetry>stable rewrite summaries and doctor/status inspection snapshots</telemetry>
+    </VM-CONFIG-SYNC>
+    <VM-ROLE-CLI MODULE="M-CLI-ROLE" FLOW="DF-ROLE-MANAGEMENT" PRIORITY="high">
+      <scenario>Role list, set, and unset mutate only canonical vvoc.json and protect built-in roles.</scenario>
+      <primary-evidence>deterministic CLI and file-content assertions</primary-evidence>
+      <trajectory-evidence>failure assertions for builtin unsets and invalid role ids</trajectory-evidence>
+      <telemetry>CLI summaries only; no provider-bound logs required</telemetry>
+    </VM-ROLE-CLI>
+    <VM-PRESET-ROLES MODULE="M-CLI-PRESET" FLOW="DF-PRESET-SWITCH" PRIORITY="high">
+      <scenario>Preset application rewrites only listed role assignments and leaves OpenCode config untouched because it is already role-reference based.</scenario>
+      <primary-evidence>deterministic vvoc.json assertions plus untouched OpenCode config assertions</primary-evidence>
+      <trajectory-evidence>per-role summary ordering and no-op coverage for unlisted roles</trajectory-evidence>
+      <telemetry>CLI per-role summaries</telemetry>
+    </VM-PRESET-ROLES>
+    <VM-RUNTIME-RESOLUTION MODULE="M-PLUGIN-MODEL-ROLES" FLOW="DF-ROLE-RESOLUTION" PRIORITY="high">
+      <scenario>Plugin config hooks resolve role references in supported root, agent, and command fields, split variants where supported, and fail loudly when resolution is impossible.</scenario>
+      <primary-evidence>deterministic config-object assertions</primary-evidence>
+      <trajectory-evidence>trace assertions on resolution count, field-path error reporting, and forbidden fallback behavior</trajectory-evidence>
+      <telemetry>structured config-hook markers for map load, per-field resolution, and unresolved roles</telemetry>
+    </VM-RUNTIME-RESOLUTION>
+    <VM-GUARDIAN-ROLE MODULE="M-PLUGIN-GUARDIAN" FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
+      <scenario>Guardian loads non-model runtime policy from vvoc.json, resolves its runtime model from the built-in `fast` role, and logs bounded permission-review evidence.</scenario>
+      <primary-evidence>plugin-config assertions plus bounded review-path tests</primary-evidence>
+      <trajectory-evidence>required block-marker order for runtime-config load and permission review</trajectory-evidence>
+      <telemetry>structured guardian runtime-config and review markers</telemetry>
+    </VM-GUARDIAN-ROLE>
+    <VM-MEMORY-ROLE MODULE="M-PLUGIN-MEMORY" FLOW="DF-MEMORY-REVIEW" PRIORITY="high">
+      <scenario>Memory reviewer resolves its runtime model from the built-in `fast` role while memory storage keeps its explicit-only semantics.</scenario>
+      <primary-evidence>plugin-config assertions plus memory-tool availability assertions</primary-evidence>
+      <trajectory-evidence>reviewer-registration trace assertions and disabled-memory failure assertions</trajectory-evidence>
+      <telemetry>structured memory plugin initialization markers with role-resolution context</telemetry>
+    </VM-MEMORY-ROLE>
+  </VerificationMatrix>
+
+  <TelemetryRequirements>
+    <TR-1 MODULE="M-PLUGIN-MODEL-ROLES">`ModelRolesPlugin` must emit structured markers anchored to `BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES` for role-map load, successful per-field resolution, and unresolved-role failure paths without logging raw secrets or provider credentials.</TR-1>
+    <TR-2 MODULE="M-PLUGIN-GUARDIAN">Guardian runtime config loading and permission review must emit stable markers anchored to `BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG` and `BLOCK_REVIEW_PERMISSION_REQUEST` so failures can be triaged without replaying full conversations.</TR-2>
+    <TR-3 MODULE="M-PLUGIN-MEMORY">Memory initialization and reviewer registration must emit stable markers anchored to `BLOCK_INITIALIZE_MEMORY_PLUGIN` and `BLOCK_REVIEWER_AGENT_CONFIGURATION`, while memory payload content stays redacted or omitted.</TR-3>
+  </TelemetryRequirements>
 
   <ModuleVerification>
     <V-M-MODEL-ROLES MODULE="M-MODEL-ROLES" PRIORITY="high">
@@ -123,13 +182,16 @@
         <scenario-3 kind="success">Global path resolution separates `opencode/` from the canonical `vvoc/vvoc.json` path while project scope still uses `./.vvoc/agents/` for prompts.</scenario-3>
         <scenario-4 kind="success">Managed enhancer/subagent registrations point OpenCode at scope-correct prompt references and use `vv-role:*` model values instead of hardcoded provider/model strings.</scenario-4>
         <scenario-5 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, and managed `vv-*` role presets are refreshed during canonical rewrites.</scenario-5>
-        <scenario-6 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-6>
+        <scenario-6 kind="success">Install and sync write root OpenCode `model = vv-role:default`, `small_model = vv-role:fast`, built-in OpenCode agent role references, and managed agent role references instead of concrete provider/model values.</scenario-6>
+        <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-7>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>Sync must keep the canonical role map in vvoc.json and keep OpenCode config role-reference based instead of storing concrete target overrides there.</assertion-1>
+        <assertion-2>Install and sync must not materialize literal provider/model defaults into managed OpenCode model-bearing fields, except inside lower-level provider alias patch objects.</assertion-2>
       </required-trace-assertions>
-      <wave-follow-up>Smoke command output for `status` and `doctor` after build.</wave-follow-up>
+      <wave-follow-up>Add temp-home smoke tests for `status` and `doctor` so unresolved role references and built-in role assignments are surfaced deterministically.</wave-follow-up>
+      <phase-follow-up>Add snapshot coverage for rendered OpenCode config that includes all managed role-reference fields in one fixture.</phase-follow-up>
     </V-M-CLI-CONFIG>
 
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
@@ -146,6 +208,7 @@
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `role`, `preset`, `patch-provider`, and `config validate`.</scenario-1>
         <scenario-2 kind="success">`guardian config --print` still emits valid guardian section JSON content without any model ownership.</scenario-2>
         <scenario-3 kind="success">`vvoc role list` reports built-in roles first and custom roles after them.</scenario-3>
+        <scenario-4 kind="success">`vvoc status` and `vvoc doctor` report role assignments and unresolved role problems without depending on the removed `vvoc agent` surface.</scenario-4>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -166,13 +229,22 @@
         <scenario-1 kind="success">The plugin resolves `vv-role:*` references in root `model` and `small_model` fields.</scenario-1>
         <scenario-2 kind="success">The plugin resolves `vv-role:*` references in `agent.*.model` and `command.*.model` fields.</scenario-2>
         <scenario-3 kind="success">Variant-bearing assignments are written as native `model` plus `variant` fields for agent targets that support variants.</scenario-3>
-        <scenario-4 kind="failure">Unknown role references throw explicit errors that identify the config field path.</scenario-4>
+        <scenario-4 kind="success">Literal provider/model values that do not use the `vv-role:*` syntax remain untouched.</scenario-4>
+        <scenario-5 kind="failure">Unknown role references throw explicit errors that identify the config field path.</scenario-5>
+        <scenario-6 kind="failure">Root `model` and `small_model` fail clearly when a role assignment resolves to a variant-bearing concrete selection that cannot be represented there safely.</scenario-6>
       </scenarios>
-      <required-log-markers />
+      <required-log-markers>
+        <marker-1>[model-roles][config][BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES] role map loaded</marker-1>
+        <marker-2>[model-roles][config][BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES] role reference resolved</marker-2>
+        <marker-3>[model-roles][config][BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES] unknown role reference</marker-3>
+      </required-log-markers>
       <required-trace-assertions>
         <assertion-1>The plugin must not rewrite literal provider/model values that do not use the `vv-role:*` syntax.</assertion-1>
+        <assertion-2>Agent targets that support variants must split `provider/model:variant` into native `model` plus `variant` fields rather than leaving a colon suffix in `model`.</assertion-2>
+        <assertion-3>Role resolution must not silently fall back to built-in provider defaults when a referenced role is missing.</assertion-3>
       </required-trace-assertions>
       <wave-follow-up>Add fixtures that mix root defaults, built-in agents, and custom commands in a single config object.</wave-follow-up>
+      <phase-follow-up>Add a smoke harness that loads a synthetic OpenCode config object with both built-in and custom role references through the plugin hook.</phase-follow-up>
     </V-M-PLUGIN-MODEL-ROLES>
 
     <V-M-PLUGIN-GUARDIAN MODULE="M-PLUGIN-GUARDIAN" PRIORITY="high">
@@ -186,17 +258,20 @@
       <scenarios>
         <scenario-1 kind="success">Guardian plugin config registers guardian as a hidden subagent with an explicit two-step limit.</scenario-1>
         <scenario-2 kind="success">Guardian resolves its runtime model from the built-in `fast` role without depending on `ModelRolesPlugin` hook ordering.</scenario-2>
-        <scenario-3 kind="failure">Review failures fall back to manual approval instead of silently allowing.</scenario-3>
+        <scenario-3 kind="failure">Guardian initialization fails loudly when the built-in `fast` role cannot be resolved to a valid concrete model selection.</scenario-3>
+        <scenario-4 kind="failure">Review failures fall back to manual approval instead of silently allowing.</scenario-4>
       </scenarios>
       <required-log-markers>
-        <marker-1>guardian plugin initialized</marker-1>
-        <marker-2>guardian review started</marker-2>
-        <marker-3>guardian review completed</marker-3>
+        <marker-1>[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded</marker-1>
+        <marker-2>[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review started</marker-2>
+        <marker-3>[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review completed</marker-3>
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>Auto-allow only occurs when Guardian returns a risk score below the configured threshold.</assertion-1>
+        <assertion-2>The built-in `fast` role must be resolved before Guardian agent registration is exposed to OpenCode runtime hooks.</assertion-2>
       </required-trace-assertions>
       <wave-follow-up>Add isolated behavioral tests around assessment parsing and decision thresholds.</wave-follow-up>
+      <phase-follow-up>Add a temp-config harness that verifies Guardian role resolution and env override precedence if model env escapes remain supported.</phase-follow-up>
     </V-M-PLUGIN-GUARDIAN>
 
     <V-M-PLUGIN-MEMORY-STORE MODULE="M-PLUGIN-MEMORY-STORE" PRIORITY="high">
@@ -235,13 +310,16 @@
         <scenario-5 kind="failure">Disabled memory config blocks tool use instead of pretending memory exists.</scenario-5>
       </scenarios>
       <required-log-markers>
-        <marker-1>memory plugin initialized</marker-1>
+        <marker-1>[memory][MemoryPlugin][BLOCK_INITIALIZE_MEMORY_PLUGIN] memory plugin initialized</marker-1>
+        <marker-2>[memory][installMemoryReviewerAgent][BLOCK_REVIEWER_AGENT_CONFIGURATION] memory reviewer registered</marker-2>
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>The reviewer agent must not have write/delete memory tools enabled.</assertion-1>
         <assertion-2>The system reminder must not include stored memory entries or imply that memory is already loaded.</assertion-2>
+        <assertion-3>The plugin must not continue reading `reviewerModel` or `reviewerVariant` from canonical memory config once role-based selection lands.</assertion-3>
       </required-trace-assertions>
       <wave-follow-up>Consider adding a smoke test around custom tool execution in a live OpenCode session.</wave-follow-up>
+      <phase-follow-up>Add temp-config coverage for built-in `fast` role resolution and for disabled-memory mode after role-based reviewer wiring lands.</phase-follow-up>
     </V-M-PLUGIN-MEMORY>
 
     <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION MODULE="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" PRIORITY="medium">
@@ -303,7 +381,9 @@
       <scenarios>
         <scenario-1 kind="success">`role list` shows the seeded built-in roles in deterministic order.</scenario-1>
         <scenario-2 kind="success">`role set my-role provider/model:variant` stores a normalized concrete assignment.</scenario-2>
-        <scenario-3 kind="failure">`role unset default` fails with a clear built-in-role protection error.</scenario-3>
+        <scenario-3 kind="success">`role set smart provider/model:variant` updates a built-in role without changing unrelated built-ins or custom roles.</scenario-3>
+        <scenario-4 kind="failure">`role unset default` fails with a clear built-in-role protection error.</scenario-4>
+        <scenario-5 kind="failure">Invalid role ids or malformed concrete model selections fail before any file write occurs.</scenario-5>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -324,8 +404,9 @@
       <scenarios>
         <scenario-1 kind="success">A fully seeded canonical vvoc schema v3, including the managed `vv-*` role preset map, reports OK.</scenario-1>
         <scenario-2 kind="failure">Invalid JSON reports parse error with line/column.</scenario-2>
-        <scenario-3 kind="failure">Missing required section, invalid role assignment, or invalid field type reports the schema path and error.</scenario-3>
-        <scenario-4 kind="failure">Pre-role vvoc schema versions report an unsupported-version failure instead of being accepted leniently.</scenario-4>
+        <scenario-3 kind="failure">Missing required built-in role ids, invalid role assignment strings, or invalid field types report the schema path and error.</scenario-3>
+        <scenario-4 kind="failure">Presets with malformed role assignments fail semantic validation with the offending preset and role path.</scenario-4>
+        <scenario-5 kind="failure">Pre-role vvoc schema versions report an unsupported-version failure instead of being accepted leniently.</scenario-5>
       </scenarios>
       <required-log-markers />
       <wave-follow-up>Run against real config files in the repository.</wave-follow-up>
@@ -346,7 +427,8 @@
         <scenario-2 kind="success">`preset show vv-openai` renders the stored preset object from canonical vvoc.json, including a smart-role assignment that can point at `openai/vv-gpt-5.4-xhigh`.</scenario-2>
         <scenario-3 kind="success">Applying a partial preset only changes the roles listed in that preset and leaves unlisted roles untouched.</scenario-3>
         <scenario-4 kind="success">Preset application updates canonical vvoc role assignments and does not rewrite OpenCode config directly.</scenario-4>
-        <scenario-5 kind="failure">Unknown preset names fail with a clear error that includes the available preset names.</scenario-5>
+        <scenario-5 kind="success">Built-in managed presets refresh back to vvoc defaults during sync even if the user edited a managed preset name in-place.</scenario-5>
+        <scenario-6 kind="failure">Unknown preset names fail with a clear error that includes the available preset names.</scenario-6>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -392,6 +474,7 @@
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>The command must fail rather than overwrite non-object `provider` config shapes.</assertion-1>
+        <assertion-2>The command must not rewrite root role-reference OpenCode model fields while installing provider alias-model helpers.</assertion-2>
       </required-trace-assertions>
       <wave-follow-up>Add more presets only when a concrete endpoint mismatch needs a one-shot patch.</wave-follow-up>
     </V-M-CLI-PATCH-PROVIDER>
@@ -410,6 +493,7 @@
         <scenario-1 kind="success">Bash completion script contains the current vvoc top-level commands plus nested completions for `config`, `plugin`, `patch-provider`, `preset`, and `role` including built-in role ids.</scenario-1>
         <scenario-2 kind="success">Zsh completion script registers `vvoc` via `#compdef` and `compdef` markers so the installed file works when sourced or loaded from completion paths.</scenario-2>
         <scenario-3 kind="success">Fish completion script exposes nested completions for `role set|unset &lt;role-id&gt;` using built-in role IDs.</scenario-3>
+        <scenario-4 kind="success">Completion output removes the obsolete `agent` command surface and its target-id completions.</scenario-4>
       </scenarios>
       <required-log-markers />
       <wave-follow-up>Validate generated scripts by sourcing/eval in test environment.</wave-follow-up>
@@ -430,6 +514,7 @@
         <scenario-2 kind="success">Ctrl+C aborts cleanly without partial file writes.</scenario-2>
         <scenario-3 kind="success">Generated canonical config is valid schema v3 JSON with seeded built-in roles and managed `vv-*` role presets.</scenario-3>
         <scenario-4 kind="success">Non-interactive init seeds OpenCode defaults and managed agents with `vv-role:*` references.</scenario-4>
+        <scenario-5 kind="success">Status and doctor output immediately after init report the built-in role assignments that were seeded.</scenario-5>
       </scenarios>
       <required-log-markers />
       <wave-follow-up>Test with a temp directory and verify file contents.</wave-follow-up>
@@ -514,7 +599,7 @@
         <command-1>bun run typecheck</command-1>
         <command-2>bun run lint</command-2>
         <command-3>bun run fmt:check</command-3>
-        <command-4>bun test</command-4>
+        <command-4>bun test src/lib/model-roles.test.ts src/plugins/model-roles.test.ts src/commands/role.test.ts src/commands/preset.test.ts src/commands/config-validate.test.ts src/plugins/guardian.test.ts src/plugins/memory.test.ts src/lib/opencode.test.ts src/commands/completion.test.ts</command-4>
         <command-5>bun run build</command-5>
         <command-6>bun run pack:check</command-6>
       </commands>
@@ -522,13 +607,14 @@
         <evidence-1>`src/lib/model-roles.ts`, `src/plugins/model-roles/index.ts`, and `src/commands/role.ts` are present.</evidence-1>
         <evidence-2>OpenCode defaults and managed agents use `vv-role:*` references and runtime startup resolves them to concrete models.</evidence-2>
         <evidence-3>Pre-role vvoc schema versions are rejected rather than migrated.</evidence-3>
+        <evidence-4>Structured markers for role resolution, Guardian runtime config, and memory reviewer registration are present or otherwise replaced with equally stable structured telemetry before autonomous execution is enabled.</evidence-4>
       </required-evidence>
     </Gate-Phase-6>
   </PhaseGates>
 
   <FailurePackets>
     <packet-template>
-      <expected-fields>scenario, expected-evidence, observed-evidence, first-divergent-block, next-action</expected-fields>
+      <expected-fields>scenario, contract-ref, expected-evidence, observed-evidence, first-divergent-block, suggested-next-action</expected-fields>
     </packet-template>
   </FailurePackets>
 </VerificationPlan>
