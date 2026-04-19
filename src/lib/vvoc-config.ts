@@ -1,5 +1,5 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 2.3.0
+// VERSION: 2.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
 //   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
@@ -41,6 +41,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
+//   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
 //   LAST_CHANGE: [v2.3.0 - Switched the built-in vv-openai preset to the vv-managed OpenAI alias model so the default target can carry xhigh reasoning exactly.]
 // END_CHANGE_SUMMARY
 
@@ -327,7 +328,7 @@ function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Reco
     default: "openai/vv-gpt-5.4-xhigh",
     smart: "openai/vv-gpt-5.4-xhigh",
     fast: "openai/gpt-5.4-mini",
-    vision: "openai/gpt-4.1",
+    vision: "openai/gpt-5.4",
   };
   const roles: Record<string, string> = { ...defaults };
 
@@ -353,7 +354,7 @@ function createBuiltinVvocPresets(): VvocPresets {
         default: "openai/vv-gpt-5.4-xhigh",
         smart: "openai/vv-gpt-5.4-xhigh",
         fast: "openai/gpt-5.4-mini",
-        vision: "openai/gpt-4.1",
+        vision: "openai/gpt-5.4",
       },
     }),
     "vv-zai": createVvocPreset({
@@ -362,7 +363,7 @@ function createBuiltinVvocPresets(): VvocPresets {
         default: "zai-coding-plan/glm-5.1",
         smart: "zai-coding-plan/glm-5.1",
         fast: "zai-coding-plan/glm-4.5-airx",
-        vision: "zai-coding-plan/glm-4.5v",
+        vision: "zai-coding-plan/glm-4.6v",
       },
     }),
     "vv-minimax": createVvocPreset({

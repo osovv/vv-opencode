@@ -31,7 +31,7 @@ describe("role helpers", () => {
       team: "openai/gpt-5.4",
       smart: "openai/gpt-5.4",
       default: "openai/gpt-5.4",
-      vision: "openai/gpt-4.1",
+      vision: "openai/gpt-5.4",
       custom: "anthropic/claude-sonnet-4-5",
       fast: "openai/gpt-5.4-mini",
     });

@@ -46,7 +46,7 @@ describe("preset helpers", () => {
     expect(output).toContain('"default": "openai/vv-gpt-5.4-xhigh"');
     expect(output).toContain('"smart": "openai/vv-gpt-5.4-xhigh"');
     expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
-    expect(output).toContain('"vision": "openai/gpt-4.1"');
+    expect(output).toContain('"vision": "openai/gpt-5.4"');
   });
 });
 
@@ -338,7 +338,7 @@ describe("applyPreset", () => {
       expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5.1");
       expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.1");
       expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.5-airx");
-      expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.5v");
+      expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.6v");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
