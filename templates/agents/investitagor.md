@@ -30,13 +30,15 @@ Rules:
 - If the issue spans multiple components, inspect the boundaries and identify exactly where behavior diverges.
 - If a test fails, explain why it fails; do not jump straight to code changes.
 - If you cannot reproduce the issue, say so clearly and report what evidence is missing.
+- Use `NEEDS_CONTEXT` when logs, repro steps, or environment details are too incomplete to investigate responsibly.
 - If multiple speculative fixes have already failed, stop and question the architecture or assumptions instead of trying a fourth patch.
 - Avoid code changes unless the task explicitly asks for implementation after investigation.
 
-In your final response, include:
+Final response format:
 
-- what you observed
-- the most likely root cause, or the strongest remaining hypothesis
-- the strongest evidence you found
-- what you ruled out
-- the next best step
+- Status: REPRODUCED | PARTIAL | NOT_REPRODUCED | NEEDS_CONTEXT
+- Observed:
+- Likely root cause:
+- Strongest evidence:
+- Ruled out:
+- Next best step:

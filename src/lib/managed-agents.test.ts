@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.2.2
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Expanded prompt-template coverage for stable enhancer schema, shared status outputs, and investigation/report protocols.]
 //   LAST_CHANGE: [v0.2.2 - Added coverage requiring the enhancer to emit the final XML prompt in English.]
 // END_CHANGE_SUMMARY
 
@@ -43,8 +44,41 @@ describe("managed agent prompts", () => {
     expect(template).toContain("mode: primary");
     expect(template).toContain("You are the enhancer agent.");
     expect(template).toContain("The final XML prompt must always be written in English.");
-    expect(template).toContain("<constraint-1>");
-    expect(template).toContain("<verification-check-1>");
+    expect(template).toContain("<task_type>");
+    expect(template).toContain("<execution_mode>");
+    expect(template).toContain("<constraint_1>");
+    expect(template).toContain("<verification_check_1>");
+    expect(template).toContain("Do not use repeated identical child tags.");
+  });
+
+  test("loads bundled implementer template with stable status protocol", async () => {
+    const template = await loadManagedAgentPromptTemplate("implementer");
+    expect(template).toStartWith("---\n");
+    expect(template).toContain("You are the implementer subagent.");
+    expect(template).toContain("Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED");
+    expect(template).toContain("reviewer feedback becomes conflicting, ambiguous, or repetitive");
+  });
+
+  test("loads bundled reviewer templates with stable status output", async () => {
+    const specTemplate = await loadManagedAgentPromptTemplate("spec-reviewer");
+    const codeTemplate = await loadManagedAgentPromptTemplate("code-reviewer");
+
+    expect(specTemplate).toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
+    expect(specTemplate).toContain("[Missing|Extra|Wrong|Unproven]");
+    expect(specTemplate).toContain("goal, constraints, non-goals, acceptance criteria");
+
+    expect(codeTemplate).toContain("Status: PASS | FAIL");
+    expect(codeTemplate).toContain(
+      "Review only issues introduced by this change or left unresolved by it.",
+    );
+    expect(codeTemplate).toContain("If a concern lacks a concrete failure mode");
+  });
+
+  test("loads bundled investitagor template with investigation status protocol", async () => {
+    const template = await loadManagedAgentPromptTemplate("investitagor");
+    expect(template).toContain("Status: REPRODUCED | PARTIAL | NOT_REPRODUCED | NEEDS_CONTEXT");
+    expect(template).toContain("Likely root cause:");
+    expect(template).toContain("Next best step:");
   });
 
   test("prefers project managed prompt over global prompt", async () => {

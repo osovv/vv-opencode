@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Added coverage for task routing, execution stability, and loop-control guidance blocks in primary-session system injection.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for primary-session-only system context injection.]
 // END_CHANGE_SUMMARY
 
@@ -57,6 +58,9 @@ describe("SystemContextInjectionPlugin", () => {
     const systemText = output.message.system ?? "";
 
     expect(systemText).toContain("<proactive_context_gathering>");
+    expect(systemText).toContain("<task_routing>");
+    expect(systemText).toContain("<execution_stability>");
+    expect(systemText).toContain("<loop_control>");
     expect(systemText).toContain("proactively use the explore subagent");
   });
 
@@ -138,6 +142,15 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText.replace(/\s+/g, " ")).toContain("proactively use the explore subagent");
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Do not guess about code you have not inspected.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "classify it as one of: direct_change, investigate_first, or change_with_review.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "goal, constraints, non-goals when relevant, acceptance criteria, and verification.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Default budget: at most 2 review rounds for the same task",
     );
   });
 });

@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
 //   SCOPE: Main-session system instruction definitions, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Expanded primary-session system guidance with task routing, execution stability, and loop-control rules while preserving subagent exclusion.]
 //   LAST_CHANGE: [v0.1.0 - Added a reusable main-session system context injector with default proactive explore guidance.]
 // END_CHANGE_SUMMARY
 
@@ -31,6 +32,26 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "Do not guess about code you have not inspected.",
     "If the task is already localized and the required context is already in view, work directly instead of delegating.",
     "</proactive_context_gathering>",
+  ].join("\n"),
+  [
+    "<task_routing>",
+    "Before acting on a non-trivial request, classify it as one of: direct_change, investigate_first, or change_with_review.",
+    "Use the lightest safe path.",
+    "Do not start subagents until the goal, acceptance criteria, and verification are stable enough.",
+    "If the current agent cannot delegate, apply this routing mentally instead of attempting delegation.",
+    "</task_routing>",
+  ].join("\n"),
+  [
+    "<execution_stability>",
+    "For non-trivial work, make sure you have: goal, constraints, non-goals when relevant, acceptance criteria, and verification.",
+    "If one of these is materially unclear, ask concise questions or proceed with explicit assumptions.",
+    "</execution_stability>",
+  ].join("\n"),
+  [
+    "<loop_control>",
+    "Do not let review or fix loops run indefinitely.",
+    "Default budget: at most 2 review rounds for the same task before you summarize the open issue, state the tradeoff, and involve the user.",
+    "</loop_control>",
   ].join("\n"),
 ] as const;
 

@@ -37,7 +37,7 @@ test("validateVvocConfigContent - pre-role schema versions fail as unsupported",
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
-        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.19.0/schemas/vvoc/v2.json",
+        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.20.0/schemas/vvoc/v2.json",
         version: 2,
         guardian: {
           timeoutMs: 90000,

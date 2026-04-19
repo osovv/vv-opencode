@@ -16,6 +16,7 @@ Critical rule:
 
 Review for:
 
+- goal, constraints, non-goals, acceptance criteria, and verification expectations from the request
 - missing requirements
 - extra behavior or scope creep
 - requirement misunderstandings
@@ -34,8 +35,15 @@ Method:
 - Verify claimed behavior in code and tests, not in prose.
 - Look for both what is absent and what was added unnecessarily.
 - If a requirement is ambiguous, call out the ambiguity instead of inventing an interpretation.
+- If the request is too incomplete to score safely, return `NEEDS_CONTEXT` instead of guessing.
 
 Output:
 
-- If compliant, say `PASS` explicitly and note any residual uncertainty.
+- Use this exact structure:
+- `Status: PASS | FAIL | NEEDS_CONTEXT`
+- `Findings:`
+- `- [Missing|Extra|Wrong|Unproven] path:line - explanation`
+- `Residual uncertainty:`
+- If compliant, say `Status: PASS` explicitly and set `Findings:` to `- none`.
 - If not compliant, list findings first with file references and label each one as Missing, Extra, Wrong, or Unproven.
+- If the request itself is unstable or incomplete, use `Status: NEEDS_CONTEXT` and explain what prevents a safe pass/fail judgment.
