@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Added coverage for standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance blocks.]
 //   LAST_CHANGE: [v0.2.0 - Added coverage for task routing, execution stability, and loop-control guidance blocks in primary-session system injection.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for primary-session-only system context injection.]
 // END_CHANGE_SUMMARY
@@ -58,9 +59,14 @@ describe("SystemContextInjectionPlugin", () => {
     const systemText = output.message.system ?? "";
 
     expect(systemText).toContain("<proactive_context_gathering>");
+    expect(systemText).toContain("<standard_trajectories>");
     expect(systemText).toContain("<task_routing>");
-    expect(systemText).toContain("<execution_stability>");
-    expect(systemText).toContain("<loop_control>");
+    expect(systemText).toContain("<working_state>");
+    expect(systemText).toContain("<reroute_on_evidence>");
+    expect(systemText).toContain("<semantic_continuity>");
+    expect(systemText).toContain("<assumption_discipline>");
+    expect(systemText).toContain("<anti_drift_budget>");
+    expect(systemText).toContain("<project_overlays>");
     expect(systemText).toContain("proactively use the explore subagent");
   });
 
@@ -144,13 +150,26 @@ describe("SystemContextInjectionPlugin", () => {
       "Do not guess about code you have not inspected.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Prefer known trajectories over ad-hoc behavior.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
       "classify it as one of: direct_change, investigate_first, or change_with_review.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "goal, constraints, non-goals when relevant, acceptance criteria, and verification.",
+      "stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Default budget: at most 2 review rounds for the same task",
+      "If new evidence invalidates the current route, stop and reroute instead of forcing the original plan.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Reuse stable domain terms from the user request and the repository.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain("Do not make silent material assumptions.");
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "If you are not converging, stop and summarize instead of continuing blindly.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples",
     );
   });
 });

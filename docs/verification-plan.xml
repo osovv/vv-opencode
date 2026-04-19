@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.6.0">
+<VerificationPlan VERSION="0.7.0">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
@@ -71,7 +71,7 @@
     </VF-MEMORY-REVIEW>
     <VF-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjection" USE_CASES="UC-006" DATA_FLOW="DF-SYSTEM-CONTEXT" PRIORITY="medium">
       <scenario>User starts a primary chat session with vvoc installed.</scenario>
-      <expected-outcome>The main-session user message carries reusable vvoc system guidance for proactive explore usage, task routing, execution stability, and loop control, while known subagents do not inherit that guidance.</expected-outcome>
+      <expected-outcome>The main-session user message carries reusable vvoc system guidance for proactive context gathering, standard trajectories, task routing, compact working state, reroute-on-evidence, semantic continuity, assumption discipline, anti-drift budgeting, and project-overlay precedence, while known subagents do not inherit that guidance.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append message.system guidance -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -187,6 +187,7 @@
         <scenario-6 kind="success">Install and sync write root OpenCode `model = vv-role:default`, `small_model = vv-role:fast`, built-in OpenCode agent role references, and managed agent role references instead of concrete provider/model values.</scenario-6>
         <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-7>
         <scenario-8 kind="success">Managed prompt templates keep a stable enhancer schema plus consistent status/reporting vocabulary across implementer, reviewers, and investigator flows.</scenario-8>
+        <scenario-9 kind="success">Managed prompt templates externalize compact working state, support rerouting and project-owned overlays, preserve semantic continuity, require explicit material assumptions, and guard against drift.</scenario-9>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -334,7 +335,7 @@
         <check-2>bun x tsc --noEmit</check-2>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Primary agents such as `build` and `enhancer` receive the injected proactive-explore, task-routing, execution-stability, and loop-control guidance exactly once.</scenario-1>
+        <scenario-1 kind="success">Primary agents such as `build` and `enhancer` receive the injected proactive-context, standard-trajectory, task-routing, working-state, reroute, semantic-continuity, assumption-discipline, anti-drift, and project-overlay guidance exactly once.</scenario-1>
         <scenario-2 kind="success">Known subagents such as `explore`, `implementer`, and `memory-reviewer` do not receive the injected guidance.</scenario-2>
         <scenario-3 kind="success">Custom config-defined subagents stay excluded after the plugin observes config mode metadata.</scenario-3>
       </scenarios>

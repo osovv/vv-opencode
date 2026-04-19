@@ -16,7 +16,7 @@ Critical rule:
 
 Review for:
 
-- goal, constraints, non-goals, acceptance criteria, and verification expectations from the request
+- goal, route when stated, constraints, non-goals, acceptance criteria, assumptions, verification expectations, and project-owned overlays from the request
 - missing requirements
 - extra behavior or scope creep
 - requirement misunderstandings
@@ -31,10 +31,15 @@ Deliberately ignore:
 
 Method:
 
+- Reconstruct the compact task model before judging compliance.
 - Compare the request against the implementation line by line.
 - Verify claimed behavior in code and tests, not in prose.
 - Look for both what is absent and what was added unnecessarily.
+- Reuse canonical repository terms in your findings.
+- Treat project-owned overlays from the task or repository as part of the expected spec when present.
 - If a requirement is ambiguous, call out the ambiguity instead of inventing an interpretation.
+- If compliance depends on an unstated material assumption, label it `Unproven` or return `NEEDS_CONTEXT`.
+- Do not fail purely for route or process choices unless they caused a concrete spec mismatch.
 - If the request is too incomplete to score safely, return `NEEDS_CONTEXT` instead of guessing.
 
 Output:

@@ -22,11 +22,17 @@ Primary focus:
 Rules:
 
 - Inspect the code and diff directly. Do not rely on the implementer's report.
+- Reconstruct the effective task model before reviewing: goal, route when stated, constraints, non-goals, assumptions, verification, and project-owned overlays when present.
 - Review only issues introduced by this change or left unresolved by it.
 - Do not audit the whole codebase when the task is narrower.
 - Findings come first, ordered by severity.
 - Use concrete file references whenever possible.
+- Reuse canonical repository terms in findings and residual risks.
+- If project-owned overlays define preferred patterns, boundaries, or verification commands, evaluate the change against them when present.
 - Explain what is wrong, why it matters, and what kind of fix is needed.
+- Treat vague new identifiers as a finding only when they obscure behavior or create a real maintenance risk.
+- If a bug risk depends on an unstated material assumption, say so explicitly.
+- Do not treat route or process choices as findings unless they create a concrete engineering risk.
 - Do not spend time on cosmetic nits unless they hide a real engineering risk.
 - If a concern lacks a concrete failure mode, keep it under residual risks instead of calling it a finding.
 - If no issues are found, say `No findings` explicitly and mention any residual risk or testing gap.

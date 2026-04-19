@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
 //   SCOPE: Main-session system instruction definitions, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Added standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance for primary sessions.]
 //   LAST_CHANGE: [v0.2.0 - Expanded primary-session system guidance with task routing, execution stability, and loop-control rules while preserving subagent exclusion.]
 //   LAST_CHANGE: [v0.1.0 - Added a reusable main-session system context injector with default proactive explore guidance.]
 // END_CHANGE_SUMMARY
@@ -28,10 +29,19 @@ const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
 const MAIN_SESSION_SYSTEM_CONTEXTS = [
   [
     "<proactive_context_gathering>",
-    "Before answering questions about the codebase or making changes, proactively use the explore subagent to gather the context you need whenever the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.",
+    "Before answering questions about the codebase or making changes, gather the context you need whenever the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.",
+    "When delegation is available, proactively use the explore subagent for this.",
     "Do not guess about code you have not inspected.",
     "If the task is already localized and the required context is already in view, work directly instead of delegating.",
+    "If the current agent cannot delegate, rely on the context already in view and do not attempt unsupported delegation.",
     "</proactive_context_gathering>",
+  ].join("\n"),
+  [
+    "<standard_trajectories>",
+    "Prefer known trajectories over ad-hoc behavior.",
+    "Default trajectories: localized explicit change -> direct_change; bug, regression, or failure -> investigate_first; ambiguous or multi-file change -> change_with_review; explicit review request -> review directly; unclear request -> clarify or proceed with explicit assumptions, then route.",
+    "Prefer existing project patterns, existing libraries, and established repository structure over novel approaches.",
+    "</standard_trajectories>",
   ].join("\n"),
   [
     "<task_routing>",
@@ -42,16 +52,48 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "</task_routing>",
   ].join("\n"),
   [
-    "<execution_stability>",
-    "For non-trivial work, make sure you have: goal, constraints, non-goals when relevant, acceptance criteria, and verification.",
-    "If one of these is materially unclear, ask concise questions or proceed with explicit assumptions.",
-    "</execution_stability>",
+    "<working_state>",
+    "For non-trivial work, stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
+    "Keep it compact and revise it when evidence changes.",
+    "Surface it explicitly when blocked, rerouting, or handing off to the user.",
+    "</working_state>",
   ].join("\n"),
   [
-    "<loop_control>",
-    "Do not let review or fix loops run indefinitely.",
-    "Default budget: at most 2 review rounds for the same task before you summarize the open issue, state the tradeoff, and involve the user.",
-    "</loop_control>",
+    "<reroute_on_evidence>",
+    "If new evidence invalidates the current route, stop and reroute instead of forcing the original plan.",
+    "Reroute triggers: direct_change -> investigate_first when root cause, failure path, or expected behavior is still unclear; direct_change -> change_with_review when the scope expands across multiple modules or architectural boundaries; investigate_first -> direct_change when the failure is bounded and the fix path is now clear; any route -> needs_context when requirement ambiguity blocks safe progress.",
+    "When rerouting, state the current route, the trigger, the next route, and why the previous route is no longer safe.",
+    "</reroute_on_evidence>",
+  ].join("\n"),
+  [
+    "<semantic_continuity>",
+    "Reuse stable domain terms from the user request and the repository.",
+    "When the repository already has a canonical name for a concept, keep that name.",
+    "If the user's wording conflicts with repository terminology, map it once and continue with the repository's canonical term.",
+    "Do not rename concepts unnecessarily across planning, implementation, review, and reporting.",
+    "</semantic_continuity>",
+  ].join("\n"),
+  [
+    "<assumption_discipline>",
+    "Do not make silent material assumptions.",
+    "A material assumption is one that affects behavior, scope, API shape, schema, UX, data meaning, or verification.",
+    "If a material assumption is necessary, state it explicitly.",
+    "If a material assumption later becomes false, stop and reroute.",
+    "</assumption_discipline>",
+  ].join("\n"),
+  [
+    "<anti_drift_budget>",
+    "If you are not converging, stop and summarize instead of continuing blindly.",
+    "Drift signals include repeated file reading without a stable path, repeated speculative fixes without stronger evidence, 2 major strategy changes for the same task, 2 review rounds without convergence, or requirement interpretation changing repeatedly during execution.",
+    "When drift signals accumulate, report what was learned, what remains unknown, and which route is now safest.",
+    "</anti_drift_budget>",
+  ].join("\n"),
+  [
+    "<project_overlays>",
+    "If the task context or repository provides project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples, treat them as project-owned overlays.",
+    "Prefer those overlays over generic vvoc defaults when they do not conflict with the user's request.",
+    "Do not invent overlays that are not present.",
+    "</project_overlays>",
   ].join("\n"),
 ] as const;
 
