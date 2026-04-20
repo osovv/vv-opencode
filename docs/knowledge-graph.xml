@@ -1,7 +1,7 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.5.0">
-    <keywords>opencode, plugins, workflow, model-roles, hashline-edit</keywords>
-    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, hash-anchored editing, and cross-device setup.</annotation>
+  <Project NAME="@osovv/vv-opencode" VERSION="0.6.0">
+    <keywords>opencode, plugins, workflow, model-roles, hashline-edit, work-items</keywords>
+    <annotation>Portable OpenCode workflow package with plugins, a Bun CLI for install, sync, semantic model-role assignment, hash-anchored editing, explicit work-item protocol, and cross-device setup.</annotation>
 
     <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" STATUS="implemented">
       <purpose>Define built-in role IDs, `vv-role:*` syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in role bindings for managed agents and OpenCode defaults.</purpose>
@@ -33,7 +33,7 @@
     </M-CLI-CONFIG>
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled guardian, memory-reviewer, enhancer, implementer, spec-reviewer, code-reviewer, and investitagor prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
+      <purpose>Define bundled guardian, memory-reviewer, enhancer, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investitagor prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
@@ -132,12 +132,12 @@
     </M-PLUGIN-MEMORY>
 
     <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Inject reusable system guidance into primary chat sessions while skipping known subagents so main-session behavior can be steered globally.</purpose>
+      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions while skipping known subagents including vv-implementer, vv-spec-reviewer, and vv-code-reviewer so main-session behavior can be steered globally.</purpose>
       <path>src/plugins/system-context-injection/index.ts</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
       <annotations>
-        <export-SystemContextInjectionPlugin PURPOSE="Inject main-session system guidance such as proactive explore instructions without polluting known subagents." />
+        <export-SystemContextInjectionPlugin PURPOSE="Inject main-session system guidance such as proactive explore instructions and workflow protocol without polluting known subagents." />
       </annotations>
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
@@ -150,6 +150,75 @@
         <export-SecretsRedactionPlugin PURPOSE="Main plugin factory for chat-message redaction, completion restoration, and tool-argument restoration." />
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION>
+
+    <M-WORKFLOW-PROTOCOL NAME="WorkflowProtocol" TYPE="CORE_LOGIC" STATUS="planned">
+      <purpose>Parse and validate VVOC_WORK_ITEM_ID, VVOC_STATUS, and VVOC_ROUTE protocol fields from tracked subagent output, define allowed statuses per agent type, and report protocol errors.</purpose>
+      <path>src/plugins/workflow/protocol.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-WORKFLOW-PROTOCOL</verification-ref>
+      <annotations>
+        <type-TrackedAgentName PURPOSE="Union type for tracked subagent names: vv-implementer, vv-spec-reviewer, vv-code-reviewer." />
+        <type-VVocStatus PURPOSE="Union type for allowed VVOC_STATUS values per agent." />
+        <type-ParsedResultBlock PURPOSE="Structured top-block parse result with workItemId, status, optional route." />
+        <fn-parseResultBlock PURPOSE="Parse the strict top block from a tracked subagent output string." />
+        <fn-validateStatusForAgent PURPOSE="Validate that a parsed status is allowed for the given tracked agent." />
+        <fn-parseWorkItemHeader PURPOSE="Extract VVOC_WORK_ITEM_ID from the first line of a tracked subagent prompt." />
+        <const-TRACKED_SUBAGENT_NAMES PURPOSE="Ordered list of tracked subagent names." />
+        <const-ALLOWED_STATUSES PURPOSE="Per-agent allowed VVOC_STATUS values." />
+      </annotations>
+    </M-WORKFLOW-PROTOCOL>
+
+    <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="planned">
+      <purpose>In-memory work-item state store with lifecycle management, state transitions, counter tracking, and round-limit enforcement keyed by (sessionId, workItemId).</purpose>
+      <path>src/plugins/workflow/state.ts</path>
+      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <verification-ref>V-M-WORKFLOW-STATE</verification-ref>
+      <annotations>
+        <type-WorkItemState PURPOSE="Union of all work-item lifecycle states." />
+        <type-WorkItemRecord PURPOSE="Full work-item state record with counters and metadata." />
+        <fn-createWorkItemStore PURPOSE="Create a new scoped in-memory work-item store." />
+        <fn-openWorkItem PURPOSE="Create or return an existing work item by idempotency key." />
+        <fn-getWorkItem PURPOSE="Retrieve a work item by ID." />
+        <fn-listWorkItems PURPOSE="List all open work items with current state." />
+        <fn-closeWorkItem PURPOSE="Close an open work item." />
+        <fn-getReviewRound PURPOSE="Compute the current review round from spec and code review counters." />
+      </annotations>
+    </M-WORKFLOW-STATE>
+
+    <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" STATUS="planned">
+      <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution, and loop-gate policy enforcement.</purpose>
+      <path>src/plugins/workflow/transitions.ts</path>
+      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <verification-ref>V-M-WORKFLOW-TRANSITIONS</verification-ref>
+      <annotations>
+        <fn-getNextState PURPOSE="Compute the next work-item state given the current state and a tracked agent result." />
+        <fn-getAllowedNextAgent PURPOSE="Return the allowed tracked agent for the current work-item state." />
+        <fn-isAllowedTransition PURPOSE="Check whether launching a specific tracked agent is valid from the current state." />
+        <fn-shouldBlockRound PURPOSE="Check whether the current review round exceeds the allowed limit." />
+      </annotations>
+    </M-WORKFLOW-TRANSITIONS>
+
+    <M-WORKFLOW-TOOLING NAME="WorkflowTooling" TYPE="UTILITY" STATUS="planned">
+      <purpose>Custom tool definitions for work_item_open, work_item_list, and work_item_close that wrap the in-memory state store.</purpose>
+      <path>src/plugins/workflow/tooling.ts</path>
+      <depends>M-WORKFLOW-STATE</depends>
+      <verification-ref>V-M-WORKFLOW-TOOLING</verification-ref>
+      <annotations>
+        <fn-createWorkItemOpenTool PURPOSE="Create the work_item_open custom tool handler." />
+        <fn-createWorkItemListTool PURPOSE="Create the work_item_list custom tool handler." />
+        <fn-createWorkItemCloseTool PURPOSE="Create the work_item_close custom tool handler." />
+      </annotations>
+    </M-WORKFLOW-TOOLING>
+
+    <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="planned">
+      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into primary sessions via chat.message.</purpose>
+      <path>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</path>
+      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
+      <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>
+      <annotations>
+        <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement, result parsing, and primary-session guidance." />
+      </annotations>
+    </M-PLUGIN-WORKFLOW>
 
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting.</purpose>
@@ -242,5 +311,14 @@
     <CrossLink from="M-PLUGIN-GUARDIAN" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-MEMORY" to="M-PLUGIN-MEMORY-STORE" relation="uses" />
     <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-CLI-CONFIG" relation="uses" />
+    <CrossLink from="M-WORKFLOW-STATE" to="M-WORKFLOW-PROTOCOL" relation="uses" />
+    <CrossLink from="M-WORKFLOW-TRANSITIONS" to="M-WORKFLOW-PROTOCOL" relation="uses" />
+    <CrossLink from="M-WORKFLOW-TOOLING" to="M-WORKFLOW-STATE" relation="uses" />
+    <CrossLink from="M-PLUGIN-WORKFLOW" to="M-WORKFLOW-PROTOCOL" relation="uses" />
+    <CrossLink from="M-PLUGIN-WORKFLOW" to="M-WORKFLOW-STATE" relation="uses" />
+    <CrossLink from="M-PLUGIN-WORKFLOW" to="M-WORKFLOW-TRANSITIONS" relation="uses" />
+    <CrossLink from="M-PLUGIN-WORKFLOW" to="M-WORKFLOW-TOOLING" relation="uses" />
+    <CrossLink from="M-PLUGIN-WORKFLOW" to="M-CLI-MANAGED-AGENTS" relation="uses" />
+    <CrossLink from="M-PLUGIN-WORKFLOW" to="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" relation="uses" />
   </Project>
 </KnowledgeGraph>

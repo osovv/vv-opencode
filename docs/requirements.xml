@@ -1,4 +1,4 @@
-<RequirementsAnalysis VERSION="0.4.0">
+<RequirementsAnalysis VERSION="0.5.0">
   <Project>
     <name>@osovv/vv-opencode</name>
     <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, and cross-device setup.</annotation>
@@ -92,6 +92,51 @@
       <Priority>high</Priority>
       <RelatedFlows>DF-ROLE-RESOLUTION</RelatedFlows>
     </UC-009>
+    <UC-010>
+      <Actor>User</Actor>
+      <Action>Calls `work_item_open`, `work_item_list`, or `work_item_close` tools during a primary OpenCode session.</Action>
+      <Goal>To create, inspect, and close explicit work items that bind every tracked subagent launch to a discrete identity and lifecycle.</Goal>
+      <Preconditions>The package is enabled in OpenCode and the WorkflowPlugin is active.</Preconditions>
+      <AcceptanceCriteria>Work items are created with idempotent keys, state transitions follow the deterministic workflow state machine, list reflects current state, and close is explicit.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-WORKFLOW-TOOLS</RelatedFlows>
+    </UC-010>
+    <UC-011>
+      <Actor>User</Actor>
+      <Action>Launches a tracked subagent (`vv-implementer`, `vv-spec-reviewer`, or `vv-code-reviewer`) through the `task` tool.</Action>
+      <Goal>To enforce that every tracked subagent launch carries a valid work-item header, targets an existing open work item, follows the allowed next-agent transition, and does not exceed the review round limit.</Goal>
+      <Preconditions>The WorkflowPlugin is active and the tracked subagent name is registered in the managed agents list.</Preconditions>
+      <AcceptanceCriteria>Tracked launches without valid `VVOC_WORK_ITEM_ID` are rejected, unknown work items are rejected, invalid next-agent transitions are rejected, and round-limit overflow is rejected. Untracked launches pass through unaffected.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-LAUNCH-ENFORCEMENT</RelatedFlows>
+    </UC-011>
+    <UC-012>
+      <Actor>User</Actor>
+      <Action>A tracked subagent completes and returns output to the main session.</Action>
+      <Goal>To parse the strict top-block protocol fields from tracked subagent output, validate work-item identity and status, update workflow state, and halt on protocol errors or hard-stop statuses.</Goal>
+      <Preconditions>The tracked subagent was launched through a valid work-item identity.</Preconditions>
+      <AcceptanceCriteria>Parsed results update workflow state correctly, `NEEDS_CONTEXT` and `BLOCKED` halt workflow, malformed results fail closed, and counters increment deterministically.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-RESULT-PARSING</RelatedFlows>
+    </UC-012>
+    <UC-013>
+      <Actor>User</Actor>
+      <Action>A tracked subagent review cycle repeats after implementation fixes.</Action>
+      <Goal>To cap repeated review churn with explicit counters keyed by work item, blocking round 3 and forcing main-session intervention.</Goal>
+      <Preconditions>The WorkflowPlugin is active and at least one review cycle has completed for the work item.</Preconditions>
+      <AcceptanceCriteria>Rounds 1 and 2 are allowed, round 3 is rejected with clear next-action guidance, no semantic heuristics are used, and main session can inspect state and recover explicitly.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-LOOP-GATE</RelatedFlows>
+    </UC-013>
+    <UC-014>
+      <Actor>User</Actor>
+      <Action>Starts a primary chat session with WorkflowPlugin active.</Action>
+      <Goal>To inject workflow protocol guidance into primary sessions so the main session knows how to open work items, use returned headers, treat hard-stop statuses, and avoid free-form review loops.</Goal>
+      <Preconditions>The package is enabled in OpenCode and a primary agent session is being created.</Preconditions>
+      <AcceptanceCriteria>Primary agents receive workflow protocol guidance, known subagents do not inherit it, and the guidance covers work-item identity, header usage, hard-stop handling, and state inspection.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-WORKFLOW-GUIDANCE</RelatedFlows>
+    </UC-014>
   </UseCases>
 
   <NonGoals>
@@ -99,6 +144,9 @@
     <item-2>No vector store, embeddings, or indexed retrieval in v1 memory.</item-2>
     <item-3>No backward compatibility or migration path for pre-role vvoc schemas once the role-based schema lands.</item-3>
     <item-4>No target-based model override UX after the role-based cutover.</item-4>
+    <item-5>No semantic task grouping or embedding-based work-item identity in workflow v1.</item-5>
+    <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
+    <item-7>No workflow tracking for `investitagor`, `guardian`, `memory-reviewer`, or `enhancer` in v1.</item-7>
   </NonGoals>
 
   <Constraints>
@@ -110,6 +158,11 @@
     <constraint-6>Generated canonical vvoc config must be fully seeded and versioned by schema rather than split across multiple CLI-managed files.</constraint-6>
     <constraint-7>Semantic role assignments must live in canonical global vvoc config, while OpenCode config stores `vv-role:*` references that are resolved at runtime.</constraint-7>
     <constraint-8>Role resolution must fail loudly for unknown roles rather than silently falling back to a provider default.</constraint-8>
+    <constraint-9>Workflow state must be in-memory only in v1. No persistence across process restarts.</constraint-9>
+    <constraint-10>Workflow enforcement must use explicit IDs and simple counters only. No semantic clustering, embeddings, n-grams, or fuzzy loop detection.</constraint-10>
+    <constraint-11>`NEEDS_CONTEXT` is a hard stop. Main session must gather context before workflow continues.</constraint-11>
+    <constraint-12>Tracked subagent names must follow the `vv-*` naming convention: `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`.</constraint-12>
+    <constraint-13>Workflow plugin must not pollute untracked subagent prompts or untracked task launches.</constraint-13>
   </Constraints>
 
   <Risks>
@@ -118,10 +171,15 @@
     <risk-3>The file-based memory store performs full scans and may degrade as the number of entries grows.</risk-3>
     <risk-4>Guardian and Memory depend on OpenCode plugin and SDK surface area that may evolve over time.</risk-4>
     <risk-5>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` may be required for certain role assignments, so preset usability depends on explicit provider patch setup when those aliases are not native.</risk-5>
+    <risk-6>LLM may not reliably follow strict top-block protocol formatting, causing false-positive protocol errors that block legitimate workflow progress.</risk-6>
+    <risk-7>Rename of tracked subagents from `implementer/spec-reviewer/code-reviewer` to `vv-implementer/vv-spec-reviewer/vv-code-reviewer` is a breaking change for any external config or prompt overrides that reference the old names.</risk-7>
+    <risk-8>In-memory workflow state is lost on process restart, which may confuse users who expect work items to survive across sessions.</risk-8>
   </Risks>
 
   <OpenQuestions>
     <question-1>Should future versions allow optional validation against provider-declared capabilities so that `vision` role assignments can be checked more strictly?</question-1>
     <question-2>Should the role system eventually expose optional diagnostics for discovering which OpenCode config fields currently still contain literal provider/model strings instead of `vv-role:*` references?</question-2>
+    <question-3>Should workflow state persist across process restarts in a future version?</question-3>
+    <question-4>Should `investitagor` become a tracked agent in a future workflow version?</question-4>
   </OpenQuestions>
 </RequirementsAnalysis>

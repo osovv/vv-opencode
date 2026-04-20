@@ -1,11 +1,13 @@
-<DevelopmentPlan VERSION="0.5.1">
+<DevelopmentPlan VERSION="0.6.0">
   <ArchitectureNotes>
-    <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config, and replace target-based model overrides with a semantic role system that resolves `vv-role:*` references at runtime.</objective>
-    <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced.</non-goal>
+    <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config, replace target-based model overrides with a semantic role system that resolves `vv-role:*` references at runtime, and introduce an explicit work-item protocol with deterministic workflow enforcement for tracked subagents.</objective>
+    <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced. Do not track all subagents in the workflow state machine in v1. Do not persist workflow state across process restarts in v1.</non-goal>
     <risk-1>Config file mutation must stay conservative because users may already have hand-maintained JSONC with comments.</risk-1>
     <risk-2>The file-based memory store does full scans and should stay explicit, simple, and easy to reason about until scale requires indexing.</risk-2>
     <risk-3>Shared workflows may reference custom roles that are not assigned on another machine, so runtime role resolution must fail loudly and point at the offending config field.</risk-3>
     <risk-4>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` remain a separate lower-level mechanism, so the role system must compose with provider patch commands without silently requiring them.</risk-4>
+    <risk-5>LLM may not reliably produce strict top-block protocol fields, so the parser must be tolerant of minor formatting variations while remaining strict on field presence and value validity.</risk-5>
+    <risk-6>Rename of tracked subagents from `implementer/spec-reviewer/code-reviewer` to `vv-implementer/vv-spec-reviewer/vv-code-reviewer` is a breaking change for any external references to old names.</risk-6>
   </ArchitectureNotes>
 
   <Modules>
@@ -89,7 +91,7 @@
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
       <contract>
-        <purpose>Describe vvoc-managed OpenCode agents, resolve managed prompt paths, and load bundled or scoped prompt text for managed agent registrations.</purpose>
+        <purpose>Describe vvoc-managed OpenCode agents, resolve managed prompt paths, and load bundled or scoped prompt text for managed agent registrations. Tracked subagents follow the `vv-*` naming convention.</purpose>
         <inputs>
           <param name="managedAgentName | promptName | resolvedPaths" type="string | object" />
         </inputs>
@@ -118,6 +120,7 @@
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <notes>
         <note-1>Managed prompts resolve from project-local `.vvoc/agents/` first, then the global vvoc agents directory, while bundled templates remain the installation baseline.</note-1>
+        <note-2>Tracked subagents are renamed to `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`. Prompt files follow the same naming. `investitagor` remains unchanged in v1.</note-2>
       </notes>
     </M-CLI-MANAGED-AGENTS>
 
@@ -590,6 +593,201 @@
       </observability>
       <verification-ref>V-M-CLI-UPGRADE</verification-ref>
     </M-CLI-UPGRADE>
+
+    <M-WORKFLOW-PROTOCOL NAME="WorkflowProtocol" TYPE="CORE_LOGIC" LAYER="0" ORDER="10" STATUS="planned">
+      <contract>
+        <purpose>Define the tracked subagent result protocol grammar, parse strict top-block fields from subagent output, validate VVOC_STATUS per agent type, and extract VVOC_WORK_ITEM_ID from prompt headers.</purpose>
+        <inputs>
+          <param name="agentName" type="TrackedAgentName" />
+          <param name="outputText" type="string" />
+          <param name="promptText" type="string" />
+        </inputs>
+        <outputs>
+          <param name="ParsedResultBlock" type="object with workItemId, status, route?" />
+        </outputs>
+        <errors>
+          <error code="PROTOCOL_ERROR_MISSING_HEADER" />
+          <error code="PROTOCOL_ERROR_MALFORMED_HEADER" />
+          <error code="PROTOCOL_ERROR_MISSING_STATUS" />
+          <error code="PROTOCOL_ERROR_UNKNOWN_STATUS" />
+          <error code="PROTOCOL_ERROR_WORK_ITEM_MISMATCH" />
+        </errors>
+      </contract>
+      <interface>
+        <export-TRACKED_SUBAGENT_NAMES PURPOSE="Ordered list of tracked subagent names: vv-implementer, vv-spec-reviewer, vv-code-reviewer." />
+        <export-ALLOWED_STATUSES PURPOSE="Per-agent allowed VVOC_STATUS value sets." />
+        <export-parseResultBlock PURPOSE="Parse the strict top block from tracked subagent output." />
+        <export-validateStatusForAgent PURPOSE="Validate a parsed status against the allowed set for the agent." />
+        <export-parseWorkItemHeader PURPOSE="Extract VVOC_WORK_ITEM_ID from the first meaningful line of a prompt." />
+        <export-isTrackedSubagent PURPOSE="Check whether a subagent name is in the tracked set." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/plugins/workflow/protocol.ts</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow-protocol]</log-prefix>
+        <critical-block>BLOCK_PARSE_RESULT</critical-block>
+      </observability>
+      <verification-ref>V-M-WORKFLOW-PROTOCOL</verification-ref>
+      <notes>
+        <note-1>Allowed statuses per agent: vv-implementer={DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}; vv-spec-reviewer={PASS, FAIL, NEEDS_CONTEXT}; vv-code-reviewer={PASS, FAIL, NEEDS_CONTEXT}.</note-1>
+        <note-1>VVOC_ROUTE is mandatory only for vv-implementer.</note-1>
+      </notes>
+    </M-WORKFLOW-PROTOCOL>
+
+    <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" LAYER="0" ORDER="11" STATUS="planned">
+      <contract>
+        <purpose>In-memory work-item state store scoped per session, with idempotent open-by-key, state transitions, review counter tracking, and round-limit computation.</purpose>
+        <inputs>
+          <param name="sessionId" type="string" />
+          <param name="items | workItemId" type="object | string" />
+        </inputs>
+        <outputs>
+          <param name="WorkItemRecord | WorkItemRecord[]" type="object | array" />
+        </outputs>
+        <errors>
+          <error code="WORK_ITEM_NOT_FOUND" />
+          <error code="WORK_ITEM_ALREADY_CLOSED" />
+          <error code="WORK_ITEM_KEY_CONFLICT" />
+        </errors>
+      </contract>
+      <interface>
+        <export-createWorkItemStore PURPOSE="Create a new scoped in-memory work-item store." />
+        <export-openWorkItem PURPOSE="Create or return an existing work item by idempotency key within a session." />
+        <export-getWorkItem PURPOSE="Retrieve a work item by ID and session." />
+        <export-listWorkItems PURPOSE="List all open work items for a session with current state." />
+        <export-closeWorkItem PURPOSE="Close an open work item." />
+        <export-transitionWorkItem PURPOSE="Transition a work item to a new state with counter updates." />
+        <export-getReviewRound PURPOSE="Compute the current review round as max(specReviewCount, codeReviewCount)." />
+      </interface>
+      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <target>
+        <source>src/plugins/workflow/state.ts</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow-state]</log-prefix>
+        <critical-block>BLOCK_TRANSITION_STATE</critical-block>
+      </observability>
+      <verification-ref>V-M-WORKFLOW-STATE</verification-ref>
+      <notes>
+        <note-1>Work-item IDs follow the pattern `wi-{incrementing}`.</note-1>
+        <note-2>Idempotency is keyed by (sessionId, key). Same key plus same title returns same ID. Same key plus different title is an error.</note-2>
+        <note-3>State is in-memory only in v1 and does not persist across process restarts.</note-3>
+      </notes>
+    </M-WORKFLOW-STATE>
+
+    <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" LAYER="0" ORDER="12" STATUS="planned">
+      <contract>
+        <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution, and loop-gate policy enforcement with a round limit of 2.</purpose>
+        <inputs>
+          <param name="currentState" type="WorkItemState" />
+          <param name="agentName | resultStatus" type="string" />
+        </inputs>
+        <outputs>
+          <param name="nextState | allowedAgent | boolean" type="WorkItemState | TrackedAgentName | boolean" />
+        </outputs>
+        <errors>
+          <error code="INVALID_TRANSITION" />
+          <error code="ROUND_LIMIT_EXCEEDED" />
+        </errors>
+      </contract>
+      <interface>
+        <export-getNextState PURPOSE="Compute the next work-item state given the current state and a tracked agent result status." />
+        <export-getAllowedNextAgent PURPOSE="Return the allowed tracked agent for the current work-item state." />
+        <export-isAllowedTransition PURPOSE="Check whether launching a specific tracked agent is valid from the current state." />
+        <export-shouldBlockRound PURPOSE="Check whether the current review round exceeds the allowed limit of 2." />
+        <export-MAX_REVIEW_ROUNDS PURPOSE="Constant: 2. Round 3 is blocked." />
+      </interface>
+      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <target>
+        <source>src/plugins/workflow/transitions.ts</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow-transitions]</log-prefix>
+        <critical-block>BLOCK_CHECK_ROUND_LIMIT</critical-block>
+      </observability>
+      <verification-ref>V-M-WORKFLOW-TRANSITIONS</verification-ref>
+      <notes>
+        <note-1>Workflow: open/awaiting_implementer → vv-implementer → awaiting_spec_review → vv-spec-reviewer → awaiting_code_review → vv-code-reviewer → ready_to_close.</note-1>
+        <note-2>FAIL from reviewers routes back to awaiting_implementer. NEEDS_CONTEXT and BLOCKED are hard stops.</note-2>
+        <note-3>Round limit uses `max(specReviewCount, codeReviewCount)`. Rounds 1 and 2 allowed, round 3 blocked.</note-3>
+      </notes>
+    </M-WORKFLOW-TRANSITIONS>
+
+    <M-WORKFLOW-TOOLING NAME="WorkflowTooling" TYPE="UTILITY" LAYER="0" ORDER="13" STATUS="planned">
+      <contract>
+        <purpose>Custom tool definitions for work_item_open (batch-based with idempotency keys), work_item_list, and work_item_close that wrap the in-memory state store and return structured results including VVOC_WORK_ITEM_ID headers.</purpose>
+        <inputs>
+          <param name="toolInput" type="object matching each tool schema" />
+        </inputs>
+        <outputs>
+          <param name="toolResult" type="structured JSON with items, state, or close confirmation" />
+        </outputs>
+        <errors>
+          <error code="WORK_ITEM_NOT_FOUND" />
+          <error code="WORK_ITEM_ALREADY_CLOSED" />
+          <error code="WORK_ITEM_KEY_CONFLICT" />
+        </errors>
+      </contract>
+      <interface>
+        <export-createWorkItemOpenTool PURPOSE="Create the work_item_open custom tool handler with batch support." />
+        <export-createWorkItemListTool PURPOSE="Create the work_item_list custom tool handler." />
+        <export-createWorkItemCloseTool PURPOSE="Create the work_item_close custom tool handler." />
+      </interface>
+      <depends>M-WORKFLOW-STATE</depends>
+      <target>
+        <source>src/plugins/workflow/tooling.ts</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow-tooling]</log-prefix>
+      </observability>
+      <verification-ref>V-M-WORKFLOW-TOOLING</verification-ref>
+    </M-WORKFLOW-TOOLING>
+
+    <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="14" STATUS="planned">
+      <contract>
+        <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before on the task tool, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into primary sessions via chat.message.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks with custom tools, tool interception, and chat.message mutation" />
+        </outputs>
+        <errors>
+          <error code="LAUNCH_REJECTED_MISSING_HEADER" />
+          <error code="LAUNCH_REJECTED_UNKNOWN_WORK_ITEM" />
+          <error code="LAUNCH_REJECTED_INVALID_TRANSITION" />
+          <error code="LAUNCH_REJECTED_ROUND_LIMIT" />
+          <error code="RESULT_PROTOCOL_ERROR" />
+          <error code="RESULT_HARD_STOP" />
+        </errors>
+      </contract>
+      <interface>
+        <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement hooks, result parsing hooks, and primary-session workflow guidance." />
+      </interface>
+      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
+      <target>
+        <source>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow]</log-prefix>
+        <critical-block>BLOCK_VALIDATE_LAUNCH</critical-block>
+        <critical-block>BLOCK_PARSE_RESULT</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>
+      <notes>
+        <note-1>Launch validation intercepts `task` in tool.execute.before and inspects subagent_type + prompt for tracked agents only.</note-1>
+        <note-2>Result parsing intercepts `task` in tool.execute.after and parses the strict top block from tracked subagent output.</note-2>
+        <note-3>Primary-session guidance is injected via chat.message, not through global system transform, to preserve agent filtering.</note-3>
+        <note-4>Untracked task launches pass through unaffected.</note-4>
+      </notes>
+    </M-PLUGIN-WORKFLOW>
   </Modules>
 
   <DataFlow>
@@ -697,6 +895,55 @@
       <step-5>If sync cannot run or exits non-zero, keep the upgrade successful but warn the user to run `vvoc sync` manually.</step-5>
       <evidence>Network failure is handled gracefully; already-latest case prints OK; install failures stop before sync; successful installs trigger the default global sync flow.</evidence>
     </DF-UPGRADE>
+    <DF-RENAME-AGENTS NAME="TrackedAgentRename" TRIGGER="vvoc install | vvoc sync">
+      <step-1>Rename managed subagent definitions from implementer, spec-reviewer, code-reviewer to vv-implementer, vv-spec-reviewer, vv-code-reviewer in managed-agents metadata.</step-1>
+      <step-2>Rename prompt template files from implementer.md, spec-reviewer.md, code-reviewer.md to vv-implementer.md, vv-spec-reviewer.md, vv-code-reviewer.md.</step-2>
+      <step-3>Update managed OpenCode agent registrations to use the new vv-* names and prompt file references.</step-3>
+      <step-4>Update model-roles managed agent role bindings to use vv-* keys.</step-4>
+      <step-5>Update system-context-injection known subagent set to include vv-* names.</step-5>
+      <evidence>Install and sync scaffold renamed tracked agents with vv-* names and prompt file references. Prompt lookup works for renamed files. All tests referencing managed agent registration pass.</evidence>
+    </DF-RENAME-AGENTS>
+    <DF-WORKFLOW-TOOLS NAME="WorkItemTools" TRIGGER="work_item_open | work_item_list | work_item_close">
+      <step-1>Receive tool call with structured input from main session.</step-1>
+      <step-2>For work_item_open, create or return existing items by idempotency key, generating wi-{N} IDs and VVOC_WORK_ITEM_ID headers.</step-2>
+      <step-3>For work_item_list, return all open items with current state, counters, and review round.</step-3>
+      <step-4>For work_item_close, validate the item exists and is open, then set state to closed with timestamp.</step-4>
+      <evidence>Items are created with deterministic IDs, same key plus same title returns same ID, same key plus different title fails, list reflects current state, close is explicit.</evidence>
+    </DF-WORKFLOW-TOOLS>
+    <DF-LAUNCH-ENFORCEMENT NAME="LaunchEnforcement" TRIGGER="tool.execute.before on task tool">
+      <step-1>Inspect output.args.subagent_type to check if it is a tracked agent.</step-1>
+      <step-2>If not tracked, allow the launch to proceed without interference.</step-2>
+      <step-3>If tracked, inspect output.args.prompt for a valid first-line VVOC_WORK_ITEM_ID header.</step-3>
+      <step-4>Validate the work item exists and is open in the current session.</step-4>
+      <step-5>Validate the tracked agent is the allowed next agent for the current work-item state.</step-5>
+      <step-6>Validate the review round limit is not exceeded.</step-6>
+      <step-7>Reject the launch with a clear error message if any validation fails.</step-7>
+      <evidence>Tracked launches without valid header are rejected, unknown items are rejected, invalid transitions are blocked, round overflow is blocked, untracked launches pass through.</evidence>
+    </DF-LAUNCH-ENFORCEMENT>
+    <DF-RESULT-PARSING NAME="ResultParsing" TRIGGER="tool.execute.after on task tool">
+      <step-1>Inspect tracked subagent output after task completion.</step-1>
+      <step-2>Parse the strict top block: VVOC_WORK_ITEM_ID, VVOC_STATUS, and optional VVOC_ROUTE.</step-2>
+      <step-3>Validate work-item identity matches the launched item.</step-3>
+      <step-4>Validate the status is allowed for the agent type.</step-4>
+      <step-5>Update counters: implementerCount, specReviewCount, codeReviewCount as appropriate.</step-5>
+      <step-6>Transition work-item state based on the result.</step-6>
+      <step-7>On NEEDS_CONTEXT or BLOCKED, set state to hard-stop and mark halted.</step-7>
+      <step-8>On protocol error, halt automation and return error to main session.</step-8>
+      <evidence>Valid results update state correctly, malformed results fail closed, NEEDS_CONTEXT returns control to main session, counters increment deterministically.</evidence>
+    </DF-RESULT-PARSING>
+    <DF-LOOP-GATE NAME="LoopGate" TRIGGER="launch validation round-limit check">
+      <step-1>Compute reviewRound = max(specReviewCount, codeReviewCount) for the target work item.</step-1>
+      <step-2>Allow rounds 1 and 2.</step-2>
+      <step-3>Before entering round 3, reject the next tracked launch.</step-3>
+      <step-4>Return explicit next-action guidance: gather context, split the item, close the item, involve the user, or run an untracked investigation.</step-4>
+      <evidence>Repeated review loops stop deterministically at round 3. No semantic heuristics. Main session can inspect state and recover explicitly.</evidence>
+    </DF-LOOP-GATE>
+    <DF-WORKFLOW-GUIDANCE NAME="WorkflowGuidance" TRIGGER="chat.message for eligible primary agents">
+      <step-1>Inspect the resolved agent name on each outgoing chat message.</step-1>
+      <step-2>If the agent is a known subagent, skip injection.</step-2>
+      <step-3>If the agent is eligible for primary session injection, append workflow protocol guidance covering: work-item opening, header usage, hard-stop handling, state inspection, and loop-gate behavior.</step-3>
+      <evidence>Primary agents receive workflow protocol guidance. Known subagents including vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</evidence>
+    </DF-WORKFLOW-GUIDANCE>
   </DataFlow>
 
   <ImplementationOrder>
@@ -742,6 +989,39 @@
       <step-9 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
       <step-10 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
     </Phase-6>
+    <Phase-7 name="Tracked Agent Rename" status="planned">
+      <goal>Rename tracked managed subagents to vv-* naming convention and update all references consistently.</goal>
+      <step-1 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update managed subagent names from implementer, spec-reviewer, code-reviewer to vv-implementer, vv-spec-reviewer, vv-code-reviewer. Rename prompt template files.</step-1>
+      <step-2 module="M-MODEL-ROLES" status="planned" verification="V-M-MODEL-ROLES">Update managedAgents role bindings to use vv-* keys: vv-implementer, vv-spec-reviewer, vv-code-reviewer.</step-2>
+      <step-3 module="M-CLI-CONFIG" status="planned" verification="V-M-CLI-CONFIG">Update managed agent registration sync to write vv-* names and vv-* prompt file references.</step-3>
+      <step-4 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="planned" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Add vv-implementer, vv-spec-reviewer, vv-code-reviewer to the known subagent set so they stay excluded from primary-session guidance injection.</step-4>
+      <step-5 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion output to reflect vv-* managed subagent names.</step-5>
+    </Phase-7>
+    <Phase-8 name="Workflow Core" status="planned">
+      <goal>Implement the protocol grammar, in-memory state store, transition rules, and work-item tools.</goal>
+      <step-1 module="M-WORKFLOW-PROTOCOL" status="planned" verification="V-M-WORKFLOW-PROTOCOL">Implement protocol field parsing, status validation per agent, and work-item header extraction.</step-1>
+      <step-2 module="M-WORKFLOW-STATE" status="planned" verification="V-M-WORKFLOW-STATE">Implement in-memory work-item store with idempotent open, state tracking, and counter management.</step-2>
+      <step-3 module="M-WORKFLOW-TRANSITIONS" status="planned" verification="V-M-WORKFLOW-TRANSITIONS">Implement deterministic transition rules and round-limit enforcement.</step-3>
+      <step-4 module="M-WORKFLOW-TOOLING" status="planned" verification="V-M-WORKFLOW-TOOLING">Implement work_item_open, work_item_list, work_item_close custom tool handlers.</step-4>
+    </Phase-8>
+    <Phase-9 name="Workflow Plugin Integration" status="planned">
+      <goal>Wire protocol, state, transitions, and tooling into the main WorkflowPlugin with enforcement hooks.</goal>
+      <step-1 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Create plugin entry point with tool registration, launch enforcement via tool.execute.before, result parsing via tool.execute.after, and primary-session guidance via chat.message.</step-1>
+      <step-2 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Export WorkflowPlugin from package root and add ./plugins/workflow export path.</step-2>
+    </Phase-9>
+    <Phase-10 name="Prompt Template Updates" status="planned">
+      <goal>Update tracked subagent prompt templates with strict top-block protocol requirements.</goal>
+      <step-1 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update vv-implementer.md prompt template to require VVOC_WORK_ITEM_ID, VVOC_STATUS, VVOC_ROUTE top block.</step-1>
+      <step-2 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update vv-spec-reviewer.md prompt template to require VVOC_WORK_ITEM_ID and VVOC_STATUS top block.</step-2>
+      <step-3 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update vv-code-reviewer.md prompt template to require VVOC_WORK_ITEM_ID and VVOC_STATUS top block.</step-3>
+    </Phase-10>
+    <Phase-11 name="Documentation And Verification" status="planned">
+      <goal>Fully document and verify the workflow protocol, rename, and enforcement.</goal>
+      <step-1 module="M-CLI-COMMANDS" status="planned" verification="V-M-CLI-COMMANDS">Update README with vv-* managed subagent names, workflow protocol, and work-item tool usage.</step-1>
+      <step-2 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion scripts with new vv-* agent names and workflow-related completions.</step-2>
+      <step-3 module="M-WORKFLOW-PROTOCOL" status="planned" verification="V-M-WORKFLOW-PROTOCOL">Add targeted tests for protocol parsing, state transitions, launch enforcement, result parsing, and loop gating.</step-3>
+      <step-4 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Run full check, build, and pack:check to validate package integrity.</step-4>
+    </Phase-11>
   </ImplementationOrder>
 
   <ExecutionPolicy>
