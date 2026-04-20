@@ -674,6 +674,7 @@
         <scenario-1 kind="success">parseResultBlock extracts VVOC_WORK_ITEM_ID, VVOC_STATUS, and VVOC_ROUTE from valid vv-implementer output.</scenario-1>
         <scenario-2 kind="success">validateStatusForAgent accepts PASS for vv-spec-reviewer and vv-code-reviewer, and DONE/DONE_WITH_CONCERNS/NEEDS_CONTEXT/BLOCKED for vv-implementer.</scenario-2>
         <scenario-3 kind="success">parseWorkItemHeader extracts VVOC_WORK_ITEM_ID from the first meaningful prompt line.</scenario-3>
+        <scenario-3b kind="failure">parseWorkItemHeader rejects malformed header lines that do not match the VVOC_WORK_ITEM_ID pattern.</scenario-3b>
         <scenario-4 kind="failure">Missing VVOC_WORK_ITEM_ID in output produces a protocol error.</scenario-4>
         <scenario-5 kind="failure">Missing VVOC_STATUS produces a protocol error.</scenario-5>
         <scenario-6 kind="failure">Unknown VVOC_STATUS value produces a protocol error.</scenario-6>
@@ -766,6 +767,7 @@
         <scenario-5 kind="success">Loop-gate path: third review round is rejected with explicit next-action guidance.</scenario-5>
         <scenario-6 kind="success">Untracked task launch passes through without interference.</scenario-6>
         <scenario-7 kind="failure">Launch without VVOC_WORK_ITEM_ID header is rejected.</scenario-7>
+        <scenario-7b kind="failure">Launch with malformed VVOC_WORK_ITEM_ID header is rejected.</scenario-7b>
         <scenario-8 kind="failure">Launch with unknown work item ID is rejected.</scenario-8>
         <scenario-9 kind="failure">Launch with wrong next agent for current state is rejected.</scenario-9>
         <scenario-10 kind="failure">Malformed tracked output halts workflow.</scenario-10>
