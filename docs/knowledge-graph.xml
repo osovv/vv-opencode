@@ -1,7 +1,7 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.4.1">
-    <keywords>opencode, plugins, workflow, model-roles</keywords>
-    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, and cross-device setup.</annotation>
+  <Project NAME="@osovv/vv-opencode" VERSION="0.5.0">
+    <keywords>opencode, plugins, workflow, model-roles, hashline-edit</keywords>
+    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, hash-anchored editing, and cross-device setup.</annotation>
 
     <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" STATUS="implemented">
       <purpose>Define built-in role IDs, `vv-role:*` syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in role bindings for managed agents and OpenCode defaults.</purpose>
@@ -98,6 +98,16 @@
         <export-GuardianPlugin PURPOSE="Register Guardian hooks for config, events, tool intent capture, and permission review via a hidden subagent." />
       </annotations>
     </M-PLUGIN-GUARDIAN>
+
+    <M-PLUGIN-HASHLINE-EDIT NAME="HashlineEditPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Replace OpenCode's default `edit` tool with a hash-anchored variant and rewrite `read` output to stable `line#hash|content` rows so stale edits are rejected before file corruption.</purpose>
+      <path>src/plugins/hashline-edit/*.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-PLUGIN-HASHLINE-EDIT</verification-ref>
+      <annotations>
+        <export-HashlineEditPlugin PURPOSE="Register the hash-anchored `edit` tool override plus a post-read output enhancer that emits `line#hash|content` rows." />
+      </annotations>
+    </M-PLUGIN-HASHLINE-EDIT>
 
     <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="implemented">
       <purpose>Store explicit memory under the vvoc XDG data root, keep shared scope global across projects, resolve scopes, and provide lexical ranking for search.</purpose>

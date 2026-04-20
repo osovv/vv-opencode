@@ -5,7 +5,7 @@ Portable OpenCode workflow package with a Bun CLI that installs and maintains Op
 ## What This Package Does
 
 - installs one pinned `@osovv/vv-opencode@<version>` entry into OpenCode
-- that package entry exports five plugins: `GuardianPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `SecretsRedactionPlugin`
+- that package entry exports six plugins: `GuardianPlugin`, `HashlineEditPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `SecretsRedactionPlugin`
 - creates and maintains canonical `vvoc` config at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
 - scaffolds managed prompt files under `vvoc/agents/`
 - registers managed OpenCode agents: `enhancer`, `implementer`, `spec-reviewer`, `code-reviewer`, `investitagor`
@@ -45,9 +45,10 @@ vvoc install --scope project
 - create or refresh canonical `vvoc.json`
 - refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
 
-That package entry exports five plugins:
+That package entry exports six plugins:
 
 - `GuardianPlugin`
+- `HashlineEditPlugin`
 - `MemoryPlugin`
 - `ModelRolesPlugin`
 - `SystemContextInjectionPlugin`
@@ -203,6 +204,14 @@ vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
 ```
 
 The runtime prompt is loaded from `guardian.md`, preferring `./.vvoc/agents/guardian.md` over the global `vvoc` agents directory.
+
+### HashlineEditPlugin
+
+`HashlineEditPlugin` is enabled by default and replaces OpenCode's `edit` tool with a hash-anchored variant.
+
+It also rewrites `read` output from plain numbered rows such as `42: const value = 1;` into hashline rows such as `42#VK|const value = 1;`.
+
+The overridden `edit` tool requires those exact `line#hash` anchors and rejects stale references when the file changed since the last read, which prevents line-number drift and accidental writes against the wrong snapshot.
 
 ### MemoryPlugin
 

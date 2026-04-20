@@ -1,11 +1,11 @@
-<VerificationPlan VERSION="0.7.1">
+<VerificationPlan VERSION="0.8.0">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, main-session system guidance injection, memory CRUD, and secrets redaction.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, main-session system guidance injection, hash-anchored editing, memory CRUD, and secrets redaction.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system change.</wave-level-focus>
-    <phase-level-focus>Buildable package output plus stable command behavior for installation, role management, role resolution, preset switching, primary-session system guidance, Guardian review, explicit memory workflows, and secrets redaction.</phase-level-focus>
+    <phase-level-focus>Buildable package output plus stable command behavior for installation, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, explicit memory workflows, and secrets redaction.</phase-level-focus>
     <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
@@ -46,6 +46,13 @@
         <trace-sequence>read canonical vvoc.json -&gt; resolve preset -&gt; write listed role assignments -&gt; print per-role summary</trace-sequence>
       </required-signals>
     </VF-PRESET-SWITCH>
+    <VF-HASHLINE-EDIT NAME="HashlineEdit" USE_CASES="UC-010" DATA_FLOW="DF-HASHLINE-EDIT" PRIORITY="high">
+      <scenario>User reads a text file and then edits it through the default-on hash-anchored `edit` override.</scenario>
+      <expected-outcome>`read` output is rewritten to `line#hash|content`, anchored edits succeed against the current snapshot, stale anchors fail loudly with refreshed anchors, and BOM/CRLF are preserved when writing back.</expected-outcome>
+      <required-signals>
+        <trace-sequence>tool.execute.after(read) -&gt; hashline rows emitted -&gt; edit anchor validation -&gt; batch edit application -&gt; metadata filediff emitted</trace-sequence>
+      </required-signals>
+    </VF-HASHLINE-EDIT>
     <VF-GUARDIAN-REVIEW NAME="GuardianReview" USE_CASES="UC-001" DATA_FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
       <scenario>OpenCode asks for a permission decision while Guardian is active.</scenario>
       <expected-outcome>Guardian resolves its runtime model from the built-in `fast` role, low-risk actions may be auto-approved, and higher-risk actions fall back to manual approval.</expected-outcome>
@@ -124,6 +131,12 @@
       <trajectory-evidence>trace assertions on resolution count, field-path error reporting, and forbidden fallback behavior</trajectory-evidence>
       <telemetry>structured config-hook markers for map load, per-field resolution, and unresolved roles</telemetry>
     </VM-RUNTIME-RESOLUTION>
+    <VM-HASHLINE-EDIT MODULE="M-PLUGIN-HASHLINE-EDIT" FLOW="DF-HASHLINE-EDIT" PRIORITY="high">
+      <scenario>Default-on hashline editing rewrites read output to `line#hash|content`, applies anchored edits against the current snapshot, rejects stale anchors, and preserves the original text envelope.</scenario>
+      <primary-evidence>deterministic plugin-hook and tool-execution assertions</primary-evidence>
+      <trajectory-evidence>mismatch-output assertions with refreshed anchors and text-envelope preservation coverage for BOM/CRLF files</trajectory-evidence>
+      <telemetry>tool metadata filediff payload emitted on successful edits</telemetry>
+    </VM-HASHLINE-EDIT>
     <VM-GUARDIAN-ROLE MODULE="M-PLUGIN-GUARDIAN" FLOW="DF-GUARDIAN-REVIEW" PRIORITY="high">
       <scenario>Guardian loads non-model runtime policy from vvoc.json, resolves its runtime model from the built-in `fast` role, and logs bounded permission-review evidence.</scenario>
       <primary-evidence>plugin-config assertions plus bounded review-path tests</primary-evidence>
@@ -281,6 +294,30 @@
       <wave-follow-up>Add isolated behavioral tests around assessment parsing and decision thresholds.</wave-follow-up>
       <phase-follow-up>Add a temp-config harness that verifies Guardian role resolution and env override precedence if model env escapes remain supported.</phase-follow-up>
     </V-M-PLUGIN-GUARDIAN>
+
+    <V-M-PLUGIN-HASHLINE-EDIT MODULE="M-PLUGIN-HASHLINE-EDIT" PRIORITY="high">
+      <test-files>
+        <file>src/plugins/hashline-edit.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/plugins/hashline-edit.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">The plugin exports compile and register an `edit` tool override.</scenario-1>
+        <scenario-2 kind="success">`tool.execute.after` rewrites numbered text-file read output into `line#hash|content` rows.</scenario-2>
+        <scenario-3 kind="success">Anchored replace edits update the requested file and emit filediff metadata.</scenario-3>
+        <scenario-4 kind="failure">Stale anchors fail with a mismatch error that includes refreshed nearby anchors.</scenario-4>
+        <scenario-5 kind="success">BOM and CRLF line endings are preserved across hashline edits.</scenario-5>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>The plugin must reject stale or malformed anchors instead of falling back to line-number-only edits.</assertion-1>
+        <assertion-2>The read-output enhancer must only rewrite line-numbered text output and must leave non-text output untouched.</assertion-2>
+        <assertion-3>The write-back path must preserve the original BOM and line-ending style recorded during canonicalization.</assertion-3>
+      </required-trace-assertions>
+      <wave-follow-up>Add coverage for anchored append/prepend and missing-file creation once the default workflow has live-session evidence.</wave-follow-up>
+    </V-M-PLUGIN-HASHLINE-EDIT>
 
     <V-M-PLUGIN-MEMORY-STORE MODULE="M-PLUGIN-MEMORY-STORE" PRIORITY="high">
       <test-files>
@@ -607,12 +644,12 @@
         <command-1>bun run typecheck</command-1>
         <command-2>bun run lint</command-2>
         <command-3>bun run fmt:check</command-3>
-        <command-4>bun test src/lib/model-roles.test.ts src/plugins/model-roles.test.ts src/commands/role.test.ts src/commands/preset.test.ts src/commands/config-validate.test.ts src/plugins/guardian.test.ts src/plugins/memory.test.ts src/lib/opencode.test.ts src/commands/completion.test.ts</command-4>
+        <command-4>bun test src/lib/model-roles.test.ts src/plugins/model-roles.test.ts src/plugins/hashline-edit.test.ts src/commands/role.test.ts src/commands/preset.test.ts src/commands/config-validate.test.ts src/plugins/guardian.test.ts src/plugins/memory.test.ts src/lib/opencode.test.ts src/commands/completion.test.ts</command-4>
         <command-5>bun run build</command-5>
         <command-6>bun run pack:check</command-6>
       </commands>
       <required-evidence>
-        <evidence-1>`src/lib/model-roles.ts`, `src/plugins/model-roles/index.ts`, and `src/commands/role.ts` are present.</evidence-1>
+        <evidence-1>`src/lib/model-roles.ts`, `src/plugins/model-roles/index.ts`, `src/plugins/hashline-edit/index.ts`, and `src/commands/role.ts` are present.</evidence-1>
         <evidence-2>OpenCode defaults and managed agents use `vv-role:*` references and runtime startup resolves them to concrete models.</evidence-2>
         <evidence-3>Pre-role vvoc schema versions are rejected rather than migrated.</evidence-3>
         <evidence-4>Structured markers for role resolution, Guardian runtime config, and memory reviewer registration are present or otherwise replaced with equally stable structured telemetry before autonomous execution is enabled.</evidence-4>
