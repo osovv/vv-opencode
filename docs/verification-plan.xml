@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.9.0">
+<VerificationPlan VERSION="0.9.1">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>

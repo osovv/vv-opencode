@@ -1,4 +1,4 @@
-<DevelopmentPlan VERSION="0.6.0">
+<DevelopmentPlan VERSION="0.7.0">
   <ArchitectureNotes>
     <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config, replace target-based model overrides with a semantic role system that resolves `vv-role:*` references at runtime, and introduce an explicit work-item protocol with deterministic workflow enforcement for tracked subagents.</objective>
     <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced. Do not track all subagents in the workflow state machine in v1. Do not persist workflow state across process restarts in v1.</non-goal>
@@ -1028,5 +1028,16 @@
     <default-profile>balanced</default-profile>
     <controller-owns>docs/development-plan.xml, docs/knowledge-graph.xml, docs/verification-plan.xml</controller-owns>
     <worker-owns>Only package source files, tests, and narrowly scoped documentation updates required by the approved module changes.</worker-owns>
+    <verification-readiness>
+      <phase-7 autonomous="yes" evidence="deterministic" notes="Pure rename across 7+ files. Existing test patterns apply. Gate-Phase-7 covers config, registration, and prompt file assertions." />
+      <phase-8 autonomous="yes" evidence="deterministic" notes="Pure functions, in-memory state, no external deps. All scenarios are deterministic assertions. Gate-Phase-8 covers protocol, state, transitions, and tooling." />
+      <phase-9 autonomous="caution" evidence="deterministic+integration" notes="Depends on OpenCode plugin API surface for tool.execute.before/after. Requires manual API validation before autonomous execution. Gate-Phase-9 covers integration paths plus build/pack." />
+      <phase-10 autonomous="yes" evidence="deterministic" notes="Text file updates with deterministic content checks." />
+      <phase-11 autonomous="yes" evidence="build+pack" notes="Documentation sync, build and pack smoke checks. Gate-Phase-11 covers full suite." />
+    </verification-readiness>
+    <test-file-layout>
+      <workflow-test-file>src/plugins/workflow.test.ts</workflow-test-file>
+      <workflow-test-scope>Covers M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, and M-PLUGIN-WORKFLOW in a single file following the existing plugin test pattern.</workflow-test-scope>
+    </test-file-layout>
   </ExecutionPolicy>
 </DevelopmentPlan>

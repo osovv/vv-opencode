@@ -1,5 +1,5 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.6.0">
+  <Project NAME="@osovv/vv-opencode" VERSION="0.6.1">
     <keywords>opencode, plugins, workflow, model-roles, hashline-edit, work-items</keywords>
     <annotation>Portable OpenCode workflow package with plugins, a Bun CLI for install, sync, semantic model-role assignment, hash-anchored editing, explicit work-item protocol, and cross-device setup.</annotation>
 
