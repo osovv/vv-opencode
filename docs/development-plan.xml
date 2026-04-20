@@ -1,4 +1,4 @@
-<DevelopmentPlan VERSION="0.5.0">
+<DevelopmentPlan VERSION="0.5.1">
   <ArchitectureNotes>
     <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config, and replace target-based model overrides with a semantic role system that resolves `vv-role:*` references at runtime.</objective>
     <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced.</non-goal>
@@ -71,9 +71,9 @@
         <export-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains the managed enhancer and bundled subagent registrations wired to `vv-role:*` references." />
         <export-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document as schema v3 while preserving valid current role-based values and refreshing managed `vv-*` role presets." />
       </interface>
-      <depends>M-MODEL-ROLES</depends>
+      <depends>M-MODEL-ROLES, M-CLI-MANAGED-AGENTS</depends>
       <target>
-        <source>src/lib/opencode.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</source>
+        <source>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</source>
         <tests>src/lib/opencode.test.ts</tests>
       </target>
       <observability>
@@ -86,6 +86,40 @@
         <note-2>Pre-role vvoc schemas are rejected instead of migrated.</note-2>
       </notes>
     </M-CLI-CONFIG>
+
+    <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
+      <contract>
+        <purpose>Describe vvoc-managed OpenCode agents, resolve managed prompt paths, and load bundled or scoped prompt text for managed agent registrations.</purpose>
+        <inputs>
+          <param name="managedAgentName | promptName | resolvedPaths" type="string | object" />
+        </inputs>
+        <outputs>
+          <param name="ManagedAgentDefinition | promptPath | promptText" type="object | string" />
+        </outputs>
+        <errors>
+          <error code="UNKNOWN_MANAGED_AGENT" />
+          <error code="MANAGED_PROMPT_NOT_FOUND" />
+        </errors>
+      </contract>
+      <interface>
+        <export-MANAGED_OPENCODE_AGENTS PURPOSE="Canonical managed OpenCode agent definitions used for bundled registration." />
+        <export-loadManagedAgentPromptTemplate PURPOSE="Load the bundled prompt template for a managed vvoc agent." />
+        <export-loadManagedAgentPromptText PURPOSE="Load managed prompt text from project or global vvoc config roots." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>src/lib/managed-agents.ts + templates/agents/*.md</source>
+        <tests>src/lib/managed-agents.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[managed-agents]</log-prefix>
+        <critical-block>none</critical-block>
+      </observability>
+      <verification-ref>V-M-CLI-CONFIG</verification-ref>
+      <notes>
+        <note-1>Managed prompts resolve from project-local `.vvoc/agents/` first, then the global vvoc agents directory, while bundled templates remain the installation baseline.</note-1>
+      </notes>
+    </M-CLI-MANAGED-AGENTS>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
@@ -120,7 +154,7 @@
       </notes>
     </M-CLI-COMMANDS>
 
-    <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="3" STATUS="implemented">
+    <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="implemented">
       <contract>
         <purpose>Resolve `vv-role:*` references inside OpenCode root model fields plus agent and command definitions during plugin config hooks so shared workflows bind semantic model intent to user-local provider choices at startup time.</purpose>
         <inputs>
@@ -153,7 +187,7 @@
       </notes>
     </M-PLUGIN-MODEL-ROLES>
 
-    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="4" STATUS="implemented">
+    <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="5" STATUS="implemented">
       <contract>
         <purpose>Review OpenCode permission requests with a constrained Guardian agent whose runtime model resolves locally from the built-in `fast` role, while keeping safe fallback behavior and explicit threshold control.</purpose>
         <inputs>
@@ -186,7 +220,7 @@
       </notes>
     </M-PLUGIN-GUARDIAN>
 
-    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="5" STATUS="planned">
+    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="6" STATUS="implemented">
       <contract>
         <purpose>Persist explicit memory entries in the vvoc XDG data root, keep shared scope global across projects, support scope-aware CRUD, and rank lexical search results while loading only non-model memory settings from canonical vvoc config.</purpose>
         <inputs>
@@ -221,7 +255,7 @@
       </notes>
     </M-PLUGIN-MEMORY-STORE>
 
-    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="6" STATUS="implemented">
+    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="7" STATUS="implemented">
       <contract>
         <purpose>Add explicit memory tools to OpenCode, register a report-only `memory-reviewer` subagent whose runtime model resolves from the built-in `fast` role, and inject a short system reminder that encourages proactive memory tool usage without loading stored entries.</purpose>
         <inputs>
@@ -254,7 +288,7 @@
       </notes>
     </M-PLUGIN-MEMORY>
 
-    <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="7" STATUS="implemented">
+    <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="8" STATUS="implemented">
       <contract>
         <purpose>Inject reusable vvoc system guidance into primary chat sessions while skipping known subagents, using agent-aware message hooks instead of the global system transform hook.</purpose>
         <inputs>
@@ -270,7 +304,7 @@
       <interface>
         <export-SystemContextInjectionPlugin PURPOSE="Inject main-session guidance such as proactive explore usage into `message.system` for eligible primary agents." />
       </interface>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CLI-MANAGED-AGENTS</depends>
       <target>
         <source>src/plugins/system-context-injection/index.ts</source>
         <tests>src/plugins/system-context-injection.test.ts</tests>
@@ -282,7 +316,7 @@
       <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
-    <M-PLUGIN-SECRETS-REDACTION NAME="SecretsRedactionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="8" STATUS="implemented">
+    <M-PLUGIN-SECRETS-REDACTION NAME="SecretsRedactionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="9" STATUS="implemented">
       <contract>
         <purpose>Redact secrets from provider-bound payloads and restore placeholders after completions and before local tool execution.</purpose>
         <inputs>
@@ -300,7 +334,7 @@
       </interface>
       <depends>M-CLI-CONFIG</depends>
       <target>
-        <source>src/plugins/secrets-redaction/index.ts + src/plugins/secrets-redaction/*.ts</source>
+        <source>src/plugins/secrets-redaction.ts + src/plugins/secrets-redaction/*.ts</source>
         <tests>src/plugins/secrets-redaction/*.test.ts</tests>
       </target>
       <observability>

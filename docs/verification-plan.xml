@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.7.0">
+<VerificationPlan VERSION="0.7.1">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
@@ -194,19 +194,23 @@
         <assertion-1>Sync must keep the canonical role map in vvoc.json and keep OpenCode config role-reference based instead of storing concrete target overrides there.</assertion-1>
         <assertion-2>Install and sync must not materialize literal provider/model defaults into managed OpenCode model-bearing fields, except inside lower-level provider alias patch objects.</assertion-2>
       </required-trace-assertions>
-      <wave-follow-up>Add temp-home smoke tests for `status` and `doctor` so unresolved role references and built-in role assignments are surfaced deterministically.</wave-follow-up>
+      <wave-follow-up>Expand temp-home smoke coverage for `vvoc install` and `vvoc sync` so seeded role references and managed prompt writes stay deterministic.</wave-follow-up>
       <phase-follow-up>Add snapshot coverage for rendered OpenCode config that includes all managed role-reference fields in one fixture.</phase-follow-up>
     </V-M-CLI-CONFIG>
 
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
       <test-files>
         <file>src/commands/completion.test.ts</file>
+        <file>src/commands/status.test.ts</file>
+        <file>src/commands/doctor.test.ts</file>
       </test-files>
       <module-checks>
         <check-1>bun run lint</check-1>
         <check-2>bun run fmt:check</check-2>
         <check-3>bun run build</check-3>
         <check-4>bun test</check-4>
+        <check-5>bun test src/commands/status.test.ts</check-5>
+        <check-6>bun test src/commands/doctor.test.ts</check-6>
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">CLI compiles and registers all planned top-level subcommands including `role`, `preset`, `patch-provider`, and `config validate`.</scenario-1>
@@ -218,7 +222,7 @@
       <required-trace-assertions>
         <assertion-1>Command handlers should delegate file mutation to helper utilities instead of duplicating filesystem logic.</assertion-1>
       </required-trace-assertions>
-      <wave-follow-up>Verify `vvoc install`, `vvoc sync`, `vvoc role list`, and `vvoc doctor` against a temp config home.</wave-follow-up>
+      <wave-follow-up>Verify `vvoc install`, `vvoc sync`, and `vvoc role list` against a temp config home.</wave-follow-up>
     </V-M-CLI-COMMANDS>
 
     <V-M-PLUGIN-MODEL-ROLES MODULE="M-PLUGIN-MODEL-ROLES" PRIORITY="high">
