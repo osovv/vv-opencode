@@ -594,7 +594,7 @@
       <verification-ref>V-M-CLI-UPGRADE</verification-ref>
     </M-CLI-UPGRADE>
 
-    <M-WORKFLOW-PROTOCOL NAME="WorkflowProtocol" TYPE="CORE_LOGIC" LAYER="0" ORDER="10" STATUS="planned">
+    <M-WORKFLOW-PROTOCOL NAME="WorkflowProtocol" TYPE="CORE_LOGIC" LAYER="0" ORDER="10" STATUS="implemented">
       <contract>
         <purpose>Define the tracked subagent result protocol grammar, parse strict top-block fields from subagent output, validate VVOC_STATUS per agent type, and extract VVOC_WORK_ITEM_ID from prompt headers.</purpose>
         <inputs>
@@ -637,7 +637,7 @@
       </notes>
     </M-WORKFLOW-PROTOCOL>
 
-    <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" LAYER="0" ORDER="11" STATUS="planned">
+    <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" LAYER="0" ORDER="11" STATUS="implemented">
       <contract>
         <purpose>In-memory work-item state store scoped per session, with idempotent open-by-key, state transitions, review counter tracking, and round-limit computation.</purpose>
         <inputs>
@@ -679,7 +679,7 @@
       </notes>
     </M-WORKFLOW-STATE>
 
-    <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" LAYER="0" ORDER="12" STATUS="planned">
+    <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" LAYER="0" ORDER="12" STATUS="implemented">
       <contract>
         <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution, and loop-gate policy enforcement with a round limit of 2.</purpose>
         <inputs>
@@ -718,7 +718,7 @@
       </notes>
     </M-WORKFLOW-TRANSITIONS>
 
-    <M-WORKFLOW-TOOLING NAME="WorkflowTooling" TYPE="UTILITY" LAYER="0" ORDER="13" STATUS="planned">
+    <M-WORKFLOW-TOOLING NAME="WorkflowTooling" TYPE="UTILITY" LAYER="0" ORDER="13" STATUS="implemented">
       <contract>
         <purpose>Custom tool definitions for work_item_open (batch-based with idempotency keys), work_item_list, and work_item_close that wrap the in-memory state store and return structured results including VVOC_WORK_ITEM_ID headers.</purpose>
         <inputs>
@@ -749,7 +749,7 @@
       <verification-ref>V-M-WORKFLOW-TOOLING</verification-ref>
     </M-WORKFLOW-TOOLING>
 
-    <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="14" STATUS="planned">
+    <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="14" STATUS="implemented">
       <contract>
         <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before on the task tool, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into primary sessions via chat.message.</purpose>
         <inputs>
@@ -942,7 +942,7 @@
       <step-1>Inspect the resolved agent name on each outgoing chat message.</step-1>
       <step-2>If the agent is a known subagent, skip injection.</step-2>
       <step-3>If the agent is eligible for primary session injection, append workflow protocol guidance covering: work-item opening, header usage, hard-stop handling, state inspection, and loop-gate behavior.</step-3>
-      <evidence>Primary agents receive workflow protocol guidance. Known subagents including vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</evidence>
+      <evidence>Eligible orchestrating primary agents receive workflow protocol guidance. Known subagents and helper primaries such as enhancer do not inherit it.</evidence>
     </DF-WORKFLOW-GUIDANCE>
   </DataFlow>
 
@@ -989,38 +989,38 @@
       <step-9 module="M-CLI-COMPLETION" status="implemented" verification="V-M-CLI-COMPLETION">Update completion output for the new role command surface and built-in role IDs.</step-9>
       <step-10 module="M-CLI-INIT" status="implemented" verification="V-M-CLI-INIT">Seed role-based defaults during install/init and surface role state in status/doctor output.</step-10>
     </Phase-6>
-    <Phase-7 name="Tracked Agent Rename" status="planned">
+    <Phase-7 name="Tracked Agent Rename" status="done">
       <goal>Rename tracked managed subagents to vv-* naming convention and update all references consistently.</goal>
-      <step-1 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update managed subagent names from implementer, spec-reviewer, code-reviewer to vv-implementer, vv-spec-reviewer, vv-code-reviewer. Rename prompt template files.</step-1>
-      <step-2 module="M-MODEL-ROLES" status="planned" verification="V-M-MODEL-ROLES">Update managedAgents role bindings to use vv-* keys: vv-implementer, vv-spec-reviewer, vv-code-reviewer.</step-2>
-      <step-3 module="M-CLI-CONFIG" status="planned" verification="V-M-CLI-CONFIG">Update managed agent registration sync to write vv-* names and vv-* prompt file references.</step-3>
-      <step-4 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="planned" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Add vv-implementer, vv-spec-reviewer, vv-code-reviewer to the known subagent set so they stay excluded from primary-session guidance injection.</step-4>
-      <step-5 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion output to reflect vv-* managed subagent names.</step-5>
+      <step-1 module="M-CLI-MANAGED-AGENTS" status="done" verification="V-M-CLI-CONFIG">Update managed subagent names from implementer, spec-reviewer, code-reviewer to vv-implementer, vv-spec-reviewer, vv-code-reviewer. Rename prompt template files.</step-1>
+      <step-2 module="M-MODEL-ROLES" status="done" verification="V-M-MODEL-ROLES">Update managedAgents role bindings to use vv-* keys: vv-implementer, vv-spec-reviewer, vv-code-reviewer.</step-2>
+      <step-3 module="M-CLI-CONFIG" status="done" verification="V-M-CLI-CONFIG">Update managed agent registration sync to write vv-* names and vv-* prompt file references while preserving user-owned legacy old-name agents.</step-3>
+      <step-4 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="done" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Add vv-implementer, vv-spec-reviewer, vv-code-reviewer to the known subagent set so they stay excluded from primary-session guidance injection.</step-4>
+      <step-5 module="M-CLI-COMPLETION" status="done" verification="V-M-CLI-COMPLETION">Confirm completion output has no legacy tracked-agent command surface; no additional vv-* completion delta is required.</step-5>
     </Phase-7>
-    <Phase-8 name="Workflow Core" status="planned">
+    <Phase-8 name="Workflow Core" status="done">
       <goal>Implement the protocol grammar, in-memory state store, transition rules, and work-item tools.</goal>
-      <step-1 module="M-WORKFLOW-PROTOCOL" status="planned" verification="V-M-WORKFLOW-PROTOCOL">Implement protocol field parsing, status validation per agent, and work-item header extraction.</step-1>
-      <step-2 module="M-WORKFLOW-STATE" status="planned" verification="V-M-WORKFLOW-STATE">Implement in-memory work-item store with idempotent open, state tracking, and counter management.</step-2>
-      <step-3 module="M-WORKFLOW-TRANSITIONS" status="planned" verification="V-M-WORKFLOW-TRANSITIONS">Implement deterministic transition rules and round-limit enforcement.</step-3>
-      <step-4 module="M-WORKFLOW-TOOLING" status="planned" verification="V-M-WORKFLOW-TOOLING">Implement work_item_open, work_item_list, work_item_close custom tool handlers.</step-4>
+      <step-1 module="M-WORKFLOW-PROTOCOL" status="done" verification="V-M-WORKFLOW-PROTOCOL">Implement protocol field parsing, case-sensitive status validation, duplicate-field rejection, and work-item header extraction.</step-1>
+      <step-2 module="M-WORKFLOW-STATE" status="done" verification="V-M-WORKFLOW-STATE">Implement in-memory work-item store with idempotent open, state tracking, counter management, and sticky hard-stop protections.</step-2>
+      <step-3 module="M-WORKFLOW-TRANSITIONS" status="done" verification="V-M-WORKFLOW-TRANSITIONS">Implement deterministic transition rules and round-limit enforcement.</step-3>
+      <step-4 module="M-WORKFLOW-TOOLING" status="done" verification="V-M-WORKFLOW-TOOLING">Implement work_item_open, work_item_list, and work_item_close custom tool handlers with deterministic structured responses.</step-4>
     </Phase-8>
-    <Phase-9 name="Workflow Plugin Integration" status="planned">
+    <Phase-9 name="Workflow Plugin Integration" status="done">
       <goal>Wire protocol, state, transitions, and tooling into the main WorkflowPlugin with enforcement hooks.</goal>
-      <step-1 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Create plugin entry point with tool registration, launch enforcement via tool.execute.before, result parsing via tool.execute.after, and primary-session guidance via chat.message.</step-1>
-      <step-2 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Export WorkflowPlugin from package root and add ./plugins/workflow export path.</step-2>
+      <step-1 module="M-PLUGIN-WORKFLOW" status="done" verification="V-M-PLUGIN-WORKFLOW">Create plugin entry point with tool registration, launch enforcement via tool.execute.before, result parsing via tool.execute.after, and orchestrating-primary guidance via chat.message.</step-1>
+      <step-2 module="M-PLUGIN-WORKFLOW" status="done" verification="V-M-PLUGIN-WORKFLOW">Export WorkflowPlugin from package root and add ./plugins/workflow export path.</step-2>
     </Phase-9>
-    <Phase-10 name="Prompt Template Updates" status="planned">
+    <Phase-10 name="Prompt Template Updates" status="done">
       <goal>Update tracked subagent prompt templates with strict top-block protocol requirements.</goal>
-      <step-1 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update vv-implementer.md prompt template to require VVOC_WORK_ITEM_ID, VVOC_STATUS, VVOC_ROUTE top block.</step-1>
-      <step-2 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update vv-spec-reviewer.md prompt template to require VVOC_WORK_ITEM_ID and VVOC_STATUS top block.</step-2>
-      <step-3 module="M-CLI-MANAGED-AGENTS" status="planned" verification="V-M-CLI-CONFIG">Update vv-code-reviewer.md prompt template to require VVOC_WORK_ITEM_ID and VVOC_STATUS top block.</step-3>
+      <step-1 module="M-CLI-MANAGED-AGENTS" status="done" verification="V-M-CLI-CONFIG">Update vv-implementer.md prompt template to require VVOC_WORK_ITEM_ID, VVOC_STATUS, VVOC_ROUTE top block.</step-1>
+      <step-2 module="M-CLI-MANAGED-AGENTS" status="done" verification="V-M-CLI-CONFIG">Update vv-spec-reviewer.md prompt template to require VVOC_WORK_ITEM_ID and VVOC_STATUS top block.</step-2>
+      <step-3 module="M-CLI-MANAGED-AGENTS" status="done" verification="V-M-CLI-CONFIG">Update vv-code-reviewer.md prompt template to require VVOC_WORK_ITEM_ID and VVOC_STATUS top block.</step-3>
     </Phase-10>
-    <Phase-11 name="Documentation And Verification" status="planned">
+    <Phase-11 name="Documentation And Verification" status="done">
       <goal>Fully document and verify the workflow protocol, rename, and enforcement.</goal>
-      <step-1 module="M-CLI-COMMANDS" status="planned" verification="V-M-CLI-COMMANDS">Update README with vv-* managed subagent names, workflow protocol, and work-item tool usage.</step-1>
-      <step-2 module="M-CLI-COMPLETION" status="planned" verification="V-M-CLI-COMPLETION">Update completion scripts with new vv-* agent names and workflow-related completions.</step-2>
-      <step-3 module="M-WORKFLOW-PROTOCOL" status="planned" verification="V-M-WORKFLOW-PROTOCOL">Add targeted tests for protocol parsing, state transitions, launch enforcement, result parsing, and loop gating.</step-3>
-      <step-4 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Run full check, build, and pack:check to validate package integrity.</step-4>
+      <step-1 module="M-CLI-COMMANDS" status="done" verification="V-M-CLI-COMMANDS">Update README with vv-* managed subagent names, WorkflowPlugin coverage, workflow protocol, and work-item tool usage.</step-1>
+      <step-2 module="M-CLI-COMPLETION" status="done" verification="V-M-CLI-COMPLETION">Confirm completion scripts still expose no legacy tracked-agent command surface; no workflow-specific completion changes are required.</step-2>
+      <step-3 module="M-WORKFLOW-PROTOCOL" status="done" verification="V-M-WORKFLOW-PROTOCOL">Add targeted tests for protocol parsing, state transitions, launch enforcement, result parsing, hard-stop behavior, and loop gating.</step-3>
+      <step-4 module="M-PLUGIN-WORKFLOW" status="done" verification="V-M-PLUGIN-WORKFLOW">Run full check, build, and pack:check to validate package integrity.</step-4>
     </Phase-11>
   </ImplementationOrder>
 

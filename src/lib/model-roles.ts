@@ -1,5 +1,5 @@
 // FILE: src/lib/model-roles.ts
-// VERSION: 0.1.1
+// VERSION: 0.1.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Define built-in role IDs, role-reference parsing, concrete model-selection parsing, and deterministic built-in role bindings.
 //   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model[:variant] parsing, and hard-coded built-in role binding lookup.
@@ -21,6 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.2 - Renamed tracked managed-agent role binding keys to vv-* names for implementer/spec/code reviewer roles.]
 //   LAST_CHANGE: [v0.1.1 - Distinguished unknown-role from blank configured role bindings and aligned role-reference whitespace handling between checker and resolver.]
 //   LAST_CHANGE: [v0.1.0 - Added role ID validation, role reference resolution helpers, model selection parsing, and deterministic built-in role bindings.]
 // END_CHANGE_SUMMARY
@@ -69,9 +70,9 @@ export type BuiltInRoleBindings = {
     guardian: BuiltInRoleName;
     "memory-reviewer": BuiltInRoleName;
     enhancer: BuiltInRoleName;
-    implementer: BuiltInRoleName;
-    "spec-reviewer": BuiltInRoleName;
-    "code-reviewer": BuiltInRoleName;
+    "vv-implementer": BuiltInRoleName;
+    "vv-spec-reviewer": BuiltInRoleName;
+    "vv-code-reviewer": BuiltInRoleName;
     investitagor: BuiltInRoleName;
   };
 };
@@ -94,9 +95,9 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
     guardian: "fast",
     "memory-reviewer": "fast",
     enhancer: "smart",
-    implementer: "default",
-    "spec-reviewer": "smart",
-    "code-reviewer": "smart",
+    "vv-implementer": "default",
+    "vv-spec-reviewer": "smart",
+    "vv-code-reviewer": "smart",
     investitagor: "smart",
   },
 };

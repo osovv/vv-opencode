@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Added coverage verifying vv-* tracked subagents remain excluded from primary-session system context injection.]
 //   LAST_CHANGE: [v0.3.0 - Added coverage for standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance blocks.]
 //   LAST_CHANGE: [v0.2.0 - Added coverage for task routing, execution stability, and loop-control guidance blocks in primary-session system injection.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for primary-session-only system context injection.]
@@ -107,6 +108,18 @@ describe("SystemContextInjectionPlugin", () => {
 
     await plugin["chat.message"]?.(
       { sessionID: "session-1", agent: "memory-reviewer" } as never,
+      output as never,
+    );
+
+    expect(output.message.system).toBeUndefined();
+  });
+
+  test("skips vv-tracked subagents", async () => {
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const output = createOutput("vv-implementer");
+
+    await plugin["chat.message"]?.(
+      { sessionID: "session-1", agent: "vv-implementer" } as never,
       output as never,
     );
 

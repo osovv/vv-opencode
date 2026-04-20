@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.9.1
+// VERSION: 0.9.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
 //   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, provider object patching, managed OpenCode agent registration/model plus variant overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
@@ -48,6 +48,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.9.5 - Moved legacy tracked-agent deletion gating into sync with prompt-file ownership checks so user-owned legacy prompt files prevent cleanup.]
+//   LAST_CHANGE: [v0.9.4 - Tightened legacy tracked-agent cleanup to remove only entries that fully match legacy vvoc-managed registration shape, preserving customized user-owned old-name agents.]
+//   LAST_CHANGE: [v0.9.3 - Restricted legacy tracked-agent cleanup to entries that match legacy vvoc-managed prompt references so user-owned custom agents with old names are preserved.]
+//   LAST_CHANGE: [v0.9.2 - Added conservative cleanup of legacy tracked managed agent registrations so sync removes pre-rename implementer/spec-reviewer/code-reviewer entries.]
 //   LAST_CHANGE: [v0.9.1 - Narrowed built-in OpenCode auto-seeding to `agent.explore` so install/init/sync stop rewriting other built-in agent model refs.]
 //   LAST_CHANGE: [v0.9.0 - Added OpenCode agent variant read/write helpers so vvoc can translate provider/model:variant into native agent config fields.]
 // END_CHANGE_SUMMARY
@@ -97,6 +101,28 @@ export const CLI_NAME = "vvoc";
 export { PACKAGE_NAME };
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
 const MANAGED_MARKER = "Managed by vvoc";
+const LEGACY_TRACKED_MANAGED_AGENT_NAMES = [
+  "implementer",
+  "spec-reviewer",
+  "code-reviewer",
+] as const;
+const LEGACY_TRACKED_ROLE_BINDINGS = {
+  implementer: "default",
+  "spec-reviewer": "smart",
+  "code-reviewer": "smart",
+} as const;
+const LEGACY_TRACKED_PROMPT_FILE_NAMES = {
+  implementer: "implementer.md",
+  "spec-reviewer": "spec-reviewer.md",
+  "code-reviewer": "code-reviewer.md",
+} as const;
+const LEGACY_TRACKED_DESCRIPTIONS = {
+  implementer: "Implements approved changes with focused verification and a minimal diff.",
+  "spec-reviewer":
+    "Checks an implementation against the requested spec and flags missing or extra behavior.",
+  "code-reviewer":
+    "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
+} as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
 
 const JSON_FORMAT = {
@@ -383,7 +409,8 @@ export async function syncManagedAgentRegistrations(paths: ResolvedPaths): Promi
   changed: boolean;
 }> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
-  const nextText = ensureManagedAgentRegistrationsConfigText(currentText, paths);
+  const syncedText = ensureManagedAgentRegistrationsConfigText(currentText, paths);
+  const nextText = await cleanupLegacyTrackedManagedEntries(syncedText, paths);
 
   if (currentText === nextText) {
     return { path: paths.opencodeConfigPath, changed: false };
@@ -1154,6 +1181,120 @@ function getManagedOpenCodeAgentPromptReference(
   const promptPath = getManagedPromptPath(paths, agentName);
   const promptRef = relative(dirname(paths.opencodeConfigPath), promptPath).replaceAll("\\", "/");
   return `{file:${promptRef.startsWith(".") ? promptRef : `./${promptRef}`}}`;
+}
+
+function getLegacyTrackedManagedPromptReferences(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  agentName: (typeof LEGACY_TRACKED_MANAGED_AGENT_NAMES)[number],
+): Set<string> {
+  const promptPath = join(paths.managedAgentsDirPath, LEGACY_TRACKED_PROMPT_FILE_NAMES[agentName]);
+  const promptRef = relative(dirname(paths.opencodeConfigPath), promptPath).replaceAll("\\", "/");
+  const normalized = promptRef.startsWith(".") ? promptRef : `./${promptRef}`;
+  const references = new Set<string>([`{file:${normalized}}`]);
+
+  if (normalized.startsWith(".") && !normalized.startsWith("../") && !normalized.startsWith("./")) {
+    references.add(`{file:./${normalized}}`);
+  }
+
+  return references;
+}
+
+function isLegacyTrackedManagedRegistration(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  agentName: (typeof LEGACY_TRACKED_MANAGED_AGENT_NAMES)[number],
+  entry: JsonObject,
+): boolean {
+  const expectedKeys = new Set<string>(
+    agentName === "implementer"
+      ? ["description", "mode", "prompt", "model"]
+      : ["description", "mode", "prompt", "model", "permission"],
+  );
+
+  if (Object.keys(entry).length !== expectedKeys.size) {
+    return false;
+  }
+
+  for (const key of Object.keys(entry)) {
+    if (!expectedKeys.has(key)) {
+      return false;
+    }
+  }
+
+  if (entry.mode !== "subagent") {
+    return false;
+  }
+
+  if (typeof entry.prompt !== "string") {
+    return false;
+  }
+
+  const expectedLegacyRefs = getLegacyTrackedManagedPromptReferences(paths, agentName);
+  if (!expectedLegacyRefs.has(entry.prompt.trim())) {
+    return false;
+  }
+
+  if (entry.model !== createRoleReference(LEGACY_TRACKED_ROLE_BINDINGS[agentName])) {
+    return false;
+  }
+
+  if (entry.description !== LEGACY_TRACKED_DESCRIPTIONS[agentName]) {
+    return false;
+  }
+
+  if (agentName === "implementer") {
+    return entry.permission === undefined;
+  }
+
+  return JSON.stringify(entry.permission) === JSON.stringify({ edit: "deny" });
+}
+
+async function cleanupLegacyTrackedManagedEntries(
+  text: string,
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+): Promise<string> {
+  const document = parseObjectDocument(text, "OpenCode config");
+  const currentAgents = readAgentMap(document, "OpenCode config");
+  let nextText = text;
+
+  for (const legacyTrackedName of LEGACY_TRACKED_MANAGED_AGENT_NAMES) {
+    const currentEntry = currentAgents[legacyTrackedName];
+    if (!currentEntry) {
+      continue;
+    }
+
+    if (!isLegacyTrackedManagedRegistration(paths, legacyTrackedName, currentEntry)) {
+      continue;
+    }
+
+    if (!(await canDeleteLegacyTrackedManagedEntry(paths, legacyTrackedName))) {
+      continue;
+    }
+
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["agent", legacyTrackedName], undefined, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+async function canDeleteLegacyTrackedManagedEntry(
+  paths: Pick<ResolvedPaths, "managedAgentsDirPath">,
+  agentName: (typeof LEGACY_TRACKED_MANAGED_AGENT_NAMES)[number],
+): Promise<boolean> {
+  const legacyPromptPath = join(
+    paths.managedAgentsDirPath,
+    LEGACY_TRACKED_PROMPT_FILE_NAMES[agentName],
+  );
+  const promptText = await readOptionalText(legacyPromptPath);
+  if (promptText === undefined) {
+    return true;
+  }
+
+  return isManagedFile(promptText);
 }
 
 function getManagedOpenCodeAgentRegistration(

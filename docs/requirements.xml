@@ -133,7 +133,7 @@
       <Action>Starts a primary chat session with WorkflowPlugin active.</Action>
       <Goal>To inject workflow protocol guidance into primary sessions so the main session knows how to open work items, use returned headers, treat hard-stop statuses, and avoid free-form review loops.</Goal>
       <Preconditions>The package is enabled in OpenCode and a primary agent session is being created.</Preconditions>
-      <AcceptanceCriteria>Primary agents receive workflow protocol guidance, known subagents do not inherit it, and the guidance covers work-item identity, header usage, hard-stop handling, and state inspection.</AcceptanceCriteria>
+      <AcceptanceCriteria>Eligible orchestrating primary agents receive workflow protocol guidance, helper primaries such as `enhancer` and known subagents do not inherit it, and the guidance covers work-item identity, header usage, hard-stop handling, and state inspection.</AcceptanceCriteria>
       <Priority>medium</Priority>
       <RelatedFlows>DF-WORKFLOW-GUIDANCE</RelatedFlows>
     </UC-014>

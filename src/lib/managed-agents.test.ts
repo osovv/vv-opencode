@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.1 - Updated tracked-agent template coverage for vv-* naming and strict top-block workflow protocol requirements.]
 //   LAST_CHANGE: [v0.4.0 - Expanded prompt-template coverage for rerouting, working-state externalization, semantic continuity, assumptions, anti-drift, and project-overlay hooks.]
 //   LAST_CHANGE: [v0.3.0 - Expanded prompt-template coverage for stable enhancer schema, shared status outputs, and investigation/report protocols.]
 //   LAST_CHANGE: [v0.2.2 - Added coverage requiring the enhancer to emit the final XML prompt in English.]
@@ -57,10 +58,13 @@ describe("managed agent prompts", () => {
     expect(template).toContain("Do not invent project overlays");
   });
 
-  test("loads bundled implementer template with stable status protocol", async () => {
-    const template = await loadManagedAgentPromptTemplate("implementer");
+  test("loads bundled vv-implementer template with strict top-block protocol", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-implementer");
     expect(template).toStartWith("---\n");
-    expect(template).toContain("You are the implementer subagent.");
+    expect(template).toContain("You are the vv-implementer subagent.");
+    expect(template).toContain("VVOC_WORK_ITEM_ID: wi-1");
+    expect(template).toContain("VVOC_STATUS: DONE");
+    expect(template).toContain("VVOC_ROUTE: change_with_review");
     expect(template).toContain("Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED");
     expect(template).toContain("stabilize a compact working state");
     expect(template).toContain("project-owned overlays");
@@ -69,17 +73,21 @@ describe("managed agent prompts", () => {
     expect(template).toContain("reviewer feedback becomes conflicting, ambiguous, or repetitive");
   });
 
-  test("loads bundled reviewer templates with stable status output", async () => {
-    const specTemplate = await loadManagedAgentPromptTemplate("spec-reviewer");
-    const codeTemplate = await loadManagedAgentPromptTemplate("code-reviewer");
+  test("loads bundled vv-reviewer templates with strict top-block protocol", async () => {
+    const specTemplate = await loadManagedAgentPromptTemplate("vv-spec-reviewer");
+    const codeTemplate = await loadManagedAgentPromptTemplate("vv-code-reviewer");
 
+    expect(specTemplate).toContain("VVOC_WORK_ITEM_ID: wi-1");
+    expect(specTemplate).toContain("VVOC_STATUS: PASS");
     expect(specTemplate).toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
     expect(specTemplate).toContain("[Missing|Extra|Wrong|Unproven]");
     expect(specTemplate).toContain("project-owned overlays");
     expect(specTemplate).toContain("Reuse canonical repository terms");
     expect(specTemplate).toContain("unstated material assumption");
 
-    expect(codeTemplate).toContain("Status: PASS | FAIL");
+    expect(codeTemplate).toContain("VVOC_WORK_ITEM_ID: wi-1");
+    expect(codeTemplate).toContain("VVOC_STATUS: PASS");
+    expect(codeTemplate).toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
     expect(codeTemplate).toContain(
       "Review only issues introduced by this change or left unresolved by it.",
     );

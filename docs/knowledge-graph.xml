@@ -151,7 +151,7 @@
       </annotations>
     </M-PLUGIN-SECRETS-REDACTION>
 
-    <M-WORKFLOW-PROTOCOL NAME="WorkflowProtocol" TYPE="CORE_LOGIC" STATUS="planned">
+    <M-WORKFLOW-PROTOCOL NAME="WorkflowProtocol" TYPE="CORE_LOGIC" STATUS="implemented">
       <purpose>Parse and validate VVOC_WORK_ITEM_ID, VVOC_STATUS, and VVOC_ROUTE protocol fields from tracked subagent output, define allowed statuses per agent type, and report protocol errors.</purpose>
       <path>src/plugins/workflow/protocol.ts</path>
       <depends>none</depends>
@@ -168,8 +168,8 @@
       </annotations>
     </M-WORKFLOW-PROTOCOL>
 
-    <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="planned">
-      <purpose>In-memory work-item state store with lifecycle management, state transitions, counter tracking, and round-limit enforcement keyed by (sessionId, workItemId).</purpose>
+    <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="implemented">
+      <purpose>In-memory work-item state store with lifecycle management, state transitions, counter tracking, round-limit enforcement, and optional closed-item listing keyed by (sessionId, workItemId).</purpose>
       <path>src/plugins/workflow/state.ts</path>
       <depends>M-WORKFLOW-PROTOCOL</depends>
       <verification-ref>V-M-WORKFLOW-STATE</verification-ref>
@@ -179,13 +179,14 @@
         <fn-createWorkItemStore PURPOSE="Create a new scoped in-memory work-item store." />
         <fn-openWorkItem PURPOSE="Create or return an existing work item by idempotency key." />
         <fn-getWorkItem PURPOSE="Retrieve a work item by ID." />
-        <fn-listWorkItems PURPOSE="List all open work items with current state." />
+        <fn-listWorkItems PURPOSE="List session work items with optional closed-item inclusion." />
         <fn-closeWorkItem PURPOSE="Close an open work item." />
+        <fn-transitionWorkItemState PURPOSE="Apply a deterministic tracked transition while validating actor and state constraints." />
         <fn-getReviewRound PURPOSE="Compute the current review round from spec and code review counters." />
       </annotations>
     </M-WORKFLOW-STATE>
 
-    <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" STATUS="planned">
+    <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" STATUS="implemented">
       <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution, and loop-gate policy enforcement.</purpose>
       <path>src/plugins/workflow/transitions.ts</path>
       <depends>M-WORKFLOW-PROTOCOL</depends>
@@ -198,7 +199,7 @@
       </annotations>
     </M-WORKFLOW-TRANSITIONS>
 
-    <M-WORKFLOW-TOOLING NAME="WorkflowTooling" TYPE="UTILITY" STATUS="planned">
+    <M-WORKFLOW-TOOLING NAME="WorkflowTooling" TYPE="UTILITY" STATUS="implemented">
       <purpose>Custom tool definitions for work_item_open, work_item_list, and work_item_close that wrap the in-memory state store.</purpose>
       <path>src/plugins/workflow/tooling.ts</path>
       <depends>M-WORKFLOW-STATE</depends>
@@ -210,8 +211,8 @@
       </annotations>
     </M-WORKFLOW-TOOLING>
 
-    <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="planned">
-      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into primary sessions via chat.message.</purpose>
+    <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="implemented">
+      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions via chat.message.</purpose>
       <path>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</path>
       <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>

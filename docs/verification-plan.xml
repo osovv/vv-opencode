@@ -129,7 +129,7 @@
     </VF-LOOP-GATE>
     <VF-WORKFLOW-GUIDANCE NAME="WorkflowGuidance" USE_CASES="UC-014" DATA_FLOW="DF-WORKFLOW-GUIDANCE" PRIORITY="medium">
       <scenario>Main session starts a chat with WorkflowPlugin active.</scenario>
-      <expected-outcome>Primary agents receive workflow protocol guidance. Known subagents including vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
+      <expected-outcome>Eligible orchestrating primary agents receive workflow protocol guidance. Helper primaries such as enhancer and known subagents including vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append workflow system instruction -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -673,12 +673,14 @@
       <scenarios>
         <scenario-1 kind="success">parseResultBlock extracts VVOC_WORK_ITEM_ID, VVOC_STATUS, and VVOC_ROUTE from valid vv-implementer output.</scenario-1>
         <scenario-2 kind="success">validateStatusForAgent accepts PASS for vv-spec-reviewer and vv-code-reviewer, and DONE/DONE_WITH_CONCERNS/NEEDS_CONTEXT/BLOCKED for vv-implementer.</scenario-2>
+        <scenario-2b kind="failure">validateStatusForAgent rejects lowercase or mixed-case VVOC_STATUS values instead of normalizing them heuristically.</scenario-2b>
         <scenario-3 kind="success">parseWorkItemHeader extracts VVOC_WORK_ITEM_ID from the first meaningful prompt line.</scenario-3>
         <scenario-3b kind="failure">parseWorkItemHeader rejects malformed header lines that do not match the VVOC_WORK_ITEM_ID pattern.</scenario-3b>
         <scenario-4 kind="failure">Missing VVOC_WORK_ITEM_ID in output produces a protocol error.</scenario-4>
         <scenario-5 kind="failure">Missing VVOC_STATUS produces a protocol error.</scenario-5>
         <scenario-6 kind="failure">Unknown VVOC_STATUS value produces a protocol error.</scenario-6>
         <scenario-7 kind="failure">Work-item mismatch between header and output produces a protocol error.</scenario-7>
+        <scenario-8 kind="failure">Duplicate or unexpected non-protocol lines in the strict top block produce a protocol error.</scenario-8>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -703,6 +705,7 @@
         <scenario-5 kind="success">closeWorkItem closes an existing open item and sets closedAt.</scenario-5>
         <scenario-6 kind="failure">closeWorkItem on a non-existent or already-closed item fails.</scenario-6>
         <scenario-7 kind="success">getReviewRound returns max(specReviewCount, codeReviewCount).</scenario-7>
+        <scenario-8 kind="failure">transitionWorkItemState rejects actor-less tracked transitions and invalid state changes without mutating the stored record.</scenario-8>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -746,6 +749,7 @@
         <scenario-1 kind="success">work_item_open with batch items returns structured results with IDs and headers.</scenario-1>
         <scenario-2 kind="success">work_item_list returns all open items with state, counters, and review round.</scenario-2>
         <scenario-3 kind="success">work_item_close closes the specified item and confirms.</scenario-3>
+        <scenario-4 kind="success">work_item_list with includeClosed=true returns closed items in addition to open items.</scenario-4>
       </scenarios>
       <required-log-markers />
     </V-M-WORKFLOW-TOOLING>
@@ -771,7 +775,7 @@
         <scenario-8 kind="failure">Launch with unknown work item ID is rejected.</scenario-8>
         <scenario-9 kind="failure">Launch with wrong next agent for current state is rejected.</scenario-9>
         <scenario-10 kind="failure">Malformed tracked output halts workflow.</scenario-10>
-        <scenario-11 kind="success">Primary agents receive workflow protocol guidance. Known subagents do not.</scenario-11>
+        <scenario-11 kind="success">Eligible orchestrating primary agents receive workflow protocol guidance. Helper primary enhancer and known subagents do not.</scenario-11>
       </scenarios>
       <required-log-markers>
         <marker-1>[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch validated</marker-1>
@@ -783,7 +787,7 @@
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>The plugin must not interfere with untracked task launches.</assertion-1>
-        <assertion-2>The plugin must not inject workflow guidance into known subagent prompts.</assertion-2>
+        <assertion-2>The plugin must not inject workflow guidance into known subagent prompts or helper-primary enhancer prompts.</assertion-2>
         <assertion-3>NEEDS_CONTEXT must always halt workflow and return control to main session.</assertion-3>
         <assertion-4>Protocol errors must halt automation rather than falling back to heuristic behavior.</assertion-4>
       </required-trace-assertions>

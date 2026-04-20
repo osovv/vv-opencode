@@ -5,10 +5,10 @@ Portable OpenCode workflow package with a Bun CLI that installs and maintains Op
 ## What This Package Does
 
 - installs one pinned `@osovv/vv-opencode@<version>` entry into OpenCode
-- that package entry exports six plugins: `GuardianPlugin`, `HashlineEditPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `SecretsRedactionPlugin`
+- that package entry exports seven plugins: `GuardianPlugin`, `HashlineEditPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `WorkflowPlugin`, `SecretsRedactionPlugin`
 - creates and maintains canonical `vvoc` config at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
 - scaffolds managed prompt files under `vvoc/agents/`
-- registers managed OpenCode agents: `enhancer`, `implementer`, `spec-reviewer`, `code-reviewer`, `investitagor`
+- registers managed OpenCode agents: `enhancer`, `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`, `investitagor`
 - installs plugin-managed agents: `guardian`, `memory-reviewer`
 - ships role presets, diagnostics, and shell completion through the `vvoc` CLI
 
@@ -45,13 +45,14 @@ vvoc install --scope project
 - create or refresh canonical `vvoc.json`
 - refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
 
-That package entry exports six plugins:
+That package entry exports seven plugins:
 
 - `GuardianPlugin`
 - `HashlineEditPlugin`
 - `MemoryPlugin`
 - `ModelRolesPlugin`
 - `SystemContextInjectionPlugin`
+- `WorkflowPlugin`
 - `SecretsRedactionPlugin`
 
 ## Config And Data Layout
@@ -255,6 +256,30 @@ The runtime prompt is loaded from `memory-reviewer.md`, preferring `./.vvoc/agen
 
 The default injected guidance tells the main session to proactively use the `explore` subagent when the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.
 
+### WorkflowPlugin
+
+`WorkflowPlugin` adds tracked workflow orchestration around the `task` tool for these managed subagents:
+
+- `vv-implementer`
+- `vv-spec-reviewer`
+- `vv-code-reviewer`
+
+It also registers three workflow tools:
+
+- `work_item_open`
+- `work_item_list`
+- `work_item_close`
+
+Tracked task prompts must start with a first-line header like:
+
+```text
+VVOC_WORK_ITEM_ID: wi-1
+```
+
+Tracked result blocks must return strict top-block protocol fields (`VVOC_WORK_ITEM_ID`, `VVOC_STATUS`, and `VVOC_ROUTE` for `vv-implementer`).
+
+Main-session guidance reminds agents to open work items first, reuse returned headers, treat `NEEDS_CONTEXT` as a hard stop, inspect `work_item_list` before retries, and avoid free-form review loops without explicit work-item identity.
+
 ### SecretsRedactionPlugin
 
 `SecretsRedactionPlugin` redacts secrets from chat content before LLM requests and restores placeholders afterward where needed.
@@ -280,18 +305,18 @@ Managed prompt files are created for:
 - `guardian`
 - `memory-reviewer`
 - `enhancer`
-- `implementer`
-- `spec-reviewer`
-- `code-reviewer`
+- `vv-implementer`
+- `vv-spec-reviewer`
+- `vv-code-reviewer`
 - `investitagor`
 
 OpenCode agent registrations written by `vvoc install` and `vvoc sync` are:
 
 - `explore`
 - `enhancer`
-- `implementer`
-- `spec-reviewer`
-- `code-reviewer`
+- `vv-implementer`
+- `vv-spec-reviewer`
+- `vv-code-reviewer`
 - `investitagor`
 
 Plugin runtime agents are:

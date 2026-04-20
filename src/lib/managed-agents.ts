@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.ts
-// VERSION: 0.3.0
+// VERSION: 0.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
 //   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
@@ -33,6 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Renamed tracked subagents to vv-* names and aligned managed prompt file names with the tracked-agent naming convention.]
 //   LAST_CHANGE: [v0.3.0 - Added the managed enhancer primary agent alongside the existing vvoc subagent definitions.]
 // END_CHANGE_SUMMARY
 
@@ -41,9 +42,9 @@ import { join } from "node:path";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
 
 export const MANAGED_SUBAGENT_NAMES = [
-  "implementer",
-  "spec-reviewer",
-  "code-reviewer",
+  "vv-implementer",
+  "vv-spec-reviewer",
+  "vv-code-reviewer",
   "investitagor",
 ] as const;
 
@@ -83,25 +84,25 @@ export type ManagedPrimaryAgentDefinition = {
 
 export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
   {
-    name: "implementer",
+    name: "vv-implementer",
     description: "Implements approved changes with focused verification and a minimal diff.",
-    promptFileName: "implementer.md",
+    promptFileName: "vv-implementer.md",
     mode: "subagent",
   },
   {
-    name: "spec-reviewer",
+    name: "vv-spec-reviewer",
     description:
       "Checks an implementation against the requested spec and flags missing or extra behavior.",
-    promptFileName: "spec-reviewer.md",
+    promptFileName: "vv-spec-reviewer.md",
     mode: "subagent",
     permission: {
       edit: "deny",
     },
   },
   {
-    name: "code-reviewer",
+    name: "vv-code-reviewer",
     description: "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
-    promptFileName: "code-reviewer.md",
+    promptFileName: "vv-code-reviewer.md",
     mode: "subagent",
     permission: {
       edit: "deny",
@@ -148,9 +149,9 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   ["guardian", "guardian.md"],
   ["memory-reviewer", "memory-reviewer.md"],
   ["enhancer", "enhancer.md"],
-  ["implementer", "implementer.md"],
-  ["spec-reviewer", "spec-reviewer.md"],
-  ["code-reviewer", "code-reviewer.md"],
+  ["vv-implementer", "vv-implementer.md"],
+  ["vv-spec-reviewer", "vv-spec-reviewer.md"],
+  ["vv-code-reviewer", "vv-code-reviewer.md"],
   ["investitagor", "investitagor.md"],
 ]);
 
