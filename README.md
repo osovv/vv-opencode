@@ -41,6 +41,7 @@ vvoc install --scope project
 
 - ensure OpenCode has a pinned `@osovv/vv-opencode@<version>` package entry
 - register managed agents and scaffold their prompt files
+- seed OpenCode `model`, `small_model`, `agent.explore`, and managed agent model refs with `vv-role:*` values
 - create or refresh canonical `vvoc.json`
 - refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
 
@@ -277,6 +278,7 @@ Managed prompt files are created for:
 
 OpenCode agent registrations written by `vvoc install` and `vvoc sync` are:
 
+- `explore`
 - `enhancer`
 - `implementer`
 - `spec-reviewer`

@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.9.0
+// VERSION: 0.9.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
 //   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, provider object patching, managed OpenCode agent registration/model plus variant overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
@@ -48,6 +48,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.9.1 - Narrowed built-in OpenCode auto-seeding to `agent.explore` so install/init/sync stop rewriting other built-in agent model refs.]
 //   LAST_CHANGE: [v0.9.0 - Added OpenCode agent variant read/write helpers so vvoc can translate provider/model:variant into native agent config fields.]
 // END_CHANGE_SUMMARY
 
@@ -247,9 +248,6 @@ export function ensureManagedAgentRegistrationsConfigText(
     small_model: createRoleReference(builtInRoleBindings.opencodeDefaults.smallModel),
   };
   const builtInAgentModelRefs = {
-    build: createRoleReference(builtInRoleBindings.opencodeAgents.build),
-    plan: createRoleReference(builtInRoleBindings.opencodeAgents.plan),
-    general: createRoleReference(builtInRoleBindings.opencodeAgents.general),
     explore: createRoleReference(builtInRoleBindings.opencodeAgents.explore),
   };
 

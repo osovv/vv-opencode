@@ -19,14 +19,14 @@
     </M-MODEL-ROLES>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
       <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
       <depends>M-MODEL-ROLES, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
-        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config contains vvoc-managed OpenCode agent registrations with `vv-role:*` model references." />
+        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, built-in `explore`, and vvoc-managed OpenCode agent registrations on `vv-role:*` model references." />
         <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v3 and reject unsupported pre-role versions." />
         <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid user-owned role assignments and refreshing managed `vv-*` role presets." />
       </annotations>
@@ -50,7 +50,7 @@
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
       <annotations>
         <export-init PURPOSE="Bootstrap package registration and role-based config scaffolding (interactive by default)." />
-        <export-sync PURPOSE="Refresh managed vvoc config files and role-reference OpenCode config." />
+        <export-sync PURPOSE="Refresh managed vvoc config files plus role-reference OpenCode root defaults, built-in `explore`, and managed agents." />
       </annotations>
     </M-CLI-COMMANDS>
 
@@ -190,7 +190,7 @@
     </M-CLI-COMPLETION>
 
     <M-CLI-INIT NAME="Init" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Interactive project setup with prompts for scope and initial configuration, seeding canonical built-in roles and role-reference OpenCode defaults. Uses @clack/prompts.</purpose>
+      <purpose>Interactive project setup with prompts for scope and initial configuration, seeding canonical built-in roles plus role-reference OpenCode root defaults, built-in `explore`, and managed agent registrations. Uses @clack/prompts.</purpose>
       <path>src/commands/init.ts</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES, @clack/prompts</depends>
       <verification-ref>V-M-CLI-INIT</verification-ref>

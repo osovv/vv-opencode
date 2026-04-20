@@ -1,5 +1,5 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.6.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, managed agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   Test suite for init command.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.1 - Updated init expectations so only `agent.explore` is auto-seeded among built-in OpenCode agents.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import {
@@ -80,9 +84,9 @@ describe("init scenarios", () => {
       expect(opencodeContent).toContain("@osovv/vv-opencode");
       expect(opencodeConfig.model).toBe("vv-role:default");
       expect(opencodeConfig.small_model).toBe("vv-role:fast");
-      expect(opencodeConfig.agent.build?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent.plan?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent.general?.model).toBe("vv-role:default");
+      expect(opencodeConfig.agent.build).toBeUndefined();
+      expect(opencodeConfig.agent.plan).toBeUndefined();
+      expect(opencodeConfig.agent.general).toBeUndefined();
       expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
       expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent.implementer?.model).toBe("vv-role:default");

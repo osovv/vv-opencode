@@ -95,13 +95,13 @@
       <telemetry>none required beyond explicit thrown-error surfaces</telemetry>
     </VM-ROLE-PARSING>
     <VM-CONFIG-SEED MODULE="M-CLI-CONFIG" FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
-      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, and role-reference OpenCode defaults plus managed agents.</scenario>
+      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, and role-reference OpenCode root defaults plus built-in `explore` and managed agents.</scenario>
       <primary-evidence>temp-home integration checks plus exact config assertions</primary-evidence>
       <trajectory-evidence>OpenCode config diff assertions proving `vv-role:*` writes instead of literal provider/model writes</trajectory-evidence>
       <telemetry>installation inspection output plus stable config snapshots</telemetry>
     </VM-CONFIG-SEED>
     <VM-CONFIG-SYNC MODULE="M-CLI-CONFIG" FLOW="DF-CONFIG-SYNC" PRIORITY="high">
-      <scenario>Sync preserves user-owned custom roles while refreshing managed role presets and rejecting unsupported pre-role schemas.</scenario>
+      <scenario>Sync preserves user-owned custom roles while refreshing managed role presets, keeping only root defaults plus built-in `explore` and managed agents on auto-seeded role refs, and rejecting unsupported pre-role schemas.</scenario>
       <primary-evidence>deterministic config round-trip assertions</primary-evidence>
       <trajectory-evidence>trace assertions on parse -&gt; refresh -&gt; rewrite order</trajectory-evidence>
       <telemetry>stable rewrite summaries and doctor/status inspection snapshots</telemetry>
@@ -180,11 +180,11 @@
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">Fresh install config renders with schema v3, seeded built-in roles, and a pinned vvoc package specifier in the plugin array.</scenario-1>
-        <scenario-2 kind="success">Existing JSONC comments survive plugin insertion and managed OpenCode role-reference rewrites.</scenario-2>
+        <scenario-2 kind="success">Existing JSONC comments survive plugin insertion and managed OpenCode role-reference rewrites while unrelated built-in agent entries stay untouched.</scenario-2>
         <scenario-3 kind="success">Global path resolution separates `opencode/` from the canonical `vvoc/vvoc.json` path while project scope still uses `./.vvoc/agents/` for prompts.</scenario-3>
         <scenario-4 kind="success">Managed enhancer/subagent registrations point OpenCode at scope-correct prompt references and use `vv-role:*` model values instead of hardcoded provider/model strings.</scenario-4>
         <scenario-5 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, and managed `vv-*` role presets are refreshed during canonical rewrites.</scenario-5>
-        <scenario-6 kind="success">Install and sync write root OpenCode `model = vv-role:default`, `small_model = vv-role:fast`, built-in OpenCode agent role references, and managed agent role references instead of concrete provider/model values.</scenario-6>
+        <scenario-6 kind="success">Install and sync write root OpenCode `model = vv-role:default`, `small_model = vv-role:fast`, built-in `agent.explore`, and managed agent role references instead of concrete provider/model values.</scenario-6>
         <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-7>
         <scenario-8 kind="success">Managed prompt templates keep a stable enhancer schema plus consistent status/reporting vocabulary across implementer, reviewers, and investigator flows.</scenario-8>
         <scenario-9 kind="success">Managed prompt templates externalize compact working state, support rerouting and project-owned overlays, preserve semantic continuity, require explicit material assumptions, and guard against drift.</scenario-9>
@@ -521,7 +521,7 @@
         <scenario-1 kind="success">Interactive prompts are shown when TTY is available.</scenario-1>
         <scenario-2 kind="success">Ctrl+C aborts cleanly without partial file writes.</scenario-2>
         <scenario-3 kind="success">Generated canonical config is valid schema v3 JSON with seeded built-in roles and managed `vv-*` role presets.</scenario-3>
-        <scenario-4 kind="success">Non-interactive init seeds OpenCode defaults and managed agents with `vv-role:*` references.</scenario-4>
+        <scenario-4 kind="success">Non-interactive init seeds OpenCode root defaults, built-in `explore`, and managed agents with `vv-role:*` references.</scenario-4>
         <scenario-5 kind="success">Status and doctor output immediately after init report the built-in role assignments that were seeded.</scenario-5>
       </scenarios>
       <required-log-markers />
