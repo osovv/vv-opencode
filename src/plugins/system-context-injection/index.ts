@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.3.0
+// VERSION: 0.3.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
 //   SCOPE: Main-session system instruction definitions, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Narrowed explore subagent guidance to context-gathering only, prohibiting solution proposals, planning, or recommendations.]
 //   LAST_CHANGE: [v0.3.0 - Added standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance for primary sessions.]
 //   LAST_CHANGE: [v0.2.0 - Expanded primary-session system guidance with task routing, execution stability, and loop-control rules while preserving subagent exclusion.]
 //   LAST_CHANGE: [v0.1.0 - Added a reusable main-session system context injector with default proactive explore guidance.]
@@ -31,6 +32,8 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "<proactive_context_gathering>",
     "Before answering questions about the codebase or making changes, gather the context you need whenever the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.",
     "When delegation is available, proactively use the explore subagent for this.",
+    "Use the explore subagent ONLY for context gathering operations: finding files, reading code, searching for patterns, mapping module relationships, and collecting factual information about the codebase.",
+    "Do NOT ask explore to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.",
     "Do not guess about code you have not inspected.",
     "If the task is already localized and the required context is already in view, work directly instead of delegating.",
     "If the current agent cannot delegate, rely on the context already in view and do not attempt unsupported delegation.",

@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.3.1
+// VERSION: 0.3.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.2 - Updated assertions to match narrowed explore-only-context-gathering guidance.]
 //   LAST_CHANGE: [v0.3.1 - Added coverage verifying vv-* tracked subagents remain excluded from primary-session system context injection.]
 //   LAST_CHANGE: [v0.3.0 - Added coverage for standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance blocks.]
 //   LAST_CHANGE: [v0.2.0 - Added coverage for task routing, execution stability, and loop-control guidance blocks in primary-session system injection.]
@@ -69,6 +70,12 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("<anti_drift_budget>");
     expect(systemText).toContain("<project_overlays>");
     expect(systemText).toContain("proactively use the explore subagent");
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Use the explore subagent ONLY for context gathering operations",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Do NOT ask explore to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.",
+    );
   });
 
   test("preserves existing system text and avoids duplicate injection", async () => {
@@ -159,6 +166,12 @@ describe("SystemContextInjectionPlugin", () => {
 
     expect(systemText).toContain("Before answering questions about the codebase or making changes");
     expect(systemText.replace(/\s+/g, " ")).toContain("proactively use the explore subagent");
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Use the explore subagent ONLY for context gathering operations: finding files, reading code, searching for patterns, mapping module relationships, and collecting factual information about the codebase.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Do NOT ask explore to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.",
+    );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Do not guess about code you have not inspected.",
     );

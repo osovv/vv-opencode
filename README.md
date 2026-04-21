@@ -254,7 +254,7 @@ The runtime prompt is loaded from `memory-reviewer.md`, preferring `./.vvoc/agen
 
 `SystemContextInjectionPlugin` injects reusable system guidance into primary sessions without polluting known subagent prompts.
 
-The default injected guidance tells the main session to proactively use the `explore` subagent when the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.
+The default injected guidance tells the main session to proactively use the `explore` subagent for read-only context gathering when the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas. The `explore` subagent must not be asked to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.
 
 ### WorkflowPlugin
 
