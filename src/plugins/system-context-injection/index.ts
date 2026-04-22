@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.3.1
+// VERSION: 0.3.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
-//   SCOPE: Main-session system instruction definitions, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
+//   SCOPE: Main-session system instruction definitions, editing-workflow guidance, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.2 - Added primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites and forbids `apply_patch` use.]
 //   LAST_CHANGE: [v0.3.1 - Narrowed explore subagent guidance to context-gathering only, prohibiting solution proposals, planning, or recommendations.]
 //   LAST_CHANGE: [v0.3.0 - Added standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance for primary sessions.]
 //   LAST_CHANGE: [v0.2.0 - Expanded primary-session system guidance with task routing, execution stability, and loop-control rules while preserving subagent exclusion.]
@@ -38,6 +39,14 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "If the task is already localized and the required context is already in view, work directly instead of delegating.",
     "If the current agent cannot delegate, rely on the context already in view and do not attempt unsupported delegation.",
     "</proactive_context_gathering>",
+  ].join("\n"),
+  [
+    "<editing_workflow>",
+    "When editing files, prefer the `edit` tool over shell-based rewrites when it is available.",
+    "Read the file first, then use exact `line#hash` anchors from the latest `read` output.",
+    "Do not use `apply_patch`; prefer the hashline-backed `edit` tool for file changes. Managed vvoc installs also disable `apply_patch` in OpenCode config.",
+    "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
+    "</editing_workflow>",
   ].join("\n"),
   [
     "<standard_trajectories>",

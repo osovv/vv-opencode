@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.9.5
+// VERSION: 0.9.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, provider baseURL patching, provider object patching, managed OpenCode agent registration/model plus variant overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model plus variant overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
 //   INPUTS: Scope-aware filesystem paths, current OpenCode/vvoc config text, and validated config override values.
 //   OUTPUTS: Normalized OpenCode/vvoc config text, persisted config writes, and installation inspection snapshots.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
@@ -26,13 +26,13 @@
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
-//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations.
+//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations and tool gating.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
 //   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
 //   syncVvocConfig - Rewrites the canonical vvoc.json document while preserving valid current values.
 //   writeProviderBaseUrl - Writes a provider options.baseURL override into OpenCode config.
-//   syncManagedAgentRegistrations - Syncs the canonical vvoc-managed OpenCode agent registrations into OpenCode config.
+//   syncManagedAgentRegistrations - Syncs the canonical vvoc-managed OpenCode agent registrations and tool gating into OpenCode config.
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian and managed OpenCode agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian and managed OpenCode agents.
 //   readOpenCodeAgentModel - Reads a model override for any OpenCode agent from config.
@@ -48,6 +48,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.9.6 - Added managed OpenCode `tools.apply_patch = false` writes during install/init/sync so sessions stay on the hashline-backed `edit` override.]
 //   LAST_CHANGE: [v0.9.5 - Moved legacy tracked-agent deletion gating into sync with prompt-file ownership checks so user-owned legacy prompt files prevent cleanup.]
 //   LAST_CHANGE: [v0.9.4 - Tightened legacy tracked-agent cleanup to remove only entries that fully match legacy vvoc-managed registration shape, preserving customized user-owned old-name agents.]
 //   LAST_CHANGE: [v0.9.3 - Restricted legacy tracked-agent cleanup to entries that match legacy vvoc-managed prompt references so user-owned custom agents with old names are preserved.]
@@ -288,6 +289,9 @@ export function ensureManagedAgentRegistrationsConfigText(
       $schema: OPENCODE_SCHEMA_URL,
       model: rootRoleRefs.model,
       small_model: rootRoleRefs.small_model,
+      tools: {
+        apply_patch: false,
+      },
       agent: {
         ...Object.fromEntries(
           Object.entries(builtInAgentModelRefs).map(([name, model]) => [name, { model }]),
@@ -299,6 +303,7 @@ export function ensureManagedAgentRegistrationsConfigText(
 
   const document = parseObjectDocument(text, "OpenCode config");
   const currentAgents = readAgentMap(document, "OpenCode config");
+  const currentTools = readOptionalObject(document, "tools", "OpenCode config");
   let nextText = text;
 
   if (!Object.hasOwn(document, "$schema")) {
@@ -324,6 +329,15 @@ export function ensureManagedAgentRegistrationsConfigText(
     nextText = applyEdits(
       nextText,
       modify(nextText, ["small_model"], rootRoleRefs.small_model, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  if (currentTools?.apply_patch !== false) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["tools", "apply_patch"], false, {
         formattingOptions: JSON_FORMAT,
       }),
     );

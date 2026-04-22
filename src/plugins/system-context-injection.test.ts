@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.3.2
+// VERSION: 0.3.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
-//   SCOPE: Primary agent injection, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
+//   SCOPE: Primary agent injection, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
 //   DEPENDS: [bun:test, src/plugins/system-context-injection/index.ts]
 //   LINKS: [V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.3 - Added regression coverage for primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites.]
 //   LAST_CHANGE: [v0.3.2 - Updated assertions to match narrowed explore-only-context-gathering guidance.]
 //   LAST_CHANGE: [v0.3.1 - Added coverage verifying vv-* tracked subagents remain excluded from primary-session system context injection.]
 //   LAST_CHANGE: [v0.3.0 - Added coverage for standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance blocks.]
@@ -69,12 +70,16 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("<assumption_discipline>");
     expect(systemText).toContain("<anti_drift_budget>");
     expect(systemText).toContain("<project_overlays>");
+    expect(systemText).toContain("<editing_workflow>");
     expect(systemText).toContain("proactively use the explore subagent");
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Use the explore subagent ONLY for context gathering operations",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Do NOT ask explore to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "prefer the `edit` tool over shell-based rewrites when it is available.",
     );
   });
 
@@ -196,6 +201,15 @@ describe("SystemContextInjectionPlugin", () => {
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Read the file first, then use exact `line#hash` anchors from the latest `read` output.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Do not use `apply_patch`; prefer the hashline-backed `edit` tool for file changes. Managed vvoc installs also disable `apply_patch` in OpenCode config.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
     );
   });
 });

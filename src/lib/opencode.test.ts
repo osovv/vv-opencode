@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.1.6
+// VERSION: 1.1.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent rewrites, managed prompt scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
+//   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
 //   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
 //   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
@@ -13,13 +13,14 @@
 //
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
-//   ensureManagedAgentRegistrationsConfigText tests - Verify role-reference defaults and managed agent rewrites while preserving comments.
+//   ensureManagedAgentRegistrationsConfigText tests - Verify role-reference defaults, managed tool rewrites, and managed agent rewrites while preserving comments.
 //   canonical vvoc config tests - Verify schema v3 seeding, managed preset refresh, and strict pre-role rejection.
 //   provider helper tests - Verify conservative provider patch helpers remain comment-safe.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.7 - Added regression coverage for managed `tools.apply_patch = false` writes and sibling `tools.*` preservation during OpenCode config sync.]
 //   LAST_CHANGE: [v1.1.6 - Added regression coverage ensuring legacy old-name cleanup is blocked when the legacy prompt file exists but is user-owned (missing vvoc managed marker).]
 //   LAST_CHANGE: [v1.1.5 - Added coverage ensuring legacy cleanup preserves old-name agents that keep legacy prompt paths but diverge from managed model/permission/description/mode fields.]
 //   LAST_CHANGE: [v1.1.4 - Added coverage proving legacy cleanup is restricted to clearly vvoc-managed old tracked entries and preserves user-owned agents that reuse old names.]
@@ -122,6 +123,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     const parsed = parse(output) as {
       model?: string;
       small_model?: string;
+      tools?: { apply_patch?: boolean };
       agent?: Record<
         string,
         { model?: string; prompt?: string; mode?: string; permission?: unknown }
@@ -130,6 +132,7 @@ describe("managed OpenCode role-reference rewrites", () => {
 
     expect(parsed.model).toBe("vv-role:default");
     expect(parsed.small_model).toBe("vv-role:fast");
+    expect(parsed.tools?.apply_patch).toBe(false);
     expect(parsed.agent?.build).toBeUndefined();
     expect(parsed.agent?.plan).toBeUndefined();
     expect(parsed.agent?.general).toBeUndefined();
@@ -161,6 +164,11 @@ describe("managed OpenCode role-reference rewrites", () => {
   "model": "openai/gpt-5",
   // keep root small note
   "small_model": "openai/gpt-5-mini",
+  "tools": {
+    // keep tools note
+    "read": true,
+    "apply_patch": true
+  },
   "agent": {
     // keep managed note
     "enhancer": {
@@ -181,17 +189,21 @@ describe("managed OpenCode role-reference rewrites", () => {
     const parsed = parse(output) as {
       model?: string;
       small_model?: string;
+      tools?: { apply_patch?: boolean; read?: boolean };
       agent?: Record<string, { model?: string; prompt?: string }>;
     };
 
     expect(output).toContain("// keep root note");
     expect(output).toContain("// keep root small note");
+    expect(output).toContain("// keep tools note");
     expect(output).toContain("// keep managed note");
     expect(output).toContain("// keep managed nested note");
     expect(output).toContain("// keep build note");
     expect(output).toContain("// keep build sibling note");
     expect(parsed.model).toBe("vv-role:default");
     expect(parsed.small_model).toBe("vv-role:fast");
+    expect(parsed.tools?.read).toBe(true);
+    expect(parsed.tools?.apply_patch).toBe(false);
     expect(parsed.agent?.build?.model).toBe("openai/gpt-5");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
@@ -483,6 +495,7 @@ describe("canonical vvoc config helpers", () => {
         plugin?: string[];
         model?: string;
         small_model?: string;
+        tools?: { apply_patch?: boolean };
         agent?: Record<string, { model?: string }>;
       };
       const vvocConfig = await readVvocConfig(paths);
@@ -492,6 +505,7 @@ describe("canonical vvoc config helpers", () => {
       );
       expect(openCodeConfig.model).toBe("vv-role:default");
       expect(openCodeConfig.small_model).toBe("vv-role:fast");
+      expect(openCodeConfig.tools?.apply_patch).toBe(false);
       expect(openCodeConfig.agent?.build).toBeUndefined();
       expect(openCodeConfig.agent?.general).toBeUndefined();
       expect(openCodeConfig.agent?.explore?.model).toBe("vv-role:fast");
@@ -604,7 +618,7 @@ describe("canonical vvoc config helpers", () => {
         paths.vvocConfigPath,
         JSON.stringify(
           {
-            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.24.3/schemas/vvoc/v2.json",
+            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.0/schemas/vvoc/v2.json",
             version: 2,
             guardian: {
               timeoutMs: 12345,

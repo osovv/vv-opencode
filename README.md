@@ -42,6 +42,7 @@ vvoc install --scope project
 - ensure OpenCode has a pinned `@osovv/vv-opencode@<version>` package entry
 - register managed agents and scaffold their prompt files
 - seed OpenCode `model`, `small_model`, `agent.explore`, and managed agent model refs with `vv-role:*` values
+- disable global OpenCode `tools.apply_patch` in managed config so editing stays on the hashline-backed `edit` override
 - create or refresh canonical `vvoc.json`
 - refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
 
@@ -213,6 +214,9 @@ The runtime prompt is loaded from `guardian.md`, preferring `./.vvoc/agents/guar
 It also rewrites `read` output from plain numbered rows such as `42: const value = 1;` into hashline rows such as `42#VK|const value = 1;`.
 
 The overridden `edit` tool requires those exact `line#hash` anchors and rejects stale references when the file changed since the last read, which prevents line-number drift and accidental writes against the wrong snapshot.
+
+Managed OpenCode config written by `vvoc install`, `vvoc sync`, and `vvoc init` also sets `tools.apply_patch = false` so sessions are steered away from the global `apply_patch` tool and onto the hashline-backed `edit` override.
+Primary chat sessions also receive a short system reminder to prefer `read` plus the hashline-backed `edit` tool over shell-based file rewrites when an edit is needed.
 
 ### MemoryPlugin
 
