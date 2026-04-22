@@ -925,6 +925,7 @@
         <evidence-1>README reflects vv-* managed subagent names and workflow protocol.</evidence-1>
         <evidence-2>docs/knowledge-graph.xml contains all workflow modules and cross-links.</evidence-2>
         <evidence-3>docs/verification-plan.xml covers workflow enforcement scenarios.</evidence-3>
+        <evidence-4>`bun run pack:check` verifies package-root exports and all published plugin subpath imports, including `./plugins/secrets-redaction`.</evidence-4>
       </required-evidence>
     </Gate-Phase-11>
   </PhaseGates>

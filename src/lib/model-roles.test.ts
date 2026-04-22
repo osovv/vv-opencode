@@ -136,6 +136,19 @@ describe("model selections", () => {
       variant: "high",
       normalized: "anthropic/claude-sonnet-4-5:high",
     });
+
+    expect(parseModelSelection("openrouter/moonshotai/kimi-k2.6")).toEqual({
+      provider: "openrouter",
+      model: "moonshotai/kimi-k2.6",
+      normalized: "openrouter/moonshotai/kimi-k2.6",
+    });
+
+    expect(parseModelSelection("openrouter/moonshotai/kimi-k2.6:high")).toEqual({
+      provider: "openrouter",
+      model: "moonshotai/kimi-k2.6",
+      variant: "high",
+      normalized: "openrouter/moonshotai/kimi-k2.6:high",
+    });
   });
 
   test("fails malformed model selections with explicit INVALID_MODEL_SELECTION", () => {

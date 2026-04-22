@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",
@@ -71,7 +71,7 @@
     "fmt:check": "oxfmt --check src",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test",
-    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('MemoryPlugin' in root)) throw new Error('dist root export missing MemoryPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/memory/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js')\" && npm pack --dry-run",
+    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('MemoryPlugin' in root)) throw new Error('dist root export missing MemoryPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/memory/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js')\" && npm pack --dry-run",
     "prepare": "lefthook install --force"
   },
   "dependencies": {

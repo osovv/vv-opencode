@@ -78,7 +78,7 @@ export type BuiltInRoleBindings = {
 };
 
 const ROLE_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
-const MODEL_SELECTION_PATTERN = /^([^\s/:]+)\/([^\s/:]+)(?::([^\s:]+))?$/;
+const MODEL_SELECTION_PATTERN = /^([^\s/:]+)\/([^\s:]+(?:\/[^\s:]+)*)(?::([^\s:]+))?$/;
 
 const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
   opencodeDefaults: {
