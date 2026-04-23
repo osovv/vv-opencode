@@ -570,7 +570,6 @@ describe("canonical vvoc config helpers", () => {
           enabled: false,
           defaultSearchLimit: 12,
           reviewerModel: "openai/gpt-5.4-mini",
-          reviewerVariant: "medium",
         },
         { merge: true },
       );
@@ -578,7 +577,6 @@ describe("canonical vvoc config helpers", () => {
         paths,
         {
           model: "openai/gpt-5.4",
-          variant: "high",
           timeoutMs: 12_345,
         },
         { merge: true },
@@ -591,9 +589,7 @@ describe("canonical vvoc config helpers", () => {
       expect(synced?.memory.enabled).toBe(false);
       expect(synced?.memory.defaultSearchLimit).toBe(12);
       expect(synced?.memory.reviewerModel).toBe("openai/gpt-5.4-mini");
-      expect(synced?.memory.reviewerVariant).toBe("medium");
       expect(synced?.guardian.model).toBe("openai/gpt-5.4");
-      expect(synced?.guardian.variant).toBe("high");
       expect(synced?.guardian.timeoutMs).toBe(12_345);
       expect(synced?.roles.custom).toBe("openai/gpt-5.4-mini");
       expect(synced?.presets.custom?.agents.custom).toBe("openai/gpt-5.4-mini");
@@ -618,7 +614,7 @@ describe("canonical vvoc config helpers", () => {
         paths.vvocConfigPath,
         JSON.stringify(
           {
-            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.1/schemas/vvoc/v2.json",
+            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.2/schemas/vvoc/v2.json",
             version: 2,
             guardian: {
               timeoutMs: 12345,

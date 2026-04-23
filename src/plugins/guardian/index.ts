@@ -42,7 +42,6 @@ const GUARDIAN_DISABLED_ENV = "OPENCODE_GUARDIAN_DISABLED";
 const GUARDIAN_RUN_DIRECTORY = "/tmp";
 const GUARDIAN_DEBUG_LOG_PATH = "/tmp/opencode-guardian-debug.log";
 const GUARDIAN_MODEL_ENV = "OPENCODE_GUARDIAN_MODEL";
-const GUARDIAN_VARIANT_ENV = "OPENCODE_GUARDIAN_VARIANT";
 const GUARDIAN_TIMEOUT_MS_ENV = "OPENCODE_GUARDIAN_TIMEOUT_MS";
 const GUARDIAN_APPROVAL_RISK_THRESHOLD_ENV = "OPENCODE_GUARDIAN_APPROVAL_RISK_THRESHOLD";
 const GUARDIAN_REVIEW_TOAST_DURATION_MS_ENV = "OPENCODE_GUARDIAN_REVIEW_TOAST_DURATION_MS";
@@ -117,7 +116,6 @@ type ActiveReview = {
 
 type GuardianRuntimeConfig = {
   model?: string;
-  variant?: string;
   timeoutMs: number;
   approvalRiskThreshold: number;
   reviewToastDurationMs: number;
@@ -214,16 +212,6 @@ function readGuardianEnvConfig(sources: string[], warnings: string[]): GuardianC
     }
   }
 
-  const variant = readStringOverride(process.env[GUARDIAN_VARIANT_ENV]);
-  if (process.env[GUARDIAN_VARIANT_ENV] !== undefined) {
-    if (variant) {
-      overrides.variant = variant;
-      sources.push(GUARDIAN_VARIANT_ENV);
-    } else {
-      warnings.push(`${GUARDIAN_VARIANT_ENV}: ignored invalid value`);
-    }
-  }
-
   if (process.env[GUARDIAN_TIMEOUT_MS_ENV] !== undefined) {
     const timeoutMs = parsePositiveInteger(process.env[GUARDIAN_TIMEOUT_MS_ENV], undefined);
     if (timeoutMs) {
@@ -291,13 +279,11 @@ function asModelRolesError(error: unknown): ModelRolesError | undefined {
 
 function resolveGuardianRoleSelection(roleMap: Record<string, string>): {
   model: string;
-  variant?: string;
 } {
   try {
     const resolved = resolveRoleReference(GUARDIAN_RUNTIME_ROLE_REF, roleMap);
     return {
-      model: `${resolved.provider}/${resolved.model}`,
-      variant: resolved.variant,
+      model: resolved.normalized,
     };
   } catch (error) {
     const code = asModelRolesError(error)?.code;
@@ -377,7 +363,6 @@ async function loadGuardianRuntimeConfig(_directory: string): Promise<GuardianRu
 
   return {
     model: merged.model,
-    variant: merged.variant,
     timeoutMs: merged.timeoutMs,
     approvalRiskThreshold: merged.approvalRiskThreshold,
     reviewToastDurationMs: merged.reviewToastDurationMs,
@@ -784,7 +769,6 @@ async function runGuardianCommand(
     "--format json",
     `--dir ${shellQuote(GUARDIAN_RUN_DIRECTORY)}`,
     ...(guardianConfig.model ? [`--model ${shellQuote(guardianConfig.model)}`] : []),
-    ...(guardianConfig.variant ? [`--variant ${shellQuote(guardianConfig.variant)}`] : []),
   ];
   const command = `${commandParts.join(" ")} > ${shellQuote(stdoutPath)} 2> ${shellQuote(stderrPath)}`;
   const proc = Bun.spawn({
@@ -1069,7 +1053,6 @@ async function reviewPermissionRequest(
         agent: GUARDIAN_AGENT,
         runDirectory: GUARDIAN_RUN_DIRECTORY,
         model: guardianConfig.model,
-        variant: guardianConfig.variant,
       },
     );
     await writeGuardianDebug({
@@ -1079,7 +1062,6 @@ async function reviewPermissionRequest(
       permission: permissionEvent.permission,
       runDirectory: GUARDIAN_RUN_DIRECTORY,
       model: guardianConfig.model,
-      variant: guardianConfig.variant,
     });
 
     const reviewStart = Date.now();
@@ -1285,7 +1267,6 @@ function installGuardianAgent(
     permission: createGuardianPermissionConfig(),
     tools: createGuardianToolsConfig(),
     ...(guardianConfig.model ? { model: guardianConfig.model } : {}),
-    ...(guardianConfig.variant ? { variant: guardianConfig.variant } : {}),
   };
 }
 // END_BLOCK_INSTALL_GUARDIAN_AGENT
@@ -1325,7 +1306,6 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
 
   await logGuardian(client, directory, "info", "guardian plugin initialized", {
     model: guardianConfig.model,
-    variant: guardianConfig.variant,
     timeoutMs: guardianConfig.timeoutMs,
     approvalRiskThreshold: guardianConfig.approvalRiskThreshold,
     reviewToastDurationMs: guardianConfig.reviewToastDurationMs,
@@ -1340,7 +1320,6 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
     "[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded",
     {
       model: guardianConfig.model,
-      variant: guardianConfig.variant,
       timeoutMs: guardianConfig.timeoutMs,
       approvalRiskThreshold: guardianConfig.approvalRiskThreshold,
       reviewToastDurationMs: guardianConfig.reviewToastDurationMs,

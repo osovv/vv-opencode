@@ -2,7 +2,7 @@
 // VERSION: 0.1.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Define built-in role IDs, role-reference parsing, concrete model-selection parsing, and deterministic built-in role bindings.
-//   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model[:variant] parsing, and hard-coded built-in role binding lookup.
+//   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model parsing, and hard-coded built-in role binding lookup.
 //   INPUTS: roleId | roleRef | modelSelection strings and a canonical role map.
 //   OUTPUTS: Normalized role IDs plus parsed and resolved model-selection objects.
 //   DEPENDS: [none]
@@ -15,12 +15,13 @@
 //   BUILTIN_ROLE_NAMES - Built-in role IDs in deterministic order.
 //   ROLE_REFERENCE_PREFIX - Stable role-reference prefix.
 //   isRoleReference - Checks whether a value is a vv-role reference.
-//   parseModelSelection - Parses provider/model[:variant] into normalized parts.
+//   parseModelSelection - Parses provider/model into normalized parts.
 //   resolveRoleReference - Resolves vv-role references through a canonical role map.
 //   getBuiltInRoleBindings - Returns hard-coded role bindings for OpenCode defaults and bundled agents.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.3 - Removed variant splitting from model selection parsing so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.1.2 - Renamed tracked managed-agent role binding keys to vv-* names for implementer/spec/code reviewer roles.]
 //   LAST_CHANGE: [v0.1.1 - Distinguished unknown-role from blank configured role bindings and aligned role-reference whitespace handling between checker and resolver.]
 //   LAST_CHANGE: [v0.1.0 - Added role ID validation, role reference resolution helpers, model selection parsing, and deterministic built-in role bindings.]
@@ -46,7 +47,6 @@ export type ModelRolesError = Error & {
 export type ParsedModelSelection = {
   provider: string;
   model: string;
-  variant?: string;
   normalized: string;
 };
 
@@ -78,7 +78,7 @@ export type BuiltInRoleBindings = {
 };
 
 const ROLE_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
-const MODEL_SELECTION_PATTERN = /^([^\s/:]+)\/([^\s:]+(?:\/[^\s:]+)*)(?::([^\s:]+))?$/;
+const MODEL_SELECTION_PATTERN = /^([^\s/]+)\/([^\s]+)$/;
 
 const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
   opencodeDefaults: {
@@ -115,9 +115,9 @@ export function isRoleReference(value: string): boolean {
 }
 
 // START_CONTRACT: parseModelSelection
-//   PURPOSE: Parse provider/model[:variant] syntax into normalized model-selection parts.
+//   PURPOSE: Parse provider/model syntax into normalized model-selection parts.
 //   INPUTS: { modelSelection: string - Concrete model-selection input. }
-//   OUTPUTS: { ParsedModelSelection - Normalized provider/model and optional variant values. }
+//   OUTPUTS: { ParsedModelSelection - Normalized provider/model values. }
 //   SIDE_EFFECTS: none
 //   LINKS: [fn-parseModelSelection]
 // END_CONTRACT: parseModelSelection
@@ -130,19 +130,22 @@ export function parseModelSelection(modelSelection: string): ParsedModelSelectio
       "INVALID_MODEL_SELECTION",
       "modelSelection",
       modelSelection,
-      "expected provider/model[:variant]",
+      "expected provider/model",
     );
   }
 
-  const [, provider, model, variant] = match;
-  const normalized = variant ? `${provider}/${model}:${variant}` : `${provider}/${model}`;
-  return variant ? { provider, model, variant, normalized } : { provider, model, normalized };
+  const [, provider, model] = match;
+  const normalized = `${provider}/${model}`;
+  return { provider, model, normalized };
 }
 
 // START_CONTRACT: resolveRoleReference
-//   PURPOSE: Resolve a vv-role:* reference to a concrete provider/model[:variant] selection.
+//   PURPOSE: Resolve a vv-role:* reference to a concrete provider/model selection.
 //   INPUTS: { roleRef: string - vv-role reference, roleMap: Record<string, string> - canonical role assignments. }
 //   OUTPUTS: { ResolvedRoleSelection - Parsed concrete model selection plus normalized role information. }
+//   SIDE_EFFECTS: none
+//   LINKS: [fn-resolveRoleReference, fn-parseModelSelection]
+// END_CONTRACT: resolveRoleReference
 //   SIDE_EFFECTS: none
 //   LINKS: [fn-resolveRoleReference, fn-parseModelSelection]
 // END_CONTRACT: resolveRoleReference

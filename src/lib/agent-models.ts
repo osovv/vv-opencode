@@ -1,8 +1,8 @@
 // FILE: src/lib/agent-models.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define supported vvoc model target IDs and shared model override validation helpers.
-//   SCOPE: Model target ID lists, type guards, model formatting, and model-argument parsing reused by CLI commands and vvoc config validation, including OpenCode agent targets that support variants.
+//   SCOPE: Model target ID lists, type guards, model formatting, and model-argument parsing reused by CLI commands and vvoc config validation.
 //   DEPENDS: [src/lib/managed-agents.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-COMMANDS, M-CLI-PRESET]
 //   ROLE: RUNTIME
@@ -10,11 +10,11 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SPECIAL_AGENT_NAMES - Target IDs that support provider/model[:variant] syntax in canonical vvoc config.
+//   SPECIAL_AGENT_NAMES - Target IDs that use provider/model syntax in canonical vvoc config.
 //   OPENCODE_DEFAULT_MODEL_TARGETS - Target IDs that map to top-level OpenCode model fields.
 //   CONFIGURABLE_OPENCODE_PRIMARY_AGENTS - Built-in OpenCode primary agent IDs vvoc can override directly.
 //   CONFIGURABLE_OPENCODE_SUBAGENTS - Built-in OpenCode subagent IDs vvoc can override directly.
-//   CONFIGURABLE_OPENCODE_AGENTS - Built-in OpenCode agent IDs that vvoc can map to model plus variant fields.
+//   CONFIGURABLE_OPENCODE_AGENTS - Built-in OpenCode agent IDs that vvoc can map to model fields.
 //   SupportedModelTargetName - Union of every preset-compatible model target ID.
 //   MODEL_TARGET_NAME_CHOICES - Human-readable supported target list for CLI errors.
 //   isSpecialAgentName - Checks whether a target uses Guardian-style model syntax.
@@ -22,14 +22,13 @@
 //   isConfigurableOpenCodeAgentName - Checks whether a target is a built-in OpenCode agent override.
 //   isConfigurableOpenCodeSubagentName - Checks whether a target is a built-in OpenCode agent override.
 //   parseModelTargetName - Validates a user-supplied model target ID.
-//   parseGuardianStyleModelArg - Validates provider/model[:variant] syntax.
-//   parseOpenCodeModelArg - Validates plain provider/model syntax for top-level OpenCode model fields.
-//   parseOpenCodeAgentModelArg - Validates provider/model[:variant] syntax for OpenCode agent fields.
+//   parseModelArg - Validates provider/model syntax.
 //   normalizeModelTargetOverride - Validates and canonicalizes a stored model override string for any supported target.
-//   formatAgentModel - Formats a model and optional variant for CLI output.
+//   formatAgentModel - Formats a model string for CLI output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Removed variant splitting from model argument parsing so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.3.0 - Added variant-aware OpenCode agent targets for build/plan/general/explore while keeping top-level default model fields plain.]
 // END_CHANGE_SUMMARY
 
@@ -114,55 +113,17 @@ export function parseModelTargetName(value: unknown, operation: string): Support
   throw new Error(`unsupported target: ${trimmed}. Expected one of: ${MODEL_TARGET_NAME_CHOICES}`);
 }
 
-export function parseGuardianStyleModelArg(
-  value: unknown,
-  operation: string,
-): { model: string; variant?: string } {
-  return parseModelArgWithOptionalVariant(value, operation);
-}
-
-export function parseOpenCodeAgentModelArg(
-  value: unknown,
-  operation: string,
-): { model: string; variant?: string } {
-  return parseModelArgWithOptionalVariant(value, operation);
-}
-
-function parseModelArgWithOptionalVariant(
-  value: unknown,
-  operation: string,
-): { model: string; variant?: string } {
+export function parseModelArg(value: unknown, operation: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`model argument required for ${operation}`);
   }
 
   const trimmed = value.trim();
-
-  if (trimmed.includes(":")) {
-    const lastColon = trimmed.lastIndexOf(":");
-    const model = trimmed.slice(0, lastColon);
-    const variant = trimmed.slice(lastColon + 1);
-    if (!model.includes("/")) {
-      throw new Error(`model must be in provider/model-id format, got: ${trimmed}`);
-    }
-    return { model, variant };
-  }
-
   if (!trimmed.includes("/")) {
     throw new Error(`model must be in provider/model-id format, got: ${trimmed}`);
   }
 
-  return { model: trimmed };
-}
-
-export function parseOpenCodeModelArg(value: unknown, operation: string): string {
-  const { model, variant } = parseModelArgWithOptionalVariant(value, operation);
-  if (variant) {
-    throw new Error(
-      `model must be in provider/model-id format without :variant for ${operation}, got: ${value}`,
-    );
-  }
-  return model;
+  return trimmed;
 }
 
 export function normalizeModelTargetOverride(
@@ -170,23 +131,13 @@ export function normalizeModelTargetOverride(
   value: unknown,
   operation: string,
 ): string {
-  if (isSpecialAgentName(targetName)) {
-    const { model, variant } = parseGuardianStyleModelArg(value, operation);
-    return formatAgentModel(model, variant);
-  }
-
-  if (isConfigurableOpenCodeAgentName(targetName) || isManagedOpenCodeAgentName(targetName)) {
-    const { model, variant } = parseOpenCodeAgentModelArg(value, operation);
-    return formatAgentModel(model, variant);
-  }
-
-  return parseOpenCodeModelArg(value, operation);
+  return parseModelArg(value, operation);
 }
 
-export function formatAgentModel(model?: string, variant?: string): string {
+export function formatAgentModel(model?: string): string {
   if (!model) {
     return "default";
   }
 
-  return variant ? `${model}:${variant}` : model;
+  return model;
 }

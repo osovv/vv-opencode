@@ -124,7 +124,7 @@ function loadConfiguredRoleMapOrThrow(
   return roleMap;
 }
 
-async function loadMemoryReviewerRuntimeModel(): Promise<{ model: string; variant?: string }> {
+async function loadMemoryReviewerRuntimeModel(): Promise<{ model: string }> {
   const configPath = getGlobalVvocConfigPath();
   const configText = await readFile(configPath, "utf8").catch((error) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -140,8 +140,7 @@ async function loadMemoryReviewerRuntimeModel(): Promise<{ model: string; varian
   try {
     const resolved = resolveRoleReference(MEMORY_REVIEWER_RUNTIME_ROLE_REF, roleMap);
     return {
-      model: `${resolved.provider}/${resolved.model}`,
-      variant: resolved.variant,
+      model: resolved.normalized,
     };
   } catch (error) {
     const code = asModelRolesError(error)?.code;
@@ -188,7 +187,6 @@ function installMemoryReviewerAgent(
   config: Config,
   reviewerPrompt: string,
   reviewerModel: string,
-  reviewerVariant?: string,
 ): void {
   config.agent ??= {};
   config.agent[MEMORY_REVIEW_AGENT] = {
@@ -205,7 +203,6 @@ function installMemoryReviewerAgent(
     },
     tools: createMemoryReviewerToolsConfig(),
     model: reviewerModel,
-    ...(reviewerVariant ? { variant: reviewerVariant } : {}),
   } as never;
 }
 // END_BLOCK_REVIEWER_AGENT_CONFIGURATION
@@ -342,12 +339,7 @@ export const MemoryPlugin: Plugin = async ({ client, directory }) => {
 
   return {
     config: async (config) => {
-      installMemoryReviewerAgent(
-        config,
-        memoryReviewerPrompt,
-        memoryReviewerRuntimeModel.model,
-        memoryReviewerRuntimeModel.variant,
-      );
+      installMemoryReviewerAgent(config, memoryReviewerPrompt, memoryReviewerRuntimeModel.model);
 
       await client.app.log({
         body: {

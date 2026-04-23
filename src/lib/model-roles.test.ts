@@ -12,7 +12,7 @@
 // START_MODULE_MAP
 //   built-in role tests - Verify deterministic built-in role IDs and hard-coded role bindings.
 //   role reference tests - Verify vv-role parsing, round-trip resolution, and unknown-role handling.
-//   model selection tests - Verify provider/model[:variant] normalization and malformed input failures.
+//   model selection tests - Verify provider/model normalization and malformed input failures.
 //   chaining guard tests - Verify role-to-role chaining is rejected in wave 1.
 // END_MODULE_MAP
 //
@@ -73,8 +73,7 @@ describe("role references", () => {
       roleId: "my-custom-role",
       roleRef: "vv-role:my-custom-role",
       provider: "openai",
-      model: "gpt-5",
-      variant: "high",
+      model: "gpt-5:high",
       normalized: "openai/gpt-5:high",
     });
   });
@@ -123,18 +122,17 @@ describe("role references", () => {
 });
 
 describe("model selections", () => {
-  test("normalizes provider/model[:variant] consistently", () => {
+  test("normalizes provider/model consistently", () => {
     expect(parseModelSelection("openai/gpt-5")).toEqual({
       provider: "openai",
       model: "gpt-5",
       normalized: "openai/gpt-5",
     });
 
-    expect(parseModelSelection("  anthropic/claude-sonnet-4-5:high  ")).toEqual({
-      provider: "anthropic",
-      model: "claude-sonnet-4-5",
-      variant: "high",
-      normalized: "anthropic/claude-sonnet-4-5:high",
+    expect(parseModelSelection("  openrouter/tencent/hy3-preview:free  ")).toEqual({
+      provider: "openrouter",
+      model: "tencent/hy3-preview:free",
+      normalized: "openrouter/tencent/hy3-preview:free",
     });
 
     expect(parseModelSelection("openrouter/moonshotai/kimi-k2.6")).toEqual({
@@ -142,24 +140,11 @@ describe("model selections", () => {
       model: "moonshotai/kimi-k2.6",
       normalized: "openrouter/moonshotai/kimi-k2.6",
     });
-
-    expect(parseModelSelection("openrouter/moonshotai/kimi-k2.6:high")).toEqual({
-      provider: "openrouter",
-      model: "moonshotai/kimi-k2.6",
-      variant: "high",
-      normalized: "openrouter/moonshotai/kimi-k2.6:high",
-    });
   });
 
   test("fails malformed model selections with explicit INVALID_MODEL_SELECTION", () => {
     assertModelRolesError(
       () => parseModelSelection("openai"),
-      "INVALID_MODEL_SELECTION",
-      "modelSelection",
-    );
-
-    assertModelRolesError(
-      () => resolveRoleReference("vv-role:default", { default: "openai/gpt-5:" }),
       "INVALID_MODEL_SELECTION",
       "modelSelection",
     );

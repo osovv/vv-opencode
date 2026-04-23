@@ -2,7 +2,7 @@
 // VERSION: 0.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vv-role references in supported OpenCode config model fields during plugin config hooks.
-//   SCOPE: Canonical role-map loading, supported field traversal, role reference resolution, variant splitting for supported targets, structured logging, and explicit failure surfaces.
+//   SCOPE: Canonical role-map loading, supported field traversal, role reference resolution, structured logging, and explicit failure surfaces.
 //   DEPENDS: [@opencode-ai/plugin, node:fs/promises, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES]
 //   ROLE: RUNTIME
@@ -28,10 +28,7 @@ import {
 import { createDefaultVvocConfig, loadLenientVvocConfigText } from "../../lib/vvoc-config.js";
 import { getGlobalVvocConfigPath } from "../../lib/vvoc-paths.js";
 
-type ModelRolesPluginErrorCode =
-  | "UNKNOWN_ROLE"
-  | "INVALID_ROLE_ASSIGNMENT"
-  | "UNSUPPORTED_ROLE_TARGET";
+type ModelRolesPluginErrorCode = "UNKNOWN_ROLE" | "INVALID_ROLE_ASSIGNMENT";
 
 type ModelRolesPluginError = Error & {
   code: ModelRolesPluginErrorCode;
@@ -64,10 +61,6 @@ function createPluginError(options: {
     (error as Error & { cause?: unknown }).cause = options.cause;
   }
   return error;
-}
-
-function toProviderModel(selection: ResolvedRoleSelection): string {
-  return `${selection.provider}/${selection.model}`;
 }
 
 function toReason(error: unknown): string {
@@ -165,16 +158,8 @@ function resolveRootField(
 
   const fieldPath = fieldName;
   const resolved = resolveRoleSelectionOrThrow(value, roleMap, fieldPath);
-  if (resolved.variant) {
-    throw createPluginError({
-      code: "UNSUPPORTED_ROLE_TARGET",
-      fieldPath,
-      roleRef: value,
-      message: `UNSUPPORTED_ROLE_TARGET: ${fieldPath} cannot represent provider/model:variant assignments (${resolved.normalized})`,
-    });
-  }
 
-  config[fieldName] = toProviderModel(resolved);
+  config[fieldName] = resolved.normalized;
   return { fieldPath, roleRef: value };
 }
 
@@ -192,24 +177,7 @@ function resolveEntryModelField(
   const fieldPath = `${parentName}.${entryName}.model`;
   const resolved = resolveRoleSelectionOrThrow(value, roleMap, fieldPath);
 
-  if (resolved.variant) {
-    if (parentName !== "agent") {
-      throw createPluginError({
-        code: "UNSUPPORTED_ROLE_TARGET",
-        fieldPath,
-        roleRef: value,
-        message: `UNSUPPORTED_ROLE_TARGET: ${fieldPath} cannot represent provider/model:variant assignments (${resolved.normalized})`,
-      });
-    }
-  }
-
-  entry.model = toProviderModel(resolved);
-
-  if (resolved.variant) {
-    entry.variant = resolved.variant;
-  } else if (Object.hasOwn(entry, "variant")) {
-    delete entry.variant;
-  }
+  entry.model = resolved.normalized;
 
   return { fieldPath, roleRef: value };
 }

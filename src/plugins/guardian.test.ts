@@ -31,7 +31,6 @@ const tempDirs: string[] = [];
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const previousPath = process.env.PATH;
 const previousGuardianModelEnv = process.env.OPENCODE_GUARDIAN_MODEL;
-const previousGuardianVariantEnv = process.env.OPENCODE_GUARDIAN_VARIANT;
 
 afterEach(async () => {
   while (tempDirs.length > 0) {
@@ -58,20 +57,10 @@ afterEach(async () => {
   } else {
     process.env.OPENCODE_GUARDIAN_MODEL = previousGuardianModelEnv;
   }
-
-  if (previousGuardianVariantEnv === undefined) {
-    delete process.env.OPENCODE_GUARDIAN_VARIANT;
-  } else {
-    process.env.OPENCODE_GUARDIAN_VARIANT = previousGuardianVariantEnv;
-  }
 });
 
-async function setupGuardianWorkspace(options?: {
-  roleFast?: string;
-  guardianModel?: string;
-  guardianVariant?: string;
-}) {
-  const roleFast = options?.roleFast ?? "openai/test-fast-model:fast-variant";
+async function setupGuardianWorkspace(options?: { roleFast?: string; guardianModel?: string }) {
+  const roleFast = options?.roleFast ?? "openai/test-fast-model";
   const projectDir = await mkdtemp(join(tmpdir(), "vvoc-guardian-project-"));
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-guardian-config-home-"));
   tempDirs.push(projectDir, configHome);
@@ -97,7 +86,6 @@ async function setupGuardianWorkspace(options?: {
         guardian: {
           ...defaultConfig.guardian,
           ...(options?.guardianModel ? { model: options.guardianModel } : {}),
-          ...(options?.guardianVariant ? { variant: options.guardianVariant } : {}),
         },
       },
       null,
@@ -148,7 +136,6 @@ test("GuardianPlugin registers guardian as a hidden subagent with explicit two-s
   expect(guardian?.steps).toBe(2);
   expect(guardian?.prompt).toBe("Custom guardian prompt.");
   expect(guardian?.model).toBe("openai/test-fast-model");
-  expect(guardian?.variant).toBe("fast-variant");
   expect(logs).toContain(
     "[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded",
   );
@@ -158,7 +145,6 @@ test("GuardianPlugin ignores stale guardian model fields in vvoc.json and keeps 
   const { projectDir } = await setupGuardianWorkspace({
     roleFast: "openai/role-fast-model:role-variant",
     guardianModel: "legacy/stale-guardian-model",
-    guardianVariant: "legacy-variant",
   });
 
   const plugin = await GuardianPlugin({
@@ -187,17 +173,15 @@ test("GuardianPlugin ignores stale guardian model fields in vvoc.json and keeps 
   await plugin.config?.(config as never);
 
   const guardian = (config.agent as Record<string, Record<string, unknown>>)?.guardian;
-  expect(guardian?.model).toBe("openai/role-fast-model");
-  expect(guardian?.variant).toBe("role-variant");
+  expect(guardian?.model).toBe("openai/role-fast-model:role-variant");
 });
 
 test("GuardianPlugin still allows env model override over the roles.fast default", async () => {
   const { projectDir } = await setupGuardianWorkspace({
-    roleFast: "openai/role-fast-model:role-variant",
+    roleFast: "openai/role-fast-model",
   });
 
   process.env.OPENCODE_GUARDIAN_MODEL = "openai/env-guardian-model";
-  process.env.OPENCODE_GUARDIAN_VARIANT = "env-variant";
 
   const plugin = await GuardianPlugin({
     client: {
@@ -226,7 +210,6 @@ test("GuardianPlugin still allows env model override over the roles.fast default
 
   const guardian = (config.agent as Record<string, Record<string, unknown>>)?.guardian;
   expect(guardian?.model).toBe("openai/env-guardian-model");
-  expect(guardian?.variant).toBe("env-variant");
 });
 
 test("GuardianPlugin fails loudly when built-in fast role cannot resolve to a concrete model", async () => {

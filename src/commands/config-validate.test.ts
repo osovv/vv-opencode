@@ -37,7 +37,7 @@ test("validateVvocConfigContent - pre-role schema versions fail as unsupported",
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
-        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.1/schemas/vvoc/v2.json",
+        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.2/schemas/vvoc/v2.json",
         version: 2,
         guardian: {
           timeoutMs: 90000,
@@ -143,7 +143,7 @@ test("validateVvocConfigContent - invalid role assignment string fails with role
     result.errors.some(
       (error) =>
         error.includes("/roles/default") &&
-        error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model[:variant]"),
+        error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model"),
     ),
   ).toBe(true);
 });
@@ -236,7 +236,7 @@ test("validateVvocConfigContent - malformed preset role assignment fails with pr
     result.errors.some(
       (error) =>
         error.includes("/presets/invalid/agents/guardian") &&
-        error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model[:variant]"),
+        error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model"),
     ),
   ).toBe(true);
 });

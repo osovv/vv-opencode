@@ -2,7 +2,7 @@
 // VERSION: 0.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify ModelRolesPlugin role-reference resolution and explicit failure behavior.
-//   SCOPE: Root and nested field resolution, variant splitting for agent targets, literal passthrough behavior, and unknown/unsupported failure paths with stable markers.
+//   SCOPE: Root and nested field resolution, literal passthrough behavior, and unknown failure paths with stable markers.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/vvoc-config.ts, src/plugins/model-roles/index.ts]
 //   LINKS: [V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: TEST
@@ -126,7 +126,7 @@ describe("ModelRolesPlugin", () => {
     const config: Record<string, any> = {
       agent: {
         build: { model: "vv-role:smart" },
-        explore: { model: "vv-role:fast", variant: "should-be-removed" },
+        explore: { model: "vv-role:fast" },
       },
       command: {
         plan: { model: "vv-role:fast" },
@@ -135,14 +135,9 @@ describe("ModelRolesPlugin", () => {
 
     await plugin.config?.(config as never);
 
-    expect(config.agent.build.model).toBe("openai/gpt-5.4");
-    expect(config.agent.build.variant).toBe("xhigh");
-    expect(config.agent.build.model.includes(":"), "agent model should not keep :variant").toBe(
-      false,
-    );
+    expect(config.agent.build.model).toBe("openai/gpt-5.4:xhigh");
 
     expect(config.agent.explore.model).toBe("openai/gpt-5.4-mini");
-    expect(Object.hasOwn(config.agent.explore, "variant")).toBe(false);
 
     expect(config.command.plan.model).toBe("openai/gpt-5.4-mini");
   });
@@ -194,24 +189,5 @@ describe("ModelRolesPlugin", () => {
     expect(messages).toContain(
       "[model-roles][config][BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES] unknown role reference",
     );
-  });
-
-  test("fails for root fields when role assignments resolve to provider/model:variant", async () => {
-    const { plugin } = await createPluginWithRoles({
-      default: "openai/gpt-5.4:high",
-      fast: "openai/gpt-5.4-mini:low",
-    });
-
-    await expect(
-      plugin.config?.({
-        model: "vv-role:default",
-      } as never),
-    ).rejects.toThrow("UNSUPPORTED_ROLE_TARGET");
-
-    await expect(
-      plugin.config?.({
-        small_model: "vv-role:fast",
-      } as never),
-    ).rejects.toThrow("small_model");
   });
 });

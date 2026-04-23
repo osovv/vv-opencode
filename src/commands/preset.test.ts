@@ -182,13 +182,11 @@ describe("applyPreset", () => {
         guardian: {
           ...defaultConfig.guardian,
           model: "anthropic/claude-sonnet-4-5",
-          variant: "high",
           timeoutMs: 120_000,
         },
         memory: {
           ...defaultConfig.memory,
           reviewerModel: "zai-coding-plan/glm-4.5-airx",
-          reviewerVariant: "high",
         },
         secretsRedaction: {
           ...defaultConfig.secretsRedaction,
@@ -295,9 +293,7 @@ describe("applyPreset", () => {
           cwd: "/workspace/project",
           configDir: configHome,
         }),
-      ).rejects.toThrow(
-        "INVALID_MODEL_SELECTION: modelSelection expected provider/model[:variant]",
-      );
+      ).rejects.toThrow("INVALID_MODEL_SELECTION: modelSelection expected provider/model");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

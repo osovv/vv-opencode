@@ -37,7 +37,7 @@ const roleArg = {
 const modelArg = {
   type: "positional" as const,
   required: true,
-  description: "Model in provider/model[:variant] format.",
+  description: "Model in provider/model format.",
 };
 
 const configDirArg = {

@@ -322,12 +322,11 @@ describe("MemoryPlugin", () => {
             ...createDefaultVvocConfig(),
             roles: {
               ...createDefaultVvocConfig().roles,
-              fast: "anthropic/claude-3-5-haiku-latest:fast-variant",
+              fast: "anthropic/claude-3-5-haiku-latest",
             },
             memory: {
               ...createDefaultVvocConfig().memory,
               reviewerModel: "openai/gpt-4o",
-              reviewerVariant: "ignored-memory-field",
             },
           },
           null,
@@ -384,9 +383,6 @@ describe("MemoryPlugin", () => {
       expect((config.agent as Record<string, { model?: string }>)?.["memory-reviewer"]?.model).toBe(
         "anthropic/claude-3-5-haiku-latest",
       );
-      expect(
-        (config.agent as Record<string, { variant?: string }>)?.["memory-reviewer"]?.variant,
-      ).toBe("fast-variant");
       expect(
         (config.agent as Record<string, { model?: string }>)?.["memory-reviewer"]?.model,
       ).not.toBe("openai/gpt-4o");

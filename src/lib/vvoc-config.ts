@@ -91,7 +91,6 @@ export type VvocPresets = Record<string, VvocPreset>;
 
 export type GuardianConfig = {
   model?: string;
-  variant?: string;
   timeoutMs: number;
   approvalRiskThreshold: number;
   reviewToastDurationMs: number;
@@ -103,7 +102,6 @@ export type MemoryConfig = {
   enabled: boolean;
   defaultSearchLimit: number;
   reviewerModel?: string;
-  reviewerVariant?: string;
 };
 
 export type MemoryConfigOverrides = Partial<MemoryConfig>;
@@ -154,7 +152,6 @@ const GUARDIAN_CONFIG_SCHEMA = {
   required: ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
   properties: {
     model: { type: "string", minLength: 1 },
-    variant: { type: "string", minLength: 1 },
     timeoutMs: { type: "integer", minimum: 1 },
     approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
     reviewToastDurationMs: { type: "integer", minimum: 1 },
@@ -169,7 +166,6 @@ const MEMORY_CONFIG_SCHEMA = {
     enabled: { type: "boolean" },
     defaultSearchLimit: { type: "integer", minimum: 1 },
     reviewerModel: { type: "string", minLength: 1 },
-    reviewerVariant: { type: "string", minLength: 1 },
   },
 };
 
@@ -286,7 +282,6 @@ export function createGuardianConfig(overrides: GuardianConfigOverrides = {}): G
 
   return compactObject({
     model: normalizeOptionalString(overrides.model),
-    variant: normalizeOptionalString(overrides.variant),
     timeoutMs,
     approvalRiskThreshold:
       overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD,
@@ -299,7 +294,6 @@ export function createMemoryConfig(overrides: MemoryConfigOverrides = {}): Memor
     enabled: overrides.enabled ?? true,
     defaultSearchLimit: overrides.defaultSearchLimit ?? DEFAULT_MEMORY_SEARCH_LIMIT,
     reviewerModel: normalizeOptionalString(overrides.reviewerModel),
-    reviewerVariant: normalizeOptionalString(overrides.reviewerVariant),
   });
 }
 
@@ -400,7 +394,7 @@ export function parseGuardianConfigText(text: string, label: string): GuardianCo
 
   assertAllowedKeys(
     value,
-    ["model", "variant", "timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
+    ["model", "timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
     label,
   );
 
@@ -408,9 +402,6 @@ export function parseGuardianConfigText(text: string, label: string): GuardianCo
 
   if (Object.hasOwn(value, "model")) {
     overrides.model = readNonEmptyString(value.model, `${label}: model`);
-  }
-  if (Object.hasOwn(value, "variant")) {
-    overrides.variant = readNonEmptyString(value.variant, `${label}: variant`);
   }
   if (Object.hasOwn(value, "timeoutMs")) {
     overrides.timeoutMs = readPositiveInteger(value.timeoutMs, `${label}: timeoutMs`);
@@ -441,11 +432,7 @@ export function parseMemoryConfigText(text: string, label: string): MemoryConfig
     throw new Error(`${label}: expected a top-level object`);
   }
 
-  assertAllowedKeys(
-    value,
-    ["enabled", "defaultSearchLimit", "reviewerModel", "reviewerVariant"],
-    label,
-  );
+  assertAllowedKeys(value, ["enabled", "defaultSearchLimit", "reviewerModel"], label);
 
   const overrides: MemoryConfigOverrides = {};
 
@@ -463,12 +450,6 @@ export function parseMemoryConfigText(text: string, label: string): MemoryConfig
   }
   if (Object.hasOwn(value, "reviewerModel")) {
     overrides.reviewerModel = readNonEmptyString(value.reviewerModel, `${label}: reviewerModel`);
-  }
-  if (Object.hasOwn(value, "reviewerVariant")) {
-    overrides.reviewerVariant = readNonEmptyString(
-      value.reviewerVariant,
-      `${label}: reviewerVariant`,
-    );
   }
   return overrides;
 }
@@ -670,12 +651,6 @@ function loadLenientGuardianConfig(
       overrides.model = model;
     }
   }
-  if (Object.hasOwn(value, "variant")) {
-    const variant = readLenientOptionalString(value.variant, `${label}.variant`, warnings);
-    if (variant !== undefined) {
-      overrides.variant = variant;
-    }
-  }
   if (Object.hasOwn(value, "timeoutMs")) {
     const timeoutMs = readLenientPositiveInteger(value.timeoutMs, `${label}.timeoutMs`, warnings);
     if (timeoutMs !== undefined) {
@@ -739,16 +714,6 @@ function loadLenientMemoryConfig(value: unknown, label: string, warnings: string
     );
     if (reviewerModel !== undefined) {
       overrides.reviewerModel = reviewerModel;
-    }
-  }
-  if (Object.hasOwn(value, "reviewerVariant")) {
-    const reviewerVariant = readLenientOptionalString(
-      value.reviewerVariant,
-      `${label}.reviewerVariant`,
-      warnings,
-    );
-    if (reviewerVariant !== undefined) {
-      overrides.reviewerVariant = reviewerVariant;
     }
   }
   return createMemoryConfig(overrides);

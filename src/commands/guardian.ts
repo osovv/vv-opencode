@@ -51,10 +51,6 @@ const config = defineCommand({
       type: "string",
       description: "Override the Guardian model.",
     },
-    variant: {
-      type: "string",
-      description: "Override the Guardian variant.",
-    },
     "timeout-ms": {
       type: "string",
       description: "Timeout in milliseconds.",
@@ -106,9 +102,6 @@ function readGuardianOverridesFromArgs(args: Record<string, unknown>): GuardianC
 
   if (typeof args.model === "string" && args.model.trim()) {
     overrides.model = args.model.trim();
-  }
-  if (typeof args.variant === "string" && args.variant.trim()) {
-    overrides.variant = args.variant.trim();
   }
 
   const timeoutMs = parsePositiveIntegerArg(args["timeout-ms"], "timeout-ms");
