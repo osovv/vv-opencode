@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/edit-text-normalization.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Normalize edit payload text so copied hashline rows and accidental diff markers do not corrupt replacements.
 //   SCOPE: Prefix stripping, line splitting, indentation restoration, and echo-line trimming for insert/replace payloads.
@@ -17,6 +17,10 @@
 //   stripInsertBeforeEcho - Remove duplicated anchor echoes from prepend payloads.
 //   stripRangeBoundaryEcho - Remove duplicated surrounding lines accidentally included in replace payloads.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Made prepend echo stripping symmetric with append so single-line anchor echoes are removed instead of duplicating the anchor line.]
+// END_CHANGE_SUMMARY
 
 const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*\d+\s*#\s*[ZPMQVRWSNKTXJBYH]{2}\|/;
 const DIFF_PLUS_RE = /^[+](?![+])/;
@@ -106,7 +110,7 @@ export function stripInsertAnchorEcho(anchorLine: string, newLines: string[]): s
 }
 
 export function stripInsertBeforeEcho(anchorLine: string, newLines: string[]): string[] {
-  if (newLines.length <= 1) {
+  if (newLines.length === 0) {
     return newLines;
   }
   if (equalsIgnoringWhitespace(newLines[newLines.length - 1] ?? "", anchorLine)) {

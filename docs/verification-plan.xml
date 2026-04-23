@@ -1,4 +1,4 @@
-<VerificationPlan VERSION="0.9.3">
+<VerificationPlan VERSION="0.9.5">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
@@ -375,17 +375,22 @@
     <V-M-PLUGIN-HASHLINE-EDIT MODULE="M-PLUGIN-HASHLINE-EDIT" PRIORITY="high">
       <test-files>
         <file>src/plugins/hashline-edit.test.ts</file>
+        <file>src/plugins/hashline-edit.edit-operations.test.ts</file>
+        <file>src/plugins/hashline-edit.normalize-edits.test.ts</file>
+        <file>src/plugins/hashline-edit.validation.test.ts</file>
       </test-files>
       <module-checks>
-        <check-1>bun test src/plugins/hashline-edit.test.ts</check-1>
+        <check-1>bun test src/plugins/hashline-edit*.test.ts</check-1>
         <check-2>bun x tsc --noEmit</check-2>
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">The plugin exports compile and register an `edit` tool override.</scenario-1>
-        <scenario-2 kind="success">`tool.execute.after` rewrites numbered text-file read output into `line#hash|content` rows.</scenario-2>
-        <scenario-3 kind="success">Anchored replace edits update the requested file and emit filediff metadata.</scenario-3>
+        <scenario-2 kind="success">`tool.execute.after` rewrites both plain numbered and wrapped text-file read output into `line#hash|content` rows.</scenario-2>
+        <scenario-3 kind="success">Anchored replace edits, including ranged replace plus anchored append batches, update the requested file and emit filediff metadata.</scenario-3>
         <scenario-4 kind="failure">Stale anchors fail with a mismatch error that includes refreshed nearby anchors.</scenario-4>
         <scenario-5 kind="success">BOM and CRLF line endings are preserved across hashline edits.</scenario-5>
+        <scenario-6 kind="success">Missing files can be created safely from unanchored prepend plus append batches without introducing extra blank lines.</scenario-6>
+        <scenario-7 kind="success">Boundary-echo stripping, anchor-echo stripping, and merged-line autocorrection normalize common model payload mistakes without corrupting neighboring lines.</scenario-7>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -393,7 +398,7 @@
         <assertion-2>The read-output enhancer must only rewrite line-numbered text output and must leave non-text output untouched.</assertion-2>
         <assertion-3>The write-back path must preserve the original BOM and line-ending style recorded during canonicalization.</assertion-3>
       </required-trace-assertions>
-      <wave-follow-up>Add coverage for anchored append/prepend and missing-file creation once the default workflow has live-session evidence.</wave-follow-up>
+      <wave-follow-up>Add direct validation and batch-ordering tests if live sessions still report corruption after the new regression coverage lands.</wave-follow-up>
     </V-M-PLUGIN-HASHLINE-EDIT>
 
     <V-M-PLUGIN-MEMORY-STORE MODULE="M-PLUGIN-MEMORY-STORE" PRIORITY="high">

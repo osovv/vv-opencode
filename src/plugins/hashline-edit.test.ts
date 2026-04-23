@@ -1,22 +1,32 @@
 // FILE: src/plugins/hashline-edit.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
-//   SCOPE: Plugin registration, read hashing, successful anchored edits, stale-anchor rejection, and BOM/CRLF preservation.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
+//   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, normalization heuristics, and BOM/CRLF preservation.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
 //   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineEditPlugin tests - Verify read hashing, edit execution, mismatch handling, and text-envelope preservation.
+//   HashlineEditPlugin tests - Verify read hashing, edit execution, normalization heuristics, mismatch handling, and text-envelope preservation.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Added regression coverage for wrapped read output, ranged plus appended edits, missing-file creation, and normalization heuristics adapted from oh-my-openagent.]
+//   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  applyInsertAfter,
+  applyInsertBefore,
+  applyReplaceLines,
+} from "./hashline-edit/edit-operation-primitives.js";
 import { computeLineHash } from "./hashline-edit/hash-computation.js";
 import { HashlineEditPlugin } from "./hashline-edit/index.js";
 
@@ -50,6 +60,10 @@ function createToolContext(directory: string) {
   };
 }
 
+function anchorFor(lines: string[], line: number): string {
+  return `${line}#${computeLineHash(line, lines[line - 1] ?? "")}`;
+}
+
 describe("HashlineEditPlugin", () => {
   test("registers the edit override and hashes read output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-read-"));
@@ -71,6 +85,30 @@ describe("HashlineEditPlugin", () => {
 
       expect(output.output).toBe(
         `1#${computeLineHash(1, "const first = 1;")}|const first = 1;\n2#${computeLineHash(2, "const second = 2;")}|const second = 2;`,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("hashes wrapped <content> read output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-read-wrapped-"));
+
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const output = {
+        title: directory,
+        output: "<content>1: const first = 1;\n2: const second = 2;\n</content>",
+        metadata: {},
+      };
+
+      await plugin["tool.execute.after"]?.(
+        { tool: "read", sessionID: "session-1", callID: "call-1", args: {} } as never,
+        output as never,
+      );
+
+      expect(output.output).toBe(
+        `<content>\n1#${computeLineHash(1, "const first = 1;")}|const first = 1;\n2#${computeLineHash(2, "const second = 2;")}|const second = 2;\n</content>`,
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -105,6 +143,243 @@ describe("HashlineEditPlugin", () => {
       expect((metadataCalls[0]?.metadata?.filediff as { after?: string } | undefined)?.after).toBe(
         'function greet() {\n  return "hello";\n}\n',
       );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("applies ranged replace and anchored append in one call", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-batch-"));
+
+    try {
+      const filePath = join(directory, "sample.ts");
+      const originalLines = ["line1", "line2", "line3", "line4"];
+      await writeFile(filePath, `${originalLines.join("\n")}\n`, "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          edits: [
+            {
+              op: "replace",
+              pos: anchorFor(originalLines, 2),
+              end: anchorFor(originalLines, 3),
+              lines: ["replaced"],
+            },
+            {
+              op: "append",
+              pos: anchorFor(originalLines, 4),
+              lines: ["inserted"],
+            },
+          ],
+        },
+        context as never,
+      );
+
+      expect(result).toBe(`Updated ${filePath}`);
+      expect(await readFile(filePath, "utf8")).toBe("line1\nreplaced\nline4\ninserted\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("creates a missing file from prepend and append edits", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-create-"));
+
+    try {
+      const filePath = join(directory, "created.ts");
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          edits: [
+            { op: "append", lines: ["line2"] },
+            { op: "prepend", lines: ["line1"] },
+          ],
+        },
+        context as never,
+      );
+
+      expect(result).toBe(`Updated ${filePath}`);
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("renames a file after applying edits", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-rename-"));
+
+    try {
+      const filePath = join(directory, "source.ts");
+      const renamedPath = join(directory, "renamed.ts");
+      const originalLines = ["line1", "line2"];
+      await writeFile(filePath, originalLines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          rename: renamedPath,
+          edits: [{ op: "replace", pos: anchorFor(originalLines, 2), lines: ["line2-updated"] }],
+        },
+        context as never,
+      );
+
+      expect(result).toBe(`Moved ${filePath} to ${renamedPath}`);
+      await expect(readFile(filePath, "utf8")).rejects.toThrow();
+      expect(await readFile(renamedPath, "utf8")).toBe("line1\nline2-updated");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("deletes a file in delete mode", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-delete-"));
+
+    try {
+      const filePath = join(directory, "delete-me.ts");
+      await writeFile(filePath, "line1\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          delete: true,
+          edits: [],
+        },
+        context as never,
+      );
+
+      expect(result).toBe(`Successfully deleted ${filePath}`);
+      await expect(readFile(filePath, "utf8")).rejects.toThrow();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects delete mode with non-empty edits", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-delete-reject-"));
+
+    try {
+      const filePath = join(directory, "delete-reject.ts");
+      await writeFile(filePath, "line1\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          delete: true,
+          edits: [{ op: "replace", pos: "1#ZZ", lines: ["bad"] }],
+        },
+        context as never,
+      );
+
+      expect(result).toContain("delete mode requires edits to be an empty array");
+      expect(await readFile(filePath, "utf8")).toBe("line1\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects delete mode combined with rename", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-delete-rename-"));
+
+    try {
+      const filePath = join(directory, "delete-rename.ts");
+      await writeFile(filePath, "line1\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          delete: true,
+          rename: join(directory, "new-name.ts"),
+          edits: [],
+        },
+        context as never,
+      );
+
+      expect(result).toContain("delete and rename cannot be used together");
+      expect(await readFile(filePath, "utf8")).toBe("line1\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects anchored append when the target file is missing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-missing-anchored-"));
+
+    try {
+      const filePath = join(directory, "missing.ts");
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          edits: [{ op: "append", pos: "1#ZZ", lines: ["bad"] }],
+        },
+        context as never,
+      );
+
+      expect(result).toContain(`Error: File not found: ${filePath}`);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("reports no-op edits instead of rewriting the file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-noop-"));
+
+    try {
+      const filePath = join(directory, "noop.ts");
+      const originalLines = ["line1", "line2"];
+      await writeFile(filePath, `${originalLines.join("\n")}\n`, "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          edits: [{ op: "replace", pos: anchorFor(originalLines, 2), lines: ["line2"] }],
+        },
+        context as never,
+      );
+
+      expect(result).toContain("No changes made");
+      expect(result).toContain("No-op edits: 1");
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2\n");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -176,5 +451,48 @@ describe("HashlineEditPlugin", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  test("strips boundary echo around range replacements", () => {
+    const lines = ["before", "old 1", "old 2", "after"];
+
+    expect(
+      applyReplaceLines(lines, anchorFor(lines, 2), anchorFor(lines, 3), [
+        "before",
+        "new 1",
+        "new 2",
+        "after",
+      ]),
+    ).toEqual(["before", "new 1", "new 2", "after"]);
+  });
+
+  test("strips copied anchor echoes for anchored inserts", () => {
+    const lines = ["line1", "line2", "line3"];
+
+    expect(applyInsertAfter(lines, anchorFor(lines, 1), ["line1", "between"])).toEqual([
+      "line1",
+      "between",
+      "line2",
+      "line3",
+    ]);
+    expect(applyInsertBefore(lines, anchorFor(lines, 3), ["before3", "line3"])).toEqual([
+      "line1",
+      "line2",
+      "before3",
+      "line3",
+    ]);
+  });
+
+  test("autocorrects merged replacement lines back to the original line count", () => {
+    const lines = ["const a = 1;", "const b = 2;"];
+
+    expect(
+      applyReplaceLines(
+        lines,
+        anchorFor(lines, 1),
+        anchorFor(lines, 2),
+        "const a = 10; const b = 20;",
+      ),
+    ).toEqual(["const a = 10;", "const b = 20;"]);
   });
 });
