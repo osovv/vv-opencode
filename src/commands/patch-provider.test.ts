@@ -47,7 +47,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(resolvePatchProviderPreset("openai")).toMatchObject({
       kind: "provider-object",
       providerID: "openai",
-      summary: "provider.openai.models.vv-gpt-5.4-xhigh patched",
+      summary: "provider.openai.models.vv-gpt-5.5-xhigh patched",
     });
   });
 

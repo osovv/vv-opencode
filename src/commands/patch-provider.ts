@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.1 - Synced the module map with the exported PatchProviderPresetName helper type.]
+//   LAST_CHANGE: [v0.4.2 - Added vv-gpt-5dot5-xhigh model and updated openai patch preset summary.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -71,6 +71,16 @@ const OPENAI_PATCH = {
         include: ["reasoning.encrypted_content"],
       },
     },
+    "vv-gpt-5.5-xhigh": {
+      name: "VV GPT-5.5-XHigh",
+      id: "gpt-5.5",
+      variants: {},
+      options: {
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
   },
 } as const satisfies Record<string, unknown>;
 
@@ -91,7 +101,7 @@ const PATCH_PROVIDER_PRESETS = {
     kind: "provider-object",
     providerID: "openai",
     value: OPENAI_PATCH,
-    summary: "provider.openai.models.vv-gpt-5.4-xhigh patched",
+    summary: "provider.openai.models.vv-gpt-5.5-xhigh patched",
   },
 } as const satisfies Record<string, PatchPreset>;
 

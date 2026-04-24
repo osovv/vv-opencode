@@ -44,8 +44,8 @@ describe("preset helpers", () => {
     expect(output).toContain(
       '"description": "Starter OpenAI role assignments for built-in vvoc roles."',
     );
-    expect(output).toContain('"default": "openai/vv-gpt-5.4-xhigh"');
-    expect(output).toContain('"smart": "openai/vv-gpt-5.4-xhigh"');
+    expect(output).toContain('"default": "openai/vv-gpt-5.5-xhigh"');
+    expect(output).toContain('"smart": "openai/vv-gpt-5.5-xhigh"');
     expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
     expect(output).toContain('"vision": "openai/gpt-5.4"');
   });
@@ -250,7 +250,7 @@ describe("applyPreset", () => {
 
       const bootstrapped = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       expect(bootstrapped.version).toBe(3);
-      expect(bootstrapped.roles.default).toBe("openai/vv-gpt-5.4-xhigh");
+      expect(bootstrapped.roles.default).toBe("openai/vv-gpt-5.5-xhigh");
       expect(bootstrapped.presets["vv-openai"]).toBeDefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });

@@ -42,7 +42,7 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
-//   LAST_CHANGE: [v2.3.0 - Switched the built-in vv-openai preset to the vv-managed OpenAI alias model so the default target can carry xhigh reasoning exactly.]
+//   LAST_CHANGE: [v2.3.2 - Updated built-in vv-openai preset and default roles to use vv-gpt-5.5-xhigh model.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -319,8 +319,8 @@ export function createDefaultVvocPresets(): VvocPresets {
 
 function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Record<string, string> {
   const defaults: Record<BuiltInRoleName, string> = {
-    default: "openai/vv-gpt-5.4-xhigh",
-    smart: "openai/vv-gpt-5.4-xhigh",
+    default: "openai/vv-gpt-5.5-xhigh",
+    smart: "openai/vv-gpt-5.5-xhigh",
     fast: "openai/gpt-5.4-mini",
     vision: "openai/gpt-5.4",
   };
@@ -345,8 +345,8 @@ function createBuiltinVvocPresets(): VvocPresets {
     "vv-openai": createVvocPreset({
       description: "Starter OpenAI role assignments for built-in vvoc roles.",
       agents: {
-        default: "openai/vv-gpt-5.4-xhigh",
-        smart: "openai/vv-gpt-5.4-xhigh",
+        default: "openai/vv-gpt-5.5-xhigh",
+        smart: "openai/vv-gpt-5.5-xhigh",
         fast: "openai/gpt-5.4-mini",
         vision: "openai/gpt-5.4",
       },

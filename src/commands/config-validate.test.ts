@@ -37,7 +37,7 @@ test("validateVvocConfigContent - pre-role schema versions fail as unsupported",
   const result = validateVvocConfigContent(
     JSON.stringify(
       {
-        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.3/schemas/vvoc/v2.json",
+        $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.4/schemas/vvoc/v2.json",
         version: 2,
         guardian: {
           timeoutMs: 90000,
@@ -104,8 +104,8 @@ test("validateVvocConfigContent - missing required built-in role ids fails with 
       {
         ...createDefaultVvocConfig(),
         roles: {
-          default: "openai/vv-gpt-5.4-xhigh",
-          smart: "openai/vv-gpt-5.4-xhigh",
+          default: "openai/vv-gpt-5.5-xhigh",
+          smart: "openai/vv-gpt-5.5-xhigh",
           fast: "openai/gpt-5.4-mini",
           helper: "openai/gpt-5.4",
         },
