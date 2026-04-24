@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit override.
 //   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, operation choice, and stale-anchor recovery.
@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `edit` tool.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Updated copied-row warning to include context-anchored hashline row format.]
+// END_CHANGE_SUMMARY
 
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 
@@ -28,7 +32,7 @@ Rules:
 - \`append\` inserts after the anchor, or at EOF when no anchor is provided.
 - \`prepend\` inserts before the anchor, or at BOF when no anchor is provided.
 - \`lines: null\` or \`lines: []\` with \`replace\` deletes the targeted line or range.
-- \`lines\` must contain plain replacement content only, not copied \`line#hash|content\` rows.
+- \`lines\` must contain plain replacement content only, not copied \`line#hash#anchor|content\` rows.
 - Prefer one operation per logical mutation site instead of a single oversized replace.
 
 Recovery:

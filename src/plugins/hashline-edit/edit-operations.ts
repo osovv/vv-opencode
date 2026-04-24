@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/edit-operations.ts
-// VERSION: 0.2.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate, order, deduplicate, and apply a batch of hashline edit operations against a file snapshot.
 //   SCOPE: Batch region computation, comprehensive conflict detection covering all mutation types, exact-edit deduplication, bottom-up application ordering, and no-op reporting.
@@ -15,6 +15,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Insert anchors targeting deleted single-line replacements are now rejected to avoid line drift after deletion.]
+//   LAST_CHANGE: [v0.5.0 - Insert anchors inside multi-line replacement ranges are now rejected to avoid post-splice line drift.]
+//   LAST_CHANGE: [v0.4.0 - Repeated unanchored prepend batches now preserve user-provided order at BOF.]
+//   LAST_CHANGE: [v0.3.0 - Same-anchor append/prepend batches now preserve user-provided order despite bottom-up splice application.]
 //   LAST_CHANGE: [v0.2.0 - Replaced range-only conflict detection with comprehensive region-based conflict validation, fixed deduplication to treat null and empty lines identically, added defensive default to edit line number extraction.]
 // END_CHANGE_SUMMARY
 
@@ -63,6 +67,11 @@ interface EditRegion {
   anchorLine: number;
   startLine: number;
   endLine: number;
+  deletesOriginalLines: boolean;
+}
+
+function isDeletePayload(lines: string | string[]): boolean {
+  return Array.isArray(lines) && lines.length === 0;
 }
 
 function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
@@ -77,6 +86,7 @@ function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
           anchorLine: startLine,
           startLine,
           endLine,
+          deletesOriginalLines: isDeletePayload(edit.lines),
         };
       }
       case "append": {
@@ -87,6 +97,7 @@ function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
           anchorLine: line,
           startLine: line,
           endLine: line,
+          deletesOriginalLines: false,
         };
       }
       case "prepend": {
@@ -97,6 +108,7 @@ function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
           anchorLine: line,
           startLine: line,
           endLine: line,
+          deletesOriginalLines: false,
         };
       }
     }
@@ -117,6 +129,12 @@ function collectLineRefs(edits: HashlineEdit[]): string[] {
 
 function validateBatchConflicts(regions: EditRegion[]): void {
   const consumed = new Map<number, { editIndex: number; op: string }>();
+  const multiLineReplaceRegions = regions.filter(
+    (region) => region.op === "replace" && region.startLine !== region.endLine,
+  );
+  const deleteReplaceRegions = regions.filter(
+    (region) => region.op === "replace" && region.deletesOriginalLines,
+  );
 
   for (const region of regions) {
     if (region.op !== "replace") continue;
@@ -129,6 +147,25 @@ function validateBatchConflicts(regions: EditRegion[]): void {
         );
       }
       consumed.set(idx, { editIndex: region.editIndex, op: region.op });
+    }
+  }
+
+  for (const region of regions) {
+    if (region.op === "replace" || region.anchorLine <= 0) continue;
+    const replaced = multiLineReplaceRegions.find(
+      (replaceRegion) =>
+        region.anchorLine >= replaceRegion.startLine && region.anchorLine <= replaceRegion.endLine,
+    );
+    const deleted = deleteReplaceRegions.find(
+      (replaceRegion) =>
+        region.anchorLine >= replaceRegion.startLine && region.anchorLine <= replaceRegion.endLine,
+    );
+    const conflict = replaced ?? deleted;
+    if (conflict) {
+      throw new Error(
+        `Conflicting edits: edit ${region.editIndex + 1} (${region.op} at line ${region.anchorLine}) ` +
+          `references a line replaced by edit ${conflict.editIndex + 1} (lines ${conflict.startLine}-${conflict.endLine})`,
+      );
     }
   }
 }
@@ -183,13 +220,26 @@ export function applyHashlineEditsWithReport(
   const sortedEdits = dedupeResult.edits
     .map((edit, index) => ({ edit, index }))
     .sort((left, right) => {
-      const lineDelta = getEditLineNumber(right.edit) - getEditLineNumber(left.edit);
-      if (lineDelta !== 0) {
-        return lineDelta;
+      const leftLine = getEditLineNumber(left.edit);
+      const rightLine = getEditLineNumber(right.edit);
+      if (leftLine !== rightLine) {
+        return rightLine - leftLine;
       }
       const precedenceDelta = editPrecedence[left.edit.op] - editPrecedence[right.edit.op];
       if (precedenceDelta !== 0) {
         return precedenceDelta;
+      }
+      if (left.edit.op === right.edit.op) {
+        if (
+          left.edit.op === "append" &&
+          left.edit.pos !== undefined &&
+          right.edit.pos !== undefined
+        ) {
+          return right.index - left.index;
+        }
+        if (left.edit.op === "prepend") {
+          return right.index - left.index;
+        }
       }
       return left.index - right.index;
     })

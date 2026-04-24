@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "0.25.4",
+  "version": "0.25.5",
   "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.3.3
+// VERSION: 0.3.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.4 - Updated editing-workflow assertion for context-anchored hashline refs.]
 //   LAST_CHANGE: [v0.3.3 - Added regression coverage for primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites.]
 //   LAST_CHANGE: [v0.3.2 - Updated assertions to match narrowed explore-only-context-gathering guidance.]
 //   LAST_CHANGE: [v0.3.1 - Added coverage verifying vv-* tracked subagents remain excluded from primary-session system context injection.]
@@ -203,7 +204,7 @@ describe("SystemContextInjectionPlugin", () => {
       "project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Read the file first, then use exact `line#hash` anchors from the latest `read` output.",
+      "Read the file first, then use exact `line#hash#anchor` refs from the latest `read` output when present.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Do not use `apply_patch`; prefer the hashline-backed `edit` tool for file changes. Managed vvoc installs also disable `apply_patch` in OpenCode config.",

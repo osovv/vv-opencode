@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.4/schemas/vvoc/v3.json",
+  "$id": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.25.5/schemas/vvoc/v3.json",
   "title": "vvoc config",
   "description": "Canonical vvoc configuration document.",
   "type": "object",

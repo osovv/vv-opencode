@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.2.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output with context-anchored hash references.
 //   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, file mutation execution, and success metadata emission.
@@ -14,13 +14,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Read source snapshots are loaded only for eligible read output and only trusted when visible rows still match the file.]
+//   LAST_CHANGE: [v0.3.0 - Read output now uses the full file snapshot when available so partial and truncated reads emit edit-valid context anchors.]
 //   LAST_CHANGE: [v0.2.0 - Read output now emits context-anchored hashes (line#hash#anchor|content) for collision-resistant edit anchors.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
-import { formatHashAnchoredLine } from "./hash-computation.js";
+import { computeAnchorHash, computeLineHash } from "./hash-computation.js";
 import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.js";
 import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
@@ -40,6 +42,12 @@ type HashlineEditArgs = {
   edits: RawHashlineEdit[];
   delete?: boolean;
   rename?: string;
+};
+
+type ReadToolArgs = {
+  filePath?: unknown;
+  path?: unknown;
+  file?: unknown;
 };
 
 function canCreateFromMissingFile(edits: HashlineEdit[]): boolean {
@@ -101,6 +109,71 @@ function isTextFileOutput(output: string): boolean {
   return COLON_READ_LINE_PATTERN.test(firstLine) || PIPE_READ_LINE_PATTERN.test(firstLine);
 }
 
+function isHashlineEligibleReadOutput(output: string): boolean {
+  if (!output) {
+    return false;
+  }
+
+  const lines = output.split("\n");
+  const contentStart = lines.findIndex(
+    (line) => line === CONTENT_OPEN_TAG || line.startsWith(CONTENT_OPEN_TAG),
+  );
+  const contentEnd = lines.indexOf(CONTENT_CLOSE_TAG);
+  const fileStart = lines.findIndex(
+    (line) => line === FILE_OPEN_TAG || line.startsWith(FILE_OPEN_TAG),
+  );
+  const fileEnd = lines.indexOf(FILE_CLOSE_TAG);
+
+  const blockStart = contentStart !== -1 ? contentStart : fileStart;
+  const blockEnd = contentStart !== -1 ? contentEnd : fileEnd;
+  const openTag = contentStart !== -1 ? CONTENT_OPEN_TAG : FILE_OPEN_TAG;
+
+  if (blockStart !== -1 && blockEnd !== -1 && blockEnd > blockStart) {
+    const openLine = lines[blockStart] ?? "";
+    const inlineFirst =
+      openLine.startsWith(openTag) && openLine !== openTag ? openLine.slice(openTag.length) : null;
+    const firstFileLine = inlineFirst ?? lines[blockStart + 1] ?? "";
+    return isTextFileOutput(firstFileLine);
+  }
+
+  return isTextFileOutput(lines[0] ?? "");
+}
+
+function readArgFilePath(args: unknown): string | undefined {
+  if (!args || typeof args !== "object") {
+    return undefined;
+  }
+
+  const readArgs = args as ReadToolArgs;
+  for (const candidate of [readArgs.filePath, readArgs.path, readArgs.file]) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+async function readSourceLines(args: unknown): Promise<string[] | undefined> {
+  const filePath = readArgFilePath(args);
+  if (!filePath) {
+    return undefined;
+  }
+
+  try {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      return undefined;
+    }
+
+    const rawContent = Buffer.from(await file.arrayBuffer()).toString("utf8");
+    const envelope = canonicalizeFileText(rawContent);
+    return envelope.content.length === 0 ? [] : envelope.content.split("\n");
+  } catch {
+    return undefined;
+  }
+}
+
 interface ParsedReadLine {
   lineNumber: number;
   content: string;
@@ -131,7 +204,47 @@ function parseReadLineParsed(line: string): ParsedReadLine | null {
   return null;
 }
 
-function formatReadLines(parsedLines: ParsedReadLine[], rawLines: string[]): string[] {
+function sourceLineAt(sourceLines: string[] | undefined, lineNumber: number): string | undefined {
+  if (!sourceLines || lineNumber < 1 || lineNumber > sourceLines.length) {
+    return undefined;
+  }
+  return sourceLines[lineNumber - 1];
+}
+
+function sourceMatchesVisibleRows(
+  sourceLines: string[] | undefined,
+  parsedLines: ParsedReadLine[],
+): sourceLines is string[] {
+  if (!sourceLines) {
+    return false;
+  }
+
+  for (const parsed of parsedLines) {
+    if (parsed.isTruncated) {
+      continue;
+    }
+    if (sourceLineAt(sourceLines, parsed.lineNumber) !== parsed.content) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function formatParsedReadLine(
+  parsed: ParsedReadLine,
+  prevContent: string | undefined,
+  currentContent: string,
+  nextContent: string | undefined,
+): string {
+  return `${parsed.lineNumber}#${computeLineHash(parsed.lineNumber, currentContent)}#${computeAnchorHash(parsed.lineNumber, prevContent, currentContent, nextContent)}|${parsed.content}`;
+}
+
+function formatReadLines(
+  parsedLines: ParsedReadLine[],
+  rawLines: string[],
+  sourceLines?: string[],
+): string[] {
   const result: string[] = [];
   let parsedIndex = 0;
 
@@ -153,19 +266,25 @@ function formatReadLines(parsedLines: ParsedReadLine[], rawLines: string[]): str
       continue;
     }
 
-    const prevContent = parsedIndex > 0 ? parsedLines[parsedIndex - 1]?.content : undefined;
-    const nextContent =
-      parsedIndex + 1 < parsedLines.length ? parsedLines[parsedIndex + 1]?.content : undefined;
-    result.push(
-      formatHashAnchoredLine(parsed.lineNumber, parsed.content, prevContent, nextContent),
-    );
+    const currentContent = sourceLineAt(sourceLines, parsed.lineNumber) ?? parsed.content;
+    const prevContent = sourceLines
+      ? sourceLineAt(sourceLines, parsed.lineNumber - 1)
+      : parsedIndex > 0
+        ? parsedLines[parsedIndex - 1]?.content
+        : undefined;
+    const nextContent = sourceLines
+      ? sourceLineAt(sourceLines, parsed.lineNumber + 1)
+      : parsedIndex + 1 < parsedLines.length
+        ? parsedLines[parsedIndex + 1]?.content
+        : undefined;
+    result.push(formatParsedReadLine(parsed, prevContent, currentContent, nextContent));
     parsedIndex += 1;
   }
 
   return result;
 }
 
-function transformReadOutput(output: string): string {
+function transformReadOutput(output: string, sourceLines?: string[]): string {
   if (!output) {
     return output;
   }
@@ -205,7 +324,11 @@ function transformReadOutput(output: string): string {
       }
       parsedLines.push(parsed);
     }
-    const result = formatReadLines(parsedLines, fileLines);
+    const result = formatReadLines(
+      parsedLines,
+      fileLines,
+      sourceMatchesVisibleRows(sourceLines, parsedLines) ? sourceLines : undefined,
+    );
 
     const prefixLines =
       inlineFirst !== null
@@ -226,7 +349,11 @@ function transformReadOutput(output: string): string {
     }
     parsedLines.push(parsed);
   }
-  const result = formatReadLines(parsedLines, lines);
+  const result = formatReadLines(
+    parsedLines,
+    lines,
+    sourceMatchesVisibleRows(sourceLines, parsedLines) ? sourceLines : undefined,
+  );
   return result.join("\n");
 }
 
@@ -296,7 +423,7 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof HashlineMismatchError) {
-      return `Error: hash mismatch - ${message}\nTip: reuse LINE#ID entries from the latest read output or mismatch snippet, or batch related edits in one call.`;
+      return `Error: hash mismatch - ${message}\nTip: reuse LINE#ID#ANCHOR entries from the latest read output or mismatch snippet, or batch related edits in one call.`;
     }
     return `Error: ${message}`;
   }
@@ -308,7 +435,10 @@ export const HashlineEditPlugin: Plugin = async () => {
       if (!isReadTool(input.tool) || typeof output.output !== "string") {
         return;
       }
-      output.output = transformReadOutput(output.output);
+      if (!isHashlineEligibleReadOutput(output.output)) {
+        return;
+      }
+      output.output = transformReadOutput(output.output, await readSourceLines(input.args));
     },
     tool: {
       edit: tool({
@@ -321,8 +451,11 @@ export const HashlineEditPlugin: Plugin = async () => {
             .array(
               z.object({
                 op: z.enum(["replace", "append", "prepend"]),
-                pos: z.string().optional().describe("Primary anchor in LINE#HASH format"),
-                end: z.string().optional().describe("Inclusive range end in LINE#HASH format"),
+                pos: z.string().optional().describe("Primary anchor in LINE#HASH#ANCHOR format"),
+                end: z
+                  .string()
+                  .optional()
+                  .describe("Inclusive range end in LINE#HASH#ANCHOR format"),
                 lines: z
                   .union([z.array(z.string()), z.string(), z.null()])
                   .describe("Replacement or inserted lines as plain text content"),

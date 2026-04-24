@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/edit-text-normalization.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Normalize edit payload text so copied hashline rows and accidental diff markers do not corrupt replacements.
 //   SCOPE: Prefix stripping, line splitting, indentation restoration, and echo-line trimming for insert/replace payloads.
@@ -19,10 +19,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Hashline payload prefix stripping now recognizes context-anchored `line#hash#anchor|content` rows.]
 //   LAST_CHANGE: [v0.2.0 - Made prepend echo stripping symmetric with append so single-line anchor echoes are removed instead of duplicating the anchor line.]
 // END_CHANGE_SUMMARY
 
-const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*\d+\s*#\s*[ZPMQVRWSNKTXJBYH]{2}\|/;
+const HASHLINE_PREFIX_RE =
+  /^\s*(?:>>>|>>)?\s*\d+\s*#\s*[ZPMQVRWSNKTXJBYH]{2}(?:\s*#\s*[ZPMQVRWSNKTXJBYH]{2})?\|/;
 const DIFF_PLUS_RE = /^[+](?![+])/;
 
 function equalsIgnoringWhitespace(left: string, right: string): boolean {

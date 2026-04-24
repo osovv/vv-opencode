@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
-//   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, normalization heuristics, and BOM/CRLF preservation.
+//   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, normalization heuristics, and BOM/CRLF preservation.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
 //   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -10,10 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineEditPlugin tests - Verify read hashing, edit execution, normalization heuristics, mismatch handling, and text-envelope preservation.
+//   HashlineEditPlugin tests - Verify read hashing, edit execution, partial-read anchor stability, normalization heuristics, mismatch handling, and text-envelope preservation.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added regression coverage preventing post-read source snapshots from being mixed into stale visible rows.]
+//   LAST_CHANGE: [v0.4.0 - Added regression coverage for full-snapshot context anchors on partial and truncated read output.]
 //   LAST_CHANGE: [v0.3.0 - Updated read output expectations for anchor hash format (line#hash#anchor|content).]
 //   LAST_CHANGE: [v0.2.0 - Added regression coverage for wrapped read output, ranged plus appended edits, missing-file creation, and normalization heuristics adapted from oh-my-openagent.]
 //   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.]
@@ -118,6 +120,112 @@ describe("HashlineEditPlugin", () => {
       expect(output.output).toBe(
         `<content>\n1#${lh1}#${ah1}|const first = 1;\n2#${lh2}#${ah2}|const second = 2;\n</content>`,
       );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("uses the full file snapshot for partial read context anchors", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-read-partial-"));
+
+    try {
+      const filePath = join(directory, "partial.txt");
+      await writeFile(filePath, "line1\nline2\nline3", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const output = {
+        title: filePath,
+        output: "2: line2\n3: line3",
+        metadata: {},
+      };
+
+      await plugin["tool.execute.after"]?.(
+        { tool: "read", sessionID: "session-1", callID: "call-1", args: { filePath } } as never,
+        output as never,
+      );
+
+      const anchor = `2#${computeLineHash(2, "line2")}#${computeAnchorHash(2, "line1", "line2", "line3")}`;
+      expect(output.output).toContain(`${anchor}|line2`);
+
+      const { context } = createToolContext(directory);
+      const result = await plugin.tool!.edit.execute(
+        { filePath, edits: [{ op: "replace", pos: anchor, lines: ["line2 updated"] }] },
+        context as never,
+      );
+      expect(result).toBe(`Updated ${filePath}`);
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2 updated\nline3");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("uses full neighbor text when hashing lines around truncated read output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-read-truncated-"));
+
+    try {
+      const filePath = join(directory, "truncated.txt");
+      const longLine = "x".repeat(2100);
+      const truncatedLine = `${longLine.slice(0, 2000)}... (line truncated to 2000 chars)`;
+      await writeFile(filePath, `short\n${longLine}\nafter`, "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const output = {
+        title: filePath,
+        output: `1: short\n2: ${truncatedLine}\n3: after`,
+        metadata: {},
+      };
+
+      await plugin["tool.execute.after"]?.(
+        {
+          tool: "read",
+          sessionID: "session-1",
+          callID: "call-1",
+          args: { path: filePath },
+        } as never,
+        output as never,
+      );
+
+      const firstAnchor = `1#${computeLineHash(1, "short")}#${computeAnchorHash(1, undefined, "short", longLine)}`;
+      const thirdAnchor = `3#${computeLineHash(3, "after")}#${computeAnchorHash(3, longLine, "after", undefined)}`;
+      expect(output.output).toContain(`${firstAnchor}|short`);
+      expect(output.output).toContain(`2: ${truncatedLine}`);
+      expect(output.output).toContain(`${thirdAnchor}|after`);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("does not pair stale visible read rows with a later file snapshot", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-read-race-"));
+
+    try {
+      const filePath = join(directory, "race.txt");
+      await writeFile(filePath, "line1\nline2 changed\nline3", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const output = {
+        title: filePath,
+        output: "2: line2\n3: line3",
+        metadata: {},
+      };
+
+      await plugin["tool.execute.after"]?.(
+        { tool: "read", sessionID: "session-1", callID: "call-1", args: { filePath } } as never,
+        output as never,
+      );
+
+      const fallbackAnchor = `2#${computeLineHash(2, "line2")}#${computeAnchorHash(2, undefined, "line2", "line3")}`;
+      const laterSnapshotAnchor = `2#${computeLineHash(2, "line2 changed")}#${computeAnchorHash(2, "line1", "line2 changed", "line3")}`;
+      expect(output.output).toContain(`${fallbackAnchor}|line2`);
+      expect(output.output).not.toContain(laterSnapshotAnchor);
+
+      const { context } = createToolContext(directory);
+      const result = await plugin.tool!.edit.execute(
+        { filePath, edits: [{ op: "replace", pos: fallbackAnchor, lines: ["line2 updated"] }] },
+        context as never,
+      );
+      expect(result).toContain("Error: hash mismatch");
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2 changed\nline3");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

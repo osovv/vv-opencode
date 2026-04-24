@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/validation.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Parse and validate hashline references with optional context-anchored hashes against the current file snapshot before edits are applied.
 //   SCOPE: Anchor normalization, line reference parsing with optional anchor hash, full-batch validation with anchor-hash verification, mismatch diagnostics, and compatibility fallback for legacy hashes.
@@ -19,6 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Anchor normalization now preserves context-anchor hashes when refs contain spaces around both separators.]
 //   LAST_CHANGE: [v0.2.0 - Added optional context-anchored hash support to LineRef, isCompatibleLineHash, validateLineRef/validateLineRefs, mismatch formatting, and remap generation for collision-resistant anchors.]
 // END_CHANGE_SUMMARY
 
@@ -67,7 +68,7 @@ export function normalizeLineRef(ref: string): string {
   const originalTrimmed = ref.trim();
   let trimmed = originalTrimmed;
   trimmed = trimmed.replace(/^(?:>>>|[+-])\s*/, "");
-  trimmed = trimmed.replace(/\s*#\s*/, "#");
+  trimmed = trimmed.replace(/\s*#\s*/g, "#");
   trimmed = trimmed.replace(/\|.*$/, "");
   trimmed = trimmed.trim();
 

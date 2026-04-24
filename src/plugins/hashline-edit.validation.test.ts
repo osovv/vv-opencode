@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit.validation.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline reference parsing and validation diagnostics.
-//   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, legacy hash acceptance, mismatch context, and line-number suggestion hints.
+//   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, context-anchor preservation, legacy hash acceptance, mismatch context, and line-number suggestion hints.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -10,8 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   hashline validation tests - Verify parsing and mismatch diagnostics for hashline anchors.
+//   hashline validation tests - Verify parsing, context-anchor preservation, and mismatch diagnostics for hashline anchors.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Added regression coverage for spaced context-anchor references preserving their anchor hash.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { computeLegacyLineHash, computeLineHash } from "./hashline-edit/hash-computation.js";
@@ -40,6 +44,10 @@ describe("hashline validation", () => {
 
   test("accepts references with spaces around the hash separator", () => {
     expect(parseLineRef("42 # VK")).toEqual({ line: 42, hash: "VK", anchorHash: undefined });
+  });
+
+  test("preserves context anchors when references include spaces around separators", () => {
+    expect(parseLineRef("42 # VK # MB")).toEqual({ line: 42, hash: "VK", anchorHash: "MB" });
   });
 
   test("accepts legacy hashes for whitespace-variant content", () => {

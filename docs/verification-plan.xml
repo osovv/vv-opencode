@@ -48,7 +48,7 @@
     </VF-PRESET-SWITCH>
     <VF-HASHLINE-EDIT NAME="HashlineEdit" USE_CASES="UC-010" DATA_FLOW="DF-HASHLINE-EDIT" PRIORITY="high">
       <scenario>User reads a text file and then edits it through the default-on hash-anchored `edit` override.</scenario>
-      <expected-outcome>`read` output is rewritten to `line#hash|content`, anchored edits succeed against the current snapshot, stale anchors fail loudly with refreshed anchors, and BOM/CRLF are preserved when writing back.</expected-outcome>
+      <expected-outcome>`read` output is rewritten to `line#hash#anchor|content` using full-snapshot context when available, anchored edits succeed against the current snapshot, stale anchors fail loudly with refreshed anchors, and BOM/CRLF are preserved when writing back.</expected-outcome>
       <required-signals>
         <trace-sequence>tool.execute.after(read) -&gt; hashline rows emitted -&gt; edit anchor validation -&gt; batch edit application -&gt; metadata filediff emitted</trace-sequence>
       </required-signals>
@@ -385,18 +385,25 @@
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">The plugin exports compile and register an `edit` tool override.</scenario-1>
-        <scenario-2 kind="success">`tool.execute.after` rewrites both plain numbered and wrapped text-file read output into `line#hash|content` rows.</scenario-2>
+        <scenario-2 kind="success">`tool.execute.after` rewrites both plain numbered and wrapped text-file read output into `line#hash#anchor|content` rows.</scenario-2>
         <scenario-3 kind="success">Anchored replace edits, including ranged replace plus anchored append batches, update the requested file and emit filediff metadata.</scenario-3>
         <scenario-4 kind="failure">Stale anchors fail with a mismatch error that includes refreshed nearby anchors.</scenario-4>
         <scenario-5 kind="success">BOM and CRLF line endings are preserved across hashline edits.</scenario-5>
         <scenario-6 kind="success">Missing files can be created safely from unanchored prepend plus append batches without introducing extra blank lines.</scenario-6>
         <scenario-7 kind="success">Boundary-echo stripping, anchor-echo stripping, and merged-line autocorrection normalize common model payload mistakes without corrupting neighboring lines.</scenario-7>
+        <scenario-8 kind="success">Partial and truncated read output uses full-file source context when a read file path is available, so emitted context anchors validate during the next edit call.</scenario-8>
+        <scenario-9 kind="success">Context-anchored refs survive copied-row normalization, spaced separators, and repeated same-anchor or BOF insert batches preserve user order.</scenario-9>
+        <scenario-10 kind="failure">If visible read rows no longer match the file by the time the read hook runs, the enhancer must not pair stale displayed content with anchors from the later file snapshot.</scenario-10>
+        <scenario-11 kind="failure">Insert operations anchored inside a multi-line replacement range are rejected instead of being applied after range-collapse line drift.</scenario-11>
+        <scenario-12 kind="failure">Insert operations anchored to a deleted single-line replacement are rejected instead of being applied after delete-induced line drift.</scenario-12>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>The plugin must reject stale or malformed anchors instead of falling back to line-number-only edits.</assertion-1>
         <assertion-2>The read-output enhancer must only rewrite line-numbered text output and must leave non-text output untouched.</assertion-2>
         <assertion-3>The write-back path must preserve the original BOM and line-ending style recorded during canonicalization.</assertion-3>
+        <assertion-4>Read-output context anchors must be computed from the same full-file line content that edit validation uses when the read hook can resolve the file path.</assertion-4>
+        <assertion-5>Read-output source snapshots must be trusted only when visible non-truncated rows still match the file content.</assertion-5>
       </required-trace-assertions>
       <wave-follow-up>Add direct validation and batch-ordering tests if live sessions still report corruption after the new regression coverage lands.</wave-follow-up>
     </V-M-PLUGIN-HASHLINE-EDIT>

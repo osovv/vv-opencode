@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/constants.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the stable hashline alphabet and reference parsing patterns used by the hash-anchored edit plugin.
 //   SCOPE: Hash dictionary generation plus regular expressions for `{line}#{hash}` references and hashline output rows.
@@ -13,8 +13,12 @@
 //   HASHLINE_NIBBLES - Canonical 16-character alphabet used to encode 8-bit line hashes.
 //   HASHLINE_DICT - Lookup table that maps 0-255 byte values to two-character hash IDs.
 //   HASHLINE_REF_PATTERN - Regex for normalized `{line}#{hash}` anchors.
-//   HASHLINE_OUTPUT_PATTERN - Regex for rendered `line#hash|content` rows.
+//   HASHLINE_OUTPUT_PATTERN - Regex for rendered `line#hash[#anchor]|content` rows.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Clarified HASHLINE_OUTPUT_PATTERN map entry for optional context-anchor rows.]
+// END_CHANGE_SUMMARY
 
 export const HASHLINE_NIBBLES = "ZPMQVRWSNKTXJBYH";
 

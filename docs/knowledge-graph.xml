@@ -103,12 +103,12 @@
     </M-PLUGIN-GUARDIAN>
 
     <M-PLUGIN-HASHLINE-EDIT NAME="HashlineEditPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Replace OpenCode's default `edit` tool with a hash-anchored variant and rewrite `read` output to stable `line#hash|content` rows so stale edits are rejected before file corruption.</purpose>
+      <purpose>Replace OpenCode's default `edit` tool with a hash-anchored variant and rewrite `read` output to stable `line#hash#anchor|content` rows so stale edits are rejected before file corruption.</purpose>
       <path>src/plugins/hashline-edit/*.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-PLUGIN-HASHLINE-EDIT</verification-ref>
       <annotations>
-        <export-HashlineEditPlugin PURPOSE="Register the hash-anchored `edit` tool override plus a post-read output enhancer that emits `line#hash|content` rows." />
+        <export-HashlineEditPlugin PURPOSE="Register the hash-anchored `edit` tool override plus a post-read output enhancer that emits `line#hash#anchor|content` rows." />
       </annotations>
     </M-PLUGIN-HASHLINE-EDIT>
 
