@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/edit-operations.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate, order, deduplicate, and apply a batch of hashline edit operations against a file snapshot.
-//   SCOPE: Batch anchor collection, overlap detection, exact-edit deduplication, bottom-up application ordering, and no-op reporting.
+//   SCOPE: Batch region computation, comprehensive conflict detection covering all mutation types, exact-edit deduplication, bottom-up application ordering, and no-op reporting.
 //   DEPENDS: [src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/types.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -13,6 +13,10 @@
 //   HashlineApplyReport - Result shape returned after applying a batch of hashline edits.
 //   applyHashlineEditsWithReport - Validate and apply a batch of edits while reporting no-ops and deduplicated operations.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Replaced range-only conflict detection with comprehensive region-based conflict validation, fixed deduplication to treat null and empty lines identically, added defensive default to edit line number extraction.]
+// END_CHANGE_SUMMARY
 
 import {
   applyAppend,
@@ -37,10 +41,7 @@ function arraysEqual(left: string[], right: string[]): boolean {
   return true;
 }
 
-function toLinePayload(lines: string | string[] | null): string {
-  if (lines === null) {
-    return "<delete>";
-  }
+function toLinePayload(lines: string | string[]): string {
   return Array.isArray(lines) ? lines.join("\n") : lines;
 }
 
@@ -51,7 +52,55 @@ function getEditLineNumber(edit: HashlineEdit): number {
     case "append":
     case "prepend":
       return edit.pos ? parseLineRef(edit.pos).line : Number.NEGATIVE_INFINITY;
+    default:
+      return Number.POSITIVE_INFINITY;
   }
+}
+
+interface EditRegion {
+  editIndex: number;
+  op: HashlineEdit["op"];
+  anchorLine: number;
+  startLine: number;
+  endLine: number;
+}
+
+function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
+  return edits.map((edit, editIndex) => {
+    switch (edit.op) {
+      case "replace": {
+        const startLine = parseLineRef(edit.pos).line;
+        const endLine = edit.end ? parseLineRef(edit.end).line : startLine;
+        return {
+          editIndex,
+          op: "replace",
+          anchorLine: startLine,
+          startLine,
+          endLine,
+        };
+      }
+      case "append": {
+        const line = edit.pos ? parseLineRef(edit.pos).line : 0;
+        return {
+          editIndex,
+          op: "append",
+          anchorLine: line,
+          startLine: line,
+          endLine: line,
+        };
+      }
+      case "prepend": {
+        const line = edit.pos ? parseLineRef(edit.pos).line : 0;
+        return {
+          editIndex,
+          op: "prepend",
+          anchorLine: line,
+          startLine: line,
+          endLine: line,
+        };
+      }
+    }
+  });
 }
 
 function collectLineRefs(edits: HashlineEdit[]): string[] {
@@ -66,34 +115,22 @@ function collectLineRefs(edits: HashlineEdit[]): string[] {
   });
 }
 
-function detectOverlappingRanges(edits: HashlineEdit[]): string | null {
-  const ranges: Array<{ start: number; end: number; index: number }> = [];
-  for (let index = 0; index < edits.length; index += 1) {
-    const edit = edits[index];
-    if (!edit || edit.op !== "replace" || !edit.end) {
-      continue;
-    }
-    ranges.push({
-      start: parseLineRef(edit.pos).line,
-      end: parseLineRef(edit.end).line,
-      index,
-    });
-  }
+function validateBatchConflicts(regions: EditRegion[]): void {
+  const consumed = new Map<number, { editIndex: number; op: string }>();
 
-  if (ranges.length < 2) {
-    return null;
-  }
-
-  ranges.sort((left, right) => left.start - right.start || left.end - right.end);
-  for (let index = 1; index < ranges.length; index += 1) {
-    const previous = ranges[index - 1]!;
-    const current = ranges[index]!;
-    if (current.start <= previous.end) {
-      return `Overlapping range edits detected: edit ${previous.index + 1} (lines ${previous.start}-${previous.end}) overlaps with edit ${current.index + 1} (lines ${current.start}-${current.end}).`;
+  for (const region of regions) {
+    if (region.op !== "replace") continue;
+    for (let idx = region.startLine - 1; idx <= region.endLine - 1; idx += 1) {
+      const existing = consumed.get(idx);
+      if (existing !== undefined) {
+        throw new Error(
+          `Overlapping edits: edit ${region.editIndex + 1} (lines ${region.startLine}-${region.endLine}, ${region.op}) ` +
+            `overlaps with edit ${existing.editIndex + 1} (${existing.op})`,
+        );
+      }
+      consumed.set(idx, { editIndex: region.editIndex, op: region.op });
     }
   }
-
-  return null;
 }
 
 function dedupeEdits(edits: HashlineEdit[]): { edits: HashlineEdit[]; deduplicatedEdits: number } {
@@ -158,13 +195,12 @@ export function applyHashlineEditsWithReport(
     })
     .map((entry) => entry.edit);
 
-  const overlapError = detectOverlappingRanges(sortedEdits);
-  if (overlapError) {
-    throw new Error(overlapError);
-  }
+  let lines = content.length === 0 ? [] : content.split("\n");
+
+  const regions = computeEditRegions(sortedEdits);
+  validateBatchConflicts(regions);
 
   const refs = collectLineRefs(sortedEdits);
-  let lines = content.length === 0 ? [] : content.split("\n");
   validateLineRefs(lines, refs);
 
   let noopEdits = 0;

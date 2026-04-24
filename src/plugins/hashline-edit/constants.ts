@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/constants.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the stable hashline alphabet and reference parsing patterns used by the hash-anchored edit plugin.
 //   SCOPE: Hash dictionary generation plus regular expressions for `{line}#{hash}` references and hashline output rows.
@@ -24,5 +24,7 @@ export const HASHLINE_DICT = Array.from({ length: 256 }, (_, index) => {
   return `${HASHLINE_NIBBLES[high]}${HASHLINE_NIBBLES[low]}`;
 });
 
-export const HASHLINE_REF_PATTERN = /^([0-9]+)#([ZPMQVRWSNKTXJBYH]{2})$/;
-export const HASHLINE_OUTPUT_PATTERN = /^([0-9]+)#([ZPMQVRWSNKTXJBYH]{2})\|(.*)$/;
+export const HASHLINE_REF_PATTERN =
+  /^([0-9]+)#([ZPMQVRWSNKTXJBYH]{2})(?:#([ZPMQVRWSNKTXJBYH]{2}))?$/;
+export const HASHLINE_OUTPUT_PATTERN =
+  /^([0-9]+)#([ZPMQVRWSNKTXJBYH]{2})(?:#([ZPMQVRWSNKTXJBYH]{2}))?\|(.*)$/;

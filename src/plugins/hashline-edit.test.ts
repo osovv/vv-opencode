@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
 //   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, normalization heuristics, and BOM/CRLF preservation.
@@ -14,9 +14,9 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Updated read output expectations for anchor hash format (line#hash#anchor|content).]
 //   LAST_CHANGE: [v0.2.0 - Added regression coverage for wrapped read output, ranged plus appended edits, missing-file creation, and normalization heuristics adapted from oh-my-openagent.]
 //   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.]
-// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -27,7 +27,7 @@ import {
   applyInsertBefore,
   applyReplaceLines,
 } from "./hashline-edit/edit-operation-primitives.js";
-import { computeLineHash } from "./hashline-edit/hash-computation.js";
+import { computeAnchorHash, computeLineHash } from "./hashline-edit/hash-computation.js";
 import { HashlineEditPlugin } from "./hashline-edit/index.js";
 
 function createPluginInput(directory: string) {
@@ -83,8 +83,12 @@ describe("HashlineEditPlugin", () => {
         output as never,
       );
 
+      const lh1 = computeLineHash(1, "const first = 1;");
+      const lh2 = computeLineHash(2, "const second = 2;");
+      const ah1 = computeAnchorHash(1, undefined, "const first = 1;", "const second = 2;");
+      const ah2 = computeAnchorHash(2, "const first = 1;", "const second = 2;", undefined);
       expect(output.output).toBe(
-        `1#${computeLineHash(1, "const first = 1;")}|const first = 1;\n2#${computeLineHash(2, "const second = 2;")}|const second = 2;`,
+        `1#${lh1}#${ah1}|const first = 1;\n2#${lh2}#${ah2}|const second = 2;`,
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -107,8 +111,12 @@ describe("HashlineEditPlugin", () => {
         output as never,
       );
 
+      const lh1 = computeLineHash(1, "const first = 1;");
+      const lh2 = computeLineHash(2, "const second = 2;");
+      const ah1 = computeAnchorHash(1, undefined, "const first = 1;", "const second = 2;");
+      const ah2 = computeAnchorHash(2, "const first = 1;", "const second = 2;", undefined);
       expect(output.output).toBe(
-        `<content>\n1#${computeLineHash(1, "const first = 1;")}|const first = 1;\n2#${computeLineHash(2, "const second = 2;")}|const second = 2;\n</content>`,
+        `<content>\n1#${lh1}#${ah1}|const first = 1;\n2#${lh2}#${ah2}|const second = 2;\n</content>`,
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -416,7 +424,7 @@ describe("HashlineEditPlugin", () => {
 
       expect(secondResult).toContain("Error: hash mismatch");
       expect(secondResult).toContain(
-        `>>> 2#${computeLineHash(2, '  return "hello";')}|  return "hello";`,
+        `>>> 2#${computeLineHash(2, '  return "hello";')}#${computeAnchorHash(2, "function greet() {", '  return "hello";', "}")}|  return "hello";`,
       );
     } finally {
       await rm(directory, { recursive: true, force: true });

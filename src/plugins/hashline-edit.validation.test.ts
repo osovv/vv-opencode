@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit.validation.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline reference parsing and validation diagnostics.
 //   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, legacy hash acceptance, mismatch context, and line-number suggestion hints.
@@ -19,11 +19,11 @@ import { parseLineRef, validateLineRef, validateLineRefs } from "./hashline-edit
 
 describe("hashline validation", () => {
   test("parses a valid line reference", () => {
-    expect(parseLineRef("42#VK")).toEqual({ line: 42, hash: "VK" });
+    expect(parseLineRef("42#VK")).toEqual({ line: 42, hash: "VK", anchorHash: undefined });
   });
 
   test("rejects invalid reference format", () => {
-    expect(() => parseLineRef("42:VK")).toThrow("{line_number}#{hash_id}");
+    expect(() => parseLineRef("42:VK")).toThrow(/\{line_number\}#\{hash_id\}/);
   });
 
   test("rejects non-numeric line prefixes with a clear hint", () => {
@@ -31,11 +31,15 @@ describe("hashline validation", () => {
   });
 
   test("accepts copied references with markers and trailing content", () => {
-    expect(parseLineRef(">>> 42#VK|const value = 1")).toEqual({ line: 42, hash: "VK" });
+    expect(parseLineRef(">>> 42#VK|const value = 1")).toEqual({
+      line: 42,
+      hash: "VK",
+      anchorHash: undefined,
+    });
   });
 
   test("accepts references with spaces around the hash separator", () => {
-    expect(parseLineRef("42 # VK")).toEqual({ line: 42, hash: "VK" });
+    expect(parseLineRef("42 # VK")).toEqual({ line: 42, hash: "VK", anchorHash: undefined });
   });
 
   test("accepts legacy hashes for whitespace-variant content", () => {
@@ -48,7 +52,9 @@ describe("hashline validation", () => {
   test("shows mismatch context with >>> markers for batched validation", () => {
     const lines = ["one", "two", "three", "four"];
 
-    expect(() => validateLineRefs(lines, ["2#ZZ"])).toThrow(/>>>\s+2#[ZPMQVRWSNKTXJBYH]{2}\|two/);
+    expect(() => validateLineRefs(lines, ["2#ZZ"])).toThrow(
+      />>>\s+2#[ZPMQVRWSNKTXJBYH]{2}#[ZPMQVRWSNKTXJBYH]{2}\|two/,
+    );
   });
 
   test("suggests the correct line number when the hash matches a current line", () => {

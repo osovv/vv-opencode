@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit.normalize-edits.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify raw hashline edit normalization into typed operations.
-//   SCOPE: Replace normalization, anchored append/prepend normalization, anchor precedence, required-lines failures, null-line rejection for inserts, and unsupported-op failures.
+//   SCOPE: Replace normalization, anchored append/prepend normalization, anchor precedence, required-lines failures, null-to-empty-array conversion for inserts, and unsupported-op failures.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/normalize-edits.ts]
 //   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -57,10 +57,10 @@ describe("hashline normalize-edits", () => {
     ]);
   });
 
-  test("rejects append with lines=null", () => {
+  test("converts null lines to empty array for append", () => {
     const input: RawHashlineEdit[] = [{ op: "append", pos: "2#VK", lines: null }];
 
-    expect(() => normalizeHashlineEdits(input)).toThrow(/does not support lines=null/);
+    expect(normalizeHashlineEdits(input)).toEqual([{ op: "append", pos: "2#VK", lines: [] }]);
   });
 
   test("rejects edits that omit lines", () => {

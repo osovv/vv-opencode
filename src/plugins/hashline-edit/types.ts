@@ -20,7 +20,7 @@ export interface ReplaceEdit {
   op: "replace";
   pos: string;
   end?: string;
-  lines: string | string[] | null;
+  lines: string | string[];
 }
 
 export interface AppendEdit {

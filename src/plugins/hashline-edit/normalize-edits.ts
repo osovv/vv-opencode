@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/normalize-edits.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate and normalize raw hashline tool arguments into strongly-typed edit operations.
 //   SCOPE: Raw edit input shape, anchor trimming, required-field validation, and replace/append/prepend normalization.
@@ -33,9 +33,12 @@ function normalizeAnchor(value: string | undefined): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-function requireLines(edit: RawHashlineEdit, index: number): string | string[] | null {
+function requireLines(edit: RawHashlineEdit, index: number): string | string[] {
   if (edit.lines === undefined) {
     throw new Error(`Edit ${index}: lines is required for ${edit.op ?? "unknown"}`);
+  }
+  if (edit.lines === null) {
+    return [];
   }
   return edit.lines;
 }
@@ -75,10 +78,6 @@ function normalizeInsertEdit(
   const end = normalizeAnchor(edit.end);
   const anchor = pos ?? end;
   const lines = requireLines(edit, index);
-  if (lines === null) {
-    throw new Error(`Edit ${index}: ${op} does not support lines=null`);
-  }
-
   const normalized: AppendEdit | PrependEdit = {
     op,
     lines,

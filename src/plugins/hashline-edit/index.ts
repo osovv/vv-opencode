@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output.
-//   SCOPE: Hashline-backed edit tool registration, read-output transformation, anchor validation, file mutation execution, and success metadata emission.
+//   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output with context-anchored hash references.
+//   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, file mutation execution, and success metadata emission.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -14,13 +14,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.]
+//   LAST_CHANGE: [v0.2.0 - Read output now emits context-anchored hashes (line#hash#anchor|content) for collision-resistant edit anchors.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
-import { computeLineHash } from "./hash-computation.js";
+import { formatHashAnchoredLine } from "./hash-computation.js";
 import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.js";
 import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
@@ -101,35 +101,68 @@ function isTextFileOutput(output: string): boolean {
   return COLON_READ_LINE_PATTERN.test(firstLine) || PIPE_READ_LINE_PATTERN.test(firstLine);
 }
 
-function parseReadLine(line: string): { lineNumber: number; content: string } | null {
+interface ParsedReadLine {
+  lineNumber: number;
+  content: string;
+  isTruncated: boolean;
+}
+
+function parseReadLineParsed(line: string): ParsedReadLine | null {
   const colonMatch = COLON_READ_LINE_PATTERN.exec(line);
   if (colonMatch) {
+    const content = colonMatch[2] ?? "";
     return {
       lineNumber: Number.parseInt(colonMatch[1] ?? "0", 10),
-      content: colonMatch[2] ?? "",
+      content,
+      isTruncated: content.endsWith(OPENCODE_LINE_TRUNCATION_SUFFIX),
     };
   }
 
   const pipeMatch = PIPE_READ_LINE_PATTERN.exec(line);
   if (pipeMatch) {
+    const content = pipeMatch[2] ?? "";
     return {
       lineNumber: Number.parseInt(pipeMatch[1] ?? "0", 10),
-      content: pipeMatch[2] ?? "",
+      content,
+      isTruncated: content.endsWith(OPENCODE_LINE_TRUNCATION_SUFFIX),
     };
   }
 
   return null;
 }
 
-function transformReadLine(line: string): string {
-  const parsed = parseReadLine(line);
-  if (!parsed) {
-    return line;
+function formatReadLines(parsedLines: ParsedReadLine[], rawLines: string[]): string[] {
+  const result: string[] = [];
+  let parsedIndex = 0;
+
+  for (let i = 0; i < rawLines.length; i += 1) {
+    if (parsedIndex >= parsedLines.length) {
+      result.push(...rawLines.slice(i));
+      break;
+    }
+
+    const parsed = parsedLines[parsedIndex];
+    if (i !== parsedIndex || !parsed) {
+      result.push(...rawLines.slice(i));
+      break;
+    }
+
+    if (parsed.isTruncated) {
+      result.push(rawLines[i]!);
+      parsedIndex += 1;
+      continue;
+    }
+
+    const prevContent = parsedIndex > 0 ? parsedLines[parsedIndex - 1]?.content : undefined;
+    const nextContent =
+      parsedIndex + 1 < parsedLines.length ? parsedLines[parsedIndex + 1]?.content : undefined;
+    result.push(
+      formatHashAnchoredLine(parsed.lineNumber, parsed.content, prevContent, nextContent),
+    );
+    parsedIndex += 1;
   }
-  if (parsed.content.endsWith(OPENCODE_LINE_TRUNCATION_SUFFIX)) {
-    return line;
-  }
-  return `${parsed.lineNumber}#${computeLineHash(parsed.lineNumber, parsed.content)}|${parsed.content}`;
+
+  return result;
 }
 
 function transformReadOutput(output: string): string {
@@ -164,14 +197,15 @@ function transformReadOutput(output: string): string {
       return output;
     }
 
-    const result: string[] = [];
+    const parsedLines: ParsedReadLine[] = [];
     for (const line of fileLines) {
-      if (!parseReadLine(line)) {
-        result.push(...fileLines.slice(result.length));
+      const parsed = parseReadLineParsed(line);
+      if (!parsed) {
         break;
       }
-      result.push(transformReadLine(line));
+      parsedLines.push(parsed);
     }
+    const result = formatReadLines(parsedLines, fileLines);
 
     const prefixLines =
       inlineFirst !== null
@@ -184,14 +218,15 @@ function transformReadOutput(output: string): string {
     return output;
   }
 
-  const result: string[] = [];
+  const parsedLines: ParsedReadLine[] = [];
   for (const line of lines) {
-    if (!parseReadLine(line)) {
-      result.push(...lines.slice(result.length));
+    const parsed = parseReadLineParsed(line);
+    if (!parsed) {
       break;
     }
-    result.push(transformReadLine(line));
+    parsedLines.push(parsed);
   }
+  const result = formatReadLines(parsedLines, lines);
   return result.join("\n");
 }
 
