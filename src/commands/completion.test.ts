@@ -145,6 +145,6 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateZshCompletion()).toContain("_vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
-  expect(generateBashCompletion()).toContain("list show vv-openai vv-zai vv-minimax");
-  expect(generateZshCompletion()).toContain("vv-openai vv-zai vv-minimax");
+  expect(generateBashCompletion()).toContain("list show vv-openai vv-zai vv-minimax vv-deepseek");
+  expect(generateZshCompletion()).toContain("vv-openai vv-zai vv-minimax vv-deepseek");
 });

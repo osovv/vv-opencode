@@ -517,7 +517,12 @@ describe("canonical vvoc config helpers", () => {
       expect(vvocConfig?.roles.smart).toBeDefined();
       expect(vvocConfig?.roles.fast).toBeDefined();
       expect(vvocConfig?.roles.vision).toBeDefined();
-      expect(Object.keys(vvocConfig?.presets ?? {})).toEqual(["vv-openai", "vv-zai", "vv-minimax"]);
+      expect(Object.keys(vvocConfig?.presets ?? {})).toEqual([
+        "vv-openai",
+        "vv-zai",
+        "vv-minimax",
+        "vv-deepseek",
+      ]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
