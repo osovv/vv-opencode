@@ -369,6 +369,15 @@ function createBuiltinVvocPresets(): VvocPresets {
         vision: "minimax-coding-plan/MiniMax-M2.1",
       },
     }),
+    "vv-deepseek": createVvocPreset({
+      description: "Starter DeepSeek role assignments for built-in vvoc roles.",
+      agents: {
+        default: "deepseek/deepseek-4-pro",
+        smart: "deepseek/deepseek-4-pro",
+        fast: "deepseek/deepseek-4-flash",
+        vision: "deepseek/deepseek-4-pro",
+      },
+    }),
   };
 }
 
