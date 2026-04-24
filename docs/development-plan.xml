@@ -409,7 +409,7 @@
       </observability>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
       <notes>
-        <note-1>Built-in presets remain `vv-openai`, `vv-zai`, and `vv-minimax` but now assign roles instead of target overrides.</note-1>
+        <note-1>Built-in presets remain `vv-openai`, `vv-zai`, `vv-minimax`, and `vv-deepseek` but now assign roles instead of target overrides.</note-1>
       </notes>
     </M-CLI-PRESET>
 

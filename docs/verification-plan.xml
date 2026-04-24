@@ -550,7 +550,7 @@
         <check-4>bun run build</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">`preset list` shows the default `vv-openai`, `vv-zai`, and `vv-minimax` presets.</scenario-1>
+    <scenario-1 kind="success">`preset list` shows the seeded `vv-openai`, `vv-zai`, `vv-minimax`, and `vv-deepseek` presets.</scenario-1>
         <scenario-2 kind="success">`preset show vv-openai` renders the stored preset object from canonical vvoc.json, including a smart-role assignment that can point at `openai/vv-gpt-5.4-xhigh`.</scenario-2>
         <scenario-3 kind="success">Applying a partial preset only changes the roles listed in that preset and leaves unlisted roles untouched.</scenario-3>
         <scenario-4 kind="success">Preset application updates canonical vvoc role assignments and does not rewrite OpenCode config directly.</scenario-4>

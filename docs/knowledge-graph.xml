@@ -87,6 +87,9 @@
         <fn-applyPreset PURPOSE="Apply only the listed role assignments through canonical vvoc config writes." />
         <cmd-preset PURPOSE="vvoc preset &lt;name&gt; - CLI command for declarative multi-role model switching." />
       </annotations>
+    <notes>
+      <note-1>Built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`, `vv-deepseek`.</note-1>
+    </notes>
     </M-CLI-PRESET>
 
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
