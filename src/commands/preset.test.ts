@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.2
+// VERSION: 0.4.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
@@ -17,6 +17,7 @@
 //   LAST_CHANGE: [v0.4.0 - Switched preset coverage to canonical role-only writes and removed legacy OpenCode target mutation assertions.]
 //   LAST_CHANGE: [v0.4.1 - Added guards for no-sync side effects: existing OpenCode byte preservation, vvoc non-role section/preset preservation, and CLI argument error paths.]
 //   LAST_CHANGE: [v0.4.2 - Asserted raw vvoc.json section/preset preservation and first-run bootstrap behavior when the vvoc config path is missing.]
+//   LAST_CHANGE: [v0.4.3 - Added vv-deepseek to preset list expectations and error message assertions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -29,11 +30,11 @@ import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 describe("preset helpers", () => {
-  test("listConfiguredPresets shows the seeded vv-openai, vv-zai, and vv-minimax presets", () => {
+  test("listConfiguredPresets shows the seeded vv-deepseek, vv-openai, vv-zai, and vv-minimax presets", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual(["vv-minimax", "vv-openai", "vv-zai"]);
+    expect(presets).toEqual(["vv-deepseek", "vv-minimax", "vv-openai", "vv-zai"]);
   });
 
   test("formatPreset renders the expected preset object", () => {
@@ -128,7 +129,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-minimax, vv-openai, vv-zai",
+        "unknown preset: missing. Available presets: vv-deepseek, vv-minimax, vv-openai, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
