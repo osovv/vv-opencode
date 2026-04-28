@@ -55,8 +55,9 @@ Output:
 
 - Use this exact structure after the top block:
 - `Findings:`
-- `- [Missing|Extra|Wrong|Unproven] path:line - explanation`
+- `- [Severity][Missing|Extra|Wrong|Unproven] path:line - explanation`
 - `Residual uncertainty:`
 - If compliant, set `Findings:` to `- none`.
-- If not compliant, list findings first with file references and label each one as Missing, Extra, Wrong, or Unproven.
+- If not compliant, list findings first with a severity (`Critical`, `Important`, or `Minor`), a label (`Missing`, `Extra`, `Wrong`, or `Unproven`), and a file path plus line whenever possible.
+- Do not force line references when unavailable. Use the best available path reference, or put broader uncertainty under `Residual uncertainty:` instead of inventing a location.
 - If the request itself is unstable or incomplete, use `VVOC_STATUS: NEEDS_CONTEXT` and explain what prevents a safe pass/fail judgment.

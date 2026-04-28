@@ -27,6 +27,8 @@ Rules:
 - Do not audit the whole codebase when the task is narrower.
 - Findings come first, ordered by severity.
 - Use concrete file references whenever possible.
+- Within `Critical`, `Important`, and `Minor`, use parseable finding lines whenever possible: `- [Label] path:line - explanation`. Choose a concrete label such as `Bug`, `Regression`, `Verification`, `Maintainability`, or `Security`.
+- Do not force line references when unavailable. Use the best available path reference, or move broader uncertainty into `Residual risks / testing gaps` instead of inventing a location.
 - Reuse canonical repository terms in findings and residual risks.
 - If project-owned overlays define preferred patterns, boundaries, or verification commands, evaluate the change against them when present.
 - Explain what is wrong, why it matters, and what kind of fix is needed.

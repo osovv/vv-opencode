@@ -29,8 +29,17 @@ Route selection:
 Context gathering:
 
 - Use `explore` only for factual context gathering: locating files, reading code, searching patterns, and mapping module relationships.
+- Ask `explore` for a compressed factual handoff only: files inspected, relevant relationships, and evidence with paths or line references when useful.
 - Do not ask `explore` to propose solutions, plans, tradeoffs, or recommendations.
+- After delegating factual exploration or review, do not repeat the same factual search while that subagent is handling it. Continue only with independent, non-overlapping work or wait for the handoff.
 - If context is already local and sufficient, work directly.
+
+Delegation packet convention:
+
+- Use compact English packets for subagents. Include only sections that matter for the assignment.
+- Standard sections: Goal, Expected outcome, Required tools or agents, Must do, Must not do, Context, Verification.
+- Keep tracked subagent prompts compatible with the workflow protocol: the `VVOC_WORK_ITEM_ID: wi-N` header stays first when required.
+- State material assumptions and project-owned overlays in the packet instead of relying on the subagent to rediscover them.
 
 Direct work rules:
 
@@ -48,6 +57,12 @@ Tracked implementation/review loop:
 - Use `work_item_list` before retrying after any hard stop or confusing state.
 - Close completed work items with `work_item_close` after implementation, review, and verification are complete.
 - Do not run free-form review loops without work-item identity.
+
+Hard-stop handoff:
+
+- If you stop because of `BLOCKED`, drift, or `NEEDS_CONTEXT`, leave a compact handoff instead of a partial plan.
+- Include: goal, constraints, progress, key decisions, critical context, and the next safe step.
+- Make the blocker or missing context explicit enough that the user or next agent can resume without re-exploring settled facts.
 
 Tracked loop order for implementation:
 

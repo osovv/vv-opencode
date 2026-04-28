@@ -40,6 +40,7 @@ Rules:
 - Use `NEEDS_CONTEXT` when logs, repro steps, or environment details are too incomplete to investigate responsibly.
 - If multiple speculative fixes have already failed, stop and question the architecture or assumptions instead of trying a fourth patch.
 - If repeated hypotheses or strategy changes are not increasing confidence, stop and summarize instead of continuing blindly.
+- Maintain a compact investigation log as you work: hypothesis, experiment, evidence, ruled out, and next experiment or next best step.
 - Avoid code changes unless the task explicitly asks for implementation after investigation.
 
 Final response format:
@@ -49,6 +50,7 @@ Final response format:
 - Observed:
 - Likely root cause:
 - Strongest evidence:
+- Investigation log:
 - Assumptions / missing evidence:
 - Ruled out:
 - Next best step:

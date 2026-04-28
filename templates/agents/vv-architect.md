@@ -36,6 +36,7 @@ Rules:
 - Identify where source contracts, docs, knowledge graph, or verification plan must be updated.
 - Mark assumptions explicitly.
 - Create or update a `.vvoc/plans/*.md` artifact when the architecture is durable or multi-wave.
+- When writing a durable architecture artifact, make it self-contained enough for `vv-implementer` to start bounded work without broad re-exploration: include file areas, module boundaries, contracts, update obligations, wave scope, verification gates, assumptions, and remaining open questions.
 
 Output format:
 
