@@ -86,7 +86,7 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
     smallModel: "fast",
   },
   opencodeAgents: {
-    build: "smart",
+    build: "default",
     plan: "smart",
     general: "default",
     explore: "fast",
