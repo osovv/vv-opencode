@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.3.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior, and primary-only workflow guidance injection.
+//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers, and primary-only workflow guidance injection.
 //   DEPENDS: [bun:test, src/plugins/workflow/protocol.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts]
 //   LINKS: [V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
@@ -18,6 +18,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.4 - Added coverage that recognized task-result wrappers with non-whitespace suffix text are not unwrapped.]
+//   LAST_CHANGE: [v0.3.3 - Added coverage that loose task_id/task_result wrappers without OpenCode resume metadata are not unwrapped.]
+//   LAST_CHANGE: [v0.3.2 - Added coverage that foreign `<task_result>` text without an OpenCode task envelope is not unwrapped.]
+//   LAST_CHANGE: [v0.3.1 - Added regression coverage for tracked result parsing from OpenCode task output wrappers.]
 //   LAST_CHANGE: [v0.3.0 - Added coverage for review-only workflows starting fresh work items with reviewer subagents.]
 //   LAST_CHANGE: [v0.2.1 - Added coverage ensuring helper primary agent enhancer does not receive workflow protocol guidance injection.]
 //   LAST_CHANGE: [v0.2.0 - Added WorkflowPlugin integration coverage for tracked launch/result hooks, loop-gate enforcement, protocol errors, and primary-only guidance injection.]
@@ -659,6 +663,16 @@ function parseToolJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
 
+function wrapTaskResult(taskId: string, innerResult: string): string {
+  return [
+    `task_id: ${taskId} (for resuming to continue this task if needed)`,
+    "",
+    "<task_result>",
+    innerResult,
+    "</task_result>",
+  ].join("\n");
+}
+
 describe("workflow plugin integration", () => {
   test("untracked task launches pass through before/after hooks", async () => {
     const { plugin } = await createWorkflowPluginHarness();
@@ -1146,6 +1160,242 @@ describe("workflow plugin integration", () => {
         } as never,
       ),
     ).rejects.toThrow("LAUNCH_REJECTED_ROUND_LIMIT");
+  });
+
+  test("tracked result parsing extracts OpenCode task result wrappers", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-wrapped-result";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-WRAPPED-RESULT", title: "Wrapped result" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-wrapped-impl" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+    await plugin["tool.execute.after"]?.(
+      {
+        tool: "task",
+        sessionID,
+        callID: "call-wrapped-impl",
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+      {
+        title: "task",
+        output: wrapTaskResult(
+          "ses_123",
+          `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
+        ),
+        metadata: {},
+      } as never,
+    );
+
+    const listedRaw = await plugin.tool?.work_item_list?.execute(
+      { includeClosed: false },
+      createToolContext(sessionID) as never,
+    );
+    const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
+    expect(listed.items[0]?.state).toBe("awaiting_spec_review");
+  });
+
+  test("foreign task result tags without OpenCode task envelope still fail strict parsing", async () => {
+    const { plugin, logs } = await createWorkflowPluginHarness();
+    const sessionID = "session-foreign-task-result";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-FOREIGN-TASK-RESULT", title: "Foreign task result" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-foreign-task-result" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-foreign-task-result",
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: `<task_result>\nVVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.\n</task_result>`,
+          metadata: {},
+        } as never,
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+  });
+
+  test("loose task id wrappers without OpenCode resume metadata still fail strict parsing", async () => {
+    const { plugin, logs } = await createWorkflowPluginHarness();
+    const sessionID = "session-loose-task-id-wrapper";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-LOOSE-TASK-ID", title: "Loose task id wrapper" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-loose-task-id" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-loose-task-id",
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: [
+            "task_id: fake",
+            "",
+            "<task_result>",
+            `VVOC_WORK_ITEM_ID: ${workItemId}`,
+            "VVOC_STATUS: DONE",
+            "VVOC_ROUTE: change_with_review",
+            "",
+            "Done.",
+            "</task_result>",
+          ].join("\n"),
+          metadata: {},
+        } as never,
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+  });
+
+  test("recognized task wrappers with non-whitespace suffix still fail strict parsing", async () => {
+    const { plugin, logs } = await createWorkflowPluginHarness();
+    const sessionID = "session-task-wrapper-suffix";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-TASK-WRAPPER-SUFFIX", title: "Task wrapper suffix" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-task-wrapper-suffix" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-task-wrapper-suffix",
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: `${wrapTaskResult(
+            "ses_789",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
+          )}\nunexpected suffix`,
+          metadata: {},
+        } as never,
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+  });
+
+  test("malformed inner task result in OpenCode wrapper still raises protocol error", async () => {
+    const { plugin, logs } = await createWorkflowPluginHarness();
+    const sessionID = "session-wrapped-protocol-error";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-WRAPPED-PROTOCOL", title: "Wrapped protocol error" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-wrapped-protocol" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-wrapped-protocol",
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: wrapTaskResult(
+            "ses_456",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_ROUTE: change_with_review\n\nMissing status.`,
+          ),
+          metadata: {},
+        } as never,
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
   });
 
   test("malformed tracked result raises protocol error", async () => {

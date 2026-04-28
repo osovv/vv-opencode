@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
-//   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
+//   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, OpenCode task-result wrapper normalization, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
@@ -14,6 +14,9 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.3 - Tightened OpenCode task-result envelope detection to the known resumable task header shape before unwrapping.]
+//   LAST_CHANGE: [v0.2.2 - Restricted task-result wrapper extraction to recognized OpenCode task envelopes so foreign `<task_result>` text still fails strict parsing.]
+//   LAST_CHANGE: [v0.2.1 - Extracted inner OpenCode `<task_result>` content before strict tracked result parsing so task wrapper metadata does not trip protocol validation.]
 //   LAST_CHANGE: [v0.2.0 - Used transition-policy checks so fresh work items can start with reviewer subagents for review-only workflows.]
 //   LAST_CHANGE: [v0.1.1 - Excluded helper primary agents like enhancer from workflow guidance injection because they cannot participate in tracked workflow tooling.]
 //   LAST_CHANGE: [v0.1.0 - Added workflow plugin integration with tool wiring, tracked launch/result hooks, loop-gate enforcement, and primary-session guidance injection.]
@@ -139,6 +142,50 @@ function appendSystemInstruction(existingSystem: string | undefined, instruction
 
 function stringifyToolOutput(value: Record<string, unknown>): string {
   return JSON.stringify(value, null, 2);
+}
+
+function extractTaskResultText(output: string): string {
+  const startTag = "<task_result>";
+  const endTag = "</task_result>";
+  const normalizedOutput = output.replace(/\r\n/g, "\n");
+  const lines = normalizedOutput.split("\n");
+  const firstMeaningfulIndex = lines.findIndex((line) => line.trim().length > 0);
+  if (firstMeaningfulIndex < 0) {
+    return output;
+  }
+
+  const firstMeaningfulLine = lines[firstMeaningfulIndex]?.trim() ?? "";
+  if (
+    !/^task_id:\s+\S+\s+\(for resuming to continue this task if needed\)$/.test(firstMeaningfulLine)
+  ) {
+    return output;
+  }
+
+  let startTagIndex = firstMeaningfulIndex + 1;
+  while (startTagIndex < lines.length && (lines[startTagIndex] ?? "").trim().length === 0) {
+    startTagIndex += 1;
+  }
+
+  if ((lines[startTagIndex] ?? "").trim() !== startTag) {
+    return output;
+  }
+
+  const endTagIndex = lines.findIndex(
+    (line, index) => index > startTagIndex && line.trim() === endTag,
+  );
+  if (endTagIndex < 0) {
+    return output;
+  }
+
+  const suffixLines = lines.slice(endTagIndex + 1);
+  if (suffixLines.some((line) => line.trim().length > 0)) {
+    return output;
+  }
+
+  return lines
+    .slice(startTagIndex + 1, endTagIndex)
+    .join("\n")
+    .trim();
 }
 
 function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number): string {
@@ -375,7 +422,7 @@ export const WorkflowPlugin: Plugin = async ({ client }) => {
 
       const parsed = parseResultBlock({
         agent: subagentType,
-        output: output.output,
+        output: extractTaskResultText(output.output),
         expectedWorkItemId: header.value,
       });
       if (!parsed.ok) {

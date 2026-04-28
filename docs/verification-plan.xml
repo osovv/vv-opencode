@@ -115,9 +115,9 @@
     </VF-LAUNCH-ENFORCEMENT>
     <VF-RESULT-PARSING NAME="ResultParsing" USE_CASES="UC-012" DATA_FLOW="DF-RESULT-PARSING" PRIORITY="high">
       <scenario>A tracked subagent completes and returns output.</scenario>
-      <expected-outcome>Parsed results update workflow state correctly for implementation and review-only workflows, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results fail closed, and counters increment deterministically.</expected-outcome>
+      <expected-outcome>Parsed results update workflow state correctly for implementation and review-only workflows, OpenCode task wrapper metadata is stripped before strict subagent result parsing, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results fail closed, and counters increment deterministically.</expected-outcome>
       <required-signals>
-        <trace-sequence>tool.execute.after(task) -&gt; parse top block -&gt; validate VVOC_WORK_ITEM_ID + VVOC_STATUS -&gt; update state and counters -&gt; halt on protocol error or hard stop</trace-sequence>
+        <trace-sequence>tool.execute.after(task) -&gt; normalize recognized OpenCode task wrapper -&gt; parse top block -&gt; validate VVOC_WORK_ITEM_ID + VVOC_STATUS -&gt; update state and counters -&gt; halt on protocol error or hard stop</trace-sequence>
       </required-signals>
     </VF-RESULT-PARSING>
     <VF-LOOP-GATE NAME="LoopGate" USE_CASES="UC-013" DATA_FLOW="DF-LOOP-GATE" PRIORITY="high">
@@ -787,6 +787,9 @@
         <scenario-8 kind="failure">Launch with unknown work item ID is rejected.</scenario-8>
         <scenario-9 kind="failure">Launch with wrong next agent for current state is rejected.</scenario-9>
         <scenario-10 kind="failure">Malformed tracked output halts workflow.</scenario-10>
+        <scenario-10b kind="success">OpenCode task output wrappers with `task_id` metadata are unwrapped before strict tracked result parsing.</scenario-10b>
+        <scenario-10c kind="failure">Malformed tracked output inside a valid OpenCode task wrapper still halts workflow.</scenario-10c>
+        <scenario-10d kind="failure">Foreign or partial `&lt;task_result&gt;` wrappers without a recognized OpenCode task envelope and resume metadata are not unwrapped and still halt workflow.</scenario-10d>
         <scenario-11 kind="success">Eligible orchestrating primary agents receive workflow protocol guidance. Helper primary enhancer and known subagents do not.</scenario-11>
       </scenarios>
       <required-log-markers>
@@ -802,6 +805,7 @@
         <assertion-2>The plugin must not inject workflow guidance into known subagent prompts or helper-primary enhancer prompts.</assertion-2>
         <assertion-3>NEEDS_CONTEXT must always halt workflow and return control to main session.</assertion-3>
         <assertion-4>Protocol errors must halt automation rather than falling back to heuristic behavior.</assertion-4>
+        <assertion-5>The plugin must parse the inner `&lt;task_result&gt;` content from OpenCode task outputs instead of treating wrapper metadata as subagent protocol fields.</assertion-5>
       </required-trace-assertions>
       <wave-follow-up>Add integration tests that simulate full tracked subagent lifecycle with mock tool execution.</wave-follow-up>
       <phase-follow-up>Validate workflow enforcement with real OpenCode sessions once the plugin is installed.</phase-follow-up>

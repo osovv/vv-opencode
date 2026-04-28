@@ -215,7 +215,7 @@
     </M-WORKFLOW-TOOLING>
 
     <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message.</purpose>
+      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, unwrap OpenCode task result envelopes before tracked result parsing via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message.</purpose>
       <path>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</path>
       <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>
