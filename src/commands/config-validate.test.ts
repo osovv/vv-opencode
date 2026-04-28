@@ -1,5 +1,5 @@
 // FILE: src/commands/config-validate.test.ts
-// VERSION: 0.9.0
+// VERSION: 0.9.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
 //   SCOPE: Strict JSON parse error reporting, canonical schema v3 validation, role/preset semantic validation, and pass/fail terminal output.
@@ -15,6 +15,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.9.0 - Replaced legacy v1/v2 acceptance checks with canonical v3 role-based failure coverage including unsupported-version and preset role-path errors.]
+//   LAST_CHANGE: [v0.9.1 - Aligned OpenAI default-role fixtures with GPT-5.4 while smart remains vv-gpt-5.5-xhigh.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -104,7 +105,7 @@ test("validateVvocConfigContent - missing required built-in role ids fails with 
       {
         ...createDefaultVvocConfig(),
         roles: {
-          default: "openai/vv-gpt-5.5-xhigh",
+          default: "openai/gpt-5.4",
           smart: "openai/vv-gpt-5.5-xhigh",
           fast: "openai/gpt-5.4-mini",
           helper: "openai/gpt-5.4",

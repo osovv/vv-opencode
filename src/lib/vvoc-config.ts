@@ -1,5 +1,5 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 2.3.1
+// VERSION: 2.3.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
 //   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
@@ -42,7 +42,8 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
-//   LAST_CHANGE: [v2.3.2 - Updated built-in vv-openai preset and default roles to use vv-gpt-5.5-xhigh model.]
+//   LAST_CHANGE: [v2.3.2 - Updated built-in vv-openai preset and seeded role assignments to use vv-gpt-5.5-xhigh model.]
+//   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -319,7 +320,7 @@ export function createDefaultVvocPresets(): VvocPresets {
 
 function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Record<string, string> {
   const defaults: Record<BuiltInRoleName, string> = {
-    default: "openai/vv-gpt-5.5-xhigh",
+    default: "openai/gpt-5.4",
     smart: "openai/vv-gpt-5.5-xhigh",
     fast: "openai/gpt-5.4-mini",
     vision: "openai/gpt-5.4",
@@ -345,7 +346,7 @@ function createBuiltinVvocPresets(): VvocPresets {
     "vv-openai": createVvocPreset({
       description: "Starter OpenAI role assignments for built-in vvoc roles.",
       agents: {
-        default: "openai/vv-gpt-5.5-xhigh",
+        default: "openai/gpt-5.4",
         smart: "openai/vv-gpt-5.5-xhigh",
         fast: "openai/gpt-5.4-mini",
         vision: "openai/gpt-5.4",

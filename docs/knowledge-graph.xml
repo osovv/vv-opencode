@@ -248,7 +248,7 @@
     </M-CLI-PLUGIN-LIST>
 
     <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override, the `zai` provider model patch, and the OpenAI alias-model patch that installs `openai/vv-gpt-5.4-xhigh` for role assignment use without rewriting root OpenCode model fields.</purpose>
+      <purpose>Apply global OpenCode patch presets such as the `stepfun-ai` baseURL override, the `zai` provider model patch, and the OpenAI alias-model patch that installs vv-managed xhigh aliases such as `openai/vv-gpt-5.5-xhigh` for role assignment use without rewriting root OpenCode model fields.</purpose>
       <path>src/commands/patch-provider.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-PATCH-PROVIDER</verification-ref>

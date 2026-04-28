@@ -137,7 +137,7 @@ Set role assignments (`provider/model[:variant]`):
 
 ```bash
 vvoc role set default openai/gpt-5.4
-vvoc role set smart openai/gpt-5.4:xhigh
+vvoc role set smart openai/vv-gpt-5.5-xhigh
 vvoc role set fast openai/gpt-5.4-mini
 vvoc role set team-review anthropic/claude-sonnet-4-5:high
 ```
@@ -174,8 +174,8 @@ Preset rules:
 
 - managed built-in presets are `vv-openai`, `vv-zai`, `vv-minimax`, and `vv-deepseek`
 - `vvoc install` and `vvoc sync` always refresh those managed `vv-*` presets back to vvoc defaults
-- `vv-openai` uses the vv-managed OpenAI alias model `openai/vv-gpt-5.4-xhigh` as its default target so GPT-5.4 xhigh can be selected as an exact root default model
-- run `vvoc patch-provider openai` before applying `vv-openai` if the alias model is not already present in your global OpenCode config
+- `vv-openai` uses normal `openai/gpt-5.4` for `default`, keeps `smart` on the vv-managed xhigh alias `openai/vv-gpt-5.5-xhigh`, and keeps `fast`/`vision` on the conservative OpenAI defaults
+- run `vvoc patch-provider openai` before using the `vv-openai` smart role if the alias model is not already present in your global OpenCode config
 - user-defined presets with other names are preserved as-is, including legacy names such as `openai`, `zai`, and `minimax`
 - presets may be partial
 - applying a preset only changes the roles listed in that preset

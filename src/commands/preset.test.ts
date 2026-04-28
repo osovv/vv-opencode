@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.3
+// VERSION: 0.4.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
@@ -18,6 +18,7 @@
 //   LAST_CHANGE: [v0.4.1 - Added guards for no-sync side effects: existing OpenCode byte preservation, vvoc non-role section/preset preservation, and CLI argument error paths.]
 //   LAST_CHANGE: [v0.4.2 - Asserted raw vvoc.json section/preset preservation and first-run bootstrap behavior when the vvoc config path is missing.]
 //   LAST_CHANGE: [v0.4.3 - Added vv-deepseek to preset list expectations and error message assertions.]
+//   LAST_CHANGE: [v0.4.4 - Updated vv-openai expectations so default is GPT-5.4 and smart remains vv-gpt-5.5-xhigh.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -44,7 +45,7 @@ describe("preset helpers", () => {
     expect(output).toContain(
       '"description": "Starter OpenAI role assignments for built-in vvoc roles."',
     );
-    expect(output).toContain('"default": "openai/vv-gpt-5.5-xhigh"');
+    expect(output).toContain('"default": "openai/gpt-5.4"');
     expect(output).toContain('"smart": "openai/vv-gpt-5.5-xhigh"');
     expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
     expect(output).toContain('"vision": "openai/gpt-5.4"');
@@ -250,8 +251,10 @@ describe("applyPreset", () => {
 
       const bootstrapped = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       expect(bootstrapped.version).toBe(3);
-      expect(bootstrapped.roles.default).toBe("openai/vv-gpt-5.5-xhigh");
-      expect(bootstrapped.presets["vv-openai"]).toBeDefined();
+      expect(bootstrapped.roles.default).toBe("openai/gpt-5.4");
+      expect(bootstrapped.roles.smart).toBe("openai/vv-gpt-5.5-xhigh");
+      expect(bootstrapped.presets["vv-openai"]?.agents.default).toBe("openai/gpt-5.4");
+      expect(bootstrapped.presets["vv-openai"]?.agents.smart).toBe("openai/vv-gpt-5.5-xhigh");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
