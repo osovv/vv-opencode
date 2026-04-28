@@ -120,7 +120,7 @@
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <notes>
         <note-1>Managed prompts resolve from project-local `.vvoc/agents/` first, then the global vvoc agents directory, while bundled templates remain the installation baseline.</note-1>
-        <note-2>Tracked subagents are renamed to `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`. Prompt files follow the same naming. `investitagor` remains unchanged in v1.</note-2>
+        <note-2>Tracked subagents are renamed to `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`. Prompt files follow the same naming. `investigator` remains unchanged in v1.</note-2>
       </notes>
     </M-CLI-MANAGED-AGENTS>
 

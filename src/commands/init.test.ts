@@ -68,7 +68,7 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/vv-implementer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-spec-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-code-reviewer.md")).toBe(true);
-      expect(existsSync(paths.managedAgentsDirPath + "/investitagor.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/investigator.md")).toBe(true);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "memory.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
@@ -93,12 +93,12 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent.investitagor?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent.investigator?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent.enhancer?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-implementer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent.investitagor?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent.investigator?.prompt).toContain("{file:");
 
       expect(vvocConfig.version).toBe(VVOC_CONFIG_VERSION);
       expect(vvocConfig.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);

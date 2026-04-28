@@ -97,8 +97,8 @@ describe("managed agent prompts", () => {
     expect(codeTemplate).toContain("If a concern lacks a concrete failure mode");
   });
 
-  test("loads bundled investitagor template with investigation status protocol", async () => {
-    const template = await loadManagedAgentPromptTemplate("investitagor");
+  test("loads bundled investigator template with investigation status protocol", async () => {
+    const template = await loadManagedAgentPromptTemplate("investigator");
     expect(template).toContain("Status: REPRODUCED | PARTIAL | NOT_REPRODUCED | NEEDS_CONTEXT");
     expect(template).toContain("Recommended route:");
     expect(template).toContain("project-owned overlays");

@@ -73,7 +73,7 @@ export type BuiltInRoleBindings = {
     "vv-implementer": BuiltInRoleName;
     "vv-spec-reviewer": BuiltInRoleName;
     "vv-code-reviewer": BuiltInRoleName;
-    investitagor: BuiltInRoleName;
+    investigator: BuiltInRoleName;
   };
 };
 
@@ -98,7 +98,7 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
     "vv-implementer": "default",
     "vv-spec-reviewer": "smart",
     "vv-code-reviewer": "smart",
-    investitagor: "smart",
+    investigator: "smart",
   },
 };
 

@@ -114,7 +114,7 @@
               "implementer": { "type": "string", "minLength": 1 },
               "spec-reviewer": { "type": "string", "minLength": 1 },
               "code-reviewer": { "type": "string", "minLength": 1 },
-              "investitagor": { "type": "string", "minLength": 1 }
+              "investigator": { "type": "string", "minLength": 1 }
             }
           }
         }

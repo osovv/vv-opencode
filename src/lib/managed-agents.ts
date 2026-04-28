@@ -45,7 +45,7 @@ export const MANAGED_SUBAGENT_NAMES = [
   "vv-implementer",
   "vv-spec-reviewer",
   "vv-code-reviewer",
-  "investitagor",
+  "investigator",
 ] as const;
 
 export type ManagedSubagentName = (typeof MANAGED_SUBAGENT_NAMES)[number];
@@ -109,9 +109,9 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     },
   },
   {
-    name: "investitagor",
+    name: "investigator",
     description: "Investigates bugs and unclear behavior before implementation work begins.",
-    promptFileName: "investitagor.md",
+    promptFileName: "investigator.md",
     mode: "subagent",
     permission: {
       edit: "deny",
@@ -152,7 +152,7 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   ["vv-implementer", "vv-implementer.md"],
   ["vv-spec-reviewer", "vv-spec-reviewer.md"],
   ["vv-code-reviewer", "vv-code-reviewer.md"],
-  ["investitagor", "investitagor.md"],
+  ["investigator", "investigator.md"],
 ]);
 
 export function isManagedSubagentName(value: string): value is ManagedSubagentName {

@@ -39,7 +39,7 @@ Use explicit IDs and simple counters only.
 1. Do not build semantic task grouping.
 2. Do not infer work-item identity from prompt similarity.
 3. Do not replace all existing subagents with workflow-aware variants.
-4. Do not track `investitagor` in the strict workflow state machine in V1.
+4. Do not track `investigator` in the strict workflow state machine in V1.
 5. Do not attempt full persistent recovery across process restarts in V1 unless required by actual runtime constraints.
 6. Do not build a UI/dashboard first.
 
@@ -136,7 +136,7 @@ V1 tracked set:
 
 Untracked for V1:
 
-- `investitagor`
+- `investigator`
 - `guardian`
 - `memory-reviewer`
 - `enhancer`
@@ -145,7 +145,7 @@ Reason:
 
 1. V1 targets the concrete churn loop the user actually wants to control.
 2. Smaller tracked surface reduces protocol brittleness.
-3. `investitagor` can remain available as a manual or later-phase escalation path.
+3. `investigator` can remain available as a manual or later-phase escalation path.
 
 ## Result Protocol
 
@@ -425,7 +425,7 @@ Rename mapping:
 - `spec-reviewer` -> `vv-spec-reviewer`
 - `code-reviewer` -> `vv-code-reviewer`
 
-`investitagor` remains unchanged in V1 unless a separate naming migration is approved.
+`investigator` remains unchanged in V1 unless a separate naming migration is approved.
 
 Rename impact areas:
 
@@ -709,12 +709,12 @@ install/sync writes renamed tracked agent registrations and prompt file referenc
 Options:
 
 1. hard stop and force user involvement
-2. hard stop and allow manual untracked `investitagor`
+2. hard stop and allow manual untracked `investigator`
 3. hard stop and allow main session to reopen/split the item explicitly
 
 Recommended V1:
 support 1 and 3 explicitly.
-Do not bake `investitagor` into the tracked state machine yet.
+Do not bake `investigator` into the tracked state machine yet.
 
 ### Q2. Should `VVOC_ROUTE` be required everywhere?
 

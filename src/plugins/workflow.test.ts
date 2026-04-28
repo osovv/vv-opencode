@@ -630,7 +630,7 @@ describe("workflow plugin integration", () => {
         } as never,
         {
           args: {
-            subagent_type: "investitagor",
+            subagent_type: "investigator",
             prompt: "no workflow header required for untracked agent",
           },
         } as never,
@@ -644,7 +644,7 @@ describe("workflow plugin integration", () => {
           sessionID: "session-untracked",
           callID: "call-untracked",
           args: {
-            subagent_type: "investitagor",
+            subagent_type: "investigator",
             prompt: "no workflow header required for untracked agent",
           },
         } as never,

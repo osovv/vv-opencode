@@ -33,7 +33,7 @@
     </M-CLI-CONFIG>
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled guardian, memory-reviewer, enhancer, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investitagor prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
+      <purpose>Define bundled guardian, memory-reviewer, enhancer, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>

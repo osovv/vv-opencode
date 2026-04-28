@@ -8,7 +8,7 @@ Portable OpenCode workflow package with a Bun CLI that installs and maintains Op
 - that package entry exports seven plugins: `GuardianPlugin`, `HashlineEditPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `WorkflowPlugin`, `SecretsRedactionPlugin`
 - creates and maintains canonical `vvoc` config at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
 - scaffolds managed prompt files under `vvoc/agents/`
-- registers managed OpenCode agents: `enhancer`, `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`, `investitagor`
+- registers managed OpenCode agents: `enhancer`, `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`, `investigator`
 - installs plugin-managed agents: `guardian`, `memory-reviewer`
 - ships role presets, diagnostics, and shell completion through the `vvoc` CLI
 
@@ -312,7 +312,7 @@ Managed prompt files are created for:
 - `vv-implementer`
 - `vv-spec-reviewer`
 - `vv-code-reviewer`
-- `investitagor`
+- `investigator`
 
 OpenCode agent registrations written by `vvoc install` and `vvoc sync` are:
 
@@ -321,7 +321,7 @@ OpenCode agent registrations written by `vvoc install` and `vvoc sync` are:
 - `vv-implementer`
 - `vv-spec-reviewer`
 - `vv-code-reviewer`
-- `investitagor`
+- `investigator`
 
 Plugin runtime agents are:
 

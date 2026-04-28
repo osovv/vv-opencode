@@ -41,7 +41,7 @@ describe("built-in roles", () => {
     expect(bindings).toEqual({
       opencodeDefaults: { model: "default", smallModel: "fast" },
       opencodeAgents: {
-        build: "smart",
+        build: "default",
         plan: "smart",
         general: "default",
         explore: "fast",
@@ -53,7 +53,7 @@ describe("built-in roles", () => {
         "vv-implementer": "default",
         "vv-spec-reviewer": "smart",
         "vv-code-reviewer": "smart",
-        investitagor: "smart",
+        investigator: "smart",
       },
     });
   });

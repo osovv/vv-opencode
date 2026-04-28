@@ -146,7 +146,7 @@
     <item-4>No target-based model override UX after the role-based cutover.</item-4>
     <item-5>No semantic task grouping or embedding-based work-item identity in workflow v1.</item-5>
     <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
-    <item-7>No workflow tracking for `investitagor`, `guardian`, `memory-reviewer`, or `enhancer` in v1.</item-7>
+    <item-7>No workflow tracking for `investigator`, `guardian`, `memory-reviewer`, or `enhancer` in v1.</item-7>
   </NonGoals>
 
   <Constraints>
@@ -180,6 +180,6 @@
     <question-1>Should future versions allow optional validation against provider-declared capabilities so that `vision` role assignments can be checked more strictly?</question-1>
     <question-2>Should the role system eventually expose optional diagnostics for discovering which OpenCode config fields currently still contain literal provider/model strings instead of `vv-role:*` references?</question-2>
     <question-3>Should workflow state persist across process restarts in a future version?</question-3>
-    <question-4>Should `investitagor` become a tracked agent in a future workflow version?</question-4>
+    <question-4>Should `investigator` become a tracked agent in a future workflow version?</question-4>
   </OpenQuestions>
 </RequirementsAnalysis>

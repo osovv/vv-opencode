@@ -149,7 +149,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.agent?.["vv-implementer"]?.model).toBe("vv-role:default");
     expect(parsed.agent?.["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.["vv-code-reviewer"]?.model).toBe("vv-role:smart");
-    expect(parsed.agent?.investitagor?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.investigator?.model).toBe("vv-role:smart");
   });
 
   test("preserves comments while rewriting managed fields and leaving unrelated built-ins alone", async () => {

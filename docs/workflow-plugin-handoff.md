@@ -98,11 +98,11 @@ Current names:
 - `implementer`
 - `spec-reviewer`
 - `code-reviewer`
-- `investitagor`
+- `investigator`
 
 Important detail:
 
-- `investitagor` is spelled exactly like that in the current codebase
+- `investigator` is spelled exactly like that in the current codebase
 
 Relevant source:
 
@@ -115,7 +115,7 @@ Prompt templates are bundled in:
 - `templates/agents/implementer.md`
 - `templates/agents/spec-reviewer.md`
 - `templates/agents/code-reviewer.md`
-- `templates/agents/investitagor.md`
+- `templates/agents/investigator.md`
 - plus `guardian.md` and `memory-reviewer.md`
 
 At runtime, `vvoc install` / `vvoc sync` materialize them into:
@@ -334,7 +334,7 @@ Use work-item orchestration with the current names:
 - `implementer`
 - `spec-reviewer`
 - `code-reviewer`
-- `investitagor`
+- `investigator`
 
 Pros:
 
@@ -345,7 +345,7 @@ Pros:
 Cons:
 
 - product naming stays less explicit
-- typo `investitagor` remains in the external surface
+- typo `investigator` remains in the external surface
 
 ### Option 2. Migrate to vv-prefixed names
 
@@ -446,7 +446,7 @@ The user explicitly preferred:
 - `templates/agents/implementer.md`
 - `templates/agents/spec-reviewer.md`
 - `templates/agents/code-reviewer.md`
-- `templates/agents/investitagor.md`
+- `templates/agents/investigator.md`
 - `README.md` sections:
   - `Managed agent prompts`
   - `Managed subagents`
@@ -459,7 +459,7 @@ Suggested instruction seed:
 Read docs/workflow-plugin-handoff.md first.
 
 We want to design and likely implement a new WorkflowPlugin for vv-opencode.
-Current managed subagents are implementer/spec-reviewer/code-reviewer/investitagor from src/lib/managed-agents.ts.
+Current managed subagents are implementer/spec-reviewer/code-reviewer/investigator from src/lib/managed-agents.ts.
 
 Goal:
 - add explicit batch work_item_open
