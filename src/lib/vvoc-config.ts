@@ -372,10 +372,10 @@ function createBuiltinVvocPresets(): VvocPresets {
     "vv-deepseek": createVvocPreset({
       description: "Starter DeepSeek role assignments for built-in vvoc roles.",
       agents: {
-        default: "deepseek/deepseek-4-pro",
-        smart: "deepseek/deepseek-4-pro",
-        fast: "deepseek/deepseek-4-flash",
-        vision: "deepseek/deepseek-4-pro",
+        default: "deepseek/deepseek-v4-pro",
+        smart: "deepseek/deepseek-v4-pro",
+        fast: "deepseek/deepseek-v4-flash",
+        vision: "deepseek/deepseek-v4-pro",
       },
     }),
   };
