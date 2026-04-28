@@ -85,6 +85,7 @@ test("runUpgradeFlow - installs latest package with Bun and runs default global 
   expect(commands).toEqual([
     ["bun", "add", "-g", "@osovv/vv-opencode@0.15.0"],
     ["vvoc", "sync"],
+    ["vvoc", "completion"],
   ]);
   expect(logger.logLines.join("\n")).toContain("Latest fixes and sync improvements.");
   expect(logger.logLines.join("\n")).toContain("Global upgrade installed successfully.");
@@ -144,7 +145,9 @@ test("runUpgradeFlow - keeps secret-like changelog text intact", async () => {
   expect(commands).toEqual([
     ["bun", "add", "-g", "@osovv/vv-opencode@0.15.0"],
     ["vvoc", "sync"],
+    ["vvoc", "completion"],
   ]);
+  expect(logger.logLines.join("\n")).toContain(changelog);
   expect(logger.logLines.join("\n")).toContain(changelog);
 });
 

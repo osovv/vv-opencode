@@ -1,8 +1,8 @@
 // FILE: src/commands/upgrade.ts
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Upgrade the global vvoc package by checking npm, installing the latest release with Bun, and triggering a fresh sync subprocess.
-//   SCOPE: npm registry query, version comparison, best-effort changelog fetching, global Bun install, and post-install sync execution.
+//   PURPOSE: Upgrade the global vvoc package by checking npm, installing the latest release with Bun, triggering a fresh sync subprocess, and reinstalling shell completions.
+//   SCOPE: npm registry query, version comparison, best-effort changelog fetching, global Bun install, post-install sync execution, and post-upgrade shell completion installation.
 //   DEPENDS: [citty, src/lib/package.ts, Bun]
 //   LINKS: [M-CLI-UPGRADE]
 //   ROLE: RUNTIME
@@ -11,15 +11,16 @@
 //
 // START_MODULE_MAP
 //   default - Upgrade command definition for vvoc.
-//   runUpgradeFlow - Execute the full global upgrade and post-install sync flow.
+//   runUpgradeFlow - Execute the full global upgrade, post-install sync, and completion install flow.
 //   buildInstallCommand - Build the Bun global install command for a specific version.
-//   buildPostInstallSyncCommand - Build the fresh subprocess command for the default global sync flow.
+//   buildPostInstallCompletionCommand - Build the fresh subprocess command for the default global completion flow.
 //   fetchLatestVersion - Query npm registry for latest version.
 //   fetchChangelog - Fetch changelog from npm registry.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Redesigned upgrade into a global-only Bun install flow that runs post-install sync in a fresh subprocess.]
+//   LAST_CHANGE: [v0.25.6 - Added post-upgrade shell completion installation after successful sync.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -144,9 +145,33 @@ export async function runUpgradeFlow(
       warnManualSync(logger, "Post-upgrade sync failed.");
       return { exitCode: 0, status: "sync-warning" };
     }
-
     logProcessOutput(logger.log, syncResult.stdout);
     logProcessOutput(logger.warn, syncResult.stderr);
+
+    const completionCommand = buildPostInstallCompletionCommand();
+    logger.log("\nReinstalling shell completions:");
+    logger.log(`  ${formatCommand(completionCommand)}`);
+
+    let completionResult: UpgradeSubprocessResult | undefined;
+    try {
+      completionResult = await runSubprocess(completionCommand);
+    } catch (error) {
+      logger.warn(`Completion install could not launch: ${formatError(error)}`);
+      logger.warn("Run `vvoc completion` manually to reinstall shell completions.");
+    }
+
+    if (completionResult && completionResult.exitCode !== 0) {
+      logProcessOutput(logger.warn, completionResult.stdout);
+      logProcessOutput(logger.warn, completionResult.stderr);
+      logger.warn("Completion install failed.");
+      logger.warn("Run `vvoc completion` manually to reinstall shell completions.");
+    }
+
+    if (completionResult && completionResult.exitCode === 0) {
+      logProcessOutput(logger.log, completionResult.stdout);
+      logProcessOutput(logger.warn, completionResult.stderr);
+    }
+
     logger.log("Upgrade complete.");
     return { exitCode: 0, status: "upgraded" };
   } catch (error) {
@@ -161,6 +186,10 @@ export function buildInstallCommand(latestVersion: string): UpgradeCommand {
 
 export function buildPostInstallSyncCommand(): UpgradeCommand {
   return ["vvoc", "sync"];
+}
+
+export function buildPostInstallCompletionCommand(): UpgradeCommand {
+  return ["vvoc", "completion"];
 }
 
 export async function fetchLatestVersion(): Promise<string | null> {
