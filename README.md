@@ -8,7 +8,8 @@ Portable OpenCode workflow package with a Bun CLI that installs and maintains Op
 - that package entry exports seven plugins: `GuardianPlugin`, `HashlineEditPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `WorkflowPlugin`, `SecretsRedactionPlugin`
 - creates and maintains canonical `vvoc` config at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
 - scaffolds managed prompt files under `vvoc/agents/`
-- registers managed OpenCode agents: `enhancer`, `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`, `investigator`
+- registers `vv-controller` as the default OpenCode primary agent plus managed OpenCode agents: `enhancer`, `vv-analyst`, `vv-architect`, `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`, `investigator`
+- registers OpenCode slash commands: `/vv-plan`, `/vv-review`
 - installs plugin-managed agents: `guardian`, `memory-reviewer`
 - ships role presets, diagnostics, and shell completion through the `vvoc` CLI
 
@@ -41,10 +42,12 @@ vvoc install --scope project
 
 - ensure OpenCode has a pinned `@osovv/vv-opencode@<version>` package entry
 - register managed agents and scaffold their prompt files
+- set OpenCode `default_agent` to `vv-controller`
 - seed OpenCode `model`, `small_model`, `agent.explore`, and managed agent model refs with `vv-role:*` values
+- register managed OpenCode commands `vv-plan` and `vv-review`
 - disable global OpenCode `tools.apply_patch` in managed config so editing stays on the hashline-backed `edit` override
 - create or refresh canonical `vvoc.json`
-- refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`
+- refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`, `vv-deepseek`
 
 That package entry exports seven plugins:
 
@@ -71,6 +74,10 @@ Managed prompt files live here:
 
 - global: `$XDG_CONFIG_HOME/vvoc/agents/*.md`
 - project: `./.vvoc/agents/*.md`
+
+Durable planning artifacts written by the managed planning agents live here:
+
+- project: `./.vvoc/plans/*.md`
 
 For CLI commands that accept `--scope project`, only the OpenCode config target and managed prompt directory become project-local. Canonical `vvoc.json` stays global.
 
@@ -165,7 +172,7 @@ vvoc preset vv-zai
 
 Preset rules:
 
-- managed built-in presets are `vv-openai`, `vv-zai`, and `vv-minimax`
+- managed built-in presets are `vv-openai`, `vv-zai`, `vv-minimax`, and `vv-deepseek`
 - `vvoc install` and `vvoc sync` always refresh those managed `vv-*` presets back to vvoc defaults
 - `vv-openai` uses the vv-managed OpenAI alias model `openai/vv-gpt-5.4-xhigh` as its default target so GPT-5.4 xhigh can be selected as an exact root default model
 - run `vvoc patch-provider openai` before applying `vv-openai` if the alias model is not already present in your global OpenCode config
@@ -262,6 +269,13 @@ The default injected guidance tells the main session to proactively use the `exp
 
 ### WorkflowPlugin
 
+`vv-controller` is the managed default primary agent. It routes routine localized work directly, uses `investigator` for unclear bugs, uses tracked implementer/reviewer loops for risky or multi-file changes, and uses `vv-analyst` plus `vv-architect` for large-feature planning before implementation approval.
+
+Managed OpenCode commands:
+
+- `/vv-plan` routes the request through planning mode and stops before implementation
+- `/vv-review` routes the request through review-only mode and reports findings first
+
 `WorkflowPlugin` adds tracked workflow orchestration around the `task` tool for these managed subagents:
 
 - `vv-implementer`
@@ -282,7 +296,9 @@ VVOC_WORK_ITEM_ID: wi-1
 
 Tracked result blocks must return strict top-block protocol fields (`VVOC_WORK_ITEM_ID`, `VVOC_STATUS`, and `VVOC_ROUTE` for `vv-implementer`).
 
-Main-session guidance reminds agents to open work items first, reuse returned headers, treat `NEEDS_CONTEXT` as a hard stop, inspect `work_item_list` before retries, and avoid free-form review loops without explicit work-item identity.
+Main-session guidance reminds agents to open work items first for tracked implementer/reviewer loops, reuse returned headers, treat `NEEDS_CONTEXT` as a hard stop, inspect `work_item_list` before retries, and avoid free-form review loops without explicit work-item identity.
+
+Review-only workflows may start a fresh work item directly with `vv-spec-reviewer` or `vv-code-reviewer`; implementation workflows still follow `vv-implementer -> vv-spec-reviewer -> vv-code-reviewer`.
 
 ### SecretsRedactionPlugin
 
@@ -308,7 +324,10 @@ Managed prompt files are created for:
 
 - `guardian`
 - `memory-reviewer`
+- `vv-controller`
 - `enhancer`
+- `vv-analyst`
+- `vv-architect`
 - `vv-implementer`
 - `vv-spec-reviewer`
 - `vv-code-reviewer`
@@ -317,7 +336,10 @@ Managed prompt files are created for:
 OpenCode agent registrations written by `vvoc install` and `vvoc sync` are:
 
 - `explore`
+- `vv-controller`
 - `enhancer`
+- `vv-analyst`
+- `vv-architect`
 - `vv-implementer`
 - `vv-spec-reviewer`
 - `vv-code-reviewer`
@@ -327,6 +349,8 @@ Plugin runtime agents are:
 
 - `guardian`
 - `memory-reviewer`
+
+`vvoc install` and `vvoc sync` also keep OpenCode `default_agent` set to `vv-controller` and keep command entries for `vv-plan` and `vv-review` registered.
 
 If a managed prompt file is missing, rerun one of these commands:
 

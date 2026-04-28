@@ -1,5 +1,5 @@
 // FILE: src/lib/model-roles.test.ts
-// VERSION: 0.1.2
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify role ID/reference parsing, concrete model-selection parsing, built-in bindings, and role-resolution failures.
 //   SCOPE: Deterministic built-in role exposure, vv-role round-trips, model selection normalization, and explicit error-code coverage.
@@ -17,6 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Added built-in binding expectations for vv-controller, vv-analyst, and vv-architect.]
 //   LAST_CHANGE: [v0.1.2 - Updated built-in managed-agent binding expectations to vv-* tracked role keys.]
 //   LAST_CHANGE: [v0.1.1 - Added coverage for blank role bindings, whitespace-consistent role references, and full deterministic built-in binding assertions.]
 //   LAST_CHANGE: [v0.1.0 - Added module-local coverage for built-in role exposure, parsing normalization, field-specific errors, and non-transitive role resolution.]
@@ -49,7 +50,10 @@ describe("built-in roles", () => {
       managedAgents: {
         guardian: "fast",
         "memory-reviewer": "fast",
+        "vv-controller": "default",
         enhancer: "smart",
+        "vv-analyst": "smart",
+        "vv-architect": "smart",
         "vv-implementer": "default",
         "vv-spec-reviewer": "smart",
         "vv-code-reviewer": "smart",

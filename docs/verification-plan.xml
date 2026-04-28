@@ -1,11 +1,11 @@
-<VerificationPlan VERSION="0.9.5">
+<VerificationPlan VERSION="1.0.0">
   <GlobalPolicy>
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, main-session system guidance injection, hash-anchored editing, memory CRUD, secrets redaction, work-item protocol parsing, workflow state transitions, launch enforcement, result parsing, and loop gating.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, controller main-session system guidance injection, hash-anchored editing, memory CRUD, secrets redaction, work-item protocol parsing, workflow state transitions, launch enforcement, review-only result parsing, and loop gating.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system or workflow change.</wave-level-focus>
-    <phase-level-focus>Buildable package output plus stable command behavior for installation, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, explicit memory workflows, secrets redaction, tracked subagent rename, and deterministic workflow enforcement.</phase-level-focus>
+    <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, explicit memory workflows, secrets redaction, tracked subagent rename, review-only workflows, and deterministic workflow enforcement.</phase-level-focus>
     <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
@@ -13,14 +13,14 @@
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User runs `vvoc init` or `vvoc install` to bootstrap the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, the managed enhancer agent and managed subagents are registered in OpenCode config with `vv-role:*` model references, managed OpenCode config sets `tools.apply_patch = false`, managed prompts exist in the scope-correct agents directory, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded with built-in roles and built-in role presets.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, `default_agent` is `vv-controller`, the managed controller/enhancer agents and managed subagents are registered in OpenCode config with `vv-role:*` model references, managed `/vv-plan` and `/vv-review` command definitions exist, managed OpenCode config sets `tools.apply_patch = false`, managed prompts exist in the scope-correct agents directory, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded with built-in roles and built-in role presets.</expected-outcome>
       <required-signals>
         <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedAgentRegistrations -&gt; installManagedAgentPrompts -&gt; installVvocConfig -&gt; status reports configured role-based setup</trace-sequence>
       </required-signals>
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Canonical vvoc schema v3 and managed prompt files are rewritten canonically, the managed enhancer/subagent registration stays present in OpenCode config with `vv-role:*` references, managed OpenCode config keeps `tools.apply_patch = false`, managed `vv-*` presets are refreshed to vvoc defaults, current explicit role-based values survive the vvoc.json rewrite where applicable, and pre-role vvoc schemas fail loudly instead of being migrated.</expected-outcome>
+      <expected-outcome>Canonical vvoc schema v3 and managed prompt files are rewritten canonically, the managed default controller, command definitions, enhancer/subagent registrations stay present in OpenCode config with canonical values and `vv-role:*` references, managed OpenCode config keeps `tools.apply_patch = false`, managed `vv-*` presets are refreshed to vvoc defaults, current explicit role-based values survive the vvoc.json rewrite where applicable, and pre-role vvoc schemas fail loudly instead of being migrated.</expected-outcome>
       <required-signals>
         <trace-sequence>inspect canonical config -&gt; parse current role values -&gt; render canonical JSON -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
@@ -78,7 +78,7 @@
     </VF-MEMORY-REVIEW>
     <VF-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjection" USE_CASES="UC-006" DATA_FLOW="DF-SYSTEM-CONTEXT" PRIORITY="medium">
       <scenario>User starts a primary chat session with vvoc installed.</scenario>
-      <expected-outcome>The main-session user message carries reusable vvoc system guidance for proactive context gathering, an editing workflow that prefers `read` plus the hashline-backed `edit` tool over shell rewrites, standard trajectories, task routing, compact working state, reroute-on-evidence, semantic continuity, assumption discipline, anti-drift budgeting, and project-overlay precedence, while known subagents do not inherit that guidance.</expected-outcome>
+      <expected-outcome>The main-session user message carries reusable vvoc system guidance for proactive context gathering, an editing workflow that prefers `read` plus the hashline-backed `edit` tool over shell rewrites, standard trajectories, task routing, compact working state, reroute-on-evidence, semantic continuity, assumption discipline, anti-drift budgeting, and project-overlay precedence, while known subagents including vv-analyst and vv-architect do not inherit that guidance.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append message.system guidance -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -108,14 +108,14 @@
     </VF-WORKFLOW-TOOLS>
     <VF-LAUNCH-ENFORCEMENT NAME="LaunchEnforcement" USE_CASES="UC-011" DATA_FLOW="DF-LAUNCH-ENFORCEMENT" PRIORITY="high">
       <scenario>Main session launches a tracked subagent through the task tool.</scenario>
-      <expected-outcome>Tracked launches without valid VVOC_WORK_ITEM_ID header are rejected, unknown work items are rejected, invalid next-agent transitions are blocked, round-limit overflow is rejected, and untracked launches pass through unaffected.</expected-outcome>
+      <expected-outcome>Tracked launches without valid VVOC_WORK_ITEM_ID header are rejected, unknown work items are rejected, invalid route-specific transitions are blocked, review-only fresh work items may launch vv-spec-reviewer or vv-code-reviewer directly, round-limit overflow is rejected, and untracked launches pass through unaffected.</expected-outcome>
       <required-signals>
         <trace-sequence>tool.execute.before(task) -&gt; inspect subagent_type -&gt; if tracked: validate header + work item + transition + round limit</trace-sequence>
       </required-signals>
     </VF-LAUNCH-ENFORCEMENT>
     <VF-RESULT-PARSING NAME="ResultParsing" USE_CASES="UC-012" DATA_FLOW="DF-RESULT-PARSING" PRIORITY="high">
       <scenario>A tracked subagent completes and returns output.</scenario>
-      <expected-outcome>Parsed results update workflow state correctly, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results fail closed, and counters increment deterministically.</expected-outcome>
+      <expected-outcome>Parsed results update workflow state correctly for implementation and review-only workflows, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results fail closed, and counters increment deterministically.</expected-outcome>
       <required-signals>
         <trace-sequence>tool.execute.after(task) -&gt; parse top block -&gt; validate VVOC_WORK_ITEM_ID + VVOC_STATUS -&gt; update state and counters -&gt; halt on protocol error or hard stop</trace-sequence>
       </required-signals>
@@ -129,7 +129,7 @@
     </VF-LOOP-GATE>
     <VF-WORKFLOW-GUIDANCE NAME="WorkflowGuidance" USE_CASES="UC-014" DATA_FLOW="DF-WORKFLOW-GUIDANCE" PRIORITY="medium">
       <scenario>Main session starts a chat with WorkflowPlugin active.</scenario>
-      <expected-outcome>Eligible orchestrating primary agents receive workflow protocol guidance. Helper primaries such as enhancer and known subagents including vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
+      <expected-outcome>Eligible orchestrating primary agents including vv-controller receive workflow protocol guidance. Helper primaries such as enhancer and known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append workflow system instruction -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -144,13 +144,13 @@
       <telemetry>none required beyond explicit thrown-error surfaces</telemetry>
     </VM-ROLE-PARSING>
     <VM-CONFIG-SEED MODULE="M-CLI-CONFIG" FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
-      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, and role-reference OpenCode root defaults plus built-in `explore` and managed agents.</scenario>
+      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, managed default controller, managed command definitions, and role-reference OpenCode root defaults plus built-in `explore` and managed agents.</scenario>
       <primary-evidence>temp-home integration checks plus exact config assertions</primary-evidence>
       <trajectory-evidence>OpenCode config diff assertions proving `vv-role:*` writes instead of literal provider/model writes</trajectory-evidence>
       <telemetry>installation inspection output plus stable config snapshots</telemetry>
     </VM-CONFIG-SEED>
     <VM-CONFIG-SYNC MODULE="M-CLI-CONFIG" FLOW="DF-CONFIG-SYNC" PRIORITY="high">
-      <scenario>Sync preserves user-owned custom roles while refreshing managed role presets, keeping only root defaults plus built-in `explore` and managed agents on auto-seeded role refs, and rejecting unsupported pre-role schemas.</scenario>
+      <scenario>Sync preserves user-owned custom roles while refreshing managed role presets, keeping root defaults, `default_agent`, managed command definitions, built-in `explore`, and managed agents on canonical managed values, and rejecting unsupported pre-role schemas.</scenario>
       <primary-evidence>deterministic config round-trip assertions</primary-evidence>
       <trajectory-evidence>trace assertions on parse -&gt; refresh -&gt; rewrite order</trajectory-evidence>
       <telemetry>stable rewrite summaries and doctor/status inspection snapshots</telemetry>
@@ -195,7 +195,7 @@
 
   <VerificationMatrix SCOPE="Phase-7-11">
     <VM-RENAME-AGENTS MODULE="M-CLI-MANAGED-AGENTS" FLOW="DF-RENAME-AGENTS" PRIORITY="high">
-      <scenario>Install and sync scaffold renamed tracked agents vv-implementer, vv-spec-reviewer, vv-code-reviewer with matching prompt file names and updated model-roles bindings.</scenario>
+      <scenario>Install and sync scaffold managed vv-controller, vv-analyst, vv-architect, and renamed tracked agents vv-implementer, vv-spec-reviewer, vv-code-reviewer with matching prompt file names and updated model-roles bindings.</scenario>
       <primary-evidence>deterministic assertions on managed agent names, prompt file names, and OpenCode registration output</primary-evidence>
       <trajectory-evidence>failure assertions for old agent name references after rename</trajectory-evidence>
       <telemetry>install/sync output reflecting vv-* names</telemetry>
@@ -207,19 +207,19 @@
       <telemetry>none required beyond explicit parse-result surfaces</telemetry>
     </VM-PROTOCOL-PARSING>
     <VM-STATE-MANAGEMENT MODULE="M-WORKFLOW-STATE" FLOW="DF-WORKFLOW-TOOLS" PRIORITY="high">
-      <scenario>Open, list, and close work items with idempotent keys and correct state transitions.</scenario>
+      <scenario>Open, list, and close work items with idempotent keys, implementation workflow transitions, and review-only reviewer-start transitions.</scenario>
       <primary-evidence>deterministic assertions on work-item lifecycle, counter tracking, and round computation</primary-evidence>
       <trajectory-evidence>failure assertions for key conflicts and already-closed items</trajectory-evidence>
       <telemetry>none required beyond explicit tool-result surfaces</telemetry>
     </VM-STATE-MANAGEMENT>
     <VM-TRANSITIONS MODULE="M-WORKFLOW-TRANSITIONS" FLOW="DF-LAUNCH-ENFORCEMENT" PRIORITY="high">
-      <scenario>Transition rules produce correct next states for all valid agent results and reject invalid transitions and round overflow.</scenario>
+      <scenario>Transition rules produce correct next states for all valid agent results, allow review-only fresh reviewer starts, and reject invalid transitions and round overflow.</scenario>
       <primary-evidence>deterministic assertions on getNextState for all valid state+status combinations</primary-evidence>
       <trajectory-evidence>failure assertions for invalid transitions, round-limit exceeded, and disallowed agent launches</trajectory-evidence>
       <telemetry>none required beyond explicit transition-result surfaces</telemetry>
     </VM-TRANSITIONS>
     <VM-WORKFLOW-INTEGRATION MODULE="M-PLUGIN-WORKFLOW" FLOW="DF-LAUNCH-ENFORCEMENT" PRIORITY="high">
-      <scenario>Full integration: tools register, launch enforcement blocks invalid tracked launches, result parsing updates state, loop gating stops round 3, and primary-session guidance injects correctly.</scenario>
+      <scenario>Full integration: tools register, launch enforcement blocks invalid tracked launches, review-only launches can start from reviewer agents, result parsing updates state, loop gating stops round 3, and primary-session guidance injects correctly.</scenario>
       <primary-evidence>deterministic integration assertions for happy path, spec fail path, code fail path, hard-stop path, and loop-gate path</primary-evidence>
       <trajectory-evidence>failure assertions for missing header, unknown work item, invalid transition, and protocol errors</trajectory-evidence>
       <telemetry>structured markers for launch validation, result parsing, and state transitions</telemetry>

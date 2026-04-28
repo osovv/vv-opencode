@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 0.9.6
+// VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode default-agent, command, and tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
 //   INPUTS: Scope-aware filesystem paths, current OpenCode/vvoc config text, and validated config override values.
 //   OUTPUTS: Normalized OpenCode/vvoc config text, persisted config writes, and installation inspection snapshots.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
@@ -26,7 +26,7 @@
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
-//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed OpenCode agent registrations and tool gating.
+//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, command registrations, agent registrations, and tool gating.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
 //   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
@@ -35,6 +35,7 @@
 //   syncManagedAgentRegistrations - Syncs the canonical vvoc-managed OpenCode agent registrations and tool gating into OpenCode config.
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian and managed OpenCode agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian and managed OpenCode agents.
+//   ensureManagedPlanDirectory - Creates the managed vvoc planning artifact directory when missing.
 //   readOpenCodeAgentModel - Reads a model override for any OpenCode agent from config.
 //   readOpenCodeAgentOverride - Reads a model override for any OpenCode agent from config.
 //   writeOpenCodeAgentModel - Writes or removes a model override for any OpenCode agent in config.
@@ -48,6 +49,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts.]
+//   LAST_CHANGE: [v1.0.0 - Added vv-controller as the managed default agent plus vv-plan/vv-review command registrations.]
 //   LAST_CHANGE: [v0.9.7 - Removed variant splitting from agent model read/write helpers so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.9.6 - Added managed OpenCode `tools.apply_patch = false` writes during install/init/sync so sessions stay on the hashline-backed `edit` override.]
 //   LAST_CHANGE: [v0.9.5 - Moved legacy tracked-agent deletion gating into sync with prompt-file ownership checks so user-owned legacy prompt files prevent cleanup.]
@@ -97,6 +100,7 @@ import {
   getGlobalVvocDir,
   getProjectVvocDir,
   getVvocAgentsDir,
+  getVvocPlansDir,
 } from "./vvoc-paths.js";
 
 export const CLI_NAME = "vvoc";
@@ -126,6 +130,21 @@ const LEGACY_TRACKED_DESCRIPTIONS = {
     "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
 } as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
+const MANAGED_DEFAULT_AGENT = "vv-controller";
+const MANAGED_OPENCODE_COMMANDS = {
+  "vv-plan": {
+    description: "Plan a vvoc workflow without implementing changes.",
+    agent: MANAGED_DEFAULT_AGENT,
+    template:
+      "Route this request as a planning-only vvoc workflow. Use analyst/architect context when helpful, write any durable planning artifact under .vvoc/plans, and stop before implementation.\n\n$ARGUMENTS",
+  },
+  "vv-review": {
+    description: "Run a vvoc review-only workflow over the requested scope.",
+    agent: MANAGED_DEFAULT_AGENT,
+    template:
+      "Route this request as a review_only vvoc workflow. Decide whether spec review, code review, or both are needed, and report findings first.\n\n$ARGUMENTS",
+  },
+} satisfies Record<string, JsonObject>;
 
 const JSON_FORMAT = {
   insertSpaces: true,
@@ -146,6 +165,7 @@ export type ResolvedPaths = {
   vvocBaseDir: string;
   vvocConfigPath: string;
   managedAgentsDirPath: string;
+  managedPlansDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
 };
@@ -207,6 +227,7 @@ export async function resolvePaths(options: {
   const managedAgentsBaseDir =
     options.scope === "global" ? vvocBaseDir : getProjectVvocDir(options.cwd);
   const managedAgentsDirPath = getVvocAgentsDir(managedAgentsBaseDir);
+  const managedPlansDirPath = getVvocPlansDir(managedAgentsBaseDir);
   const opencodeSelection = await selectPrimaryPath(
     OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
   );
@@ -219,6 +240,7 @@ export async function resolvePaths(options: {
     vvocBaseDir,
     vvocConfigPath: getGlobalVvocConfigPath(options.configDir),
     managedAgentsDirPath,
+    managedPlansDirPath,
     opencodeConfigPath: opencodeSelection.primary,
     opencodeAlternatePaths: opencodeSelection.alternates,
   };
@@ -290,6 +312,7 @@ export function ensureManagedAgentRegistrationsConfigText(
       $schema: OPENCODE_SCHEMA_URL,
       model: rootRoleRefs.model,
       small_model: rootRoleRefs.small_model,
+      default_agent: MANAGED_DEFAULT_AGENT,
       tools: {
         apply_patch: false,
       },
@@ -299,11 +322,13 @@ export function ensureManagedAgentRegistrationsConfigText(
         ),
         ...managedRegistrations,
       },
+      command: MANAGED_OPENCODE_COMMANDS,
     });
   }
 
   const document = parseObjectDocument(text, "OpenCode config");
   const currentAgents = readAgentMap(document, "OpenCode config");
+  const currentCommands = readCommandMap(document, "OpenCode config");
   const currentTools = readOptionalObject(document, "tools", "OpenCode config");
   let nextText = text;
 
@@ -330,6 +355,15 @@ export function ensureManagedAgentRegistrationsConfigText(
     nextText = applyEdits(
       nextText,
       modify(nextText, ["small_model"], rootRoleRefs.small_model, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  if (document.default_agent !== MANAGED_DEFAULT_AGENT) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["default_agent"], MANAGED_DEFAULT_AGENT, {
         formattingOptions: JSON_FORMAT,
       }),
     );
@@ -398,6 +432,19 @@ export function ensureManagedAgentRegistrationsConfigText(
     }
   }
 
+  for (const [commandName, registration] of Object.entries(MANAGED_OPENCODE_COMMANDS)) {
+    if (JSON.stringify(currentCommands[commandName]) === JSON.stringify(registration)) {
+      continue;
+    }
+
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["command", commandName], registration, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 
@@ -463,6 +510,16 @@ export async function syncManagedAgentPrompts(
   }
 
   return results;
+}
+
+export async function ensureManagedPlanDirectory(
+  paths: Pick<ResolvedPaths, "managedPlansDirPath">,
+): Promise<WriteResult> {
+  const createdPath = await mkdir(paths.managedPlansDirPath, { recursive: true });
+  return {
+    action: createdPath ? "created" : "kept",
+    path: paths.managedPlansDirPath,
+  };
 }
 
 export async function readManagedAgentModels(
@@ -1040,6 +1097,25 @@ function readAgentMap(document: JsonObject, label: string): Record<string, JsonO
   for (const [name, value] of Object.entries(raw as JsonObject)) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error(`${label}: expected "agent.${name}" to be an object`);
+    }
+    entries[name] = value as JsonObject;
+  }
+  return entries;
+}
+
+function readCommandMap(document: JsonObject, label: string): Record<string, JsonObject> {
+  const raw = document.command;
+  if (raw === undefined) {
+    return {};
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${label}: expected "command" to be an object`);
+  }
+
+  const entries: Record<string, JsonObject> = {};
+  for (const [name, value] of Object.entries(raw as JsonObject)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${label}: expected "command.${name}" to be an object`);
     }
     entries[name] = value as JsonObject;
   }

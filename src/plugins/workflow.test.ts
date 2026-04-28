@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow.test.ts
-// VERSION: 0.2.1
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
 //   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior, and primary-only workflow guidance injection.
@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Added coverage for review-only workflows starting fresh work items with reviewer subagents.]
 //   LAST_CHANGE: [v0.2.1 - Added coverage ensuring helper primary agent enhancer does not receive workflow protocol guidance injection.]
 //   LAST_CHANGE: [v0.2.0 - Added WorkflowPlugin integration coverage for tracked launch/result hooks, loop-gate enforcement, protocol errors, and primary-only guidance injection.]
 //   LAST_CHANGE: [v0.1.2 - Added coverage for duplicate top-block field rejection and missing transition actor rejection.]
@@ -284,7 +285,7 @@ describe("workflow state", () => {
     const attempted = transitionWorkItemState(store, {
       sessionId: "session-a",
       workItemId: opened.record.workItemId,
-      state: "awaiting_code_review",
+      state: "ready_to_close",
       actor: "vv-spec-reviewer",
     });
 
@@ -387,6 +388,29 @@ describe("workflow state", () => {
     expect(getReviewRound({ specReviewCount: 1, codeReviewCount: 0 })).toBe(1);
     expect(getReviewRound({ specReviewCount: 1, codeReviewCount: 2 })).toBe(2);
   });
+
+  test("fresh work items can transition from review-only reviewer outcomes", () => {
+    const store = createWorkItemStore();
+    const opened = openWorkItem(store, {
+      sessionId: "session-review-only",
+      key: "review-only",
+      title: "Review only",
+    });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+
+    const transitioned = transitionWorkItemState(store, {
+      sessionId: "session-review-only",
+      workItemId: opened.record.workItemId,
+      state: "ready_to_close",
+      actor: "vv-code-reviewer",
+    });
+
+    expect(transitioned.ok).toBe(true);
+    if (!transitioned.ok) return;
+    expect(transitioned.record.state).toBe("ready_to_close");
+    expect(transitioned.record.codeReviewCount).toBe(1);
+  });
 });
 
 describe("workflow transitions", () => {
@@ -394,6 +418,8 @@ describe("workflow transitions", () => {
     expect(getAllowedNextAgent("open")).toBe("vv-implementer");
     expect(getAllowedNextAgent("awaiting_implementer")).toBe("vv-implementer");
     expect(isAllowedTransition("open", "vv-implementer")).toBe(true);
+    expect(isAllowedTransition("open", "vv-spec-reviewer")).toBe(true);
+    expect(isAllowedTransition("open", "vv-code-reviewer")).toBe(true);
   });
 
   test("implements deterministic next-state mappings", () => {
@@ -438,6 +464,22 @@ describe("workflow transitions", () => {
         status: "FAIL",
       }),
     ).toBe("awaiting_implementer");
+
+    expect(
+      getNextState("open", {
+        agent: "vv-code-reviewer",
+        workItemId: "wi-1",
+        status: "PASS",
+      }),
+    ).toBe("ready_to_close");
+
+    expect(
+      getNextState("open", {
+        agent: "vv-spec-reviewer",
+        workItemId: "wi-1",
+        status: "PASS",
+      }),
+    ).toBe("awaiting_code_review");
 
     expect(
       getNextState("awaiting_code_review", {
@@ -708,6 +750,36 @@ describe("workflow plugin integration", () => {
     const workItemId = opened.items[0]?.workItemId;
     expect(workItemId).toBe("wi-1");
 
+    await plugin["tool.execute.before"]?.(
+      {
+        tool: "task",
+        sessionID: "session-invalid-launch",
+        callID: "call-impl-before-wrong-agent",
+      } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement first`,
+        },
+      } as never,
+    );
+    await plugin["tool.execute.after"]?.(
+      {
+        tool: "task",
+        sessionID: "session-invalid-launch",
+        callID: "call-impl-before-wrong-agent",
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement first`,
+        },
+      } as never,
+      {
+        title: "task",
+        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
+        metadata: {},
+      } as never,
+    );
+
     await expect(
       plugin["tool.execute.before"]?.(
         {
@@ -717,8 +789,8 @@ describe("workflow plugin integration", () => {
         } as never,
         {
           args: {
-            subagent_type: "vv-spec-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview this`,
+            subagent_type: "vv-code-reviewer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code too early`,
           },
         } as never,
       ),

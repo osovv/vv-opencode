@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.4.1
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added prompt-template coverage for vv-controller, vv-analyst, and vv-architect.]
 //   LAST_CHANGE: [v0.4.1 - Updated tracked-agent template coverage for vv-* naming and strict top-block workflow protocol requirements.]
 //   LAST_CHANGE: [v0.4.0 - Expanded prompt-template coverage for rerouting, working-state externalization, semantic continuity, assumptions, anti-drift, and project-overlay hooks.]
 //   LAST_CHANGE: [v0.3.0 - Expanded prompt-template coverage for stable enhancer schema, shared status outputs, and investigation/report protocols.]
@@ -56,6 +57,36 @@ describe("managed agent prompts", () => {
     expect(template).toContain("Do not use repeated identical child tags.");
     expect(template).toContain("Reuse stable domain terms");
     expect(template).toContain("Do not invent project overlays");
+  });
+
+  test("loads bundled vv-controller template with route and workflow guidance", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    expect(template).toStartWith("---\n");
+    expect(template).toContain("mode: primary");
+    expect(template).toContain("You are the vv-controller primary agent.");
+    expect(template).toContain("direct_change");
+    expect(template).toContain("change_with_review");
+    expect(template).toContain("large_feature");
+    expect(template).toContain("VVOC_WORK_ITEM_ID: wi-N");
+    expect(template).toContain("Do not implement before approval");
+    expect(template).toContain("Match the user's language");
+  });
+
+  test("loads bundled analyst and architect templates with plan-file permissions", async () => {
+    const analystTemplate = await loadManagedAgentPromptTemplate("vv-analyst");
+    const architectTemplate = await loadManagedAgentPromptTemplate("vv-architect");
+
+    expect(analystTemplate).toContain("mode: subagent");
+    expect(analystTemplate).toContain(".vvoc/plans/**");
+    expect(analystTemplate).toContain("Status: READY | NEEDS_CONTEXT");
+    expect(analystTemplate).toContain("Acceptance criteria:");
+    expect(analystTemplate).toContain("Plan artifact: path or none");
+
+    expect(architectTemplate).toContain("mode: subagent");
+    expect(architectTemplate).toContain(".vvoc/plans/**");
+    expect(architectTemplate).toContain("Implementation waves:");
+    expect(architectTemplate).toContain("Verification gates:");
+    expect(architectTemplate).toContain("User approval checkpoint:");
   });
 
   test("loads bundled vv-implementer template with strict top-block protocol", async () => {

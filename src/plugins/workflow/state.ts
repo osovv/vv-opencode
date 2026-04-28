@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow/state.ts
-// VERSION: 0.1.2
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage in-memory workflow work-item state scoped by session with idempotent open semantics.
 //   SCOPE: Session-scoped work-item storage, id generation, idempotent open-by-key, state transitions, review counters, and close/list/get operations.
@@ -26,6 +26,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Allowed fresh review-only work items to transition directly from reviewer outcomes.]
 //   LAST_CHANGE: [v0.1.2 - Required actor metadata for tracked transitions so reviewer counters cannot be bypassed by actor-less updates.]
 //   LAST_CHANGE: [v0.1.1 - Enforced deterministic transition invariants with sticky hard-stop states and optional closed-item listing support.]
 //   LAST_CHANGE: [v0.1.0 - Added session-scoped in-memory workflow state store with idempotent open, transitions, close/list/get, and review-round helpers.]
@@ -206,7 +207,14 @@ function getWorkItemInStore(
 
 function isTransitionAllowed(fromState: WorkItemState, toState: WorkItemState): boolean {
   const allowed: Record<WorkItemState, WorkItemState[]> = {
-    open: ["awaiting_spec_review", "needs_context", "blocked"],
+    open: [
+      "awaiting_implementer",
+      "awaiting_spec_review",
+      "awaiting_code_review",
+      "needs_context",
+      "blocked",
+      "ready_to_close",
+    ],
     awaiting_implementer: ["awaiting_spec_review", "needs_context", "blocked"],
     awaiting_spec_review: ["awaiting_code_review", "awaiting_implementer", "needs_context"],
     awaiting_code_review: ["ready_to_close", "awaiting_implementer", "needs_context"],
@@ -218,17 +226,48 @@ function isTransitionAllowed(fromState: WorkItemState, toState: WorkItemState): 
   return allowed[fromState].includes(toState);
 }
 
-function getAllowedActorForState(state: WorkItemState): TrackedAgentName | undefined {
+function getAllowedActorsForState(state: WorkItemState): TrackedAgentName[] {
   if (state === "open" || state === "awaiting_implementer") {
-    return "vv-implementer";
+    return state === "open"
+      ? ["vv-implementer", "vv-spec-reviewer", "vv-code-reviewer"]
+      : ["vv-implementer"];
   }
   if (state === "awaiting_spec_review") {
-    return "vv-spec-reviewer";
+    return ["vv-spec-reviewer"];
   }
   if (state === "awaiting_code_review") {
-    return "vv-code-reviewer";
+    return ["vv-code-reviewer"];
   }
-  return undefined;
+  return [];
+}
+
+function isActorStateTransitionAllowed(
+  actor: TrackedAgentName | undefined,
+  fromState: WorkItemState,
+  toState: WorkItemState,
+): boolean {
+  if (!actor) {
+    return true;
+  }
+
+  if (actor === "vv-implementer") {
+    return (
+      (fromState === "open" || fromState === "awaiting_implementer") &&
+      ["awaiting_spec_review", "needs_context", "blocked"].includes(toState)
+    );
+  }
+
+  if (actor === "vv-spec-reviewer") {
+    return (
+      (fromState === "open" || fromState === "awaiting_spec_review") &&
+      ["awaiting_code_review", "awaiting_implementer", "needs_context"].includes(toState)
+    );
+  }
+
+  return (
+    (fromState === "open" || fromState === "awaiting_code_review") &&
+    ["ready_to_close", "awaiting_implementer", "needs_context"].includes(toState)
+  );
 }
 
 function listWorkItemsInStore(
@@ -315,8 +354,8 @@ function transitionWorkItemStateInStore(
     };
   }
 
-  const allowedActor = getAllowedActorForState(existing.state);
-  if (allowedActor && !input.actor) {
+  const allowedActors = getAllowedActorsForState(existing.state);
+  if (allowedActors.length > 0 && !input.actor) {
     return {
       ok: false,
       errorCode: "MISSING_TRANSITION_ACTOR",
@@ -324,7 +363,7 @@ function transitionWorkItemStateInStore(
     };
   }
 
-  if (input.actor && allowedActor && input.actor !== allowedActor) {
+  if (input.actor && allowedActors.length > 0 && !allowedActors.includes(input.actor)) {
     return {
       ok: false,
       errorCode: "INVALID_STATE_TRANSITION",
@@ -337,6 +376,14 @@ function transitionWorkItemStateInStore(
       ok: false,
       errorCode: "INVALID_STATE_TRANSITION",
       message: `INVALID_STATE_TRANSITION: cannot transition from ${existing.state} to ${input.state}`,
+    };
+  }
+
+  if (!isActorStateTransitionAllowed(input.actor, existing.state, input.state)) {
+    return {
+      ok: false,
+      errorCode: "INVALID_STATE_TRANSITION",
+      message: `INVALID_STATE_TRANSITION: actor ${input.actor ?? "<none>"} cannot transition from ${existing.state} to ${input.state}`,
     };
   }
 

@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow/transitions.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide deterministic workflow transition rules, allowed-next-agent resolution, and loop-gate policy checks.
 //   SCOPE: Work-item state transition mapping from tracked results, launch permission checks by state, and review-round limit checks.
@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Allowed fresh work items to start with reviewer subagents for review-only workflows.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic state transition policy, launch-allowance resolution, and review round-gate checks.]
 // END_CHANGE_SUMMARY
 
@@ -54,6 +55,11 @@ export function getAllowedNextAgent(state: WorkItemState): TrackedAgentName | nu
 //   LINKS: [M-WORKFLOW-TRANSITIONS]
 // END_CONTRACT: isAllowedTransition
 export function isAllowedTransition(state: WorkItemState, agent: TrackedAgentName): boolean {
+  if (state === "open") {
+    return (
+      agent === "vv-implementer" || agent === "vv-spec-reviewer" || agent === "vv-code-reviewer"
+    );
+  }
   return getAllowedNextAgent(state) === agent;
 }
 

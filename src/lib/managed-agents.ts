@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.ts
-// VERSION: 0.3.1
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
 //   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
@@ -33,6 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Added managed vv-controller, vv-analyst, and vv-architect agents for controller-led workflow orchestration.]
 //   LAST_CHANGE: [v0.3.1 - Renamed tracked subagents to vv-* names and aligned managed prompt file names with the tracked-agent naming convention.]
 //   LAST_CHANGE: [v0.3.0 - Added the managed enhancer primary agent alongside the existing vvoc subagent definitions.]
 // END_CHANGE_SUMMARY
@@ -42,6 +43,8 @@ import { join } from "node:path";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
 
 export const MANAGED_SUBAGENT_NAMES = [
+  "vv-analyst",
+  "vv-architect",
   "vv-implementer",
   "vv-spec-reviewer",
   "vv-code-reviewer",
@@ -49,7 +52,7 @@ export const MANAGED_SUBAGENT_NAMES = [
 ] as const;
 
 export type ManagedSubagentName = (typeof MANAGED_SUBAGENT_NAMES)[number];
-export const MANAGED_PRIMARY_AGENT_NAMES = ["enhancer"] as const;
+export const MANAGED_PRIMARY_AGENT_NAMES = ["vv-controller", "enhancer"] as const;
 
 export type ManagedPrimaryAgentName = (typeof MANAGED_PRIMARY_AGENT_NAMES)[number];
 export const MANAGED_OPENCODE_AGENT_NAMES = [
@@ -83,6 +86,38 @@ export type ManagedPrimaryAgentDefinition = {
 };
 
 export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
+  {
+    name: "vv-analyst",
+    description:
+      "Analyzes ambiguous or large requests into requirements, acceptance criteria, and non-goals.",
+    promptFileName: "vv-analyst.md",
+    mode: "subagent",
+    permission: {
+      edit: {
+        "*": "deny",
+        ".vvoc/plans/**": "allow",
+      },
+      bash: "deny",
+      task: "deny",
+      todowrite: "deny",
+    },
+  },
+  {
+    name: "vv-architect",
+    description:
+      "Designs module boundaries, contracts, implementation waves, and verification gates for large changes.",
+    promptFileName: "vv-architect.md",
+    mode: "subagent",
+    permission: {
+      edit: {
+        "*": "deny",
+        ".vvoc/plans/**": "allow",
+      },
+      bash: "deny",
+      task: "deny",
+      todowrite: "deny",
+    },
+  },
   {
     name: "vv-implementer",
     description: "Implements approved changes with focused verification and a minimal diff.",
@@ -121,6 +156,13 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
 
 export const MANAGED_PRIMARY_AGENTS: readonly ManagedPrimaryAgentDefinition[] = [
   {
+    name: "vv-controller",
+    description:
+      "Default vvoc workflow controller for routing, implementation, review, and verification.",
+    promptFileName: "vv-controller.md",
+    mode: "primary",
+  },
+  {
     name: "enhancer",
     description: "Turns raw user intent into a structured XML prompt for a follow-up agent.",
     promptFileName: "enhancer.md",
@@ -148,7 +190,10 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
 >([
   ["guardian", "guardian.md"],
   ["memory-reviewer", "memory-reviewer.md"],
+  ["vv-controller", "vv-controller.md"],
   ["enhancer", "enhancer.md"],
+  ["vv-analyst", "vv-analyst.md"],
+  ["vv-architect", "vv-architect.md"],
   ["vv-implementer", "vv-implementer.md"],
   ["vv-spec-reviewer", "vv-spec-reviewer.md"],
   ["vv-code-reviewer", "vv-code-reviewer.md"],

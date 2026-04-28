@@ -1,5 +1,5 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.6.2
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, managed agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
@@ -14,6 +14,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
+//   LAST_CHANGE: [v0.7.0 - Updated init expectations for vv-controller, vv-analyst, and vv-architect managed agents.]
 //   LAST_CHANGE: [v0.6.2 - Updated init expectations for vv-* tracked subagent names and prompt filenames.]
 //   LAST_CHANGE: [v0.6.1 - Updated init expectations so only `agent.explore` is auto-seeded among built-in OpenCode agents.]
 // END_CHANGE_SUMMARY
@@ -64,11 +66,15 @@ describe("init scenarios", () => {
       expect(existsSync(paths.vvocConfigPath)).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/memory-reviewer.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/vv-controller.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/enhancer.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/vv-analyst.md")).toBe(true);
+      expect(existsSync(paths.managedAgentsDirPath + "/vv-architect.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-implementer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-spec-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-code-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/investigator.md")).toBe(true);
+      expect(existsSync(paths.managedPlansDirPath)).toBe(true);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "memory.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
@@ -78,27 +84,38 @@ describe("init scenarios", () => {
       const opencodeConfig = JSON.parse(opencodeContent) as {
         model: string;
         small_model: string;
+        default_agent: string;
         agent: Record<string, { model?: string; prompt?: string }>;
+        command: Record<string, { agent?: string }>;
       };
       const vvocConfig = parseVvocConfigText(vvocContent, paths.vvocConfigPath);
 
       expect(opencodeContent).toContain("@osovv/vv-opencode");
       expect(opencodeConfig.model).toBe("vv-role:default");
       expect(opencodeConfig.small_model).toBe("vv-role:fast");
+      expect(opencodeConfig.default_agent).toBe("vv-controller");
       expect(opencodeConfig.agent.build).toBeUndefined();
       expect(opencodeConfig.agent.plan).toBeUndefined();
       expect(opencodeConfig.agent.general).toBeUndefined();
       expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
+      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent["vv-analyst"]?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent["vv-architect"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent.investigator?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent["vv-controller"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent.enhancer?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent["vv-analyst"]?.prompt).toContain("{file:");
+      expect(opencodeConfig.agent["vv-architect"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-implementer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent.investigator?.prompt).toContain("{file:");
+      expect(opencodeConfig.command["vv-plan"]?.agent).toBe("vv-controller");
+      expect(opencodeConfig.command["vv-review"]?.agent).toBe("vv-controller");
 
       expect(vvocConfig.version).toBe(VVOC_CONFIG_VERSION);
       expect(vvocConfig.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);

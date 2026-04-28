@@ -1,8 +1,8 @@
 // FILE: src/commands/sync.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep the OpenCode plugin specifier current.
-//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, and canonical vvoc config rewrite.
+//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,12 +14,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope sync.]
 //   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config syncing with canonical vvoc.json refresh.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
   describeWriteResult,
+  ensureManagedPlanDirectory,
   ensurePackageInstalled,
   resolvePaths,
   syncManagedAgentPrompts,
@@ -61,6 +63,8 @@ export default defineCommand({
     const opencode = await ensurePackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
+    const managedPlans =
+      paths.scope === "project" ? await ensureManagedPlanDirectory(paths) : undefined;
     const vvocConfig = await syncVvocConfig(paths);
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
@@ -69,6 +73,9 @@ export default defineCommand({
     );
     for (const result of managedPrompts) {
       console.log(describeWriteResult(result));
+    }
+    if (managedPlans) {
+      console.log(describeWriteResult(managedPlans));
     }
     console.log(describeWriteResult(vvocConfig));
     // END_BLOCK_APPLY_SYNC_COMMAND

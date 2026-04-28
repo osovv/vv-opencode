@@ -1,7 +1,7 @@
-<RequirementsAnalysis VERSION="0.5.0">
+<RequirementsAnalysis VERSION="0.6.0">
   <Project>
     <name>@osovv/vv-opencode</name>
-    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, and cross-device setup.</annotation>
+    <annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, controller-led workflow routing, and cross-device setup.</annotation>
     <keywords>opencode, plugins, workflow, model-roles</keywords>
   </Project>
 
@@ -14,18 +14,18 @@
     <UC-001>
       <Actor>User</Actor>
       <Action>Runs `vvoc install` for global or project scope.</Action>
-      <Goal>To register `@osovv/vv-opencode` in OpenCode config, seed canonical role assignments in `$XDG_CONFIG_HOME/vvoc/vvoc.json`, and write shared OpenCode model fields and managed agents to `vv-role:*` references instead of concrete provider-specific model IDs.</Goal>
+      <Goal>To register `@osovv/vv-opencode` in OpenCode config, seed canonical role assignments in `$XDG_CONFIG_HOME/vvoc/vvoc.json`, set the managed default controller agent, and write shared OpenCode model fields and managed agents to `vv-role:*` references instead of concrete provider-specific model IDs.</Goal>
       <Preconditions>Bun and OpenCode are available, and the target config locations are writable.</Preconditions>
-      <AcceptanceCriteria>The package name appears in the resolved OpenCode config, canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`, built-in roles are fully seeded, and OpenCode model-bearing fields reference `vv-role:*` semantics rather than literal target-specific overrides.</AcceptanceCriteria>
+      <AcceptanceCriteria>The package name appears in the resolved OpenCode config, canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`, built-in roles are fully seeded, OpenCode `default_agent` is `vv-controller`, managed `/vv-plan` and `/vv-review` command definitions exist, and OpenCode model-bearing fields reference `vv-role:*` semantics rather than literal target-specific overrides.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-PLUGIN-INSTALL</RelatedFlows>
     </UC-001>
     <UC-002>
       <Actor>User</Actor>
       <Action>Runs `vvoc sync` on another machine or after package updates.</Action>
-      <Goal>To refresh canonical vvoc-owned config, managed prompt files, built-in role presets, and managed OpenCode registrations without reintroducing target-based model config or legacy vvoc schema migrations.</Goal>
+      <Goal>To refresh canonical vvoc-owned config, managed prompt files, built-in role presets, default controller selection, managed command definitions, and managed OpenCode registrations without reintroducing target-based model config or legacy vvoc schema migrations.</Goal>
       <Preconditions>The target OpenCode config and canonical vvoc config can be created or updated.</Preconditions>
-      <AcceptanceCriteria>The canonical `vvoc.json` file is rewritten canonically as the current role-based schema, managed prompts are refreshed, and managed OpenCode fields continue to point at `vv-role:*` references.</AcceptanceCriteria>
+      <AcceptanceCriteria>The canonical `vvoc.json` file is rewritten canonically as the current role-based schema, managed prompts are refreshed, OpenCode `default_agent` remains `vv-controller`, managed `/vv-plan` and `/vv-review` commands are refreshed, and managed OpenCode fields continue to point at `vv-role:*` references.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-CONFIG-SYNC</RelatedFlows>
     </UC-002>
@@ -59,9 +59,9 @@
     <UC-006>
       <Actor>User</Actor>
       <Action>Starts a primary chat session with vvoc installed.</Action>
-      <Goal>To inject reusable main-session guidance such as proactive explore usage without polluting known subagent prompts.</Goal>
+      <Goal>To inject reusable main-session guidance such as proactive explore usage without polluting known subagent prompts, including the managed controller primary session.</Goal>
       <Preconditions>The package is enabled in OpenCode and a primary agent session is being created.</Preconditions>
-      <AcceptanceCriteria>Eligible primary agents receive the reusable guidance exactly once, while known subagents and internal helper agents do not inherit it.</AcceptanceCriteria>
+      <AcceptanceCriteria>Eligible primary agents including `vv-controller` receive the reusable guidance exactly once, while known subagents, `vv-analyst`, `vv-architect`, and internal helper agents do not inherit it.</AcceptanceCriteria>
       <Priority>medium</Priority>
       <RelatedFlows>DF-SYSTEM-CONTEXT</RelatedFlows>
     </UC-006>
@@ -104,9 +104,9 @@
     <UC-011>
       <Actor>User</Actor>
       <Action>Launches a tracked subagent (`vv-implementer`, `vv-spec-reviewer`, or `vv-code-reviewer`) through the `task` tool.</Action>
-      <Goal>To enforce that every tracked subagent launch carries a valid work-item header, targets an existing open work item, follows the allowed next-agent transition, and does not exceed the review round limit.</Goal>
+      <Goal>To enforce that every tracked subagent launch carries a valid work-item header, targets an existing open work item, follows the allowed route-specific transition, and does not exceed the review round limit.</Goal>
       <Preconditions>The WorkflowPlugin is active and the tracked subagent name is registered in the managed agents list.</Preconditions>
-      <AcceptanceCriteria>Tracked launches without valid `VVOC_WORK_ITEM_ID` are rejected, unknown work items are rejected, invalid next-agent transitions are rejected, and round-limit overflow is rejected. Untracked launches pass through unaffected.</AcceptanceCriteria>
+      <AcceptanceCriteria>Tracked launches without valid `VVOC_WORK_ITEM_ID` are rejected, unknown work items are rejected, invalid route-specific transitions are rejected, review-only fresh work items may start with `vv-spec-reviewer` or `vv-code-reviewer`, and round-limit overflow is rejected. Untracked launches pass through unaffected.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-LAUNCH-ENFORCEMENT</RelatedFlows>
     </UC-011>
@@ -133,7 +133,7 @@
       <Action>Starts a primary chat session with WorkflowPlugin active.</Action>
       <Goal>To inject workflow protocol guidance into primary sessions so the main session knows how to open work items, use returned headers, treat hard-stop statuses, and avoid free-form review loops.</Goal>
       <Preconditions>The package is enabled in OpenCode and a primary agent session is being created.</Preconditions>
-      <AcceptanceCriteria>Eligible orchestrating primary agents receive workflow protocol guidance, helper primaries such as `enhancer` and known subagents do not inherit it, and the guidance covers work-item identity, header usage, hard-stop handling, and state inspection.</AcceptanceCriteria>
+      <AcceptanceCriteria>Eligible orchestrating primary agents including `vv-controller` receive workflow protocol guidance, helper primaries such as `enhancer` and known subagents do not inherit it, and the guidance covers route selection, work-item identity, header usage, hard-stop handling, and state inspection.</AcceptanceCriteria>
       <Priority>medium</Priority>
       <RelatedFlows>DF-WORKFLOW-GUIDANCE</RelatedFlows>
     </UC-014>
@@ -146,7 +146,7 @@
     <item-4>No target-based model override UX after the role-based cutover.</item-4>
     <item-5>No semantic task grouping or embedding-based work-item identity in workflow v1.</item-5>
     <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
-    <item-7>No workflow tracking for `investigator`, `guardian`, `memory-reviewer`, or `enhancer` in v1.</item-7>
+    <item-7>No workflow tracking for `investigator`, `guardian`, `memory-reviewer`, `enhancer`, `vv-analyst`, or `vv-architect` in v1.</item-7>
   </NonGoals>
 
   <Constraints>
@@ -163,6 +163,8 @@
     <constraint-11>`NEEDS_CONTEXT` is a hard stop. Main session must gather context before workflow continues.</constraint-11>
     <constraint-12>Tracked subagent names must follow the `vv-*` naming convention: `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`.</constraint-12>
     <constraint-13>Workflow plugin must not pollute untracked subagent prompts or untracked task launches.</constraint-13>
+    <constraint-14>`vv-analyst` and `vv-architect` may write durable plan artifacts only under project-local `.vvoc/plans/`.</constraint-14>
+    <constraint-15>`vvoc install` and `vvoc sync` treat OpenCode `default_agent`, managed agent definitions, and managed `/vv-plan` plus `/vv-review` command definitions as vvoc-owned.</constraint-15>
   </Constraints>
 
   <Risks>
@@ -174,6 +176,7 @@
     <risk-6>LLM may not reliably follow strict top-block protocol formatting, causing false-positive protocol errors that block legitimate workflow progress.</risk-6>
     <risk-7>Rename of tracked subagents from `implementer/spec-reviewer/code-reviewer` to `vv-implementer/vv-spec-reviewer/vv-code-reviewer` is a breaking change for any external config or prompt overrides that reference the old names.</risk-7>
     <risk-8>In-memory workflow state is lost on process restart, which may confuse users who expect work items to survive across sessions.</risk-8>
+    <risk-9>Forcing OpenCode `default_agent` to `vv-controller` during sync may surprise users who intentionally selected another default primary agent.</risk-9>
   </Risks>
 
   <OpenQuestions>

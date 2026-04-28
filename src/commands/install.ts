@@ -1,8 +1,8 @@
 // FILE: src/commands/install.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Install vv-opencode into OpenCode config and bootstrap the canonical vvoc.json config plus managed prompts.
-//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, and canonical vvoc config creation.
+//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, and canonical vvoc config creation.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,12 +14,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope install.]
 //   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config scaffolding with canonical vvoc.json creation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
   describeWriteResult,
+  ensureManagedPlanDirectory,
   ensurePackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
@@ -70,6 +72,10 @@ export default defineCommand({
       force: Boolean(args.force),
     })) {
       console.log(describeWriteResult(result));
+    }
+
+    if (paths.scope === "project") {
+      console.log(describeWriteResult(await ensureManagedPlanDirectory(paths)));
     }
 
     const vvocConfig = await installVvocConfig(paths);

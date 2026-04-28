@@ -1,8 +1,8 @@
 // FILE: src/commands/init.ts
-// VERSION: 0.6.1
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds the canonical vvoc.json config plus managed prompts. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
+//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds the canonical vvoc.json config plus managed prompts/plans. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
+//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, canonical config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Ensured the project-local managed planning artifact directory exists during project-scope init.]
 //   LAST_CHANGE: [v0.6.1 - Exported runInit as the command helper and kept the non-interactive path internal so the module map matches the public surface.]
 // END_CHANGE_SUMMARY
 
@@ -22,6 +23,7 @@ import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import {
   ensurePackageInstalled,
+  ensureManagedPlanDirectory,
   installManagedAgentPrompts,
   installVvocConfig,
   inspectInstallation,
@@ -145,6 +147,11 @@ export async function runInit(options: {
     p.log.info(result.path + " - " + result.action);
   }
 
+  if (finalPaths.scope === "project") {
+    const planDirectoryResult = await ensureManagedPlanDirectory(finalPaths);
+    p.log.info(planDirectoryResult.path + " - " + planDirectoryResult.action);
+  }
+
   p.log.step("Scaffolding canonical vvoc config...");
   const vvocConfigResult = await installVvocConfig(finalPaths);
   p.log.info(vvocConfigResult.path + " - " + vvocConfigResult.action);
@@ -173,5 +180,8 @@ async function runInitNonInteractive(options: {
   await ensurePackageInstalled(paths);
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
+  if (paths.scope === "project") {
+    await ensureManagedPlanDirectory(paths);
+  }
   await installVvocConfig(paths);
 }

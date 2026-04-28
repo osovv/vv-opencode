@@ -1,7 +1,7 @@
 <KnowledgeGraph>
-  <Project NAME="@osovv/vv-opencode" VERSION="0.6.1">
-    <keywords>opencode, plugins, workflow, model-roles, hashline-edit, work-items</keywords>
-    <annotation>Portable OpenCode workflow package with plugins, a Bun CLI for install, sync, semantic model-role assignment, hash-anchored editing, explicit work-item protocol, and cross-device setup.</annotation>
+  <Project NAME="@osovv/vv-opencode" VERSION="0.7.0">
+    <keywords>opencode, plugins, workflow, model-roles, hashline-edit, work-items, controller</keywords>
+    <annotation>Portable OpenCode workflow package with plugins, a Bun CLI for install, sync, semantic model-role assignment, hash-anchored editing, managed controller routing, explicit work-item protocol, and cross-device setup.</annotation>
 
     <M-MODEL-ROLES NAME="ModelRoles" TYPE="CORE_LOGIC" STATUS="implemented">
       <purpose>Define built-in role IDs, `vv-role:*` syntax, concrete model-selection parsing, canonical role assignment normalization, shared role resolution helpers, and built-in role bindings for managed agents and OpenCode defaults.</purpose>
@@ -19,26 +19,26 @@
     </M-MODEL-ROLES>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
+      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, managed command definitions, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
       <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
       <depends>M-MODEL-ROLES, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
-        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, built-in `explore`, and vvoc-managed OpenCode agent registrations on `vv-role:*` model references." />
+        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, `default_agent: vv-controller`, managed `/vv-plan` and `/vv-review` commands, built-in `explore`, and vvoc-managed OpenCode agent registrations on canonical values and `vv-role:*` model references." />
         <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v3 and reject unsupported pre-role versions." />
         <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid user-owned role assignments and refreshing managed `vv-*` role presets." />
       </annotations>
     </M-CLI-CONFIG>
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled guardian, memory-reviewer, enhancer, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
+      <purpose>Define bundled guardian, memory-reviewer, vv-controller, enhancer, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
-        <const-MANAGED_OPENCODE_AGENTS PURPOSE="Canonical managed OpenCode agent definitions used for enhancer/subagent registration." />
+        <const-MANAGED_OPENCODE_AGENTS PURPOSE="Canonical managed OpenCode agent definitions used for vv-controller, enhancer, analyst/architect, and tracked subagent registration." />
         <fn-loadManagedAgentPromptTemplate PURPOSE="Load a bundled prompt template for a managed vvoc agent." />
       </annotations>
     </M-CLI-MANAGED-AGENTS>
@@ -135,7 +135,7 @@
     </M-PLUGIN-MEMORY>
 
     <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions while skipping known subagents including vv-implementer, vv-spec-reviewer, and vv-code-reviewer so main-session behavior can be steered globally.</purpose>
+      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions, including vv-controller, while skipping known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, and vv-code-reviewer so main-session behavior can be steered globally.</purpose>
       <path>src/plugins/system-context-injection/index.ts</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
@@ -172,7 +172,7 @@
     </M-WORKFLOW-PROTOCOL>
 
     <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="implemented">
-      <purpose>In-memory work-item state store with lifecycle management, state transitions, counter tracking, round-limit enforcement, and optional closed-item listing keyed by (sessionId, workItemId).</purpose>
+      <purpose>In-memory work-item state store with lifecycle management, route-aware state transitions including review-only reviewer starts, counter tracking, round-limit enforcement, and optional closed-item listing keyed by (sessionId, workItemId).</purpose>
       <path>src/plugins/workflow/state.ts</path>
       <depends>M-WORKFLOW-PROTOCOL</depends>
       <verification-ref>V-M-WORKFLOW-STATE</verification-ref>
@@ -190,7 +190,7 @@
     </M-WORKFLOW-STATE>
 
     <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" STATUS="implemented">
-      <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution, and loop-gate policy enforcement.</purpose>
+      <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution including fresh review-only reviewer starts, and loop-gate policy enforcement.</purpose>
       <path>src/plugins/workflow/transitions.ts</path>
       <depends>M-WORKFLOW-PROTOCOL</depends>
       <verification-ref>V-M-WORKFLOW-TRANSITIONS</verification-ref>
@@ -215,7 +215,7 @@
     </M-WORKFLOW-TOOLING>
 
     <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions via chat.message.</purpose>
+      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, parse tracked subagent results via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message.</purpose>
       <path>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</path>
       <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>

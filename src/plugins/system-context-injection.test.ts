@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.3.4
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Added coverage for vv-controller primary injection and managed analyst subagent exclusion.]
 //   LAST_CHANGE: [v0.3.4 - Updated editing-workflow assertion for context-anchored hashline refs.]
 //   LAST_CHANGE: [v0.3.3 - Added regression coverage for primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites.]
 //   LAST_CHANGE: [v0.3.2 - Updated assertions to match narrowed explore-only-context-gathering guidance.]
@@ -84,6 +85,19 @@ describe("SystemContextInjectionPlugin", () => {
     );
   });
 
+  test("injects primary-session system context for vv-controller", async () => {
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const output = createOutput("vv-controller");
+
+    await plugin["chat.message"]?.(
+      { sessionID: "session-1", agent: "vv-controller" } as never,
+      output as never,
+    );
+
+    expect(output.message.system).toContain("<proactive_context_gathering>");
+    expect(output.message.system).toContain("<task_routing>");
+  });
+
   test("preserves existing system text and avoids duplicate injection", async () => {
     const plugin = await SystemContextInjectionPlugin(createPluginInput());
     const output = createOutput("enhancer", "Existing system context.");
@@ -137,6 +151,24 @@ describe("SystemContextInjectionPlugin", () => {
     );
 
     expect(output.message.system).toBeUndefined();
+  });
+
+  test("skips managed analyst and architect subagents", async () => {
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const analystOutput = createOutput("vv-analyst");
+    const architectOutput = createOutput("vv-architect");
+
+    await plugin["chat.message"]?.(
+      { sessionID: "session-1", agent: "vv-analyst" } as never,
+      analystOutput as never,
+    );
+    await plugin["chat.message"]?.(
+      { sessionID: "session-1", agent: "vv-architect" } as never,
+      architectOutput as never,
+    );
+
+    expect(analystOutput.message.system).toBeUndefined();
+    expect(architectOutput.message.system).toBeUndefined();
   });
 
   test("skips custom configured subagents", async () => {

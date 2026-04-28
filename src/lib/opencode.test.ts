@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.1.7
+// VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
+//   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
 //   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
 //   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.0 - Added coverage for managed vv-controller registrations and planning artifact directory scaffolding.]
 //   LAST_CHANGE: [v1.1.7 - Added regression coverage for managed `tools.apply_patch = false` writes and sibling `tools.*` preservation during OpenCode config sync.]
 //   LAST_CHANGE: [v1.1.6 - Added regression coverage ensuring legacy old-name cleanup is blocked when the legacy prompt file exists but is user-owned (missing vvoc managed marker).]
 //   LAST_CHANGE: [v1.1.5 - Added coverage ensuring legacy cleanup preserves old-name agents that keep legacy prompt paths but diverge from managed model/permission/description/mode fields.]
@@ -38,6 +39,7 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
+  ensureManagedPlanDirectory,
   ensureManagedAgentRegistrationsConfigText,
   ensurePackageConfigText,
   ensurePackageInstalled,
@@ -123,20 +125,26 @@ describe("managed OpenCode role-reference rewrites", () => {
     const parsed = parse(output) as {
       model?: string;
       small_model?: string;
+      default_agent?: string;
       tools?: { apply_patch?: boolean };
       agent?: Record<
         string,
         { model?: string; prompt?: string; mode?: string; permission?: unknown }
       >;
+      command?: Record<string, { description?: string; agent?: string; template?: string }>;
     };
 
     expect(parsed.model).toBe("vv-role:default");
     expect(parsed.small_model).toBe("vv-role:fast");
+    expect(parsed.default_agent).toBe("vv-controller");
     expect(parsed.tools?.apply_patch).toBe(false);
     expect(parsed.agent?.build).toBeUndefined();
     expect(parsed.agent?.plan).toBeUndefined();
     expect(parsed.agent?.general).toBeUndefined();
     expect(parsed.agent?.explore?.model).toBe("vv-role:fast");
+    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:default");
+    expect(parsed.agent?.["vv-controller"]?.mode).toBe("primary");
+    expect(parsed.agent?.["vv-controller"]?.prompt).toBe("{file:../vvoc/agents/vv-controller.md}");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.mode).toBe("primary");
     expect(parsed.agent?.enhancer?.prompt).toBe("{file:../vvoc/agents/enhancer.md}");
@@ -146,10 +154,27 @@ describe("managed OpenCode role-reference rewrites", () => {
       task: "deny",
       todowrite: "deny",
     });
+    expect(parsed.agent?.["vv-analyst"]?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.["vv-analyst"]?.mode).toBe("subagent");
+    expect(parsed.agent?.["vv-analyst"]?.permission).toEqual({
+      edit: {
+        "*": "deny",
+        ".vvoc/plans/**": "allow",
+      },
+      bash: "deny",
+      task: "deny",
+      todowrite: "deny",
+    });
+    expect(parsed.agent?.["vv-architect"]?.model).toBe("vv-role:smart");
+    expect(parsed.agent?.["vv-architect"]?.mode).toBe("subagent");
     expect(parsed.agent?.["vv-implementer"]?.model).toBe("vv-role:default");
     expect(parsed.agent?.["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.["vv-code-reviewer"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.investigator?.model).toBe("vv-role:smart");
+    expect(parsed.command?.["vv-plan"]?.agent).toBe("vv-controller");
+    expect(parsed.command?.["vv-plan"]?.template).toContain("planning-only vvoc workflow");
+    expect(parsed.command?.["vv-review"]?.agent).toBe("vv-controller");
+    expect(parsed.command?.["vv-review"]?.template).toContain("review_only vvoc workflow");
   });
 
   test("preserves comments while rewriting managed fields and leaving unrelated built-ins alone", async () => {
@@ -164,7 +189,8 @@ describe("managed OpenCode role-reference rewrites", () => {
   "model": "openai/gpt-5",
   // keep root small note
   "small_model": "openai/gpt-5-mini",
-  "tools": {
+      "default_agent": "plan",
+      "tools": {
     // keep tools note
     "read": true,
     "apply_patch": true
@@ -190,7 +216,9 @@ describe("managed OpenCode role-reference rewrites", () => {
       model?: string;
       small_model?: string;
       tools?: { apply_patch?: boolean; read?: boolean };
+      default_agent?: string;
       agent?: Record<string, { model?: string; prompt?: string }>;
+      command?: Record<string, { agent?: string; template?: string }>;
     };
 
     expect(output).toContain("// keep root note");
@@ -202,11 +230,15 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(output).toContain("// keep build sibling note");
     expect(parsed.model).toBe("vv-role:default");
     expect(parsed.small_model).toBe("vv-role:fast");
+    expect(parsed.default_agent).toBe("vv-controller");
     expect(parsed.tools?.read).toBe(true);
     expect(parsed.tools?.apply_patch).toBe(false);
     expect(parsed.agent?.build?.model).toBe("openai/gpt-5");
+    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:default");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
+    expect(parsed.command?.["vv-plan"]?.agent).toBe("vv-controller");
+    expect(parsed.command?.["vv-review"]?.agent).toBe("vv-controller");
   });
 
   test("sync removes legacy tracked managed entries and preserves unrelated agents", async () => {
@@ -495,8 +527,10 @@ describe("canonical vvoc config helpers", () => {
         plugin?: string[];
         model?: string;
         small_model?: string;
+        default_agent?: string;
         tools?: { apply_patch?: boolean };
         agent?: Record<string, { model?: string }>;
+        command?: Record<string, { agent?: string }>;
       };
       const vvocConfig = await readVvocConfig(paths);
 
@@ -505,11 +539,17 @@ describe("canonical vvoc config helpers", () => {
       );
       expect(openCodeConfig.model).toBe("vv-role:default");
       expect(openCodeConfig.small_model).toBe("vv-role:fast");
+      expect(openCodeConfig.default_agent).toBe("vv-controller");
       expect(openCodeConfig.tools?.apply_patch).toBe(false);
       expect(openCodeConfig.agent?.build).toBeUndefined();
       expect(openCodeConfig.agent?.general).toBeUndefined();
       expect(openCodeConfig.agent?.explore?.model).toBe("vv-role:fast");
+      expect(openCodeConfig.agent?.["vv-controller"]?.model).toBe("vv-role:default");
       expect(openCodeConfig.agent?.enhancer?.model).toBe("vv-role:smart");
+      expect(openCodeConfig.agent?.["vv-analyst"]?.model).toBe("vv-role:smart");
+      expect(openCodeConfig.agent?.["vv-architect"]?.model).toBe("vv-role:smart");
+      expect(openCodeConfig.command?.["vv-plan"]?.agent).toBe("vv-controller");
+      expect(openCodeConfig.command?.["vv-review"]?.agent).toBe("vv-controller");
 
       expect(vvocConfig?.version).toBe(3);
       expect(vvocConfig?.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);
@@ -658,11 +698,19 @@ describe("managed prompt install", () => {
       });
 
       const promptResults = await installManagedAgentPrompts(paths, { force: true });
-      expect(promptResults).toHaveLength(7);
+      expect(promptResults).toHaveLength(10);
+      const planDirResult = await ensureManagedPlanDirectory(paths);
+      expect(planDirResult.action).toBe("created");
+      const repeatedPlanDirResult = await ensureManagedPlanDirectory(paths);
+      expect(repeatedPlanDirResult.action).toBe("kept");
+      expect(repeatedPlanDirResult.path).toBe(join(projectDir, ".vvoc", "plans"));
 
       const openCode = ensureManagedAgentRegistrationsConfigText(undefined, paths);
       const parsed = parse(openCode) as { agent?: Record<string, { prompt?: string }> };
+      expect(parsed.agent?.["vv-controller"]?.prompt).toBe("{file:.vvoc/agents/vv-controller.md}");
       expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
+      expect(parsed.agent?.["vv-analyst"]?.prompt).toBe("{file:.vvoc/agents/vv-analyst.md}");
+      expect(parsed.agent?.["vv-architect"]?.prompt).toBe("{file:.vvoc/agents/vv-architect.md}");
       expect(parsed.agent?.["vv-implementer"]?.prompt).toBe(
         "{file:.vvoc/agents/vv-implementer.md}",
       );
@@ -822,6 +870,7 @@ describe("resolvePaths", () => {
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
     expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
+    expect(paths.managedPlansDirPath).toBe("/tmp/vvoc-config-home/vvoc/plans");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
   });
 
@@ -836,6 +885,7 @@ describe("resolvePaths", () => {
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
     expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
+    expect(paths.managedPlansDirPath).toBe("/workspace/project/.vvoc/plans");
   });
 });
 

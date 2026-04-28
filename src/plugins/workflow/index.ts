@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.1.1
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
 //   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Used transition-policy checks so fresh work items can start with reviewer subagents for review-only workflows.]
 //   LAST_CHANGE: [v0.1.1 - Excluded helper primary agents like enhancer from workflow guidance injection because they cannot participate in tracked workflow tooling.]
 //   LAST_CHANGE: [v0.1.0 - Added workflow plugin integration with tool wiring, tracked launch/result hooks, loop-gate enforcement, and primary-session guidance injection.]
 // END_CHANGE_SUMMARY
@@ -33,7 +34,12 @@ import {
   transitionWorkItemState,
   type WorkItemRecord,
 } from "./state.js";
-import { getAllowedNextAgent, getNextState, shouldBlockRound } from "./transitions.js";
+import {
+  getAllowedNextAgent,
+  getNextState,
+  isAllowedTransition,
+  shouldBlockRound,
+} from "./transitions.js";
 import {
   createWorkItemCloseTool,
   createWorkItemListTool,
@@ -250,7 +256,7 @@ export const WorkflowPlugin: Plugin = async ({ client }) => {
       }
 
       const allowedNextAgent = getAllowedNextAgent(workItem.state);
-      if (allowedNextAgent !== subagentType) {
+      if (!isAllowedTransition(workItem.state, subagentType)) {
         await client.app.log({
           body: {
             service: "workflow",
