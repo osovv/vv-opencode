@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.12
+// VERSION: 0.4.13
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `role set|unset <role-id>` flow.
@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.13 - Added regression coverage for canonical built-in preset-name completion output across shells.]
 //   LAST_CHANGE: [v0.4.12 - Restricted unset-role completion assertions to avoid built-in role suggestions.]
 // END_CHANGE_SUMMARY
 
@@ -147,4 +148,5 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain("list show vv-openai vv-zai vv-minimax vv-deepseek");
   expect(generateZshCompletion()).toContain("vv-openai vv-zai vv-minimax vv-deepseek");
+  expect(generateFishCompletion()).toContain("echo vv-openai vv-zai vv-minimax vv-deepseek");
 });

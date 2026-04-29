@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.4
+// VERSION: 0.4.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
@@ -19,6 +19,7 @@
 //   LAST_CHANGE: [v0.4.2 - Asserted raw vvoc.json section/preset preservation and first-run bootstrap behavior when the vvoc config path is missing.]
 //   LAST_CHANGE: [v0.4.3 - Added vv-deepseek to preset list expectations and error message assertions.]
 //   LAST_CHANGE: [v0.4.4 - Updated vv-openai expectations so default is GPT-5.4 and smart remains vv-gpt-5.5-xhigh.]
+//   LAST_CHANGE: [v0.4.5 - Added regression coverage for the canonical built-in preset key set.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -31,6 +32,15 @@ import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 describe("preset helpers", () => {
+  test("createDefaultVvocConfig exposes the canonical built-in preset keys", () => {
+    expect(Object.keys(createDefaultVvocConfig().presets)).toEqual([
+      "vv-openai",
+      "vv-zai",
+      "vv-minimax",
+      "vv-deepseek",
+    ]);
+  });
+
   test("listConfiguredPresets shows the seeded vv-deepseek, vv-openai, vv-zai, and vv-minimax presets", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,

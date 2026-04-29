@@ -1,9 +1,9 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 2.3.3
+// VERSION: 2.3.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
 //   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
-//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts]
+//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY-STORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -41,6 +41,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
+//   LAST_CHANGE: [v2.3.4 - Moved built-in vvoc preset definitions and managed-name detection to a shared internal preset registry.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
 //   LAST_CHANGE: [v2.3.2 - Updated built-in vv-openai preset and seeded role assignments to use vv-gpt-5.5-xhigh model.]
 //   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
@@ -49,6 +50,10 @@
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { BUILTIN_ROLE_NAMES, parseModelSelection, type BuiltInRoleName } from "./model-roles.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
+import {
+  BUILTIN_VVOC_PRESET_REGISTRY,
+  isBuiltinVvocPresetName as isManagedBuiltinVvocPresetName,
+} from "./vvoc-preset-registry.js";
 
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
 const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
@@ -75,8 +80,6 @@ const BUILTIN_SECRETS_REDACTION_PATTERNS = [
   "syn_key",
   "hex_token",
 ] as const;
-const BUILTIN_VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax"] as const;
-
 type JsonObject = Record<string, unknown>;
 type VvocConfigVersion = 3;
 
@@ -342,44 +345,12 @@ function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Reco
 }
 
 function createBuiltinVvocPresets(): VvocPresets {
-  return {
-    "vv-openai": createVvocPreset({
-      description: "Starter OpenAI role assignments for built-in vvoc roles.",
-      agents: {
-        default: "openai/gpt-5.4",
-        smart: "openai/vv-gpt-5.5-xhigh",
-        fast: "openai/gpt-5.4-mini",
-        vision: "openai/gpt-5.4",
-      },
-    }),
-    "vv-zai": createVvocPreset({
-      description: "Starter ZAI role assignments for built-in vvoc roles.",
-      agents: {
-        default: "zai-coding-plan/glm-5.1",
-        smart: "zai-coding-plan/glm-5.1",
-        fast: "zai-coding-plan/glm-4.5-airx",
-        vision: "zai-coding-plan/glm-4.6v",
-      },
-    }),
-    "vv-minimax": createVvocPreset({
-      description: "Starter MiniMax role assignments for built-in vvoc roles.",
-      agents: {
-        default: "minimax-coding-plan/MiniMax-M2.7",
-        smart: "minimax-coding-plan/MiniMax-M2.7",
-        fast: "minimax-coding-plan/MiniMax-M2.1",
-        vision: "minimax-coding-plan/MiniMax-M2.1",
-      },
-    }),
-    "vv-deepseek": createVvocPreset({
-      description: "Starter DeepSeek role assignments for built-in vvoc roles.",
-      agents: {
-        default: "deepseek/deepseek-v4-pro",
-        smart: "deepseek/deepseek-v4-pro",
-        fast: "deepseek/deepseek-v4-flash",
-        vision: "deepseek/deepseek-v4-pro",
-      },
-    }),
-  };
+  return Object.fromEntries(
+    Object.entries(BUILTIN_VVOC_PRESET_REGISTRY).map(([presetName, preset]) => [
+      presetName,
+      createVvocPreset(preset),
+    ]),
+  );
 }
 
 export function createDefaultVvocConfig(): VvocConfig {
@@ -603,7 +574,7 @@ function createVvocPresets(overrides: VvocPresets = {}): VvocPresets {
 }
 
 function isBuiltinVvocPresetName(name: string): boolean {
-  return BUILTIN_VVOC_PRESET_NAMES.includes(name as (typeof BUILTIN_VVOC_PRESET_NAMES)[number]);
+  return isManagedBuiltinVvocPresetName(name);
 }
 
 function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {

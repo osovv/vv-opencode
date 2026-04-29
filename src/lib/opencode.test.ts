@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.2.0
+// VERSION: 1.2.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -20,7 +20,9 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.2 - Reworked the vv-deepseek refresh regression to write drifted managed presets directly before syncVvocConfig runs.]
 //   LAST_CHANGE: [v1.2.0 - Added coverage for managed vv-controller registrations and planning artifact directory scaffolding.]
+//   LAST_CHANGE: [v1.2.1 - Added regression coverage proving sync restores drifted vv-deepseek while preserving custom non-managed presets.]
 //   LAST_CHANGE: [v1.1.7 - Added regression coverage for managed `tools.apply_patch = false` writes and sibling `tools.*` preservation during OpenCode config sync.]
 //   LAST_CHANGE: [v1.1.6 - Added regression coverage ensuring legacy old-name cleanup is blocked when the legacy prompt file exists but is user-owned (missing vvoc managed marker).]
 //   LAST_CHANGE: [v1.1.5 - Added coverage ensuring legacy cleanup preserves old-name agents that keep legacy prompt paths but diverge from managed model/permission/description/mode fields.]
@@ -53,8 +55,6 @@ import {
   resolvePaths,
   syncManagedAgentRegistrations,
   syncVvocConfig,
-  writeGuardianConfig,
-  writeMemoryConfig,
   writeProviderBaseUrl,
   writeOpenCodeProviderObject,
 } from "./opencode.js";
@@ -568,7 +568,7 @@ describe("canonical vvoc config helpers", () => {
     }
   });
 
-  test("canonical writes preserve unrelated sections and refresh managed vv presets", async () => {
+  test("syncVvocConfig preserves unrelated sections, restores drifted vv-deepseek, and keeps custom presets", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-v3-preset-refresh-"));
 
     try {
@@ -584,12 +584,23 @@ describe("canonical vvoc config helpers", () => {
         JSON.stringify(
           {
             ...createDefaultVvocConfig(),
+            memory: {
+              ...createDefaultVvocConfig().memory,
+              enabled: false,
+              defaultSearchLimit: 12,
+              reviewerModel: "openai/gpt-5.4-mini",
+            },
+            guardian: {
+              ...createDefaultVvocConfig().guardian,
+              model: "openai/gpt-5.4",
+              timeoutMs: 12_345,
+            },
             roles: {
               ...createDefaultVvocConfig().roles,
               custom: "openai/gpt-5.4-mini",
             },
             presets: {
-              "vv-zai": {
+              "vv-deepseek": {
                 description: "user drifted managed preset",
                 agents: {
                   default: "openai/gpt-5",
@@ -609,26 +620,16 @@ describe("canonical vvoc config helpers", () => {
         "utf8",
       );
 
-      await writeMemoryConfig(
-        paths,
-        {
-          enabled: false,
-          defaultSearchLimit: 12,
-          reviewerModel: "openai/gpt-5.4-mini",
-        },
-        { merge: true },
+      const driftedBeforeSync = JSON.parse(
+        await readFile(paths.vvocConfigPath, "utf8"),
+      ) as ReturnType<typeof createDefaultVvocConfig>;
+      expect(driftedBeforeSync.presets["vv-deepseek"]?.description).toBe(
+        "user drifted managed preset",
       );
-      await writeGuardianConfig(
-        paths,
-        {
-          model: "openai/gpt-5.4",
-          timeoutMs: 12_345,
-        },
-        { merge: true },
-      );
+      expect(driftedBeforeSync.presets["vv-deepseek"]?.agents.default).toBe("openai/gpt-5");
 
       const syncResult = await syncVvocConfig(paths);
-      expect(["updated", "kept"]).toContain(syncResult.action);
+      expect(syncResult.action).toBe("updated");
 
       const synced = await readVvocConfig(paths);
       expect(synced?.memory.enabled).toBe(false);
@@ -638,6 +639,12 @@ describe("canonical vvoc config helpers", () => {
       expect(synced?.guardian.timeoutMs).toBe(12_345);
       expect(synced?.roles.custom).toBe("openai/gpt-5.4-mini");
       expect(synced?.presets.custom?.agents.custom).toBe("openai/gpt-5.4-mini");
+      expect(synced?.presets.custom?.description).toBe("user preset");
+      expect(synced?.presets["vv-deepseek"]?.description).toBe(
+        "Starter DeepSeek role assignments for built-in vvoc roles.",
+      );
+      expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-v4-pro");
+      expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/deepseek-v4-flash");
       expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.1");
     } finally {
       await rm(configHome, { recursive: true, force: true });

@@ -1,11 +1,11 @@
 // FILE: src/commands/completion.ts
-// VERSION: 0.5.14
+// VERSION: 0.5.15
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `role set|unset` flow, and rc file patching.
 //   INPUTS: Current shell environment plus built-in vvoc command and preset names.
 //   OUTPUTS: Shell-specific completion scripts and idempotent rc/config patches.
-//   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts]
+//   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts, src/lib/vvoc-preset-registry.ts]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.15 - Switched built-in preset completions to the shared internal preset registry so managed names stay in sync.]
 //   LAST_CHANGE: [v0.5.14 - Restricted unset-role completions so shell suggestions no longer imply built-in roles are unsettable.]
 // END_CHANGE_SUMMARY
 
@@ -28,6 +29,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { BUILTIN_ROLE_NAMES } from "../lib/model-roles.js";
+import { BUILTIN_VVOC_PRESET_NAMES } from "../lib/vvoc-preset-registry.js";
 
 const VVOC_TOP_LEVEL_COMMANDS = [
   "completion",
@@ -49,7 +51,6 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai", "openai"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
-const VVOC_PRESET_NAMES = ["vv-openai", "vv-zai", "vv-minimax", "vv-deepseek"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_ROLE_COMMANDS = ["set", "unset", "list"];
 const VVOC_ROLE_IDS = [...BUILTIN_ROLE_NAMES];
@@ -165,8 +166,8 @@ export function generateBashCompletion(): string {
   const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
   const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
   const patchProviderPresets = VVOC_PATCH_PROVIDER_PRESETS.join(" ");
-  const presetCommands = [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ");
-  const presetNames = VVOC_PRESET_NAMES.join(" ");
+  const presetCommands = [...VVOC_PRESET_COMMANDS, ...BUILTIN_VVOC_PRESET_NAMES].join(" ");
+  const presetNames = BUILTIN_VVOC_PRESET_NAMES.join(" ");
   const pluginCommands = VVOC_PLUGIN_COMMANDS.join(" ");
   const roleCommands = VVOC_ROLE_COMMANDS.join(" ");
   const roleIds = VVOC_ROLE_IDS.join(" ");
@@ -324,10 +325,12 @@ export function generateZshCompletion(): string {
     "_vvoc_preset_cmds() {",
     "  case $words[2] in",
     "    show)",
-    '      _arguments "1: :(' + VVOC_PRESET_NAMES.join(" ") + ')"',
+    '      _arguments "1: :(' + BUILTIN_VVOC_PRESET_NAMES.join(" ") + ')"',
     "      ;;",
     "    *)",
-    '      _arguments "1: :(' + [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ") + ')"',
+    '      _arguments "1: :(' +
+      [...VVOC_PRESET_COMMANDS, ...BUILTIN_VVOC_PRESET_NAMES].join(" ") +
+      ')"',
     "      ;;",
     "  esac",
     "}",
@@ -359,7 +362,7 @@ export function generateZshCompletion(): string {
 }
 
 export function generateFishCompletion(): string {
-  const presetCommands = [...VVOC_PRESET_COMMANDS, ...VVOC_PRESET_NAMES].join(" ");
+  const presetCommands = [...VVOC_PRESET_COMMANDS, ...BUILTIN_VVOC_PRESET_NAMES].join(" ");
   const lines: string[] = ["# fish completion for vvoc", "", "function __vvoc_commands"];
 
   for (const cmd of VVOC_TOP_LEVEL_COMMANDS) {
@@ -382,7 +385,7 @@ export function generateFishCompletion(): string {
     "end",
     "",
     "function __vvoc_preset_names",
-    "  echo " + VVOC_PRESET_NAMES.join(" "),
+    "  echo " + BUILTIN_VVOC_PRESET_NAMES.join(" "),
     "end",
     "",
     "function __vvoc_role_cmds",

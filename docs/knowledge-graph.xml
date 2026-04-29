@@ -20,8 +20,8 @@
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
       <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, managed command definitions, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
-      <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
-      <depends>M-MODEL-ROLES, M-CLI-MANAGED-AGENTS</depends>
+      <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/vvoc-preset-registry.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
+      <depends>M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
@@ -79,8 +79,8 @@
 
     <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>List, show, and apply declarative named role presets stored in canonical vvoc.json without rewriting OpenCode config directly.</purpose>
-      <path>src/commands/preset.ts + src/lib/model-roles.ts</path>
-      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
+      <path>src/commands/preset.ts + src/lib/model-roles.ts + src/lib/vvoc-preset-registry.ts</path>
+      <depends>M-CLI-CONFIG, M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY</depends>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
       <annotations>
         <fn-resolvePreset PURPOSE="Validate a preset name against the current vvoc.json preset map." />
@@ -91,6 +91,18 @@
       <note-1>Built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`, `vv-deepseek`.</note-1>
     </notes>
     </M-CLI-PRESET>
+
+    <M-VVOC-PRESET-REGISTRY NAME="VvocPresetRegistry" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Define the canonical managed vvoc preset registry so config seeding, sync refresh, and shell completion names share one internal source of truth.</purpose>
+      <path>src/lib/vvoc-preset-registry.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-CLI-CONFIG, V-M-CLI-PRESET, V-M-CLI-COMPLETION</verification-ref>
+      <annotations>
+        <const-BUILTIN_VVOC_PRESET_REGISTRY PURPOSE="Canonical built-in preset definitions for vv-openai, vv-zai, vv-minimax, and vv-deepseek." />
+        <const-BUILTIN_VVOC_PRESET_NAMES PURPOSE="Deterministic built-in preset name order reused by config writes and completion output." />
+        <fn-isBuiltinVvocPresetName PURPOSE="Check whether a preset name is one of the managed built-in vvoc presets." />
+      </annotations>
+    </M-VVOC-PRESET-REGISTRY>
 
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role.</purpose>
@@ -262,7 +274,7 @@
     <M-CLI-COMPLETION NAME="Completion" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Auto-detect the current shell, install completion files idempotently, and generate bash/zsh/fish completion content including patch-provider presets, preset names, role subcommands, and built-in role ids.</purpose>
       <path>src/commands/completion.ts</path>
-      <depends>M-CLI-COMMANDS, M-MODEL-ROLES</depends>
+      <depends>M-CLI-COMMANDS, M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY</depends>
       <verification-ref>V-M-CLI-COMPLETION</verification-ref>
       <annotations>
         <fn-detectShell PURPOSE="Detect the active shell from environment variables." />
