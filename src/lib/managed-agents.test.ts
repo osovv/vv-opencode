@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.5.0
+// VERSION: 0.5.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.1 - Rejected ambiguous plain `Status:` prompt lines for tracked agents so strict workflow protocol fields stay unambiguous.]
 //   LAST_CHANGE: [v0.5.0 - Added prompt-template coverage for vv-controller, vv-analyst, and vv-architect.]
 //   LAST_CHANGE: [v0.4.1 - Updated tracked-agent template coverage for vv-* naming and strict top-block workflow protocol requirements.]
 //   LAST_CHANGE: [v0.4.0 - Expanded prompt-template coverage for rerouting, working-state externalization, semantic continuity, assumptions, anti-drift, and project-overlay hooks.]
@@ -96,7 +97,10 @@ describe("managed agent prompts", () => {
     expect(template).toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(template).toContain("VVOC_STATUS: DONE");
     expect(template).toContain("VVOC_ROUTE: change_with_review");
-    expect(template).toContain("Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED");
+    expect(template).toContain(
+      "Allowed `VVOC_STATUS` values: `DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`",
+    );
+    expect(template).not.toContain("Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED");
     expect(template).toContain("stabilize a compact working state");
     expect(template).toContain("project-owned overlays");
     expect(template).toContain("Prefer semantically meaningful identifiers");
@@ -110,7 +114,8 @@ describe("managed agent prompts", () => {
 
     expect(specTemplate).toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(specTemplate).toContain("VVOC_STATUS: PASS");
-    expect(specTemplate).toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
+    expect(specTemplate).toContain("Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`");
+    expect(specTemplate).not.toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
     expect(specTemplate).toContain("[Missing|Extra|Wrong|Unproven]");
     expect(specTemplate).toContain("project-owned overlays");
     expect(specTemplate).toContain("Reuse canonical repository terms");
@@ -118,7 +123,8 @@ describe("managed agent prompts", () => {
 
     expect(codeTemplate).toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(codeTemplate).toContain("VVOC_STATUS: PASS");
-    expect(codeTemplate).toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
+    expect(codeTemplate).toContain("Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`");
+    expect(codeTemplate).not.toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
     expect(codeTemplate).toContain(
       "Review only issues introduced by this change or left unresolved by it.",
     );

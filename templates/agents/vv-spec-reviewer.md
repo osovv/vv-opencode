@@ -47,9 +47,9 @@ Final response protocol:
 - Start with this top block in this exact key order:
   - `VVOC_WORK_ITEM_ID: wi-1`
   - `VVOC_STATUS: PASS`
-- Replace values as needed using only allowed values.
-- `Status: PASS | FAIL | NEEDS_CONTEXT`
-- Allowed statuses: `PASS | FAIL | NEEDS_CONTEXT`
+- Replace values as needed using only allowed `VVOC_STATUS` values.
+- Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`
+- Do not add a plain `Status:` line or any other extra top-block field.
 
 Output:
 

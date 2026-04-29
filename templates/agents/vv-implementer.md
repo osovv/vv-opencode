@@ -77,9 +77,9 @@ Final response protocol:
   - `VVOC_WORK_ITEM_ID: wi-1`
   - `VVOC_STATUS: DONE`
   - `VVOC_ROUTE: change_with_review`
-- Replace values as needed using only allowed values.
-- `Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`
-- Allowed statuses: `DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`
+- Replace values as needed using only allowed `VVOC_STATUS` values.
+- Allowed `VVOC_STATUS` values: `DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`
+- Keep `VVOC_ROUTE` in the top block and do not add a plain `Status:` line or any other extra top-block field.
 - Then provide:
   - `Changed: ...`
   - `Verified: ...`
