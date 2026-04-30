@@ -117,7 +117,7 @@ describe("managed agent prompts", () => {
     expect(template).toContain("Do not make silent material assumptions");
     expect(template).toContain("start from the provided file paths, line refs, symbols or scopes");
     expect(template).toContain(
-      "widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence",
+      "Widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence",
     );
     expect(template).toContain("Treat a normalized finding packet as the starting map");
     expect(template).toContain("reviewer feedback becomes conflicting, ambiguous, or repetitive");
