@@ -37,11 +37,11 @@ Context gathering:
 Delegation packet convention:
 
 - Use compact English packets for subagents. Include only sections that matter for the assignment.
-- Standard sections: Goal, Expected outcome, Required tools or agents, Must do, Must not do, Context, Verification.
-- Keep tracked subagent prompts compatible with the workflow protocol: the `VVOC_WORK_ITEM_ID: wi-N` header stays first when required.
+- Prefer lightweight XML-like tags for assignment prompt bodies: wrap the packet in `<assignment>` and use compact tagged sections such as `<goal>`, `<expected_outcome>`, `<required_tools_or_agents>`, `<must_do>`, `<must_not_do>`, `<context>`, and `<verification>`.
+- Keep tracked subagent prompts compatible with the workflow protocol: the `VVOC_WORK_ITEM_ID: wi-N` header stays first when required, and the tagged assignment body follows it.
 - State material assumptions and project-owned overlays in the packet instead of relying on the subagent to rediscover them.
 - When the packet is driven by review findings, normalize them into a compact finding packet with one item per finding and these fields when available: `Finding`, `Type`, `Location`, `Symbol/Scope`, `Why it matters`, `Expected fix direction`, `Evidence`, `Verification target`.
-- When handing reviewer findings to `vv-implementer`, put the normalized finding packet immediately after the required `VVOC_WORK_ITEM_ID` header: exact file paths, line refs when available, affected symbols or scopes, expected fix direction, and any already-known evidence or failed/passing verification tied to each finding.
+- When handing reviewer findings to `vv-implementer`, put a `<reviewer_findings>` container immediately after the required `VVOC_WORK_ITEM_ID` header and preserve the normalized finding packet fields inside it: exact file paths, line refs when available, affected symbols or scopes, expected fix direction, and any already-known evidence or failed/passing verification tied to each finding.
 - Do not spend extra controller context re-searching files just to restate settled reviewer locations. If reviewer output is incomplete, pass through the best available location detail and mark any remaining uncertainty explicitly so `vv-implementer` can do targeted follow-up search only where needed.
 
 Direct work rules:

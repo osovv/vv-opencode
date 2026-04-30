@@ -292,11 +292,18 @@ Tracked task prompts must start with a first-line header like:
 
 ```text
 VVOC_WORK_ITEM_ID: wi-1
+<assignment>
+<goal>Implement the approved change.</goal>
+<context>Repository-specific notes.</context>
+<verification>bun test src/plugins/workflow.test.ts</verification>
+</assignment>
 ```
+
+The lightweight XML-like tags are for assignment prompt bodies only. Keep `VVOC_WORK_ITEM_ID` as line 1 for tracked assignments, use `<reviewer_findings>` as a container when passing normalized review findings, and do not convert tracked final result fields into tags.
 
 Tracked result blocks must return strict top-block protocol fields (`VVOC_WORK_ITEM_ID`, `VVOC_STATUS`, and `VVOC_ROUTE` for `vv-implementer`).
 
-Main-session guidance reminds agents to open work items first for tracked implementer/reviewer loops, reuse returned headers, treat `NEEDS_CONTEXT` as a hard stop, inspect `work_item_list` before retries, and avoid free-form review loops without explicit work-item identity.
+Main-session guidance reminds agents to open work items first for tracked implementer/reviewer loops, reuse returned headers, keep the tracked header first while using tagged assignment bodies, treat `NEEDS_CONTEXT` as a hard stop, inspect `work_item_list` before retries, and avoid free-form review loops without explicit work-item identity.
 
 Review-only workflows may start a fresh work item directly with `vv-spec-reviewer` or `vv-code-reviewer`; implementation workflows still follow `vv-implementer -> vv-spec-reviewer -> vv-code-reviewer`.
 

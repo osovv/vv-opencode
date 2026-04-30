@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.5.2
+// VERSION: 0.5.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.3 - Added coverage for lightweight XML-like assignment packet tags and header-first reviewer-finding containers in workflow-managed prompts.]
 //   LAST_CHANGE: [v0.5.2 - Added coverage for normalized reviewer location guidance and controller-to-implementer finding handoff details in managed prompts.]
 //   LAST_CHANGE: [v0.5.1 - Rejected ambiguous plain `Status:` prompt lines for tracked agents so strict workflow protocol fields stay unambiguous.]
 //   LAST_CHANGE: [v0.5.0 - Added prompt-template coverage for vv-controller, vv-analyst, and vv-architect.]
@@ -74,6 +75,10 @@ describe("managed agent prompts", () => {
     expect(template).toContain("Match the user's language");
     expect(template).toContain("normalized finding packet");
     expect(template).toContain("Finding`, `Type`, `Location`, `Symbol/Scope`");
+    expect(template).toContain("lightweight XML-like tags");
+    expect(template).toContain("<assignment>");
+    expect(template).toContain("<goal>");
+    expect(template).toContain("<reviewer_findings>");
     expect(template).toContain("immediately after the required `VVOC_WORK_ITEM_ID` header");
     expect(template).toContain("Do not spend extra controller context re-searching files");
   });

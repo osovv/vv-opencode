@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow.test.ts
-// VERSION: 0.3.6
+// VERSION: 0.3.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
 //   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers and bounded same-session repair, and primary-only workflow guidance injection.
@@ -19,6 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.7 - Added coverage that workflow guidance and tracked launches accept header-first assignment prompts with lightweight XML-like tagged bodies.]
 //   LAST_CHANGE: [v0.3.6 - Added coverage that duplicate strict top-block fields inside resumable task wrappers fail closed without same-session repair.]
 //   LAST_CHANGE: [v0.3.5 - Added coverage for one-shot same-session repair of malformed tracked results in resumable OpenCode task envelopes.]
 //   LAST_CHANGE: [v0.3.4 - Added coverage that recognized task-result wrappers with non-whitespace suffix text are not unwrapped.]
@@ -890,6 +891,42 @@ describe("workflow plugin integration", () => {
     ).rejects.toThrow("LAUNCH_REJECTED_INVALID_TRANSITION");
   });
 
+  test("tracked launch accepts header-first assignment tags", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-tagged-launch";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      {
+        items: [{ key: "WI-TAGGED-LAUNCH", title: "Tagged launch" }],
+      },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await expect(
+      plugin["tool.execute.before"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-tagged-launch",
+        } as never,
+        {
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: [
+              `VVOC_WORK_ITEM_ID: ${workItemId}`,
+              "<assignment>",
+              "<goal>Implement the approved change.</goal>",
+              "<verification>bun test src/plugins/workflow.test.ts</verification>",
+              "</assignment>",
+            ].join("\n"),
+          },
+        } as never,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   test("happy path transitions to ready_to_close", async () => {
     const { plugin, logs } = await createWorkflowPluginHarness();
     const sessionID = "session-happy";
@@ -1737,6 +1774,8 @@ describe("workflow plugin integration", () => {
     expect(primaryOutput.message.system).toContain("<workflow_protocol>");
     expect(primaryOutput.message.system).toContain("work_item_open");
     expect(primaryOutput.message.system).toContain("VVOC_WORK_ITEM_ID");
+    expect(primaryOutput.message.system).toContain("<assignment>");
+    expect(primaryOutput.message.system).toContain("tagged assignment bodies");
 
     const enhancerOutput = {
       message: {

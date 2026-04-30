@@ -129,7 +129,7 @@
     </VF-LOOP-GATE>
     <VF-WORKFLOW-GUIDANCE NAME="WorkflowGuidance" USE_CASES="UC-014" DATA_FLOW="DF-WORKFLOW-GUIDANCE" PRIORITY="medium">
       <scenario>Main session starts a chat with WorkflowPlugin active.</scenario>
-      <expected-outcome>Eligible orchestrating primary agents including vv-controller receive workflow protocol guidance. Helper primaries such as enhancer and known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
+      <expected-outcome>Eligible orchestrating primary agents including vv-controller receive workflow protocol guidance, including the header-first plus lightweight tagged assignment-body convention for tracked prompts. Helper primaries such as enhancer and known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append workflow system instruction -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -812,7 +812,7 @@
         <scenario-10c kind="success">Malformed tracked output inside a recognized resumable wrapper gets one same-session repair attempt before state transition continues.</scenario-10c>
         <scenario-10d kind="failure">If the one-shot resumable repair still returns malformed tracked output, workflow halts with RESULT_PROTOCOL_ERROR.</scenario-10d>
         <scenario-10e kind="failure">Foreign or partial `&lt;task_result&gt;` wrappers without a recognized OpenCode task envelope and resume metadata are not unwrapped and still halt workflow.</scenario-10e>
-        <scenario-11 kind="success">Eligible orchestrating primary agents receive workflow protocol guidance. Helper primary enhancer and known subagents do not.</scenario-11>
+        <scenario-11 kind="success">Eligible orchestrating primary agents receive workflow protocol guidance, including header-first tracked prompts plus lightweight tagged assignment bodies. Helper primary enhancer and known subagents do not.</scenario-11>
       </scenarios>
       <required-log-markers>
         <marker-1>[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch validated</marker-1>
@@ -826,10 +826,11 @@
       <required-trace-assertions>
         <assertion-1>The plugin must not interfere with untracked task launches.</assertion-1>
         <assertion-2>The plugin must not inject workflow guidance into known subagent prompts or helper-primary enhancer prompts.</assertion-2>
-        <assertion-3>NEEDS_CONTEXT must always halt workflow and return control to main session.</assertion-3>
-        <assertion-4>Protocol errors must halt automation rather than falling back to heuristic behavior.</assertion-4>
-        <assertion-5>The plugin must parse the inner `&lt;task_result&gt;` content from OpenCode task outputs instead of treating wrapper metadata as subagent protocol fields.</assertion-5>
-        <assertion-6>When resumable repair is attempted, the plugin must resume only the same child session and must stop after one attempt.</assertion-6>
+        <assertion-3>Tracked launch validation must continue accepting prompts where `VVOC_WORK_ITEM_ID` stays on line 1 and the remaining assignment body uses lightweight XML-like tags.</assertion-3>
+        <assertion-4>NEEDS_CONTEXT must always halt workflow and return control to main session.</assertion-4>
+        <assertion-5>Protocol errors must halt automation rather than falling back to heuristic behavior.</assertion-5>
+        <assertion-6>The plugin must parse the inner `&lt;task_result&gt;` content from OpenCode task outputs instead of treating wrapper metadata as subagent protocol fields.</assertion-6>
+        <assertion-7>When resumable repair is attempted, the plugin must resume only the same child session and must stop after one attempt.</assertion-7>
       </required-trace-assertions>
       <wave-follow-up>Add integration tests that simulate full tracked subagent lifecycle with mock tool execution.</wave-follow-up>
       <phase-follow-up>Validate workflow enforcement with real OpenCode sessions once the plugin is installed.</phase-follow-up>
