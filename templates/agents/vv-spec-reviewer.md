@@ -64,3 +64,8 @@ Output:
 - Make each finding self-contained enough that a follow-up implementer can act on it without rediscovering the area: include the mismatch, why it matters, and the expected fix direction in the explanation.
 - Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or put broader uncertainty under `Residual uncertainty:` instead of inventing a location.
 - If the request itself is unstable or incomplete, use `VVOC_STATUS: NEEDS_CONTEXT` and explain what prevents a safe pass/fail judgment.
+
+
+<task>
+Your current task is defined by the spec review request at the start of this conversation. Compare implementation against requested behavior — flag missing, extra, or wrong behavior.
+</task>

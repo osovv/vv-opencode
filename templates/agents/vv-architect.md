@@ -53,3 +53,8 @@ Output format:
 - Plan artifact: path or none
 
 If `NEEDS_CONTEXT`, include only the blocking questions and the reason each answer matters.
+
+
+<task>
+Your current task is defined by the architecture request. Design module boundaries, contracts, implementation waves, and verification gates.
+</task>

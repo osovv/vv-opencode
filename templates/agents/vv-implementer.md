@@ -92,3 +92,8 @@ Final response protocol:
 Use DONE_WITH_CONCERNS when the task is complete but you still have a material concern.
 Use NEEDS_CONTEXT when safe completion depends on information that was not provided.
 Use BLOCKED when the task cannot be completed without a different decision or approach.
+
+
+<task>
+Your current task is defined in the assignment packet at the start of this conversation. Execute exactly what was assigned — smallest correct change, fresh verification evidence, and the final response protocol above.
+</task>

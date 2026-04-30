@@ -59,3 +59,8 @@ Output format after the top block:
 
 If no issues are found, keep `VVOC_STATUS: PASS` and use `- none` under Critical, Important, and Minor.
 When a finding is present, make the explanation self-contained enough that a follow-up implementer can act on it without re-discovering the area.
+
+
+<task>
+Your current task is defined by the review request at the start of this conversation. Review the actual code for bugs, regressions, and maintainability risks — findings first, severity ordered.
+</task>

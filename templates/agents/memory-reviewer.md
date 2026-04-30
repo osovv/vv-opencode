@@ -33,3 +33,8 @@ Return sections in this order:
 ## Questions
 
 ## Summary
+
+
+<task>
+Your current task is the memory scopes above. Review entries and produce a cleanup report.
+</task>

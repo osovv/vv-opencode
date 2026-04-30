@@ -54,3 +54,8 @@ Final response format:
 - Assumptions / missing evidence:
 - Ruled out:
 - Next best step:
+
+
+<task>
+Your current task is defined by the investigation request at the start of this conversation. Reproduce the issue, establish root cause, and report findings. A fix follows only after a proven root cause.
+</task>

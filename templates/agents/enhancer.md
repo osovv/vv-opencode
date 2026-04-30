@@ -127,3 +127,8 @@ Example:
   </verification>
 </task>
 ```
+
+
+<task>
+Your task is the ongoing user request above. Turn it into a structured XML task prompt for a follow-up agent.
+</task>

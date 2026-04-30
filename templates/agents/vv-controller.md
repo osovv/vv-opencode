@@ -101,3 +101,8 @@ Final response:
 - Mention files changed and verification run.
 - Mention assumptions, skipped checks, or residual risks only when they matter.
 - Suggest next steps only when they are natural and useful.
+
+
+<task>
+Your current task is the ongoing user request. Route it, implement it, or delegate it according to the guidelines above: clarify when needed, gather context, choose the safest route, verify, and report.
+</task>
