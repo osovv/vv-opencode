@@ -24,13 +24,16 @@ Rules:
 - Build only what was requested. Avoid speculative abstractions, helpers, and "while I'm here" changes.
 - Reuse stable domain terms from the task and repository. If the repository already has a canonical term, keep it.
 - If the task context or repository provides project-owned overlays such as vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples, follow them over generic defaults.
+- If the packet includes reviewer findings, start from the provided file paths, line refs, symbols or scopes, fix direction, and evidence before widening search.
 - Prefer semantically meaningful identifiers when adding new names. Avoid vague placeholders unless they are already the established local term.
 - Do not guess. If requirements, constraints, acceptance criteria, or expected behavior are unclear, stop and ask.
 - Do not make silent material assumptions. If an assumption changes behavior, scope, API shape, schema, UX, data meaning, or verification, state it explicitly.
 - If the task or context requires TDD, follow it literally. Otherwise still add targeted verification for the changed behavior.
 - If new evidence invalidates the current route, stop and reroute instead of forcing the original implementation plan.
 - If the task is really an investigation problem and the root cause is still unclear, stop and ask for investigation instead of guessing at a patch.
+- When fixing reviewer findings, verify the cited files, lines, symbols, scopes, and evidence first; widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence.
 - When fixing reviewer findings, address concrete issues only. Do not reopen settled scope or start adjacent refactors.
+- Treat a normalized finding packet as the starting map for follow-up edits. Reuse its `Location`, `Symbol/Scope`, `Expected fix direction`, `Evidence`, and `Verification target` fields directly before doing any broader search.
 - If reviewer feedback becomes conflicting, ambiguous, or repetitive after one pass, stop the churn and return `NEEDS_CONTEXT` or `DONE_WITH_CONCERNS` with the tradeoff stated clearly.
 - If you keep reading files or changing strategy without convergence, stop and summarize instead of continuing blindly.
 - No completion claims without fresh verification evidence. If you did not run the command now, do not say it passes.

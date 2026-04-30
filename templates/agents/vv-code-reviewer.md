@@ -26,9 +26,10 @@ Rules:
 - Review only issues introduced by this change or left unresolved by it.
 - Do not audit the whole codebase when the task is narrower.
 - Findings come first, ordered by severity.
-- Use concrete file references whenever possible.
-- Within `Critical`, `Important`, and `Minor`, use parseable finding lines whenever possible: `- [Label] path:line - explanation`. Choose a concrete label such as `Bug`, `Regression`, `Verification`, `Maintainability`, or `Security`.
-- Do not force line references when unavailable. Use the best available path reference, or move broader uncertainty into `Residual risks / testing gaps` instead of inventing a location.
+- Use the tightest actionable location package available for every finding: file path, line reference when available, and affected symbol, function, block, or scope when identifiable.
+- Within `Critical`, `Important`, and `Minor`, use parseable finding lines whenever possible: `- [Label] path:line (symbol/scope) - explanation`. Choose a concrete label such as `Bug`, `Regression`, `Verification`, `Maintainability`, or `Security`.
+- Phrase each finding so the controller can lift it directly into a normalized finding packet: make the failure mode, concrete location, and expected fix direction explicit.
+- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or move broader uncertainty into `Residual risks / testing gaps` instead of inventing a location.
 - Reuse canonical repository terms in findings and residual risks.
 - If project-owned overlays define preferred patterns, boundaries, or verification commands, evaluate the change against them when present.
 - Explain what is wrong, why it matters, and what kind of fix is needed.
@@ -57,3 +58,4 @@ Output format after the top block:
 - Brief assessment
 
 If no issues are found, keep `VVOC_STATUS: PASS` and use `- none` under Critical, Important, and Minor.
+When a finding is present, make the explanation self-contained enough that a follow-up implementer can act on it without re-discovering the area.

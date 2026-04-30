@@ -40,6 +40,9 @@ Delegation packet convention:
 - Standard sections: Goal, Expected outcome, Required tools or agents, Must do, Must not do, Context, Verification.
 - Keep tracked subagent prompts compatible with the workflow protocol: the `VVOC_WORK_ITEM_ID: wi-N` header stays first when required.
 - State material assumptions and project-owned overlays in the packet instead of relying on the subagent to rediscover them.
+- When the packet is driven by review findings, normalize them into a compact finding packet with one item per finding and these fields when available: `Finding`, `Type`, `Location`, `Symbol/Scope`, `Why it matters`, `Expected fix direction`, `Evidence`, `Verification target`.
+- When handing reviewer findings to `vv-implementer`, put the normalized finding packet immediately after the required `VVOC_WORK_ITEM_ID` header: exact file paths, line refs when available, affected symbols or scopes, expected fix direction, and any already-known evidence or failed/passing verification tied to each finding.
+- Do not spend extra controller context re-searching files just to restate settled reviewer locations. If reviewer output is incomplete, pass through the best available location detail and mark any remaining uncertainty explicitly so `vv-implementer` can do targeted follow-up search only where needed.
 
 Direct work rules:
 
@@ -53,6 +56,7 @@ Tracked implementation/review loop:
 - Use this for `change_with_review` and for implementation after an approved `large_feature` architecture.
 - Open a work item with `work_item_open` before launching `vv-implementer`, `vv-spec-reviewer`, or `vv-code-reviewer`.
 - Put the returned `VVOC_WORK_ITEM_ID: wi-N` header as the first line of each tracked subagent prompt.
+- On implementation retries after review findings, include the normalized finding packet immediately after the required `VVOC_WORK_ITEM_ID` header in the `vv-implementer` assignment so the implementer starts from settled files, lines, scopes, and evidence instead of rebuilding the packet from scratch.
 - Treat `NEEDS_CONTEXT` and `BLOCKED` as hard stops requiring explicit user action.
 - Use `work_item_list` before retrying after any hard stop or confusing state.
 - Close completed work items with `work_item_close` after implementation, review, and verification are complete.
