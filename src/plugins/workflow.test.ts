@@ -1,16 +1,17 @@
 // FILE: src/plugins/workflow.test.ts
-// VERSION: 0.3.4
+// VERSION: 0.3.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers, and primary-only workflow guidance injection.
-//   DEPENDS: [bun:test, src/plugins/workflow/protocol.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts]
-//   LINKS: [V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
+//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers and bounded same-session repair, and primary-only workflow guidance injection.
+//   DEPENDS: [bun:test, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts]
+//   LINKS: [V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   protocol tests - Verify strict top-block parsing, header parsing, and status validation.
+//   repair tests - Verify resumable task envelope recognition for bounded tracked-result repair.
 //   state tests - Verify session-scoped idempotent open, conflict handling, close behavior, and review-round computation.
 //   transition tests - Verify deterministic next-state rules, launch allowances, and round-limit checks.
 //   tooling tests - Verify structured responses from work_item_open, work_item_list, and work_item_close wrappers.
@@ -18,6 +19,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.6 - Added coverage that duplicate strict top-block fields inside resumable task wrappers fail closed without same-session repair.]
+//   LAST_CHANGE: [v0.3.5 - Added coverage for one-shot same-session repair of malformed tracked results in resumable OpenCode task envelopes.]
 //   LAST_CHANGE: [v0.3.4 - Added coverage that recognized task-result wrappers with non-whitespace suffix text are not unwrapped.]
 //   LAST_CHANGE: [v0.3.3 - Added coverage that loose task_id/task_result wrappers without OpenCode resume metadata are not unwrapped.]
 //   LAST_CHANGE: [v0.3.2 - Added coverage that foreign `<task_result>` text without an OpenCode task envelope is not unwrapped.]
@@ -57,6 +60,7 @@ import {
   createWorkItemOpenTool,
 } from "./workflow/tooling.js";
 import { WorkflowPlugin } from "./workflow/index.js";
+import { unwrapResumableTaskResult } from "./workflow/repair.js";
 
 describe("workflow protocol", () => {
   test("parseResultBlock extracts implementer fields from strict top block", () => {
@@ -185,6 +189,22 @@ describe("workflow protocol", () => {
     if (!parsed.ok) {
       expect(parsed.error.code).toBe("DUPLICATE_TOP_BLOCK_FIELD");
     }
+  });
+});
+
+describe("workflow repair", () => {
+  test("unwrapResumableTaskResult extracts inner text only from recognized resumable task envelopes", () => {
+    const wrapped = unwrapResumableTaskResult(
+      wrapTaskResult("ses_repair", "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\n\nReviewed."),
+    );
+    expect(wrapped.envelope?.taskId).toBe("ses_repair");
+    expect(wrapped.normalizedOutput).toBe(
+      "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\n\nReviewed.",
+    );
+
+    const foreign = unwrapResumableTaskResult("task_id: fake\n<task_result>\nPASS\n</task_result>");
+    expect(foreign.envelope).toBeUndefined();
+    expect(foreign.normalizedOutput).toBe("task_id: fake\n<task_result>\nPASS\n</task_result>");
   });
 });
 
@@ -623,10 +643,31 @@ describe("workflow tooling", () => {
 type WorkflowPluginHarness = {
   plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
   logs: string[];
+  promptCalls: Array<{
+    sessionID: string;
+    agent?: string;
+    system?: string;
+    tools?: Record<string, boolean>;
+    text: string;
+  }>;
 };
 
-function createWorkflowPluginHarness(): Promise<WorkflowPluginHarness> {
+function createWorkflowPluginHarness(options?: {
+  promptResponseText?: string;
+  promptResponder?: (input: {
+    sessionID: string;
+    agent?: string;
+    text: string;
+  }) => string | undefined;
+}): Promise<WorkflowPluginHarness> {
   const logs: string[] = [];
+  const promptCalls: Array<{
+    sessionID: string;
+    agent?: string;
+    system?: string;
+    tools?: Record<string, boolean>;
+    text: string;
+  }> = [];
   return WorkflowPlugin({
     client: {
       app: {
@@ -637,13 +678,51 @@ function createWorkflowPluginHarness(): Promise<WorkflowPluginHarness> {
           }
         },
       },
+      session: {
+        prompt: async (payload: {
+          path: { id: string };
+          body?: {
+            agent?: string;
+            system?: string;
+            tools?: Record<string, boolean>;
+            parts?: Array<{ type: string; text?: string }>;
+          };
+        }) => {
+          const text = payload.body?.parts?.find((part) => part.type === "text")?.text ?? "";
+          const call = {
+            sessionID: payload.path.id,
+            agent: payload.body?.agent,
+            system: payload.body?.system,
+            tools: payload.body?.tools,
+            text,
+          };
+          promptCalls.push(call);
+
+          const repairedText = options?.promptResponder?.(call) ?? options?.promptResponseText;
+          if (!repairedText) {
+            return { data: undefined, error: { message: "prompt unavailable" } };
+          }
+
+          return {
+            data: {
+              parts: [
+                {
+                  type: "text",
+                  text: repairedText,
+                },
+              ],
+            },
+            error: undefined,
+          };
+        },
+      },
     } as never,
     project: {} as never,
     directory: "/tmp/project",
     worktree: "/tmp/project",
     serverUrl: new URL("http://localhost"),
     $: {} as never,
-  }).then((plugin) => ({ plugin, logs }));
+  }).then((plugin) => ({ plugin, logs, promptCalls }));
 }
 
 function createToolContext(sessionID: string, agent = "build") {
@@ -1307,7 +1386,7 @@ describe("workflow plugin integration", () => {
   });
 
   test("recognized task wrappers with non-whitespace suffix still fail strict parsing", async () => {
-    const { plugin, logs } = await createWorkflowPluginHarness();
+    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness();
     const sessionID = "session-task-wrapper-suffix";
 
     const openedRaw = await plugin.tool?.work_item_open?.execute(
@@ -1350,10 +1429,144 @@ describe("workflow plugin integration", () => {
     ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
 
     expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+    expect(promptCalls).toHaveLength(0);
   });
 
-  test("malformed inner task result in OpenCode wrapper still raises protocol error", async () => {
-    const { plugin, logs } = await createWorkflowPluginHarness();
+  test("malformed tracked output in resumable wrapper is repaired once in the same child session when possible", async () => {
+    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
+      promptResponder: ({ text }) => {
+        const workItemId = /VVOC_WORK_ITEM_ID: (wi-\d+)/.exec(text)?.[1] ?? "wi-1";
+        return `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone after repair.`;
+      },
+    });
+    const sessionID = "session-repair-success";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-REPAIR-SUCCESS", title: "Repair success" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-repair-success" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-repair-success",
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: wrapTaskResult(
+            "ses_repair_success",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_ROUTE: change_with_review\n\nMissing status.`,
+          ),
+          metadata: {},
+        } as never,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(promptCalls).toHaveLength(1);
+    expect(promptCalls[0]).toEqual(
+      expect.objectContaining({
+        sessionID: "ses_repair_success",
+        agent: "vv-implementer",
+        system: expect.stringContaining("Format-only workflow repair"),
+        tools: expect.objectContaining({
+          apply_patch: false,
+          bash: false,
+          task: false,
+          work_item_open: false,
+        }),
+      }),
+    );
+    expect(promptCalls[0]?.text).toContain("Protocol error: MISSING_STATUS");
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] result parsed");
+
+    const listedRaw = await plugin.tool?.work_item_list?.execute(
+      { includeClosed: false },
+      createToolContext(sessionID) as never,
+    );
+    const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
+    expect(listed.items[0]?.state).toBe("awaiting_spec_review");
+  });
+
+  test("resumable wrapper repair remains bounded to one failed retry", async () => {
+    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
+      promptResponseText: "VVOC_WORK_ITEM_ID: wi-1\n\nStill malformed.",
+    });
+    const sessionID = "session-repair-failure";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-REPAIR-FAILURE", title: "Repair failure" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-repair-failure" } as never,
+      {
+        args: {
+          subagent_type: "vv-spec-reviewer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview spec`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-repair-failure",
+          args: {
+            subagent_type: "vv-spec-reviewer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview spec`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: wrapTaskResult(
+            "ses_repair_failure",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\n\nStill malformed.`,
+          ),
+          metadata: {},
+        } as never,
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+
+    expect(promptCalls).toHaveLength(1);
+    expect(promptCalls[0]).toEqual(
+      expect.objectContaining({
+        sessionID: "ses_repair_failure",
+        agent: "vv-spec-reviewer",
+      }),
+    );
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+  });
+
+  test("wrapped work-item mismatch fails closed without attempting repair", async () => {
+    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
+      promptResponseText:
+        "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nShould not be used.",
+    });
     const sessionID = "session-wrapped-protocol-error";
 
     const openedRaw = await plugin.tool?.work_item_open?.execute(
@@ -1388,7 +1601,7 @@ describe("workflow plugin integration", () => {
           title: "task",
           output: wrapTaskResult(
             "ses_456",
-            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_ROUTE: change_with_review\n\nMissing status.`,
+            "VVOC_WORK_ITEM_ID: wi-999\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nWrong work item.",
           ),
           metadata: {},
         } as never,
@@ -1396,10 +1609,63 @@ describe("workflow plugin integration", () => {
     ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
 
     expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+    expect(logs).not.toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
+    expect(promptCalls).toHaveLength(0);
+  });
+
+  test("wrapped duplicate strict top-block fields fail closed without attempting repair", async () => {
+    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
+      promptResponseText:
+        "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nShould not be used.",
+    });
+    const sessionID = "session-wrapped-duplicate-field";
+
+    const openedRaw = await plugin.tool?.work_item_open?.execute(
+      { items: [{ key: "WI-WRAPPED-DUPLICATE", title: "Wrapped duplicate field" }] },
+      createToolContext(sessionID) as never,
+    );
+    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+    const workItemId = opened.items[0]?.workItemId;
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "call-wrapped-duplicate" } as never,
+      {
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+        },
+      } as never,
+    );
+
+    await expect(
+      plugin["tool.execute.after"]?.(
+        {
+          tool: "task",
+          sessionID,
+          callID: "call-wrapped-duplicate",
+          args: {
+            subagent_type: "vv-implementer",
+            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+          },
+        } as never,
+        {
+          title: "task",
+          output: wrapTaskResult(
+            "ses_duplicate_field",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_STATUS: DONE_WITH_CONCERNS\nVVOC_ROUTE: change_with_review\n\nAmbiguous status.`,
+          ),
+          metadata: {},
+        } as never,
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+    expect(logs).not.toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
+    expect(promptCalls).toHaveLength(0);
   });
 
   test("malformed tracked result raises protocol error", async () => {
-    const { plugin, logs } = await createWorkflowPluginHarness();
+    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness();
     const sessionID = "session-protocol-error";
 
     const openedRaw = await plugin.tool?.work_item_open?.execute(
@@ -1439,6 +1705,7 @@ describe("workflow plugin integration", () => {
     ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
 
     expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
+    expect(promptCalls).toHaveLength(0);
   });
 
   test("guidance injects for primary sessions only", async () => {

@@ -183,6 +183,19 @@
       </annotations>
     </M-WORKFLOW-PROTOCOL>
 
+    <M-WORKFLOW-REPAIR NAME="WorkflowRepair" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Recognize resumable OpenCode task-result envelopes, build strict repair prompts, and resume the same child session once to repair malformed tracked workflow outputs when safe.</purpose>
+      <path>src/plugins/workflow/repair.ts</path>
+      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <verification-ref>V-M-WORKFLOW-REPAIR</verification-ref>
+      <annotations>
+        <type-ResumableTaskEnvelope PURPOSE="Recognized resumable OpenCode task wrapper metadata plus inner tracked result text." />
+        <fn-unwrapResumableTaskResult PURPOSE="Extract inner tracked result text only from known resumable OpenCode task envelopes." />
+        <fn-buildTrackedResultRepairPrompt PURPOSE="Construct the one-shot repair prompt for the same tracked child session." />
+        <fn-attemptTrackedResultRepair PURPOSE="Resume the same child session once and return repaired tracked result text when available." />
+      </annotations>
+    </M-WORKFLOW-REPAIR>
+
     <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="implemented">
       <purpose>In-memory work-item state store with lifecycle management, route-aware state transitions including review-only reviewer starts, counter tracking, round-limit enforcement, and optional closed-item listing keyed by (sessionId, workItemId).</purpose>
       <path>src/plugins/workflow/state.ts</path>
@@ -227,9 +240,9 @@
     </M-WORKFLOW-TOOLING>
 
     <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, unwrap OpenCode task result envelopes before tracked result parsing via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message.</purpose>
+      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, unwrap OpenCode task result envelopes before tracked result parsing, attempt one bounded same-session repair for malformed resumable tracked outputs via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message.</purpose>
       <path>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</path>
-      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
+      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>
       <annotations>
         <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement, result parsing, and primary-session guidance." />

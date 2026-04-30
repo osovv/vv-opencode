@@ -3,7 +3,7 @@
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, controller main-session system guidance injection, hash-anchored editing, memory CRUD, secrets redaction, work-item protocol parsing, workflow state transitions, launch enforcement, review-only result parsing, and loop gating.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, Guardian/Memory built-in role wiring, controller main-session system guidance injection, hash-anchored editing, memory CRUD, secrets redaction, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, and loop gating.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system or workflow change.</wave-level-focus>
     <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, explicit memory workflows, secrets redaction, tracked subagent rename, review-only workflows, and deterministic workflow enforcement.</phase-level-focus>
     <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
@@ -115,9 +115,9 @@
     </VF-LAUNCH-ENFORCEMENT>
     <VF-RESULT-PARSING NAME="ResultParsing" USE_CASES="UC-012" DATA_FLOW="DF-RESULT-PARSING" PRIORITY="high">
       <scenario>A tracked subagent completes and returns output.</scenario>
-      <expected-outcome>Parsed results update workflow state correctly for implementation and review-only workflows, OpenCode task wrapper metadata is stripped before strict subagent result parsing, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results fail closed, and counters increment deterministically.</expected-outcome>
+      <expected-outcome>Parsed results update workflow state correctly for implementation and review-only workflows, OpenCode task wrapper metadata is stripped before strict subagent result parsing, malformed resumable tracked outputs get at most one same-session repair attempt, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results otherwise fail closed, and counters increment deterministically.</expected-outcome>
       <required-signals>
-        <trace-sequence>tool.execute.after(task) -&gt; normalize recognized OpenCode task wrapper -&gt; parse top block -&gt; validate VVOC_WORK_ITEM_ID + VVOC_STATUS -&gt; update state and counters -&gt; halt on protocol error or hard stop</trace-sequence>
+        <trace-sequence>tool.execute.after(task) -&gt; normalize recognized OpenCode task wrapper -&gt; parse top block -&gt; if malformed and resumable: attempt one same-session repair -&gt; validate VVOC_WORK_ITEM_ID + VVOC_STATUS -&gt; update state and counters -&gt; halt on protocol error or hard stop</trace-sequence>
       </required-signals>
     </VF-RESULT-PARSING>
     <VF-LOOP-GATE NAME="LoopGate" USE_CASES="UC-013" DATA_FLOW="DF-LOOP-GATE" PRIORITY="high">
@@ -230,7 +230,7 @@
     <TR-1 MODULE="M-PLUGIN-MODEL-ROLES">`ModelRolesPlugin` must emit structured markers anchored to `BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES` for role-map load, successful per-field resolution, and unresolved-role failure paths without logging raw secrets or provider credentials.</TR-1>
     <TR-2 MODULE="M-PLUGIN-GUARDIAN">Guardian runtime config loading and permission review must emit stable markers anchored to `BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG` and `BLOCK_REVIEW_PERMISSION_REQUEST` so failures can be triaged without replaying full conversations.</TR-2>
     <TR-3 MODULE="M-PLUGIN-MEMORY">Memory initialization and reviewer registration must emit stable markers anchored to `BLOCK_INITIALIZE_MEMORY_PLUGIN` and `BLOCK_REVIEWER_AGENT_CONFIGURATION`, while memory payload content stays redacted or omitted.</TR-3>
-    <TR-4 MODULE="M-PLUGIN-WORKFLOW">Workflow launch validation must emit stable markers anchored to `BLOCK_VALIDATE_LAUNCH` for valid, rejected, and untracked launch paths. Result parsing must emit stable markers anchored to `BLOCK_PARSE_RESULT` for successful parse, protocol error, and hard-stop paths.</TR-4>
+    <TR-4 MODULE="M-PLUGIN-WORKFLOW">Workflow launch validation must emit stable markers anchored to `BLOCK_VALIDATE_LAUNCH` for valid, rejected, and untracked launch paths. Result parsing must emit stable markers anchored to `BLOCK_PARSE_RESULT` for repair-attempt, successful-parse, protocol-error, and hard-stop paths.</TR-4>
     <TR-5 MODULE="M-WORKFLOW-TRANSITIONS">State transitions must emit stable markers anchored to `BLOCK_TRANSITION_STATE` and `BLOCK_CHECK_ROUND_LIMIT` so launch-enforcement and result-parsing failures can be triaged without replaying full subagent output.</TR-5>
   </TelemetryRequirements>
 
@@ -701,6 +701,27 @@
       <wave-follow-up>Add tolerance tests for minor whitespace variations around the strict top block.</wave-follow-up>
     </V-M-WORKFLOW-PROTOCOL>
 
+    <V-M-WORKFLOW-REPAIR MODULE="M-WORKFLOW-REPAIR" PRIORITY="high">
+      <test-files>
+        <file>src/plugins/workflow.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/plugins/workflow.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">Recognized resumable OpenCode task envelopes unwrap to inner tracked result text and expose the resumable task ID.</scenario-1>
+        <scenario-2 kind="failure">Foreign, partial, or suffix-bearing wrappers do not count as resumable envelopes and must not trigger repair.</scenario-2>
+        <scenario-3 kind="success">When a tracked result parse fails inside a recognized resumable wrapper, the same child session is resumed once with a strict repair prompt.</scenario-3>
+        <scenario-4 kind="failure">If the one-shot repair still returns malformed output or cannot be resumed, the workflow remains fail-closed.</scenario-4>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Repair must remain bounded to one attempt per malformed tracked result.</assertion-1>
+        <assertion-2>Repair must never loosen strict parsing in `src/plugins/workflow/protocol.ts`.</assertion-2>
+      </required-trace-assertions>
+    </V-M-WORKFLOW-REPAIR>
+
     <V-M-WORKFLOW-STATE MODULE="M-WORKFLOW-STATE" PRIORITY="high">
       <test-files>
         <file>src/plugins/workflow.test.ts</file>
@@ -786,19 +807,21 @@
         <scenario-7b kind="failure">Launch with malformed VVOC_WORK_ITEM_ID header is rejected.</scenario-7b>
         <scenario-8 kind="failure">Launch with unknown work item ID is rejected.</scenario-8>
         <scenario-9 kind="failure">Launch with wrong next agent for current state is rejected.</scenario-9>
-        <scenario-10 kind="failure">Malformed tracked output halts workflow.</scenario-10>
+        <scenario-10 kind="failure">Malformed tracked output without a recognized resumable envelope halts workflow.</scenario-10>
         <scenario-10b kind="success">OpenCode task output wrappers with `task_id` metadata are unwrapped before strict tracked result parsing.</scenario-10b>
-        <scenario-10c kind="failure">Malformed tracked output inside a valid OpenCode task wrapper still halts workflow.</scenario-10c>
-        <scenario-10d kind="failure">Foreign or partial `&lt;task_result&gt;` wrappers without a recognized OpenCode task envelope and resume metadata are not unwrapped and still halt workflow.</scenario-10d>
+        <scenario-10c kind="success">Malformed tracked output inside a recognized resumable wrapper gets one same-session repair attempt before state transition continues.</scenario-10c>
+        <scenario-10d kind="failure">If the one-shot resumable repair still returns malformed tracked output, workflow halts with RESULT_PROTOCOL_ERROR.</scenario-10d>
+        <scenario-10e kind="failure">Foreign or partial `&lt;task_result&gt;` wrappers without a recognized OpenCode task envelope and resume metadata are not unwrapped and still halt workflow.</scenario-10e>
         <scenario-11 kind="success">Eligible orchestrating primary agents receive workflow protocol guidance. Helper primary enhancer and known subagents do not.</scenario-11>
       </scenarios>
       <required-log-markers>
         <marker-1>[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch validated</marker-1>
         <marker-2>[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected</marker-2>
         <marker-3>[workflow][resultParsing][BLOCK_PARSE_RESULT] result parsed</marker-3>
-        <marker-4>[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error</marker-4>
-        <marker-5>[workflow][stateTransition][BLOCK_TRANSITION_STATE] state transitioned</marker-5>
-        <marker-6>[workflow][loopGate][BLOCK_CHECK_ROUND_LIMIT] round limit check</marker-6>
+        <marker-4>[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted</marker-4>
+        <marker-5>[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error</marker-5>
+        <marker-6>[workflow][stateTransition][BLOCK_TRANSITION_STATE] state transitioned</marker-6>
+        <marker-7>[workflow][loopGate][BLOCK_CHECK_ROUND_LIMIT] round limit check</marker-7>
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>The plugin must not interfere with untracked task launches.</assertion-1>
@@ -806,6 +829,7 @@
         <assertion-3>NEEDS_CONTEXT must always halt workflow and return control to main session.</assertion-3>
         <assertion-4>Protocol errors must halt automation rather than falling back to heuristic behavior.</assertion-4>
         <assertion-5>The plugin must parse the inner `&lt;task_result&gt;` content from OpenCode task outputs instead of treating wrapper metadata as subagent protocol fields.</assertion-5>
+        <assertion-6>When resumable repair is attempted, the plugin must resume only the same child session and must stop after one attempt.</assertion-6>
       </required-trace-assertions>
       <wave-follow-up>Add integration tests that simulate full tracked subagent lifecycle with mock tool execution.</wave-follow-up>
       <phase-follow-up>Validate workflow enforcement with real OpenCode sessions once the plugin is installed.</phase-follow-up>

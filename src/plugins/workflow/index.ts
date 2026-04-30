@@ -1,10 +1,10 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.2.3
+// VERSION: 0.2.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
-//   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, OpenCode task-result wrapper normalization, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
-//   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
+//   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
+//   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -14,6 +14,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.5 - Limited resumable result repair to safe format-only protocol errors and disabled tool use during repair prompts where supported.]
+//   LAST_CHANGE: [v0.2.4 - Added a single same-session repair attempt for malformed tracked results inside recognized resumable OpenCode task envelopes.]
 //   LAST_CHANGE: [v0.2.3 - Tightened OpenCode task-result envelope detection to the known resumable task header shape before unwrapping.]
 //   LAST_CHANGE: [v0.2.2 - Restricted task-result wrapper extraction to recognized OpenCode task envelopes so foreign `<task_result>` text still fails strict parsing.]
 //   LAST_CHANGE: [v0.2.1 - Extracted inner OpenCode `<task_result>` content before strict tracked result parsing so task wrapper metadata does not trip protocol validation.]
@@ -24,6 +26,11 @@
 
 import { type Config, type Plugin, tool } from "@opencode-ai/plugin";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
+import {
+  attemptTrackedResultRepair,
+  isTrackedResultRepairEligible,
+  unwrapResumableTaskResult,
+} from "./repair.js";
 import {
   parseResultBlock,
   parseWorkItemHeader,
@@ -144,50 +151,6 @@ function stringifyToolOutput(value: Record<string, unknown>): string {
   return JSON.stringify(value, null, 2);
 }
 
-function extractTaskResultText(output: string): string {
-  const startTag = "<task_result>";
-  const endTag = "</task_result>";
-  const normalizedOutput = output.replace(/\r\n/g, "\n");
-  const lines = normalizedOutput.split("\n");
-  const firstMeaningfulIndex = lines.findIndex((line) => line.trim().length > 0);
-  if (firstMeaningfulIndex < 0) {
-    return output;
-  }
-
-  const firstMeaningfulLine = lines[firstMeaningfulIndex]?.trim() ?? "";
-  if (
-    !/^task_id:\s+\S+\s+\(for resuming to continue this task if needed\)$/.test(firstMeaningfulLine)
-  ) {
-    return output;
-  }
-
-  let startTagIndex = firstMeaningfulIndex + 1;
-  while (startTagIndex < lines.length && (lines[startTagIndex] ?? "").trim().length === 0) {
-    startTagIndex += 1;
-  }
-
-  if ((lines[startTagIndex] ?? "").trim() !== startTag) {
-    return output;
-  }
-
-  const endTagIndex = lines.findIndex(
-    (line, index) => index > startTagIndex && line.trim() === endTag,
-  );
-  if (endTagIndex < 0) {
-    return output;
-  }
-
-  const suffixLines = lines.slice(endTagIndex + 1);
-  if (suffixLines.some((line) => line.trim().length > 0)) {
-    return output;
-  }
-
-  return lines
-    .slice(startTagIndex + 1, endTagIndex)
-    .join("\n")
-    .trim();
-}
-
 function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number): string {
   return [
     "LAUNCH_REJECTED_ROUND_LIMIT: review loop gate blocked tracked launch before entering round 3.",
@@ -197,7 +160,7 @@ function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number)
 }
 
 // START_BLOCK_PLUGIN_ENTRY
-export const WorkflowPlugin: Plugin = async ({ client }) => {
+export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   const store = createWorkItemStore();
   const knownSubagents = createKnownSubagentSet();
 
@@ -420,11 +383,50 @@ export const WorkflowPlugin: Plugin = async ({ client }) => {
         throw new Error("RESULT_PROTOCOL_ERROR: tracked task output must be a string");
       }
 
-      const parsed = parseResultBlock({
+      const unwrapped = unwrapResumableTaskResult(output.output);
+      let parsed = parseResultBlock({
         agent: subagentType,
-        output: extractTaskResultText(output.output),
+        output: unwrapped.normalizedOutput,
         expectedWorkItemId: header.value,
       });
+      if (!parsed.ok) {
+        if (unwrapped.envelope && isTrackedResultRepairEligible(parsed.error.code)) {
+          await client.app.log({
+            body: {
+              service: "workflow",
+              level: "info",
+              message: "[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted",
+              extra: {
+                sessionID: input.sessionID,
+                agent: subagentType,
+                workItemId: header.value,
+                taskId: unwrapped.envelope.taskId,
+                reason: parsed.error.code,
+                attempt: 1,
+              },
+            },
+          });
+
+          const repairedOutput = await attemptTrackedResultRepair({
+            client,
+            directory,
+            taskId: unwrapped.envelope.taskId,
+            agent: subagentType,
+            workItemId: header.value,
+            malformedOutput: unwrapped.normalizedOutput,
+            parseErrorMessage: parsed.error.message,
+          });
+
+          if (repairedOutput) {
+            parsed = parseResultBlock({
+              agent: subagentType,
+              output: repairedOutput,
+              expectedWorkItemId: header.value,
+            });
+          }
+        }
+      }
+
       if (!parsed.ok) {
         await client.app.log({
           body: {
