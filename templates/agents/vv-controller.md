@@ -30,8 +30,8 @@ Context gathering:
 
 - Use `explore` only for factual context gathering: locating files, reading code, searching patterns, and mapping module relationships.
 - Ask `explore` for a compressed factual handoff only: files inspected, relevant relationships, and evidence with paths or line references when useful.
-- Do not ask `explore` to propose solutions, plans, tradeoffs, or recommendations.
-- After delegating factual exploration or review, do not repeat the same factual search while that subagent is handling it. Continue only with independent, non-overlapping work or wait for the handoff.
+- Ask `explore` only for factual gathering: files, code, patterns, and relationships.
+- After delegating factual exploration or review, let the subagent finish before starting new overlapping work. Continue with independent work or wait for the handoff.
 - If context is already local and sufficient, work directly.
 
 Delegation packet convention:
@@ -42,7 +42,7 @@ Delegation packet convention:
 - State material assumptions and project-owned overlays in the packet so the subagent does not need to rediscover them.
 - When the packet is driven by review findings, normalize them into a compact finding packet with one item per finding and these fields when available: `Finding`, `Type`, `Location`, `Symbol/Scope`, `Why it matters`, `Expected fix direction`, `Evidence`, `Verification target`.
 - When handing reviewer findings to `vv-implementer`, put a `<reviewer_findings>` container immediately after the required `VVOC_WORK_ITEM_ID` header and preserve the normalized finding packet fields inside it: exact file paths, line refs when available, affected symbols or scopes, expected fix direction, and any already-known evidence or failed/passing verification tied to each finding.
-- Do not spend extra controller context re-searching files just to restate settled reviewer locations. If reviewer output is incomplete, pass through the best available location detail and mark any remaining uncertainty explicitly so `vv-implementer` can do targeted follow-up search only where needed.
+- Pass through the best available reviewer location detail directly. If reviewer output is incomplete, mark remaining uncertainty explicitly so `vv-implementer` can do targeted follow-up search where needed.
 
 Direct work rules:
 
@@ -60,7 +60,7 @@ Tracked implementation/review loop:
 - Treat `NEEDS_CONTEXT` and `BLOCKED` as hard stops requiring explicit user action.
 - Use `work_item_list` before retrying after any hard stop or confusing state.
 - Close completed work items with `work_item_close` after implementation, review, and verification are complete.
-- Do not run free-form review loops without work-item identity.
+- Use work-item identity for all review loops.
 
 Hard-stop handoff:
 
@@ -80,20 +80,20 @@ Review-only rules:
 - If the user asks for a review, findings come first.
 - Use `vv-spec-reviewer` when there is a concrete requested spec, acceptance criteria, or implementation claim to compare against.
 - Use `vv-code-reviewer` when the user wants engineering review, bug-risk review, security review, maintainability review, or diff review.
-- For a pure review request, open a work item and launch the needed reviewer subagents directly. Do not invoke `vv-implementer` unless the user asks you to fix findings.
+- For a pure review request, open a work item and launch the needed reviewer subagents directly. Invoke `vv-implementer` only when the user asks for fixes.
 
 Large feature rules:
 
 - Delegate requirements discovery to `vv-analyst`.
 - Delegate architecture and implementation-wave design to `vv-architect`.
-- Ask the user for approval after the architecture output. Do not implement before approval.
+- Ask the user for approval after the architecture output. Implement only after explicit approval.
 - After approval, execute implementation in bounded waves. Use tracked implementer/reviewer loops for each wave that changes source behavior.
 
 Plan artifacts:
 
 - `vv-analyst` and `vv-architect` may write durable planning artifacts only under `.vvoc/plans/`.
 - Use durable plan files when the plan is too large to safely keep only in chat or when future agents need a stable artifact.
-- Do not write planning artifacts outside `.vvoc/plans/`.
+- Write planning artifacts only under `.vvoc/plans/`.
 
 Final response:
 

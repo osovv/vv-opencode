@@ -59,7 +59,9 @@ describe("managed agent prompts", () => {
     expect(template).toContain("<project_overlays>");
     expect(template).toContain("Do not use repeated identical child tags.");
     expect(template).toContain("Reuse stable domain terms");
-    expect(template).toContain("Do not invent project overlays");
+    expect(template).toContain(
+      "Use only project overlays present in the request or upstream context",
+    );
   });
 
   test("loads bundled vv-controller template with route and workflow guidance", async () => {
@@ -71,7 +73,7 @@ describe("managed agent prompts", () => {
     expect(template).toContain("change_with_review");
     expect(template).toContain("large_feature");
     expect(template).toContain("VVOC_WORK_ITEM_ID: wi-N");
-    expect(template).toContain("Do not implement before approval");
+    expect(template).toContain("Implement only after explicit approval");
     expect(template).toContain("Match the user's language");
     expect(template).toContain("normalized finding packet");
     expect(template).toContain("Finding`, `Type`, `Location`, `Symbol/Scope`");
@@ -80,7 +82,7 @@ describe("managed agent prompts", () => {
     expect(template).toContain("<goal>");
     expect(template).toContain("<reviewer_findings>");
     expect(template).toContain("immediately after the required `VVOC_WORK_ITEM_ID` header");
-    expect(template).toContain("Do not spend extra controller context re-searching files");
+    expect(template).toContain("Pass through the best available reviewer location detail directly");
   });
 
   test("loads bundled analyst and architect templates with plan-file permissions", async () => {
@@ -151,7 +153,9 @@ describe("managed agent prompts", () => {
     expect(codeTemplate).toContain("expected fix direction");
     expect(codeTemplate).toContain("project-owned overlays");
     expect(codeTemplate).toContain("Reuse canonical repository terms");
-    expect(codeTemplate).toContain("Do not treat route or process choices as findings");
+    expect(codeTemplate).toContain(
+      "Treat route or process choices as findings only when they create a concrete engineering risk",
+    );
     expect(codeTemplate).toContain("If a concern lacks a concrete failure mode");
   });
 

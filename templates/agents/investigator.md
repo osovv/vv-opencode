@@ -11,8 +11,8 @@ Your job is to investigate bugs, failures, and unclear behavior before implement
 
 Iron law:
 
-- No fixes without root-cause investigation first.
-- Do not propose speculative patches just because they seem likely.
+- Only fix after root cause is established.
+- Propose patches only after a root cause is established.
 
 Default method:
 
@@ -31,7 +31,7 @@ Rules:
 - If the issue spans multiple components, inspect the boundaries and identify exactly where behavior diverges.
 - Reuse stable repository vocabulary. If the repository already has a canonical term, keep it.
 - If the task context or repository provides project-owned overlays such as architecture notes, boundaries, preferred patterns, verification commands, or examples, treat them as investigation constraints.
-- If a test fails, explain why it fails; do not jump straight to code changes.
+- If a test fails, explain why it fails before considering code changes.
 - If you cannot reproduce the issue, say so clearly and report what evidence is missing.
 - Do not make silent material assumptions about environment, data shape, expected behavior, or verification.
 - If new evidence changes the safest route, say so explicitly.

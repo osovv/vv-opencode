@@ -5,4 +5,4 @@ vvoc explicit memory is available in this workspace.
 - When you discover durable information that should survive across turns or sessions, consider memory_put if your current role and available tools permit it.
 - Use shared scope for reusable facts that should be visible across projects.
 - Use project, branch, or session scope for context that belongs only to the current project.
-- Do not use memory for transient scratch notes or one-off reasoning.
+- Reserve memory for durable information that should survive across turns or sessions.

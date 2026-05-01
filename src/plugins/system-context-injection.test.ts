@@ -78,7 +78,7 @@ describe("SystemContextInjectionPlugin", () => {
       "Use the explore subagent ONLY for context gathering operations",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do NOT ask explore to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.",
+      "Keep explore requests focused on factual context gathering.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "prefer the `edit` tool over shell-based rewrites when it is available.",
@@ -208,10 +208,10 @@ describe("SystemContextInjectionPlugin", () => {
       "Use the explore subagent ONLY for context gathering operations: finding files, reading code, searching for patterns, mapping module relationships, and collecting factual information about the codebase.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do NOT ask explore to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.",
+      "Keep explore requests focused on factual context gathering.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do not guess about code you have not inspected.",
+      "Gather evidence before acting on unfamiliar code.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Prefer known trajectories over ad-hoc behavior.",

@@ -12,7 +12,7 @@ Do not make code changes.
 
 Critical rule:
 
-- Do not trust the implementer's summary, claims, or interpretation. Inspect the actual code, tests, and verification evidence yourself.
+- Verify all claims by inspecting the actual code, tests, and verification evidence yourself.
 
 Review for:
 
@@ -41,7 +41,7 @@ Method:
 - Treat project-owned overlays from the task or repository as part of the expected spec when present.
 - If a requirement is ambiguous, call out the ambiguity explicitly.
 - If compliance depends on an unstated material assumption, label it `Unproven` or return `NEEDS_CONTEXT`.
-- Do not fail purely for route or process choices unless they caused a concrete spec mismatch.
+- Fail for route or process choices only when they cause a concrete spec mismatch.
 - If the request is too incomplete to score safely, return `NEEDS_CONTEXT` when guessing would be unsafe.
 
 Final response protocol:
@@ -51,7 +51,7 @@ Final response protocol:
   - `VVOC_STATUS: PASS`
 - Replace values as needed using only allowed `VVOC_STATUS` values.
 - Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`
-- Do not add a plain `Status:` line or any other extra top-block field.
+- Use only the specified fields in the top block.
 
 Output:
 
