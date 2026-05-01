@@ -334,6 +334,10 @@
         <scenario-3 kind="success">isBuiltinVvocPresetName correctly identifies managed preset names.</scenario-3>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>BUILTIN_VVOC_PRESET_NAMES must return names in a fixed deterministic order regardless of insertion order.</assertion-1>
+        <assertion-2>isBuiltinVvocPresetName must handle non-string and empty-string inputs without throwing.</assertion-2>
+      </required-trace-assertions>
     </V-M-VVOC-PRESET-REGISTRY>
 
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
@@ -479,7 +483,10 @@
 
     <V-M-PLUGIN-SECRETS-REDACTION MODULE="M-PLUGIN-SECRETS-REDACTION" PRIORITY="high">
       <test-files>
-        <file>src/plugins/secrets-redaction/*.test.ts</file>
+        <file>src/plugins/secrets-redaction/patterns.test.ts</file>
+        <file>src/plugins/secrets-redaction/session.test.ts</file>
+        <file>src/plugins/secrets-redaction/index.test.ts</file>
+        <file>src/plugins/secrets-redaction/engine.test.ts</file>
       </test-files>
       <module-checks>
         <check-1>bun x tsc --noEmit</check-1>
@@ -544,6 +551,10 @@
         <scenario-5 kind="failure">Pre-role vvoc schema versions report an unsupported-version failure instead of being accepted leniently.</scenario-5>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Schema validation must reject pre-role vvoc schema versions before attempting any field-level validation.</assertion-1>
+        <assertion-2>Semantic validation for presets must report the offending preset name and role path in the error message.</assertion-2>
+      </required-trace-assertions>
       <wave-follow-up>Run against real config files in the repository.</wave-follow-up>
     </V-M-CLI-CONFIG-VALIDATE>
 
@@ -587,6 +598,10 @@
         <scenario-2 kind="success">Shows `ModelRolesPlugin` when the package exports are wired correctly.</scenario-2>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>The plugin list must not throw or crash when no plugins are installed — only show an empty message.</assertion-1>
+        <assertion-2>Each entry must include the plugin source path and enabled/disabled status.</assertion-2>
+      </required-trace-assertions>
       <wave-follow-up>Run against a temp config with known plugin entries.</wave-follow-up>
     </V-M-CLI-PLUGIN-LIST>
 
@@ -656,6 +671,10 @@
         <scenario-5 kind="success">Status and doctor output immediately after init report the built-in role assignments that were seeded.</scenario-5>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Non-interactive init must seed canonical config without any TTY prompts or interactive fallbacks.</assertion-1>
+        <assertion-2>Generated canonical config must pass schema validation immediately after init completes.</assertion-2>
+      </required-trace-assertions>
       <wave-follow-up>Test with a temp directory and verify file contents.</wave-follow-up>
     </V-M-CLI-INIT>
 
@@ -676,6 +695,10 @@
         <scenario-3 kind="failure">Registry or network failure is caught and reported gracefully.</scenario-3>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>The upgrade command must detect and report &quot;already latest&quot; without making any network install attempt.</assertion-1>
+        <assertion-2>Network failures must be caught and reported gracefully without crashing or leaving partial state.</assertion-2>
+      </required-trace-assertions>
       <wave-follow-up>Mock npm registry responses and subprocess execution so upgrade coverage never performs real global installs.</wave-follow-up>
     </V-M-CLI-UPGRADE>
 
@@ -790,6 +813,10 @@
         <scenario-4 kind="success">work_item_list with includeClosed=true returns closed items in addition to open items.</scenario-4>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>work_item_open must return VVOC_WORK_ITEM_ID in structured results, not as plain text.</assertion-1>
+        <assertion-2>work_item_close on a non-existent or already-closed item must throw rather than silently succeeding.</assertion-2>
+      </required-trace-assertions>
     </V-M-WORKFLOW-TOOLING>
 
     <V-M-PLUGIN-WORKFLOW MODULE="M-PLUGIN-WORKFLOW" PRIORITY="high">
