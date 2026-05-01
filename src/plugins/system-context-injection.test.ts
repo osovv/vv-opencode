@@ -223,14 +223,14 @@ describe("SystemContextInjectionPlugin", () => {
       "stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "If new evidence invalidates the current route, stop and reroute instead of forcing the original plan.",
+      "When new evidence invalidates the current route, stop and reroute.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Reuse stable domain terms from the user request and the repository.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain("Do not make silent material assumptions.");
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "If you are not converging, stop and summarize instead of continuing blindly.",
+      "When repeated attempts do not converge, stop and summarize.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples",
