@@ -60,7 +60,7 @@ import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
 const z = tool.schema;
 
 const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
-const PLUGIN_MANAGED_SUBAGENTS = ["guardian", "memory-reviewer"] as const;
+const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
 const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
 const HELPER_PRIMARY_AGENTS = ["enhancer"] as const;
 const TRACKED_SUBAGENT_SET = new Set<string>(TRACKED_SUBAGENT_NAMES);

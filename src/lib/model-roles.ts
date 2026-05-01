@@ -69,7 +69,6 @@ export type BuiltInRoleBindings = {
   };
   managedAgents: {
     guardian: BuiltInRoleName;
-    "memory-reviewer": BuiltInRoleName;
     "vv-controller": BuiltInRoleName;
     enhancer: BuiltInRoleName;
     "vv-analyst": BuiltInRoleName;
@@ -97,7 +96,6 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
   },
   managedAgents: {
     guardian: "fast",
-    "memory-reviewer": "fast",
     "vv-controller": "default",
     enhancer: "smart",
     "vv-analyst": "smart",

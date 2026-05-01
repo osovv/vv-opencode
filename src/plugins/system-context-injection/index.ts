@@ -27,7 +27,7 @@ import { type Config, type Plugin } from "@opencode-ai/plugin";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
 
 const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
-const PLUGIN_MANAGED_SUBAGENTS = ["guardian", "memory-reviewer"] as const;
+const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
 const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
 
 const MAIN_SESSION_SYSTEM_CONTEXTS = [

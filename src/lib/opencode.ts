@@ -43,7 +43,6 @@
 //   readManagedAgentOverrides - Reads model overrides for the bundled vvoc-managed OpenCode agents.
 //   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model override in OpenCode config.
 //   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
-//   writeMemoryConfig - Writes the memory section into the canonical vvoc.json document.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
 //   describeWriteResult - Formats config write outcomes for CLI output.
 // END_MODULE_MAP
@@ -81,14 +80,11 @@ import {
 import {
   createDefaultVvocConfig,
   createGuardianConfig,
-  createMemoryConfig,
   parseVersionedVvocConfigText,
   parseVvocConfigText,
   renderVvocConfig,
   type GuardianConfig,
   type GuardianConfigOverrides,
-  type MemoryConfig,
-  type MemoryConfigOverrides,
   type SecretsRedactionConfig,
   type VvocConfig,
 } from "./vvoc-config.js";
@@ -199,9 +195,6 @@ export type InstallationInspection = {
   };
   guardian: {
     config?: GuardianConfig;
-  };
-  memory: {
-    config?: MemoryConfig;
   };
   secretsRedaction: {
     config?: SecretsRedactionConfig;
@@ -871,29 +864,6 @@ export async function writeGuardianConfig(
 }
 // END_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 
-// START_BLOCK_INSTALL_MEMORY_CONFIG
-export { type MemoryConfigOverrides } from "./vvoc-config.js";
-
-export async function writeMemoryConfig(
-  paths: Pick<ResolvedPaths, "vvocConfigPath">,
-  overrides: MemoryConfigOverrides,
-  options: { merge?: boolean } = {},
-): Promise<WriteResult> {
-  const currentText = await readOptionalText(paths.vvocConfigPath);
-  const currentConfig = currentText
-    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
-    : createDefaultVvocConfig();
-  const nextConfig: VvocConfig = {
-    ...currentConfig,
-    memory: options.merge
-      ? createMemoryConfig({ ...currentConfig.memory, ...overrides })
-      : createMemoryConfig(overrides),
-  };
-
-  return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
-}
-// END_BLOCK_INSTALL_MEMORY_CONFIG
-
 // START_BLOCK_INSPECT_INSTALLATION_STATE
 export async function inspectInstallation(paths: ResolvedPaths): Promise<InstallationInspection> {
   const warnings: string[] = [];
@@ -982,9 +952,6 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     },
     guardian: {
       config: vvocConfig?.guardian,
-    },
-    memory: {
-      config: vvocConfig?.memory,
     },
     secretsRedaction: {
       config: vvocConfig?.secretsRedaction,

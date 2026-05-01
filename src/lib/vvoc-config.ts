@@ -4,48 +4,46 @@
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
 //   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict and lenient config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
 //   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
-//   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY-STORE, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
+//   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   VVOC_CONFIG_VERSION - Canonical vvoc config document version.
-//   VVOC_CONFIG_SCHEMA_URL - Hosted JSON Schema URL for the canonical vvoc config.
-//   VVOC_CONFIG_SCHEMA - JSON Schema document for vvoc.json.
-//   VvocPresetAgents - Partial per-target model override map for a named preset.
-//   VvocPreset - Declarative preset shape stored in vvoc.json.
-//   VvocPresets - Top-level preset map stored in vvoc.json.
-//   GuardianConfig - Fully seeded guardian section shape.
-//   GuardianConfigOverrides - Partial guardian section override shape.
-//   MemoryConfig - Fully seeded memory section shape.
-//   MemoryConfigOverrides - Partial memory section override shape.
 //   SecretsRedactionConfig - Fully seeded secrets-redaction section shape.
 //   VvocConfig - Fully seeded canonical vvoc config document shape.
 //   ParsedVvocConfig - Parsed vvoc config plus the document schema/version found on disk.
 //   createGuardianConfig - Builds a fully seeded guardian section from optional overrides.
-//   createMemoryConfig - Builds a fully seeded memory section from optional overrides.
 //   createDefaultSecretsRedactionConfig - Builds the seeded secrets-redaction section.
 //   createDefaultVvocPresets - Builds the seeded named preset map.
 //   createDefaultVvocConfig - Builds the fully seeded canonical vvoc config document.
 //   parseGuardianConfigText - Strictly parses a guardian section JSON snippet.
 //   renderGuardianConfig - Renders a guardian section JSON snippet.
-//   parseMemoryConfigText - Strictly parses a memory section JSON snippet.
-//   renderMemoryConfig - Renders a memory section JSON snippet.
 //   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns the source version plus normalized config.
 //   parseVvocConfigText - Strictly parses the canonical vvoc config document.
 //   loadLenientVvocConfigText - Parses vvoc.json leniently for runtime fallback with warnings.
 //   renderVvocConfig - Renders canonical vvoc.json.
 //   validateVvocConfigDocument - Validates a parsed vvoc config object against the JSON Schema.
-// END_MODULE_MAP
+//   SecretsRedactionConfig - Fully seeded secrets-redaction section shape.
+//   VvocConfig - Fully seeded canonical vvoc config document shape.
+//   ParsedVvocConfig - Parsed vvoc config plus the document schema/version found on disk.
+//   createGuardianConfig - Builds a fully seeded guardian section from optional overrides.
+//   createDefaultSecretsRedactionConfig - Builds the seeded secrets-redaction section.
+//   createDefaultVvocPresets - Builds the seeded named preset map.
+//   createDefaultVvocConfig - Builds the fully seeded canonical vvoc config document.
+//   parseGuardianConfigText - Strictly parses a guardian section JSON snippet.
+//   renderGuardianConfig - Renders a guardian section JSON snippet.
+//   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns the source version plus normalized config.
+//   parseVvocConfigText - Strictly parses the canonical vvoc config document.
+//   loadLenientVvocConfigText - Parses vvoc.json leniently for runtime fallback with warnings.
+//   renderVvocConfig - Renders canonical vvoc.json.
+//   validateVvocConfigDocument - Validates a parsed vvoc config object against the JSON Schema.
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v2.0.0 - Added vvoc.json schema v2 with declarative named presets and version-aware v1 normalization.]
 //   LAST_CHANGE: [v2.3.4 - Moved built-in vvoc preset definitions and managed-name detection to a shared internal preset registry.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
-//   LAST_CHANGE: [v2.3.2 - Updated built-in vv-openai preset and seeded role assignments to use vv-gpt-5.5-xhigh model.]
 //   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
-// END_CHANGE_SUMMARY
+//   LAST_CHANGE: [v2.4.0 - Removed MemoryConfig, memory section, and all memory-related parsing. Memory v2 is a CLI command, not a config section.]
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { BUILTIN_ROLE_NAMES, parseModelSelection, type BuiltInRoleName } from "./model-roles.js";
@@ -57,10 +55,8 @@ import {
 
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
 const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
-const DEFAULT_MEMORY_SEARCH_LIMIT = 8;
 const DEFAULT_SECRETS_REDACTION_TTL_MS = 3_600_000;
 const DEFAULT_SECRETS_REDACTION_MAX_MAPPINGS = 10_000;
-
 export const VVOC_CONFIG_VERSION = 3;
 export const VVOC_CONFIG_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v3.json`;
 
@@ -102,14 +98,6 @@ export type GuardianConfig = {
 
 export type GuardianConfigOverrides = Partial<GuardianConfig>;
 
-export type MemoryConfig = {
-  enabled: boolean;
-  defaultSearchLimit: number;
-  reviewerModel?: string;
-};
-
-export type MemoryConfigOverrides = Partial<MemoryConfig>;
-
 export type SecretsRedactionKeywordRule = {
   value: string;
   category?: string;
@@ -139,7 +127,6 @@ export type VvocConfig = {
   version: number;
   roles: Record<string, string>;
   guardian: GuardianConfig;
-  memory: MemoryConfig;
   secretsRedaction: SecretsRedactionConfig;
   presets: VvocPresets;
 };
@@ -159,17 +146,6 @@ const GUARDIAN_CONFIG_SCHEMA = {
     timeoutMs: { type: "integer", minimum: 1 },
     approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
     reviewToastDurationMs: { type: "integer", minimum: 1 },
-  },
-};
-
-const MEMORY_CONFIG_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["enabled", "defaultSearchLimit"],
-  properties: {
-    enabled: { type: "boolean" },
-    defaultSearchLimit: { type: "integer", minimum: 1 },
-    reviewerModel: { type: "string", minLength: 1 },
   },
 };
 
@@ -249,7 +225,7 @@ export const VVOC_CONFIG_SCHEMA = {
   description: "Canonical vvoc configuration document.",
   type: "object",
   additionalProperties: false,
-  required: ["$schema", "version", "roles", "guardian", "memory", "secretsRedaction", "presets"],
+  required: ["$schema", "version", "roles", "guardian", "secretsRedaction", "presets"],
   properties: {
     $schema: {
       type: "string",
@@ -267,7 +243,6 @@ export const VVOC_CONFIG_SCHEMA = {
       additionalProperties: { type: "string", minLength: 1 },
     },
     guardian: GUARDIAN_CONFIG_SCHEMA,
-    memory: MEMORY_CONFIG_SCHEMA,
     secretsRedaction: SECRETS_REDACTION_CONFIG_SCHEMA,
     presets: {
       type: "object",
@@ -290,14 +265,6 @@ export function createGuardianConfig(overrides: GuardianConfigOverrides = {}): G
     approvalRiskThreshold:
       overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD,
     reviewToastDurationMs: overrides.reviewToastDurationMs ?? timeoutMs,
-  });
-}
-
-export function createMemoryConfig(overrides: MemoryConfigOverrides = {}): MemoryConfig {
-  return compactObject({
-    enabled: overrides.enabled ?? true,
-    defaultSearchLimit: overrides.defaultSearchLimit ?? DEFAULT_MEMORY_SEARCH_LIMIT,
-    reviewerModel: normalizeOptionalString(overrides.reviewerModel),
   });
 }
 
@@ -359,7 +326,6 @@ export function createDefaultVvocConfig(): VvocConfig {
     version: VVOC_CONFIG_VERSION,
     roles: createDefaultRoleAssignments(),
     guardian: createGuardianConfig(),
-    memory: createMemoryConfig(),
     secretsRedaction: createDefaultSecretsRedactionConfig(),
     presets: createDefaultVvocPresets(),
   };
@@ -407,37 +373,6 @@ export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): s
   return renderJson(createGuardianConfig(overrides));
 }
 
-export function parseMemoryConfigText(text: string, label: string): MemoryConfigOverrides {
-  const value = parseStrictJson(text, label);
-  if (!isPlainObject(value)) {
-    throw new Error(`${label}: expected a top-level object`);
-  }
-
-  assertAllowedKeys(value, ["enabled", "defaultSearchLimit", "reviewerModel"], label);
-
-  const overrides: MemoryConfigOverrides = {};
-
-  if (Object.hasOwn(value, "enabled")) {
-    if (typeof value.enabled !== "boolean") {
-      throw new Error(`${label}: enabled: expected a boolean`);
-    }
-    overrides.enabled = value.enabled;
-  }
-  if (Object.hasOwn(value, "defaultSearchLimit")) {
-    overrides.defaultSearchLimit = readPositiveInteger(
-      value.defaultSearchLimit,
-      `${label}: defaultSearchLimit`,
-    );
-  }
-  if (Object.hasOwn(value, "reviewerModel")) {
-    overrides.reviewerModel = readNonEmptyString(value.reviewerModel, `${label}: reviewerModel`);
-  }
-  return overrides;
-}
-
-export function renderMemoryConfig(overrides: MemoryConfigOverrides = {}): string {
-  return renderJson(createMemoryConfig(overrides));
-}
 // END_BLOCK_SECTION_PARSE_AND_RENDER
 
 // START_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
@@ -482,7 +417,6 @@ export function loadLenientVvocConfigText(
     version: VVOC_CONFIG_VERSION,
     roles: loadLenientRoleAssignments(value.roles, `${label}: roles`, warnings),
     guardian: loadLenientGuardianConfig(value.guardian, `${label}: guardian`, warnings),
-    memory: loadLenientMemoryConfig(value.memory, `${label}: memory`, warnings),
     secretsRedaction: loadLenientSecretsRedactionConfig(
       value.secretsRedaction,
       `${label}: secretsRedaction`,
@@ -498,7 +432,6 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     version: VVOC_CONFIG_VERSION,
     roles: createDefaultRoleAssignments(config.roles),
     guardian: createGuardianConfig(config.guardian),
-    memory: createMemoryConfig(config.memory),
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
     presets: createVvocPresets(config.presets),
   });
@@ -529,7 +462,6 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
       version: VVOC_CONFIG_VERSION,
       roles: createDefaultRoleAssignments(value.roles as VvocRoleAssignments),
       guardian: createGuardianConfig(value.guardian as GuardianConfig),
-      memory: createMemoryConfig(value.memory as MemoryConfig),
       secretsRedaction: createSecretsRedactionConfig(
         value.secretsRedaction as SecretsRedactionConfig,
       ),
@@ -660,44 +592,6 @@ function loadLenientGuardianConfig(
   }
 
   return createGuardianConfig(overrides);
-}
-
-function loadLenientMemoryConfig(value: unknown, label: string, warnings: string[]): MemoryConfig {
-  if (!isPlainObject(value)) {
-    warnings.push(`${label}: expected an object`);
-    return createMemoryConfig();
-  }
-
-  const overrides: MemoryConfigOverrides = {};
-
-  if (Object.hasOwn(value, "enabled")) {
-    if (typeof value.enabled === "boolean") {
-      overrides.enabled = value.enabled;
-    } else {
-      warnings.push(`${label}.enabled: expected a boolean`);
-    }
-  }
-  if (Object.hasOwn(value, "defaultSearchLimit")) {
-    const limit = readLenientPositiveInteger(
-      value.defaultSearchLimit,
-      `${label}.defaultSearchLimit`,
-      warnings,
-    );
-    if (limit !== undefined) {
-      overrides.defaultSearchLimit = limit;
-    }
-  }
-  if (Object.hasOwn(value, "reviewerModel")) {
-    const reviewerModel = readLenientOptionalString(
-      value.reviewerModel,
-      `${label}.reviewerModel`,
-      warnings,
-    );
-    if (reviewerModel !== undefined) {
-      overrides.reviewerModel = reviewerModel;
-    }
-  }
-  return createMemoryConfig(overrides);
 }
 
 function loadLenientSecretsRedactionConfig(

@@ -49,7 +49,6 @@ describe("built-in roles", () => {
       },
       managedAgents: {
         guardian: "fast",
-        "memory-reviewer": "fast",
         "vv-controller": "default",
         enhancer: "smart",
         "vv-analyst": "smart",

@@ -217,13 +217,12 @@ describe("managed agent prompts", () => {
       const globalAgentsDir = getVvocAgentsDir(getGlobalVvocDir());
       await mkdir(globalAgentsDir, { recursive: true });
       await writeFile(
-        getManagedAgentPromptPath(globalAgentsDir, "memory-reviewer"),
-        "Global memory reviewer prompt.\n",
-        "utf8",
+        getManagedAgentPromptPath(globalAgentsDir, "guardian"),
+        "Global guardian prompt.\n",
       );
 
-      expect(await loadManagedAgentPromptText(projectDir, "memory-reviewer")).toBe(
-        "Global memory reviewer prompt.\n",
+      expect(await loadManagedAgentPromptText(projectDir, "guardian")).toBe(
+        "Global guardian prompt.\n",
       );
     } finally {
       if (previousConfigHome === undefined) {

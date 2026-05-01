@@ -45,10 +45,6 @@ test("validateVvocConfigContent - pre-role schema versions fail as unsupported",
           approvalRiskThreshold: 80,
           reviewToastDurationMs: 90000,
         },
-        memory: {
-          enabled: true,
-          defaultSearchLimit: 8,
-        },
         secretsRedaction: {
           enabled: true,
           secret: "${VVOC_SECRET}",
@@ -160,10 +156,6 @@ test("validateVvocConfigContent - missing required section fails", () => {
           approvalRiskThreshold: 80,
           reviewToastDurationMs: 90000,
         },
-        memory: {
-          enabled: true,
-          defaultSearchLimit: 8,
-        },
         presets: {
           openai: {
             agents: {
@@ -181,28 +173,6 @@ test("validateVvocConfigContent - missing required section fails", () => {
   expect(result.valid).toBe(false);
   expect(
     result.errors.some((error) => error.includes('missing required property "secretsRedaction"')),
-  ).toBe(true);
-});
-
-test("validateVvocConfigContent - invalid field type fails", () => {
-  const result = validateVvocConfigContent(
-    JSON.stringify(
-      {
-        ...createDefaultVvocConfig(),
-        memory: {
-          enabled: "yes",
-          defaultSearchLimit: 8,
-        },
-      },
-      null,
-      2,
-    ),
-    FP,
-  );
-
-  expect(result.valid).toBe(false);
-  expect(
-    result.errors.some((error) => error.includes("/memory/enabled") && error.includes("boolean")),
   ).toBe(true);
 });
 

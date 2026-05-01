@@ -131,10 +131,10 @@ describe("SystemContextInjectionPlugin", () => {
 
   test("skips plugin-managed subagents", async () => {
     const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("memory-reviewer");
+    const output = createOutput("guardian");
 
     await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "memory-reviewer" } as never,
+      { sessionID: "session-1", agent: "guardian" } as never,
       output as never,
     );
 

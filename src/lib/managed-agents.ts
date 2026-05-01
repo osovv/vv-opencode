@@ -4,7 +4,7 @@
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
 //   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-paths.ts]
-//   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN, M-PLUGIN-MEMORY]
+//   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -13,7 +13,7 @@
 //   ManagedSubagentName - Canonical vvoc-managed subagent names.
 //   ManagedPrimaryAgentName - Canonical vvoc-managed primary agent names.
 //   ManagedOpenCodeAgentName - Canonical vvoc-managed OpenCode agent registration names.
-//   ManagedAgentPromptName - Canonical vvoc-managed agent prompt names including Guardian and memory-reviewer.
+//   ManagedAgentPromptName - Canonical vvoc-managed agent prompt names including Guardian.
 //   ManagedSubagentDefinition - Metadata used to register a managed subagent in OpenCode config.
 //   ManagedPrimaryAgentDefinition - Metadata used to register a managed primary agent in OpenCode config.
 //   MANAGED_SUBAGENT_NAMES - Ordered managed subagent names.
@@ -61,11 +61,7 @@ export const MANAGED_OPENCODE_AGENT_NAMES = [
 ] as const;
 
 export type ManagedOpenCodeAgentName = (typeof MANAGED_OPENCODE_AGENT_NAMES)[number];
-export const MANAGED_AGENT_PROMPT_NAMES = [
-  "guardian",
-  "memory-reviewer",
-  ...MANAGED_OPENCODE_AGENT_NAMES,
-] as const;
+export const MANAGED_AGENT_PROMPT_NAMES = ["guardian", ...MANAGED_OPENCODE_AGENT_NAMES] as const;
 
 export type ManagedAgentPromptName = (typeof MANAGED_AGENT_PROMPT_NAMES)[number];
 
@@ -189,7 +185,6 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   `${ManagedAgentPromptName}.md`
 >([
   ["guardian", "guardian.md"],
-  ["memory-reviewer", "memory-reviewer.md"],
   ["vv-controller", "vv-controller.md"],
   ["enhancer", "enhancer.md"],
   ["vv-analyst", "vv-analyst.md"],

@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.29.0/schemas/vvoc/v3.json",
+  "$id": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.29.1/schemas/vvoc/v3.json",
   "title": "vvoc config",
   "description": "Canonical vvoc configuration document.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "version", "roles", "guardian", "memory", "secretsRedaction", "presets"],
+  "required": ["$schema", "version", "roles", "guardian", "secretsRedaction", "presets"],
   "properties": {
     "$schema": {
       "type": "string",
@@ -38,17 +38,6 @@
         "timeoutMs": { "type": "integer", "minimum": 1 },
         "approvalRiskThreshold": { "type": "integer", "minimum": 0, "maximum": 100 },
         "reviewToastDurationMs": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "memory": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "defaultSearchLimit"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "defaultSearchLimit": { "type": "integer", "minimum": 1 },
-        "reviewerModel": { "type": "string", "minLength": 1 },
-        "reviewerVariant": { "type": "string", "minLength": 1 }
       }
     },
     "secretsRedaction": {

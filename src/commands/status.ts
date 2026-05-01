@@ -59,9 +59,6 @@ export default defineCommand({
       `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
     );
     console.log(
-      `Memory enabled: ${inspection.memory.config ? (inspection.memory.config.enabled ? "yes" : "no") : "unknown"}`,
-    );
-    console.log(
       `Secrets Redaction enabled: ${inspection.secretsRedaction.config ? (inspection.secretsRedaction.config.enabled ? "yes" : "no") : "unknown"}`,
     );
     console.log("Roles:");

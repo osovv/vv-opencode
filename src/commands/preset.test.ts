@@ -196,10 +196,6 @@ describe("applyPreset", () => {
           model: "anthropic/claude-sonnet-4-5",
           timeoutMs: 120_000,
         },
-        memory: {
-          ...defaultConfig.memory,
-          reviewerModel: "zai-coding-plan/glm-4.5-airx",
-        },
         secretsRedaction: {
           ...defaultConfig.secretsRedaction,
           debug: true,
@@ -230,7 +226,6 @@ describe("applyPreset", () => {
       const after = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
 
       expect(before.guardian).toEqual(after.guardian);
-      expect(before.memory).toEqual(after.memory);
       expect(before.secretsRedaction).toEqual(after.secretsRedaction);
       expect(before.presets).toEqual(after.presets);
       expect(after.presets["vv-openai"].description).toBe(

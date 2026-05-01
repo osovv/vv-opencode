@@ -584,12 +584,6 @@ describe("canonical vvoc config helpers", () => {
         JSON.stringify(
           {
             ...createDefaultVvocConfig(),
-            memory: {
-              ...createDefaultVvocConfig().memory,
-              enabled: false,
-              defaultSearchLimit: 12,
-              reviewerModel: "openai/gpt-5.4-mini",
-            },
             guardian: {
               ...createDefaultVvocConfig().guardian,
               model: "openai/gpt-5.4",
@@ -632,9 +626,6 @@ describe("canonical vvoc config helpers", () => {
       expect(syncResult.action).toBe("updated");
 
       const synced = await readVvocConfig(paths);
-      expect(synced?.memory.enabled).toBe(false);
-      expect(synced?.memory.defaultSearchLimit).toBe(12);
-      expect(synced?.memory.reviewerModel).toBe("openai/gpt-5.4-mini");
       expect(synced?.guardian.model).toBe("openai/gpt-5.4");
       expect(synced?.guardian.timeoutMs).toBe(12_345);
       expect(synced?.roles.custom).toBe("openai/gpt-5.4-mini");
@@ -673,10 +664,6 @@ describe("canonical vvoc config helpers", () => {
               approvalRiskThreshold: 70,
               reviewToastDurationMs: 54321,
             },
-            memory: {
-              enabled: false,
-              defaultSearchLimit: 12,
-            },
             secretsRedaction: createDefaultVvocConfig().secretsRedaction,
             presets: createDefaultVvocConfig().presets,
           },
@@ -705,7 +692,7 @@ describe("managed prompt install", () => {
       });
 
       const promptResults = await installManagedAgentPrompts(paths, { force: true });
-      expect(promptResults).toHaveLength(10);
+      expect(promptResults).toHaveLength(9);
       const planDirResult = await ensureManagedPlanDirectory(paths);
       expect(planDirResult.action).toBe("created");
       const repeatedPlanDirResult = await ensureManagedPlanDirectory(paths);

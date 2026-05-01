@@ -65,7 +65,6 @@ describe("init scenarios", () => {
       expect(existsSync(paths.opencodeConfigPath)).toBe(true);
       expect(existsSync(paths.vvocConfigPath)).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
-      expect(existsSync(paths.managedAgentsDirPath + "/memory-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-controller.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/enhancer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-analyst.md")).toBe(true);
