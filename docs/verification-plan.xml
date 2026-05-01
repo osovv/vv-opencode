@@ -267,6 +267,25 @@
       <phase-follow-up>Add snapshot coverage for rendered OpenCode config that includes all managed role-reference fields in one fixture.</phase-follow-up>
     </V-M-CLI-CONFIG>
 
+    <V-M-CLI-AGENT-MODELS MODULE="M-CLI-AGENT-MODELS" PRIORITY="medium">
+      <test-files />
+      <module-checks>
+        <check-1>bun x tsc --noEmit</check-1>
+        <check-2>bun run lint</check-2>
+        <check-3>bun run fmt:check</check-3>
+        <check-4>bun run build</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">SPECIAL_AGENT_NAMES exposes Guardian-style model target IDs.</scenario-1>
+        <scenario-2 kind="success">OPENCODE_DEFAULT_MODEL_TARGETS lists top-level OpenCode model field targets.</scenario-2>
+        <scenario-3 kind="success">CONFIGURABLE_OPENCODE_AGENTS lists built-in agent override IDs.</scenario-3>
+        <scenario-4 kind="success">isSpecialAgentName, parseModelArg, normalizeModelTargetOverride, and formatAgentModel handle valid inputs deterministically.</scenario-4>
+        <scenario-5 kind="failure">Malformed model arguments and unsupported target names fail with clear errors.</scenario-5>
+      </scenarios>
+      <required-log-markers />
+      <wave-follow-up>Add a dedicated test file (src/lib/agent-models.test.ts) covering exported constants, type guards, model parsing, and model-formatting helpers.</wave-follow-up>
+    </V-M-CLI-AGENT-MODELS>
+
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
       <test-files>
         <file>src/commands/completion.test.ts</file>

@@ -21,7 +21,7 @@
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
       <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, managed command definitions, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
       <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/vvoc-preset-registry.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
-      <depends>M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS</depends>
+      <depends>M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS, M-CLI-AGENT-MODELS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
@@ -42,6 +42,22 @@
         <fn-loadManagedAgentPromptTemplate PURPOSE="Load a bundled prompt template for a managed vvoc agent." />
       </annotations>
     </M-CLI-MANAGED-AGENTS>
+
+    <M-CLI-AGENT-MODELS NAME="AgentModels" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Define supported vvoc model target IDs and shared model override validation helpers.</purpose>
+      <path>src/lib/agent-models.ts</path>
+      <depends>M-CLI-MANAGED-AGENTS</depends>
+      <verification-ref>V-M-CLI-AGENT-MODELS</verification-ref>
+      <annotations>
+        <const-SPECIAL_AGENT_NAMES PURPOSE="Target IDs that use provider/model syntax in canonical vvoc config." />
+        <const-OPENCODE_DEFAULT_MODEL_TARGETS PURPOSE="Target IDs that map to top-level OpenCode model fields." />
+        <const-CONFIGURABLE_OPENCODE_AGENTS PURPOSE="Built-in OpenCode agent IDs that vvoc can map to model fields." />
+        <fn-isSpecialAgentName PURPOSE="Checks whether a target uses Guardian-style model syntax." />
+        <fn-parseModelArg PURPOSE="Validates provider/model syntax." />
+        <fn-normalizeModelTargetOverride PURPOSE="Validates and canonicalizes a stored model override string for any supported target." />
+        <fn-formatAgentModel PURPOSE="Formats a model string for CLI output." />
+      </annotations>
+    </M-CLI-AGENT-MODELS>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, role, preset, patch-provider, completion, guardian config, and upgrade commands for the role-based model system.</purpose>
@@ -306,6 +322,7 @@
     <CrossLink from="M-MODEL-ROLES" to="M-CLI-PRESET" relation="used-by" />
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG" to="M-CLI-MANAGED-AGENTS" relation="uses" />
+    <CrossLink from="M-CLI-CONFIG" to="M-CLI-AGENT-MODELS" relation="uses" />
     <CrossLink from="M-CLI-PRESET" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-ROLE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG-VALIDATE" to="M-CLI-CONFIG" relation="uses" />
