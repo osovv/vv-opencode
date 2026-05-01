@@ -75,7 +75,6 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/investigator.md")).toBe(true);
       expect(existsSync(paths.managedPlansDirPath)).toBe(true);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
-      expect(existsSync(join(tmpDir, ".vvoc", "memory.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");

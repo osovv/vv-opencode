@@ -38,7 +38,7 @@ import {
   type ManagedOpenCodeAgentName,
 } from "./managed-agents.js";
 
-export const SPECIAL_AGENT_NAMES = ["guardian", "memory-reviewer"] as const;
+export const SPECIAL_AGENT_NAMES = ["guardian"] as const;
 export type SpecialAgentName = (typeof SPECIAL_AGENT_NAMES)[number];
 
 export const OPENCODE_DEFAULT_MODEL_TARGETS = ["default", "small-model"] as const;
