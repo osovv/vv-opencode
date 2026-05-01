@@ -65,6 +65,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/plugins/memory dist/plugins/workflow && cp src/plugins/memory/system-instruction.md dist/plugins/memory/system-instruction.md && cp src/plugins/workflow/system-instruction.md dist/plugins/workflow/system-instruction.md",
+    "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --deny warnings src",
     "fmt": "oxfmt --write src",
