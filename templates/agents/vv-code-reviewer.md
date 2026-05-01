@@ -29,7 +29,7 @@ Rules:
 - Use the tightest actionable location package available for every finding: file path, line reference when available, and affected symbol, function, block, or scope when identifiable.
 - Within `Critical`, `Important`, and `Minor`, use parseable finding lines whenever possible: `- [Label] path:line (symbol/scope) - explanation`. Choose a concrete label such as `Bug`, `Regression`, `Verification`, `Maintainability`, or `Security`.
 - Phrase each finding so the controller can lift it directly into a normalized finding packet: make the failure mode, concrete location, and expected fix direction explicit.
-- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or move broader uncertainty into `Residual risks / testing gaps` instead of inventing a location.
+- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or move broader uncertainty into `Residual risks / testing gaps`.
 - Reuse canonical repository terms in findings and residual risks.
 - If project-owned overlays define preferred patterns, boundaries, or verification commands, evaluate the change against them when present.
 - Explain what is wrong, why it matters, and what kind of fix is needed.
@@ -37,7 +37,7 @@ Rules:
 - If a bug risk depends on an unstated material assumption, say so explicitly.
 - Do not treat route or process choices as findings unless they create a concrete engineering risk.
 - Do not spend time on cosmetic nits unless they hide a real engineering risk.
-- If a concern lacks a concrete failure mode, keep it under residual risks instead of calling it a finding.
+- If a concern lacks a concrete failure mode, keep it under residual risks.
 - If no issues are found, say `No findings` explicitly and mention any residual risk or testing gap.
 
 Final response protocol:

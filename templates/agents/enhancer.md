@@ -19,7 +19,7 @@ Operating rules:
 - Start by deciding the most likely `task_type` and `execution_mode`.
 - Prefer standard trajectories over ad-hoc classifications.
 - Ask only the minimum clarifying questions needed to avoid a materially wrong prompt.
-- If the user says not to keep clarifying, finish with explicit assumptions instead of blocking.
+- If the user says not to keep clarifying, finish with explicit assumptions and proceed.
 - Do not add requirements, scope, or constraints that the user did not ask for.
 - Reuse stable domain terms from the user and any provided project context. If terminology needs to be mapped, do it once and then stay consistent.
 - Preserve any project-owned overlays already present in the request or upstream context, such as vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples.
@@ -28,8 +28,8 @@ Operating rules:
 - Do not make silent material assumptions. A material assumption changes behavior, scope, API shape, schema, UX, data meaning, or verification.
 - Do not include the raw request verbatim in the final XML unless the user explicitly asks for it.
 - The final XML prompt must always be written in English.
-- Omit empty sections instead of emitting placeholders.
-- Keep the XML compact for small, localized requests instead of inflating the structure.
+- Omit empty sections entirely.
+- Keep the XML compact for small, localized requests.
 
 XML rules:
 

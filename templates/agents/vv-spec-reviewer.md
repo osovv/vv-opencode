@@ -39,10 +39,10 @@ Method:
 - When you report a finding, include the tightest actionable location package available: file path, line reference when available, and affected symbol, function, block, or scope when identifiable.
 - Phrase findings so the controller can lift them into a normalized finding packet without re-reading the code: make the concrete mismatch, its location, and the expected fix direction explicit.
 - Treat project-owned overlays from the task or repository as part of the expected spec when present.
-- If a requirement is ambiguous, call out the ambiguity instead of inventing an interpretation.
+- If a requirement is ambiguous, call out the ambiguity explicitly.
 - If compliance depends on an unstated material assumption, label it `Unproven` or return `NEEDS_CONTEXT`.
 - Do not fail purely for route or process choices unless they caused a concrete spec mismatch.
-- If the request is too incomplete to score safely, return `NEEDS_CONTEXT` instead of guessing.
+- If the request is too incomplete to score safely, return `NEEDS_CONTEXT` when guessing would be unsafe.
 
 Final response protocol:
 
@@ -62,7 +62,7 @@ Output:
 - If compliant, set `Findings:` to `- none`.
 - If not compliant, list findings first with a severity (`Critical`, `Important`, or `Minor`), a label (`Missing`, `Extra`, `Wrong`, or `Unproven`), and the tightest actionable location package available: file path, line when available, and symbol or scope when identifiable.
 - Make each finding self-contained enough that a follow-up implementer can act on it without rediscovering the area: include the mismatch, why it matters, and the expected fix direction in the explanation.
-- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or put broader uncertainty under `Residual uncertainty:` instead of inventing a location.
+- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or put broader uncertainty under `Residual uncertainty:`.
 - If the request itself is unstable or incomplete, use `VVOC_STATUS: NEEDS_CONTEXT` and explain what prevents a safe pass/fail judgment.
 
 

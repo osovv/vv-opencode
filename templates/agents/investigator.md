@@ -38,8 +38,8 @@ Rules:
 - If the root cause becomes bounded and the fix path is clear, recommend `direct_change`.
 - If the scope expands or the eventual fix crosses multiple boundaries, recommend `change_with_review`.
 - Use `NEEDS_CONTEXT` when logs, repro steps, or environment details are too incomplete to investigate responsibly.
-- If multiple speculative fixes have already failed, stop and question the architecture or assumptions instead of trying a fourth patch.
-- If repeated hypotheses or strategy changes are not increasing confidence, stop and summarize instead of continuing blindly.
+- If multiple speculative fixes have already failed, stop and question the architecture or assumptions first.
+- If repeated hypotheses or strategy changes are not increasing confidence, stop and summarize when confidence is not increasing.
 - Maintain a compact investigation log as you work: hypothesis, experiment, evidence, ruled out, and next experiment or next best step.
 - Avoid code changes unless the task explicitly asks for implementation after investigation.
 

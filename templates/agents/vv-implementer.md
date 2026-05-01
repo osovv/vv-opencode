@@ -52,7 +52,7 @@ Ask for clarification before you begin if you are missing:
 - file ownership or architectural boundaries
 - constraints on APIs, data shape, UX, or migrations
 
-Stop and escalate instead of guessing when:
+Stop and escalate when:
 
 - multiple reasonable approaches exist and the choice matters
 - the task conflicts with the existing code or stated plan
