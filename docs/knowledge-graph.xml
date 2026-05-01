@@ -33,7 +33,7 @@
     </M-CLI-CONFIG>
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled guardian, memory-reviewer, vv-controller, enhancer, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
+      <purpose>Define bundled guardian, vv-controller, enhancer, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
@@ -124,27 +124,6 @@
       </annotations>
     </M-PLUGIN-HASHLINE-EDIT>
 
-    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Store explicit memory under the vvoc XDG data root, keep shared scope global across projects, resolve scopes, and provide lexical ranking for search.</purpose>
-      <path>src/plugins/memory-store.ts</path>
-      <depends>M-CLI-CONFIG</depends>
-      <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
-      <annotations>
-        <fn-loadMemoryRuntimeConfig PURPOSE="Load canonical vvoc memory settings from vvoc.json." />
-        <fn-putMemory PURPOSE="Create a scoped memory entry in the vvoc XDG data root." />
-        <fn-searchMemories PURPOSE="Return ranked lexical matches across scoped entries." />
-      </annotations>
-    </M-PLUGIN-MEMORY-STORE>
-
-    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Add explicit memory tools to OpenCode and register the `memory-reviewer` subagent using built-in role-driven model selection.</purpose>
-      <path>src/plugins/memory/index.ts + src/plugins/memory/system-instruction.md + templates/agents/memory-reviewer.md</path>
-      <depends>M-PLUGIN-MEMORY-STORE, M-MODEL-ROLES</depends>
-      <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
-      <annotations>
-        <export-MemoryPlugin PURPOSE="Register memory tools and the report-only reviewer subagent." />
-      </annotations>
-    </M-PLUGIN-MEMORY>
 
     <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" STATUS="implemented">
       <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions, including vv-controller, while skipping known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, and vv-code-reviewer so main-session behavior can be steered globally.</purpose>
@@ -323,7 +302,6 @@
     <CrossLink from="M-MODEL-ROLES" to="M-CLI-CONFIG" relation="used-by" />
     <CrossLink from="M-MODEL-ROLES" to="M-PLUGIN-MODEL-ROLES" relation="used-by" />
     <CrossLink from="M-MODEL-ROLES" to="M-PLUGIN-GUARDIAN" relation="used-by" />
-    <CrossLink from="M-MODEL-ROLES" to="M-PLUGIN-MEMORY" relation="used-by" />
     <CrossLink from="M-MODEL-ROLES" to="M-CLI-ROLE" relation="used-by" />
     <CrossLink from="M-MODEL-ROLES" to="M-CLI-PRESET" relation="used-by" />
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
@@ -338,7 +316,6 @@
     <CrossLink from="M-CLI-UPGRADE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-MODEL-ROLES" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-GUARDIAN" to="M-CLI-CONFIG" relation="uses" />
-    <CrossLink from="M-PLUGIN-MEMORY" to="M-PLUGIN-MEMORY-STORE" relation="uses" />
     <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-WORKFLOW-STATE" to="M-WORKFLOW-PROTOCOL" relation="uses" />
     <CrossLink from="M-WORKFLOW-TRANSITIONS" to="M-WORKFLOW-PROTOCOL" relation="uses" />

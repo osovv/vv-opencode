@@ -29,24 +29,6 @@
       <Priority>high</Priority>
       <RelatedFlows>DF-CONFIG-SYNC</RelatedFlows>
     </UC-002>
-    <UC-003>
-      <Actor>User</Actor>
-      <Action>Uses `memory_put`, `memory_search`, `memory_get`, `memory_update`, `memory_delete`, or `memory_list` inside OpenCode.</Action>
-      <Goal>To persist explicit durable context in the vvoc data root under `$XDG_DATA_HOME/vvoc/`, with `shared` scope visible across projects and local scopes isolated per project.</Goal>
-      <Preconditions>The package is enabled in OpenCode and memory is not disabled in canonical `vvoc.json`.</Preconditions>
-      <AcceptanceCriteria>Session, branch, and project entries are project-local, shared entries are visible across projects, and stored memory is never silently injected into prompts.</AcceptanceCriteria>
-      <Priority>high</Priority>
-      <RelatedFlows>DF-MEMORY-ACCESS</RelatedFlows>
-    </UC-003>
-    <UC-004>
-      <Actor>User</Actor>
-      <Action>Invokes the bundled `memory-reviewer` subagent.</Action>
-      <Goal>To audit stored memory and get keep/update/merge/delete suggestions without modifying entries.</Goal>
-      <Preconditions>The package is enabled in OpenCode, explicit memory exists in scope, and the built-in `fast` role resolves to a concrete reviewer-capable model.</Preconditions>
-      <AcceptanceCriteria>The reviewer can only read memory tools, resolves its runtime model through the built-in role system, and returns a report-only audit.</AcceptanceCriteria>
-      <Priority>medium</Priority>
-      <RelatedFlows>DF-MEMORY-REVIEW</RelatedFlows>
-    </UC-004>
     <UC-005>
       <Actor>User</Actor>
       <Action>Sends chat content or tool payloads that contain secrets while `SecretsRedactionPlugin` is active.</Action>
@@ -140,13 +122,11 @@
   </UseCases>
 
   <NonGoals>
-    <item-1>No automatic memory injection into prompts.</item-1>
-    <item-2>No vector store, embeddings, or indexed retrieval in v1 memory.</item-2>
     <item-3>No backward compatibility or migration path for pre-role vvoc schemas once the role-based schema lands.</item-3>
     <item-4>No target-based model override UX after the role-based cutover.</item-4>
     <item-5>No semantic task grouping or embedding-based work-item identity in workflow v1.</item-5>
     <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
-    <item-7>No workflow tracking for `investigator`, `guardian`, `memory-reviewer`, `enhancer`, `vv-analyst`, or `vv-architect` in v1.</item-7>
+    <item-7>No workflow tracking for `investigator`, `guardian`, `enhancer`, `vv-analyst`, or `vv-architect` in v1.</item-7>
   </NonGoals>
 
   <Constraints>
@@ -154,7 +134,6 @@
     <constraint-2>vvoc-managed settings must live in the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</constraint-2>
     <constraint-3>Persisted vvoc data must live under `$XDG_DATA_HOME/vvoc/`, not inside the OpenCode config tree.</constraint-3>
     <constraint-4>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-4>
-    <constraint-5>Memory must stay explicit-only. Stored entries must not be injected into prompts automatically.</constraint-5>
     <constraint-6>Generated canonical vvoc config must be fully seeded and versioned by schema rather than split across multiple CLI-managed files.</constraint-6>
     <constraint-7>Semantic role assignments must live in canonical global vvoc config, while OpenCode config stores `vv-role:*` references that are resolved at runtime.</constraint-7>
     <constraint-8>Role resolution must fail loudly for unknown roles rather than silently falling back to a provider default.</constraint-8>
@@ -170,8 +149,7 @@
   <Risks>
     <risk-1>Shared workflows may reference custom roles that are not assigned on another machine, causing startup-time resolution failures.</risk-1>
     <risk-2>Unsafe rewrites of user-maintained config could damage trust in the CLI.</risk-2>
-    <risk-3>The file-based memory store performs full scans and may degrade as the number of entries grows.</risk-3>
-    <risk-4>Guardian and Memory depend on OpenCode plugin and SDK surface area that may evolve over time.</risk-4>
+    <risk-4>The plugins depend on OpenCode plugin and SDK surface area that may evolve over time.</risk-4>
     <risk-5>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` may be required for certain role assignments, so preset usability depends on explicit provider patch setup when those aliases are not native.</risk-5>
     <risk-6>LLM may not reliably follow strict top-block protocol formatting, causing false-positive protocol errors that block legitimate workflow progress.</risk-6>
     <risk-7>Rename of tracked subagents from `implementer/spec-reviewer/code-reviewer` to `vv-implementer/vv-spec-reviewer/vv-code-reviewer` is a breaking change for any external config or prompt overrides that reference the old names.</risk-7>

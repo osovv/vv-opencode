@@ -1,9 +1,7 @@
 <DevelopmentPlan VERSION="0.8.0">
   <ArchitectureNotes>
-    <objective>Package portable OpenCode workflow plugins while keeping vvoc-owned config and memory data isolated from native OpenCode config, replace target-based model overrides with a semantic role system that resolves `vv-role:*` references at runtime, install `vv-controller` as the managed default primary agent, and introduce an explicit work-item protocol with deterministic workflow enforcement for tracked subagents.</objective>
     <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced. Do not track all subagents in the workflow state machine in v1. Do not persist workflow state across process restarts in v1.</non-goal>
     <risk-1>Config file mutation must stay conservative because users may already have hand-maintained JSONC with comments.</risk-1>
-    <risk-2>The file-based memory store does full scans and should stay explicit, simple, and easy to reason about until scale requires indexing.</risk-2>
     <risk-3>Shared workflows may reference custom roles that are not assigned on another machine, so runtime role resolution must fail loudly and point at the offending config field.</risk-3>
     <risk-4>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` remain a separate lower-level mechanism, so the role system must compose with provider patch commands without silently requiring them.</risk-4>
     <risk-5>LLM may not reliably produce strict top-block protocol fields, so the parser must be tolerant of minor formatting variations while remaining strict on field presence and value validity.</risk-5>
@@ -225,73 +223,6 @@
       </notes>
     </M-PLUGIN-GUARDIAN>
 
-    <M-PLUGIN-MEMORY-STORE NAME="MemoryStore" TYPE="UTILITY" LAYER="0" ORDER="6" STATUS="implemented">
-      <contract>
-        <purpose>Persist explicit memory entries in the vvoc XDG data root, keep shared scope global across projects, support scope-aware CRUD, and rank lexical search results while loading only non-model memory settings from canonical vvoc config.</purpose>
-        <inputs>
-          <param name="MemoryRuntimeConfig" type="object" />
-          <param name="MemoryEntry or query/filter inputs" type="object" />
-        </inputs>
-        <outputs>
-          <param name="MemoryEntry | MemoryEntry[] | MemoryRuntimeConfig" type="object" />
-        </outputs>
-        <errors>
-          <error code="INVALID_MEMORY_CONFIG" />
-          <error code="INVALID_MEMORY_TEXT" />
-        </errors>
-      </contract>
-      <interface>
-        <export-loadMemoryRuntimeConfig PURPOSE="Load vvoc memory settings from canonical global vvoc.json." />
-        <export-putMemory PURPOSE="Create a scoped memory entry in the vvoc XDG data root." />
-        <export-searchMemories PURPOSE="Return ranked lexical matches across relevant memory scopes." />
-      </interface>
-      <depends>M-CLI-CONFIG</depends>
-      <target>
-        <source>src/plugins/memory-store.ts</source>
-        <tests>src/plugins/memory.test.ts</tests>
-      </target>
-      <observability>
-        <log-prefix>[memory-store]</log-prefix>
-        <critical-block>BLOCK_MEMORY_SEARCH</critical-block>
-      </observability>
-      <verification-ref>V-M-PLUGIN-MEMORY-STORE</verification-ref>
-      <notes>
-        <note-1>Memory remains explicit-only. The store must not inject entries into prompts or system context.</note-1>
-      </notes>
-    </M-PLUGIN-MEMORY-STORE>
-
-    <M-PLUGIN-MEMORY NAME="MemoryPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="7" STATUS="implemented">
-      <contract>
-        <purpose>Add explicit memory tools to OpenCode, register a report-only `memory-reviewer` subagent whose runtime model resolves from the built-in `fast` role, and inject a short system reminder that encourages proactive memory tool usage without loading stored entries.</purpose>
-        <inputs>
-          <param name="PluginInput" type="@opencode-ai/plugin input" />
-        </inputs>
-        <outputs>
-          <param name="Hooks" type="OpenCode plugin hooks with custom tools and config mutation" />
-        </outputs>
-        <errors>
-          <error code="MEMORY_DISABLED" />
-          <error code="MEMORY_NOT_FOUND" />
-          <error code="UNKNOWN_ROLE" />
-        </errors>
-      </contract>
-      <interface>
-        <export-MemoryPlugin PURPOSE="Register explicit memory tools and the `memory-reviewer` subagent with role-driven model selection." />
-      </interface>
-      <depends>M-PLUGIN-MEMORY-STORE, M-MODEL-ROLES</depends>
-      <target>
-        <source>src/plugins/memory/index.ts</source>
-        <tests>src/plugins/memory.test.ts</tests>
-      </target>
-      <observability>
-        <log-prefix>[memory]</log-prefix>
-        <critical-block>BLOCK_REGISTER_MEMORY_TOOLS</critical-block>
-      </observability>
-      <verification-ref>V-M-PLUGIN-MEMORY</verification-ref>
-      <notes>
-        <note-1>The `memory` section no longer owns reviewer model fields; reviewer selection comes from the built-in role system.</note-1>
-      </notes>
-    </M-PLUGIN-MEMORY>
 
     <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="8" STATUS="implemented">
       <contract>
@@ -835,19 +766,6 @@
       <step-3>Run Guardian, interpret risk, and auto-reply only when below threshold.</step-3>
       <evidence>Guardian logs, toasts, and permission reply behavior inside OpenCode.</evidence>
     </DF-GUARDIAN-REVIEW>
-    <DF-MEMORY-ACCESS NAME="MemoryAccess" TRIGGER="memory_* tool call">
-      <step-0>Before model turns, the plugin appends a short system reminder that explicit memory tools exist, without injecting stored memory entries.</step-0>
-      <step-1>Load vvoc memory settings from `$XDG_CONFIG_HOME/vvoc/vvoc.json`.</step-1>
-      <step-2>Resolve relevant scopes from session id, git branch, project, or shared key.</step-2>
-      <step-3>Read or mutate session, branch, and project entries under `$XDG_DATA_HOME/vvoc/projects/&lt;project-id&gt;/memory/`, and shared entries under `$XDG_DATA_HOME/vvoc/memory/shared/&lt;namespace&gt;/`.</step-3>
-      <evidence>Correct file layout, deterministic CRUD/search behavior, and no automatic prompt injection.</evidence>
-    </DF-MEMORY-ACCESS>
-    <DF-MEMORY-REVIEW NAME="MemoryReview" TRIGGER="@memory-reviewer invocation">
-      <step-1>Resolve the built-in `fast` role and register the reviewer subagent through plugin config mutation.</step-1>
-      <step-2>The reviewer inspects memory with `memory_list`, `memory_get`, and `memory_search` only.</step-2>
-      <step-3>The reviewer returns a keep/update/merge/delete report without modifying entries.</step-3>
-      <evidence>Bundled `memory-reviewer` agent with read-only memory tooling and built-in role-driven model selection.</evidence>
-    </DF-MEMORY-REVIEW>
     <DF-SYSTEM-CONTEXT NAME="SystemContextInjection" TRIGGER="chat.message for eligible primary agents">
       <step-1>Build the known-subagent set from built-ins, plugin-managed agents, and config-defined subagents.</step-1>
       <step-2>Inspect the resolved agent name on each outgoing chat message.</step-2>
@@ -959,11 +877,6 @@
       <goal>Move the existing standalone Guardian plugin into the repository and export it from the package.</goal>
       <step-1 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Port Guardian and move runtime config to the canonical vvoc.json path.</step-1>
     </Phase-2>
-    <Phase-3 name="Explicit Memory" status="done">
-      <goal>Add explicit persistent memory, store it in the vvoc XDG data root, and expose a report-only reviewer subagent.</goal>
-      <step-1 module="M-PLUGIN-MEMORY-STORE" status="done" verification="V-M-PLUGIN-MEMORY-STORE">Implement file-based scoped memory storage and lexical search.</step-1>
-      <step-2 module="M-PLUGIN-MEMORY" status="done" verification="V-M-PLUGIN-MEMORY">Register memory tools and the `memory-reviewer` subagent via OpenCode plugin hooks.</step-2>
-    </Phase-3>
     <Phase-4 name="CLI Enhancement Suite" status="done">
       <goal>Add preset/configuration helpers and developer-experience commands to improve setup, inspection, and switching flows.</goal>
       <step-1 module="M-CLI-CONFIG-VALIDATE" status="implemented" verification="V-M-CLI-CONFIG-VALIDATE">Validate canonical vvoc.json with human-readable schema errors.</step-1>
@@ -985,7 +898,6 @@
       <step-2 module="M-CLI-CONFIG" status="implemented" verification="V-M-CLI-CONFIG">Upgrade canonical vvoc config to schema v3, seed built-in roles, remove target-based config fields, and keep OpenCode root defaults plus built-in `explore` and managed agents pinned to `vv-role:*` references.</step-2>
       <step-3 module="M-PLUGIN-MODEL-ROLES" status="implemented" verification="V-M-PLUGIN-MODEL-ROLES">Resolve role references at startup for supported OpenCode config fields and fail loudly for unknown roles.</step-3>
       <step-4 module="M-PLUGIN-GUARDIAN" status="implemented" verification="V-M-PLUGIN-GUARDIAN">Move Guardian model selection to the built-in role system without depending on plugin hook ordering.</step-4>
-      <step-5 module="M-PLUGIN-MEMORY" status="implemented" verification="V-M-PLUGIN-MEMORY">Move memory-reviewer model selection to the built-in role system and drop reviewer model fields from canonical memory config.</step-5>
       <step-6 module="M-CLI-ROLE" status="implemented" verification="V-M-CLI-ROLE">Introduce the role command tree and remove the legacy `agent` override UX.</step-6>
       <step-7 module="M-CLI-PRESET" status="implemented" verification="V-M-CLI-PRESET">Convert built-in and user presets from target-based writes to role assignment writes only.</step-7>
       <step-8 module="M-CLI-PATCH-PROVIDER" status="implemented" verification="V-M-CLI-PATCH-PROVIDER">Keep provider alias patching as a lower-level helper for concrete role assignments without mutating root OpenCode model fields.</step-8>
