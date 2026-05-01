@@ -4,7 +4,7 @@
 //   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and project-local conventions.
 //   SCOPE: XDG config/data home lookup, canonical vvoc config path derivation, managed agent/plan directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
-//   LINKS: [M-CLI-CONFIG, M-PLUGIN-MEMORY-STORE, M-PLUGIN-GUARDIAN]
+//   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

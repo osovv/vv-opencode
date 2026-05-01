@@ -138,7 +138,6 @@ Untracked for V1:
 
 - `investigator`
 - `guardian`
-- `memory-reviewer`
 - `enhancer`
 
 Reason:
