@@ -58,7 +58,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
   "vv-deepseek": {
     description: "Starter DeepSeek role assignments for built-in vvoc roles.",
     agents: {
-      default: "deepseek/deepseek-v4-pro",
+      default: "deepseek/deepseek-v4-flash",
       smart: "deepseek/deepseek-v4-pro",
       fast: "deepseek/deepseek-v4-flash",
       vision: "deepseek/deepseek-v4-pro",

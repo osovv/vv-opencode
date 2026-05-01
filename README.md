@@ -1,397 +1,171 @@
 # @osovv/vv-opencode
 
-Portable OpenCode workflow package with a Bun CLI that installs and maintains OpenCode plugins, managed agent prompts, and a canonical `vvoc.json` config.
+**Portable OpenCode workflow toolkit** — one command bootstraps a managed agent ecosystem, seven security-and-productivity plugins, explicit persistent memory, and a unified CLI.
 
-## What This Package Does
+<p>
+  <a href="https://www.npmjs.com/package/@osovv/vv-opencode"><img src="https://img.shields.io/npm/v/%40osovv%2Fvv-opencode?style=flat&label=npm&color=blue" alt="npm"></a>
+  <a href="https://bun.sh"><img src="https://img.shields.io/badge/runtime-bun-%23f9f9f9?style=flat&logo=bun" alt="bun"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat" alt="MIT"></a>
+</p>
 
-- installs one pinned `@osovv/vv-opencode@<version>` entry into OpenCode
-- that package entry exports seven plugins: `GuardianPlugin`, `HashlineEditPlugin`, `MemoryPlugin`, `ModelRolesPlugin`, `SystemContextInjectionPlugin`, `WorkflowPlugin`, `SecretsRedactionPlugin`
-- creates and maintains canonical `vvoc` config at `$XDG_CONFIG_HOME/vvoc/vvoc.json`
-- scaffolds managed prompt files under `vvoc/agents/`
-- registers `vv-controller` as the default OpenCode primary agent plus managed OpenCode agents: `enhancer`, `vv-analyst`, `vv-architect`, `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`, `investigator`
-- registers OpenCode slash commands: `/vv-plan`, `/vv-review`
-- installs plugin-managed agents: `guardian`, `memory-reviewer`
-- ships role presets, diagnostics, and shell completion through the `vvoc` CLI
+---
 
 ## Quick Start
 
-If the package is installed as a project dependency, run it via `bun x vvoc` or `bun run vvoc`.
-
-Install globally:
-
 ```bash
 bun add -g @osovv/vv-opencode
-```
-
-Bootstrap the default global setup:
-
-```bash
 vvoc install
-vvoc status
 ```
 
-Write OpenCode config and managed prompts into the current repository instead of the global OpenCode config:
+That's it. `vvoc install` pins the package, scaffolds managed agents, registers slash commands, writes canonical config, and sets `vv-controller` as your default OpenCode agent.
+
+To scope everything to the current project instead of the global OpenCode config:
 
 ```bash
 vvoc install --scope project
 ```
 
-## What `install` And `sync` Do
+> **Already installed?** Run `vvoc sync` anytime to refresh plugins, prompts, and presets.
 
-`vvoc install` and `vvoc sync`:
+---
 
-- ensure OpenCode has a pinned `@osovv/vv-opencode@<version>` package entry
-- register managed agents and scaffold their prompt files
-- set OpenCode `default_agent` to `vv-controller`
-- seed OpenCode `model`, `small_model`, `agent.explore`, and managed agent model refs with `vv-role:*` values
-- register managed OpenCode commands `vv-plan` and `vv-review`
-- disable global OpenCode `tools.apply_patch` in managed config so editing stays on the hashline-backed `edit` override
-- create or refresh canonical `vvoc.json`
-- refresh managed built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`, `vv-deepseek`
+## Why vv-opencode?
 
-That package entry exports seven plugins:
+Setting up OpenCode for serious daily work means juggling config files, agent prompts, plugin wiring, model role assignments, and permission rules — every time, on every machine.
 
-- `GuardianPlugin`
-- `HashlineEditPlugin`
-- `MemoryPlugin`
-- `ModelRolesPlugin`
-- `SystemContextInjectionPlugin`
-- `WorkflowPlugin`
-- `SecretsRedactionPlugin`
+**vv-opencode collapses that into a single `vvoc install`.** It owns the wiring so you don't have to:
 
-## Config And Data Layout
+- **Seven plugins, one entry** — all plugins are exported from a single pinned package entry
+- **Managed agent system** — a routed `vv-controller` primary agent, domain-specialized subagents, and a report-only memory reviewer
+- **Model roles & presets** — assign models to roles (`smart`, `fast`, `vision`, …) and switch provider presets with one command
+- **Explicit memory** — persist context across sessions, branches, projects, and even across projects
+- **Security-first** — a `guardian` agent reviews permission requests, secrets are redacted from LLM-bound chat
+- **Stale-line-number defense** — hashline-backed `edit` prevents write-against-wrong-snapshot bugs
 
-OpenCode config stays in OpenCode-managed paths:
+---
 
-- global: `$XDG_CONFIG_HOME/opencode/opencode.json` or `~/.config/opencode/opencode.json`
-- project: `./opencode.json` or `./opencode.jsonc`
+## Features
 
-vvoc-owned config stays separate from OpenCode config:
+| Area | What you get |
+|---|---|
+| **Plugins** | 7 plugins in one pinned package entry — workflow orchestration, memory, model roles, guardian, hashline edit, system context injection, secrets redaction |
+| **Agent System** | `vv-controller` routes work: direct for small changes, `investigator` for bugs, implementer+reviewer loop for risky work, analyst+architect for large features |
+| **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, prompts, commands, presets |
+| **CLI Tooling** | 15+ commands: install, sync, status, doctor, role management, presets, guardian config, shell completion, upgrade |
+| **Explicit Memory** | `memory_search`, `memory_get`, `memory_put`, `memory_update`, `memory_delete`, `memory_list` — session, branch, project, and cross-project scopes |
+| **Security** | GuardianPlugin reviews shell-permission requests; SecretsRedactionPlugin strips tokens before LLM requests; both configurable via `vvoc.json` |
+| **Model Roles** | Assign provider/model/variant to roles (`default`, `smart`, `fast`, `vision`, custom); switch between `vv-openai`, `vv-zai`, `vv-deepseek`, `vv-minimax` presets |
+| **Workflow Tracking** | Work items with open/list/close for tracked implementation-to-review pipelines |
+| **Slash Commands** | `/vv-plan` routes through planning mode, `/vv-review` routes through review-only mode |
 
-- canonical config: `$XDG_CONFIG_HOME/vvoc/vvoc.json` or `~/.config/vvoc/vvoc.json`
+---
 
-Managed prompt files live here:
+## The Seven Plugins
 
-- global: `$XDG_CONFIG_HOME/vvoc/agents/*.md`
-- project: `./.vvoc/agents/*.md`
+| Plugin | What it does |
+|---|---|
+| **WorkflowPlugin** | Tracked orchestration around `task` for subagents; registers `work_item_open/list/close` tools; routes `/vv-plan` and `/vv-review` commands |
+| **ModelRolesPlugin** | Resolves `vv-role:*` references in OpenCode config at startup; translates `:variant` suffixes into native model+variant fields |
+| **GuardianPlugin** | Reviews OpenCode permission requests with a constrained guardian agent and safe-deny defaults; configurable model, timeout, risk threshold |
+| **HashlineEditPlugin** | Replaces OpenCode's `edit` with hash-anchored variant; rewrites `read` output to `line#hash` format; rejects stale snapshots to prevent drift bugs |
+| **MemoryPlugin** | Adds persistent memory tools + report-only `memory-reviewer` subagent; scopes: session, branch, project, shared (cross-project) |
+| **SystemContextInjectionPlugin** | Injects reusable system guidance into primary sessions without polluting subagent prompts; encourages proactive `explore` usage |
+| **SecretsRedactionPlugin** | Redacts secrets (tokens, keys, emails, UUIDs, IPs) before LLM requests; restores placeholders afterward; configurable patterns |
 
-Durable planning artifacts written by the managed planning agents live here:
+---
 
-- project: `./.vvoc/plans/*.md`
-
-For CLI commands that accept `--scope project`, only the OpenCode config target and managed prompt directory become project-local. Canonical `vvoc.json` stays global.
-
-Persisted vvoc data lives here:
-
-- global data root: `$XDG_DATA_HOME/vvoc/` or `~/.local/share/vvoc/`
-- project-local memory: `$XDG_DATA_HOME/vvoc/projects/<project-id>/memory/`
-- shared memory: `$XDG_DATA_HOME/vvoc/memory/shared/<namespace>/`
-
-`vvoc.json` currently contains these top-level sections:
-
-- `roles`
-- `guardian`
-- `memory`
-- `secretsRedaction`
-- `presets`
-
-The current schema is versioned and published with the package:
-
-```json
-{
-  "$schema": "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@<installed-version>/schemas/vvoc/v3.json",
-  "version": 3
-}
-```
-
-Schema source of truth lives in this repository at `schemas/vvoc/v3.json`.
-
-## CLI Overview
+## CLI at a Glance
 
 | Command | Purpose |
-| --- | --- |
+|---|---|
 | `vvoc init` | Interactive bootstrap flow |
 | `vvoc install` | Non-interactive setup and scaffolding |
-| `vvoc sync` | Refresh plugin entry, managed agents, prompts, and `vvoc.json` |
+| `vvoc sync` | Refresh plugin entry, agents, prompts, config |
 | `vvoc status` | Show current installation state |
-| `vvoc doctor` | Diagnose setup problems and exit non-zero if problems are found |
+| `vvoc doctor` | Diagnose setup problems (exits non-zero on issues) |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
-| `vvoc role list/set/unset` | Manage canonical role assignments |
-| `vvoc preset list`, `vvoc preset show <name>`, `vvoc preset <name>` | Inspect or apply named presets |
-| `vvoc guardian config` | Print or write the `guardian` section of `vvoc.json` |
-| `vvoc plugin list` | List plugin entries from OpenCode config |
-| `vvoc patch-provider stepfun-ai|zai|openai` | Patch a global OpenCode config preset |
+| `vvoc role list\|set\|unset` | Manage model role assignments |
+| `vvoc preset list\|show\|<name>` | Inspect or apply named presets |
+| `vvoc guardian config` | Print or write guardian section |
+| `vvoc plugin list` | List OpenCode plugin entries |
+| `vvoc patch-provider stepfun-ai\|zai\|openai` | Patch a global OpenCode config preset |
 | `vvoc completion` | Install shell completions |
-| `vvoc upgrade` | Upgrade the global package and run a follow-up sync |
-| `vvoc version` | Print the installed package version |
+| `vvoc upgrade` | Upgrade global package and run follow-up sync |
+| `vvoc version` | Print installed version |
 
-## Model Roles And Presets
+---
 
-Inspect current role assignments:
+## Model Roles & Presets
 
 ```bash
+# View current assignments
 vvoc role list
-```
 
-Set role assignments (`provider/model[:variant]`):
-
-```bash
+# Assign models to roles
 vvoc role set default openai/gpt-5.4
 vvoc role set smart openai/vv-gpt-5.5-xhigh
 vvoc role set fast openai/gpt-5.4-mini
-vvoc role set team-review anthropic/claude-sonnet-4-5:high
-```
 
-Remove custom role assignments:
-
-```bash
-vvoc role unset team-review
-```
-
-Built-in role IDs:
-
-- `default`
-- `smart`
-- `fast`
-- `vision`
-
-Role notes:
-
-- `vvoc role` mutates only canonical global `vvoc.json` (`roles` map)
-- built-in roles cannot be removed with `vvoc role unset`
-- custom role IDs must use lowercase letters, digits, and hyphens
-
-Presets are stored in canonical `vvoc.json` and are useful when you want to switch several role assignments together:
-
-```bash
-vvoc preset list
-vvoc preset show vv-openai
+# Switch provider presets
 vvoc preset vv-openai
 vvoc preset vv-zai
+vvoc preset vv-deepseek
+vvoc preset vv-minimax
 ```
 
-Preset rules:
+Built-in role IDs: `default`, `smart`, `fast`, `vision` + any custom lowercase-hyphenated IDs.
 
-- managed built-in presets are `vv-openai`, `vv-zai`, `vv-minimax`, and `vv-deepseek`
-- `vvoc install` and `vvoc sync` always refresh those managed `vv-*` presets back to vvoc defaults
-- `vv-openai` uses normal `openai/gpt-5.4` for `default`, keeps `smart` on the vv-managed xhigh alias `openai/vv-gpt-5.5-xhigh`, and keeps `fast`/`vision` on the conservative OpenAI defaults
-- run `vvoc patch-provider openai` before using the `vv-openai` smart role if the alias model is not already present in your global OpenCode config
-- user-defined presets with other names are preserved as-is, including legacy names such as `openai`, `zai`, and `minimax`
-- presets may be partial
-- applying a preset only changes the roles listed in that preset
-- `vvoc preset list/show/apply` reads the current canonical `vvoc.json` as-is and only bootstraps defaults when the file is missing
-- on existing `vvoc.json`, preset commands do not reseed or refresh managed preset definitions as a side effect
-- preset application updates only canonical global `vvoc.json` role assignments and does not rewrite OpenCode config directly
+Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed on every `vvoc install`/`vvoc sync`; user-defined presets are preserved as-is.
 
-## Plugins Included
+---
 
-### ModelRolesPlugin
+## Config & Data Layout
 
-`ModelRolesPlugin` resolves `vv-role:*` model references at startup for supported OpenCode config fields (`model`, `small_model`, `agent.*.model`, and `command.*.model`).
-
-Agent role assignments that include `:variant` are translated into native `model` plus `variant` fields.
-
-### GuardianPlugin
-
-`GuardianPlugin` reviews OpenCode permission requests with a constrained `guardian` agent and safe deny behavior.
-
-Runtime settings live in the `guardian` section of canonical `vvoc.json`.
-
-Supported `guardian` fields:
-
-- `model`
-- `variant`
-- `timeoutMs`
-- `approvalRiskThreshold`
-- `reviewToastDurationMs`
-
-Print or update the `guardian` section:
-
-```bash
-vvoc guardian config --print
-vvoc guardian config --model "anthropic/claude-sonnet-4-5" --variant high
+```
+OpenCode config          → OpenCode-managed paths (global or project)
+vvoc.json (canonical)    → $XDG_CONFIG_HOME/vvoc/vvoc.json
+Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md  (global)
+                           ./.vvoc/agents/*.md                 (project)
+Planning artifacts       → ./.vvoc/plans/*
+Persisted data           → $XDG_DATA_HOME/vvoc/
+Project memory           → $XDG_DATA_HOME/vvoc/projects/<id>/memory/
+Shared memory            → $XDG_DATA_HOME/vvoc/memory/shared/<namespace>/
 ```
 
-The runtime prompt is loaded from `guardian.md`, preferring `./.vvoc/agents/guardian.md` over the global `vvoc` agents directory.
+Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`.
 
-### HashlineEditPlugin
+---
 
-`HashlineEditPlugin` is enabled by default and replaces OpenCode's `edit` tool with a hash-anchored variant.
+## Managed Agents
 
-It also rewrites `read` output from plain numbered rows such as `42: const value = 1;` into hashline rows such as `42#VK#AB|const value = 1;`, where the final hash anchors the surrounding context.
+All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
-The overridden `edit` tool requires those exact `line#hash#anchor` anchors, still accepts legacy `line#hash` anchors, and rejects stale references when the file changed since the last read, which prevents line-number drift and accidental writes against the wrong snapshot.
+| Agent | Role |
+|---|---|
+| `vv-controller` | Default primary agent — routes work to the right subagent |
+| `enhancer` | Prompt enhancement |
+| `vv-analyst` | Requirements analysis for large features |
+| `vv-architect` | Module/contract/wave design |
+| `vv-implementer` | Focused implementation with verification |
+| `vv-spec-reviewer` | Checks implementation against spec |
+| `vv-code-reviewer` | Engineering review for bugs and maintainability |
+| `investigator` | Root-cause analysis for unclear bugs |
+| `guardian` | Permission request review (plugin runtime) |
+| `memory-reviewer` | Read-only memory audit (plugin runtime) |
 
-Managed OpenCode config written by `vvoc install`, `vvoc sync`, and `vvoc init` also sets `tools.apply_patch = false` so sessions are steered away from the global `apply_patch` tool and onto the hashline-backed `edit` override.
-Primary chat sessions also receive a short system reminder to prefer `read` plus the hashline-backed `edit` tool over shell-based file rewrites when an edit is needed.
-
-### MemoryPlugin
-
-`MemoryPlugin` adds explicit persistent memory tools and installs a report-only `memory-reviewer` subagent.
-
-Memory scopes are `session`, `branch`, `project`, and `shared`. Writes default to `project`; `shared` is cross-project, the rest are repository-local.
-
-Available tools:
-
-- `memory_search`
-- `memory_get`
-- `memory_put`
-- `memory_update`
-- `memory_delete`
-- `memory_list`
-
-Memory is explicit-only:
-
-- stored entries are never injected into prompts automatically
-- the agent must call memory tools directly when durable context is useful
-- `memory-reviewer` can read memory but cannot modify it
-
-Supported `memory` fields:
-
-- `enabled`
-- `defaultSearchLimit`
-- `reviewerModel`
-- `reviewerVariant`
-
-Example:
-
-```text
-@memory-reviewer review the current memory and suggest keep/update/merge/delete actions
-```
-
-The runtime prompt is loaded from `memory-reviewer.md`, preferring `./.vvoc/agents/memory-reviewer.md` over the global `vvoc` agents directory.
-
-### SystemContextInjectionPlugin
-
-`SystemContextInjectionPlugin` injects reusable system guidance into primary sessions without polluting known subagent prompts.
-
-The default injected guidance tells the main session to proactively use the `explore` subagent for read-only context gathering when the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas. The `explore` subagent must not be asked to propose solutions, suggest plans, recommend changes, make design decisions, or evaluate trade-offs.
-
-### WorkflowPlugin
-
-`vv-controller` is the managed default primary agent. It routes routine localized work directly, uses `investigator` for unclear bugs, uses tracked implementer/reviewer loops for risky or multi-file changes, and uses `vv-analyst` plus `vv-architect` for large-feature planning before implementation approval.
-
-Managed OpenCode commands:
-
-- `/vv-plan` routes the request through planning mode and stops before implementation
-- `/vv-review` routes the request through review-only mode and reports findings first
-
-`WorkflowPlugin` adds tracked workflow orchestration around the `task` tool for these managed subagents:
-
-- `vv-implementer`
-- `vv-spec-reviewer`
-- `vv-code-reviewer`
-
-It also registers three workflow tools:
-
-- `work_item_open`
-- `work_item_list`
-- `work_item_close`
-
-Tracked task prompts must start with a first-line header like:
-
-```text
-VVOC_WORK_ITEM_ID: wi-1
-<assignment>
-<goal>Implement the approved change.</goal>
-<context>Repository-specific notes.</context>
-<verification>bun test src/plugins/workflow.test.ts</verification>
-</assignment>
-```
-
-The lightweight XML-like tags are for assignment prompt bodies only. Keep `VVOC_WORK_ITEM_ID` as line 1 for tracked assignments, use `<reviewer_findings>` as a container when passing normalized review findings, and do not convert tracked final result fields into tags.
-
-Tracked result blocks must return strict top-block protocol fields (`VVOC_WORK_ITEM_ID`, `VVOC_STATUS`, and `VVOC_ROUTE` for `vv-implementer`).
-
-Main-session guidance reminds agents to open work items first for tracked implementer/reviewer loops, reuse returned headers, keep the tracked header first while using tagged assignment bodies, treat `NEEDS_CONTEXT` as a hard stop, inspect `work_item_list` before retries, and avoid free-form review loops without explicit work-item identity.
-
-Review-only workflows may start a fresh work item directly with `vv-spec-reviewer` or `vv-code-reviewer`; implementation workflows still follow `vv-implementer -> vv-spec-reviewer -> vv-code-reviewer`.
-
-### SecretsRedactionPlugin
-
-`SecretsRedactionPlugin` redacts secrets from chat content before LLM requests and restores placeholders afterward where needed.
-
-Settings live in the `secretsRedaction` section of canonical `vvoc.json`.
-
-The default seeded config uses:
-
-```json
-{
-  "secret": "${VVOC_SECRET}"
-}
-```
-
-Set `VVOC_SECRET` if you want placeholder restoration to stay stable across restarts.
-
-Built-in patterns cover common identifiers and tokens such as email addresses, UUIDs, IP and MAC addresses, bearer tokens, and common OpenAI, Anthropic, GitHub, AWS, and Stripe-style keys.
-
-## Managed Prompts And Agents
-
-Managed prompt files are created for:
-
-- `guardian`
-- `memory-reviewer`
-- `vv-controller`
-- `enhancer`
-- `vv-analyst`
-- `vv-architect`
-- `vv-implementer`
-- `vv-spec-reviewer`
-- `vv-code-reviewer`
-- `investigator`
-
-OpenCode agent registrations written by `vvoc install` and `vvoc sync` are:
-
-- `explore`
-- `vv-controller`
-- `enhancer`
-- `vv-analyst`
-- `vv-architect`
-- `vv-implementer`
-- `vv-spec-reviewer`
-- `vv-code-reviewer`
-- `investigator`
-
-Plugin runtime agents are:
-
-- `guardian`
-- `memory-reviewer`
-
-`vvoc install` and `vvoc sync` also keep OpenCode `default_agent` set to `vv-controller` and keep command entries for `vv-plan` and `vv-review` registered.
-
-If a managed prompt file is missing, rerun one of these commands:
-
-```bash
-vvoc install
-vvoc sync
-```
+---
 
 ## Local Development
 
-Install dependencies:
-
 ```bash
-bun install
+bun install             # Install dependencies
+bun run check           # Typecheck + lint + format check + test
+bun run fmt             # Auto-format source files
 ```
 
-Run the local verification stack:
+Git hooks managed via `lefthook`.
 
-```bash
-bun run typecheck
-bun run lint
-bun run fmt:check
-bun test
-bun run build
-bun run pack:check
-```
-
-Format source files:
-
-```bash
-bun run fmt
-```
-
-Smoke-test the built CLI against a temporary config root:
+### Smoke-test the built CLI
 
 ```bash
 tmpdir="$(mktemp -d)"
@@ -400,24 +174,26 @@ bun dist/cli.js install --config-dir "$tmpdir"
 bun dist/cli.js status --config-dir "$tmpdir"
 ```
 
-Git hooks are managed with `lefthook`.
+### Full release verification
+
+```bash
+bun run check
+bun run build
+bun run pack:check
+```
+
+---
 
 ## Publishing
 
-Publishing is manual from the terminal.
-
-Typical release flow:
-
 ```bash
-bun run typecheck
-bun run lint
-bun run fmt:check
-bun test
-bun run build
-bun run pack:check
-npm publish
+bun run check && bun run build && npm publish
 ```
+
+Publishing is manual from the terminal. No CI publish workflows.
+
+---
 
 ## Optional: RTK
 
-[RTK](https://github.com/rtk-ai/rtk) is a CLI proxy that can reduce token usage for common developer commands. The interactive `vvoc init` flow recommends it after setup.
+[RTK](https://github.com/rtk-ai/rtk) is a CLI proxy that reduces token usage for common developer commands. The interactive `vvoc init` flow recommends it after setup.

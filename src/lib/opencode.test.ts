@@ -643,7 +643,7 @@ describe("canonical vvoc config helpers", () => {
       expect(synced?.presets["vv-deepseek"]?.description).toBe(
         "Starter DeepSeek role assignments for built-in vvoc roles.",
       );
-      expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-v4-pro");
+      expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-v4-flash");
       expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/deepseek-v4-flash");
       expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.1");
     } finally {
