@@ -239,9 +239,6 @@ describe("SystemContextInjectionPlugin", () => {
       "Read the file first, then use exact `line#hash#anchor` refs from the latest `read` output when present.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do not use `apply_patch`; prefer the hashline-backed `edit` tool for file changes. Managed vvoc installs also disable `apply_patch` in OpenCode config.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
       "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
     );
   });

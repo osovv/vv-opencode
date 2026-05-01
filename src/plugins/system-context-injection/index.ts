@@ -15,6 +15,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.3.3 - Updated editing workflow guidance to prefer exact context-anchored `line#hash#anchor` refs from read output.]
+//   LAST_CHANGE: [v0.4.0 - Removed `apply_patch` instruction from editing_workflow block — tool-level disable is stronger than prompt text.]
 //   LAST_CHANGE: [v0.3.2 - Added primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites and forbids `apply_patch` use.]
 //   LAST_CHANGE: [v0.3.1 - Narrowed explore subagent guidance to context-gathering only, prohibiting solution proposals, planning, or recommendations.]
 //   LAST_CHANGE: [v0.3.0 - Added standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance for primary sessions.]
@@ -83,7 +84,6 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "<editing_workflow>",
     "When editing files, prefer the `edit` tool over shell-based rewrites when it is available.",
     "Read the file first, then use exact `line#hash#anchor` refs from the latest `read` output when present.",
-    "Do not use `apply_patch`; prefer the hashline-backed `edit` tool for file changes. Managed vvoc installs also disable `apply_patch` in OpenCode config.",
     "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
     "</editing_workflow>",
   ].join("\n"),
