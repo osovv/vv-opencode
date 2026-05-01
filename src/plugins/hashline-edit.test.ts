@@ -18,7 +18,8 @@
 //   LAST_CHANGE: [v0.4.0 - Added regression coverage for full-snapshot context anchors on partial and truncated read output.]
 //   LAST_CHANGE: [v0.3.0 - Updated read output expectations for anchor hash format (line#hash#anchor|content).]
 //   LAST_CHANGE: [v0.2.0 - Added regression coverage for wrapped read output, ranged plus appended edits, missing-file creation, and normalization heuristics adapted from oh-my-openagent.]
-//   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.]
+//   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

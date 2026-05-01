@@ -25,6 +25,12 @@
 //   parseModelArg - Validates provider/model syntax.
 //   normalizeModelTargetOverride - Validates and canonicalizes a stored model override string for any supported target.
 //   formatAgentModel - Formats a model string for CLI output.
+//   SpecialAgentName - Union of Guardian-style model target IDs.
+//   OpenCodeDefaultModelTargetName - Union of top-level OpenCode model target IDs.
+//   ConfigurableOpenCodePrimaryAgentName - Union of configurable primary agent names.
+//   ConfigurableOpenCodeSubagentName - Union of configurable subagent names.
+//   ConfigurableOpenCodeAgentName - Union of all configurable agent names.
+//   SUPPORTED_MODEL_TARGET_NAMES - Human-readable supported target list.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   restoreText - restores all placeholders in a string to original values
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { type PlaceholderSession } from "./session.js";
 import { getPlaceholderRegex } from "./session.js";

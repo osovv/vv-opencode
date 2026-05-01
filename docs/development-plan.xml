@@ -722,6 +722,125 @@
         <note-4>Untracked task launches pass through unaffected.</note-4>
       </notes>
     </M-PLUGIN-WORKFLOW>
+
+    <M-CLI-AGENT-MODELS NAME="AgentModels" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
+      <contract>
+        <purpose>Define supported vvoc model target IDs and shared model override validation helpers.</purpose>
+        <inputs>
+          <param name="targetId | modelArg" type="string" />
+        </inputs>
+        <outputs>
+          <param name="validatedTarget | parsedModel | formattedModel" type="object | string" />
+        </outputs>
+        <errors>
+          <error code="INVALID_MODEL_TARGET" />
+          <error code="INVALID_MODEL_ARGUMENT" />
+        </errors>
+      </contract>
+      <interface>
+        <export-SPECIAL_AGENT_NAMES PURPOSE="Target IDs using provider/model syntax in canonical vvoc config." />
+        <export-OPENCODE_DEFAULT_MODEL_TARGETS PURPOSE="Target IDs mapping to top-level OpenCode model fields." />
+        <export-CONFIGURABLE_OPENCODE_AGENTS PURPOSE="Built-in OpenCode agent IDs vvoc can override." />
+        <export-isSpecialAgentName PURPOSE="Check Guardian-style model target syntax." />
+        <export-parseModelArg PURPOSE="Validate provider/model syntax." />
+        <export-normalizeModelTargetOverride PURPOSE="Validate and canonicalize stored model override strings." />
+        <export-formatAgentModel PURPOSE="Format a model string for CLI output." />
+      </interface>
+      <depends>M-CLI-MANAGED-AGENTS</depends>
+      <target>
+        <source>src/lib/agent-models.ts</source>
+        <tests />
+      </target>
+      <observability>
+        <log-prefix>[agent-models]</log-prefix>
+        <critical-block>none</critical-block>
+      </observability>
+      <verification-ref>V-M-CLI-AGENT-MODELS</verification-ref>
+    </M-CLI-AGENT-MODELS>
+
+    <M-VVOC-PRESET-REGISTRY NAME="VvocPresetRegistry" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
+      <contract>
+        <purpose>Define the canonical managed vvoc preset registry for config seeding, sync refresh, and shell completion.</purpose>
+        <inputs>
+          <param name="presetName" type="string" />
+        </inputs>
+        <outputs>
+          <param name="presetDef | boolean" type="object | boolean" />
+        </outputs>
+        <errors />
+      </contract>
+      <interface>
+        <export-BUILTIN_VVOC_PRESET_REGISTRY PURPOSE="Canonical built-in preset definitions." />
+        <export-BUILTIN_VVOC_PRESET_NAMES PURPOSE="Deterministic preset name order." />
+        <export-isBuiltinVvocPresetName PURPOSE="Check whether a preset name is managed." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/lib/vvoc-preset-registry.ts</source>
+        <tests />
+      </target>
+      <observability>
+        <log-prefix>[vvoc-preset-registry]</log-prefix>
+        <critical-block>none</critical-block>
+      </observability>
+      <verification-ref>V-M-CLI-CONFIG, V-M-CLI-PRESET, V-M-CLI-COMPLETION</verification-ref>
+    </M-VVOC-PRESET-REGISTRY>
+
+    <M-PLUGIN-HASHLINE-EDIT NAME="HashlineEditPlugin" TYPE="INTEGRATION" LAYER="0" ORDER="6" STATUS="implemented">
+      <contract>
+        <purpose>Replace OpenCode's default edit tool with a hash-anchored variant and rewrite read output to stable line#hash#anchor rows so stale edits fail before file corruption.</purpose>
+        <inputs>
+          <param name="PluginInput" type="@opencode-ai/plugin input" />
+        </inputs>
+        <outputs>
+          <param name="Hooks" type="OpenCode plugin hooks" />
+        </outputs>
+        <errors />
+      </contract>
+      <interface>
+        <export-HashlineEditPlugin PURPOSE="Register hash-anchored edit tool override and post-read output enhancer." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/plugins/hashline-edit/*.ts</source>
+        <tests>src/plugins/hashline-edit*.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[hashline-edit]</log-prefix>
+        <critical-block>BLOCK_EDIT_FILE</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-HASHLINE-EDIT</verification-ref>
+    </M-PLUGIN-HASHLINE-EDIT>
+
+    <M-WORKFLOW-REPAIR NAME="WorkflowRepair" TYPE="UTILITY" LAYER="0" ORDER="11" STATUS="implemented">
+      <contract>
+        <purpose>Recognize resumable OpenCode task-result envelopes, build strict repair prompts, and resume the same child session once to repair malformed tracked workflow outputs.</purpose>
+        <inputs>
+          <param name="outputText" type="string" />
+        </inputs>
+        <outputs>
+          <param name="repairedOutput | null" type="string | null" />
+        </outputs>
+        <errors>
+          <error code="REPAIR_FAILED" />
+        </errors>
+      </contract>
+      <interface>
+        <export-unwrapResumableTaskResult PURPOSE="Extract inner tracked result text from recognized OpenCode task envelopes." />
+        <export-buildTrackedResultRepairPrompt PURPOSE="Build the one-shot repair prompt." />
+        <export-attemptTrackedResultRepair PURPOSE="Resume the same child session once and return repaired output." />
+      </interface>
+      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <target>
+        <source>src/plugins/workflow/repair.ts</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow-repair]</log-prefix>
+        <critical-block>BLOCK_REPAIR_TRACKED_RESULT</critical-block>
+      </observability>
+      <verification-ref>V-M-WORKFLOW-REPAIR</verification-ref>
+    </M-WORKFLOW-REPAIR>
   </Modules>
 
   <DataFlow>

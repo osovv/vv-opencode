@@ -13,6 +13,8 @@
 //   DEFAULT_CONFIG - Default secrets-redaction section used when vvoc.json is missing or incomplete
 //   loadConfig - loads and returns normalized config
 //   getConfigCandidates - returns the canonical vvoc.json path candidate
+//   SecretsRedactionConfig - Secrets redaction configuration type.
+// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -268,7 +268,9 @@
     </V-M-CLI-CONFIG>
 
     <V-M-CLI-AGENT-MODELS MODULE="M-CLI-AGENT-MODELS" PRIORITY="medium">
-      <test-files />
+      <test-files>
+        <file>src/lib/agent-models.test.ts</file>
+      </test-files>
       <module-checks>
         <check-1>bun x tsc --noEmit</check-1>
         <check-2>bun run lint</check-2>
@@ -283,8 +285,56 @@
         <scenario-5 kind="failure">Malformed model arguments and unsupported target names fail with clear errors.</scenario-5>
       </scenarios>
       <required-log-markers />
-      <wave-follow-up>Add a dedicated test file (src/lib/agent-models.test.ts) covering exported constants, type guards, model parsing, and model-formatting helpers.</wave-follow-up>
+      <required-trace-assertions>
+        <assertion-1>Type guards must return strict booleans without side effects or logging.</assertion-1>
+        <assertion-2>parseModelArg must reject values without a forward slash before any further validation.</assertion-2>
+        <assertion-3>formatAgentModel must return &quot;default&quot; when no model is provided rather than throwing or returning undefined.</assertion-3>
+      </required-trace-assertions>
+      <phase-follow-up>Run the full agent-models test suite alongside other lib module tests before release.</phase-follow-up>
     </V-M-CLI-AGENT-MODELS>
+
+    <V-M-CLI-MANAGED-AGENTS MODULE="M-CLI-MANAGED-AGENTS" PRIORITY="high">
+      <test-files>
+        <file>src/lib/managed-agents.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/lib/managed-agents.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+        <check-3>bun run lint</check-3>
+        <check-4>bun run fmt:check</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">MANAGED_OPENCODE_AGENTS exposes vv-controller, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator definitions.</scenario-1>
+        <scenario-2 kind="success">loadManagedAgentPromptTemplate resolves bundled prompt file paths.</scenario-2>
+        <scenario-3 kind="success">loadManagedAgentPromptText resolves project-local prompts first, then global prompts, then bundled fallback.</scenario-3>
+        <scenario-4 kind="failure">Unknown managed agent names fail with a clear error.</scenario-4>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Prompts must resolve in deterministic order: project-local before global before bundled.</assertion-1>
+        <assertion-2>Unknown managed agent names must throw rather than returning a default prompt.</assertion-2>
+      </required-trace-assertions>
+    </V-M-CLI-MANAGED-AGENTS>
+
+    <V-M-VVOC-PRESET-REGISTRY MODULE="M-VVOC-PRESET-REGISTRY" PRIORITY="medium">
+      <test-files>
+        <file>src/lib/opencode.test.ts</file>
+        <file>src/commands/preset.test.ts</file>
+        <file>src/commands/completion.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun x tsc --noEmit</check-1>
+        <check-2>bun run lint</check-2>
+        <check-3>bun run fmt:check</check-3>
+        <check-4>bun run build</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">BUILTIN_VVOC_PRESET_REGISTRY contains vv-openai, vv-zai, vv-minimax, and vv-deepseek preset definitions.</scenario-1>
+        <scenario-2 kind="success">BUILTIN_VVOC_PRESET_NAMES returns preset names in deterministic order.</scenario-2>
+        <scenario-3 kind="success">isBuiltinVvocPresetName correctly identifies managed preset names.</scenario-3>
+      </scenarios>
+      <required-log-markers />
+    </V-M-VVOC-PRESET-REGISTRY>
 
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
       <test-files>
@@ -581,6 +631,10 @@
         <scenario-4 kind="success">Completion output removes the obsolete `agent` command surface and its target-id completions.</scenario-4>
       </scenarios>
       <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Completion output must not contain references to the removed `vvoc agent` command.</assertion-1>
+        <assertion-2>Shell-specific completion generators must produce syntactically valid completion files for each target shell.</assertion-2>
+      </required-trace-assertions>
       <wave-follow-up>Validate generated scripts by sourcing/eval in test environment.</wave-follow-up>
     </V-M-CLI-COMPLETION>
 

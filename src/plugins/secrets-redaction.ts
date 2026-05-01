@@ -12,5 +12,9 @@
 // START_MODULE_MAP
 //   SecretsRedactionPlugin - main plugin export
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 export { SecretsRedactionPlugin } from "./secrets-redaction/index.js";

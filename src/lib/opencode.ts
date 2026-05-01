@@ -45,6 +45,13 @@
 //   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
 //   describeWriteResult - Formats config write outcomes for CLI output.
+//   ManagedAgentModelMap - Map of managed agent names to model selections.
+//   OpenCodeAgentOverride - Agent override config for OpenCode.
+//   ManagedAgentOverrideMap - Map of agent override configs.
+//   parseGuardianConfigText - Parse guardian section JSON.
+//   renderGuardianConfig - Render guardian section JSON.
+//   GuardianConfigOverrides - Guardian config override type.
+// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

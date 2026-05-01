@@ -17,6 +17,10 @@
 //   applyAppend - Insert lines at EOF, creating content for an empty file.
 //   applyPrepend - Insert lines at BOF, creating content for an empty file.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { autocorrectReplacementLines } from "./autocorrect-replacement-lines.js";
 import {

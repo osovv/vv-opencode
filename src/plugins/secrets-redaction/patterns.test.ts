@@ -4,9 +4,18 @@
 //   PURPOSE: Tests for buildPatternSet and builtin patterns
 //   SCOPE: pattern building, regex normalization
 //   DEPENDS: patterns
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   testPatterns - Pattern fixtures used in tests.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { buildPatternSet, BUILTIN_PATTERNS } from "./patterns.js";

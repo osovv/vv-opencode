@@ -11,6 +11,9 @@
 //
 // START_MODULE_MAP
 //   redactText - replaces secrets in text with placeholders, returns changed text + match list
+//   Match - Regex match result.
+//   RedactResult - Overall redaction operation result.
+// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   SecretsRedactionPlugin - main plugin factory function
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { loadConfig } from "./config.js";
 import { buildPatternSet } from "./patterns.js";

@@ -15,6 +15,10 @@
 //   PrependEdit - Insert content before an optional anchor or at BOF when no anchor is provided.
 //   HashlineEdit - Union of all normalized hashline edit operations.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 export interface ReplaceEdit {
   op: "replace";

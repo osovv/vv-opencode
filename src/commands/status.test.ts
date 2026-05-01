@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   status command tests - Verify role inventory output from installation inspection.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";

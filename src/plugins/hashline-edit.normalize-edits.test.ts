@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   hashline normalize-edits tests - Verify tool payload normalization and validation failures.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { normalizeHashlineEdits, type RawHashlineEdit } from "./hashline-edit/normalize-edits.js";

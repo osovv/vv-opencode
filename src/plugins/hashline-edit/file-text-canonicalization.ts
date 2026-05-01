@@ -14,6 +14,10 @@
 //   canonicalizeFileText - Normalize file text to LF without losing BOM or line-ending metadata.
 //   restoreFileText - Reapply the original line-ending style and BOM to canonical content.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 export interface FileTextEnvelope {
   content: string;

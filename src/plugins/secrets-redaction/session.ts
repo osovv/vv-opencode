@@ -13,7 +13,15 @@
 // START_MODULE_MAP
 //   PlaceholderSession - manages secret → placeholder mappings with HMAC hashing
 //   getPlaceholderRegex - returns RegExp to find all placeholders in text
+//   PlaceholderSessionOptions - Session configuration options.
+//   PlaceholderEntry - Individual placeholder mapping entry.
+//   generateFallbackSecret - Generate fallback secret string.
 // END_MODULE_MAP
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { createHmac, randomBytes } from "node:crypto";
 

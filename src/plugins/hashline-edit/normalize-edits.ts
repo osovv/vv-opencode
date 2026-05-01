@@ -13,6 +13,10 @@
 //   RawHashlineEdit - Tool-facing edit input before validation and normalization.
 //   normalizeHashlineEdits - Convert raw tool args into validated HashlineEdit operations.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import type { AppendEdit, HashlineEdit, PrependEdit, ReplaceEdit } from "./types.js";
 

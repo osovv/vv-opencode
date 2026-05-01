@@ -4,9 +4,18 @@
 //   PURPOSE: Tests for PlaceholderSession
 //   SCOPE: placeholder creation, lookup, TTL eviction, maxMappings eviction
 //   DEPENDS: session
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   setupPlaceholderSession - Creates a test placeholder session.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { PlaceholderSession, generateFallbackSecret } from "./session.js";

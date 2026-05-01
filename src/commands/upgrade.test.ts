@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   runUpgradeFlow tests - Verify the automatic install and sync upgrade flow without real global package mutations.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
 import { runUpgradeFlow } from "./upgrade.js";

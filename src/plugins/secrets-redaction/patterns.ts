@@ -12,7 +12,15 @@
 // START_MODULE_MAP
 //   buildPatternSet - builds pattern set from config object
 //   BUILTIN_PATTERNS - Map of 13 builtin pattern definitions
+//   PatternRule - Individual pattern matching rule.
+//   PatternSet - Group of related pattern rules.
+//   PatternsConfig - Patterns configuration schema.
 // END_MODULE_MAP
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 export interface PatternRule {
   pattern: RegExp;

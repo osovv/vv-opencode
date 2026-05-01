@@ -13,6 +13,10 @@
 //   restoreDeep - restores placeholders in objects/arrays in-place
 //   redactDeep - redacts secrets in objects/arrays in-place
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+// END_CHANGE_SUMMARY
 
 import { type PlaceholderSession } from "./session.js";
 import { type PatternSet } from "./patterns.js";

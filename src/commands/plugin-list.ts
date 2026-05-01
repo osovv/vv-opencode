@@ -13,6 +13,9 @@
 //   default - PluginList command definition for vvoc.
 //   listPlugins - Returns the list of plugins from OpenCode config.
 //   renderPluginTable - Renders a table of plugins with name, source, and enabled status.
+//   PluginEntry - Parsed plugin entry information.
+//   parsePluginSpecifier - Parse plugin specifier string.
+// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -18,6 +18,13 @@
 //   parseModelSelection - Parses provider/model into normalized parts.
 //   resolveRoleReference - Resolves vv-role references through a canonical role map.
 //   getBuiltInRoleBindings - Returns hard-coded role bindings for OpenCode defaults and bundled agents.
+//   BuiltInRoleName - Union type for built-in role IDs.
+//   ModelRolesErrorCode - Error code string literals.
+//   ModelRolesError - Custom error class for role errors.
+//   ParsedModelSelection - Parsed provider/model[:variant] result.
+//   ResolvedRoleSelection - Resolved role reference result.
+//   BuiltInRoleBindings - Hard-coded built-in role mapping.
+// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -148,9 +155,6 @@ export function parseModelSelection(modelSelection: string): ParsedModelSelectio
 //   PURPOSE: Resolve a vv-role:* reference to a concrete provider/model selection.
 //   INPUTS: { roleRef: string - vv-role reference, roleMap: Record<string, string> - canonical role assignments. }
 //   OUTPUTS: { ResolvedRoleSelection - Parsed concrete model selection plus normalized role information. }
-//   SIDE_EFFECTS: none
-//   LINKS: [fn-resolveRoleReference, fn-parseModelSelection]
-// END_CONTRACT: resolveRoleReference
 //   SIDE_EFFECTS: none
 //   LINKS: [fn-resolveRoleReference, fn-parseModelSelection]
 // END_CONTRACT: resolveRoleReference

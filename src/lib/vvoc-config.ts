@@ -10,40 +10,41 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SecretsRedactionConfig - Fully seeded secrets-redaction section shape.
+//   VVOC_CONFIG_VERSION - Canonical vvoc config version number.
+//   VVOC_CONFIG_SCHEMA_URL - Hosted JSON Schema URL for vvoc config.
+//   VvocRoleAssignments - Role assignment record type.
+//   VvocPresetAgents - Preset agent assignment record type.
+//   VvocPreset - Named preset definition type.
+//   VvocPresets - Named preset map type.
+//   GuardianConfig - Guardian section configuration type.
+//   GuardianConfigOverrides - Guardian config override type.
+//   SecretsRedactionKeywordRule - Keyword rule configuration type.
+//   SecretsRedactionRegexRule - Regex rule configuration type.
+//   SecretsRedactionConfig - Secrets redaction section configuration type.
 //   VvocConfig - Fully seeded canonical vvoc config document shape.
-//   ParsedVvocConfig - Parsed vvoc config plus the document schema/version found on disk.
+//   ParsedVvocConfig - Parsed vvoc config plus source schema/version.
+//   VVOC_CONFIG_SCHEMA - JSON Schema object for validation.
 //   createGuardianConfig - Builds a fully seeded guardian section from optional overrides.
 //   createDefaultSecretsRedactionConfig - Builds the seeded secrets-redaction section.
 //   createDefaultVvocPresets - Builds the seeded named preset map.
 //   createDefaultVvocConfig - Builds the fully seeded canonical vvoc config document.
 //   parseGuardianConfigText - Strictly parses a guardian section JSON snippet.
 //   renderGuardianConfig - Renders a guardian section JSON snippet.
-//   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns the source version plus normalized config.
+//   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns source version plus config.
 //   parseVvocConfigText - Strictly parses the canonical vvoc config document.
-//   loadLenientVvocConfigText - Parses vvoc.json leniently for runtime fallback with warnings.
+//   loadLenientVvocConfigText - Parses vvoc.json leniently for runtime fallback.
 //   renderVvocConfig - Renders canonical vvoc.json.
-//   validateVvocConfigDocument - Validates a parsed vvoc config object against the JSON Schema.
-//   SecretsRedactionConfig - Fully seeded secrets-redaction section shape.
-//   VvocConfig - Fully seeded canonical vvoc config document shape.
-//   ParsedVvocConfig - Parsed vvoc config plus the document schema/version found on disk.
-//   createGuardianConfig - Builds a fully seeded guardian section from optional overrides.
-//   createDefaultSecretsRedactionConfig - Builds the seeded secrets-redaction section.
-//   createDefaultVvocPresets - Builds the seeded named preset map.
-//   createDefaultVvocConfig - Builds the fully seeded canonical vvoc config document.
-//   parseGuardianConfigText - Strictly parses a guardian section JSON snippet.
-//   renderGuardianConfig - Renders a guardian section JSON snippet.
-//   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns the source version plus normalized config.
-//   parseVvocConfigText - Strictly parses the canonical vvoc config document.
-//   loadLenientVvocConfigText - Parses vvoc.json leniently for runtime fallback with warnings.
-//   renderVvocConfig - Renders canonical vvoc.json.
-//   validateVvocConfigDocument - Validates a parsed vvoc config object against the JSON Schema.
+//   validateVvocConfigDocument - Validates parsed vvoc config against JSON Schema.
+// END_MODULE_MAP
+//
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v2.3.4 - Moved built-in vvoc preset definitions and managed-name detection to a shared internal preset registry.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
 //   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
 //   LAST_CHANGE: [v2.4.0 - Removed MemoryConfig, memory section, and all memory-related parsing. Memory v2 is a CLI command, not a config section.]
+//   LAST_CHANGE: [v2.4.0 - Removed MemoryConfig, memory section, and all memory-related parsing. Memory v2 is a CLI command, not a config section.
+// END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { BUILTIN_ROLE_NAMES, parseModelSelection, type BuiltInRoleName } from "./model-roles.js";

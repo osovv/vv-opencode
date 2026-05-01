@@ -16,6 +16,10 @@
 //   buildPostInstallCompletionCommand - Build the fresh subprocess command for the default global completion flow.
 //   fetchLatestVersion - Query npm registry for latest version.
 //   fetchChangelog - Fetch changelog from npm registry.
+//   UpgradeFlowResult - Upgrade flow result type.
+//   UpgradeSubprocessResult - Subprocess result type.
+//   buildPostInstallSyncCommand - Build post-install sync command.
+// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
