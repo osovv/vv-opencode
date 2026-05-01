@@ -116,7 +116,7 @@ Prompt templates are bundled in:
 - `templates/agents/spec-reviewer.md`
 - `templates/agents/code-reviewer.md`
 - `templates/agents/investigator.md`
-- plus `guardian.md` and `memory-reviewer.md`
+- plus `guardian.md`
 
 At runtime, `vvoc install` / `vvoc sync` materialize them into:
 
@@ -150,12 +150,10 @@ Relevant source:
 These are separate from the config-scaffolded managed subagents:
 
 - `guardian` is installed by `GuardianPlugin`
-- `memory-reviewer` is installed by `MemoryPlugin`
 
 Relevant source:
 
 - `src/plugins/guardian/index.ts:1363-1506`
-- `src/plugins/memory/index.ts:74-97`
 
 ### 5. There is already a runtime hook point for intercepting tool calls
 
@@ -171,15 +169,12 @@ Relevant source:
 
 ### 6. There is already a runtime hook point for injecting system instructions
 
-`MemoryPlugin` already uses:
+The Guardian plugin already uses:
 
-- `experimental.chat.system.transform`
-
-That is the cleanest current integration point for teaching the main session about a future work-item protocol.
 
 Relevant source:
 
-- `src/plugins/memory/index.ts:235-239`
+- `src/plugins/guardian/index.ts:1486-1495`
 
 ## Key Architectural Insight
 
@@ -402,7 +397,6 @@ Purpose:
 
 Reference:
 
-- `src/plugins/memory/index.ts:235-239`
 
 ### Enforcement hook
 
@@ -442,7 +436,6 @@ The user explicitly preferred:
 - `src/lib/managed-agents.ts`
 - `src/lib/opencode.ts`
 - `src/plugins/guardian/index.ts`
-- `src/plugins/memory/index.ts`
 - `templates/agents/implementer.md`
 - `templates/agents/spec-reviewer.md`
 - `templates/agents/code-reviewer.md`
