@@ -657,7 +657,7 @@ describe("canonical vvoc config helpers", () => {
         paths.vvocConfigPath,
         JSON.stringify(
           {
-            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.29.0/schemas/vvoc/v2.json",
+            $schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@0.30.0/schemas/vvoc/v2.json",
             version: 2,
             guardian: {
               timeoutMs: 12345,
