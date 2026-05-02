@@ -38,6 +38,7 @@ describe("preset helpers", () => {
       "vv-zai",
       "vv-minimax",
       "vv-deepseek",
+      "vv-osovv",
     ]);
   });
 
@@ -45,7 +46,7 @@ describe("preset helpers", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual(["vv-deepseek", "vv-minimax", "vv-openai", "vv-zai"]);
+    expect(presets).toEqual(["vv-deepseek", "vv-minimax", "vv-openai", "vv-osovv", "vv-zai"]);
   });
 
   test("formatPreset renders the expected preset object", () => {
@@ -140,7 +141,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-deepseek, vv-minimax, vv-openai, vv-zai",
+        "unknown preset: missing. Available presets: vv-deepseek, vv-minimax, vv-openai, vv-osovv, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -340,7 +341,7 @@ describe("applyPreset", () => {
       expect(stderr).toBe("");
       expect(stdout).toContain("Applied preset vv-zai:");
       const vvocConfig = await readVvocConfig(paths);
-      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5.1");
+      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5-turbo");
       expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.1");
       expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.5-airx");
       expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.6v");

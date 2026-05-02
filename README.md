@@ -58,7 +58,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 
 ---
 
-## The Seven Plugins
+## The Six Plugins
 
 | Plugin | What it does |
 |---|---|
@@ -108,6 +108,7 @@ vvoc preset vv-openai
 vvoc preset vv-zai
 vvoc preset vv-deepseek
 vvoc preset vv-minimax
+vvoc preset vv-osovv
 ```
 
 Built-in role IDs: `default`, `smart`, `fast`, `vision` + any custom lowercase-hyphenated IDs.

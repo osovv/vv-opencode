@@ -40,7 +40,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
   "vv-zai": {
     description: "Starter ZAI role assignments for built-in vvoc roles.",
     agents: {
-      default: "zai-coding-plan/glm-5.1",
+      default: "zai-coding-plan/glm-5-turbo",
       smart: "zai-coding-plan/glm-5.1",
       fast: "zai-coding-plan/glm-4.5-airx",
       vision: "zai-coding-plan/glm-4.6v",
@@ -52,7 +52,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       default: "minimax-coding-plan/MiniMax-M2.7",
       smart: "minimax-coding-plan/MiniMax-M2.7",
       fast: "minimax-coding-plan/MiniMax-M2.1",
-      vision: "minimax-coding-plan/MiniMax-M2.1",
+      vision: "minimax-coding-plan/MiniMax-M2.7",
     },
   },
   "vv-deepseek": {
@@ -62,6 +62,15 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "deepseek/deepseek-v4-pro",
       fast: "deepseek/deepseek-v4-flash",
       vision: "deepseek/deepseek-v4-pro",
+    },
+  },
+  "vv-osovv": {
+    description: "Personal osovv role assignments (deepseek + stepfun + minimax).",
+    agents: {
+      default: "deepseek/deepseek-v4-flash",
+      fast: "stepfun/step-3.5-flash",
+      smart: "deepseek/deepseek-v4-pro",
+      vision: "minimax-coding-plan/MiniMax-M2.7",
     },
   },
 } as const satisfies Record<string, BuiltinVvocPresetDefinition>;

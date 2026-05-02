@@ -124,6 +124,7 @@ describe("init scenarios", () => {
       expect(vvocConfig.presets["vv-openai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-minimax"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-osovv"]?.agents.default).toBeDefined();
     } finally {
       rmSync(configHome, { recursive: true, force: true });
       rmSync(tmpDir, { recursive: true, force: true });

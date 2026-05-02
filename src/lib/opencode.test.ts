@@ -562,6 +562,7 @@ describe("canonical vvoc config helpers", () => {
         "vv-zai",
         "vv-minimax",
         "vv-deepseek",
+        "vv-osovv",
       ]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -636,7 +637,7 @@ describe("canonical vvoc config helpers", () => {
       );
       expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-v4-flash");
       expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/deepseek-v4-flash");
-      expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.1");
+      expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5-turbo");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
