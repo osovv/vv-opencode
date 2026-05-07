@@ -53,6 +53,10 @@ import {
   BUILTIN_VVOC_PRESET_REGISTRY,
   isBuiltinVvocPresetName as isManagedBuiltinVvocPresetName,
 } from "./vvoc-preset-registry.js";
+import {
+  createDefaultPluginToggleConfig,
+  type VvocPluginToggleConfig,
+} from "./plugin-toggle-config.js";
 
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
 const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
@@ -130,6 +134,7 @@ export type VvocConfig = {
   guardian: GuardianConfig;
   secretsRedaction: SecretsRedactionConfig;
   presets: VvocPresets;
+  plugins: VvocPluginToggleConfig;
 };
 
 export type ParsedVvocConfig = {
@@ -329,6 +334,7 @@ export function createDefaultVvocConfig(): VvocConfig {
     guardian: createGuardianConfig(),
     secretsRedaction: createDefaultSecretsRedactionConfig(),
     presets: createDefaultVvocPresets(),
+    plugins: createDefaultPluginToggleConfig(),
   };
 }
 // END_BLOCK_DEFAULT_CONFIG_BUILDERS
@@ -424,6 +430,7 @@ export function loadLenientVvocConfigText(
       warnings,
     ),
     presets: loadLenientVvocPresets(value.presets, `${label}: presets`, warnings),
+    plugins: loadLenientPluginToggleConfig(value.plugins, `${label}: plugins`, warnings),
   };
 }
 
@@ -435,6 +442,7 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     guardian: createGuardianConfig(config.guardian),
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
     presets: createVvocPresets(config.presets),
+    plugins: config.plugins,
   });
 }
 // END_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
@@ -467,6 +475,7 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
         value.secretsRedaction as SecretsRedactionConfig,
       ),
       presets: createVvocPresets(value.presets as VvocPresets),
+      plugins: createDefaultPluginToggleConfig(),
     },
   };
 }
@@ -818,6 +827,27 @@ function loadLenientVvocPresets(value: unknown, label: string, warnings: string[
   }
 
   return createVvocPresets(presets);
+}
+
+function loadLenientPluginToggleConfig(
+  value: unknown,
+  label: string,
+  warnings: string[],
+): VvocPluginToggleConfig {
+  if (!isPlainObject(value)) {
+    warnings.push(`${label}: expected an object`);
+    return createDefaultPluginToggleConfig();
+  }
+
+  const config = createDefaultPluginToggleConfig();
+
+  for (const [pluginName, pluginValue] of Object.entries(value)) {
+    if (typeof pluginValue === "boolean") {
+      config[pluginName] = pluginValue;
+    }
+  }
+
+  return config;
 }
 
 function loadLenientVvocPresetAgents(
