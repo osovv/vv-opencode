@@ -30,6 +30,7 @@ import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
 const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
+const SELF_SUFFICIENT_PRIMARY_AGENTS = ["vv-controller", "enhancer"] as const;
 
 const MAIN_SESSION_SYSTEM_CONTEXTS = [
   [
@@ -136,6 +137,13 @@ function shouldInjectForAgent(agentName: string | undefined, knownSubagents: Set
     return false;
   }
   if (INTERNAL_PRIMARY_AGENTS.includes(agentName as (typeof INTERNAL_PRIMARY_AGENTS)[number])) {
+    return false;
+  }
+  if (
+    SELF_SUFFICIENT_PRIMARY_AGENTS.includes(
+      agentName as (typeof SELF_SUFFICIENT_PRIMARY_AGENTS)[number],
+    )
+  ) {
     return false;
   }
   return true;
