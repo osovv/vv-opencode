@@ -1152,7 +1152,7 @@
     <Phase-12 name="Plugin Runtime Toggle" status="planned">
       <goal>Add `plugins` section to canonical vvoc.json, shared `isPluginEnabled()` utility, CLI enable/disable commands, and per-plugin load-time checks so every vvoc-managed plugin can be toggled at runtime.</goal>
       <step-1 module="M-PLUGIN-TOGGLE-CONFIG" status="done" verification="V-M-PLUGIN-TOGGLE-CONFIG">Implement PLUGIN_TOGGLE_NAMES, createDefaultPluginToggleConfig, isPluginEnabled helper, and update VvocConfig type with the plugins section.</step-1>
-      <step-2 module="M-CLI-CONFIG" status="planned" verification="V-M-CLI-CONFIG">Update vvoc schema v3 to add plugins section and remove enabled from secretsRedaction section. Update createDefaultVvocConfig to seed plugins all-true. Update syncVvocConfig to preserve existing plugins values.</step-2>
+      <step-2 module="M-CLI-CONFIG" status="done" verification="V-M-CLI-CONFIG">Update vvoc schema v3 to add plugins section and remove enabled from secretsRedaction section. Update createDefaultVvocConfig to seed plugins all-true. Update syncVvocConfig to preserve existing plugins values.</step-2>
       <step-3 module="M-CLI-PLUGIN-TOGGLE" status="planned" verification="V-M-CLI-PLUGIN-TOGGLE">Add vvoc plugin enable/disable CLI subcommands that validate plugin names and write to vvoc.json.</step-3>
       <step-4 module="M-CLI-PLUGIN-LIST" status="planned" verification="V-M-CLI-PLUGIN-LIST">Extend plugin list to show a vvoc-status column reading from the vvoc.json plugins section.</step-4>
       <step-5 module="M-PLUGIN-GUARDIAN" status="planned" verification="V-M-PLUGIN-GUARDIAN">Add isPluginEnabled check to GuardianPlugin factory, return {} when disabled.</step-5>
