@@ -119,6 +119,51 @@
       <Priority>medium</Priority>
       <RelatedFlows>DF-WORKFLOW-GUIDANCE</RelatedFlows>
     </UC-014>
+    <UC-015>
+      <Actor>User</Actor>
+      <Action>Sets `plugins.secretsRedaction = false` in canonical vvoc.json (directly or via `vvoc plugin disable secrets-redaction`).</Action>
+      <Goal>To make the secrets-redaction plugin return empty hooks on the next session so raw secrets reach the provider without redaction.</Goal>
+      <Preconditions>The canonical vvoc config exists at `$XDG_CONFIG_HOME/vvoc/vvoc.json`.</Preconditions>
+      <AcceptanceCriteria>The `plugins` section in vvoc.json contains `"secrets-redaction": false`, the secrets-redaction plugin factory reads this value and returns `{}` on the next session, and other plugins continue to load normally.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-PLUGIN-TOGGLE</RelatedFlows>
+    </UC-015>
+    <UC-016>
+      <Actor>User</Actor>
+      <Action>Sets `plugins.hashlineEdit = false` in canonical vvoc.json (directly or via CLI).</Action>
+      <Goal>To disable the hash-anchored edit plugin at runtime when it causes regressions, falling back to OpenCode's default edit tool.</Goal>
+      <Preconditions>The canonical vvoc config exists.</Preconditions>
+      <AcceptanceCriteria>The hashline-edit plugin returns `{}` instead of registering hooks when `plugins["hashline-edit"]` is `false`, and the OpenCode default edit tool remains available.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-PLUGIN-TOGGLE</RelatedFlows>
+    </UC-016>
+    <UC-017>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc plugin enable guardian` via CLI.</Action>
+      <Goal>To set `plugins.guardian = true` in vvoc.json and re-enable the Guardian plugin on the next session.</Goal>
+      <Preconditions>The canonical vvoc config exists.</Preconditions>
+      <AcceptanceCriteria>The CLI validates `guardian` as a known plugin name, sets `plugins.guardian = true` in vvoc.json, and prints a confirmation with restart instructions.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-PLUGIN-TOGGLE</RelatedFlows>
+    </UC-017>
+    <UC-018>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc sync` while some plugins are disabled in vvoc.json.</Action>
+      <Goal>To refresh managed vvoc config and OpenCode registrations without resetting the disabled plugins back to enabled.</Goal>
+      <Preconditions>Canonical vvoc config with non-default `plugins` values exists.</Preconditions>
+      <AcceptanceCriteria>The `plugins` section survives the sync rewrite — disabled plugins stay disabled, enabled ones stay enabled.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-CONFIG-SYNC</RelatedFlows>
+    </UC-018>
+    <UC-019>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc plugin list` while some plugins are disabled in vvoc.json.</Action>
+      <Goal>To see both the OpenCode-level plugin registration status and the vvoc-level enabled/disabled toggle status for each plugin.</Goal>
+      <Preconditions>Canonical vvoc config exists with `plugins` section.</Preconditions>
+      <AcceptanceCriteria>The output includes a separate vvoc status column showing enabled/disabled per plugin based on the vvoc.json `plugins` section.</AcceptanceCriteria>
+      <Priority>medium</Priority>
+      <RelatedFlows>DF-PLUGIN-LIST</RelatedFlows>
+    </UC-019>
   </UseCases>
 
   <NonGoals>
@@ -127,6 +172,7 @@
     <item-5>No semantic task grouping or embedding-based work-item identity in workflow v1.</item-5>
     <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
     <item-7>No workflow tracking for `investigator`, `guardian`, `enhancer`, `vv-analyst`, or `vv-architect` in v1.</item-7>
+    <item-8>No per-plugin granularity beyond the vvoc-managed plugin set in v1 — plugin toggle does not extend to user-defined OpenCode plugins.</item-8>
   </NonGoals>
 
   <Constraints>
@@ -134,6 +180,9 @@
     <constraint-2>vvoc-managed settings must live in the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file.</constraint-2>
     <constraint-3>Persisted vvoc data must live under `$XDG_DATA_HOME/vvoc/`, not inside the OpenCode config tree.</constraint-3>
     <constraint-4>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-4>
+    <constraint-16>The `plugins` toggle section governs vvoc-managed plugins only: `guardian`, `hashline-edit`, `model-roles`, `system-context-injection`, `workflow`, and `secrets-redaction`. User-registered OpenCode plugins are out of scope.</constraint-16>
+    <constraint-17>If the `plugins` section is absent from vvoc.json, all vvoc plugins are treated as enabled (backward compatibility).</constraint-17>
+    <constraint-18>The `vvoc sync` command must preserve the `plugins` section values rather than resetting them to defaults.</constraint-18>
     <constraint-6>Generated canonical vvoc config must be fully seeded and versioned by schema rather than split across multiple CLI-managed files.</constraint-6>
     <constraint-7>Semantic role assignments must live in canonical global vvoc config, while OpenCode config stores `vv-role:*` references that are resolved at runtime.</constraint-7>
     <constraint-8>Role resolution must fail loudly for unknown roles rather than silently falling back to a provider default.</constraint-8>
@@ -155,6 +204,8 @@
     <risk-7>Rename of tracked subagents from `implementer/spec-reviewer/code-reviewer` to `vv-implementer/vv-spec-reviewer/vv-code-reviewer` is a breaking change for any external config or prompt overrides that reference the old names.</risk-7>
     <risk-8>In-memory workflow state is lost on process restart, which may confuse users who expect work items to survive across sessions.</risk-8>
     <risk-9>Forcing OpenCode `default_agent` to `vv-controller` during sync may surprise users who intentionally selected another default primary agent.</risk-9>
+    <risk-10>A user disables a critical plugin (e.g., `workflow` or `model-roles`) and forgets to re-enable it, causing workflow enforcement or role resolution to silently stop working.</risk-10>
+    <risk-11>Config-less plugins (`hashline-edit`, `system-context-injection`) need new config-reading code that could fail in edge cases like unreadable vvoc.json.</risk-11>
   </Risks>
 
   <OpenQuestions>

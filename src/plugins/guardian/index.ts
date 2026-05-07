@@ -36,6 +36,7 @@ import {
   type GuardianConfigOverrides,
 } from "../../lib/vvoc-config.js";
 import { getGlobalVvocConfigPath } from "../../lib/vvoc-paths.js";
+import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const GUARDIAN_AGENT = "guardian";
 const GUARDIAN_DISABLED_ENV = "OPENCODE_GUARDIAN_DISABLED";
@@ -1273,6 +1274,7 @@ function installGuardianAgent(
 
 // START_BLOCK_REGISTER_GUARDIAN_PLUGIN_HOOKS
 export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) => {
+  if (!(await isPluginEnabled("guardian"))) return {};
   const toolIntentsByCallID = new Map<string, ToolIntent>();
   const latestCommandIntentBySessionID = new Map<string, CommandIntent>();
   const activeReviews = new Map<string, ActiveReview>();

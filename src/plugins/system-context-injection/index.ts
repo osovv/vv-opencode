@@ -25,6 +25,7 @@
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
+import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
@@ -168,6 +169,7 @@ function appendSystemContexts(
 
 // START_BLOCK_PLUGIN_ENTRY
 export const SystemContextInjectionPlugin: Plugin = async () => {
+  if (!(await isPluginEnabled("system-context-injection"))) return {};
   const knownSubagents = createKnownSubagentSet();
 
   return {

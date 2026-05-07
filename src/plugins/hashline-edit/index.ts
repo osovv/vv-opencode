@@ -27,6 +27,7 @@ import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.
 import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
 import { HashlineMismatchError } from "./validation.js";
+import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const z = tool.schema;
 const CONTENT_OPEN_TAG = "<content>";
@@ -430,6 +431,7 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
 }
 
 export const HashlineEditPlugin: Plugin = async () => {
+  if (!(await isPluginEnabled("hashline-edit"))) return {};
   return {
     "tool.execute.after": async (input, output) => {
       if (!isReadTool(input.tool) || typeof output.output !== "string") {

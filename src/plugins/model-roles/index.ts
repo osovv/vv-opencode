@@ -27,6 +27,7 @@ import {
 } from "../../lib/model-roles.js";
 import { createDefaultVvocConfig, loadLenientVvocConfigText } from "../../lib/vvoc-config.js";
 import { getGlobalVvocConfigPath } from "../../lib/vvoc-paths.js";
+import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 type ModelRolesPluginErrorCode = "UNKNOWN_ROLE" | "INVALID_ROLE_ASSIGNMENT";
 
@@ -212,6 +213,7 @@ function resolveNestedModelFields(
 
 // START_BLOCK_PLUGIN_ENTRY
 export const ModelRolesPlugin: Plugin = async ({ client }) => {
+  if (!(await isPluginEnabled("model-roles"))) return {};
   return {
     config: async (config) => {
       const { roleMap, sources, warningCount } = await loadCanonicalRoleMap();

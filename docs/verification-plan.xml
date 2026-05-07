@@ -3,9 +3,9 @@
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, controller main-session system guidance injection, hash-anchored editing, secrets redaction, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, and loop gating.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, controller main-session system guidance injection, hash-anchored editing, secrets redaction, plugin toggle config and CLI, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, and loop gating.</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system or workflow change.</wave-level-focus>
-    <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, secrets redaction, tracked subagent rename, review-only workflows, and deterministic workflow enforcement.</phase-level-focus>
+    <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, secrets redaction, plugin runtime toggle, tracked subagent rename, review-only workflows, and deterministic workflow enforcement.</phase-level-focus>
     <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
@@ -120,7 +120,29 @@
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append workflow system instruction -&gt; skip known subagents</trace-sequence>
       </required-signals>
     </VF-WORKFLOW-GUIDANCE>
+    <VF-PLUGIN-TOGGLE NAME="PluginToggle" USE_CASES="UC-015,UC-016,UC-017,UC-018,UC-019" DATA_FLOW="DF-PLUGIN-TOGGLE" PRIORITY="medium">
+      <scenario>User enables or disables a vvoc-managed plugin via `vvoc plugin enable|disable <name>` or by directly editing vvoc.json.</scenario>
+      <expected-outcome>The vvoc.json `plugins` section reflects the intended toggle state, unknown plugin names are rejected, sync preserves the toggle state, and the plugin returns empty hooks on the next session when disabled.</expected-outcome>
+      <required-signals>
+        <trace-sequence>vvoc plugin enable|disable <name> -&gt; validate plugin name -&gt; write vvoc.json -&gt; restart session -&gt; isPluginEnabled -&gt; return {} or normal hooks</trace-sequence>
+      </required-signals>
+    </VF-PLUGIN-TOGGLE>
   </CriticalFlows>
+
+  <VerificationMatrix SCOPE="Phase-12">
+    <VM-PLUGIN-TOGGLE-CONFIG MODULE="M-PLUGIN-TOGGLE-CONFIG" FLOW="DF-PLUGIN-TOGGLE-CHECK" PRIORITY="medium">
+      <scenario>isPluginEnabled reads vvoc.json and returns true/false based on the plugins section. Defaults to true when section is missing.</scenario>
+      <primary-evidence>deterministic assertions on isPluginEnabled with known plugin names and config fixtures</primary-evidence>
+      <trajectory-evidence>edge-case assertions for missing config, missing plugins section, unknown plugin names</trajectory-evidence>
+      <telemetry>none required beyond return-value surfaces</telemetry>
+    </VM-PLUGIN-TOGGLE-CONFIG>
+    <VM-CLI-PLUGIN-TOGGLE MODULE="M-CLI-PLUGIN-TOGGLE" FLOW="DF-PLUGIN-TOGGLE" PRIORITY="medium">
+      <scenario>CLI enable/disable validates plugin names and writes to vvoc.json. Plugin list shows vvoc status column.</scenario>
+      <primary-evidence>deterministic assertions on vvoc.json round-trip after enable/disable</primary-evidence>
+      <trajectory-evidence>failure assertions for unknown plugin names and unreadable config</trajectory-evidence>
+      <telemetry>CLI confirmation output</telemetry>
+    </VM-CLI-PLUGIN-TOGGLE>
+  </VerificationMatrix>
 
   <VerificationMatrix SCOPE="Phase-6">
     <VM-ROLE-PARSING MODULE="M-MODEL-ROLES" FLOW="DF-ROLE-RESOLUTION" PRIORITY="high">
@@ -211,6 +233,7 @@
     <TR-2 MODULE="M-PLUGIN-GUARDIAN">Guardian runtime config loading and permission review must emit stable markers anchored to `BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG` and `BLOCK_REVIEW_PERMISSION_REQUEST` so failures can be triaged without replaying full conversations.</TR-2>
     <TR-4 MODULE="M-PLUGIN-WORKFLOW">Workflow launch validation must emit stable markers anchored to `BLOCK_VALIDATE_LAUNCH` for valid, rejected, and untracked launch paths. Result parsing must emit stable markers anchored to `BLOCK_PARSE_RESULT` for repair-attempt, successful-parse, protocol-error, and hard-stop paths.</TR-4>
     <TR-5 MODULE="M-WORKFLOW-TRANSITIONS">State transitions must emit stable markers anchored to `BLOCK_TRANSITION_STATE` and `BLOCK_CHECK_ROUND_LIMIT` so launch-enforcement and result-parsing failures can be triaged without replaying full subagent output.</TR-5>
+    <TR-6 MODULE="M-PLUGIN-TOGGLE-CONFIG">Plugin toggle check must emit a structured marker anchored to `BLOCK_CHECK_PLUGIN_ENABLED` showing plugin name and resolved enabled/disabled state. Disabled plugins should emit a clear log line like `[plugin-name][factory][BLOCK_PLUGIN_DISABLED] plugin disabled via vvoc config, skipping hooks` so the user can verify which plugins were skipped at startup.</TR-6>
   </TelemetryRequirements>
 
   <ModuleVerification>
@@ -481,6 +504,60 @@
       <wave-follow-up>Consider making the injected system contexts configurable once multiple reusable guidance blocks exist.</wave-follow-up>
     </V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
+        <V-M-PLUGIN-TOGGLE-CONFIG MODULE="M-PLUGIN-TOGGLE-CONFIG" PRIORITY="medium">
+      <test-files>
+        <file>src/lib/plugin-toggle-config.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/lib/plugin-toggle-config.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+        <check-3>bun run lint</check-3>
+        <check-4>bun run fmt:check</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">PLUGIN_TOGGLE_NAMES exposes exactly guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction.</scenario-1>
+        <scenario-2 kind="success">createDefaultPluginToggleConfig returns all-known-plugins record with all values set to true.</scenario-2>
+        <scenario-3 kind="success">isPluginEnabled returns true for a known plugin when the plugins section is absent (backward compatibility).</scenario-3>
+        <scenario-4 kind="success">isPluginEnabled returns true when plugins[name] is true.</scenario-4>
+        <scenario-5 kind="success">isPluginEnabled returns false when plugins[name] is false.</scenario-5>
+        <scenario-6 kind="failure">isPluginEnabled returns true for unknown plugin names (safe default).</scenario-6>
+        <scenario-7 kind="failure">isPluginEnabled handles unreadable/missing vvoc.json gracefully by returning true.</scenario-7>
+      </scenarios>
+      <required-log-markers>
+        <marker-1>[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED] plugin &lt;name&gt; enabled: &lt;true|false&gt;</marker-1>
+      </required-log-markers>
+      <required-trace-assertions>
+        <assertion-1>isPluginEnabled must not mutate vvoc.json or any external state.</assertion-1>
+        <assertion-2>isPluginEnabled must return a boolean synchronously and must never throw for valid input.</assertion-2>
+      </required-trace-assertions>
+      <wave-follow-up>Add file-based fixture tests for the full suite of config shapes (with section, without section, malformed JSON).</wave-follow-up>
+    </V-M-PLUGIN-TOGGLE-CONFIG>
+
+    <V-M-CLI-PLUGIN-TOGGLE MODULE="M-CLI-PLUGIN-TOGGLE" PRIORITY="medium">
+      <test-files>
+        <file>src/commands/plugin-toggle.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/commands/plugin-toggle.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+        <check-3>bun run lint</check-3>
+        <check-4>bun run fmt:check</check-4>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">`enablePlugin("secrets-redaction")` sets plugins["secrets-redaction"] = true and round-trips cleanly.</scenario-1>
+        <scenario-2 kind="success">`disablePlugin("hashline-edit")` sets plugins["hashline-edit"] = false and round-trips cleanly.</scenario-2>
+        <scenario-3 kind="failure">`enablePlugin("unknown-plugin")` fails with UNKNOWN_PLUGIN_NAME error.</scenario-3>
+        <scenario-4 kind="failure">`disablePlugin("unknown-plugin")` fails with UNKNOWN_PLUGIN_NAME error.</scenario-4>
+        <scenario-5 kind="failure">Both enable/disable fail with CONFIG_NOT_FOUND when vvoc.json is absent.</scenario-5>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Both enable and disable must use canonical vvoc write helpers instead of introducing a parallel mutation path.</assertion-1>
+        <assertion-2>After enable or disable, the config must remain schema-valid.</assertion-2>
+      </required-trace-assertions>
+      <wave-follow-up>Add temp-home integration tests for vvoc plugin enable/disable end-to-end.</wave-follow-up>
+    </V-M-CLI-PLUGIN-TOGGLE>
+
     <V-M-PLUGIN-SECRETS-REDACTION MODULE="M-PLUGIN-SECRETS-REDACTION" PRIORITY="high">
       <test-files>
         <file>src/plugins/secrets-redaction/patterns.test.ts</file>
@@ -498,7 +575,7 @@
         <scenario-1 kind="success">Plugin exports compile against current OpenCode plugin and SDK types.</scenario-1>
         <scenario-2 kind="success">Placeholders are stable within a session (same secret maps to same placeholder).</scenario-2>
         <scenario-3 kind="success">Builtin patterns detect the documented token and identifier classes.</scenario-3>
-        <scenario-4 kind="failure">Disabled config makes plugin a no-op.</scenario-4>
+        <scenario-4 kind="failure">Disabled via vvoc plugins section makes plugin return {} without registering hooks (replaces old internal enabled check).</scenario-4>
       </scenarios>
       <required-log-markers>
         <marker-1>secrets-redaction</marker-1>
@@ -596,6 +673,8 @@
       <scenarios>
         <scenario-1 kind="success">Lists all plugins when OpenCode config has a populated plugin array.</scenario-1>
         <scenario-2 kind="success">Shows `ModelRolesPlugin` when the package exports are wired correctly.</scenario-2>
+        <scenario-3 kind="success">When vvoc.json has a plugins section, the vvoc status column shows enabled/disabled per vvoc-managed plugin.</scenario-3>
+        <scenario-4 kind="success">When vvoc.json has no plugins section, vvoc status column shows N/A or equivalent indicator.</scenario-4>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -988,6 +1067,26 @@
         <evidence-4>`bun run pack:check` verifies package-root exports and all published plugin subpath imports, including `./plugins/secrets-redaction`.</evidence-4>
       </required-evidence>
     </Gate-Phase-11>
+    <Gate-Phase-12 PHASE="Phase-12">
+      <goal>Plugin runtime toggle: plugins section in vvoc.json, isPluginEnabled helper, CLI enable/disable, extended plugin list, and per-plugin load checks.</goal>
+      <commands>
+        <command-1>bun run typecheck</command-1>
+        <command-2>bun run lint</command-2>
+        <command-3>bun run fmt:check</command-3>
+        <command-4>bun test src/lib/plugin-toggle-config.test.ts src/commands/plugin-toggle.test.ts</command-4>
+        <command-5>bun test src/commands/plugin-list.test.ts</command-5>
+        <command-6>bun test src/plugins/secrets-redaction/*.test.ts</command-6>
+        <command-7>bun run build</command-7>
+        <command-8>bun run pack:check</command-8>
+      </commands>
+      <required-evidence>
+        <evidence-1>isPluginEnabled returns correct boolean for all config shapes including missing section.</evidence-1>
+        <evidence-2>CLI enable/disable round-trips cleanly and validates plugin names.</evidence-2>
+        <evidence-3>Each plugin factory returns {} when its plugin name is set to false in vvoc.json.</evidence-3>
+        <evidence-4>vvoc plugin list shows a vvoc status column reflecting the plugins section.</evidence-4>
+        <evidence-5>syncVvocConfig preserves user-set plugins values.</evidence-5>
+      </required-evidence>
+    </Gate-Phase-12>
   </PhaseGates>
 
   <FailurePackets>

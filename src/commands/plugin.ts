@@ -19,6 +19,7 @@
 
 import { defineCommand } from "citty";
 import listCommand from "./plugin-list.js";
+import { enableCommand, disableCommand } from "./plugin-toggle.js";
 
 export default defineCommand({
   meta: {
@@ -27,5 +28,7 @@ export default defineCommand({
   },
   subCommands: {
     list: listCommand,
+    enable: enableCommand,
+    disable: disableCommand,
   },
 });

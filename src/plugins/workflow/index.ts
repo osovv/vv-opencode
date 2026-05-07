@@ -56,6 +56,7 @@ import {
   createWorkItemOpenTool,
 } from "./tooling.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
+import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const z = tool.schema;
 
@@ -161,6 +162,7 @@ function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number)
 
 // START_BLOCK_PLUGIN_ENTRY
 export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
+  if (!(await isPluginEnabled("workflow"))) return {};
   const store = createWorkItemStore();
   const knownSubagents = createKnownSubagentSet();
 

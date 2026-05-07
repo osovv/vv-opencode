@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Display all installed OpenCode plugins with their status (enabled/disabled) and source paths.
 //   SCOPE: Scope parsing, plugin array inspection, table rendering, and graceful handling of missing config.
-//   DEPENDS: [citty, src/lib/opencode.js]
+//   DEPENDS: [citty, node:fs/promises, src/lib/opencode.js, src/lib/plugin-toggle-config.js]
 //   LINKS: [M-CLI-PLUGIN-LIST, M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -24,6 +24,8 @@
 
 import { defineCommand } from "citty";
 import { resolvePaths, type Scope } from "../lib/opencode.js";
+import { readFile } from "node:fs/promises";
+import { getGlobalVvocConfigPath } from "../lib/vvoc-paths.js";
 
 export type PluginEntry = {
   name: string;
@@ -68,7 +70,8 @@ export default defineCommand({
       console.log(`OpenCode config: ${paths.opencodeConfigPath}`);
     }
 
-    renderPluginTable(plugins);
+    const vvocToggles = await loadVvocPluginToggles();
+    renderPluginTable(plugins, vvocToggles);
     // END_BLOCK_RUN_PLUGIN_LIST
   },
 });
@@ -128,7 +131,24 @@ export function parsePluginSpecifier(specifier: string): PluginEntry {
   return { name, source, enabled };
 }
 
-export function renderPluginTable(plugins: PluginEntry[]): void {
+export async function loadVvocPluginToggles(): Promise<Record<string, boolean> | null> {
+  try {
+    const configPath = getGlobalVvocConfigPath();
+    const content = await readFile(configPath, "utf8");
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (typeof parsed.plugins !== "object" || parsed.plugins === null) {
+      return null;
+    }
+    return parsed.plugins as Record<string, boolean>;
+  } catch {
+    return null;
+  }
+}
+
+export function renderPluginTable(
+  plugins: PluginEntry[],
+  vvocToggles: Record<string, boolean> | null = null,
+): void {
   if (plugins.length === 0) {
     console.log("No plugins configured.");
     return;
@@ -152,5 +172,27 @@ export function renderPluginTable(plugins: PluginEntry[]): void {
     console.log(
       `  ${plugin.name.padEnd(nameWidth)}  ${plugin.source.padEnd(sourceWidth)}  ${status}`,
     );
+  }
+
+  // Render VVoc plugin toggles section
+  if (vvocToggles !== null) {
+    console.log();
+    console.log("VVoc Plugin Toggles:");
+    const toggleNameCol = "Plugin";
+    const toggleStatusCol = "Status";
+    const toggleNameWidth = Math.max(
+      toggleNameCol.length,
+      ...(Object.keys(vvocToggles).length > 0
+        ? Object.keys(vvocToggles).map((n) => n.length)
+        : [0]),
+    );
+    const toggleHeader = `  ${toggleNameCol.padEnd(toggleNameWidth)}  ${toggleStatusCol}`;
+    const toggleSep = `  ${"-".repeat(toggleNameWidth)}  ${"-".repeat(9)}`;
+    console.log(toggleHeader);
+    console.log(toggleSep);
+    for (const [pluginName, enabled] of Object.entries(vvocToggles)) {
+      const statusText = enabled ? "enabled" : "disabled";
+      console.log(`  ${pluginName.padEnd(toggleNameWidth)}  ${statusText}`);
+    }
   }
 }
