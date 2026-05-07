@@ -399,9 +399,50 @@
       </target>
       <observability>
         <log-prefix>[plugin-list]</log-prefix>
+      <observability>
+        <log-prefix>[plugin-list]</log-prefix>
+        <critical-block>none</critical-block>
       </observability>
       <verification-ref>V-M-CLI-PLUGIN-LIST</verification-ref>
+      <notes>
+        <note-1>Extended to show a vvoc-status column (enabled/disabled) based on the vvoc.json `plugins` section.</note-1>
+      </notes>
     </M-CLI-PLUGIN-LIST>
+    <M-CLI-PLUGIN-TOGGLE NAME="PluginToggle" TYPE="ENTRY_POINT" LAYER="1" ORDER="6" STATUS="planned">
+      <contract>
+        <purpose>Add `vvoc plugin enable &lt;name&gt;` and `vvoc plugin disable &lt;name&gt;` subcommands that mutate the `plugins` section in canonical vvoc.json.</purpose>
+        <inputs>
+          <param name="pluginName" type="string" />
+          <param name="configDir" type="string | undefined" />
+        </inputs>
+        <outputs>
+          <param name="stdout" type="terminal output with confirmation or error" />
+        </outputs>
+        <errors>
+          <error code="UNKNOWN_PLUGIN_NAME" />
+          <error code="CONFIG_NOT_FOUND" />
+          <error code="WRITE_FAILED" />
+        </errors>
+      </contract>
+      <interface>
+        <export-enablePlugin PURPOSE="Set plugins[&lt;name&gt;] = true in canonical vvoc.json." />
+        <export-disablePlugin PURPOSE="Set plugins[&lt;name&gt;] = false in canonical vvoc.json." />
+      </interface>
+      <depends>M-CLI-CONFIG, M-PLUGIN-TOGGLE-CONFIG</depends>
+      <target>
+        <source>src/commands/plugin-toggle.ts</source>
+        <tests>src/commands/plugin-toggle.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[plugin-toggle]</log-prefix>
+        <critical-block>none</critical-block>
+      </observability>
+      <verification-ref>V-M-CLI-PLUGIN-TOGGLE</verification-ref>
+      <notes>
+        <note-1>Validates plugin name against PLUGIN_TOGGLE_NAMES before writing.</note-1>
+        <note-2>Prints restart instruction after successful write.</note-2>
+      </notes>
+    </M-CLI-PLUGIN-TOGGLE>
 
     <M-CLI-PATCH-PROVIDER NAME="PatchProvider" TYPE="ENTRY_POINT" LAYER="1" ORDER="6" STATUS="implemented">
       <contract>
@@ -757,6 +798,41 @@
       </observability>
       <verification-ref>V-M-CLI-AGENT-MODELS</verification-ref>
     </M-CLI-AGENT-MODELS>
+    <M-PLUGIN-TOGGLE-CONFIG NAME="PluginToggleConfig" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="planned">
+      <contract>
+        <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a shared `isPluginEnabled()` helper that each plugin factory can call at load time.</purpose>
+        <inputs>
+          <param name="pluginName" type="string" />
+        </inputs>
+        <outputs>
+          <param name="boolean" type="whether the plugin is enabled in vvoc.json" />
+        </outputs>
+        <errors>
+          <error code="CONFIG_NOT_FOUND" />
+          <error code="INVALID_VVOC_CONFIG" />
+        </errors>
+      </contract>
+      <interface>
+        <export-PLUGIN_TOGGLE_NAMES PURPOSE="Canonical list of vvoc-managed plugin names: guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction." />
+        <export-createDefaultPluginToggleConfig PURPOSE="Return a Record&lt;string, boolean&gt; with all known plugins set to true." />
+        <export-isPluginEnabled PURPOSE="Read the canonical vvoc.json and return whether the named plugin is enabled. If the plugins section is absent, default to true." />
+        <export-VvocPluginToggleConfig PURPOSE="Type alias for Record&lt;string, boolean&gt;." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/lib/plugin-toggle-config.ts</source>
+        <tests>src/lib/plugin-toggle-config.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[plugin-toggle]</log-prefix>
+        <critical-block>BLOCK_CHECK_PLUGIN_ENABLED</critical-block>
+      </observability>
+      <verification-ref>V-M-PLUGIN-TOGGLE-CONFIG</verification-ref>
+      <notes>
+        <note-1>Plugin names are kebab-case matching the OpenCode sub-path export convention: guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction.</note-1>
+        <note-2>If vvoc.json cannot be read or the `plugins` section is missing, return true (backward compatibility).</note-2>
+      </notes>
+    </M-PLUGIN-TOGGLE-CONFIG>
 
     <M-VVOC-PRESET-REGISTRY NAME="VvocPresetRegistry" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
       <contract>
@@ -919,6 +995,23 @@
       <step-4>Patch shell init files idempotently when the shell needs an explicit loader.</step-4>
       <evidence>Installed completion files match the real vvoc command tree and role-centric subcommand surface.</evidence>
     </DF-COMPLETION>
+    <DF-PLUGIN-TOGGLE NAME="PluginToggle" TRIGGER="vvoc plugin enable &lt;name&gt; | vvoc plugin disable &lt;name&gt;">
+      <step-1>Resolve the canonical vvoc.json path.</step-1>
+      <step-2>Load and parse vvoc.json.</step-2>
+      <step-3>Validate plugin name against PLUGIN_TOGGLE_NAMES.</step-3>
+      <step-4>Set plugins[name] = true/false in the parsed config.</step-4>
+      <step-5>Write the updated vvoc.json back.</step-5>
+      <step-6>Print confirmation with a reminder to restart the session.</step-6>
+      <evidence>Config round-trips cleanly, known names are accepted, unknown names are rejected, and the change is visible in `vvoc plugin list` on the next read.</evidence>
+    </DF-PLUGIN-TOGGLE>
+    <DF-PLUGIN-TOGGLE-CHECK NAME="PluginToggleCheck" TRIGGER="plugin factory initialization (every session start)">
+      <step-1>Plugin factory is called by OpenCode at startup.</step-1>
+      <step-2>Read canonical vvoc.json via getGlobalVvocConfigPath().</step-2>
+      <step-3>Call isPluginEnabled(pluginName) which checks the `plugins` section.</step-3>
+      <step-4>If false, return {} (empty hooks) and emit a log message.</step-4>
+      <step-5>If true, proceed with normal initialization and hook registration.</step-5>
+      <evidence>Disabled plugins do not register any hooks. Enabled plugins behave identically to before the toggle was added.</evidence>
+    </DF-PLUGIN-TOGGLE-CHECK>
     <DF-INIT NAME="InteractiveInit" TRIGGER="vvoc init [--non-interactive]">
       <step-1>Check --non-interactive flag. If absent and TTY detected, enter interactive mode with @clack/prompts.</step-1>
       <step-2>Prompt for scope selection (global/project) if interactive.</step-2>
@@ -1056,6 +1149,20 @@
       <step-3 module="M-WORKFLOW-PROTOCOL" status="done" verification="V-M-WORKFLOW-PROTOCOL">Add targeted tests for protocol parsing, state transitions, launch enforcement, result parsing, hard-stop behavior, and loop gating.</step-3>
       <step-4 module="M-PLUGIN-WORKFLOW" status="done" verification="V-M-PLUGIN-WORKFLOW">Run full check, build, and pack:check to validate package integrity.</step-4>
     </Phase-11>
+    <Phase-12 name="Plugin Runtime Toggle" status="planned">
+      <goal>Add `plugins` section to canonical vvoc.json, shared `isPluginEnabled()` utility, CLI enable/disable commands, and per-plugin load-time checks so every vvoc-managed plugin can be toggled at runtime.</goal>
+      <step-1 module="M-PLUGIN-TOGGLE-CONFIG" status="done" verification="V-M-PLUGIN-TOGGLE-CONFIG">Implement PLUGIN_TOGGLE_NAMES, createDefaultPluginToggleConfig, isPluginEnabled helper, and update VvocConfig type with the plugins section.</step-1>
+      <step-2 module="M-CLI-CONFIG" status="planned" verification="V-M-CLI-CONFIG">Update vvoc schema v3 to add plugins section and remove enabled from secretsRedaction section. Update createDefaultVvocConfig to seed plugins all-true. Update syncVvocConfig to preserve existing plugins values.</step-2>
+      <step-3 module="M-CLI-PLUGIN-TOGGLE" status="planned" verification="V-M-CLI-PLUGIN-TOGGLE">Add vvoc plugin enable/disable CLI subcommands that validate plugin names and write to vvoc.json.</step-3>
+      <step-4 module="M-CLI-PLUGIN-LIST" status="planned" verification="V-M-CLI-PLUGIN-LIST">Extend plugin list to show a vvoc-status column reading from the vvoc.json plugins section.</step-4>
+      <step-5 module="M-PLUGIN-GUARDIAN" status="planned" verification="V-M-PLUGIN-GUARDIAN">Add isPluginEnabled check to GuardianPlugin factory, return {} when disabled.</step-5>
+      <step-6 module="M-PLUGIN-HASHLINE-EDIT" status="planned" verification="V-M-PLUGIN-HASHLINE-EDIT">Add isPluginEnabled check to HashlineEditPlugin factory, return {} when disabled.</step-6>
+      <step-7 module="M-PLUGIN-MODEL-ROLES" status="planned" verification="V-M-PLUGIN-MODEL-ROLES">Add isPluginEnabled check to ModelRolesPlugin factory, return {} when disabled.</step-7>
+      <step-8 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="planned" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Add isPluginEnabled check to SystemContextInjectionPlugin factory, return {} when disabled.</step-8>
+      <step-9 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Add isPluginEnabled check to WorkflowPlugin factory, return {} when disabled.</step-9>
+      <step-10 module="M-PLUGIN-SECRETS-REDACTION" status="planned" verification="V-M-PLUGIN-SECRETS-REDACTION">Replace internal enabled check with isPluginEnabled call, remove enabled from SecretsRedactionConfig type and schema.</step-10>
+      <step-11 module="M-CLI-COMMANDS" status="planned" verification="V-M-CLI-COMMANDS">Run full check, build, and pack:check.</step-11>
+    </Phase-12>
   </ImplementationOrder>
 
   <ExecutionPolicy>
@@ -1068,6 +1175,7 @@
       <phase-9 autonomous="caution" evidence="deterministic+integration" notes="Depends on OpenCode plugin API surface for tool.execute.before/after. Requires manual API validation before autonomous execution. Gate-Phase-9 covers integration paths plus build/pack." />
       <phase-10 autonomous="yes" evidence="deterministic" notes="Text file updates with deterministic content checks." />
       <phase-11 autonomous="yes" evidence="build+pack" notes="Documentation sync, build and pack smoke checks. Gate-Phase-11 covers full suite." />
+      <phase-12 autonomous="yes" evidence="deterministic+integration" notes="New utility module, schema update, CLI additions, and per-plugin load checks. Each plugin check is a 2-line addition following a shared pattern. Gate-Phase-12 covers config, CLI, and per-plugin tests." />
     </verification-readiness>
     <test-file-layout>
       <workflow-test-file>src/plugins/workflow.test.ts</workflow-test-file>
