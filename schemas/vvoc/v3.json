@@ -43,9 +43,8 @@
     "secretsRedaction": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "secret", "ttlMs", "maxMappings", "patterns", "debug"],
+      "required": ["secret", "ttlMs", "maxMappings", "patterns", "debug"],
       "properties": {
-        "enabled": { "type": "boolean" },
         "secret": { "type": "string", "minLength": 1 },
         "ttlMs": { "type": "integer", "minimum": 0 },
         "maxMappings": { "type": "integer", "minimum": 1 },
@@ -113,4 +112,12 @@
       }
     }
   }
+,
+    "plugins": {
+      "type": "object",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    }
 }

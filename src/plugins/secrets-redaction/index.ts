@@ -23,6 +23,7 @@ import { redactText } from "./engine.js";
 import { restoreText } from "./restore.js";
 import { redactDeep, restoreDeep } from "./deep.js";
 import { PlaceholderSession } from "./session.js";
+import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { Plugin } from "@opencode-ai/plugin";
 import type { Part, TextPart, ReasoningPart } from "@opencode-ai/sdk/client";
 
@@ -98,7 +99,7 @@ export const SecretsRedactionPlugin: Plugin = async (ctx) => {
     });
   }
 
-  if (!config.enabled) {
+  if (!(await isPluginEnabled("secrets-redaction"))) {
     return {};
   }
 

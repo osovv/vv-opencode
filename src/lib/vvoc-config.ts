@@ -114,7 +114,6 @@ export type SecretsRedactionRegexRule = {
 };
 
 export type SecretsRedactionConfig = {
-  enabled: boolean;
   secret: string;
   ttlMs: number;
   maxMappings: number;
@@ -158,9 +157,8 @@ const GUARDIAN_CONFIG_SCHEMA = {
 const SECRETS_REDACTION_CONFIG_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["enabled", "secret", "ttlMs", "maxMappings", "patterns", "debug"],
+  required: ["secret", "ttlMs", "maxMappings", "patterns", "debug"],
   properties: {
-    enabled: { type: "boolean" },
     secret: { type: "string", minLength: 1 },
     ttlMs: { type: "integer", minimum: 0 },
     maxMappings: { type: "integer", minimum: 1 },
@@ -255,6 +253,11 @@ export const VVOC_CONFIG_SCHEMA = {
       propertyNames: { minLength: 1 },
       additionalProperties: VVOC_PRESET_SCHEMA,
     },
+    plugins: {
+      type: "object",
+      propertyNames: { minLength: 1 },
+      additionalProperties: { type: "boolean" },
+    },
   },
 };
 
@@ -276,7 +279,6 @@ export function createGuardianConfig(overrides: GuardianConfigOverrides = {}): G
 
 export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
   return {
-    enabled: true,
     secret: "${VVOC_SECRET}",
     ttlMs: DEFAULT_SECRETS_REDACTION_TTL_MS,
     maxMappings: DEFAULT_SECRETS_REDACTION_MAX_MAPPINGS,
@@ -487,7 +489,6 @@ function createSecretsRedactionConfig(
   const patterns: Partial<SecretsRedactionConfig["patterns"]> = overrides.patterns ?? {};
 
   return {
-    enabled: overrides.enabled ?? defaults.enabled,
     secret: normalizeOptionalString(overrides.secret) ?? defaults.secret,
     ttlMs: overrides.ttlMs ?? defaults.ttlMs,
     maxMappings: overrides.maxMappings ?? defaults.maxMappings,
@@ -616,14 +617,6 @@ function loadLenientSecretsRedactionConfig(
 
   const defaults = createDefaultSecretsRedactionConfig();
   const config = createDefaultSecretsRedactionConfig();
-
-  if (Object.hasOwn(value, "enabled")) {
-    if (typeof value.enabled === "boolean") {
-      config.enabled = value.enabled;
-    } else {
-      warnings.push(`${label}.enabled: expected a boolean`);
-    }
-  }
   if (Object.hasOwn(value, "secret")) {
     const secret = readLenientOptionalString(value.secret, `${label}.secret`, warnings);
     if (secret !== undefined) {

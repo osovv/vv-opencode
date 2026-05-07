@@ -59,7 +59,7 @@ export default defineCommand({
       `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
     );
     console.log(
-      `Secrets Redaction enabled: ${inspection.secretsRedaction.config ? (inspection.secretsRedaction.config.enabled ? "yes" : "no") : "unknown"}`,
+      `Secrets Redaction config: ${inspection.secretsRedaction.config ? "present" : "unknown"}`,
     );
     console.log("Roles:");
     if (inspection.roles.assignments.length === 0) {
