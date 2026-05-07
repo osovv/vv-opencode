@@ -1149,19 +1149,19 @@
       <step-3 module="M-WORKFLOW-PROTOCOL" status="done" verification="V-M-WORKFLOW-PROTOCOL">Add targeted tests for protocol parsing, state transitions, launch enforcement, result parsing, hard-stop behavior, and loop gating.</step-3>
       <step-4 module="M-PLUGIN-WORKFLOW" status="done" verification="V-M-PLUGIN-WORKFLOW">Run full check, build, and pack:check to validate package integrity.</step-4>
     </Phase-11>
-    <Phase-12 name="Plugin Runtime Toggle" status="planned">
+    <Phase-12 name="Plugin Runtime Toggle" status="done">
       <goal>Add `plugins` section to canonical vvoc.json, shared `isPluginEnabled()` utility, CLI enable/disable commands, and per-plugin load-time checks so every vvoc-managed plugin can be toggled at runtime.</goal>
       <step-1 module="M-PLUGIN-TOGGLE-CONFIG" status="done" verification="V-M-PLUGIN-TOGGLE-CONFIG">Implement PLUGIN_TOGGLE_NAMES, createDefaultPluginToggleConfig, isPluginEnabled helper, and update VvocConfig type with the plugins section.</step-1>
       <step-2 module="M-CLI-CONFIG" status="done" verification="V-M-CLI-CONFIG">Update vvoc schema v3 to add plugins section and remove enabled from secretsRedaction section. Update createDefaultVvocConfig to seed plugins all-true. Update syncVvocConfig to preserve existing plugins values.</step-2>
-      <step-3 module="M-CLI-PLUGIN-TOGGLE" status="planned" verification="V-M-CLI-PLUGIN-TOGGLE">Add vvoc plugin enable/disable CLI subcommands that validate plugin names and write to vvoc.json.</step-3>
-      <step-4 module="M-CLI-PLUGIN-LIST" status="planned" verification="V-M-CLI-PLUGIN-LIST">Extend plugin list to show a vvoc-status column reading from the vvoc.json plugins section.</step-4>
-      <step-5 module="M-PLUGIN-GUARDIAN" status="planned" verification="V-M-PLUGIN-GUARDIAN">Add isPluginEnabled check to GuardianPlugin factory, return {} when disabled.</step-5>
-      <step-6 module="M-PLUGIN-HASHLINE-EDIT" status="planned" verification="V-M-PLUGIN-HASHLINE-EDIT">Add isPluginEnabled check to HashlineEditPlugin factory, return {} when disabled.</step-6>
-      <step-7 module="M-PLUGIN-MODEL-ROLES" status="planned" verification="V-M-PLUGIN-MODEL-ROLES">Add isPluginEnabled check to ModelRolesPlugin factory, return {} when disabled.</step-7>
-      <step-8 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="planned" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Add isPluginEnabled check to SystemContextInjectionPlugin factory, return {} when disabled.</step-8>
-      <step-9 module="M-PLUGIN-WORKFLOW" status="planned" verification="V-M-PLUGIN-WORKFLOW">Add isPluginEnabled check to WorkflowPlugin factory, return {} when disabled.</step-9>
-      <step-10 module="M-PLUGIN-SECRETS-REDACTION" status="planned" verification="V-M-PLUGIN-SECRETS-REDACTION">Replace internal enabled check with isPluginEnabled call, remove enabled from SecretsRedactionConfig type and schema.</step-10>
-      <step-11 module="M-CLI-COMMANDS" status="planned" verification="V-M-CLI-COMMANDS">Run full check, build, and pack:check.</step-11>
+      <step-3 module="M-CLI-PLUGIN-TOGGLE" status="done" verification="V-M-CLI-PLUGIN-TOGGLE">Add vvoc plugin enable/disable CLI subcommands that validate plugin names and write to vvoc.json.</step-3>
+      <step-4 module="M-CLI-PLUGIN-LIST" status="done" verification="V-M-CLI-PLUGIN-LIST">Extend plugin list to show a vvoc-status column reading from the vvoc.json plugins section.</step-4>
+      <step-5 module="M-PLUGIN-GUARDIAN" status="done" verification="V-M-PLUGIN-GUARDIAN">Add isPluginEnabled check to GuardianPlugin factory, return {} when disabled.</step-5>
+      <step-6 module="M-PLUGIN-HASHLINE-EDIT" status="done" verification="V-M-PLUGIN-HASHLINE-EDIT">Add isPluginEnabled check to HashlineEditPlugin factory, return {} when disabled.</step-6>
+      <step-7 module="M-PLUGIN-MODEL-ROLES" status="done" verification="V-M-PLUGIN-MODEL-ROLES">Add isPluginEnabled check to ModelRolesPlugin factory, return {} when disabled.</step-7>
+      <step-8 module="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" status="done" verification="V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION">Add isPluginEnabled check to SystemContextInjectionPlugin factory, return {} when disabled.</step-8>
+      <step-9 module="M-PLUGIN-WORKFLOW" status="done" verification="V-M-PLUGIN-WORKFLOW">Add isPluginEnabled check to WorkflowPlugin factory, return {} when disabled.</step-9>
+      <step-10 module="M-PLUGIN-SECRETS-REDACTION" status="done" verification="V-M-PLUGIN-SECRETS-REDACTION">Replace internal enabled check with isPluginEnabled call, remove enabled from SecretsRedactionConfig type and schema.</step-10>
+      <step-11 module="M-CLI-COMMANDS" status="done" verification="V-M-CLI-COMMANDS">Run full check, build, and pack:check.</step-11>
     </Phase-12>
   </ImplementationOrder>
 

@@ -280,7 +280,7 @@
       </annotations>
     </M-CLI-PLUGIN-LIST>
 
-    <M-CLI-PLUGIN-TOGGLE NAME="PluginToggle" TYPE="ENTRY_POINT" STATUS="planned">
+    <M-CLI-PLUGIN-TOGGLE NAME="PluginToggle" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Add `vvoc plugin enable <name>` and `vvoc plugin disable <name>` subcommands that mutate the `plugins` section in canonical vvoc.json.</purpose>
       <path>src/commands/plugin-toggle.ts</path>
       <depends>M-CLI-CONFIG, M-PLUGIN-TOGGLE-CONFIG</depends>
