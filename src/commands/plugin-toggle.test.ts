@@ -8,6 +8,16 @@
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   plugin toggle describe block - Integration tests for plugin enable/disable CLI commands.
+//   PLUGIN_TOGGLE_NAMES test - Verify PLUGIN_TOGGLE_NAMES contains expected plugin names.
+//   vvoc.json toggle write round-trips test - Verify config write and read-back consistency.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle CLI.]
+// END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
 import { mkdtempSync, mkdirSync } from "node:fs";

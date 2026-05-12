@@ -75,6 +75,12 @@ export async function isPluginEnabled(pluginName: string): Promise<boolean> {
       return true;
     }
 
+    console.log(
+      "[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED] plugin " +
+        pluginName +
+        " enabled: " +
+        pluginValue,
+    );
     return pluginValue;
   } catch {
     // If config cannot be read or parsed, default to enabled

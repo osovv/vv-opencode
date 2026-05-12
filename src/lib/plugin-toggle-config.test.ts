@@ -14,6 +14,10 @@
 //   createDefaultPluginToggleConfig test
 //   isPluginEnabled tests (with temp config fixtures)
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle config.]
+// END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
 import { mkdtempSync } from "node:fs";

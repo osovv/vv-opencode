@@ -12,7 +12,6 @@
 // START_MODULE_MAP
 //   enableCommand - Enable plugin subcommand definition.
 //   disableCommand - Disable plugin subcommand definition.
-//   togglePlugin - Core logic to set a plugin toggle value.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

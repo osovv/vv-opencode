@@ -524,7 +524,7 @@
         <scenario-7 kind="failure">isPluginEnabled handles unreadable/missing vvoc.json gracefully by returning true.</scenario-7>
       </scenarios>
       <required-log-markers>
-        <marker-1>[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED] plugin &lt;name&gt; enabled: &lt;true|false&gt;</marker-1>
+        <marker-1>[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED]</marker-1>
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>isPluginEnabled must not mutate vvoc.json or any external state.</assertion-1>

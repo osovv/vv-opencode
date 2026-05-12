@@ -15,7 +15,7 @@
 //   renderPluginTable - Renders a table of plugins with name, source, and enabled status.
 //   PluginEntry - Parsed plugin entry information.
 //   parsePluginSpecifier - Parse plugin specifier string.
-// END_MODULE_MAP
+//   loadVvocPluginToggles - Read plugin toggle state from vvoc.json.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
