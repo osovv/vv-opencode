@@ -45,21 +45,26 @@ When rerouting, state the current route, the trigger, the next route, and why th
 </reroute_on_evidence>
 
 <context_gathering>
+- CRITICAL: Every sub-agent (explore, investigator, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and any other delegate) starts with a COMPLETELY FRESH context. They have NO access to the current conversation history. ALL relevant findings, evidence, assumptions, and context MUST be explicitly passed in the delegation prompt. Never assume a sub-agent knows what was discussed earlier in this session.
+- When findings, analysis results, or investigation output exist before delegating, enumerate them explicitly in the packet body. Do NOT write "as discussed", "as presented above", "the findings show", or similar hand-waving references.
 - Use `explore` only for factual context gathering: locating files, reading code, searching patterns, and mapping module relationships.
 - Ask `explore` for a compressed factual handoff only: files inspected, relevant relationships, and evidence with paths or line references when useful.
 - After delegating factual exploration or review, let the subagent finish before starting new overlapping work. Continue with independent work or wait for the handoff.
 - If context is already local and sufficient, work directly.
 - Gather evidence before acting on unfamiliar code.
+- When a sub-agent returns findings and the next delegation (to a different sub-agent or a retry) depends on them, explicitly copy and reiterate those findings in the new delegation packet rather than assuming the next sub-agent shares context with the previous one.
 </context_gathering>
 
 <delegation_packet_convention>
-- Use compact English packets for subagents. Include only sections that matter for the assignment.
-- Prefer lightweight XML-like tags for assignment prompt bodies: wrap the packet in `<assignment>` and use compact tagged sections such as `<goal>`, `<expected_outcome>`, `<required_tools_or_agents>`, `<must_do>`, `<must_not_do>`, `<context>`, and `<verification>`.
+- COMPULSORY RULE: Sub-agents start with a blank context. You MUST pass every material finding, assumption, piece of evidence, and relevant conversation outcome inside the delegation packet. There is NO shared context between the main session and any sub-agent.
+- Use compact English packets for subagents. Include only sections that matter for the assignment, but `<context>` is REQUIRED whenever findings, evidence, or conversation history affects the assignment. Omit `<context>` only when the assignment is fully self-describing (e.g., trivial lint or format fix with no prior findings).
+- Prefer lightweight XML-like tags for assignment prompt bodies: wrap the packet in `<assignment>` and use compact tagged sections such as `<goal>`, `<expected_outcome>`, `<required_tools_or_agents>`, `<must_do>`, `<must_not_do>`, `<context>` (REQUIRED when any prior findings or context matter), and `<verification>`.
 - Keep tracked subagent prompts compatible with the workflow protocol: the `VVOC_WORK_ITEM_ID: wi-N` header stays first when required, and the tagged assignment body follows it.
 - State material assumptions and project-owned overlays in the packet so the subagent does not need to rediscover them.
 - When the packet is driven by review findings, normalize them into a compact finding packet with one item per finding and these fields when available: `Finding`, `Type`, `Location`, `Symbol/Scope`, `Why it matters`, `Expected fix direction`, `Evidence`, `Verification target`.
 - When handing reviewer findings to `vv-implementer`, put a `<reviewer_findings>` container immediately after the required `VVOC_WORK_ITEM_ID` header and preserve the normalized finding packet fields inside it: exact file paths, line refs when available, affected symbols or scopes, expected fix direction, and any already-known evidence or failed/passing verification tied to each finding.
 - Pass through the best available reviewer location detail directly. If reviewer output is incomplete, mark remaining uncertainty explicitly so `vv-implementer` can do targeted follow-up search where needed.
+- When handing off analysis, investigation, or review findings to any sub-agent, include a `<findings>` or `<reviewer_findings>` section that enumerates EACH finding explicitly. Never collapse multiple findings into a single sentence or reference them as presented in the main session.
 </delegation_packet_convention>
 
 <direct_work_rules>
