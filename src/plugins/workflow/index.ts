@@ -174,6 +174,11 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   let persistedSessionId: string | null = null;
 
   function hydratePersistedState(sessionId: string): void {
+    // Once a session is tracked, ignore calls from other sessions
+    // (e.g., subagent tool calls use child session IDs)
+    if (persistedSessionId !== null && persistedSessionId !== sessionId) {
+      return;
+    }
     if (persistedSessionId === sessionId) return;
     if (persistedSessionId) {
       snapshotWorkflowState(persistedSessionId, store.getStoreData());
