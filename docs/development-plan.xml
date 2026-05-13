@@ -1,6 +1,7 @@
 <DevelopmentPlan VERSION="0.8.0">
   <ArchitectureNotes>
     <non-goal>Do not preserve backward compatibility with pre-role vvoc schemas or continue exposing target-based model override UX once the role-based contract is introduced. Do not track all subagents in the workflow state machine in v1. Do not persist workflow state across process restarts in v1.</non-goal>
+    <note-updated>Workflow state persistence added in v0.9.0. Per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json hydrate on plugin startup and snapshot on every mutation, plus on session switch via event hooks.</note-updated>
     <risk-1>Config file mutation must stay conservative because users may already have hand-maintained JSONC with comments.</risk-1>
     <risk-3>Shared workflows may reference custom roles that are not assigned on another machine, so runtime role resolution must fail loudly and point at the offending config field.</risk-3>
     <risk-4>Provider-level alias models such as `openai/vv-gpt-5.4-xhigh` remain a separate lower-level mechanism, so the role system must compose with provider patch commands without silently requiring them.</risk-4>
@@ -649,8 +650,8 @@
       <notes>
         <note-1>Work-item IDs follow the pattern `wi-{incrementing}`.</note-1>
         <note-2>Idempotency is keyed by (sessionId, key). Same key plus same title returns same ID. Same key plus different title is an error.</note-2>
-        <note-3>State is in-memory only in v1 and does not persist across process restarts.</note-3>
-      </notes>
+        <note-3>State persisted to $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json. Hydrated on store creation;
+      snapshot on every mutation.</note-3>
     </M-WORKFLOW-STATE>
 
     <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" LAYER="0" ORDER="12" STATUS="implemented">
@@ -743,9 +744,8 @@
         </errors>
       </contract>
       <interface>
-        <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement hooks, result parsing hooks, and primary-session workflow guidance." />
-      </interface>
-      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
+        <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement hooks, result parsing hooks, event-driven persistence (hydrate/snapshot/session-switch/session-cleanup), and primary-session workflow guidance." />
+      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-CLI-MANAGED-AGENTS</depends>
       <target>
         <source>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</source>
         <tests>src/plugins/workflow.test.ts</tests>
@@ -754,6 +754,10 @@
         <log-prefix>[workflow]</log-prefix>
         <critical-block>BLOCK_VALIDATE_LAUNCH</critical-block>
         <critical-block>BLOCK_PARSE_RESULT</critical-block>
+        <critical-block>BLOCK_HYDRATE_STATE</critical-block>
+        <critical-block>BLOCK_SNAPSHOT_STATE</critical-block>
+        <critical-block>BLOCK_SESSION_SWITCH</critical-block>
+        <critical-block>BLOCK_SESSION_CLEANUP</critical-block>
       </observability>
       <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>
       <notes>
@@ -761,6 +765,8 @@
         <note-2>Result parsing intercepts `task` in tool.execute.after and parses the strict top block from tracked subagent output.</note-2>
         <note-3>Primary-session guidance is injected via chat.message, not through global system transform, to preserve agent filtering. `vv-controller` is eligible, while helper primary `enhancer` and known subagents are skipped.</note-3>
         <note-4>Untracked task launches pass through unaffected.</note-4>
+        <note-5>State is hydrated from per-session JSON file on store creation and snapshotted on every mutation plus on session switch.</note-5>
+        <note-6>The event hook handles session.status (busy/idle), tui.session.select (TUI session switch), and session.deleted (cleanup).</note-6>
       </notes>
     </M-PLUGIN-WORKFLOW>
 
@@ -917,6 +923,46 @@
       </observability>
       <verification-ref>V-M-WORKFLOW-REPAIR</verification-ref>
     </M-WORKFLOW-REPAIR>
+
+    <M-WORKFLOW-PERSISTENCE NAME="WorkflowPersistence" TYPE="DATA_LAYER" LAYER="0" ORDER="14" STATUS="implemented">
+      <contract>
+        <purpose>Hydrate and snapshot work-item workflow state from/to per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.</purpose>
+        <inputs>
+          <param name="sessionId" type="string" />
+          <param name="storeData" type="WorkItemStoreData" />
+        </inputs>
+        <outputs>
+          <param name="WorkItemStoreData | void" type="hydrated state or snapshot acknowledgment" />
+        </outputs>
+        <errors>
+          <error code="STATE_FILE_NOT_FOUND" />
+          <error code="STATE_FILE_PARSE_ERROR" />
+          <error code="STATE_FILE_WRITE_ERROR" />
+        </errors>
+      </contract>
+      <interface>
+        <export-getWorkflowSessionDir PURPOSE="Resolve the per-session directory path." />
+        <export-hydrateWorkflowState PURPOSE="Read and parse the per-session workflow-state.json, return WorkItemStoreData or null." />
+        <export-snapshotWorkflowState PURPOSE="Write WorkItemStoreData to the per-session workflow-state.json." />
+      </interface>
+      <depends>src/lib/vvoc-paths.ts</depends>
+      <target>
+        <source>src/plugins/workflow/persistence.ts</source>
+        <tests>src/plugins/workflow.test.ts</tests>
+      </target>
+      <observability>
+        <log-prefix>[workflow-persistence]</log-prefix>
+        <critical-block>BLOCK_HYDRATE_STATE</critical-block>
+        <critical-block>BLOCK_SNAPSHOT_STATE</critical-block>
+      </observability>
+      <verification-ref>V-M-WORKFLOW-PERSISTENCE</verification-ref>
+      <notes>
+        <note-1>Session directory: $XDG_DATA_HOME/vvoc/workflow/<sessionId>/</note-1>
+        <note-2>State file: workflow-state.json with version, nextId, records array, keyIndex map.</note-2>
+        <note-3>On parse error (corrupt file), return null and let caller start fresh.</note-3>
+        <note-4>Write errors are logged as warnings but do not block in-memory operations.</note-4>
+      </notes>
+    </M-WORKFLOW-PERSISTENCE>
   </Modules>
 
   <DataFlow>

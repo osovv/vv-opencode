@@ -57,6 +57,11 @@ import {
 } from "./tooling.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
 import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import {
+  deleteWorkflowSessionDir,
+  hydrateWorkflowState,
+  snapshotWorkflowState,
+} from "./persistence.js";
 
 const z = tool.schema;
 
@@ -163,7 +168,41 @@ function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number)
 // START_BLOCK_PLUGIN_ENTRY
 export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   if (!(await isPluginEnabled("workflow"))) return {};
-  const store = createWorkItemStore();
+
+  // START_BLOCK_PERSISTENCE_SETUP
+  let store = createWorkItemStore();
+  let persistedSessionId: string | null = null;
+
+  function hydratePersistedState(sessionId: string): void {
+    if (persistedSessionId === sessionId) return;
+    if (persistedSessionId) {
+      snapshotWorkflowState(persistedSessionId, store.getStoreData());
+    }
+    persistedSessionId = sessionId;
+    const hydrated = hydrateWorkflowState(sessionId);
+    if (hydrated) {
+      const data = store.getStoreData();
+      data.nextId = hydrated.nextId;
+      data.records.clear();
+      for (const [key, value] of hydrated.records) {
+        data.records.set(key, value);
+      }
+      data.keyIndexBySession.clear();
+      for (const [key, value] of hydrated.keyIndexBySession) {
+        data.keyIndexBySession.set(key, value);
+      }
+    }
+  }
+
+  function snapshotSession(sessionId: string): void {
+    try {
+      snapshotWorkflowState(sessionId, store.getStoreData());
+    } catch {
+      // Snapshot failures are non-blocking
+    }
+  }
+  // END_BLOCK_PERSISTENCE_SETUP
+
   const knownSubagents = createKnownSubagentSet();
 
   const workItemOpenTool = createWorkItemOpenTool(store);
@@ -186,11 +225,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           ),
         },
         async execute(args, context) {
-          return stringifyToolOutput(
-            workItemOpenTool.execute(args, {
-              sessionId: context.sessionID,
-            }),
-          );
+          hydratePersistedState(context.sessionID);
+          const opened = workItemOpenTool.execute(args, {
+            sessionId: context.sessionID,
+          });
+          snapshotSession(context.sessionID);
+          return stringifyToolOutput(opened);
         },
       }),
       work_item_list: tool({
@@ -199,6 +239,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           includeClosed: z.boolean().optional(),
         },
         async execute(args, context) {
+          hydratePersistedState(context.sessionID);
           return stringifyToolOutput(
             workItemListTool.execute(args, {
               sessionId: context.sessionID,
@@ -212,11 +253,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           workItemId: z.string(),
         },
         async execute(args, context) {
-          return stringifyToolOutput(
-            workItemCloseTool.execute(args, {
-              sessionId: context.sessionID,
-            }),
-          );
+          hydratePersistedState(context.sessionID);
+          const closed = workItemCloseTool.execute(args, {
+            sessionId: context.sessionID,
+          });
+          snapshotSession(context.sessionID);
+          return stringifyToolOutput(closed);
         },
       }),
     },
@@ -229,6 +271,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
       if (!isTrackedSubagent(subagentType)) {
         return;
       }
+
+      hydratePersistedState(input.sessionID);
 
       const header = parseWorkItemHeader(readTaskPrompt(output.args));
       if (!header.ok) {
@@ -522,6 +566,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         },
       });
 
+      snapshotSession(input.sessionID);
+
       if (parsed.value.status === "NEEDS_CONTEXT" || parsed.value.status === "BLOCKED") {
         throw new Error(
           `RESULT_HARD_STOP: ${parsed.value.status} requires explicit user action. Inspect work_item_list before retrying.`,
@@ -537,6 +583,51 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         output.message.system,
         WORKFLOW_SYSTEM_INSTRUCTION,
       );
+    },
+    event: async (input) => {
+      const eventType = (input.event as { type?: string }).type;
+      const properties = (input.event as { properties?: Record<string, unknown> }).properties ?? {};
+      const eventSessionId = properties.sessionID as string | undefined;
+
+      if (!eventSessionId) return;
+
+      // Session status busy — potential session switch
+      if (eventType === "session.status") {
+        const status = properties.status as { type?: string } | undefined;
+        if (status?.type === "busy") {
+          hydratePersistedState(eventSessionId);
+          await client.app.log({
+            body: {
+              service: "workflow",
+              level: "info",
+              message: "[workflow][sessionSwitch][BLOCK_SESSION_SWITCH] session active",
+              extra: {
+                sessionID: eventSessionId,
+              },
+            },
+          });
+        }
+        return;
+      }
+
+      // Session deleted — cleanup persisted state
+      if (eventType === "session.deleted") {
+        if (persistedSessionId === eventSessionId) {
+          persistedSessionId = null;
+        }
+        await deleteWorkflowSessionDir(eventSessionId);
+        await client.app.log({
+          body: {
+            service: "workflow",
+            level: "info",
+            message: "[workflow][sessionCleanup][BLOCK_SESSION_CLEANUP] deleted",
+            extra: {
+              sessionID: eventSessionId,
+            },
+          },
+        });
+        return;
+      }
     },
   };
 };

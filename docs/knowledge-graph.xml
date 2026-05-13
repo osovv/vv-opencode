@@ -205,9 +205,9 @@
     </M-WORKFLOW-REPAIR>
 
     <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="implemented">
-      <purpose>In-memory work-item state store with lifecycle management, route-aware state transitions including review-only reviewer starts, counter tracking, round-limit enforcement, and optional closed-item listing keyed by (sessionId, workItemId).</purpose>
+      <purpose>In-memory work-item state store with lifecycle management, route-aware state transitions including review-only reviewer starts, counter tracking, round-limit enforcement, optional closed-item listing keyed by (sessionId, workItemId), and file-backed persistence via hydrate/snapshot delegate.</purpose>
       <path>src/plugins/workflow/state.ts</path>
-      <depends>M-WORKFLOW-PROTOCOL</depends>
+      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-PERSISTENCE</depends>
       <verification-ref>V-M-WORKFLOW-STATE</verification-ref>
       <annotations>
         <type-WorkItemState PURPOSE="Union of all work-item lifecycle states." />
@@ -248,15 +248,26 @@
     </M-WORKFLOW-TOOLING>
 
     <M-PLUGIN-WORKFLOW NAME="WorkflowPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, unwrap OpenCode task result envelopes before tracked result parsing, attempt one bounded same-session repair for malformed resumable tracked outputs via tool.execute.after, and inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message.</purpose>
+      <purpose>Register workflow tools, enforce tracked subagent launch validation via tool.execute.before, unwrap OpenCode task result envelopes before tracked result parsing, attempt one bounded same-session repair for malformed resumable tracked outputs via tool.execute.after, inject workflow protocol guidance into eligible orchestrating primary sessions such as vv-controller via chat.message, and hydrate/snapshot work-item state from/to per-session persistence files through event hooks.</purpose>
       <path>src/plugins/workflow/index.ts + src/plugins/workflow/system-instruction.md</path>
-      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-CLI-MANAGED-AGENTS</depends>
+      <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-WORKFLOW</verification-ref>
       <annotations>
-        <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement, result parsing, and primary-session guidance." />
+        <export-WorkflowPlugin PURPOSE="Main plugin factory that registers workflow tools, launch enforcement, result parsing, event-driven persistence, and primary-session guidance." />
       </annotations>
     </M-PLUGIN-WORKFLOW>
 
+    <M-WORKFLOW-PERSISTENCE NAME="WorkflowPersistence" TYPE="DATA_LAYER" STATUS="implemented">
+      <purpose>Hydrate and snapshot work-item workflow state from/to per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.</purpose>
+      <path>src/plugins/workflow/persistence.ts</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-WORKFLOW-PERSISTENCE</verification-ref>
+      <annotations>
+        <fn-getWorkflowSessionDir PURPOSE="Resolve the per-session directory path." />
+        <fn-hydrateWorkflowState PURPOSE="Read and parse the per-session workflow-state.json, return WorkItemStoreData or null." />
+        <fn-snapshotWorkflowState PURPOSE="Write WorkItemStoreData to the per-session workflow-state.json." />
+      </annotations>
+    </M-WORKFLOW-PERSISTENCE>
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
       <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting.</purpose>
       <path>src/commands/config-validate.ts + src/commands/config.ts</path>
@@ -382,5 +393,8 @@
     <CrossLink from="M-PLUGIN-SYSTEM-CONTEXT-INJECTION" to="M-PLUGIN-TOGGLE-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-WORKFLOW" to="M-PLUGIN-TOGGLE-CONFIG" relation="uses" />
     <CrossLink from="M-PLUGIN-SECRETS-REDACTION" to="M-PLUGIN-TOGGLE-CONFIG" relation="uses" />
+    <CrossLink from="M-WORKFLOW-PERSISTENCE" to="M-PLUGIN-WORKFLOW" relation="used-by" />
+    <CrossLink from="M-WORKFLOW-PERSISTENCE" to="M-WORKFLOW-STATE" relation="used-by" />
+    <CrossLink from="M-WORKFLOW-PERSISTENCE" to="M-CLI-CONFIG" relation="uses" />
   </Project>
 </KnowledgeGraph>

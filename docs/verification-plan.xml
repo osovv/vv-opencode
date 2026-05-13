@@ -3,9 +3,9 @@
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, controller main-session system guidance injection, hash-anchored editing, secrets redaction, plugin toggle config and CLI, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, and loop gating.</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, controller main-session system guidance injection, hash-anchored editing, secrets redaction, plugin toggle config and CLI, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, loop gating, and work-item state persistence (hydrate/snapshot/round-trip).</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system or workflow change.</wave-level-focus>
-    <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, secrets redaction, plugin runtime toggle, tracked subagent rename, review-only workflows, and deterministic workflow enforcement.</phase-level-focus>
+    <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, secrets redaction, plugin runtime toggle, tracked subagent rename, review-only workflows, deterministic workflow enforcement, and per-session work-item state persistence across process restarts and session switches.</phase-level-focus>
     <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
@@ -127,6 +127,37 @@
         <trace-sequence>vvoc plugin enable|disable <name> -&gt; validate plugin name -&gt; write vvoc.json -&gt; restart session -&gt; isPluginEnabled -&gt; return {} or normal hooks</trace-sequence>
       </required-signals>
     </VF-PLUGIN-TOGGLE>
+    <VF-WORKFLOW-PERSISTENCE-HYDRATE NAME="WorkflowPersistenceHydrate" USE_CASES="UC-011" DATA_FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="high">
+      <scenario>Plugin loads with existing per-session workflow state file.</scenario>
+      <expected-outcome>WorkItemStore is hydrated from the per-session JSON file. nextId, records, and keyIndex match the saved state. Hydration does not overwrite in-memory operations that already occurred.</expected-outcome>
+      <required-signals>
+        <trace-sequence>plugin init -&gt; createWorkItemStore -&gt; hydrateWorkflowState -&gt; state loaded</trace-sequence>
+        <log-marker>[workflow][persistence][BLOCK_HYDRATE_STATE] hydrated</log-marker>
+      </required-signals>
+    </VF-WORKFLOW-PERSISTENCE-HYDRATE>
+    <VF-WORKFLOW-PERSISTENCE-SNAPSHOT NAME="WorkflowPersistenceSnapshot" USE_CASES="UC-011" DATA_FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="high">
+      <scenario>Work item is opened, transitioned, or closed.</scenario>
+      <expected-outcome>After every mutation (open/close/transition), the state is snapshotted to the per-session JSON file. Missing or corrupt file does not block in-memory operations.</expected-outcome>
+      <required-signals>
+        <log-marker>[workflow][persistence][BLOCK_SNAPSHOT_STATE] snapshot written</log-marker>
+        <log-marker>[workflow][persistence][BLOCK_SNAPSHOT_STATE] snapshot failed</log-marker>
+      </required-signals>
+    </VF-WORKFLOW-PERSISTENCE-SNAPSHOT>
+    <VF-WORKFLOW-SESSION-SWITCH NAME="WorkflowSessionSwitch" USE_CASES="UC-011" DATA_FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="medium">
+      <scenario>Session switches via tui.session.select or session.status busy with a different sessionId.</scenario>
+      <expected-outcome>Current session state is snapshotted, new session state is hydrated from its per-session file. If hydrate fails, new store is empty and operations continue.</expected-outcome>
+      <required-signals>
+        <log-marker>[workflow][sessionSwitch][BLOCK_SESSION_SWITCH] switched from &lt;old&gt; to &lt;new&gt;</log-marker>
+        <trace-sequence>session.status(busy, different sessionId) OR tui.session.select -&gt; snapshot old -&gt; hydrate new</trace-sequence>
+      </required-signals>
+    </VF-WORKFLOW-SESSION-SWITCH>
+    <VF-WORKFLOW-SESSION-DELETED NAME="WorkflowSessionDeleted" USE_CASES="UC-011" DATA_FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="low">
+      <scenario>Session is deleted.</scenario>
+      <expected-outcome>Per-session directory is removed. No errors if directory does not exist.</expected-outcome>
+      <required-signals>
+        <log-marker>[workflow][sessionCleanup][BLOCK_SESSION_CLEANUP] deleted</log-marker>
+      </required-signals>
+    </VF-WORKFLOW-SESSION-DELETED>
   </CriticalFlows>
 
   <VerificationMatrix SCOPE="Phase-12">
@@ -228,12 +259,41 @@
     </VM-WORKFLOW-INTEGRATION>
   </VerificationMatrix>
 
+  <VerificationMatrix SCOPE="Phase-13">
+    <VM-PERSISTENCE-HYDRATE MODULE="M-WORKFLOW-PERSISTENCE" FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="high">
+      <scenario>hydrateWorkflowState reads the per-session JSON file and restores WorkItemStoreData.</scenario>
+      <primary-evidence>deterministic assertions on restored nextId, records count, keyIndex entries</primary-evidence>
+      <trajectory-evidence>null returned for missing file, null returned for corrupt JSON, no side effects on failed hydrate</trajectory-evidence>
+      <telemetry>log marker on success; silent return null on error without crashing</telemetry>
+    </VM-PERSISTENCE-HYDRATE>
+    <VM-PERSISTENCE-SNAPSHOT MODULE="M-WORKFLOW-PERSISTENCE" FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="high">
+      <scenario>snapshotWorkflowState writes state to per-session JSON and round-trips cleanly.</scenario>
+      <primary-evidence>deterministic assertions on file existence, JSON validity, and re-hydrate equivalence</primary-evidence>
+      <trajectory-evidence>directory auto-creation, write failure logged as warning without throw</trajectory-evidence>
+      <telemetry>log marker on success and on write failure</telemetry>
+    </VM-PERSISTENCE-SNAPSHOT>
+    <VM-PERSISTENCE-SESSION-SWITCH MODULE="M-PLUGIN-WORKFLOW" FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="medium">
+      <scenario>Session switch triggers snapshot of old state + hydrate of new state.</scenario>
+      <primary-evidence>deterministic assertions on snapshot occurrence for old sessionId, hydrate for new sessionId</primary-evidence>
+      <trajectory-evidence>new store is empty when hydrate returns null, old store is preserved if hydrate fails</trajectory-evidence>
+      <telemetry>BLOCK_SESSION_SWITCH marker with old and new sessionId</telemetry>
+    </VM-PERSISTENCE-SESSION-SWITCH>
+    <VM-PERSISTENCE-SESSION-DELETED MODULE="M-PLUGIN-WORKFLOW" FLOW="DF-WORKFLOW-PERSISTENCE" PRIORITY="low">
+      <scenario>Session deletion triggers cleanup of per-session directory.</scenario>
+      <primary-evidence>deterministic assertion that directory no longer exists after cleanup</primary-evidence>
+      <trajectory-evidence>no error when directory already absent</trajectory-evidence>
+      <telemetry>BLOCK_SESSION_CLEANUP marker</telemetry>
+    </VM-PERSISTENCE-SESSION-DELETED>
+  </VerificationMatrix>
+
   <TelemetryRequirements>
     <TR-1 MODULE="M-PLUGIN-MODEL-ROLES">`ModelRolesPlugin` must emit structured markers anchored to `BLOCK_RESOLVE_CONFIG_ROLE_REFERENCES` for role-map load, successful per-field resolution, and unresolved-role failure paths without logging raw secrets or provider credentials.</TR-1>
     <TR-2 MODULE="M-PLUGIN-GUARDIAN">Guardian runtime config loading and permission review must emit stable markers anchored to `BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG` and `BLOCK_REVIEW_PERMISSION_REQUEST` so failures can be triaged without replaying full conversations.</TR-2>
     <TR-4 MODULE="M-PLUGIN-WORKFLOW">Workflow launch validation must emit stable markers anchored to `BLOCK_VALIDATE_LAUNCH` for valid, rejected, and untracked launch paths. Result parsing must emit stable markers anchored to `BLOCK_PARSE_RESULT` for repair-attempt, successful-parse, protocol-error, and hard-stop paths.</TR-4>
     <TR-5 MODULE="M-WORKFLOW-TRANSITIONS">State transitions must emit stable markers anchored to `BLOCK_TRANSITION_STATE` and `BLOCK_CHECK_ROUND_LIMIT` so launch-enforcement and result-parsing failures can be triaged without replaying full subagent output.</TR-5>
     <TR-6 MODULE="M-PLUGIN-TOGGLE-CONFIG">Plugin toggle check must emit a structured marker anchored to `BLOCK_CHECK_PLUGIN_ENABLED` showing plugin name and resolved enabled/disabled state. Disabled plugins should emit a clear log line like `[plugin-name][factory][BLOCK_PLUGIN_DISABLED] plugin disabled via vvoc config, skipping hooks` so the user can verify which plugins were skipped at startup.</TR-6>
+    <TR-7 MODULE="M-WORKFLOW-PERSISTENCE">Workflow hydration and snapshot must emit stable markers anchored to BLOCK_HYDRATE_STATE and BLOCK_SNAPSHOT_STATE. Write failures must be logged as warnings and must not block in-memory operations.</TR-7>
+    <TR-8 MODULE="M-PLUGIN-WORKFLOW">Session switch must emit a stable marker anchored to BLOCK_SESSION_SWITCH showing the old and new sessionId. Session cleanup must emit BLOCK_SESSION_CLEANUP.</TR-8>
   </TelemetryRequirements>
 
   <ModuleVerification>
@@ -947,6 +1007,35 @@
       <phase-follow-up>Validate workflow enforcement with real OpenCode sessions once the plugin is installed.</phase-follow-up>
     </V-M-PLUGIN-WORKFLOW>
 
+    <V-M-WORKFLOW-PERSISTENCE MODULE="M-WORKFLOW-PERSISTENCE" PRIORITY="high">
+      <test-files>
+        <file>src/plugins/workflow.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun test src/plugins/workflow.test.ts</check-1>
+        <check-2>bun x tsc --noEmit</check-2>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">getWorkflowSessionDir returns correct path under getDataHome/vvoc/workflow/<sessionId>/.</scenario-1>
+        <scenario-2 kind="success">hydrateWorkflowState returns null when no state file exists.</scenario-2>
+        <scenario-3 kind="success">hydrateWorkflowState returns valid WorkItemStoreData from a valid JSON file.</scenario-3>
+        <scenario-4 kind="failure">hydrateWorkflowState returns null on corrupt JSON instead of throwing.</scenario-4>
+        <scenario-5 kind="success">snapshotWorkflowState writes a valid JSON file that can be re-hydrated.</scenario-5>
+        <scenario-6 kind="success">snapshotWorkflowState creates the session directory if it does not exist.</scenario-6>
+        <scenario-7 kind="failure">snapshotWorkflowState logs a warning on write failure and does not throw.</scenario-7>
+      </scenarios>
+      <required-log-markers>
+        <marker-1>[workflow][persistence][BLOCK_HYDRATE_STATE] hydrated</marker-1>
+        <marker-2>[workflow][persistence][BLOCK_SNAPSHOT_STATE] snapshot written</marker-2>
+        <marker-3>[workflow][persistence][BLOCK_SNAPSHOT_STATE] snapshot failed</marker-3>
+      </required-log-markers>
+      <required-trace-assertions>
+        <assertion-1>hydrateWorkflowState must never throw — return null on any error.</assertion-1>
+        <assertion-2>snapshotWorkflowState must never throw — log warning on write failure.</assertion-2>
+        <assertion-3>Round-trip: snapshot then hydrate returns equivalent state.</assertion-3>
+      </required-trace-assertions>
+    </V-M-WORKFLOW-PERSISTENCE>
+
   <PhaseGates>
     <Gate-Phase-1 PHASE="Phase-1">
       <goal>CLI foundation is buildable and the helper layer has deterministic checks.</goal>
@@ -1087,6 +1176,24 @@
         <evidence-5>syncVvocConfig preserves user-set plugins values.</evidence-5>
       </required-evidence>
     </Gate-Phase-12>
+    <Gate-Phase-13 PHASE="Phase-13">
+      <goal>Work-item state persists across process restarts and session switches. Per-session JSON files hydrate on plugin startup and snapshot on every mutation.</goal>
+      <commands>
+        <command-1>bun run typecheck</command-1>
+        <command-2>bun run lint</command-2>
+        <command-3>bun run fmt:check</command-3>
+        <command-4>bun test src/plugins/workflow.test.ts</command-4>
+        <command-5>bun run build</command-5>
+        <command-6>bun run pack:check</command-6>
+      </commands>
+      <required-evidence>
+        <evidence-1>persistence.ts exports getWorkflowSessionDir, hydrateWorkflowState, snapshotWorkflowState.</evidence-1>
+        <evidence-2>hydrateWorkflowState returns null on missing or corrupt file without throwing.</evidence-2>
+        <evidence-3>snapshotWorkflowState round-trips: snapshot then hydrate returns equivalent state.</evidence-3>
+        <evidence-4>WorkflowPlugin hydrates state on startup and snapshots after every mutation.</evidence-4>
+        <evidence-5>Event hooks handle session.status, tui.session.select, and session.deleted without blocking.</evidence-5>
+      </required-evidence>
+    </Gate-Phase-13>
   </PhaseGates>
 
   <FailurePackets>

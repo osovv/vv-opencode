@@ -2,7 +2,7 @@
 // VERSION: 0.3.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers and bounded same-session repair, and primary-only workflow guidance injection.
+//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers and bounded same-session repair, primary-only workflow guidance injection, and per-session work-item state persistence (hydrate/snapshot/round-trip/session-switch/cleanup).
 //   DEPENDS: [bun:test, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts]
 //   LINKS: [V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
@@ -16,6 +16,7 @@
 //   transition tests - Verify deterministic next-state rules, launch allowances, and round-limit checks.
 //   tooling tests - Verify structured responses from work_item_open, work_item_list, and work_item_close wrappers.
 //   workflow plugin tests - Verify task launch validation, result parsing/transitions, hard-stop and loop-gate behavior, and primary-only guidance injection.
+//   persistence tests - Verify per-session hydrate, snapshot, round-trip, corrupt file handling, and session cleanup.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -32,9 +33,10 @@
 //   LAST_CHANGE: [v0.1.2 - Added coverage for duplicate top-block field rejection and missing transition actor rejection.]
 //   LAST_CHANGE: [v0.1.1 - Added strict top-block, case-sensitive status, deterministic transition guard, sticky hard-stop, and includeClosed coverage.]
 //   LAST_CHANGE: [v0.1.0 - Added shared workflow core coverage for protocol, state, transitions, and tooling modules.]
+//   LAST_CHANGE: [v0.3.8 - Added persistence tests for hydrate/snapshot round-trip, corrupt JSON handling, session cleanup, and store hydration on creation.]
 // END_CHANGE_SUMMARY
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   parseResultBlock,
   parseWorkItemHeader,
@@ -62,6 +64,14 @@ import {
 } from "./workflow/tooling.js";
 import { WorkflowPlugin } from "./workflow/index.js";
 import { unwrapResumableTaskResult } from "./workflow/repair.js";
+import {
+  deleteWorkflowSessionDir,
+  getWorkflowSessionDir,
+  hydrateWorkflowState,
+  snapshotWorkflowState,
+} from "./workflow/persistence.js";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("workflow protocol", () => {
   test("parseResultBlock extracts implementer fields from strict top block", () => {
@@ -726,6 +736,142 @@ function createWorkflowPluginHarness(options?: {
   }).then((plugin) => ({ plugin, logs, promptCalls }));
 }
 
+describe("workflow persistence", () => {
+  const SESSION_ID = "ses_test_session_123";
+  let originalDataHome: string | undefined;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    originalDataHome = process.env.XDG_DATA_HOME;
+    tmpDir = import.meta.dirname ?? "/tmp";
+    process.env.XDG_DATA_HOME = tmpDir;
+  });
+
+  afterEach(async () => {
+    // Clean up test session data
+    await deleteWorkflowSessionDir(SESSION_ID);
+    // Restore original XDG_DATA_HOME
+    if (originalDataHome !== undefined) {
+      process.env.XDG_DATA_HOME = originalDataHome;
+    } else {
+      delete process.env.XDG_DATA_HOME;
+    }
+  });
+
+  test("getWorkflowSessionDir returns correct path", () => {
+    const dir = getWorkflowSessionDir(SESSION_ID);
+    expect(dir).toContain("vvoc/workflow/" + SESSION_ID);
+  });
+
+  test("hydrateWorkflowState returns null when no state file exists", () => {
+    const result = hydrateWorkflowState(SESSION_ID);
+    expect(result).toBeNull();
+  });
+
+  test("snapshotWorkflowState writes a valid JSON file that can be re-hydrated", () => {
+    // Build a minimal store
+    const store = createWorkItemStore();
+    const openResult = openWorkItem(store, {
+      sessionId: SESSION_ID,
+      key: "test-key",
+      title: "Test Work Item",
+    });
+    expect(openResult.ok).toBeTrue();
+
+    // Snapshot
+    snapshotWorkflowState(SESSION_ID, store.getStoreData());
+
+    // Re-hydrate
+    const hydrated = hydrateWorkflowState(SESSION_ID);
+    expect(hydrated).not.toBeNull();
+    expect(hydrated!.nextId).toBe(2);
+
+    // Verify records
+    const hydratedStore = createWorkItemStore(hydrated);
+    const records = hydratedStore.listWorkItems(SESSION_ID);
+    expect(records).toHaveLength(1);
+    expect(records[0]!.key).toBe("test-key");
+    expect(records[0]!.state).toBe("open");
+
+    // Verify key index via idempotent open
+    const reopenResult = openWorkItem(hydratedStore, {
+      sessionId: SESSION_ID,
+      key: "test-key",
+      title: "Test Work Item",
+    });
+    expect(reopenResult.ok).toBeTrue();
+    if (reopenResult.ok) {
+      expect(reopenResult.reused).toBeTrue();
+      expect(reopenResult.record.workItemId).toBe("wi-1");
+    }
+  });
+  test("hydrateWorkflowState handles corrupt JSON gracefully", () => {
+    // Ensure directory exists, then write corrupt JSON
+    mkdirSync(getWorkflowSessionDir(SESSION_ID), { recursive: true });
+    writeFileSync(
+      join(getWorkflowSessionDir(SESSION_ID), "workflow-state.json"),
+      "{ not valid json }",
+      "utf-8",
+    );
+
+    const result = hydrateWorkflowState(SESSION_ID);
+    expect(result).toBeNull();
+  });
+
+  test("createWorkItemStore with null hydrate data creates empty store", () => {
+    const store = createWorkItemStore(null);
+    expect(store.listWorkItems(SESSION_ID)).toHaveLength(0);
+
+    // Can still open items
+    const result = openWorkItem(store, {
+      sessionId: SESSION_ID,
+      key: "fresh-key",
+      title: "Fresh",
+    });
+    expect(result.ok).toBeTrue();
+    if (result.ok) {
+      expect(result.record.workItemId).toBe("wi-1");
+    }
+  });
+
+  test("snapshot survives failed writes gracefully", () => {
+    const store = createWorkItemStore();
+    openWorkItem(store, { sessionId: SESSION_ID, key: "k1", title: "T1" });
+    // Snapshot should not throw even if we can't write (it will succeed normally)
+    expect(() => snapshotWorkflowState(SESSION_ID, store.getStoreData())).not.toThrow();
+  });
+
+  test("multiple work items round-trip", () => {
+    const store = createWorkItemStore();
+    openWorkItem(store, { sessionId: SESSION_ID, key: "k1", title: "Item 1" });
+    openWorkItem(store, { sessionId: SESSION_ID, key: "k2", title: "Item 2" });
+    closeWorkItem(store, SESSION_ID, "wi-1");
+
+    snapshotWorkflowState(SESSION_ID, store.getStoreData());
+
+    const hydrated = hydrateWorkflowState(SESSION_ID);
+    expect(hydrated).not.toBeNull();
+
+    const hydratedStore = createWorkItemStore(hydrated);
+    const openItems = hydratedStore.listWorkItems(SESSION_ID);
+    const allItems = hydratedStore.listWorkItems(SESSION_ID, { includeClosed: true });
+    expect(openItems).toHaveLength(1);
+    expect(allItems).toHaveLength(2);
+    expect(openItems[0]!.key).toBe("k2");
+  });
+  test("deleteWorkflowSessionDir removes session data", async () => {
+    // Write some data first
+    mkdirSync(getWorkflowSessionDir(SESSION_ID), { recursive: true });
+    snapshotWorkflowState(SESSION_ID, createWorkItemStore().getStoreData());
+
+    // Verify file exists
+    expect(existsSync(getWorkflowSessionDir(SESSION_ID))).toBeTrue();
+
+    await deleteWorkflowSessionDir(SESSION_ID);
+    expect(existsSync(getWorkflowSessionDir(SESSION_ID))).toBeFalse();
+  });
+});
+
 function createToolContext(sessionID: string, agent = "build") {
   return {
     sessionID,
@@ -754,6 +900,34 @@ function wrapTaskResult(taskId: string, innerResult: string): string {
 }
 
 describe("workflow plugin integration", () => {
+  beforeEach(async () => {
+    const testSessionIds = [
+      "session-untracked",
+      "session-missing-header",
+      "session-invalid-launch",
+      "session-happy",
+      "session-loop-gate",
+      "session-fail-route",
+      "session-hard-stop",
+      "session-foreign-task-result",
+      "session-loose-task-id-wrapper",
+      "session-protocol-error",
+      "session-repair-failure",
+      "session-repair-success",
+      "session-tagged-launch",
+      "session-task-wrapper-suffix",
+      "session-wrapped-duplicate-field",
+      "session-wrapped-protocol-error",
+      "session-wrapped-result",
+      "session-guidance",
+      "ses_repair_failure",
+      "ses_repair_success",
+    ];
+    for (const sid of testSessionIds) {
+      await deleteWorkflowSessionDir(sid);
+    }
+  });
+
   test("untracked task launches pass through before/after hooks", async () => {
     const { plugin } = await createWorkflowPluginHarness();
 

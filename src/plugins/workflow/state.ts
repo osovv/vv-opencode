@@ -16,7 +16,7 @@
 //   OpenWorkItemResult - Structured open operation result with idempotency and conflict signaling.
 //   CloseWorkItemResult - Structured close operation result.
 //   TransitionWorkItemStateResult - Structured transition operation result.
-//   createWorkItemStore - Creates a new in-memory store instance.
+//   createWorkItemStore - Creates a new in-memory store instance, optionally hydrated from persisted data.
 //   openWorkItem - Opens an item idempotently by (sessionId, key).
 //   getWorkItem - Fetches an item by session and work-item id.
 //   listWorkItems - Lists session items with optional closed inclusion.
@@ -98,7 +98,7 @@ export type TransitionWorkItemStateResult =
       message: string;
     };
 
-type WorkItemStoreData = {
+export type WorkItemStoreData = {
   nextId: number;
   records: Map<string, WorkItemRecord>;
   keyIndexBySession: Map<string, Map<string, string>>;
@@ -116,6 +116,8 @@ export type WorkItemStore = {
     actor?: TrackedAgentName;
   }) => TransitionWorkItemStateResult;
   getReviewRound: (record: Pick<WorkItemRecord, "specReviewCount" | "codeReviewCount">) => number;
+  /** Expose internal store data for persistence snapshotting. */
+  getStoreData: () => WorkItemStoreData;
 };
 
 function createRecordLookupKey(sessionId: string, workItemId: string): string {
@@ -419,18 +421,24 @@ export function getReviewRound(
 }
 
 // START_CONTRACT: createWorkItemStore
-//   PURPOSE: Create a session-scoped in-memory work-item store with deterministic operation behavior.
-//   INPUTS: { none }
+//   PURPOSE: Create a session-scoped in-memory work-item store, optionally hydrated from a previous session's persisted data.
+//   INPUTS: { hydrateData?: WorkItemStoreData | null - optional persisted store data to restore }
 //   OUTPUTS: { WorkItemStore - operation surface for open/get/list/close/transition operations }
 //   SIDE_EFFECTS: [none]
-//   LINKS: [M-WORKFLOW-STATE]
+//   LINKS: [M-WORKFLOW-STATE, M-WORKFLOW-PERSISTENCE]
 // END_CONTRACT: createWorkItemStore
-export function createWorkItemStore(): WorkItemStore {
-  const data: WorkItemStoreData = {
-    nextId: 1,
-    records: new Map(),
-    keyIndexBySession: new Map(),
-  };
+export function createWorkItemStore(hydrateData?: WorkItemStoreData | null): WorkItemStore {
+  const data: WorkItemStoreData = hydrateData
+    ? {
+        nextId: hydrateData.nextId,
+        records: new Map(hydrateData.records),
+        keyIndexBySession: new Map(hydrateData.keyIndexBySession),
+      }
+    : {
+        nextId: 1,
+        records: new Map(),
+        keyIndexBySession: new Map(),
+      };
 
   return {
     openWorkItem: (input) => openWorkItemInStore(data, input),
@@ -439,6 +447,7 @@ export function createWorkItemStore(): WorkItemStore {
     closeWorkItem: (sessionId, workItemId) => closeWorkItemInStore(data, sessionId, workItemId),
     transitionWorkItemState: (input) => transitionWorkItemStateInStore(data, input),
     getReviewRound,
+    getStoreData: () => data,
   };
 }
 
