@@ -591,22 +591,10 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
 
       if (!eventSessionId) return;
 
-      // Session status busy — potential session switch
+      // Hydration happens in tool.execute.before — not here,
+      // because session.status fires for subagent child sessions too,
+      // which would erroneously change persistedSessionId mid-flow.
       if (eventType === "session.status") {
-        const status = properties.status as { type?: string } | undefined;
-        if (status?.type === "busy") {
-          hydratePersistedState(eventSessionId);
-          await client.app.log({
-            body: {
-              service: "workflow",
-              level: "info",
-              message: "[workflow][sessionSwitch][BLOCK_SESSION_SWITCH] session active",
-              extra: {
-                sessionID: eventSessionId,
-              },
-            },
-          });
-        }
         return;
       }
 
