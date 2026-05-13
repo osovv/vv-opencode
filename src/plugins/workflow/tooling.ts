@@ -37,7 +37,7 @@ export type WorkflowToolContext = {
 export type WorkflowToolDefinition<TArgs, TResult> = {
   name: string;
   description: string;
-  execute: (args: TArgs, context: WorkflowToolContext) => TResult;
+  execute: (args: TArgs, context: WorkflowToolContext, store?: WorkItemStore) => TResult;
 };
 
 type OpenInputItem = {
@@ -76,7 +76,7 @@ export function createWorkItemOpenTool(
   return {
     name: "work_item_open",
     description: "Open one or more workflow work items idempotently.",
-    execute: (args, context) => {
+    execute: (args, context, overrideStore) => {
       const inputItems = Array.isArray(args.items) ? args.items : [];
 
       const results = inputItems.map((item) => {
@@ -90,7 +90,7 @@ export function createWorkItemOpenTool(
           };
         }
 
-        const opened = openWorkItem(store, {
+        const opened = openWorkItem(overrideStore ?? store, {
           sessionId: context.sessionId,
           key,
           title,
@@ -136,9 +136,10 @@ export function createWorkItemListTool(
   return {
     name: "work_item_list",
     description: "List workflow work items for the current session.",
-    execute: (args, context) => {
+    execute: (args, context, overrideStore) => {
+      const s = overrideStore ?? store;
       const includeClosed = args.includeClosed === true;
-      const records = listWorkItems(store, context.sessionId, { includeClosed });
+      const records = listWorkItems(s, context.sessionId, { includeClosed });
       return {
         tool: "work_item_list",
         sessionId: context.sessionId,
@@ -173,7 +174,8 @@ export function createWorkItemCloseTool(
   return {
     name: "work_item_close",
     description: "Close a workflow work item by id.",
-    execute: (args, context) => {
+    execute: (args, context, overrideStore) => {
+      const s = overrideStore ?? store;
       const workItemId = coerceNonEmptyString(args.workItemId);
       if (!workItemId) {
         return {
@@ -185,7 +187,7 @@ export function createWorkItemCloseTool(
         };
       }
 
-      const closed = closeWorkItem(store, context.sessionId, workItemId);
+      const closed = closeWorkItem(s, context.sessionId, workItemId);
       if (!closed.ok) {
         return {
           tool: "work_item_close",

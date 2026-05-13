@@ -43,6 +43,7 @@ import {
   getWorkItem,
   transitionWorkItemState,
   type WorkItemRecord,
+  type WorkItemStore,
 } from "./state.js";
 import {
   getAllowedNextAgent,
@@ -170,49 +171,40 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   if (!(await isPluginEnabled("workflow"))) return {};
 
   // START_BLOCK_PERSISTENCE_SETUP
-  let store = createWorkItemStore();
-  let persistedSessionId: string | null = null;
+  // Each session (main or subagent) gets its own isolated store.
+  // This prevents subagent tool calls from interfering with the main session's work items.
+  const stores = new Map<string, WorkItemStore>();
 
-  function hydratePersistedState(sessionId: string): void {
-    // Once a session is tracked, ignore calls from other sessions
-    // (e.g., subagent tool calls use child session IDs)
-    if (persistedSessionId !== null && persistedSessionId !== sessionId) {
-      return;
+  function getOrCreateStore(sessionId: string): WorkItemStore {
+    let store = stores.get(sessionId);
+    if (!store) {
+      const hydrated = hydrateWorkflowState(sessionId);
+      store = createWorkItemStore(hydrated);
+      stores.set(sessionId, store);
     }
-    if (persistedSessionId === sessionId) return;
-    if (persistedSessionId) {
-      snapshotWorkflowState(persistedSessionId, store.getStoreData());
-    }
-    persistedSessionId = sessionId;
-    const hydrated = hydrateWorkflowState(sessionId);
-    if (hydrated) {
-      const data = store.getStoreData();
-      data.nextId = hydrated.nextId;
-      data.records.clear();
-      for (const [key, value] of hydrated.records) {
-        data.records.set(key, value);
-      }
-      data.keyIndexBySession.clear();
-      for (const [key, value] of hydrated.keyIndexBySession) {
-        data.keyIndexBySession.set(key, value);
-      }
-    }
+    return store;
   }
 
   function snapshotSession(sessionId: string): void {
-    try {
-      snapshotWorkflowState(sessionId, store.getStoreData());
-    } catch {
-      // Snapshot failures are non-blocking
+    const store = stores.get(sessionId);
+    if (store) {
+      try {
+        snapshotWorkflowState(sessionId, store.getStoreData());
+      } catch {
+        // Snapshot failures are non-blocking
+      }
     }
   }
   // END_BLOCK_PERSISTENCE_SETUP
 
   const knownSubagents = createKnownSubagentSet();
 
-  const workItemOpenTool = createWorkItemOpenTool(store);
-  const workItemListTool = createWorkItemListTool(store);
-  const workItemCloseTool = createWorkItemCloseTool(store);
+  // Tool wrappers still need a store reference for description/args shape
+  // but execute handlers resolve the right store per-call
+  const dummyStore = createWorkItemStore();
+  const workItemOpenTool = createWorkItemOpenTool(dummyStore);
+  const workItemListTool = createWorkItemListTool(dummyStore);
+  const workItemCloseTool = createWorkItemCloseTool(dummyStore);
 
   return {
     config: async (config) => {
@@ -230,10 +222,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           ),
         },
         async execute(args, context) {
-          hydratePersistedState(context.sessionID);
-          const opened = workItemOpenTool.execute(args, {
-            sessionId: context.sessionID,
-          });
+          const sessionStore = getOrCreateStore(context.sessionID);
+          const opened = workItemOpenTool.execute(
+            args,
+            { sessionId: context.sessionID },
+            sessionStore,
+          );
           snapshotSession(context.sessionID);
           return stringifyToolOutput(opened);
         },
@@ -244,11 +238,9 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           includeClosed: z.boolean().optional(),
         },
         async execute(args, context) {
-          hydratePersistedState(context.sessionID);
+          const sessionStore = getOrCreateStore(context.sessionID);
           return stringifyToolOutput(
-            workItemListTool.execute(args, {
-              sessionId: context.sessionID,
-            }),
+            workItemListTool.execute(args, { sessionId: context.sessionID }, sessionStore),
           );
         },
       }),
@@ -258,10 +250,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           workItemId: z.string(),
         },
         async execute(args, context) {
-          hydratePersistedState(context.sessionID);
-          const closed = workItemCloseTool.execute(args, {
-            sessionId: context.sessionID,
-          });
+          const sessionStore = getOrCreateStore(context.sessionID);
+          const closed = workItemCloseTool.execute(
+            args,
+            { sessionId: context.sessionID },
+            sessionStore,
+          );
           snapshotSession(context.sessionID);
           return stringifyToolOutput(closed);
         },
@@ -277,8 +271,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         return;
       }
 
-      hydratePersistedState(input.sessionID);
-
+      const sessionStore = getOrCreateStore(input.sessionID);
       const header = parseWorkItemHeader(readTaskPrompt(output.args));
       if (!header.ok) {
         await client.app.log({
@@ -296,7 +289,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         throw new Error(`LAUNCH_REJECTED_MISSING_HEADER: ${header.error.message}`);
       }
 
-      const workItem = getWorkItem(store, input.sessionID, header.value);
+      const workItem = getWorkItem(sessionStore, input.sessionID, header.value);
       if (!workItem || workItem.state === "closed") {
         await client.app.log({
           body: {
@@ -510,7 +503,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         },
       });
 
-      const current = getWorkItem(store, input.sessionID, parsed.value.workItemId);
+      const sessionStore = getOrCreateStore(input.sessionID);
+      const current = getWorkItem(sessionStore, input.sessionID, parsed.value.workItemId);
       if (!current || current.state === "closed") {
         await client.app.log({
           body: {
@@ -531,7 +525,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
       }
 
       const nextState = getNextState(current.state, parsed.value);
-      const transitioned = transitionWorkItemState(store, {
+      const transitioned = transitionWorkItemState(sessionStore, {
         sessionId: input.sessionID,
         workItemId: parsed.value.workItemId,
         state: nextState,
@@ -603,11 +597,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         return;
       }
 
-      // Session deleted — cleanup persisted state
       if (eventType === "session.deleted") {
-        if (persistedSessionId === eventSessionId) {
-          persistedSessionId = null;
-        }
+        await deleteWorkflowSessionDir(eventSessionId);
         await deleteWorkflowSessionDir(eventSessionId);
         await client.app.log({
           body: {
