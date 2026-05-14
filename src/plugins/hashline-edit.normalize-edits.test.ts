@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [v0.3.0 - Migrated range test from replace+end to replace_range; replace rejects end.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -29,14 +29,26 @@ describe("hashline normalize-edits", () => {
     ]);
   });
 
-  test("maps replace with pos and end to a ranged replace edit", () => {
+  test("maps replace_range with pos and end to a ranged replace edit", () => {
     const input: RawHashlineEdit[] = [
-      { op: "replace", pos: "2#VK", end: "4#MB", lines: ["a", "b"] },
+      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: ["a", "b"] },
     ];
 
     expect(normalizeHashlineEdits(input)).toEqual([
-      { op: "replace", pos: "2#VK", end: "4#MB", lines: ["a", "b"] },
+      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: ["a", "b"] },
     ]);
+  });
+
+  test("rejects replace with end", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", end: "4#MB", lines: ["a"] }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/replace does not accept end/i);
+  });
+
+  test("rejects replace_range without end", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace_range", pos: "2#VK", lines: ["a"] }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/requires both pos and end/i);
   });
 
   test("maps anchored append and prepend while preserving op", () => {

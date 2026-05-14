@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/normalize-edits.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate and normalize raw hashline tool arguments into strongly-typed edit operations.
-//   SCOPE: Raw edit input shape, anchor trimming, required-field validation, and replace/append/prepend normalization.
+//   SCOPE: Raw edit input shape, anchor trimming, required-field validation, and replace/replace_range/append/prepend normalization.
 //   DEPENDS: [src/plugins/hashline-edit/types.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -15,12 +15,18 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [v0.3.0 - Split "replace" validation: "replace" rejects end, "replace_range" requires both pos and end.]
 // END_CHANGE_SUMMARY
 
-import type { AppendEdit, HashlineEdit, PrependEdit, ReplaceEdit } from "./types.js";
+import type {
+  AppendEdit,
+  HashlineEdit,
+  PrependEdit,
+  ReplaceEdit,
+  ReplaceRangeEdit,
+} from "./types.js";
 
-type HashlineToolOp = "replace" | "append" | "prepend";
+type HashlineToolOp = "replace" | "replace_range" | "append" | "prepend";
 
 export interface RawHashlineEdit {
   op?: HashlineToolOp;
@@ -47,30 +53,35 @@ function requireLines(edit: RawHashlineEdit, index: number): string | string[] {
   return edit.lines;
 }
 
-function requireAnchor(anchor: string | undefined, index: number, op: HashlineToolOp): string {
-  if (!anchor) {
+function normalizeReplaceEdit(edit: RawHashlineEdit, index: number): ReplaceEdit {
+  const pos = normalizeAnchor(edit.pos);
+  if (!pos) {
+    throw new Error(`Edit ${index}: replace requires pos anchor`);
+  }
+  if (edit.end !== undefined && edit.end !== null && edit.end.trim() !== "") {
     throw new Error(
-      `Edit ${index}: ${op} requires at least one anchor line reference (pos or end)`,
+      `Edit ${index}: replace does not accept end — use "replace_range" for multi-line replacements`,
     );
   }
-  return anchor;
+  return {
+    op: "replace",
+    pos,
+    lines: requireLines(edit, index),
+  };
 }
 
-function normalizeReplaceEdit(edit: RawHashlineEdit, index: number): HashlineEdit {
+function normalizeReplaceRangeEdit(edit: RawHashlineEdit, index: number): ReplaceRangeEdit {
   const pos = normalizeAnchor(edit.pos);
   const end = normalizeAnchor(edit.end);
-  const anchor = requireAnchor(pos ?? end, index, "replace");
-  const lines = requireLines(edit, index);
-
-  const normalized: ReplaceEdit = {
-    op: "replace",
-    pos: anchor,
-    lines,
-  };
-  if (end) {
-    normalized.end = end;
+  if (!pos || !end) {
+    throw new Error(`Edit ${index}: replace_range requires both pos and end anchors`);
   }
-  return normalized;
+  return {
+    op: "replace_range",
+    pos,
+    end,
+    lines: requireLines(edit, index),
+  };
 }
 
 function normalizeInsertEdit(
@@ -99,13 +110,15 @@ export function normalizeHashlineEdits(rawEdits: RawHashlineEdit[]): HashlineEdi
     switch (edit.op) {
       case "replace":
         return normalizeReplaceEdit(edit, index);
+      case "replace_range":
+        return normalizeReplaceRangeEdit(edit, index);
       case "append":
         return normalizeInsertEdit(edit, index, "append");
       case "prepend":
         return normalizeInsertEdit(edit, index, "prepend");
       default:
         throw new Error(
-          `Edit ${index}: unsupported op "${String(edit.op)}". Use replace, append, or prepend.`,
+          `Edit ${index}: unsupported op "${String(edit.op)}". Use replace, replace_range, append, or prepend.`,
         );
     }
   });

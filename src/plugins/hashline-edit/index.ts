@@ -452,12 +452,14 @@ export const HashlineEditPlugin: Plugin = async () => {
           edits: z
             .array(
               z.object({
-                op: z.enum(["replace", "append", "prepend"]),
+                op: z.enum(["replace", "replace_range", "append", "prepend"]),
                 pos: z.string().optional().describe("Primary anchor in LINE#HASH#ANCHOR format"),
                 end: z
                   .string()
                   .optional()
-                  .describe("Inclusive range end in LINE#HASH#ANCHOR format"),
+                  .describe(
+                    "Range end for replace_range in LINE#HASH#ANCHOR format (required for replace_range, rejected for replace)",
+                  ),
                 lines: z
                   .union([z.array(z.string()), z.string(), z.null()])
                   .describe("Replacement or inserted lines as plain text content"),

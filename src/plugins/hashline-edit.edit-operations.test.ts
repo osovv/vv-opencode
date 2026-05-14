@@ -1,24 +1,22 @@
 // FILE: src/plugins/hashline-edit.edit-operations.test.ts
-// VERSION: 0.5.0
-// START_MODULE_CONTRACT
-//   PURPOSE: Verify hashline batch edit ordering, deduplication, and primitive failure handling.
-//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, and BOF/EOF insertion into empty files.
-//   DEPENDS: [bun:test, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/types.ts]
-//   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
-//   ROLE: TEST
-//   MAP_MODE: LOCALS
-// END_MODULE_CONTRACT
-//
-// START_MODULE_MAP
-//   hashline edit-operations tests - Verify batch ordering, range/delete insert conflicts, same-anchor insert ordering, BOF prepend ordering, deduplication, and primitive failure behavior.
-// END_MODULE_MAP
-//
-// START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Added regression coverage rejecting inserts anchored to deleted single-line replacements.]
-//   LAST_CHANGE: [v0.4.0 - Added regression coverage rejecting inserts anchored inside multi-line replacement ranges.]
-//   LAST_CHANGE: [v0.3.0 - Added regression coverage for repeated unanchored prepends preserving user order at BOF.]
-//   LAST_CHANGE: [v0.2.0 - Added regression coverage for preserving user order across repeated same-anchor inserts and stripping copied anchored hashline rows.]
-// END_CHANGE_SUMMARY
+// WX#SQ|// VERSION: 0.6.0
+// HN#KY|// START_MODULE_CONTRACT
+// XK#MK|//   PURPOSE: Verify hashline batch edit ordering, deduplication, and primitive failure handling.
+// KZ#ZW|//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, and BOF/EOF insertion into empty files.
+// TX#HX|//   DEPENDS: [bun:test, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/types.ts]
+// NJ#YB|//   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
+// HH#HH|//   ROLE: TEST
+// QT#TM|//   MAP_MODE: LOCALS
+// VR#RQ|// END_MODULE_CONTRACT
+// JV#NR|//
+// JN#TR|// START_MODULE_MAP
+// YX#WT|//   hashline edit-operations tests - Verify batch ordering, range/delete insert conflicts, same-anchor insert ordering, BOF prepend ordering, deduplication, and primitive failure behavior.
+// WJ#VQ|// END_MODULE_MAP
+// NQ#PR|//
+// NH#HM|// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Migrated range edits from replace+end to replace_range op.]
+// QY#YZ|// END_CHANGE_SUMMARY
+// ZP#QS|
 
 import { describe, expect, test } from "bun:test";
 import {
@@ -40,8 +38,18 @@ describe("hashline edit-operations", () => {
     const content = "line 1\nline 2\nline 3\nline 4\nline 5";
     const lines = content.split("\n");
     const edits: HashlineEdit[] = [
-      { op: "replace", pos: anchorFor(lines, 1), end: anchorFor(lines, 3), lines: ["replaced A"] },
-      { op: "replace", pos: anchorFor(lines, 2), end: anchorFor(lines, 4), lines: ["replaced B"] },
+      {
+        op: "replace_range",
+        pos: anchorFor(lines, 1),
+        end: anchorFor(lines, 3),
+        lines: ["replaced A"],
+      },
+      {
+        op: "replace_range",
+        pos: anchorFor(lines, 2),
+        end: anchorFor(lines, 4),
+        lines: ["replaced B"],
+      },
     ];
 
     expect(() => applyHashlineEditsWithReport(content, edits)).toThrow(/overlap/i);
@@ -51,8 +59,18 @@ describe("hashline edit-operations", () => {
     const content = "line 1\nline 2\nline 3\nline 4\nline 5";
     const lines = content.split("\n");
     const edits: HashlineEdit[] = [
-      { op: "replace", pos: anchorFor(lines, 1), end: anchorFor(lines, 2), lines: ["replaced A"] },
-      { op: "replace", pos: anchorFor(lines, 4), end: anchorFor(lines, 5), lines: ["replaced B"] },
+      {
+        op: "replace_range",
+        pos: anchorFor(lines, 1),
+        end: anchorFor(lines, 2),
+        lines: ["replaced A"],
+      },
+      {
+        op: "replace_range",
+        pos: anchorFor(lines, 4),
+        end: anchorFor(lines, 5),
+        lines: ["replaced B"],
+      },
     ];
 
     expect(applyHashlineEditsWithReport(content, edits).content).toBe(
@@ -64,7 +82,12 @@ describe("hashline edit-operations", () => {
     const content = "line 1\nline 2\nline 3\nline 4\nline 5";
     const lines = content.split("\n");
     const edits: HashlineEdit[] = [
-      { op: "replace", pos: anchorFor(lines, 2), end: anchorFor(lines, 4), lines: ["replaced"] },
+      {
+        op: "replace_range",
+        pos: anchorFor(lines, 2),
+        end: anchorFor(lines, 4),
+        lines: ["replaced"],
+      },
       { op: "append", pos: anchorFor(lines, 4), lines: ["should not drift"] },
     ];
 

@@ -15,11 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Insert anchors targeting deleted single-line replacements are now rejected to avoid line drift after deletion.]
-//   LAST_CHANGE: [v0.5.0 - Insert anchors inside multi-line replacement ranges are now rejected to avoid post-splice line drift.]
-//   LAST_CHANGE: [v0.4.0 - Repeated unanchored prepend batches now preserve user-provided order at BOF.]
-//   LAST_CHANGE: [v0.3.0 - Same-anchor append/prepend batches now preserve user-provided order despite bottom-up splice application.]
-//   LAST_CHANGE: [v0.2.0 - Replaced range-only conflict detection with comprehensive region-based conflict validation, fixed deduplication to treat null and empty lines identically, added defensive default to edit line number extraction.]
+//   LAST_CHANGE: [v0.7.0 - Added replace_range support alongside replace to prevent accidental end-boundary errors.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -52,6 +48,7 @@ function toLinePayload(lines: string | string[]): string {
 function getEditLineNumber(edit: HashlineEdit): number {
   switch (edit.op) {
     case "replace":
+    case "replace_range":
       return parseLineRef(edit.end ?? edit.pos).line;
     case "append":
     case "prepend":
@@ -79,10 +76,21 @@ function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
     switch (edit.op) {
       case "replace": {
         const startLine = parseLineRef(edit.pos).line;
-        const endLine = edit.end ? parseLineRef(edit.end).line : startLine;
         return {
           editIndex,
           op: "replace",
+          anchorLine: startLine,
+          startLine,
+          endLine: startLine,
+          deletesOriginalLines: isDeletePayload(edit.lines),
+        };
+      }
+      case "replace_range": {
+        const startLine = parseLineRef(edit.pos).line;
+        const endLine = parseLineRef(edit.end).line;
+        return {
+          editIndex,
+          op: "replace_range",
           anchorLine: startLine,
           startLine,
           endLine,
@@ -118,8 +126,10 @@ function computeEditRegions(edits: HashlineEdit[]): EditRegion[] {
 function collectLineRefs(edits: HashlineEdit[]): string[] {
   return edits.flatMap((edit) => {
     switch (edit.op) {
+      case "replace_range":
+        return [edit.pos, edit.end];
       case "replace":
-        return edit.end ? [edit.pos, edit.end] : [edit.pos];
+        return [edit.pos];
       case "append":
       case "prepend":
         return edit.pos ? [edit.pos] : [];
@@ -130,14 +140,15 @@ function collectLineRefs(edits: HashlineEdit[]): string[] {
 function validateBatchConflicts(regions: EditRegion[]): void {
   const consumed = new Map<number, { editIndex: number; op: string }>();
   const multiLineReplaceRegions = regions.filter(
-    (region) => region.op === "replace" && region.startLine !== region.endLine,
+    (region) => region.op === "replace_range" && region.startLine !== region.endLine,
   );
   const deleteReplaceRegions = regions.filter(
-    (region) => region.op === "replace" && region.deletesOriginalLines,
+    (region) =>
+      (region.op === "replace" || region.op === "replace_range") && region.deletesOriginalLines,
   );
 
   for (const region of regions) {
-    if (region.op !== "replace") continue;
+    if (region.op !== "replace" && region.op !== "replace_range") continue;
     for (let idx = region.startLine - 1; idx <= region.endLine - 1; idx += 1) {
       const existing = consumed.get(idx);
       if (existing !== undefined) {
@@ -151,7 +162,8 @@ function validateBatchConflicts(regions: EditRegion[]): void {
   }
 
   for (const region of regions) {
-    if (region.op === "replace" || region.anchorLine <= 0) continue;
+    if (region.op === "replace" || region.op === "replace_range" || region.anchorLine <= 0)
+      continue;
     const replaced = multiLineReplaceRegions.find(
       (replaceRegion) =>
         region.anchorLine >= replaceRegion.startLine && region.anchorLine <= replaceRegion.endLine,
@@ -213,9 +225,10 @@ export function applyHashlineEditsWithReport(
 
   const dedupeResult = dedupeEdits(edits);
   const editPrecedence: Record<HashlineEdit["op"], number> = {
-    replace: 0,
-    append: 1,
-    prepend: 2,
+    replace_range: 0,
+    replace: 1,
+    append: 2,
+    prepend: 3,
   };
   const sortedEdits = dedupeResult.edits
     .map((edit, index) => ({ edit, index }))
@@ -257,10 +270,11 @@ export function applyHashlineEditsWithReport(
   for (const edit of sortedEdits) {
     let next = lines;
     switch (edit.op) {
+      case "replace_range":
+        next = applyReplaceLines(lines, edit.pos, edit.end, edit.lines, { skipValidation: true });
+        break;
       case "replace":
-        next = edit.end
-          ? applyReplaceLines(lines, edit.pos, edit.end, edit.lines, { skipValidation: true })
-          : applySetLine(lines, edit.pos, edit.lines, { skipValidation: true });
+        next = applySetLine(lines, edit.pos, edit.lines, { skipValidation: true });
         break;
       case "append":
         next = edit.pos
@@ -273,7 +287,6 @@ export function applyHashlineEditsWithReport(
           : applyPrepend(lines, edit.lines);
         break;
     }
-
     if (arraysEqual(next, lines)) {
       noopEdits += 1;
       continue;

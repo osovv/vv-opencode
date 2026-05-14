@@ -283,7 +283,7 @@ describe("HashlineEditPlugin", () => {
           filePath,
           edits: [
             {
-              op: "replace",
+              op: "replace_range",
               pos: anchorFor(originalLines, 2),
               end: anchorFor(originalLines, 3),
               lines: ["replaced"],
