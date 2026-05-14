@@ -48,8 +48,9 @@ function toLinePayload(lines: string | string[]): string {
 function getEditLineNumber(edit: HashlineEdit): number {
   switch (edit.op) {
     case "replace":
+      return parseLineRef(edit.pos).line;
     case "replace_range":
-      return parseLineRef(edit.end ?? edit.pos).line;
+      return parseLineRef(edit.end).line;
     case "append":
     case "prepend":
       return edit.pos ? parseLineRef(edit.pos).line : Number.NEGATIVE_INFINITY;
