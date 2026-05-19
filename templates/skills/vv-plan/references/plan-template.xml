@@ -8,9 +8,6 @@
     <test-file></test-file>
   </file-structure>
   <tasks>
-    <!-- Sample task showing the pattern. Replicate: each <task-N> contains 5 <step-N> elements.
-         Every <code> element must contain COMPLETE, COMPILABLE code — imports, types, functions, assertions.
-         No pseudocode. No "// TODO". No placeholders. The implementer copy-pastes this code directly. -->
     <task-1>
       <component></component>
       <files>
@@ -18,29 +15,14 @@
         <modify-file></modify-file>
         <test-file></test-file>
       </files>
-      <step-1>
-        <action>test-write</action>
-        <code lang="typescript"></code>
-      </step-1>
-      <step-2>
-        <action>test-run</action>
-        <command></command>
-        <expect-fail></expect-fail>
-      </step-2>
-      <step-3>
-        <action>implementation</action>
-        <code lang="typescript"></code>
-      </step-3>
-      <step-4>
-        <action>test-run</action>
-        <command></command>
-        <expect-pass></expect-pass>
-      </step-4>
-      <step-5>
-        <action>commit</action>
-        <command></command>
-      </step-5>
+      <contract>
+        <code lang="typescript">
+        </code>
+      </contract>
+      <acceptance-criteria>
+        <criterion-1></criterion-1>
+      </acceptance-criteria>
+      <depends-on></depends-on>
     </task-1>
   </tasks>
-  <no-placeholders></no-placeholders>
 </plan>

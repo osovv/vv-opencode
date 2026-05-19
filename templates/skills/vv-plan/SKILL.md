@@ -1,11 +1,11 @@
 ---
 name: vv-plan
-description: Use AFTER an approved spec exists at .vvoc/specs/ — writes a detailed implementation plan with exact file paths, complete code blocks, exact commands with expected output, and no placeholders
+description: Use AFTER an approved spec exists at .vvoc/specs/ — writes a detailed implementation plan with exact file paths, interface contracts, acceptance criteria per task, and no placeholders
 ---
 
 <skill>
 <identity>
-You are the vv-plan skill. Your job is to take an approved spec and write an implementation plan so detailed that the implementer barely needs to think. The plan WRITES THE CODE — exact file paths, complete compilable code blocks in every step, exact commands with expected FAIL/PASS output, and zero placeholders. The implementer copy-pastes each step. If the implementer has to decide HOW to implement something, the plan is incomplete.
+You are the vv-plan skill. Your job is to take an approved spec and write an implementation plan — a contract-level document. The plan contains exact file paths, interface signatures with JSDoc behavior descriptions, acceptance criteria per task, and dependency ordering. The plan does NOT contain full implementations — it specifies WHAT to build and HOW to verify it. The implementer reads the contracts and criteria, then writes code that satisfies them.
 </identity>
 
 <prerequisites>
@@ -14,125 +14,89 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 <rule>Do not reinterpret or expand the spec. The plan implements ONLY what the spec describes.</rule>
 </prerequisites>
 
+<three_layer_review>
+<principle>The plan enables three independent review stages:</principle>
+<stage-1>spec.xml → review: are the requirements correct, complete, unambiguous?</stage-1>
+<stage-2>plan.xml → review against spec: does every requirement map to a task? Do contracts match spec intent?</stage-2>
+<stage-3>code → review against plan: does the code implement every contract? Do tests verify every acceptance criterion?</stage-3>
+</three_layer_review>
+
 <plan_document_format>
-<rule>Load the plan template from references/plan-template.xml. Fill every element with the decisions from the approved spec and the file-structure map.</rule>
-<rule>Do not invent new elements. Do not skip sections. The template IS the contract.</rule>
-<rule>The template contains one &lt;task-1&gt; as a pattern. Replicate it for each task: task-1, task-2, task-N.</rule>
-<rule>Steps use unique semantic tags: step-1 (test-write), step-2 (test-run expect-fail), step-3 (implementation), step-4 (test-run expect-pass), step-5 (commit).</rule>
+<rule>Load the plan template from references/plan-template.xml. Fill every element.</rule>
+<rule>The template contains one &lt;task-1&gt; as a pattern. Replicate it for each task: task-1, task-2, task-N. Tasks are ordered by dependency.</rule>
+<rule>Every XML element is named for grep extraction. Use: `grep '<task-[0-9]\+>' plan.xml` to list tasks, `grep '<criterion-[0-9]\+>' plan.xml` for all criteria, `grep '<depends-on>task-' plan.xml` for dependency graph.</rule>
 <location>Save to .vvoc/plans/YYYY-MM-DD-&lt;feature-name&gt;-plan.xml</location>
 </plan_document_format>
 
-<code_in_plan>
-<core_principle>The plan writes almost all the code. The implementer copy-pastes it. Every &lt;code&gt; element contains complete, compilable code — imports, types, functions, assertions. If the implementer must decide HOW to implement a step, the plan is incomplete.</core_principle>
-</code_in_plan>
+<contract_format>
+<rule>Every task contains a &lt;contract&gt; element with a &lt;code&gt; block. The code shows interfaces, type signatures, and method declarations — the SHAPE of the code, not the full implementation.</rule>
+<rule>Use JSDoc-style comments BEFORE each function, method, and type. Format: /** behavior description */</rule>
+<rule>Show constructor signatures, public method signatures, type parameters, return types. Include private fields if they define structural state.</rule>
+<rule>Include constant definitions, enum values, and configuration constants when they define the data model.</rule>
+<rule>Show implementation logic ONLY when it is the point of the contract — a small algorithm, a state transition, a conditional branching rule. Use brief implementation for the CORE LOGIC, leave boilerplate out.</rule>
+</contract_format>
+
+<acceptance_criteria_format>
+<rule>Every task contains an &lt;acceptance-criteria&gt; section with numbered criteria: criterion-1, criterion-2, criterion-N.</rule>
+<rule>Each criterion is ONE specific, testable condition. If you cannot write a test for it, it is not specific enough.</rule>
+<rule>Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.</rule>
+<rule>Use plain English assertions: "Returns X when Y", "Throws Z if W", "Handles N concurrent calls without data loss".</rule>
+</acceptance_criteria_format>
 
 <example>
-<rule>Here is a concrete example of one filled task. Every code block is complete — no pseudocode, no "// TODO", no placeholders:</rule>
+<rule>Here is a concrete example of one task. Every &lt;contract&gt; shows JSDoc interfaces, and every &lt;acceptance-criteria&gt; has testable conditions:</rule>
 <sample-fragment>
   &lt;task-1&gt;
     &lt;component&gt;LRU Cache Store&lt;/component&gt;
     &lt;files&gt;
       &lt;create-file&gt;src/lib/cache-store.ts&lt;/create-file&gt;
-      &lt;modify-file&gt;src/lib/query-runner.ts&lt;/modify-file&gt;
       &lt;test-file&gt;src/lib/cache-store.test.ts&lt;/test-file&gt;
     &lt;/files&gt;
-    &lt;step-1&gt;
-      &lt;action&gt;test-write&lt;/action&gt;
+    &lt;contract&gt;
       &lt;code lang="typescript"&gt;
-import { describe, expect, test } from "bun:test";
-import { CacheStore } from "./cache-store.js";
-
-describe("CacheStore", () => {
-  test("stores and retrieves a value", () => {
-    const store = new CacheStore&lt;string&gt;({ maxSize: 10 });
-    store.set("a", "hello");
-    expect(store.get("a")).toBe("hello");
-  });
-
-  test("returns undefined for missing key", () => {
-    const store = new CacheStore&lt;string&gt;({ maxSize: 10 });
-    expect(store.get("missing")).toBeUndefined();
-  });
-
-  test("evicts oldest entry when at capacity", () => {
-    const store = new CacheStore&lt;string&gt;({ maxSize: 2 });
-    store.set("a", "first");
-    store.set("b", "second");
-    store.set("c", "third");
-    expect(store.get("a")).toBeUndefined();
-    expect(store.get("b")).toBe("second");
-    expect(store.get("c")).toBe("third");
-  });
-
-  test("updates LRU order on get", () => {
-    const store = new CacheStore&lt;string&gt;({ maxSize: 2 });
-    store.set("a", "first");
-    store.set("b", "second");
-    store.get("a"); // bump "a"
-    store.set("c", "third");
-    expect(store.get("a")).toBe("first");
-    expect(store.get("b")).toBeUndefined();
-    expect(store.get("c")).toBe("third");
-  });
-});
-      &lt;/code&gt;
-    &lt;/step-1&gt;
-    &lt;step-2&gt;
-      &lt;action&gt;test-run&lt;/action&gt;
-      &lt;command&gt;bun test src/lib/cache-store.test.ts&lt;/command&gt;
-      &lt;expect-fail&gt;FAIL — CacheStore is not defined&lt;/expect-fail&gt;
-    &lt;/step-2&gt;
-    &lt;step-3&gt;
-      &lt;action&gt;implementation&lt;/action&gt;
-      &lt;code lang="typescript"&gt;
+/** Options for configuring a CacheStore instance. */
 export type CacheStoreOptions = {
+  /** Maximum number of entries before eviction begins. */
   maxSize: number;
 };
 
+/**
+ * A size-bounded store with least-recently-used eviction.
+ * Get bumps the accessed key to most-recently-used position.
+ */
 export class CacheStore&lt;T&gt; {
-  private readonly maxSize: number;
-  private readonly map = new Map&lt;string, T&gt;();
+  /** Creates an empty store with the given capacity limit. */
+  constructor(options: CacheStoreOptions);
 
-  constructor(options: CacheStoreOptions) {
-    this.maxSize = options.maxSize;
-  }
+  /**
+   * Returns the value associated with key, or undefined if missing.
+   * Moves key to the most-recently-used position.
+   */
+  get(key: string): T | undefined;
 
-  get(key: string): T | undefined {
-    if (!this.map.has(key)) return undefined;
-    const value = this.map.get(key)!;
-    this.map.delete(key);
-    this.map.set(key, value);
-    return value;
-  }
+  /**
+   * Inserts or updates the mapping for key.
+   * If the store is at capacity and key is new, evicts the least-recently-used entry first.
+   * If key already exists, updates its value and moves it to MRU position.
+   */
+  set(key: string, value: T): void;
 
-  set(key: string, value: T): void {
-    if (this.map.has(key)) {
-      this.map.delete(key);
-    } else if (this.map.size &gt;= this.maxSize) {
-      const oldest = this.map.keys().next().value;
-      if (oldest !== undefined) this.map.delete(oldest);
-    }
-    this.map.set(key, value);
-  }
-
-  clear(): void {
-    this.map.clear();
-  }
+  /** Removes all entries from the store. */
+  clear(): void;
 }
       &lt;/code&gt;
-    &lt;/step-3&gt;
-    &lt;step-4&gt;
-      &lt;action&gt;test-run&lt;/action&gt;
-      &lt;command&gt;bun test src/lib/cache-store.test.ts&lt;/command&gt;
-      &lt;expect-pass&gt;PASS — 4 tests pass&lt;/expect-pass&gt;
-    &lt;/step-4&gt;
-    &lt;step-5&gt;
-      &lt;action&gt;commit&lt;/action&gt;
-      &lt;command&gt;git add src/lib/cache-store.ts src/lib/cache-store.test.ts &amp;&amp; git commit -m "feat: add LRU cache store"&lt;/command&gt;
-    &lt;/step-5&gt;
+    &lt;/contract&gt;
+    &lt;acceptance-criteria&gt;
+      &lt;criterion-1&gt;get() returns undefined for a key that was never set&lt;/criterion-1&gt;
+      &lt;criterion-2&gt;get() returns the value stored by set() for the same key&lt;/criterion-2&gt;
+      &lt;criterion-3&gt;When at maxSize capacity, setting a new key evicts the least-recently-used entry&lt;/criterion-3&gt;
+      &lt;criterion-4&gt;get() on an existing key bumps it to MRU, protecting it from eviction&lt;/criterion-4&gt;
+      &lt;criterion-5&gt;set() on an existing key updates its value without evicting other entries&lt;/criterion-5&gt;
+    &lt;/acceptance-criteria&gt;
+    &lt;depends-on/&gt;
   &lt;/task-1&gt;
 </sample-fragment>
-<rule>Every step has complete code with imports, types, implementation, and assertions. Nothing is left for the implementer to figure out. No "similar to step N" — repeat the code. No "add error handling" without code. The code IS the plan.</rule>
+<rule>Notice: the contract shows signatures with JSDoc, NOT implementations. The acceptance criteria are specific and testable. Every element is grep-able by its XML tag name.</rule>
 </example>
 
 <file_structure>
@@ -144,21 +108,27 @@ export class CacheStore&lt;T&gt; {
 <rule>In existing codebases, follow established file patterns.</rule>
 </file_structure>
 
+<dependency_tracking>
+<rule>Every task after the first must declare its dependencies in &lt;depends-on&gt;.</rule>
+<rule>Use task IDs: &lt;depends-on&gt;task-1, task-2&lt;/depends-on&gt;</rule>
+<rule>Dependency graph is grep-able: `grep '&lt;depends-on&gt;' plan.xml`</rule>
+</dependency_tracking>
 
 <no_placeholders>
 <rule>These are PLAN FAILURES. The plan is incomplete if any of these appear:</rule>
 <forbidden>TBD, TODO, "implement later", "fill in details", "add later"</forbidden>
-<forbidden>"Add appropriate error handling" or "add validation" or "handle edge cases" — WITHOUT the actual code that does it</forbidden>
-<forbidden>"Write tests for the above" — WITHOUT actual test code showing what to test and how</forbidden>
-<forbidden>"Similar to Task N" or "Follow the same pattern as Task N" — repeat the complete code; the implementer may read tasks out of order</forbidden>
-<forbidden>Steps that describe what to do without showing how — every code step MUST include a complete code block</forbidden>
-<forbidden>References to types, functions, methods, classes, or variables not defined in any prior task</forbidden>
+<forbidden>"Add appropriate error handling" or "add validation" — WITHOUT the specific error types or validation rules</forbidden>
+<forbidden>"Write tests for the above" — WITHOUT concrete acceptance criteria</forbidden>
+<forbidden>Empty &lt;contract&gt; or &lt;acceptance-criteria&gt; sections</forbidden>
+<forbidden>"Similar to Task N" — repeat the full contract and criteria; the implementer may read tasks out of order</forbidden>
+<forbidden>References to types, functions, methods, or classes not defined in any prior task</forbidden>
 </no_placeholders>
 
 <self_review>
 <check>Spec coverage: For each requirement in the spec, identify the task that implements it. List any gaps as issues to fix.</check>
-<check>Placeholder scan: Search the plan for every forbidden pattern from the No Placeholders section. Fix each one found.</check>
-<check>Type consistency: Do the types, function signatures, method names, and property names used in later tasks match exactly what was defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
+<check>Contract completeness: Does every task's contract show all public signatures and types? Are edge cases covered by acceptance criteria?</check>
+<check>Acceptance criteria quality: Is every criterion testable? Could a reviewer or implementer write a failing test for it?</check>
+<check>Type consistency: Do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
 <rule>Fix issues inline as you find them. No second review pass needed — just fix and continue.</rule>
 </self_review>
 
@@ -171,6 +141,6 @@ export class CacheStore&lt;T&gt; {
 </execution_handoff>
 
 <task>
-Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/, load the plan template from references/plan-template.xml, map the file structure, decompose into task-1..task-N with COMPLETE COMPILABLE CODE in every &lt;code&gt; element (imports, types, functions — everything), run self-review, save the plan as XML, and offer execution options. Stop before implementation. The implementer must be able to copy-paste every step without thinking.
+Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/, load the plan template from references/plan-template.xml, map the file structure, decompose into task-1..task-N with JSDoc interface contracts and testable acceptance criteria, run self-review, save the plan as XML, and offer execution options. Stop before implementation. The plan must be reviewable: every contract maps to a spec requirement, every criterion is testable, every dependency is explicit.
 </task>
 </skill>
