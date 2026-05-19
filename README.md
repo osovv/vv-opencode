@@ -1,6 +1,6 @@
 # @osovv/vv-opencode
 
-**Portable OpenCode workflow toolkit** — one command bootstraps a managed agent ecosystem, security-and-productivity plugins, and a unified CLI.
+**Portable OpenCode workflow toolkit** — one command bootstraps a managed agent ecosystem, skill-driven spec-to-code pipeline, security-and-productivity plugins, and a unified CLI.
 
 <p>
   <a href="https://www.npmjs.com/package/@osovv/vv-opencode"><img src="https://img.shields.io/npm/v/%40osovv%2Fvv-opencode?style=flat&label=npm&color=blue" alt="npm"></a>
@@ -17,7 +17,7 @@ bun add -g @osovv/vv-opencode
 vvoc install
 ```
 
-That's it. `vvoc install` pins the package, scaffolds managed agents, registers slash commands, writes canonical config, and sets `vv-controller` as your default OpenCode agent.
+That's it. `vvoc install` pins the package, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, and review skills.
 
 To scope everything to the current project instead of the global OpenCode config:
 
@@ -25,7 +25,68 @@ To scope everything to the current project instead of the global OpenCode config
 vvoc install --scope project
 ```
 
-> **Already installed?** Run `vvoc sync` anytime to refresh plugins, prompts, and presets.
+> **Already installed?** Run `vvoc sync` anytime to refresh plugins, prompts, skills, and presets.
+
+---
+
+## Spec-to-Code Pipeline
+
+The core workflow is a three-stage pipeline with independent review gates at each level:
+
+```
+User request
+    │
+    ▼ auto-trigger
+vv-spec  ───────────────────────────────────────→  .vvoc/specs/*.xml
+    │   Grill-me interview (one question at a time)
+    │   Decision tree with recommended answers
+    │   vv-analyst + vv-architect synthesis
+    │
+    ├── ① Spec review: requirements correct, complete, unambiguous?
+    │
+    ▼ auto-trigger (after approval)
+vv-plan  ───────────────────────────────────────→  .vvoc/plans/*-plan.xml
+    │   Interface contracts with JSDoc behavior descriptions
+    │   Acceptance criteria per task (grep: `<criterion-N>`)
+    │   Dependency ordering (grep: `<depends-on>`)
+    │   Three-layer review model: spec → plan → code
+    │
+    ├── ② Plan review: every spec requirement → task? Contracts match spec?
+    │
+    ▼ auto-trigger (after approval)
+vv-implementer → vv-spec-reviewer → vv-code-reviewer
+    │   Workflow tracked loop with work items
+    │   Spec review checks: code matches spec?
+    │   Code review checks: implementation matches plan contracts?
+    │
+    ├── ③ Code review: interfaces correct? All AC pass?
+    │
+    ▼
+Done
+```
+
+### XML grep
+
+Plans and specs are XML documents, making every element grep-able:
+
+```bash
+# Extract tasks from plan
+grep '<task-[0-9]\+>' .vvoc/plans/*.xml
+
+# Extract all acceptance criteria
+grep '<criterion-[0-9]\+>' .vvoc/plans/*.xml
+
+# Extract dependency graph
+grep '<depends-on>task-' .vvoc/plans/*.xml
+
+# Extract method signatures
+grep '/\*\*' .vvoc/plans/*.xml
+
+# Extract all components from plan
+grep '<component>' .vvoc/plans/*.xml
+```
+
+All three skills are auto-triggered by `vv-controller` via its built-in `<skill_trigger_rule>` — no slash commands needed. The controller checks whether `vv-spec`, `vv-plan`, or `vv-review` applies before routing any request.
 
 ---
 
@@ -35,8 +96,8 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 
 **vv-opencode collapses that into a single `vvoc install`.** It owns the wiring so you don't have to:
 
-- **Seven plugins, one entry** — all plugins are exported from a single pinned package entry
-- **Managed agent system** — a routed `vv-controller` primary agent with domain-specialized subagents
+- **Six plugins, one entry** — all plugins are exported from a single pinned package entry
+- **Managed agent & skill system** — `vv-controller` auto-triggers `vv-spec`, `vv-plan`, and `vv-review` skills before routing to domain-specialized subagents
 - **Model roles & presets** — assign models to roles (`smart`, `fast`, `vision`, …) and switch provider presets with one command
 - **Security-first** — a `guardian` agent reviews permission requests, secrets are redacted from LLM-bound chat
 - **Stale-line-number defense** — hashline-backed `edit` prevents write-against-wrong-snapshot bugs
@@ -49,12 +110,13 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 |---|---|
 | **Plugins** | 6 plugins in one pinned package entry — workflow orchestration, model roles, guardian, hashline edit, system context injection, secrets redaction |
 | **Agent System** | `vv-controller` routes work: direct for small changes, `investigator` for bugs, implementer+reviewer loop for risky work, analyst+architect for large features |
-| **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, prompts, commands, presets |
+| **Skills** | `vv-spec` interviews you and writes an XML spec; `vv-plan` maps the spec to interface contracts and acceptance criteria; `vv-review` runs a review-only workflow — all auto-triggered |
+| **Spec-to-Code Pipeline** | `vv-spec` → spec review → `vv-plan` → plan review → `vv-implementer` → code review. Three independent review gates cover requirements, contracts, and implementation |
+| **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, skills, prompts, presets |
 | **CLI Tooling** | 15+ commands: install, sync, status, doctor, role management, presets, guardian config, shell completion, upgrade |
 | **Security** | GuardianPlugin reviews shell-permission requests; SecretsRedactionPlugin strips tokens before LLM requests; both configurable via `vvoc.json` |
 | **Model Roles** | Assign provider/model/variant to roles (`default`, `smart`, `fast`, `vision`, custom); switch between `vv-openai`, `vv-zai`, `vv-deepseek`, `vv-minimax` presets |
 | **Workflow Tracking** | Work items with open/list/close for tracked implementation-to-review pipelines |
-| **Slash Commands** | `/vv-plan` routes through planning mode, `/vv-review` routes through review-only mode |
 
 ---
 
@@ -62,11 +124,11 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 
 | Plugin | What it does |
 |---|---|
-| **WorkflowPlugin** | Tracked orchestration around `task` for subagents; registers `work_item_open/list/close` tools; routes `/vv-plan` and `/vv-review` commands |
+| **WorkflowPlugin** | Tracked orchestration around `task` for subagents; registers `work_item_open/list/close` tools for implementation-to-review pipelines with state-machine enforcement and round-limit gating |
 | **ModelRolesPlugin** | Resolves `vv-role:*` references in OpenCode config at startup; translates `:variant` suffixes into native model+variant fields |
 | **GuardianPlugin** | Reviews OpenCode permission requests with a constrained guardian agent and safe-deny defaults; configurable model, timeout, risk threshold |
 | **HashlineEditPlugin** | Replaces OpenCode's `edit` with hash-anchored variant; rewrites `read` output to `line#hash` format; rejects stale snapshots to prevent drift bugs |
-| **SystemContextInjectionPlugin** | Injects reusable system guidance into primary sessions without polluting subagent prompts; encourages proactive `explore` usage |
+| **SystemContextInjectionPlugin** | Injects reusable system guidance into primary sessions without polluting subagent prompts; encourages proactive `explore` usage; registers vvoc skill directory for OpenCode skill discovery |
 | **SecretsRedactionPlugin** | Redacts secrets (tokens, keys, emails, UUIDs, IPs) before LLM requests; restores placeholders afterward; configurable patterns |
 
 ---
@@ -77,7 +139,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 |---|---|
 | `vvoc init` | Interactive bootstrap flow |
 | `vvoc install` | Non-interactive setup and scaffolding |
-| `vvoc sync` | Refresh plugin entry, agents, prompts, config |
+| `vvoc sync` | Refresh plugin entry, agents, prompts, skills, config |
 | `vvoc status` | Show current installation state |
 | `vvoc doctor` | Diagnose setup problems (exits non-zero on issues) |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
@@ -124,6 +186,9 @@ OpenCode config          → OpenCode-managed paths (global or project)
 vvoc.json (canonical)    → $XDG_CONFIG_HOME/vvoc/vvoc.json
 Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md  (global)
                            ./.vvoc/agents/*.md                 (project)
+Managed skills           → $XDG_CONFIG_HOME/vvoc/skills/*/SKILL.md  (global)
+                           ./.vvoc/skills/*/SKILL.md               (project)
+Spec documents           → ./.vvoc/specs/*
 Planning artifacts       → ./.vvoc/plans/*
 Persisted data           → $XDG_DATA_HOME/vvoc/
 ```
@@ -147,6 +212,20 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 | `vv-code-reviewer` | Engineering review for bugs and maintainability |
 | `investigator` | Root-cause analysis for unclear bugs |
 | `guardian` | Permission request review (plugin runtime) |
+
+---
+
+## Managed Skills
+
+Three XML-based skills are scaffolded alongside agents:
+
+| Skill | Trigger | Output | Grep-able |
+|---|---|---|---|
+| `vv-spec` | Creative/feature request, no spec exists | `.vvoc/specs/*.xml` | `<user-story>`, `<fr-1>`, `<sc-1>` |
+| `vv-plan` | Approved spec exists | `.vvoc/plans/*-plan.xml` | `<task-N>`, `<criterion-N>`, `<depends-on>`, `/**` JSDoc |
+| `vv-review` | Review request | Findings report | — |
+
+Skills are loaded by OpenCode at session start through `config.skills.paths` (registered by the SystemContextInjectionPlugin). The `vv-controller` agent's `<skill_trigger_rule>` ensures they are invoked automatically when the user's request matches their trigger conditions.
 
 ---
 
