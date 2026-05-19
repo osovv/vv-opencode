@@ -90,13 +90,13 @@ describe("managed agent prompts", () => {
     const architectTemplate = await loadManagedAgentPromptTemplate("vv-architect");
 
     expect(analystTemplate).toContain("mode: subagent");
-    expect(analystTemplate).toContain(".vvoc/plans/**");
+    expect(analystTemplate).toContain("the caller handles persistence");
     expect(analystTemplate).toContain("Status: READY | NEEDS_CONTEXT");
     expect(analystTemplate).toContain("Acceptance criteria:");
-    expect(analystTemplate).toContain("Plan artifact: path or none");
+    expect(analystTemplate).toContain("Verification expectations:");
 
     expect(architectTemplate).toContain("mode: subagent");
-    expect(architectTemplate).toContain(".vvoc/plans/**");
+    expect(architectTemplate).toContain("the caller handles persistence");
     expect(architectTemplate).toContain("Implementation waves:");
     expect(architectTemplate).toContain("Verification gates:");
     expect(architectTemplate).toContain("User approval checkpoint:");
