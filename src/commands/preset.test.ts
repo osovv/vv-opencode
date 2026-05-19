@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
-//   LINKS: [V-M-CLI-PRESET]
+//   LINKS: [M-CLI-PRESET, V-M-CLI-PRESET]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

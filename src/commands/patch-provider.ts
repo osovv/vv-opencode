@@ -3,8 +3,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply global OpenCode patch presets.
 //   SCOPE: Patch preset validation, global OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
-//   INPUTS: CLI preset name plus optional config directory override.
-//   OUTPUTS: Global OpenCode config mutations and a one-line write summary.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-PATCH-PROVIDER, M-CLI-CONFIG]
 //   ROLE: RUNTIME

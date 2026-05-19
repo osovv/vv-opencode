@@ -4,7 +4,7 @@
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
 //   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, normalization heuristics, and BOM/CRLF preservation.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
-//   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

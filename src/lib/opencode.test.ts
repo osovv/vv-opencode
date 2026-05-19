@@ -3,10 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
-//   INPUTS: Helper return values, temp config homes, and representative OpenCode/vvoc config documents.
-//   OUTPUTS: Assertions over rewritten config text, persisted files, and scope-aware paths.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
-//   LINKS: [V-M-CLI-CONFIG]
+//   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

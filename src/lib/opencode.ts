@@ -3,8 +3,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
 //   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode default-agent, command, and tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
-//   INPUTS: Scope-aware filesystem paths, current OpenCode/vvoc config text, and validated config override values.
-//   OUTPUTS: Normalized OpenCode/vvoc config text, persisted config writes, and installation inspection snapshots.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME

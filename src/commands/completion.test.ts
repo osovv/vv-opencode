@@ -3,8 +3,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `role set|unset <role-id>` flow.
-//   INPUTS: Generated completion scripts for bash, zsh, and fish.
-//   OUTPUTS: Assertions over exposed commands, nested completions, and syntax markers.
 //   DEPENDS: [bun:test, src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST

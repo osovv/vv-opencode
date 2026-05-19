@@ -3,8 +3,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, nested command and preset completion generation for config/plugin/patch-provider/preset and the `role set|unset` flow, and rc file patching.
-//   INPUTS: Current shell environment plus built-in vvoc command and preset names.
-//   OUTPUTS: Shell-specific completion scripts and idempotent rc/config patches.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts, src/lib/vvoc-preset-registry.ts]
 //   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS]
 //   ROLE: RUNTIME

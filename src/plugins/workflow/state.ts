@@ -23,6 +23,7 @@
 //   closeWorkItem - Closes an existing open item.
 //   transitionWorkItemState - Applies deterministic state transitions and increments review counters.
 //   getReviewRound - Computes review round as max(specReviewCount, codeReviewCount).
+//   WorkItemStoreData - JSON-serializable store data structure for persistence.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

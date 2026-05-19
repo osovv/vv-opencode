@@ -4,7 +4,7 @@
 //   PURPOSE: Verify hashline reference parsing and validation diagnostics.
 //   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, context-anchor preservation, legacy hash acceptance, mismatch context, and line-number suggestion hints.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/validation.ts]
-//   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

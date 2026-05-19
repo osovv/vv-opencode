@@ -4,7 +4,7 @@
 //   PURPOSE: Verify raw hashline edit normalization into typed operations.
 //   SCOPE: Replace normalization, anchored append/prepend normalization, anchor precedence, required-lines failures, null-to-empty-array conversion for inserts, and unsupported-op failures.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/normalize-edits.ts]
-//   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

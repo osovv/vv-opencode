@@ -4,7 +4,7 @@
 //   PURPOSE: Verify Guardian plugin role-based runtime config and permission review fallback behavior.
 //   SCOPE: Hidden subagent registration, built-in fast-role model resolution, initialization failure signaling, and review fallback behavior.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/vvoc-config.ts, src/plugins/guardian/index.ts]
-//   LINKS: [V-M-PLUGIN-GUARDIAN]
+//   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

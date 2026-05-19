@@ -4,7 +4,7 @@
 // XK#MK|//   PURPOSE: Verify hashline batch edit ordering, deduplication, and primitive failure handling.
 // KZ#ZW|//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, and BOF/EOF insertion into empty files.
 // TX#HX|//   DEPENDS: [bun:test, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/types.ts]
-// NJ#YB|//   LINKS: [V-M-PLUGIN-HASHLINE-EDIT]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 // HH#HH|//   ROLE: TEST
 // QT#TM|//   MAP_MODE: LOCALS
 // VR#RQ|// END_MODULE_CONTRACT

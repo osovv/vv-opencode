@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-ROLE - canonical role list/set/unset behavior.
 //   SCOPE: Built-in list ordering, role ID/model normalization, built-in unset protection, config bootstrap, and custom role removal.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/role.ts, src/lib/opencode.ts]
-//   LINKS: [V-M-CLI-ROLE]
+//   LINKS: [M-CLI-ROLE, V-M-CLI-ROLE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

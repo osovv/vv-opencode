@@ -5,8 +5,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble and run the vvoc CLI entrypoint.
 //   SCOPE: Package version lookup, top-level command registration, and main command execution.
-//   INPUTS: Process argv plus command metadata from registered subcommands.
-//   OUTPUTS: The executed vvoc command tree.
 //   DEPENDS: [citty, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: SCRIPT

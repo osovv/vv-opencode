@@ -4,7 +4,7 @@
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
 //   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers and bounded same-session repair, primary-only workflow guidance injection, and per-session work-item state persistence (hydrate/snapshot/round-trip/session-switch/cleanup).
 //   DEPENDS: [bun:test, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts]
-//   LINKS: [V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
+//   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

@@ -4,7 +4,7 @@
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
 //   DEPENDS: [bun:test, src/plugins/system-context-injection/index.ts]
-//   LINKS: [V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
+//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

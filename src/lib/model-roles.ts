@@ -3,8 +3,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Define built-in role IDs, role-reference parsing, concrete model-selection parsing, and deterministic built-in role bindings.
 //   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model parsing, and hard-coded built-in role binding lookup.
-//   INPUTS: roleId | roleRef | modelSelection strings and a canonical role map.
-//   OUTPUTS: Normalized role IDs plus parsed and resolved model-selection objects.
 //   DEPENDS: [none]
 //   LINKS: [M-MODEL-ROLES]
 //   ROLE: RUNTIME
@@ -24,7 +22,6 @@
 //   ParsedModelSelection - Parsed provider/model[:variant] result.
 //   ResolvedRoleSelection - Resolved role reference result.
 //   BuiltInRoleBindings - Hard-coded built-in role mapping.
-// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -4,7 +4,7 @@
 //   PURPOSE: Verify doctor command role-aware diagnostics and failure signaling.
 //   SCOPE: Canonical role inventory output and unresolved role-reference problem reporting with non-zero exit behavior.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/doctor.ts, src/lib/opencode.ts]
-//   LINKS: [V-M-CLI-COMMANDS]
+//   LINKS: [M-CLI-COMMANDS, V-M-CLI-COMMANDS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

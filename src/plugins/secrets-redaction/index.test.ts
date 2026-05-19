@@ -4,7 +4,7 @@
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
 //   SCOPE: chat message redaction, assistant state redaction, text completion restore, and tool arg restore.
 //   DEPENDS: bun:test, node:fs/promises, node:os, node:path, index
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

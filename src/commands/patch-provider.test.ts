@@ -3,10 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PATCH-PROVIDER - global OpenCode patch presets.
 //   SCOPE: Preset validation plus global OpenCode provider and provider-specific patch application without root model rewrites.
-//   INPUTS: Built-in patch preset names and temp config homes.
-//   OUTPUTS: Assertions over rewritten global OpenCode config content.
 //   DEPENDS: [bun:test, src/commands/patch-provider.ts]
-//   LINKS: [V-M-CLI-PATCH-PROVIDER]
+//   LINKS: [M-CLI-PATCH-PROVIDER, V-M-CLI-PATCH-PROVIDER]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

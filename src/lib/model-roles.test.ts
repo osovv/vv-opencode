@@ -4,7 +4,7 @@
 //   PURPOSE: Verify role ID/reference parsing, concrete model-selection parsing, built-in bindings, and role-resolution failures.
 //   SCOPE: Deterministic built-in role exposure, vv-role round-trips, model selection normalization, and explicit error-code coverage.
 //   DEPENDS: [bun:test, src/lib/model-roles.ts]
-//   LINKS: [V-M-MODEL-ROLES]
+//   LINKS: [M-MODEL-ROLES, V-M-MODEL-ROLES]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

@@ -4,7 +4,7 @@
 //   PURPOSE: Re-export barrel for SecretsRedactionPlugin
 //   SCOPE: plugin re-exports
 //   DEPENDS: secrets-redaction/index
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: BARREL
 //   MAP_MODE: SUMMARY
 // END_MODULE_CONTRACT

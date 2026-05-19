@@ -4,7 +4,7 @@
 //   PURPOSE: Verify status command role-aware installation reporting.
 //   SCOPE: Canonical role inventory rendering and deterministic built-in role ordering.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/status.ts, src/lib/opencode.ts]
-//   LINKS: [V-M-CLI-COMMANDS]
+//   LINKS: [M-CLI-COMMANDS, V-M-CLI-COMMANDS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

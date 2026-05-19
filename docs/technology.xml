@@ -1,4 +1,4 @@
-<TechnologyStack VERSION="0.4.0">
+<TechnologyStack VERSION="0.5.0">
   <Runtime>Bun 1.3.8</Runtime>
   <Language>TypeScript 5.8.2</Language>
   <Framework>citty 0.2.2</Framework>
@@ -54,6 +54,34 @@
     <required-fields>service, level, message, requestID, sessionID</required-fields>
     <redaction>Never log secrets, credentials, or raw high-risk payloads beyond the existing Guardian truncation policy.</redaction>
   </Observability>
+
+  <PreferredAgentStack>
+    <runtime>bun 1.3.8</runtime>
+    <language>TypeScript 5.8.2</language>
+    <test-runner>bun test</test-runner>
+    <linter>oxlint</linter>
+    <formatter>oxfmt</formatter>
+    <observability>OpenCode app.log plus structured markers with [service][function][block] format</observability>
+    <config>XDG_CONFIG_HOME/vvoc/vvoc.json (canonical) and opencode.json(c) (OpenCode)</config>
+    <data>XDG_DATA_HOME/vvoc/ for persisted workflow state</data>
+  </PreferredAgentStack>
+
+  <AutonomyPolicy>
+    <retry-budget>
+      <subagent-retries>2</subagent-retries>
+      <repair-attempts>1 same-session repair attempt for resumable tracked output</repair-attempts>
+    </retry-budget>
+    <replan-triggers>
+      <trigger>BLOCKED or NEEDS_CONTEXT hard stop from tracked subagent</trigger>
+      <trigger>Review round 3 exceeded — explicit user intervention required</trigger>
+      <trigger>Material assumption invalidated during execution</trigger>
+      <trigger>Protocol error from tracked subagent output</trigger>
+    </replan-triggers>
+    <loop-protection>
+      <max-review-rounds>2</max-review-rounds>
+      <policy>Round 3 blocked with explicit guidance to inspect work_item_list and recover</policy>
+    </loop-protection>
+  </AutonomyPolicy>
 
   <DeliveryShape>
     <shape>One public npm package that exports `GuardianPlugin`, `MemoryPlugin`, `SystemContextInjectionPlugin`, `SecretsRedactionPlugin`, and `ModelRolesPlugin`, plus a Bun CLI binary named `vvoc`.</shape>

@@ -4,7 +4,7 @@
 //   PURPOSE: Define supported vvoc model target IDs and shared model override validation helpers.
 //   SCOPE: Model target ID lists, type guards, model formatting, and model-argument parsing reused by CLI commands and vvoc config validation.
 //   DEPENDS: [src/lib/managed-agents.ts]
-//   LINKS: [M-CLI-CONFIG, M-CLI-COMMANDS, M-CLI-PRESET]
+//   LINKS: [M-CLI-AGENT-MODELS, M-CLI-CONFIG, M-CLI-COMMANDS, M-CLI-PRESET]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for the secrets redaction engine.
 //   SCOPE: direct text redaction, overlap resolution, exclude handling, and placeholder round-trips.
 //   DEPENDS: bun:test, engine, patterns, restore, session
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

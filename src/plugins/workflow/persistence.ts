@@ -116,10 +116,7 @@ export function hydrateWorkflowState(sessionId: string): WorkItemStoreData | nul
 //   PURPOSE: Serialize WorkItemStoreData to a per-session JSON file. Creates the
 //     session directory if it does not exist. Logs warnings on write failure but
 //     never throws so in-memory operations continue.
-//   INPUTS: {
-//     sessionId: string - OpenCode session identifier,
-//     data: WorkItemStoreData - current in-memory store data
-//   }
+//   INPUTS: { sessionId: string, data: WorkItemStoreData }
 //   OUTPUTS: { void }
 //   SIDE_EFFECTS: [Writes JSON file to $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json]
 //   LINKS: [M-WORKFLOW-PERSISTENCE]

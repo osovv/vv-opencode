@@ -3,8 +3,6 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical built-in vvoc preset registry from a single internal source of truth.
 //   SCOPE: Built-in preset name ordering, preset definitions, and built-in preset-name detection.
-//   INPUTS: none
-//   OUTPUTS: Canonical built-in preset registry constants and name-guard helpers.
 //   DEPENDS: [none]
 //   LINKS: [M-VVOC-PRESET-REGISTRY, M-CLI-CONFIG, M-CLI-PRESET, M-CLI-COMPLETION]
 //   ROLE: RUNTIME

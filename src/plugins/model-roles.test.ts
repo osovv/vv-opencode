@@ -4,7 +4,7 @@
 //   PURPOSE: Verify ModelRolesPlugin role-reference resolution and explicit failure behavior.
 //   SCOPE: Root and nested field resolution, literal passthrough behavior, and unknown failure paths with stable markers.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/vvoc-config.ts, src/plugins/model-roles/index.ts]
-//   LINKS: [V-M-PLUGIN-MODEL-ROLES]
+//   LINKS: [M-PLUGIN-MODEL-ROLES, V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
