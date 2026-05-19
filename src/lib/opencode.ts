@@ -83,6 +83,8 @@ import {
   MANAGED_SKILL_NAMES,
   type ManagedSkillName,
   getManagedSkillFilePath,
+  listManagedSkillReferenceNames,
+  loadManagedSkillReference,
   loadManagedSkillTemplate,
 } from "./managed-skills.js";
 import {
@@ -519,10 +521,7 @@ export async function installManagedSkillFiles(
     if (!currentText) {
       await writeText(skillPath, await renderManagedSkill(skillName));
       results.push({ action: "created", path: skillPath });
-      continue;
-    }
-
-    if (!options.force) {
+    } else if (!options.force) {
       if (!isManagedFile(currentText)) {
         results.push({
           action: "skipped",
@@ -533,9 +532,11 @@ export async function installManagedSkillFiles(
         results.push({ action: "kept", path: skillPath });
       }
       continue;
+    } else {
+      results.push(await syncManagedSkill(paths, skillName, options));
     }
-
-    results.push(await syncManagedSkill(paths, skillName, options));
+    const refResults = await syncManagedSkillReferences(paths.managedSkillsDirPath, skillName);
+    results.push(...refResults);
   }
 
   return results;
@@ -549,6 +550,8 @@ export async function syncManagedSkillFiles(
 
   for (const skillName of MANAGED_SKILL_NAMES) {
     results.push(await syncManagedSkill(paths, skillName, options));
+    const refResults = await syncManagedSkillReferences(paths.managedSkillsDirPath, skillName);
+    results.push(...refResults);
   }
 
   return results;
@@ -1455,6 +1458,29 @@ async function renderManagedSkill(skillName: ManagedSkillName): Promise<string> 
     "",
   ].join("\n");
   return `${header}${template}\n`;
+}
+
+async function syncManagedSkillReferences(
+  skillsDirPath: string,
+  skillName: ManagedSkillName,
+): Promise<WriteResult[]> {
+  const results: WriteResult[] = [];
+  const referenceNames = await listManagedSkillReferenceNames(skillName);
+  for (const refName of referenceNames) {
+    const templateContent = await loadManagedSkillReference(skillName, refName);
+    const targetPath = join(skillsDirPath, skillName, "references", refName);
+    const currentContent = await readOptionalText(targetPath);
+    if (currentContent === templateContent) {
+      results.push({ action: "kept", path: targetPath });
+      continue;
+    }
+    await writeText(targetPath, templateContent);
+    results.push({
+      action: currentContent ? "updated" : "created",
+      path: targetPath,
+    });
+  }
+  return results;
 }
 
 async function syncManagedSkill(

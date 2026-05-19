@@ -713,10 +713,12 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await installManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(5); // 3 SKILL.md + 2 reference files (vv-spec, vv-plan)
       expect(results.every((r) => r.action === "created")).toBe(true);
       for (const r of results) {
-        expect(r.path).toMatch(/SKILL\.md$/);
+        const isSkill = r.path.endsWith("SKILL.md");
+        const isReference = r.path.endsWith(".xml");
+        expect(isSkill || isReference).toBe(true);
       }
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -732,7 +734,7 @@ describe("managed skill files", () => {
       await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
 
       const results = await installManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(4); // vv-spec SKILL.md skipped, others created + references
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
       expect(vvSpec?.reason).toContain("not managed by vvoc");
@@ -762,7 +764,7 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await syncManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(5); // 3 SKILL.md + 2 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -793,7 +795,7 @@ describe("managed skill files", () => {
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: false });
       const kept = results.filter((r) => r.action === "kept");
-      expect(kept).toHaveLength(3);
+      expect(kept).toHaveLength(5); // 3 SKILL.md + 2 reference files
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -805,7 +807,7 @@ describe("managed skill files", () => {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(5); // 3 SKILL.md + 2 reference files
       for (const r of results) {
         expect(["kept", "updated"]).toContain(r.action);
       }

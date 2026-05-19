@@ -14,14 +14,13 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 <rule>Do not reinterpret or expand the spec. The plan implements ONLY what the spec describes.</rule>
 </prerequisites>
 
-<plan_header>
-<rule>Every plan starts with this exact header block:</rule>
-<fields>
-Goal: [one sentence describing what this plan builds]
-Architecture: [2-3 sentences about the implementation approach]
-Tech Stack: [key technologies, libraries, and tools used]
-</fields>
-</plan_header>
+<plan_document_format>
+<rule>Load the plan template from references/plan-template.xml. Fill every element with the decisions from the approved spec and the file-structure map.</rule>
+<rule>Do not invent new elements. Do not skip sections. The template IS the contract.</rule>
+<rule>The template contains one &lt;task-1&gt; as a pattern. Replicate it for each task: task-1, task-2, task-N.</rule>
+<rule>Steps use unique semantic tags: step-1 (test-write), step-2 (test-run expect-fail), step-3 (implementation), step-4 (test-run expect-pass), step-5 (commit).</rule>
+<location>Save to .vvoc/plans/YYYY-MM-DD-&lt;feature-name&gt;-plan.xml</location>
+</plan_document_format>
 
 <file_structure>
 <rule>Before defining any tasks, map out every file that will be created or modified.</rule>
@@ -32,45 +31,6 @@ Tech Stack: [key technologies, libraries, and tools used]
 <rule>In existing codebases, follow established file patterns.</rule>
 </file_structure>
 
-<task_schema>
-<rule>Every task follows this exact structure:</rule>
-<format>
-### Task N: ComponentName
-
-**Files:**
-- Create: `exact/path/to/new/file.ts`
-- Modify: `exact/path/to/existing.ts`
-- Test: `tests/exact/path/to/test.ts`
-
-- [ ] **Step 1: Write the failing test**
-```language
-// Complete test code — actual code, never pseudocode
-// Include imports, test function, assertions
-// Include edge cases the test must cover
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-Run: `exact command to run the test`
-Expected: FAIL — [specific error message or assertion failure]
-
-- [ ] **Step 3: Write minimal implementation**
-```language
-// Complete implementation code
-// Include all imports, types, functions
-// Minimal: only enough to make the test pass
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-Run: `exact command to run the test`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-```bash
-git add exact/path/test.ts exact/path/impl.ts
-git commit -m "type: concise description of what was done"
-```
-</format>
-</task_schema>
 
 <no_placeholders>
 <rule>These are PLAN FAILURES. The plan is incomplete if any of these appear:</rule>
@@ -90,7 +50,7 @@ git commit -m "type: concise description of what was done"
 </self_review>
 
 <execution_handoff>
-<rule>Save the plan to .vvoc/plans/YYYY-MM-DD-&lt;feature-name&gt;-plan.md</rule>
+<rule>Save the plan to .vvoc/plans/YYYY-MM-DD-&lt;feature-name&gt;-plan.xml</rule>
 <rule>After saving, present the user with two execution options:</rule>
 <option name="workflow">Workflow tracked loop (recommended) — vv-implementer executes tasks, followed by vv-spec-reviewer and vv-code-reviewer. Uses work_item_open/close for each implementation wave.</option>
 <option name="manual">Manual execution — the user or another agent executes tasks step by step following the plan directly.</option>
@@ -98,6 +58,6 @@ git commit -m "type: concise description of what was done"
 </execution_handoff>
 
 <task>
-Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/, map the complete file structure, decompose the work into bite-sized tasks with exact code, exact commands, and expected output, run self-review, save the plan, and offer execution options. Stop before implementation.
+Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/, load the plan template from references/plan-template.xml, map the file structure, decompose into task-1..task-N with complete code in each step, run self-review, save the plan as XML, and offer execution options. Stop before implementation.
 </task>
 </skill>

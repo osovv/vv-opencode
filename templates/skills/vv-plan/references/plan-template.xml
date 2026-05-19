@@ -1,0 +1,43 @@
+<plan>
+  <goal></goal>
+  <architecture></architecture>
+  <tech-stack></tech-stack>
+  <file-structure>
+    <create-file></create-file>
+    <modify-file></modify-file>
+    <test-file></test-file>
+  </file-structure>
+  <tasks>
+    <task-1>
+      <component></component>
+      <files>
+        <create-file></create-file>
+        <modify-file></modify-file>
+        <test-file></test-file>
+      </files>
+      <step-1>
+        <action>test-write</action>
+        <code lang="typescript"></code>
+      </step-1>
+      <step-2>
+        <action>test-run</action>
+        <command></command>
+        <expect-fail></expect-fail>
+      </step-2>
+      <step-3>
+        <action>implementation</action>
+        <code lang="typescript"></code>
+      </step-3>
+      <step-4>
+        <action>test-run</action>
+        <command></command>
+        <expect-pass></expect-pass>
+      </step-4>
+      <step-5>
+        <action>commit</action>
+        <command></command>
+      </step-5>
+    </task-1>
+  </tasks>
+  <no-placeholders></no-placeholders>
+</plan>

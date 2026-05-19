@@ -1,0 +1,21 @@
+<spec>
+  <goal></goal>
+  <architecture></architecture>
+  <tech-stack></tech-stack>
+  <components>
+    <component>
+      <name></name>
+      <responsibility></responsibility>
+      <depends-on></depends-on>
+    </component>
+  </components>
+  <data-flow></data-flow>
+  <error-handling></error-handling>
+  <testing>
+    <strategy></strategy>
+    <coverage></coverage>
+  </testing>
+  <non-goals>
+    <non-goal></non-goal>
+  </non-goals>
+</spec>
