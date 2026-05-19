@@ -8,6 +8,9 @@
     <test-file></test-file>
   </file-structure>
   <tasks>
+    <!-- Sample task showing the pattern. Replicate: each <task-N> contains 5 <step-N> elements.
+         Every <code> element must contain COMPLETE, COMPILABLE code — imports, types, functions, assertions.
+         No pseudocode. No "// TODO". No placeholders. The implementer copy-pastes this code directly. -->
     <task-1>
       <component></component>
       <files>
