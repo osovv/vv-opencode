@@ -28,7 +28,11 @@ import { type Config, type Plugin } from "@opencode-ai/plugin";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
 import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { existsSync } from "node:fs";
-import { getGlobalVvocDir, getProjectVvocDir, getVvocSkillsDir } from "../../lib/vvoc-paths.js";
+import {
+  getGlobalOpencodeSkillsDir,
+  getProjectVvocDir,
+  getVvocSkillsDir,
+} from "../../lib/vvoc-paths.js";
 
 const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
@@ -189,9 +193,10 @@ export const SystemContextInjectionPlugin: Plugin = async () => {
       const configRecord = config as Record<string, unknown>;
       const skills = (configRecord.skills ?? {}) as Record<string, unknown>;
       const skillsPaths = (skills.paths ?? []) as string[];
-      const vvocSkillsDir = getVvocSkillsDir(getGlobalVvocDir());
-      if (!skillsPaths.includes(vvocSkillsDir)) {
-        skills.paths = [...skillsPaths, vvocSkillsDir];
+      // Register the global OpenCode skills directory — vvoc sync creates a symlink there
+      const opencodeSkillsDir = getGlobalOpencodeSkillsDir();
+      if (!skillsPaths.includes(opencodeSkillsDir)) {
+        skills.paths = [...skillsPaths, opencodeSkillsDir];
         configRecord.skills = skills;
       }
 

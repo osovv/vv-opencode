@@ -23,8 +23,9 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import {
-  ensurePackageInstalled,
   ensureManagedPlanDirectory,
+  ensureManagedSkillSymlink,
+  ensurePackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
@@ -163,6 +164,10 @@ export async function runInit(options: {
   const vvocConfigResult = await installVvocConfig(finalPaths);
   p.log.info(vvocConfigResult.path + " - " + vvocConfigResult.action);
 
+  p.log.step("Creating skill symlink...");
+  const symlinkResult = await ensureManagedSkillSymlink(configDir);
+  p.log.info(symlinkResult.path + " - " + symlinkResult.action);
+
   p.outro(`vvoc initialized successfully
 
 💡 Highly recommended: Install RTK for 60-90% token savings on git/test/lint commands
@@ -192,4 +197,5 @@ async function runInitNonInteractive(options: {
     await ensureManagedPlanDirectory(paths);
   }
   await installVvocConfig(paths);
+  await ensureManagedSkillSymlink(configDir);
 }

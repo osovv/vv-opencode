@@ -23,6 +23,7 @@ import { defineCommand } from "citty";
 import {
   describeWriteResult,
   ensureManagedPlanDirectory,
+  ensureManagedSkillSymlink,
   ensurePackageInstalled,
   resolvePaths,
   syncManagedAgentPrompts,
@@ -84,6 +85,9 @@ export default defineCommand({
       console.log(describeWriteResult(result));
     }
     console.log(describeWriteResult(vvocConfig));
+
+    const symlinkResult = await ensureManagedSkillSymlink(configDir);
+    console.log(describeWriteResult(symlinkResult));
     // END_BLOCK_APPLY_SYNC_COMMAND
   },
 });

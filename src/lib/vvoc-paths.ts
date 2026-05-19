@@ -20,12 +20,14 @@
 //   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getVvocPlansDir - Resolves the managed vvoc planning artifact directory for a vvoc config root.
 //   getVvocSkillsDir - Resolves the managed vvoc skills directory for a vvoc config root.
+//   getGlobalOpencodeSkillsDir - Resolves the global OpenCode skills directory for skill discovery via symlink.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
 //   getProjectVvocDir - Resolves the project-local vvoc config directory.
 //   getProjectLegacyOpencodeDir - Resolves the old project-local OpenCode directory path.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.1 - Added getGlobalOpencodeSkillsDir for OpenCode skills directory resolution.]
 //   LAST_CHANGE: [v0.5.0 - Added the managed skills directory helper.]
 //   LAST_CHANGE: [v0.3.0 - Added the canonical global vvoc config file path helper for vvoc.json.]
 // END_CHANGE_SUMMARY
@@ -63,6 +65,10 @@ export function getDataHome(dataHomeOverride?: string): string {
 
 export function getGlobalOpencodeDir(configHomeOverride?: string): string {
   return join(getConfigHome(configHomeOverride), "opencode");
+}
+
+export function getGlobalOpencodeSkillsDir(configHomeOverride?: string): string {
+  return join(getGlobalOpencodeDir(configHomeOverride), "skills");
 }
 
 export function getGlobalVvocDir(configHomeOverride?: string): string {

@@ -36,6 +36,7 @@
 //   ensureManagedPlanDirectory - Creates the managed vvoc planning artifact directory when missing.
 //   installManagedSkillFiles - Creates managed vvoc skill files from bundled templates.
 //   syncManagedSkillFiles - Rewrites managed vvoc skill files from bundled templates.
+//   ensureManagedSkillSymlink - Creates symlink from OpenCode skills dir to vvoc skills dir for skill discovery.
 //   readOpenCodeAgentModel - Reads a model override for any OpenCode agent from config.
 //   readOpenCodeAgentOverride - Reads a model override for any OpenCode agent from config.
 //   writeOpenCodeAgentModel - Writes or removes a model override for any OpenCode agent in config.
@@ -55,6 +56,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.1 - Added ensureManagedSkillSymlink. Fixed renderManagedSkill to preserve YAML frontmatter.]
 //   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts.]
 //   LAST_CHANGE: [v0.5.0 - Replaced managed command registrations (vv-plan/vv-review) with managed skills system. Added managedSkillsDirPath to ResolvedPaths. Added installManagedSkillFiles and syncManagedSkillFiles.]
 //   LAST_CHANGE: [v0.9.7 - Removed variant splitting from agent model read/write helpers so provider/model:free passes through unchanged.]
@@ -68,7 +70,7 @@
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import {
   MANAGED_AGENT_PROMPT_NAMES,
@@ -107,6 +109,7 @@ import { getPinnedPackageSpecifier, PACKAGE_NAME } from "./package.js";
 import {
   getConfigHome,
   getGlobalOpencodeDir,
+  getGlobalOpencodeSkillsDir,
   getGlobalVvocConfigPath,
   getGlobalVvocDir,
   getProjectVvocDir,
@@ -557,6 +560,30 @@ export async function syncManagedSkillFiles(
   return results;
 }
 // END_BLOCK_MANAGED_SKILL_FUNCTIONS
+
+// START_BLOCK_MANAGED_SKILL_SYMLINK
+export async function ensureManagedSkillSymlink(configDir?: string): Promise<WriteResult> {
+  const globalSkillsDir = getVvocSkillsDir(getGlobalVvocDir(configDir));
+  const opencodeSkillsDir = getGlobalOpencodeSkillsDir(configDir);
+  const symlinkPath = join(opencodeSkillsDir, "vvoc");
+
+  // Create the OpenCode skills parent directory
+  await mkdir(opencodeSkillsDir, { recursive: true });
+
+  // Track whether this is an update or first creation
+  let wasStale = false;
+  try {
+    await unlink(symlinkPath);
+    wasStale = true;
+  } catch {
+    // Symlink did not exist — will be created fresh
+  }
+
+  // Create symlink: opencode/skills/vvoc -> vvoc/skills
+  await symlink(globalSkillsDir, symlinkPath);
+  return { action: wasStale ? "updated" : "created", path: symlinkPath };
+}
+// END_BLOCK_MANAGED_SKILL_SYMLINK
 
 export async function readManagedAgentModels(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
@@ -1449,15 +1476,17 @@ async function syncManagedPrompt(
 }
 
 async function renderManagedSkill(skillName: ManagedSkillName): Promise<string> {
-  const template = stripMarkdownFrontmatter(await loadManagedSkillTemplate(skillName)).trim();
-  const header = [
+  const template = await loadManagedSkillTemplate(skillName);
+  const markerLines = [
     "<!-- Managed by vvoc.",
     "`vvoc sync` rewrites files with this marker while preserving skill identity and user-defined content elsewhere.",
     "Remove this comment if you want to manage the file manually.",
     "-->",
-    "",
-  ].join("\n");
-  return `${header}${template}\n`;
+  ];
+  const marker = markerLines.join("\n");
+  // Insert managed marker after YAML frontmatter (after closing ---)
+  const markerInserted = template.replace(/^---\n[\s\S]*?\n---\n?/, "$&" + marker + "\n");
+  return markerInserted;
 }
 
 async function syncManagedSkillReferences(
