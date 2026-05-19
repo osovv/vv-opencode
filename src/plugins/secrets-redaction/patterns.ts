@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [v1.0.1 - Tightened bearer_token lookahead to exclude . _ - after match, preventing false positives on long filenames with extension.]
 // END_CHANGE_SUMMARY
 
 export interface PatternRule {
@@ -61,7 +61,7 @@ const BUILTIN_PATTERNS: Map<string, { pattern: string; category: string }> = new
   ["stripe_key", { pattern: "sk_live_[A-Za-z0-9]{24,}", category: "STRIPE_KEY" }],
   [
     "bearer_token",
-    { pattern: "(?<![A-Za-z0-9])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9])", category: "BEARER_TOKEN" },
+    { pattern: "(?<![A-Za-z0-9])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9._-])", category: "BEARER_TOKEN" },
   ],
   ["bearer_dot", { pattern: "[A-Za-z0-9]{16,}\\.[A-Za-z0-9_-]{16,}", category: "BEARER_DOT" }],
   ["syn_key", { pattern: "syn_[A-Za-z0-9_-]{32,}", category: "SYN_KEY" }],

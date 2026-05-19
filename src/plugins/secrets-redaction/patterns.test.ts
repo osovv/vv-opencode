@@ -15,6 +15,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [v1.0.1 - Added bearer_token .md filename negative test.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -99,6 +100,17 @@ describe("BUILTIN_PATTERNS", () => {
   test("bearer_token pattern matches generic bearer tokens", () => {
     const keyBuiltin = BUILTIN_PATTERNS.get("bearer_token")!;
     const regex = new RegExp(keyBuiltin.pattern, "i");
+    expect(regex.test("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")).toBe(true);
+    expect(regex.test("abcdefghijklmnopqrstuvwxyz123456")).toBe(true);
+  });
+
+  test("bearer_token does NOT match long .md filenames", () => {
+    const keyBuiltin = BUILTIN_PATTERNS.get("bearer_token")!;
+    const regex = new RegExp(keyBuiltin.pattern, "i");
+    // 32+ char filename with .md extension should NOT trigger bearer_token
+    expect(regex.test("batch-form-migration-requirements.md")).toBe(false);
+    expect(regex.test("very-long-planning-document-name-here-123.md")).toBe(false);
+    // But bare long tokens still match
     expect(regex.test("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")).toBe(true);
     expect(regex.test("abcdefghijklmnopqrstuvwxyz123456")).toBe(true);
   });

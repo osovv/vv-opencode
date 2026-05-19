@@ -15,6 +15,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Added direct engine coverage for real email redaction and overlap handling.]
+//   LAST_CHANGE: [v1.0.1 - Added test that bearer_token does NOT redact .md filenames in the full pipeline.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -104,5 +105,17 @@ describe("redactText", () => {
 
     expect(restored).toContain(EMAIL);
     expect(restored).not.toContain(redacted.matches[0]!.placeholder);
+  });
+
+  test("does NOT redact long .md filenames with bearer_token pattern", () => {
+    const session = createSession();
+    const patternSet = buildPatternSet({ builtin: ["bearer_token"] });
+    const mdFilename = ".vvoc/plans/batch-form-migration-requirements.md";
+
+    const result = redactText(mdFilename, patternSet, session);
+
+    // Should not match - the .md extension should prevent false positive
+    expect(result.matches).toHaveLength(0);
+    expect(result.text).toBe(mdFilename);
   });
 });
