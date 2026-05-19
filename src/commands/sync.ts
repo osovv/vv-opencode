@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added managed skill file sync during vvoc sync.]
 //   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope sync.]
 //   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config syncing with canonical vvoc.json refresh.]
 // END_CHANGE_SUMMARY
@@ -27,6 +28,7 @@ import {
   syncManagedAgentPrompts,
   syncManagedAgentRegistrations,
   syncVvocConfig,
+  syncManagedSkillFiles,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -65,6 +67,7 @@ export default defineCommand({
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
     const managedPlans =
       paths.scope === "project" ? await ensureManagedPlanDirectory(paths) : undefined;
+    const managedSkills = await syncManagedSkillFiles(paths, { force: Boolean(args.force) });
     const vvocConfig = await syncVvocConfig(paths);
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
@@ -76,6 +79,9 @@ export default defineCommand({
     }
     if (managedPlans) {
       console.log(describeWriteResult(managedPlans));
+    }
+    for (const result of managedSkills) {
+      console.log(describeWriteResult(result));
     }
     console.log(describeWriteResult(vvocConfig));
     // END_BLOCK_APPLY_SYNC_COMMAND

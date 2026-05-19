@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.3 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v1.2.2 - Reworked the vv-deepseek refresh regression to write drifted managed presets directly before syncVvocConfig runs.]
 //   LAST_CHANGE: [v1.2.0 - Added coverage for managed vv-controller registrations and planning artifact directory scaffolding.]
 //   LAST_CHANGE: [v1.2.1 - Added regression coverage proving sync restores drifted vv-deepseek while preserving custom non-managed presets.]
@@ -45,6 +46,7 @@ import {
   ensurePackageInstalled,
   ensureProviderBaseUrlConfigText,
   installManagedAgentPrompts,
+  installManagedSkillFiles,
   installVvocConfig,
   inspectInstallation,
   parseGuardianConfigText,
@@ -52,6 +54,7 @@ import {
   renderGuardianConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
+  syncManagedSkillFiles,
   syncVvocConfig,
   writeProviderBaseUrl,
   writeOpenCodeProviderObject,
@@ -169,10 +172,6 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.agent?.["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.["vv-code-reviewer"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.investigator?.model).toBe("vv-role:smart");
-    expect(parsed.command?.["vv-plan"]?.agent).toBe("vv-controller");
-    expect(parsed.command?.["vv-plan"]?.template).toContain("planning-only vvoc workflow");
-    expect(parsed.command?.["vv-review"]?.agent).toBe("vv-controller");
-    expect(parsed.command?.["vv-review"]?.template).toContain("review_only vvoc workflow");
   });
 
   test("preserves comments while rewriting managed fields and leaving unrelated built-ins alone", async () => {
@@ -235,8 +234,6 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:default");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
-    expect(parsed.command?.["vv-plan"]?.agent).toBe("vv-controller");
-    expect(parsed.command?.["vv-review"]?.agent).toBe("vv-controller");
   });
 
   test("sync removes legacy tracked managed entries and preserves unrelated agents", async () => {
@@ -546,8 +543,6 @@ describe("canonical vvoc config helpers", () => {
       expect(openCodeConfig.agent?.enhancer?.model).toBe("vv-role:smart");
       expect(openCodeConfig.agent?.["vv-analyst"]?.model).toBe("vv-role:smart");
       expect(openCodeConfig.agent?.["vv-architect"]?.model).toBe("vv-role:smart");
-      expect(openCodeConfig.command?.["vv-plan"]?.agent).toBe("vv-controller");
-      expect(openCodeConfig.command?.["vv-review"]?.agent).toBe("vv-controller");
 
       expect(vvocConfig?.version).toBe(3);
       expect(vvocConfig?.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);
@@ -707,6 +702,113 @@ describe("managed prompt install", () => {
       expect(parsed.agent?.["vv-implementer"]?.prompt).toBe(
         "{file:.vvoc/agents/vv-implementer.md}",
       );
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+});
+describe("managed skill files", () => {
+  test("installManagedSkillFiles creates skill files for all managed skills", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      const results = await installManagedSkillFiles(paths, { force: true });
+      expect(results).toHaveLength(3);
+      expect(results.every((r) => r.action === "created")).toBe(true);
+      for (const r of results) {
+        expect(r.path).toMatch(/SKILL\.md$/);
+      }
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("installManagedSkillFiles skips non-managed files without force", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-skip-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      const saveDir = join(paths.managedSkillsDirPath, "vv-spec");
+      await mkdir(saveDir, { recursive: true });
+      await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
+
+      const results = await installManagedSkillFiles(paths, { force: false });
+      expect(results).toHaveLength(3);
+      const vvSpec = results.find((r) => r.path.includes("vv-spec"));
+      expect(vvSpec?.action).toBe("skipped");
+      expect(vvSpec?.reason).toContain("not managed by vvoc");
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("installManagedSkillFiles overwrites with force", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-force-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      const saveDir = join(paths.managedSkillsDirPath, "vv-spec");
+      await mkdir(saveDir, { recursive: true });
+      await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
+
+      const results = await installManagedSkillFiles(paths, { force: true });
+      const vvSpec = results.find((r) => r.path.includes("vv-spec"));
+      expect(vvSpec?.action).toBe("updated");
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("syncManagedSkillFiles creates missing skill files", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-sync-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      const results = await syncManagedSkillFiles(paths, { force: false });
+      expect(results).toHaveLength(3);
+      expect(results.every((r) => r.action === "created")).toBe(true);
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("syncManagedSkillFiles skips non-managed files", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-sync-skip-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      const saveDir = join(paths.managedSkillsDirPath, "vv-plan");
+      await mkdir(saveDir, { recursive: true });
+      await writeFile(join(saveDir, "SKILL.md"), "# Custom plan\n", "utf8");
+
+      const results = await syncManagedSkillFiles(paths, { force: false });
+      const vvPlan = results.find((r) => r.path.includes("vv-plan"));
+      expect(vvPlan?.action).toBe("skipped");
+      expect(vvPlan?.reason).toContain("not managed by vvoc");
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("syncManagedSkillFiles keeps unchanged managed files", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-keep-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      await installManagedSkillFiles(paths, { force: true });
+      const results = await syncManagedSkillFiles(paths, { force: false });
+      const kept = results.filter((r) => r.action === "kept");
+      expect(kept).toHaveLength(3);
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("syncManagedSkillFiles force-updates content", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-force-update-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      await installManagedSkillFiles(paths, { force: true });
+      const results = await syncManagedSkillFiles(paths, { force: true });
+      expect(results).toHaveLength(3);
+      for (const r of results) {
+        expect(["kept", "updated"]).toContain(r.action);
+      }
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }

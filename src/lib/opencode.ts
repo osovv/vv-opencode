@@ -2,8 +2,8 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode default-agent, command, and tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
-//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
+//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode default-agent, command, and tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, managed skill file install/sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
+//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -24,7 +24,7 @@
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
-//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, command registrations, agent registrations, and tool gating.
+//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, agent registrations, and tool gating. Managed command entries are removed in favor of skills.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
 //   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
@@ -34,6 +34,8 @@
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian and managed OpenCode agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian and managed OpenCode agents.
 //   ensureManagedPlanDirectory - Creates the managed vvoc planning artifact directory when missing.
+//   installManagedSkillFiles - Creates managed vvoc skill files from bundled templates.
+//   syncManagedSkillFiles - Rewrites managed vvoc skill files from bundled templates.
 //   readOpenCodeAgentModel - Reads a model override for any OpenCode agent from config.
 //   readOpenCodeAgentOverride - Reads a model override for any OpenCode agent from config.
 //   writeOpenCodeAgentModel - Writes or removes a model override for any OpenCode agent in config.
@@ -54,7 +56,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts.]
-//   LAST_CHANGE: [v1.0.0 - Added vv-controller as the managed default agent plus vv-plan/vv-review command registrations.]
+//   LAST_CHANGE: [v0.5.0 - Replaced managed command registrations (vv-plan/vv-review) with managed skills system. Added managedSkillsDirPath to ResolvedPaths. Added installManagedSkillFiles and syncManagedSkillFiles.]
 //   LAST_CHANGE: [v0.9.7 - Removed variant splitting from agent model read/write helpers so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.9.6 - Added managed OpenCode `tools.apply_patch = false` writes during install/init/sync so sessions stay on the hashline-backed `edit` override.]
 //   LAST_CHANGE: [v0.9.5 - Moved legacy tracked-agent deletion gating into sync with prompt-file ownership checks so user-owned legacy prompt files prevent cleanup.]
@@ -77,6 +79,12 @@ import {
   loadManagedAgentPromptTemplate,
   type ManagedOpenCodeAgentName,
 } from "./managed-agents.js";
+import {
+  MANAGED_SKILL_NAMES,
+  type ManagedSkillName,
+  getManagedSkillFilePath,
+  loadManagedSkillTemplate,
+} from "./managed-skills.js";
 import {
   BUILTIN_ROLE_NAMES,
   getBuiltInRoleBindings,
@@ -102,6 +110,7 @@ import {
   getProjectVvocDir,
   getVvocAgentsDir,
   getVvocPlansDir,
+  getVvocSkillsDir,
 } from "./vvoc-paths.js";
 
 export const CLI_NAME = "vvoc";
@@ -132,20 +141,7 @@ const LEGACY_TRACKED_DESCRIPTIONS = {
 } as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
 const MANAGED_DEFAULT_AGENT = "vv-controller";
-const MANAGED_OPENCODE_COMMANDS = {
-  "vv-plan": {
-    description: "Plan a vvoc workflow without implementing changes.",
-    agent: MANAGED_DEFAULT_AGENT,
-    template:
-      "Route this request as a planning-only vvoc workflow. Use analyst/architect context when helpful, write any durable planning artifact under .vvoc/plans, and stop before implementation.\n\n$ARGUMENTS",
-  },
-  "vv-review": {
-    description: "Run a vvoc review-only workflow over the requested scope.",
-    agent: MANAGED_DEFAULT_AGENT,
-    template:
-      "Route this request as a review_only vvoc workflow. Decide whether spec review, code review, or both are needed, and report findings first.\n\n$ARGUMENTS",
-  },
-} satisfies Record<string, JsonObject>;
+const MANAGED_COMMAND_NAMES_TO_REMOVE = ["vv-plan", "vv-review"] as const;
 
 const JSON_FORMAT = {
   insertSpaces: true,
@@ -167,6 +163,7 @@ export type ResolvedPaths = {
   vvocConfigPath: string;
   managedAgentsDirPath: string;
   managedPlansDirPath: string;
+  managedSkillsDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
 };
@@ -226,6 +223,7 @@ export async function resolvePaths(options: {
     options.scope === "global" ? vvocBaseDir : getProjectVvocDir(options.cwd);
   const managedAgentsDirPath = getVvocAgentsDir(managedAgentsBaseDir);
   const managedPlansDirPath = getVvocPlansDir(managedAgentsBaseDir);
+  const managedSkillsDirPath = getVvocSkillsDir(managedAgentsBaseDir);
   const opencodeSelection = await selectPrimaryPath(
     OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
   );
@@ -239,6 +237,7 @@ export async function resolvePaths(options: {
     vvocConfigPath: getGlobalVvocConfigPath(options.configDir),
     managedAgentsDirPath,
     managedPlansDirPath,
+    managedSkillsDirPath,
     opencodeConfigPath: opencodeSelection.primary,
     opencodeAlternatePaths: opencodeSelection.alternates,
   };
@@ -320,13 +319,12 @@ export function ensureManagedAgentRegistrationsConfigText(
         ),
         ...managedRegistrations,
       },
-      command: MANAGED_OPENCODE_COMMANDS,
+      command: {},
     });
   }
 
   const document = parseObjectDocument(text, "OpenCode config");
   const currentAgents = readAgentMap(document, "OpenCode config");
-  const currentCommands = readCommandMap(document, "OpenCode config");
   const currentTools = readOptionalObject(document, "tools", "OpenCode config");
   let nextText = text;
 
@@ -430,19 +428,6 @@ export function ensureManagedAgentRegistrationsConfigText(
     }
   }
 
-  for (const [commandName, registration] of Object.entries(MANAGED_OPENCODE_COMMANDS)) {
-    if (JSON.stringify(currentCommands[commandName]) === JSON.stringify(registration)) {
-      continue;
-    }
-
-    nextText = applyEdits(
-      nextText,
-      modify(nextText, ["command", commandName], registration, {
-        formattingOptions: JSON_FORMAT,
-      }),
-    );
-  }
-
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 
@@ -453,12 +438,13 @@ export async function syncManagedAgentRegistrations(paths: ResolvedPaths): Promi
   const currentText = await readOptionalText(paths.opencodeConfigPath);
   const syncedText = ensureManagedAgentRegistrationsConfigText(currentText, paths);
   const nextText = await cleanupLegacyTrackedManagedEntries(syncedText, paths);
+  const nextText2 = cleanupManagedCommandEntries(nextText);
 
-  if (currentText === nextText) {
+  if (currentText === nextText2) {
     return { path: paths.opencodeConfigPath, changed: false };
   }
 
-  await writeText(paths.opencodeConfigPath, nextText);
+  await writeText(paths.opencodeConfigPath, nextText2);
   return { path: paths.opencodeConfigPath, changed: true };
 }
 // END_BLOCK_ENSURE_MANAGED_AGENT_CONFIG
@@ -519,6 +505,55 @@ export async function ensureManagedPlanDirectory(
     path: paths.managedPlansDirPath,
   };
 }
+
+// START_BLOCK_MANAGED_SKILL_FUNCTIONS
+export async function installManagedSkillFiles(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult[]> {
+  const results: WriteResult[] = [];
+
+  for (const skillName of MANAGED_SKILL_NAMES) {
+    const skillPath = getManagedSkillFilePath(paths.managedSkillsDirPath, skillName);
+    const currentText = await readOptionalText(skillPath);
+    if (!currentText) {
+      await writeText(skillPath, await renderManagedSkill(skillName));
+      results.push({ action: "created", path: skillPath });
+      continue;
+    }
+
+    if (!options.force) {
+      if (!isManagedFile(currentText)) {
+        results.push({
+          action: "skipped",
+          path: skillPath,
+          reason: "existing file is not managed by vvoc",
+        });
+      } else {
+        results.push({ action: "kept", path: skillPath });
+      }
+      continue;
+    }
+
+    results.push(await syncManagedSkill(paths, skillName, options));
+  }
+
+  return results;
+}
+
+export async function syncManagedSkillFiles(
+  paths: ResolvedPaths,
+  options: { force: boolean },
+): Promise<WriteResult[]> {
+  const results: WriteResult[] = [];
+
+  for (const skillName of MANAGED_SKILL_NAMES) {
+    results.push(await syncManagedSkill(paths, skillName, options));
+  }
+
+  return results;
+}
+// END_BLOCK_MANAGED_SKILL_FUNCTIONS
 
 export async function readManagedAgentModels(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
@@ -1330,6 +1365,25 @@ async function canDeleteLegacyTrackedManagedEntry(
   return isManagedFile(promptText);
 }
 
+function cleanupManagedCommandEntries(text: string): string {
+  const document = parseObjectDocument(text, "OpenCode config");
+  const currentCommands = readCommandMap(document, "OpenCode config");
+  let nextText = text;
+
+  for (const commandName of MANAGED_COMMAND_NAMES_TO_REMOVE) {
+    if (currentCommands[commandName] !== undefined) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ["command", commandName], undefined, {
+          formattingOptions: JSON_FORMAT,
+        }),
+      );
+    }
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
 function getManagedOpenCodeAgentRegistration(
   paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
   agentName: ManagedOpenCodeAgentName,
@@ -1391,6 +1445,47 @@ async function syncManagedPrompt(
   return { action: "updated", path: promptPath };
 }
 
+async function renderManagedSkill(skillName: ManagedSkillName): Promise<string> {
+  const template = stripMarkdownFrontmatter(await loadManagedSkillTemplate(skillName)).trim();
+  const header = [
+    "<!-- Managed by vvoc.",
+    "`vvoc sync` rewrites files with this marker while preserving skill identity and user-defined content elsewhere.",
+    "Remove this comment if you want to manage the file manually.",
+    "-->",
+    "",
+  ].join("\n");
+  return `${header}${template}\n`;
+}
+
+async function syncManagedSkill(
+  paths: ResolvedPaths,
+  skillName: ManagedSkillName,
+  options: { force: boolean },
+): Promise<WriteResult> {
+  const skillPath = getManagedSkillFilePath(paths.managedSkillsDirPath, skillName);
+  const currentText = await readOptionalText(skillPath);
+
+  if (!currentText) {
+    await writeText(skillPath, await renderManagedSkill(skillName));
+    return { action: "created", path: skillPath };
+  }
+
+  if (!options.force && !isManagedFile(currentText)) {
+    return {
+      action: "skipped",
+      path: skillPath,
+      reason: "existing file is not managed by vvoc",
+    };
+  }
+
+  const nextText = await renderManagedSkill(skillName);
+  if (currentText === nextText) {
+    return { action: "kept", path: skillPath };
+  }
+
+  await writeText(skillPath, nextText);
+  return { action: "updated", path: skillPath };
+}
 function updateAgentEntryText(text: string, agentName: string, entry: JsonObject): string {
   const nextText = applyEdits(
     text,

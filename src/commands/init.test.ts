@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.8.1 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
 //   LAST_CHANGE: [v0.7.0 - Updated init expectations for vv-controller, vv-analyst, and vv-architect managed agents.]
 //   LAST_CHANGE: [v0.6.2 - Updated init expectations for vv-* tracked subagent names and prompt filenames.]
@@ -74,6 +75,9 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/vv-code-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/investigator.md")).toBe(true);
       expect(existsSync(paths.managedPlansDirPath)).toBe(true);
+      expect(existsSync(paths.managedSkillsDirPath + "/vv-spec/SKILL.md")).toBe(true);
+      expect(existsSync(paths.managedSkillsDirPath + "/vv-plan/SKILL.md")).toBe(true);
+      expect(existsSync(paths.managedSkillsDirPath + "/vv-review/SKILL.md")).toBe(true);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
@@ -112,8 +116,6 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent.investigator?.prompt).toContain("{file:");
-      expect(opencodeConfig.command["vv-plan"]?.agent).toBe("vv-controller");
-      expect(opencodeConfig.command["vv-review"]?.agent).toBe("vv-controller");
 
       expect(vvocConfig.version).toBe(VVOC_CONFIG_VERSION);
       expect(vvocConfig.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);

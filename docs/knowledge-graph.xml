@@ -21,7 +21,7 @@
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
       <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, managed command definitions, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
       <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/vvoc-preset-registry.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
-      <depends>M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS, M-CLI-AGENT-MODELS</depends>
+      <depends>M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS, M-CLI-AGENT-MODELS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
@@ -42,6 +42,17 @@
         <fn-loadManagedAgentPromptTemplate PURPOSE="Load a bundled prompt template for a managed vvoc agent." />
       </annotations>
     </M-CLI-MANAGED-AGENTS>
+
+    <M-CLI-MANAGED-SKILLS NAME="ManagedSkills" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Define bundled vv-spec, vv-plan, and vv-review skill templates plus managed skill metadata for file path resolution, bundled template loading, and project/global skill lookup.</purpose>
+      <path>src/lib/managed-skills.ts + templates/skills/**/SKILL.md</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-CLI-CONFIG</verification-ref>
+      <annotations>
+        <const-MANAGED_SKILL_NAMES PURPOSE="Canonical vvoc-managed skill names: vv-spec, vv-plan, vv-review." />
+        <fn-loadManagedSkillTemplate PURPOSE="Load a bundled skill template for a managed vvoc skill." />
+      </annotations>
+    </M-CLI-MANAGED-SKILLS>
 
     <M-CLI-AGENT-MODELS NAME="AgentModels" TYPE="UTILITY" STATUS="implemented">
       <purpose>Define supported vvoc model target IDs and shared model override validation helpers.</purpose>
@@ -363,6 +374,7 @@
     <CrossLink from="M-CLI-COMMANDS" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG" to="M-CLI-MANAGED-AGENTS" relation="uses" />
     <CrossLink from="M-CLI-CONFIG" to="M-CLI-AGENT-MODELS" relation="uses" />
+    <CrossLink from="M-CLI-CONFIG" to="M-CLI-MANAGED-SKILLS" relation="uses" />
     <CrossLink from="M-CLI-PRESET" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-ROLE" to="M-CLI-CONFIG" relation="uses" />
     <CrossLink from="M-CLI-CONFIG-VALIDATE" to="M-CLI-CONFIG" relation="uses" />

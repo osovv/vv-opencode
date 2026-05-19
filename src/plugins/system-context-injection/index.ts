@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
 //   SCOPE: Main-session system instruction definitions, editing-workflow guidance, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.4 - Added vvoc managed skill directory to config.skills.paths in config hook.]
 //   LAST_CHANGE: [v0.3.3 - Updated editing workflow guidance to prefer exact context-anchored `line#hash#anchor` refs from read output.]
 //   LAST_CHANGE: [v0.4.0 - Removed `apply_patch` instruction from editing_workflow block — tool-level disable is stronger than prompt text.]
 //   LAST_CHANGE: [v0.3.2 - Added primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites and forbids `apply_patch` use.]
@@ -26,6 +27,8 @@
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
 import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import { existsSync } from "node:fs";
+import { getGlobalVvocDir, getProjectVvocDir, getVvocSkillsDir } from "../../lib/vvoc-paths.js";
 
 const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
@@ -183,6 +186,22 @@ export const SystemContextInjectionPlugin: Plugin = async () => {
   return {
     config: async (config) => {
       syncConfiguredSubagents(config, knownSubagents);
+      const configRecord = config as Record<string, unknown>;
+      const skills = (configRecord.skills ?? {}) as Record<string, unknown>;
+      const skillsPaths = (skills.paths ?? []) as string[];
+      const vvocSkillsDir = getVvocSkillsDir(getGlobalVvocDir());
+      if (!skillsPaths.includes(vvocSkillsDir)) {
+        skills.paths = [...skillsPaths, vvocSkillsDir];
+        configRecord.skills = skills;
+      }
+
+      // Register project-local skills dir when it exists
+      const projectSkillsDir = getVvocSkillsDir(getProjectVvocDir(process.cwd()));
+      const currentPaths = (skills.paths ?? []) as string[];
+      if (existsSync(projectSkillsDir) && !currentPaths.includes(projectSkillsDir)) {
+        skills.paths = [...currentPaths, projectSkillsDir];
+        configRecord.skills = skills;
+      }
     },
     "chat.message": async (_input, output) => {
       if (!shouldInjectForAgent(output.message.agent, knownSubagents)) {

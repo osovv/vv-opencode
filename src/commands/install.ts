@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added managed skill file install during vvoc install.]
 //   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope install.]
 //   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config scaffolding with canonical vvoc.json creation.]
 // END_CHANGE_SUMMARY
@@ -25,6 +26,7 @@ import {
   ensurePackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
+  installManagedSkillFiles,
   resolvePaths,
   syncManagedAgentRegistrations,
   type Scope,
@@ -69,6 +71,12 @@ export default defineCommand({
     );
 
     for (const result of await installManagedAgentPrompts(paths, {
+      force: Boolean(args.force),
+    })) {
+      console.log(describeWriteResult(result));
+    }
+
+    for (const result of await installManagedSkillFiles(paths, {
       force: Boolean(args.force),
     })) {
       console.log(describeWriteResult(result));

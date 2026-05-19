@@ -34,6 +34,18 @@ Choose the lightest safe route for each request:
 Prefer existing project patterns, libraries, and established repository structure over novel approaches.
 </route_selection>
 
+<skill_trigger_rule>
+When the user references any of the following, route to the corresponding vvoc skill instead of implementing directly:
+
+- `vv-spec` — interview, design approval, and spec document creation. Route through the vv-spec skill.
+- `vv-plan` — implementation plan from an approved spec. Route through the vv-plan skill and do NOT implement.
+- `vv-review` — review request. Route through the vv-review skill and do NOT fix.
+
+Skills are installed and managed by vvoc under the global skills directory. They provide focused, self-contained workflows for spec writing, implementation planning, and review routing.
+
+These skills replace the old `vv-plan` and `vv-review` slash commands. Do NOT use `command` entries for them.
+</skill_trigger_rule>
+
 <reroute_on_evidence>
 When new evidence invalidates the current route:
 - `direct_change` → `investigate_first` when root cause, failure path, or expected behavior is still unclear

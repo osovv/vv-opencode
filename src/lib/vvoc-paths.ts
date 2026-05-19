@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and project-local conventions.
-//   SCOPE: XDG config/data home lookup, canonical vvoc config path derivation, managed agent/plan directory resolution, and deterministic project data directory naming.
+//   SCOPE: XDG config/data home lookup, canonical vvoc config path derivation, managed agent/plan/skills directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -19,14 +19,14 @@
 //   getGlobalVvocConfigPath - Resolves the canonical global vvoc config file path.
 //   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getVvocPlansDir - Resolves the managed vvoc planning artifact directory for a vvoc config root.
-//   getGlobalVvocDataDir - Resolves the global vvoc data directory.
+//   getVvocSkillsDir - Resolves the managed vvoc skills directory for a vvoc config root.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
 //   getProjectVvocDir - Resolves the project-local vvoc config directory.
 //   getProjectLegacyOpencodeDir - Resolves the old project-local OpenCode directory path.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Added the managed planning artifact directory helper.]
+//   LAST_CHANGE: [v0.5.0 - Added the managed skills directory helper.]
 //   LAST_CHANGE: [v0.3.0 - Added the canonical global vvoc config file path helper for vvoc.json.]
 // END_CHANGE_SUMMARY
 
@@ -79,6 +79,10 @@ export function getVvocAgentsDir(vvocDir: string): string {
 
 export function getVvocPlansDir(vvocDir: string): string {
   return join(vvocDir, "plans");
+}
+
+export function getVvocSkillsDir(vvocDir: string): string {
+  return join(vvocDir, "skills");
 }
 
 export function getGlobalVvocDataDir(dataHomeOverride?: string): string {

@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.1 - Added managed skill file scaffolding during vvoc init.]
 //   LAST_CHANGE: [v0.7.0 - Ensured the project-local managed planning artifact directory exists during project-scope init.]
 //   LAST_CHANGE: [v0.6.1 - Exported runInit as the command helper and kept the non-interactive path internal so the module map matches the public surface.]
 // END_CHANGE_SUMMARY
@@ -26,6 +27,7 @@ import {
   ensureManagedPlanDirectory,
   installManagedAgentPrompts,
   installVvocConfig,
+  installManagedSkillFiles,
   inspectInstallation,
   resolvePaths,
   syncManagedAgentRegistrations,
@@ -147,6 +149,11 @@ export async function runInit(options: {
     p.log.info(result.path + " - " + result.action);
   }
 
+  p.log.step("Scaffolding managed skills...");
+  for (const result of await installManagedSkillFiles(finalPaths, { force: true })) {
+    p.log.info(result.path + " - " + result.action);
+  }
+
   if (finalPaths.scope === "project") {
     const planDirectoryResult = await ensureManagedPlanDirectory(finalPaths);
     p.log.info(planDirectoryResult.path + " - " + planDirectoryResult.action);
@@ -180,6 +187,7 @@ async function runInitNonInteractive(options: {
   await ensurePackageInstalled(paths);
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
+  await installManagedSkillFiles(paths, { force: true });
   if (paths.scope === "project") {
     await ensureManagedPlanDirectory(paths);
   }
