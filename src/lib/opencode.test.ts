@@ -737,7 +737,7 @@ describe("managed skill files", () => {
       expect(results).toHaveLength(4); // vv-spec SKILL.md skipped, others created + references
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
-      expect(vvSpec?.reason).toContain("not managed by vvoc");
+      expect(vvSpec?.reason).toContain("has no YAML frontmatter");
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -782,7 +782,7 @@ describe("managed skill files", () => {
       const results = await syncManagedSkillFiles(paths, { force: false });
       const vvPlan = results.find((r) => r.path.includes("vv-plan"));
       expect(vvPlan?.action).toBe("skipped");
-      expect(vvPlan?.reason).toContain("not managed by vvoc");
+      expect(vvPlan?.reason).toContain("no YAML frontmatter");
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }

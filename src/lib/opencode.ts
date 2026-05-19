@@ -525,11 +525,11 @@ export async function installManagedSkillFiles(
       await writeText(skillPath, await renderManagedSkill(skillName));
       results.push({ action: "created", path: skillPath });
     } else if (!options.force) {
-      if (!isManagedFile(currentText)) {
+      if (!hasYamlFrontmatter(currentText)) {
         results.push({
           action: "skipped",
           path: skillPath,
-          reason: "existing file is not managed by vvoc",
+          reason: "existing file has no YAML frontmatter — might not be a skill",
         });
       } else {
         results.push({ action: "kept", path: skillPath });
@@ -1476,17 +1476,7 @@ async function syncManagedPrompt(
 }
 
 async function renderManagedSkill(skillName: ManagedSkillName): Promise<string> {
-  const template = await loadManagedSkillTemplate(skillName);
-  const markerLines = [
-    "<!-- Managed by vvoc.",
-    "`vvoc sync` rewrites files with this marker while preserving skill identity and user-defined content elsewhere.",
-    "Remove this comment if you want to manage the file manually.",
-    "-->",
-  ];
-  const marker = markerLines.join("\n");
-  // Insert managed marker after YAML frontmatter (after closing ---)
-  const markerInserted = template.replace(/^---\n[\s\S]*?\n---\n?/, "$&" + marker + "\n");
-  return markerInserted;
+  return loadManagedSkillTemplate(skillName);
 }
 
 async function syncManagedSkillReferences(
@@ -1525,11 +1515,11 @@ async function syncManagedSkill(
     return { action: "created", path: skillPath };
   }
 
-  if (!options.force && !isManagedFile(currentText)) {
+  if (!options.force && !hasYamlFrontmatter(currentText)) {
     return {
       action: "skipped",
       path: skillPath,
-      reason: "existing file is not managed by vvoc",
+      reason: "existing file has no YAML frontmatter — might not be a skill",
     };
   }
 
@@ -1690,6 +1680,10 @@ function readOptionalObject(
 // START_BLOCK_FILESYSTEM_HELPERS
 function isManagedFile(text: string): boolean {
   return text.includes(MANAGED_MARKER);
+}
+
+function hasYamlFrontmatter(text: string): boolean {
+  return text.startsWith("---\n");
 }
 
 function renderJson(value: unknown): string {
