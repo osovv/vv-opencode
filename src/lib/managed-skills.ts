@@ -27,7 +27,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocSkillsDir } from "./vvoc-paths.js";
 
-export const MANAGED_SKILL_NAMES = ["vv-spec", "vv-plan", "vv-review"] as const;
+export const MANAGED_SKILL_NAMES = ["vv-spec", "vv-plan", "vv-review", "vv-execute"] as const;
 
 export type ManagedSkillName = (typeof MANAGED_SKILL_NAMES)[number];
 

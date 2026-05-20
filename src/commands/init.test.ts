@@ -78,6 +78,7 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedSkillsDirPath + "/vv-spec/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-plan/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-review/SKILL.md")).toBe(true);
+      expect(existsSync(paths.managedSkillsDirPath + "/vv-execute/SKILL.md")).toBe(true);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
