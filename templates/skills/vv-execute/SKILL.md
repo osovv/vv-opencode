@@ -1,6 +1,6 @@
 ---
 name: vv-execute
-description: Use when a plan.xml exists at .vvoc/plans/ and you need to execute it task by task — walks dependency order, dispatches vv-implementer with extracted contracts, verifies acceptance criteria, and tracks progress via workflow work items
+description: Use when given a path to a plan.xml — walks tasks in dependency order, dispatches vv-implementer with extracted contracts, verifies acceptance criteria, and tracks progress via workflow work items
 ---
 
 <skill>
@@ -149,6 +149,6 @@ Otherwise → move to the next task in dependency order.
 </completion>
 
 <task>
-Your current task is the ongoing user request. Load the plan from .vvoc/plans/, validate its structure, walk tasks in dependency order, extract each task's contract and criteria, dispatch vv-implementer with a focused packet, verify results, and track progress. Use the grep helpers to navigate the plan. Do not write code — delegate to vv-implementer.
+Your current task is the ongoing user request. Read the plan.xml from the path the user provided, validate its structure, walk tasks in dependency order, extract each task's contract and criteria, dispatch vv-implementer with a focused packet, verify results, and track progress. Use the grep helpers to navigate the plan. Do not write code — delegate to vv-implementer.
 </task>
 </skill>
