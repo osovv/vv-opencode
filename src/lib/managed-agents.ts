@@ -33,7 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Added managed vv-controller, vv-analyst, and vv-architect agents for controller-led workflow orchestration.]
+//   LAST_CHANGE: [v0.5.0 - Removed two creative-role managed subagents. Only executor subagents remain.]
 //   LAST_CHANGE: [v0.3.1 - Renamed tracked subagents to vv-* names and aligned managed prompt file names with the tracked-agent naming convention.]
 //   LAST_CHANGE: [v0.3.0 - Added the managed enhancer primary agent alongside the existing vvoc subagent definitions.]
 // END_CHANGE_SUMMARY
@@ -43,8 +43,6 @@ import { join } from "node:path";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
 
 export const MANAGED_SUBAGENT_NAMES = [
-  "vv-analyst",
-  "vv-architect",
   "vv-implementer",
   "vv-spec-reviewer",
   "vv-code-reviewer",
@@ -82,38 +80,6 @@ export type ManagedPrimaryAgentDefinition = {
 };
 
 export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
-  {
-    name: "vv-analyst",
-    description:
-      "Analyzes ambiguous or large requests into requirements, acceptance criteria, and non-goals.",
-    promptFileName: "vv-analyst.md",
-    mode: "subagent",
-    permission: {
-      edit: {
-        "*": "deny",
-        ".vvoc/plans/**": "allow",
-      },
-      bash: "deny",
-      task: "deny",
-      todowrite: "deny",
-    },
-  },
-  {
-    name: "vv-architect",
-    description:
-      "Designs module boundaries, contracts, implementation waves, and verification gates for large changes.",
-    promptFileName: "vv-architect.md",
-    mode: "subagent",
-    permission: {
-      edit: {
-        "*": "deny",
-        ".vvoc/plans/**": "allow",
-      },
-      bash: "deny",
-      task: "deny",
-      todowrite: "deny",
-    },
-  },
   {
     name: "vv-implementer",
     description: "Implements approved changes with focused verification and a minimal diff.",
@@ -187,8 +153,6 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   ["guardian", "guardian.md"],
   ["vv-controller", "vv-controller.md"],
   ["enhancer", "enhancer.md"],
-  ["vv-analyst", "vv-analyst.md"],
-  ["vv-architect", "vv-architect.md"],
   ["vv-implementer", "vv-implementer.md"],
   ["vv-spec-reviewer", "vv-spec-reviewer.md"],
   ["vv-code-reviewer", "vv-code-reviewer.md"],

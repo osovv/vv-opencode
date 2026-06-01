@@ -16,7 +16,7 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.8.1 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
-//   LAST_CHANGE: [v0.7.0 - Updated init expectations for vv-controller, vv-analyst, and vv-architect managed agents.]
+//   LAST_CHANGE: [v0.9.0 - Removed vv-analyst and vv-architect init expectations. Agents removed from managed-agents list.
 //   LAST_CHANGE: [v0.6.2 - Updated init expectations for vv-* tracked subagent names and prompt filenames.]
 //   LAST_CHANGE: [v0.6.1 - Updated init expectations so only `agent.explore` is auto-seeded among built-in OpenCode agents.]
 // END_CHANGE_SUMMARY
@@ -68,8 +68,6 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-controller.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/enhancer.md")).toBe(true);
-      expect(existsSync(paths.managedAgentsDirPath + "/vv-analyst.md")).toBe(true);
-      expect(existsSync(paths.managedAgentsDirPath + "/vv-architect.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-implementer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-spec-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-code-reviewer.md")).toBe(true);
@@ -103,16 +101,12 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
       expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent["vv-analyst"]?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent["vv-architect"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent.investigator?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-controller"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent.enhancer?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent["vv-analyst"]?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent["vv-architect"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-implementer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.prompt).toContain("{file:");

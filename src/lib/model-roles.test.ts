@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added built-in binding expectations for vv-controller, vv-analyst, and vv-architect.]
+//   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect binding expectations. Agents removed from managed-agents list.
 //   LAST_CHANGE: [v0.1.2 - Updated built-in managed-agent binding expectations to vv-* tracked role keys.]
 //   LAST_CHANGE: [v0.1.1 - Added coverage for blank role bindings, whitespace-consistent role references, and full deterministic built-in binding assertions.]
 //   LAST_CHANGE: [v0.1.0 - Added module-local coverage for built-in role exposure, parsing normalization, field-specific errors, and non-transitive role resolution.]
@@ -51,8 +51,6 @@ describe("built-in roles", () => {
         guardian: "fast",
         "vv-controller": "default",
         enhancer: "smart",
-        "vv-analyst": "smart",
-        "vv-architect": "smart",
         "vv-implementer": "default",
         "vv-spec-reviewer": "smart",
         "vv-code-reviewer": "smart",

@@ -28,48 +28,51 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 
 <plan_document_format>
 <rule>Load the plan template from references/plan-template.xml. Fill every element.</rule>
-<rule>The template contains one &lt;task-1&gt; as a pattern. Replicate it for each task: task-1, task-2, task-N. Tasks are ordered by dependency.</rule>
-<rule>Every XML element is named for grep extraction. Use: `grep '<task-[0-9]\+>' plan.xml` to list tasks, `grep '<criterion-[0-9]\+>' plan.xml` for all criteria, `grep '<depends-on>task-' plan.xml` for dependency graph.</rule>
+<rule>The plan contains two major sections: architecture (modules, contracts, dependencies) and tasks (implementation steps with code snippets).</rule>
+<rule>Architecture section uses child tags: module, name, purpose, file (path, role), contract, depends_on (module).</rule>
+<rule>Tasks use child tags: id (T-NNN pattern), title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command).</rule>
+<rule>Every XML element is named for grep extraction. Use: `grep '<id>T-' plan.xml` to list tasks, `grep '<criterion>' plan.xml` for all criteria, `grep '<task_id>' plan.xml` for dependency graph.</rule>
 <location>Save to .vvoc/plans/YYYY-MM-DD-&lt;feature-name&gt;-plan.xml</location>
 </plan_document_format>
 
-<contract_format>
-<rule>Every task contains a &lt;contract&gt; element with a &lt;code&gt; block. The code shows interfaces, type signatures, and method declarations — the SHAPE of the code, not the full implementation.</rule>
+<snippet_format>
+<rule>Every task contains a &lt;snippet&gt; element wrapped in CDATA. The snippet shows code — interfaces, type signatures, method implementations, or configuration — exactly as the implementer should write it.</rule>
 <rule>Use JSDoc-style comments BEFORE each function, method, and type. Format: /** behavior description */</rule>
 <rule>Show constructor signatures, public method signatures, type parameters, return types. Include private fields if they define structural state.</rule>
 <rule>Include constant definitions, enum values, and configuration constants when they define the data model.</rule>
-<rule>Show implementation logic ONLY when it is the point of the contract — a small algorithm, a state transition, a conditional branching rule. Use brief implementation for the CORE LOGIC, leave boilerplate out.</rule>
-</contract_format>
+<rule>Show implementation logic when it is the point of the contract — a small algorithm, a state transition, a conditional branching rule.</rule>
+<rule>CDATA wrapping is mandatory: &lt;snippet&gt;&lt;![CDATA[...]]&gt;&lt;/snippet&gt;. This protects against &lt; and &gt; in code breaking XML structure.</rule>
+</snippet_format>
 
 <acceptance_criteria_format>
-<rule>Every task contains an &lt;acceptance-criteria&gt; section with numbered criteria: criterion-1, criterion-2, criterion-N.</rule>
+<rule>Every task contains an &lt;acceptance&gt; section with one or more &lt;criterion&gt; elements.</rule>
 <rule>Each criterion is ONE specific, testable condition. If you cannot write a test for it, it is not specific enough.</rule>
 <rule>Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.</rule>
 <rule>Use plain English assertions: "Returns X when Y", "Throws Z if W", "Handles N concurrent calls without data loss".</rule>
+<rule>Each criterion is a separate child tag: &lt;criterion&gt;...&lt;/criterion&gt;. Line breaks between them for readability. No numbered tags.</rule>
 </acceptance_criteria_format>
 
 <example>
-<rule>Here is a concrete example of one task. Every &lt;contract&gt; shows JSDoc interfaces, and every &lt;acceptance-criteria&gt; has testable conditions:</rule>
+<rule>Here is a concrete example of one task in the new format. Every &lt;snippet&gt; uses CDATA, and every &lt;criterion&gt; is testable:</rule>
 <sample-fragment>
-  &lt;task-1&gt;
-    &lt;component&gt;LRU Cache Store&lt;/component&gt;
-    &lt;files&gt;
-      &lt;create-file&gt;src/lib/cache-store.ts&lt;/create-file&gt;
-      &lt;test-file&gt;src/lib/cache-store.test.ts&lt;/test-file&gt;
-    &lt;/files&gt;
-    &lt;contract&gt;
-      &lt;code lang="typescript"&gt;
-/** Options for configuring a CacheStore instance. */
+  &lt;task&gt;
+  &lt;id&gt;T-001&lt;/id&gt;
+  &lt;title&gt;LRU Cache Store&lt;/title&gt;
+  &lt;file&gt;src/lib/cache-store.ts&lt;/file&gt;
+  &lt;status&gt;pending&lt;/status&gt;
+  &lt;description&gt;Implement a size-bounded LRU cache with get, set, and clear operations&lt;/description&gt;
+  &lt;snippet&gt;&lt;![CDATA[
+      /** Options for configuring a CacheStore instance. */
 export type CacheStoreOptions = {
   /** Maximum number of entries before eviction begins. */
   maxSize: number;
-};
+  };
 
 /**
  * A size-bounded store with least-recently-used eviction.
  * Get bumps the accessed key to most-recently-used position.
  */
-export class CacheStore&lt;T&gt; {
+ export class CacheStore&lt;T&gt; {
   /** Creates an empty store with the given capacity limit. */
   constructor(options: CacheStoreOptions);
 
@@ -88,20 +91,21 @@ export class CacheStore&lt;T&gt; {
 
   /** Removes all entries from the store. */
   clear(): void;
-}
-      &lt;/code&gt;
-    &lt;/contract&gt;
-    &lt;acceptance-criteria&gt;
-      &lt;criterion-1&gt;get() returns undefined for a key that was never set&lt;/criterion-1&gt;
-      &lt;criterion-2&gt;get() returns the value stored by set() for the same key&lt;/criterion-2&gt;
-      &lt;criterion-3&gt;When at maxSize capacity, setting a new key evicts the least-recently-used entry&lt;/criterion-3&gt;
-      &lt;criterion-4&gt;get() on an existing key bumps it to MRU, protecting it from eviction&lt;/criterion-4&gt;
-      &lt;criterion-5&gt;set() on an existing key updates its value without evicting other entries&lt;/criterion-5&gt;
-    &lt;/acceptance-criteria&gt;
-    &lt;depends-on/&gt;
-  &lt;/task-1&gt;
+  }
+]]&gt;&lt;/snippet&gt;
+  &lt;acceptance&gt;
+    &lt;criterion&gt;get() returns undefined for a key that was never set&lt;/criterion&gt;
+    &lt;criterion&gt;get() returns the value stored by set() for the same key&lt;/criterion&gt;
+    &lt;criterion&gt;When at maxSize capacity, setting a new key evicts the least-recently-used entry&lt;/criterion&gt;
+    &lt;criterion&gt;get() on an existing key bumps it to MRU, protecting it from eviction&lt;/criterion&gt;
+    &lt;criterion&gt;set() on an existing key updates its value without evicting other entries&lt;/criterion&gt;
+  &lt;/acceptance&gt;
+  &lt;verification&gt;
+    &lt;command&gt;bun test src/lib/cache-store.test.ts&lt;/command&gt;
+  &lt;/verification&gt;
+  &lt;/task&gt;
 </sample-fragment>
-<rule>Notice: the contract shows signatures with JSDoc, NOT implementations. The acceptance criteria are specific and testable. Every element is grep-able by its XML tag name.</rule>
+<rule>Notice: the snippet uses CDATA wrapping (mandatory). Every element is a child tag (no attributes). The task has id, title, file, status, description, snippet, acceptance, and verification — all as child elements.</rule>
 </example>
 
 <file_structure>
@@ -114,9 +118,9 @@ export class CacheStore&lt;T&gt; {
 </file_structure>
 
 <dependency_tracking>
-<rule>Every task after the first must declare its dependencies in &lt;depends-on&gt;.</rule>
-<rule>Use task IDs: &lt;depends-on&gt;task-1, task-2&lt;/depends-on&gt;</rule>
-<rule>Dependency graph is grep-able: `grep '&lt;depends-on&gt;' plan.xml`</rule>
+<rule>Every task after the first must declare its dependencies in &lt;depends_on&gt;.</rule>
+<rule>Use child tags: &lt;depends_on&gt;&lt;task_id&gt;T-001&lt;/task_id&gt;&lt;task_id&gt;T-002&lt;/task_id&gt;&lt;/depends_on&gt;</rule>
+<rule>Dependency graph is grep-able: `grep '&lt;task_id&gt;' plan.xml`</rule>
 </dependency_tracking>
 
 <no_placeholders>
@@ -127,6 +131,9 @@ export class CacheStore&lt;T&gt; {
 <forbidden>Empty &lt;contract&gt; or &lt;acceptance-criteria&gt; sections</forbidden>
 <forbidden>"Similar to Task N" — repeat the full contract and criteria; the implementer may read tasks out of order</forbidden>
 <forbidden>References to types, functions, methods, or classes not defined in any prior task</forbidden>
+<forbidden>XML attributes in any tag — use child elements only</forbidden>
+<forbidden>Code outside CDATA — all snippets must be wrapped in CDATA sections</forbidden>
+<forbidden>Numbered criterion tags — use plain &lt;criterion&gt;, not numbered variants</forbidden>
 </no_placeholders>
 
 <self_review>
@@ -135,6 +142,8 @@ export class CacheStore&lt;T&gt; {
 <check>Acceptance criteria quality: Is every criterion testable? Could a reviewer or implementer write a failing test for it?</check>
 <check>Type consistency: Do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
 <rule>Fix issues inline as you find them. No second review pass needed — just fix and continue.</rule>
+<check>Format compliance: Are there zero XML attributes? Is every snippet in CDATA? Are tasks using id child tags instead of task-N numbering?</check>
+<check>Architecture presence: Does the plan have an architecture section with modules, contracts, and dependency graph?</check>
 </self_review>
 
 <execution_handoff>
@@ -146,6 +155,6 @@ export class CacheStore&lt;T&gt; {
 </execution_handoff>
 
 <task>
-Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/, load the plan template from references/plan-template.xml, map the file structure, decompose into task-1..task-N with JSDoc interface contracts and testable acceptance criteria, run self-review, save the plan as XML, and offer execution options. Stop before implementation. The plan must be reviewable: every contract maps to a spec requirement, every criterion is testable, every dependency is explicit.
+Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/, load the plan template from references/plan-template.xml, map the architecture (modules, contracts, dependencies), write detailed tasks with code snippets in CDATA, apply self-review, save the plan as XML, and offer execution options.
 </task>
 </skill>

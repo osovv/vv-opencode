@@ -1,28 +1,54 @@
 <plan>
-  <goal></goal>
-  <architecture></architecture>
-  <tech-stack></tech-stack>
-  <file-structure>
-    <create-file></create-file>
-    <modify-file></modify-file>
-    <test-file></test-file>
-  </file-structure>
-  <tasks>
-    <task-1>
-      <component></component>
-      <files>
-        <create-file></create-file>
-        <modify-file></modify-file>
-        <test-file></test-file>
-      </files>
+  <spec></spec>
+  <created></created>
+  <status>pending</status>
+
+  <meta>
+    <summary></summary>
+    <waves></waves>
+    <affected_modules></affected_modules>
+    <complexity></complexity>
+  </meta>
+
+  <architecture>
+    <module>
+      <name></name>
+      <purpose></purpose>
+      <file>
+        <path></path>
+        <role></role>
+      </file>
       <contract>
-        <code lang="typescript">
-        </code>
       </contract>
-      <acceptance-criteria>
-        <criterion-1></criterion-1>
-      </acceptance-criteria>
-      <depends-on></depends-on>
-    </task-1>
+      <depends_on>
+        <module></module>
+      </depends_on>
+    </module>
+  </architecture>
+
+  <tasks>
+    <wave>
+      <num>1</num>
+      <goal></goal>
+      <task>
+        <id>T-001</id>
+        <title></title>
+        <file></file>
+        <status>pending</status>
+        <description></description>
+        <depends_on>
+          <task_id></task_id>
+        </depends_on>
+        <snippet><![CDATA[
+// code here
+]]></snippet>
+        <acceptance>
+          <criterion></criterion>
+        </acceptance>
+        <verification>
+          <command></command>
+        </verification>
+      </task>
+    </wave>
   </tasks>
 </plan>

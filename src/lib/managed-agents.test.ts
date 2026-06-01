@@ -17,7 +17,7 @@
 //   LAST_CHANGE: [v0.5.3 - Added coverage for lightweight XML-like assignment packet tags and header-first reviewer-finding containers in workflow-managed prompts.]
 //   LAST_CHANGE: [v0.5.2 - Added coverage for normalized reviewer location guidance and controller-to-implementer finding handoff details in managed prompts.]
 //   LAST_CHANGE: [v0.5.1 - Rejected ambiguous plain `Status:` prompt lines for tracked agents so strict workflow protocol fields stay unambiguous.]
-//   LAST_CHANGE: [v0.5.0 - Added prompt-template coverage for vv-controller, vv-analyst, and vv-architect.]
+//   LAST_CHANGE: [v0.5.0 - Added prompt-template coverage for vv-controller and three executor subagents.]
 //   LAST_CHANGE: [v0.4.1 - Updated tracked-agent template coverage for vv-* naming and strict top-block workflow protocol requirements.]
 //   LAST_CHANGE: [v0.4.0 - Expanded prompt-template coverage for rerouting, working-state externalization, semantic continuity, assumptions, anti-drift, and project-overlay hooks.]
 //   LAST_CHANGE: [v0.3.0 - Expanded prompt-template coverage for stable enhancer schema, shared status outputs, and investigation/report protocols.]
@@ -83,23 +83,6 @@ describe("managed agent prompts", () => {
     expect(template).toContain("<reviewer_findings>");
     expect(template).toContain("immediately after the required `VVOC_WORK_ITEM_ID` header");
     expect(template).toContain("Pass through the best available reviewer location detail directly");
-  });
-
-  test("loads bundled analyst and architect templates with plan-file permissions", async () => {
-    const analystTemplate = await loadManagedAgentPromptTemplate("vv-analyst");
-    const architectTemplate = await loadManagedAgentPromptTemplate("vv-architect");
-
-    expect(analystTemplate).toContain("mode: subagent");
-    expect(analystTemplate).toContain("the caller handles persistence");
-    expect(analystTemplate).toContain("Status: READY | NEEDS_CONTEXT");
-    expect(analystTemplate).toContain("Acceptance criteria:");
-    expect(analystTemplate).toContain("Verification expectations:");
-
-    expect(architectTemplate).toContain("mode: subagent");
-    expect(architectTemplate).toContain("the caller handles persistence");
-    expect(architectTemplate).toContain("Implementation waves:");
-    expect(architectTemplate).toContain("Verification gates:");
-    expect(architectTemplate).toContain("User approval checkpoint:");
   });
 
   test("loads bundled vv-implementer template with strict top-block protocol", async () => {

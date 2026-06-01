@@ -153,24 +153,6 @@ describe("SystemContextInjectionPlugin", () => {
     expect(output.message.system).toBeUndefined();
   });
 
-  test("skips managed analyst and architect subagents", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const analystOutput = createOutput("vv-analyst");
-    const architectOutput = createOutput("vv-architect");
-
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "vv-analyst" } as never,
-      analystOutput as never,
-    );
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "vv-architect" } as never,
-      architectOutput as never,
-    );
-
-    expect(analystOutput.message.system).toBeUndefined();
-    expect(architectOutput.message.system).toBeUndefined();
-  });
-
   test("skips custom configured subagents", async () => {
     const plugin = await SystemContextInjectionPlugin(createPluginInput());
     await plugin.config?.({

@@ -155,19 +155,6 @@ describe("managed OpenCode role-reference rewrites", () => {
       task: "deny",
       todowrite: "deny",
     });
-    expect(parsed.agent?.["vv-analyst"]?.model).toBe("vv-role:smart");
-    expect(parsed.agent?.["vv-analyst"]?.mode).toBe("subagent");
-    expect(parsed.agent?.["vv-analyst"]?.permission).toEqual({
-      edit: {
-        "*": "deny",
-        ".vvoc/plans/**": "allow",
-      },
-      bash: "deny",
-      task: "deny",
-      todowrite: "deny",
-    });
-    expect(parsed.agent?.["vv-architect"]?.model).toBe("vv-role:smart");
-    expect(parsed.agent?.["vv-architect"]?.mode).toBe("subagent");
     expect(parsed.agent?.["vv-implementer"]?.model).toBe("vv-role:default");
     expect(parsed.agent?.["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.["vv-code-reviewer"]?.model).toBe("vv-role:smart");
@@ -541,8 +528,6 @@ describe("canonical vvoc config helpers", () => {
       expect(openCodeConfig.agent?.explore?.model).toBe("vv-role:fast");
       expect(openCodeConfig.agent?.["vv-controller"]?.model).toBe("vv-role:default");
       expect(openCodeConfig.agent?.enhancer?.model).toBe("vv-role:smart");
-      expect(openCodeConfig.agent?.["vv-analyst"]?.model).toBe("vv-role:smart");
-      expect(openCodeConfig.agent?.["vv-architect"]?.model).toBe("vv-role:smart");
 
       expect(vvocConfig?.version).toBe(3);
       expect(vvocConfig?.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);
@@ -686,7 +671,7 @@ describe("managed prompt install", () => {
       });
 
       const promptResults = await installManagedAgentPrompts(paths, { force: true });
-      expect(promptResults).toHaveLength(9);
+      expect(promptResults).toHaveLength(7);
       const planDirResult = await ensureManagedPlanDirectory(paths);
       expect(planDirResult.action).toBe("created");
       const repeatedPlanDirResult = await ensureManagedPlanDirectory(paths);
@@ -697,8 +682,6 @@ describe("managed prompt install", () => {
       const parsed = parse(openCode) as { agent?: Record<string, { prompt?: string }> };
       expect(parsed.agent?.["vv-controller"]?.prompt).toBe("{file:.vvoc/agents/vv-controller.md}");
       expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
-      expect(parsed.agent?.["vv-analyst"]?.prompt).toBe("{file:.vvoc/agents/vv-analyst.md}");
-      expect(parsed.agent?.["vv-architect"]?.prompt).toBe("{file:.vvoc/agents/vv-architect.md}");
       expect(parsed.agent?.["vv-implementer"]?.prompt).toBe(
         "{file:.vvoc/agents/vv-implementer.md}",
       );

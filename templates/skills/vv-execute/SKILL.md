@@ -14,52 +14,74 @@ You are the vv-execute skill. Your job is to execute a plan.xml from .vvoc/plans
 </language>
 
 <grep-helpers>
+<helper name="plan-meta">
+  <command>sed -n '/&lt;meta&gt;/,/&lt;\/meta&gt;/p' PLAN_PATH</command>
+  <purpose>Extract plan metadata: summary, waves, complexity</purpose>
+</helper>
+<helper name="architecture">
+  <command>sed -n '/&lt;architecture&gt;/,/&lt;\/architecture&gt;/p' PLAN_PATH</command>
+  <purpose>Extract full architecture section with modules, files, contracts</purpose>
+</helper>
+<helper name="module-list">
+  <command>sed -n '/&lt;architecture&gt;/,/&lt;\/architecture&gt;/p' PLAN_PATH | grep '&lt;name&gt;'</command>
+  <purpose>List all module names</purpose>
+</helper>
 <helper name="list-tasks">
-  <command>grep -o '&lt;task-[0-9]\+&gt;' .vvoc/plans/*.xml | sort</command>
-  <purpose>List all task IDs in plan order</purpose>
+  <command>grep '&lt;id&gt;T-' PLAN_PATH</command>
+  <purpose>List all task IDs in document order</purpose>
 </helper>
 <helper name="extract-task">
-  <command>sed -n '/&lt;task-N&gt;/,/&lt;\/task-N&gt;/p' .vvoc/plans/*.xml</command>
-  <purpose>Extract one task with its full contract, criteria, and files (replace N with task number)</purpose>
+  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH</command>
+  <purpose>Extract one full task by ID (replace T-NNN with actual ID like T-001)</purpose>
 </helper>
-<helper name="list-components">
-  <command>grep -o '&lt;component&gt;[^&lt;]*&lt;\/component&gt;' .vvoc/plans/*.xml</command>
-  <purpose>Show all component names</purpose>
+<helper name="extract-snippet">
+  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | sed -n '/&lt;snippet&gt;/,/&lt;\/snippet&gt;/p'</command>
+  <purpose>Extract only the code snippet for a specific task</purpose>
 </helper>
-<helper name="list-criteria">
-  <command>grep -o '&lt;criterion-[0-9]\+&gt;[^&lt;]*&lt;\/criterion-[0-9]\+&gt;' .vvoc/plans/*.xml</command>
-  <purpose>Extract all acceptance criteria across all tasks</purpose>
+<helper name="extract-acceptance">
+  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | sed -n '/&lt;acceptance&gt;/,/&lt;\/acceptance&gt;/p'</command>
+  <purpose>Extract all acceptance criteria for a specific task</purpose>
 </helper>
-<helper name="list-files">
-  <command>grep -E '&lt;(create-file|modify-file|test-file)&gt;' .vvoc/plans/*.xml</command>
-  <purpose>Show every file that will be created, modified, or tested</purpose>
+<helper name="task-file">
+  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | grep '&lt;file&gt;'</command>
+  <purpose>Get the target file for a specific task</purpose>
+</helper>
+<helper name="task-status">
+  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | grep '&lt;status&gt;'</command>
+  <purpose>Get current status of a specific task</purpose>
 </helper>
 <helper name="dependency-graph">
-  <command>grep '&lt;depends-on&gt;' .vvoc/plans/*.xml</command>
-  <purpose>Show all task dependencies as a graph</purpose>
+  <command>grep '&lt;task_id&gt;' PLAN_PATH</command>
+  <purpose>Show all task dependencies</purpose>
+</helper>
+<helper name="task-deps">
+  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | grep '&lt;task_id&gt;'</command>
+  <purpose>List dependencies for a specific task</purpose>
 </helper>
 <helper name="count-tasks">
-  <command>grep -c '&lt;task-[0-9]\+&gt;' .vvoc/plans/*.xml</command>
+  <command>grep -c '&lt;id&gt;T-' PLAN_PATH</command>
   <purpose>Count total tasks in the plan</purpose>
 </helper>
-<helper name="task-files">
-  <command>sed -n '/&lt;task-N&gt;/,/&lt;\/task-N&gt;/p' .vvoc/plans/*.xml | grep -E '&lt;(create-file|modify-file|test-file)&gt;'</command>
-  <purpose>List files for a specific task (replace N with task number)</purpose>
+<helper name="all-files">
+  <command>grep '&lt;path&gt;' PLAN_PATH</command>
+  <purpose>List all file paths referenced in the plan (architecture and tasks)</purpose>
 </helper>
-<helper name="task-component">
-  <command>sed -n '/&lt;task-N&gt;/,/&lt;\/task-N&gt;/p' .vvoc/plans/*.xml | grep '&lt;component&gt;'</command>
-  <purpose>Get component name for a specific task (replace N)</purpose>
+<helper name="verification-commands">
+  <command>grep '&lt;command&gt;' PLAN_PATH</command>
+  <purpose>List all verification commands</purpose>
 </helper>
 </grep-helpers>
 
 <pre-execution>
 <step name="load-plan">Read plan.xml from .vvoc/plans/. Use list-tasks and count-tasks to understand scope. Use dependency-graph to determine execution order.</step>
 <step name="validate-plan">
-  <check>Every task has a non-empty &lt;contract&gt; with &lt;code&gt;</check>
-  <check>Every task has at least one &lt;criterion-N&gt;</check>
-  <check>All &lt;depends-on&gt; references point to existing task IDs</check>
-  <check>File paths are non-empty in &lt;files&gt;</check>
-  <action>If any check fails, stop and report the issue. Do not proceed with broken plan.</action>
+  <check>Plan file exists and is readable</check>
+  <check>Plan contains &lt;plan&gt; root tag</check>
+  <check>Plan contains &lt;tasks&gt; section with at least one &lt;task&gt;</check>
+  <check>Each task has non-empty &lt;id&gt;, &lt;title&gt;, and &lt;file&gt;</check>
+  <check>Each task has &lt;snippet&gt; (may be empty but must exist)</check>
+  <check>Each task has &lt;acceptance&gt; with at least one &lt;criterion&gt;</check>
+  <action>If any check fails, stop and report the issue with line numbers. Do not proceed with broken plan.</action>
 </step>
 <step name="create-todo">Create a TodoWrite with all task IDs in dependency order for progress tracking.</step>
 </pre-execution>
@@ -69,11 +91,11 @@ You are the vv-execute skill. Your job is to execute a plan.xml from .vvoc/plans
 
 <step name="extract">
 Use extract-task to pull the full task content. Collect:
-- Component name
-- File list (create, modify, test)
-- Contract code (signatures + JSDoc)
+- Task id and title
+- File path
+- Code snippet (from CDATA)
 - Acceptance criteria
-- Dependencies
+- Dependencies (task_id list)
 </step>
 
 <step name="construct-packet">
@@ -81,9 +103,8 @@ Build the vv-implementer assignment. The packet must contain:
 <format>
 &lt;assignment&gt;
   &lt;goal&gt;Implement &lt;component&gt; per spec and plan&lt;/goal&gt;
-  &lt;contract&gt;...task's contract code...&lt;/contract&gt;
-  &lt;acceptance-criteria&gt;...task's criteria...&lt;/acceptance-criteria&gt;
-  &lt;files&gt;...task's files...&lt;/files&gt;
+  &lt;contract&gt;...task's code snippet...&lt;/contract&gt;
+  &lt;acceptance&gt;...task's criteria...&lt;/acceptance&gt;
   &lt;verification&gt;Run the tests, verify all criteria pass&lt;/verification&gt;
 &lt;/assignment&gt;
 </format>

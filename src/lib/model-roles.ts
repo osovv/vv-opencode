@@ -25,7 +25,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added built-in role bindings for vv-controller, vv-analyst, and vv-architect.]
+//   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect role bindings. Analysis and architecture are now done directly by the expensive model through interactive skills (vv-spec, vv-plan).
 //   LAST_CHANGE: [v0.1.3 - Removed variant splitting from model selection parsing so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.1.2 - Renamed tracked managed-agent role binding keys to vv-* names for implementer/spec/code reviewer roles.]
 //   LAST_CHANGE: [v0.1.1 - Distinguished unknown-role from blank configured role bindings and aligned role-reference whitespace handling between checker and resolver.]
@@ -75,8 +75,6 @@ export type BuiltInRoleBindings = {
     guardian: BuiltInRoleName;
     "vv-controller": BuiltInRoleName;
     enhancer: BuiltInRoleName;
-    "vv-analyst": BuiltInRoleName;
-    "vv-architect": BuiltInRoleName;
     "vv-implementer": BuiltInRoleName;
     "vv-spec-reviewer": BuiltInRoleName;
     "vv-code-reviewer": BuiltInRoleName;
@@ -102,8 +100,6 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
     guardian: "fast",
     "vv-controller": "default",
     enhancer: "smart",
-    "vv-analyst": "smart",
-    "vv-architect": "smart",
     "vv-implementer": "default",
     "vv-spec-reviewer": "smart",
     "vv-code-reviewer": "smart",
