@@ -922,6 +922,8 @@ describe("workflow plugin integration", () => {
       "session-guidance",
       "ses_repair_failure",
       "ses_repair_success",
+      "session-task-element",
+      "session-task-element-nested",
     ];
     for (const sid of testSessionIds) {
       await deleteWorkflowSessionDir(sid);
@@ -1999,4 +2001,142 @@ describe("workflow plugin integration", () => {
     );
     expect(configuredSubagentOutput.message.system).toBeUndefined();
   });
+});
+
+function wrapTaskElement(taskId: string, innerResult: string): string {
+  return [`<task id="${taskId}" state="completed">`, innerResult, "</task>"].join("\n");
+}
+
+function wrapTaskElementWithTaskResult(taskId: string, innerResult: string): string {
+  return [
+    `<task id="${taskId}" state="completed">`,
+    "<task_result>",
+    innerResult,
+    "</task_result>",
+    "</task>",
+  ].join("\n");
+}
+
+test("unwrapResumableTaskResult extracts inner text from new <task> element format", () => {
+  const wrapped = unwrapResumableTaskResult(
+    wrapTaskElement("ses_task_element", "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n\nDone."),
+  );
+  expect(wrapped.envelope?.taskId).toBe("ses_task_element");
+  expect(wrapped.envelope?.format).toBe("task_element");
+  expect(wrapped.normalizedOutput).toBe("VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n\nDone.");
+});
+
+test("unwrapResumableTaskResult strips nested <task_result> from new <task> element format", () => {
+  const wrapped = unwrapResumableTaskResult(
+    wrapTaskElementWithTaskResult(
+      "ses_nested",
+      "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\n\nReviewed.",
+    ),
+  );
+  expect(wrapped.envelope?.format).toBe("task_element");
+  expect(wrapped.normalizedOutput).toBe("VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\n\nReviewed.");
+});
+
+test("unwrapResumableTaskResult ignores foreign <task_result> tags (not <task> elements)", () => {
+  const foreign = unwrapResumableTaskResult(
+    "<task_result>\nVVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n</task_result>",
+  );
+  expect(foreign.envelope).toBeUndefined();
+  expect(foreign.normalizedOutput).toBe(
+    "<task_result>\nVVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n</task_result>",
+  );
+});
+
+test("tracked result parsing extracts new <task> element wrapper", async () => {
+  const { plugin } = await createWorkflowPluginHarness();
+  const sessionID = "session-task-element";
+  const openedRaw = await plugin.tool?.work_item_open?.execute(
+    { items: [{ key: "WI-TASK-ELEMENT", title: "Task element result" }] },
+    createToolContext(sessionID) as never,
+  );
+  const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+  const workItemId = opened.items[0]?.workItemId;
+
+  await plugin["tool.execute.before"]?.(
+    { tool: "task", sessionID, callID: "call-task-element-impl" } as never,
+    {
+      args: {
+        subagent_type: "vv-implementer",
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+      },
+    } as never,
+  );
+  await plugin["tool.execute.after"]?.(
+    {
+      tool: "task",
+      sessionID,
+      callID: "call-task-element-impl",
+      args: {
+        subagent_type: "vv-implementer",
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
+      },
+    } as never,
+    {
+      title: "task",
+      output: wrapTaskElement(
+        "ses_task_element_test",
+        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
+      ),
+      metadata: {},
+    } as never,
+  );
+
+  const listedRaw = await plugin.tool?.work_item_list?.execute(
+    { includeClosed: false },
+    createToolContext(sessionID) as never,
+  );
+  const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
+  expect(listed.items[0]?.state).toBe("awaiting_spec_review");
+});
+
+test("tracked result parsing extracts new <task> element wrapper with nested <task_result>", async () => {
+  const { plugin } = await createWorkflowPluginHarness();
+  const sessionID = "session-task-element-nested";
+  const openedRaw = await plugin.tool?.work_item_open?.execute(
+    { items: [{ key: "WI-TASK-ELEMENT-NESTED", title: "Task element nested result" }] },
+    createToolContext(sessionID) as never,
+  );
+  const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+  const workItemId = opened.items[0]?.workItemId;
+
+  await plugin["tool.execute.before"]?.(
+    { tool: "task", sessionID, callID: "call-task-element-nested" } as never,
+    {
+      args: {
+        subagent_type: "vv-code-reviewer",
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code`,
+      },
+    } as never,
+  );
+  await plugin["tool.execute.after"]?.(
+    {
+      tool: "task",
+      sessionID,
+      callID: "call-task-element-nested",
+      args: {
+        subagent_type: "vv-code-reviewer",
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code`,
+      },
+    } as never,
+    {
+      title: "task",
+      output: wrapTaskElementWithTaskResult(
+        "ses_task_element_nested",
+        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: PASS\n\nReviewed.`,
+      ),
+      metadata: {},
+    } as never,
+  );
+
+  const listedRaw = await plugin.tool?.work_item_list?.execute(
+    { includeClosed: false },
+    createToolContext(sessionID) as never,
+  );
+  const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
+  expect(listed.items[0]?.state).toBe("ready_to_close");
 });

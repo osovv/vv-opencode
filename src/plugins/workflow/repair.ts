@@ -30,6 +30,7 @@ import type { ProtocolErrorCode, TrackedAgentName } from "./protocol.js";
 export type ResumableTaskEnvelope = {
   taskId: string;
   innerResult: string;
+  format: "resumable_header" | "task_element";
 };
 
 const RESUMABLE_TASK_ID_RE =
@@ -40,6 +41,8 @@ const SAFE_TRACKED_RESULT_REPAIR_CODES: ReadonlySet<ProtocolErrorCode> = new Set
   "MISSING_ROUTE",
   "UNEXPECTED_TOP_BLOCK_LINE",
 ]);
+
+const TASK_ELEMENT_OPEN_RE = /^<task\s+id="([^"]+)"\s+state="([^"]+)"\s*>$/;
 
 const FORMAT_ONLY_REPAIR_SYSTEM_PROMPT =
   "Format-only workflow repair. Do not call tools, do not perform implementation or review work, and do not cause side effects. Return only the corrected final response text.";
@@ -100,6 +103,60 @@ function parseResumableTaskEnvelope(output: string): ResumableTaskEnvelope | und
       .slice(startTagIndex + 1, endTagIndex)
       .join("\n")
       .trim(),
+    format: "resumable_header",
+  };
+}
+
+/**
+ * Parse the new OpenCode `<task id="ses_..." state="completed">...</task>` envelope format.
+ * Also strips any nested `<task_result>`/`</task_result>` wrapper inside the element body.
+ */
+function parseTaskElementEnvelope(output: string): ResumableTaskEnvelope | undefined {
+  const normalizedOutput = output.replace(/\r\n/g, "\n");
+  const lines = normalizedOutput.split("\n");
+  const firstMeaningfulIndex = lines.findIndex((line) => line.trim().length > 0);
+  if (firstMeaningfulIndex < 0) {
+    return undefined;
+  }
+
+  const firstMeaningfulLine = lines[firstMeaningfulIndex]?.trim() ?? "";
+  const openTagMatch = TASK_ELEMENT_OPEN_RE.exec(firstMeaningfulLine);
+  if (!openTagMatch) {
+    return undefined;
+  }
+
+  const taskId = openTagMatch[1];
+
+  // Find closing </task> tag
+  const closeTagIndex = lines.findIndex(
+    (line, index) => index > firstMeaningfulIndex && line.trim() === "</task>",
+  );
+  if (closeTagIndex < 0) {
+    return undefined;
+  }
+
+  // Extract inner content (between open and close tags)
+  let innerLines = lines.slice(firstMeaningfulIndex + 1, closeTagIndex);
+
+  // Strip outer <task_result>/</task_result> wrapper if present
+  const innerFirstIdx = innerLines.findIndex((line) => line.trim().length > 0);
+  if (innerFirstIdx >= 0) {
+    const innerFirstTrimmed = innerLines[innerFirstIdx]?.trim() ?? "";
+    if (innerFirstTrimmed === "<task_result>") {
+      // Find the closing </task_result>
+      const innerCloseIdx = innerLines.findIndex(
+        (line, index) => index > innerFirstIdx && line.trim() === "</task_result>",
+      );
+      if (innerCloseIdx >= 0) {
+        innerLines = innerLines.slice(innerFirstIdx + 1, innerCloseIdx);
+      }
+    }
+  }
+
+  return {
+    taskId,
+    innerResult: innerLines.join("\n").trim(),
+    format: "task_element",
   };
 }
 
@@ -107,6 +164,16 @@ export function unwrapResumableTaskResult(output: string): {
   normalizedOutput: string;
   envelope?: ResumableTaskEnvelope;
 } {
+  // Try the new <task> element format first
+  const taskElementEnvelope = parseTaskElementEnvelope(output);
+  if (taskElementEnvelope) {
+    return {
+      normalizedOutput: taskElementEnvelope.innerResult,
+      ...(taskElementEnvelope ? { envelope: taskElementEnvelope } : {}),
+    };
+  }
+
+  // Fall back to the old resumable task header format
   const envelope = parseResumableTaskEnvelope(output);
   return {
     normalizedOutput: envelope?.innerResult ?? output,
