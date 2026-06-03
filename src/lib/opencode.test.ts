@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.2.2
+// VERSION: 1.2.4
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.4 - Added static schema regression coverage for the package-versioned URL and plugins property placement.]
 //   LAST_CHANGE: [v1.2.3 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v1.2.2 - Reworked the vv-deepseek refresh regression to write drifted managed presets directly before syncVvocConfig runs.]
 //   LAST_CHANGE: [v1.2.0 - Added coverage for managed vv-controller registrations and planning artifact directory scaffolding.]
@@ -480,11 +481,14 @@ describe("canonical vvoc config helpers", () => {
     );
     const schema = JSON.parse(schemaText) as {
       $id?: string;
-      properties?: { version?: { const?: number } };
+      plugins?: unknown;
+      properties?: { version?: { const?: number }; plugins?: unknown };
     };
 
     expect(schema.$id).toBe(VVOC_CONFIG_SCHEMA_URL);
     expect(schema.properties?.version?.const).toBe(3);
+    expect(schema.properties?.plugins).toBeDefined();
+    expect(schema.plugins).toBeUndefined();
   });
 
   test("fresh install creates schema v3 vvoc config and pins package in plugin array", async () => {

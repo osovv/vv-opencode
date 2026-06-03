@@ -235,6 +235,7 @@ Skills are loaded by OpenCode at session start through `config.skills.paths` (re
 bun install             # Install dependencies
 bun run check           # Typecheck + lint + format check + test
 bun run fmt             # Auto-format source files
+bun run release:check   # Verify package/schema release consistency
 ```
 
 Git hooks managed via `lefthook`.
@@ -251,20 +252,51 @@ bun dist/cli.js status --config-dir "$tmpdir"
 ### Full release verification
 
 ```bash
+bun run release:check
 bun run check
-bun run build
 bun run pack:check
 ```
 
 ---
-
 ## Publishing
 
+The release flow is automated via a local wrapper and a tag-gated GitHub Actions workflow.
+
+### Local bump
+
 ```bash
-bun run check && bun run build && npm publish
+bun run release:bump patch   # or minor, major, prerelease, or explicit semver
 ```
 
-Publishing is manual from the terminal. No CI publish workflows.
+This will:
+1. Reject if the worktree is dirty
+2. Bump `package.json` via `npm version --no-git-tag-version`
+3. Update `schemas/vvoc/v3.json` `$id` to the new version
+4. Run `release:check` for consistency
+5. Create a release commit and annotated tag `vX.Y.Z`
+
+### Push to trigger publish
+
+```bash
+git push && git push --tags
+```
+
+The GitHub Actions workflow triggers on `v*` tag pushes, verifies the tag matches
+`package.json`, runs full validation (typecheck, lint, fmt check, tests, build, pack
+check, `release:check`), and publishes to npm with `--provenance`.
+
+### Checking consistency manually
+
+```bash
+bun run release:check
+```
+
+This verifies that `package.json` name, version, and `schemas/vvoc/v3.json` `$id` and
+config format version are all consistent. Run it independently anytime.
+
+### CI publish workflow
+
+The workflow uses npm provenance/trusted publishing (`id-token: write`) and does not publish on normal branch pushes. Configure npm trusted publishing for this GitHub repository/package, or adapt the publish step to use an `NPM_TOKEN` secret if token-based publishing is required.
 
 ---
 

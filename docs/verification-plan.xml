@@ -3,9 +3,9 @@
     <log-format>[service][function][block] message</log-format>
     <trace-marker-format>[service][function][BLOCK_NAME] message</trace-marker-format>
     <deterministic-first>true</deterministic-first>
-    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, controller main-session system guidance injection, hash-anchored editing, secrets redaction, plugin toggle config and CLI, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, loop gating, and work-item state persistence (hydrate/snapshot/round-trip).</module-level-focus>
+    <module-level-focus>Fast deterministic checks for vvoc schema v3 layout, release package/schema consistency, role parsing, `vv-role:*` resolution, managed default-agent/command registration, managed agent prompt scaffolding, managed agent registration, role preset application, controller main-session system guidance injection, hash-anchored editing, secrets redaction, plugin toggle config and CLI, work-item protocol parsing, resumable workflow result repair, workflow state transitions, launch enforcement, review-only result parsing, loop gating, and work-item state persistence (hydrate/snapshot/round-trip).</module-level-focus>
     <wave-level-focus>Typecheck, lint, format-check, and test the merged CLI + plugin surface after each coordinated role-system or workflow change.</wave-level-focus>
-    <phase-level-focus>Buildable package output plus stable command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, secrets redaction, plugin runtime toggle, tracked subagent rename, review-only workflows, deterministic workflow enforcement, and per-session work-item state persistence across process restarts and session switches.</phase-level-focus>
+    <phase-level-focus>Buildable package output plus stable release automation and command behavior for installation, managed default controller registration, role management, role resolution, preset switching, primary-session system guidance, hash-anchored editing, Guardian review, secrets redaction, plugin runtime toggle, tracked subagent rename, review-only workflows, deterministic workflow enforcement, and per-session work-item state persistence across process restarts and session switches.</phase-level-focus>
     <failure-packet-alignment>Use `docs/operational-packets.xml` `FailurePacketTemplate` fields when verification fails.</failure-packet-alignment>
     <redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside the existing Guardian truncation policy.</redaction>
   </GlobalPolicy>
@@ -25,6 +25,13 @@
         <trace-sequence>inspect canonical config -&gt; parse current role values -&gt; render canonical JSON -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
+    <VF-RELEASE-AUTOMATION NAME="ReleaseAutomation" USE_CASES="UC-RELEASE" DATA_FLOW="DF-RELEASE" PRIORITY="high">
+      <scenario>Maintainer runs `bun run release:bump &lt;target&gt;`, pushes the release commit, and pushes the generated `v*` tag.</scenario>
+      <expected-outcome>The local wrapper refuses dirty worktrees, bumps `package.json` without npm-created tags, patches only the hosted vvoc schema `$id` package version, runs `release:check`, creates a release commit plus `vX.Y.Z` tag, and the GitHub Actions publish workflow only publishes when the tag exactly matches `package.json.version` and all package checks pass.</expected-outcome>
+      <required-signals>
+        <trace-sequence>release:bump -&gt; npm version --no-git-tag-version -&gt; schema `$id` patch -&gt; release:check -&gt; git commit/tag -&gt; tag workflow verifies `v${package.version}` -&gt; typecheck/lint/fmt/test/pack -&gt; npm publish --provenance</trace-sequence>
+      </required-signals>
+    </VF-RELEASE-AUTOMATION>
     <VF-ROLE-MANAGEMENT NAME="RoleManagement" USE_CASES="UC-008" DATA_FLOW="DF-ROLE-MANAGEMENT" PRIORITY="high">
       <scenario>User runs `vvoc role list`, `vvoc role set`, or `vvoc role unset`.</scenario>
       <expected-outcome>Built-in roles are always shown, custom roles can be created or removed, concrete assignments are normalized as `provider/model[:variant]`, and built-in roles cannot be removed accidentally.</expected-outcome>
@@ -349,6 +356,33 @@
       <wave-follow-up>Expand temp-home smoke coverage for `vvoc install` and `vvoc sync` so seeded role references and managed prompt writes stay deterministic.</wave-follow-up>
       <phase-follow-up>Add snapshot coverage for rendered OpenCode config that includes all managed role-reference fields in one fixture.</phase-follow-up>
     </V-M-CLI-CONFIG>
+
+    <V-M-RELEASE-AUTOMATION MODULE="M-RELEASE-AUTOMATION" PRIORITY="high">
+      <test-files>
+        <file>scripts/release-check.ts</file>
+        <file>scripts/release-bump.ts</file>
+        <file>.github/workflows/publish.yml</file>
+        <file>src/lib/opencode.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun run release:check</check-1>
+        <check-2>bun test src/lib/opencode.test.ts -t "ships a versioned schema file at the canonical hosted URL"</check-2>
+        <check-3>bun run typecheck</check-3>
+        <check-4>bun run fmt:check</check-4>
+        <check-5>bun run pack:check</check-5>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">`release:check` passes only when `schemas/vvoc/v3.json` `$id` exactly references the current `package.json.version` package URL.</scenario-1>
+        <scenario-2 kind="success">Config format version `properties.version.const` remains the canonical vvoc schema version and is not bumped for package releases.</scenario-2>
+        <scenario-3 kind="failure">The publish workflow rejects a `v*` tag that does not exactly match `package.json.version`.</scenario-3>
+        <scenario-4 kind="failure">`release:bump` refuses to run on a dirty worktree before changing release files.</scenario-4>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Release automation must not publish from normal branch pushes.</assertion-1>
+        <assertion-2>Schema `$id` package version drift must fail before npm publish.</assertion-2>
+      </required-trace-assertions>
+    </V-M-RELEASE-AUTOMATION>
 
     <V-M-CLI-AGENT-MODELS MODULE="M-CLI-AGENT-MODELS" PRIORITY="medium">
       <test-files>
@@ -1142,18 +1176,20 @@
     <Gate-Phase-11 PHASE="Phase-11">
       <goal>Documentation and verification artifacts are current. Build and pack smoke checks pass.</goal>
       <commands>
-        <command-1>bun run typecheck</command-1>
-        <command-2>bun run lint</command-2>
-        <command-3>bun run fmt:check</command-3>
-        <command-4>bun test</command-4>
-        <command-5>bun run build</command-5>
-        <command-6>bun run pack:check</command-6>
+        <command-1>bun run release:check</command-1>
+        <command-2>bun run typecheck</command-2>
+        <command-3>bun run lint</command-3>
+        <command-4>bun run fmt:check</command-4>
+        <command-5>bun test</command-5>
+        <command-6>bun run build</command-6>
+        <command-7>bun run pack:check</command-7>
       </commands>
       <required-evidence>
         <evidence-1>README reflects vv-* managed subagent names and workflow protocol.</evidence-1>
         <evidence-2>docs/knowledge-graph.xml contains all workflow modules and cross-links.</evidence-2>
         <evidence-3>docs/verification-plan.xml covers workflow enforcement scenarios.</evidence-3>
         <evidence-4>`bun run pack:check` verifies package-root exports and all published plugin subpath imports, including `./plugins/secrets-redaction`.</evidence-4>
+        <evidence-5>`bun run release:check` verifies package/schema release consistency before tag publishing.</evidence-5>
       </required-evidence>
     </Gate-Phase-11>
     <Gate-Phase-12 PHASE="Phase-12">

@@ -32,6 +32,18 @@
       </annotations>
     </M-CLI-CONFIG>
 
+    <M-RELEASE-AUTOMATION NAME="ReleaseAutomation" TYPE="SCRIPT" STATUS="implemented">
+      <purpose>Guard npm releases with a local version-bump wrapper, schema `$id` consistency check, and tag-gated GitHub Actions publish workflow.</purpose>
+      <path>scripts/release-bump.ts + scripts/release-check.ts + .github/workflows/publish.yml + schemas/vvoc/v3.json</path>
+      <depends>M-CLI-CONFIG</depends>
+      <verification-ref>V-M-RELEASE-AUTOMATION</verification-ref>
+      <annotations>
+        <script-release-check PURPOSE="Verify package identity/version, hosted vvoc schema `$id`, and config format version before release." />
+        <script-release-bump PURPOSE="Wrap `npm version --no-git-tag-version`, patch schema `$id`, run consistency checks, commit package/schema changes, and create a `vX.Y.Z` tag." />
+        <workflow-publish PURPOSE="Publish to npm only from `v*` tags after tag/package consistency and package quality checks pass." />
+      </annotations>
+    </M-RELEASE-AUTOMATION>
+
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
       <purpose>Define bundled guardian, vv-controller, enhancer, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
