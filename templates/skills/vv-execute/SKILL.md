@@ -145,12 +145,36 @@ Run the acceptance criteria. For each criterion:
 - Does the test pass?
 - Did the implementer miss any edge cases?
 
-If all criteria pass → close.
+If all criteria pass → proceed to commit.
 If criteria fail → re-dispatch implementer with specific failure details.
 </step>
 
+<step name="commit">
+After all acceptance criteria pass, commit the task's changes to git.
+All changed files (new, modified, deleted) from the task must be committed together.
+
+Derive a business task identifier from (in priority order):
+1. Branch name — extract ticket/issue reference (e.g. `feat/JIRA-123-description` → `JIRA-123`)
+2. Spec title from `.vvoc/specs/` — if a spec exists for this feature, use its title
+3. Plan title from plan.xml — use the plan's summary or overarching feature name
+4. Ask the user explicitly — if no identifier is derivable, ask the user what business context to include
+
+Match the commit message style to the repository's existing convention.
+Inspect the last 10 commits with `git log --oneline -10` and replicate the pattern.
+Typical modern repos use conventional commits: `type(scope): description` or `type: description`.
+
+Format: `&lt;business-ref&gt; &lt;type&gt;(&lt;scope&gt;): &lt;task title&gt;`
+e.g. `JIRA-123 feat(catalog): implement product search endpoint`
+If no business identifier is available, omit it: `fix(scope): task title`
+
+Do NOT include internal T-NNN task IDs in commit messages — these are workflow-local identifiers.
+
+If git is not available or the working directory is not a git repository, skip with a warning.
+If the commit fails (e.g. nothing to commit, hook rejection), report the failure and stop. Do not silently proceed.
+</step>
+
 <step name="close">
-Mark the task complete in TodoWrite. Close the work item with work_item_close.
+The task's changes are already committed. Mark the task complete in TodoWrite. Close the work item with work_item_close.
 If all tasks are done → proceed to completion.
 Otherwise → move to the next task in dependency order.
 </step>
