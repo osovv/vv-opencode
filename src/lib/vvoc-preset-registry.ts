@@ -66,7 +66,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv role assignments (deepseek + stepfun + minimax).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "stepfun/step-3.5-flash",
+      fast: "stepfun/step-3.7-flash",
       smart: "deepseek/deepseek-v4-pro",
       vision: "minimax-coding-plan/MiniMax-M2.7",
     },
