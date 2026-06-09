@@ -57,6 +57,26 @@ const ZAI_CODING_PLAN_PATCH = {
   },
 } as const satisfies Record<string, unknown>;
 
+const STEPFUN_PATCH = {
+  options: {
+    baseURL: "https://api.stepfun.ai/v1",
+  },
+  models: {
+    "step-3.7-flash": {
+      name: "Step 3.7 Flash",
+      limit: {
+        context: 256000,
+        input: 256000,
+        output: 256000,
+      },
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"],
+      },
+    },
+  },
+} as const satisfies Record<string, unknown>;
+
 const OPENAI_PATCH = {
   models: {
     "vv-gpt-5.4-xhigh": {
@@ -84,10 +104,10 @@ const OPENAI_PATCH = {
 
 const PATCH_PROVIDER_PRESETS = {
   "stepfun-ai": {
-    kind: "provider-base-url",
+    kind: "provider-object",
     providerID: "stepfun",
-    baseURL: "https://api.stepfun.ai/v1",
-    summary: "provider.stepfun.options.baseURL=https://api.stepfun.ai/v1",
+    value: STEPFUN_PATCH,
+    summary: "provider.stepfun.models.step-3.7-flash patched + baseURL",
   },
   zai: {
     kind: "provider-object",

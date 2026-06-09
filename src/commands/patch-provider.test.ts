@@ -24,13 +24,18 @@ import { join } from "node:path";
 import { applyPatchProviderPreset, resolvePatchProviderPreset } from "./patch-provider.js";
 
 describe("resolvePatchProviderPreset", () => {
-  test("returns the built-in stepfun provider patch", () => {
-    expect(resolvePatchProviderPreset("stepfun-ai")).toEqual({
-      kind: "provider-base-url",
+  test("returns the built-in stepfun provider patch with step-3.7-flash model", () => {
+    const preset = resolvePatchProviderPreset("stepfun-ai");
+    expect(preset).toMatchObject({
+      kind: "provider-object",
       providerID: "stepfun",
-      baseURL: "https://api.stepfun.ai/v1",
-      summary: "provider.stepfun.options.baseURL=https://api.stepfun.ai/v1",
+      summary: "provider.stepfun.models.step-3.7-flash patched + baseURL",
     });
+    const value = JSON.parse(JSON.stringify((preset as { value: Record<string, unknown> }).value));
+    expect(value.options.baseURL).toBe("https://api.stepfun.ai/v1");
+    expect(value.models["step-3.7-flash"].name).toBe("Step 3.7 Flash");
+    expect(value.models["step-3.7-flash"].limit.context).toBe(256000);
+    expect(value.models["step-3.7-flash"].modalities.input).toEqual(["text", "image"]);
   });
 
   test("returns the built-in zai config patch", () => {
@@ -57,7 +62,7 @@ describe("resolvePatchProviderPreset", () => {
 });
 
 describe("applyPatchProviderPreset", () => {
-  test("writes the global OpenCode provider baseURL override", async () => {
+  test("writes the global OpenCode stepfun provider patch with model config", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -70,6 +75,9 @@ describe("applyPatchProviderPreset", () => {
       expect(result.action).toBe("created");
       expect(content).toContain('"stepfun"');
       expect(content).toContain("https://api.stepfun.ai/v1");
+      expect(content).toContain("step-3.7-flash");
+      expect(content).toContain("Step 3.7 Flash");
+      expect(content).toContain("256000");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
