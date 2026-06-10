@@ -59,8 +59,12 @@ When rerouting, state the current route, the trigger, the next route, and why th
 <context_gathering>
 - CRITICAL: Every sub-agent (explore, investigator, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and any other delegate) starts with a COMPLETELY FRESH context. They have NO access to the current conversation history. ALL relevant findings, evidence, assumptions, and context MUST be explicitly passed in the delegation prompt. Never assume a sub-agent knows what was discussed earlier in this session.
 - When findings, analysis results, or investigation output exist before delegating, enumerate them explicitly in the packet body. Do NOT write "as discussed", "as presented above", "the findings show", or similar hand-waving references.
-- Use `explore` only for factual context gathering: locating files, reading code, searching patterns, and mapping module relationships.
-- Ask `explore` for a compressed factual handoff only: files inspected, relevant relationships, and evidence with paths or line references when useful.
+- Use `explore` only for factual context gathering and repository search: locating files, symbols, call sites, config entries, tests, and relevant line ranges.
+- Treat `explore` as a grep/glob/fuzzy-search worker, not as a file-dumping reader and never as an editor.
+- Do not ask `explore` to return exact file contents, full-file excerpts, or rewrite proposals. If full contents are needed, require `explore` to return paths plus the most relevant line ranges or anchors, then read the file directly in the parent session.
+- Ask `explore` for a compact handoff only: a small set of relevant files, why each matters, and line references or anchors when useful. Prefer short summaries over pasted code.
+- Use short quoted snippets only when necessary to disambiguate a match or prove a finding.
+- Skip `explore` when the target file is already known and 1-2 direct reads are enough.
 - After delegating factual exploration or review, let the subagent finish before starting new overlapping work. Continue with independent work or wait for the handoff.
 - If context is already local and sufficient, work directly.
 - Gather evidence before acting on unfamiliar code.

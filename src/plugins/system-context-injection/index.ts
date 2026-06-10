@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.3.3
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
 //   SCOPE: Main-session system instruction definitions, editing-workflow guidance, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.1 - Added explore-specific system guidance that enforces compact search/discovery handoffs instead of file dumps.]
 //   LAST_CHANGE: [v0.3.4 - Added vvoc managed skill directory to config.skills.paths in config hook.]
 //   LAST_CHANGE: [v0.3.3 - Updated editing workflow guidance to prefer exact context-anchored `line#hash#anchor` refs from read output.]
 //   LAST_CHANGE: [v0.4.0 - Removed `apply_patch` instruction from editing_workflow block — tool-level disable is stronger than prompt text.]
@@ -34,18 +35,22 @@ import {
   getVvocSkillsDir,
 } from "../../lib/vvoc-paths.js";
 
-const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
+const BUILT_IN_SUBAGENTS = ["general"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
 const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
 const SELF_SUFFICIENT_PRIMARY_AGENTS = [] as const;
+const EXPLORE_SUBAGENT = "explore" as const;
 
 const MAIN_SESSION_SYSTEM_CONTEXTS = [
   [
     "<proactive_context_gathering>",
     "Before answering questions about the codebase or making changes, gather the context you need whenever the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.",
-    "When delegation is available, proactively use the explore subagent for this.",
-    "Use the explore subagent ONLY for context gathering operations: finding files, reading code, searching for patterns, mapping module relationships, and collecting factual information about the codebase.",
-    "Keep explore requests focused on factual context gathering.",
+    "When delegation is available, proactively use the explore subagent for repository search and discovery.",
+    "Treat the explore subagent as a grep/glob/fuzzy-search worker: use it to find relevant files, symbols, call sites, tests, config entries, and useful line ranges.",
+    "Do not ask explore to return exact file contents, large pasted excerpts, or rewrite proposals. If full contents are needed, have explore return file paths plus the most relevant line ranges or anchors, then read the file directly in the parent session.",
+    "Keep explore handoffs compact: a short summary and a small set of relevant file references with brief explanations.",
+    "Use short quoted snippets only when needed to disambiguate a match or support a finding.",
+    "Skip explore when the target file is already known and one or two direct reads are enough.",
     "Gather evidence before acting on unfamiliar code.",
     "If the task is already localized and the required context is already in view, work directly.",
     "If the current agent cannot delegate, work with the context already in view.",
@@ -119,6 +124,21 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
   ].join("\n"),
 ] as const;
 
+const EXPLORE_SYSTEM_CONTEXTS = [
+  [
+    "<explore_role>",
+    "You are a repository search-and-discovery worker.",
+    "Behave like grep/glob/fuzzy-search over the repo: locate relevant files, symbols, call sites, config entries, tests, and line ranges.",
+    "Do not act like a file-dumping reader and never act like an editor.",
+    "Do not return exact file contents, large pasted excerpts, or rewrite proposals unless the parent explicitly asks for them.",
+    "Default output: a short summary plus a compact, prioritized list of relevant paths with why they matter and line references or anchors when useful.",
+    "Use short quoted snippets only when needed to disambiguate a match or prove a finding.",
+    "If full contents seem necessary, return the path and the most relevant line ranges or anchors so the parent session can read the file directly.",
+    "Keep results capped and focused. Prefer the smallest useful set of references over broad dumps.",
+    "</explore_role>",
+  ].join("\n"),
+] as const;
+
 type AgentConfigShape = {
   mode?: unknown;
 };
@@ -154,6 +174,14 @@ function shouldInjectForAgent(agentName: string | undefined, knownSubagents: Set
     return false;
   }
   return true;
+}
+
+function getSystemContextsForAgent(agentName: string | undefined): readonly string[] {
+  if (agentName === EXPLORE_SUBAGENT) {
+    return EXPLORE_SYSTEM_CONTEXTS;
+  }
+
+  return MAIN_SESSION_SYSTEM_CONTEXTS;
 }
 // END_BLOCK_AGENT_FILTERS
 
@@ -215,7 +243,7 @@ export const SystemContextInjectionPlugin: Plugin = async () => {
 
       output.message.system = appendSystemContexts(
         output.message.system,
-        MAIN_SESSION_SYSTEM_CONTEXTS,
+        getSystemContextsForAgent(output.message.agent),
       );
     },
   };

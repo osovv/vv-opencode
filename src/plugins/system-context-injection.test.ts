@@ -1,5 +1,5 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.4.0
+// VERSION: 0.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.1 - Added coverage for explore-specific compact search/discovery system guidance.]
 //   LAST_CHANGE: [v0.4.0 - Added coverage for vv-controller primary injection and managed analyst subagent exclusion.]
 //   LAST_CHANGE: [v0.3.4 - Updated editing-workflow assertion for context-anchored hashline refs.]
 //   LAST_CHANGE: [v0.3.3 - Added regression coverage for primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites.]
@@ -75,10 +76,10 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("<editing_workflow>");
     expect(systemText).toContain("proactively use the explore subagent");
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Use the explore subagent ONLY for context gathering operations",
+      "Treat the explore subagent as a grep/glob/fuzzy-search worker",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Keep explore requests focused on factual context gathering.",
+      "Do not ask explore to return exact file contents, large pasted excerpts, or rewrite proposals.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "prefer the `edit` tool over shell-based rewrites when it is available.",
@@ -117,7 +118,7 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText.match(/<proactive_context_gathering>/g)).toHaveLength(1);
   });
 
-  test("skips built-in subagents", async () => {
+  test("injects explore-specific system context for built-in explore subagent", async () => {
     const plugin = await SystemContextInjectionPlugin(createPluginInput());
     const output = createOutput("explore");
 
@@ -126,7 +127,18 @@ describe("SystemContextInjectionPlugin", () => {
       output as never,
     );
 
-    expect(output.message.system).toBeUndefined();
+    const systemText = output.message.system ?? "";
+
+    expect(systemText).toContain("<explore_role>");
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "You are a repository search-and-discovery worker.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Do not return exact file contents, large pasted excerpts, or rewrite proposals unless the parent explicitly asks for them.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Default output: a short summary plus a compact, prioritized list of relevant paths with why they matter and line references or anchors when useful.",
+    );
   });
 
   test("skips plugin-managed subagents", async () => {
@@ -187,10 +199,13 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("Before answering questions about the codebase or making changes");
     expect(systemText.replace(/\s+/g, " ")).toContain("proactively use the explore subagent");
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Use the explore subagent ONLY for context gathering operations: finding files, reading code, searching for patterns, mapping module relationships, and collecting factual information about the codebase.",
+      "Treat the explore subagent as a grep/glob/fuzzy-search worker: use it to find relevant files, symbols, call sites, tests, config entries, and useful line ranges.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Keep explore requests focused on factual context gathering.",
+      "Do not ask explore to return exact file contents, large pasted excerpts, or rewrite proposals. If full contents are needed, have explore return file paths plus the most relevant line ranges or anchors, then read the file directly in the parent session.",
+    );
+    expect(systemText.replace(/\s+/g, " ")).toContain(
+      "Skip explore when the target file is already known and one or two direct reads are enough.",
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Gather evidence before acting on unfamiliar code.",
