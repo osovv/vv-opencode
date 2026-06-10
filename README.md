@@ -274,12 +274,9 @@ This will:
 3. Update `schemas/vvoc/v3.json` `$id` to the new version
 4. Run `release:check` for consistency
 5. Create a release commit and annotated tag `vX.Y.Z`
+6. Push the current branch and the created tag to `origin`
 
-### Push to trigger publish
-
-```bash
-git push && git push --tags
-```
+Run `release:bump` from a checked-out branch with push access to `origin`. The tag push is what triggers the publish workflow.
 
 The GitHub Actions workflow triggers on `v*` tag pushes, verifies the tag matches
 `package.json`, runs full validation (typecheck, lint, fmt check, tests, build, pack

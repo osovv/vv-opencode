@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Wrapper around npm version --no-git-tag-version that patches schema $id, runs release checks, then creates a release commit and tag.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), updates package.json and schema $id, runs release:check, commits, tags.
+//   PURPOSE: Wrapper around npm version --no-git-tag-version that patches schema $id, runs release checks, then commits, tags, and pushes the release.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
 //   DEPENDS: [node:fs, node:child_process]
 //   LINKS: [scripts/release-check.ts]
 //   ROLE: SCRIPT
@@ -14,7 +14,8 @@
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
 //   updateSchemaId - Patches only the hosted schema $id text for the new package version.
 //   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json and schema changes before commit.
-//   main - Runs the guarded release bump, consistency check, commit, and tag flow.
+//   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
+//   main - Runs the guarded release bump, consistency check, commit, tag, and push flow.
 // END_MODULE_MAP
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -175,6 +176,21 @@ function assertTagDoesNotExist(tagName: string): void {
   }
 }
 
+function getCurrentBranchName(): string {
+  const branchName = runCapture(
+    "git",
+    ["rev-parse", "--abbrev-ref", "HEAD"],
+    "git rev-parse failed while detecting the current branch.",
+  ).trim();
+
+  if (!branchName || branchName === "HEAD") {
+    console.error("✗ release:bump requires a checked-out branch. Detached HEAD is not supported.");
+    process.exit(1);
+  }
+
+  return branchName;
+}
+
 function main(): void {
   const npmVersionArgs = parseNpmVersionArgs(process.argv.slice(2));
 
@@ -219,6 +235,7 @@ function main(): void {
   // START_BLOCK_GIT_COMMIT_AND_TAG
   assertOnlyReleaseFilesChanged();
 
+  const branchName = getCurrentBranchName();
   const tagName = `v${newVersion}`;
   assertTagDoesNotExist(tagName);
 
@@ -232,11 +249,24 @@ function main(): void {
   run("git", ["tag", "-a", tagName, "-m", tagName], "git tag failed. Release commit was created without a tag.");
   // END_BLOCK_GIT_COMMIT_AND_TAG
 
-  console.log(`\n✓ Release ${tagName} committed and tagged.\n`);
+  // START_BLOCK_GIT_PUSH
+  console.log("\nPushing release commit and tag...\n");
+  run(
+    "git",
+    ["push", "origin", branchName],
+    `git push origin ${branchName} failed. Release commit and tag were created locally but not pushed.`,
+  );
+  run(
+    "git",
+    ["push", "origin", tagName],
+    `git push origin ${tagName} failed. Release tag exists locally but was not pushed.`,
+  );
+  // END_BLOCK_GIT_PUSH
+
+  console.log(`\n✓ Release ${tagName} committed, tagged, and pushed.\n`);
   console.log(`  Git SHA: ${runCapture("git", ["rev-parse", "HEAD"], "git rev-parse failed.").trim()}`);
+  console.log(`  Branch: ${branchName}`);
   console.log(`  Tag: ${tagName}\n`);
-  console.log("To publish:");
-  console.log(`  git push && git push --tags\n`);
 }
 
 main();
