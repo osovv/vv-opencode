@@ -1,5 +1,5 @@
 // FILE: src/lib/model-roles.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Define built-in role IDs, role-reference parsing, concrete model-selection parsing, and deterministic built-in role bindings.
 //   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model parsing, and hard-coded built-in role binding lookup.
@@ -25,6 +25,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.1 - Rebound managed vv-controller to the built-in smart role while leaving root OpenCode defaults and other managed agents unchanged.]
 //   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect role bindings. Analysis and architecture are now done directly by the expensive model through interactive skills (vv-spec, vv-plan).
 //   LAST_CHANGE: [v0.1.3 - Removed variant splitting from model selection parsing so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.1.2 - Renamed tracked managed-agent role binding keys to vv-* names for implementer/spec/code reviewer roles.]
@@ -98,7 +99,7 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
   },
   managedAgents: {
     guardian: "fast",
-    "vv-controller": "default",
+    "vv-controller": "smart",
     enhancer: "smart",
     "vv-implementer": "default",
     "vv-spec-reviewer": "smart",

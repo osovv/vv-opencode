@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.2.4
+// VERSION: 1.2.5
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.5 - Updated managed vv-controller registration expectations to seed and sync `model = vv-role:smart` while preserving root defaults.]
 //   LAST_CHANGE: [v1.2.4 - Added static schema regression coverage for the package-versioned URL and plugins property placement.]
 //   LAST_CHANGE: [v1.2.3 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v1.2.2 - Reworked the vv-deepseek refresh regression to write drifted managed presets directly before syncVvocConfig runs.]
@@ -145,7 +146,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.agent?.plan).toBeUndefined();
     expect(parsed.agent?.general).toBeUndefined();
     expect(parsed.agent?.explore?.model).toBe("vv-role:fast");
-    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:default");
+    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.["vv-controller"]?.mode).toBe("primary");
     expect(parsed.agent?.["vv-controller"]?.prompt).toBe("{file:../vvoc/agents/vv-controller.md}");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
@@ -220,7 +221,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.tools?.read).toBe(true);
     expect(parsed.tools?.apply_patch).toBe(false);
     expect(parsed.agent?.build?.model).toBe("openai/gpt-5");
-    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:default");
+    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
   });
@@ -531,7 +532,7 @@ describe("canonical vvoc config helpers", () => {
       expect(openCodeConfig.agent?.build).toBeUndefined();
       expect(openCodeConfig.agent?.general).toBeUndefined();
       expect(openCodeConfig.agent?.explore?.model).toBe("vv-role:fast");
-      expect(openCodeConfig.agent?.["vv-controller"]?.model).toBe("vv-role:default");
+      expect(openCodeConfig.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
       expect(openCodeConfig.agent?.enhancer?.model).toBe("vv-role:smart");
 
       expect(vvocConfig?.version).toBe(3);

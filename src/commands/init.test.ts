@@ -1,5 +1,5 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.8.0
+// VERSION: 0.8.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, managed agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.8.1 - Updated init expectations so the managed vv-controller agent is seeded with the built-in smart role.]
 //   LAST_CHANGE: [v0.8.1 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
 //   LAST_CHANGE: [v0.9.0 - Removed vv-analyst and vv-architect init expectations. Agents removed from managed-agents list.
@@ -99,7 +100,7 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent.plan).toBeUndefined();
       expect(opencodeConfig.agent.general).toBeUndefined();
       expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
-      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:default");
+      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:smart");

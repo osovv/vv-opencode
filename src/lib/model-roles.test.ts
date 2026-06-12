@@ -1,5 +1,5 @@
 // FILE: src/lib/model-roles.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify role ID/reference parsing, concrete model-selection parsing, built-in bindings, and role-resolution failures.
 //   SCOPE: Deterministic built-in role exposure, vv-role round-trips, model selection normalization, and explicit error-code coverage.
@@ -17,6 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.1 - Updated deterministic managed-agent binding expectations so vv-controller resolves to the built-in smart role.]
 //   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect binding expectations. Agents removed from managed-agents list.
 //   LAST_CHANGE: [v0.1.2 - Updated built-in managed-agent binding expectations to vv-* tracked role keys.]
 //   LAST_CHANGE: [v0.1.1 - Added coverage for blank role bindings, whitespace-consistent role references, and full deterministic built-in binding assertions.]
@@ -49,7 +50,7 @@ describe("built-in roles", () => {
       },
       managedAgents: {
         guardian: "fast",
-        "vv-controller": "default",
+        "vv-controller": "smart",
         enhancer: "smart",
         "vv-implementer": "default",
         "vv-spec-reviewer": "smart",

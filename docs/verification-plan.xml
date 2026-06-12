@@ -13,14 +13,14 @@
   <CriticalFlows>
     <VF-PLUGIN-INSTALL NAME="PluginInstall" USE_CASES="UC-001" DATA_FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
       <scenario>User runs `vvoc init` or `vvoc install` to bootstrap the package into a fresh global or project config root.</scenario>
-      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, `default_agent` is `vv-controller`, the managed controller/enhancer agents and managed subagents are registered in OpenCode config with `vv-role:*` model references, managed `/vv-plan` and `/vv-review` command definitions exist, managed OpenCode config sets `tools.apply_patch = false`, managed prompts exist in the scope-correct agents directory, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded with built-in roles and built-in role presets.</expected-outcome>
+      <expected-outcome>The pinned vvoc package specifier is present in the resolved OpenCode `plugin` array, `default_agent` is `vv-controller`, the managed controller is registered in OpenCode config with `model = vv-role:smart`, the managed enhancer/subagents are registered with their canonical `vv-role:*` model references, managed `/vv-plan` and `/vv-review` command definitions exist, managed OpenCode config sets `tools.apply_patch = false`, managed prompts exist in the scope-correct agents directory, and the canonical `$XDG_CONFIG_HOME/vvoc/vvoc.json` file is fully seeded with built-in roles and built-in role presets.</expected-outcome>
       <required-signals>
         <trace-sequence>resolvePaths -&gt; ensurePackageInstalled -&gt; syncManagedAgentRegistrations -&gt; installManagedAgentPrompts -&gt; installVvocConfig -&gt; status reports configured role-based setup</trace-sequence>
       </required-signals>
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Canonical vvoc schema v3 and managed prompt files are rewritten canonically, the managed default controller, command definitions, enhancer/subagent registrations stay present in OpenCode config with canonical values and `vv-role:*` references, managed OpenCode config keeps `tools.apply_patch = false`, managed `vv-*` presets are refreshed to vvoc defaults, current explicit role-based values survive the vvoc.json rewrite where applicable, and pre-role vvoc schemas fail loudly instead of being migrated.</expected-outcome>
+      <expected-outcome>Canonical vvoc schema v3 and managed prompt files are rewritten canonically, the managed default controller stays present in OpenCode config with `model = vv-role:smart`, managed command definitions plus enhancer/subagent registrations stay present with canonical values and `vv-role:*` references, managed OpenCode config keeps `tools.apply_patch = false`, managed `vv-*` presets are refreshed to vvoc defaults, current explicit role-based values survive the vvoc.json rewrite where applicable, and pre-role vvoc schemas fail loudly instead of being migrated.</expected-outcome>
       <required-signals>
         <trace-sequence>inspect canonical config -&gt; parse current role values -&gt; render canonical JSON -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
@@ -190,7 +190,7 @@
       <telemetry>none required beyond explicit thrown-error surfaces</telemetry>
     </VM-ROLE-PARSING>
     <VM-CONFIG-SEED MODULE="M-CLI-CONFIG" FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
-      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, managed default controller, managed command definitions, and role-reference OpenCode root defaults plus built-in `explore` and managed agents.</scenario>
+      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, managed default controller, managed command definitions, and role-reference OpenCode root defaults plus built-in `explore` and managed agents, with vv-controller specifically bound to `vv-role:smart`.</scenario>
       <primary-evidence>temp-home integration checks plus exact config assertions</primary-evidence>
       <trajectory-evidence>OpenCode config diff assertions proving `vv-role:*` writes instead of literal provider/model writes</trajectory-evidence>
       <telemetry>installation inspection output plus stable config snapshots</telemetry>
@@ -235,7 +235,7 @@
 
   <VerificationMatrix SCOPE="Phase-7-11">
     <VM-RENAME-AGENTS MODULE="M-CLI-MANAGED-AGENTS" FLOW="DF-RENAME-AGENTS" PRIORITY="high">
-      <scenario>Install and sync scaffold managed vv-controller, vv-analyst, vv-architect, and renamed tracked agents vv-implementer, vv-spec-reviewer, vv-code-reviewer with matching prompt file names and updated model-roles bindings.</scenario>
+      <scenario>Install and sync scaffold managed vv-controller and renamed tracked agents vv-implementer, vv-spec-reviewer, vv-code-reviewer with matching prompt file names and updated model-roles bindings, including vv-controller -&gt; `smart`.</scenario>
       <primary-evidence>deterministic assertions on managed agent names, prompt file names, and OpenCode registration output</primary-evidence>
       <trajectory-evidence>failure assertions for old agent name references after rename</trajectory-evidence>
       <telemetry>install/sync output reflecting vv-* names</telemetry>
