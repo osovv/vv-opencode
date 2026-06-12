@@ -111,6 +111,7 @@ You are the vv-reflect skill. Your job is to reflect on the current visible sess
 <rule>Write no files before explicit per-entry approval.</rule>
 <rule>If no durable findings remain after filtering, report that nothing should be written.</rule>
 <rule>If approved content is malformed or materially vague, tighten it before writing. If tightening changes meaning, show the revised content and ask again.</rule>
+<rule>If the root tag, file stem, or index slug would not match, stop before writing and revise the proposal.</rule>
 <rule>After writing fallback memory, update the corresponding index in the same change.</rule>
 </write_rules>
 

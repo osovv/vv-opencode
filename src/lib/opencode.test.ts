@@ -810,6 +810,30 @@ describe("managed skill files", () => {
       await rm(projectDir, { recursive: true, force: true });
     }
   });
+
+  test("vv-reflect SKILL.md template contains required behavioral contracts", async () => {
+    const skillText = await readFile(
+      new URL("../../templates/skills/vv-reflect/SKILL.md", import.meta.url),
+      "utf8",
+    );
+    expect(skillText).toContain("name: vv-reflect");
+    expect(skillText).toContain("Do not use or create .vvoc/reflect.jsonc");
+    expect(skillText).toContain("Use only the current visible chat context");
+    expect(skillText).toContain("wait for explicit per-entry");
+    expect(skillText).toContain(
+      "Treat silence or general agreement without clear approval as not yet approved",
+    );
+    expect(skillText).toContain(
+      "Prefer existing repository-owned documentation only when the match is high-confidence",
+    );
+    expect(skillText).toContain("Create fallback directories and indexes lazily");
+    expect(skillText).toContain("Use one durable entry per file");
+    expect(skillText).toContain("update the corresponding index");
+    expect(skillText).toContain("Never silently overwrite");
+    expect(skillText).toContain(
+      "Do not add a CLI command, hook behavior, or automatic writer behavior",
+    );
+  });
 });
 
 /** Returns true when the path exists and false for ENOENT. */
