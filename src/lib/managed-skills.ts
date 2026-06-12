@@ -1,5 +1,5 @@
 // FILE: src/lib/managed-skills.ts
-// VERSION: 0.5.1
+// VERSION: 0.5.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode skills and load them from bundled templates or scoped vvoc config roots.
 //   SCOPE: Managed skill names, skill file path resolution, bundled template loading, reference file discovery, and project/global skill lookup.
@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   MANAGED_SKILL_NAMES - Canonical vvoc-managed skill names.
+//   MANAGED_SKILL_NAMES - Canonical vvoc-managed skill names, including vv-reflect.
 //   ManagedSkillName - Type for vvoc-managed skill names.
 //   getManagedSkillFilePath - Resolves the skill file path inside a vvoc skills directory.
 //   loadManagedSkillTemplate - Loads the bundled skill template for a managed skill.
@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.2 - Added vv-reflect to the canonical managed skill set.]
 //   LAST_CHANGE: [v0.5.1 - Added loadManagedSkillReference and listManagedSkillReferenceNames for copying reference files alongside skill templates.]
 //   LAST_CHANGE: [v0.5.0 - Initial module for managed skill file resolution and template loading.]
 // END_CHANGE_SUMMARY
@@ -27,7 +28,13 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocSkillsDir } from "./vvoc-paths.js";
 
-export const MANAGED_SKILL_NAMES = ["vv-spec", "vv-plan", "vv-review", "vv-execute"] as const;
+export const MANAGED_SKILL_NAMES = [
+  "vv-spec",
+  "vv-plan",
+  "vv-review",
+  "vv-execute",
+  "vv-reflect",
+] as const;
 
 export type ManagedSkillName = (typeof MANAGED_SKILL_NAMES)[number];
 
