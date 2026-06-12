@@ -25,6 +25,7 @@
 //   LAST_CHANGE: [v1.2.1 - Added regression coverage proving sync restores drifted vv-deepseek while preserving custom non-managed presets.]
 //   LAST_CHANGE: [v1.1.7 - Added regression coverage for managed `tools.apply_patch = false` writes and sibling `tools.*` preservation during OpenCode config sync.]
 //   LAST_CHANGE: [v1.1.6 - Added regression coverage ensuring legacy old-name cleanup is blocked when the legacy prompt file exists but is user-owned (missing vvoc managed marker).]
+//   LAST_CHANGE: [v1.2.5 - Added managed skill distribution coverage for vv-reflect.]
 //   LAST_CHANGE: [v1.1.5 - Added coverage ensuring legacy cleanup preserves old-name agents that keep legacy prompt paths but diverge from managed model/permission/description/mode fields.]
 //   LAST_CHANGE: [v1.1.4 - Added coverage proving legacy cleanup is restricted to clearly vvoc-managed old tracked entries and preserves user-owned agents that reuse old names.]
 //   LAST_CHANGE: [v1.1.3 - Added legacy tracked-agent migration coverage to verify sync removes pre-rename implementer/spec-reviewer/code-reviewer registrations while preserving unrelated agent entries and comments.]
@@ -34,7 +35,7 @@
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "jsonc-parser";
@@ -700,13 +701,16 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await installManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(6); // 4 SKILL.md + 2 reference files
+      expect(results).toHaveLength(7); // 5 SKILL.md + 2 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       for (const r of results) {
         const isSkill = r.path.endsWith("SKILL.md");
         const isReference = r.path.endsWith(".xml");
         expect(isSkill || isReference).toBe(true);
       }
+      expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
+      expect(await exists(join(projectDir, ".vvoc", "lessons"))).toBe(false);
+      expect(await exists(join(projectDir, ".vvoc", "runbooks"))).toBe(false);
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -721,7 +725,7 @@ describe("managed skill files", () => {
       await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
 
       const results = await installManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(5); // vv-spec skipped + 4 others created (incl. refs)
+      expect(results).toHaveLength(6); // vv-spec skipped + 4 other SKILL.md + 1 plan ref
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
       expect(vvSpec?.reason).toContain("has no YAML frontmatter");
@@ -751,8 +755,11 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await syncManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(6); // 4 SKILL.md + 2 reference files
+      expect(results).toHaveLength(7); // 5 SKILL.md + 2 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
+      expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
+      expect(await exists(join(projectDir, ".vvoc", "lessons"))).toBe(false);
+      expect(await exists(join(projectDir, ".vvoc", "runbooks"))).toBe(false);
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -782,7 +789,7 @@ describe("managed skill files", () => {
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: false });
       const kept = results.filter((r) => r.action === "kept");
-      expect(kept).toHaveLength(6); // 4 SKILL.md + 2 reference files
+      expect(kept).toHaveLength(7); // 5 SKILL.md + 2 reference files
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -794,7 +801,7 @@ describe("managed skill files", () => {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(6); // 4 SKILL.md + 2 reference files
+      expect(results).toHaveLength(7); // 5 SKILL.md + 2 reference files
       for (const r of results) {
         expect(["kept", "updated"]).toContain(r.action);
       }
@@ -804,6 +811,16 @@ describe("managed skill files", () => {
   });
 });
 
+/** Returns true when the path exists and false for ENOENT. */
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
 describe("provider baseURL helpers", () => {
   test("creates a new config with a provider baseURL override", () => {
     const output = ensureProviderBaseUrlConfigText(
