@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.2.5
+// VERSION: 0.2.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
 //   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.6 - Restricted work-item tools and workflow guidance injection to vv-controller sessions only.]
 //   LAST_CHANGE: [v0.2.5 - Limited resumable result repair to safe format-only protocol errors and disabled tool use during repair prompts where supported.]
 //   LAST_CHANGE: [v0.2.4 - Added a single same-session repair attempt for malformed tracked results inside recognized resumable OpenCode task envelopes.]
 //   LAST_CHANGE: [v0.2.3 - Tightened OpenCode task-result envelope detection to the known resumable task header shape before unwrapping.]
@@ -24,8 +25,7 @@
 //   LAST_CHANGE: [v0.1.0 - Added workflow plugin integration with tool wiring, tracked launch/result hooks, loop-gate enforcement, and primary-session guidance injection.]
 // END_CHANGE_SUMMARY
 
-import { type Config, type Plugin, tool } from "@opencode-ai/plugin";
-import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
+import { type Plugin, tool } from "@opencode-ai/plugin";
 import {
   attemptTrackedResultRepair,
   isTrackedResultRepairEligible,
@@ -66,19 +66,12 @@ import {
 
 const z = tool.schema;
 
-const BUILT_IN_SUBAGENTS = ["general", "explore"] as const;
-const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
-const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
-const HELPER_PRIMARY_AGENTS = ["enhancer"] as const;
 const TRACKED_SUBAGENT_SET = new Set<string>(TRACKED_SUBAGENT_NAMES);
 const WORK_ITEM_MISSING_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_a6f582092f05__";
 const INVALID_NEXT_AGENT_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_513fa2de603d__";
+const WORKFLOW_CONTROLLER_AGENT = "vv-controller";
 
 const WORKFLOW_SYSTEM_INSTRUCTION = workflowSystemInstructionTemplate.trim();
-
-type AgentConfigShape = {
-  mode?: unknown;
-};
 
 function isTrackedSubagent(value: unknown): value is TrackedAgentName {
   return typeof value === "string" && TRACKED_SUBAGENT_SET.has(value);
@@ -111,37 +104,23 @@ function readTaskPrompt(args: unknown): string {
   return value;
 }
 
-function createKnownSubagentSet(): Set<string> {
-  return new Set([
-    ...BUILT_IN_SUBAGENTS,
-    ...PLUGIN_MANAGED_SUBAGENTS,
-    ...MANAGED_SUBAGENT_NAMES,
-    ...TRACKED_SUBAGENT_NAMES,
-  ]);
+function canUseWorkflowTools(agentName: string | undefined): boolean {
+  return agentName === WORKFLOW_CONTROLLER_AGENT;
 }
 
-function syncConfiguredSubagents(config: Config, knownSubagents: Set<string>): void {
-  for (const [name, definition] of Object.entries(config.agent ?? {})) {
-    if ((definition as AgentConfigShape | undefined)?.mode === "subagent") {
-      knownSubagents.add(name);
-    }
+function assertWorkflowToolAccess(agentName: string | undefined, toolName: string): void {
+  if (canUseWorkflowTools(agentName)) {
+    return;
   }
+
+  const resolvedAgent = agentName?.trim() || "unknown-agent";
+  throw new Error(
+    `WORKFLOW_TOOL_DENIED: ${toolName} is only available to ${WORKFLOW_CONTROLLER_AGENT} sessions. Current agent: ${resolvedAgent}.`,
+  );
 }
 
-function shouldInjectForAgent(agentName: string | undefined, knownSubagents: Set<string>): boolean {
-  if (!agentName) {
-    return false;
-  }
-  if (knownSubagents.has(agentName)) {
-    return false;
-  }
-  if (INTERNAL_PRIMARY_AGENTS.includes(agentName as (typeof INTERNAL_PRIMARY_AGENTS)[number])) {
-    return false;
-  }
-  if (HELPER_PRIMARY_AGENTS.includes(agentName as (typeof HELPER_PRIMARY_AGENTS)[number])) {
-    return false;
-  }
-  return true;
+function shouldInjectForAgent(agentName: string | undefined): boolean {
+  return canUseWorkflowTools(agentName);
 }
 
 function appendSystemInstruction(existingSystem: string | undefined, instruction: string): string {
@@ -197,8 +176,6 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   }
   // END_BLOCK_PERSISTENCE_SETUP
 
-  const knownSubagents = createKnownSubagentSet();
-
   // Tool wrappers still need a store reference for description/args shape
   // but execute handlers resolve the right store per-call
   const dummyStore = createWorkItemStore();
@@ -207,9 +184,6 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   const workItemCloseTool = createWorkItemCloseTool(dummyStore);
 
   return {
-    config: async (config) => {
-      syncConfiguredSubagents(config, knownSubagents);
-    },
     tool: {
       work_item_open: tool({
         description: workItemOpenTool.description,
@@ -222,6 +196,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           ),
         },
         async execute(args, context) {
+          assertWorkflowToolAccess(context.agent, "work_item_open");
           const sessionStore = getOrCreateStore(context.sessionID);
           const opened = workItemOpenTool.execute(
             args,
@@ -238,6 +213,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           includeClosed: z.boolean().optional(),
         },
         async execute(args, context) {
+          assertWorkflowToolAccess(context.agent, "work_item_list");
           const sessionStore = getOrCreateStore(context.sessionID);
           return stringifyToolOutput(
             workItemListTool.execute(args, { sessionId: context.sessionID }, sessionStore),
@@ -250,6 +226,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           workItemId: z.string(),
         },
         async execute(args, context) {
+          assertWorkflowToolAccess(context.agent, "work_item_close");
           const sessionStore = getOrCreateStore(context.sessionID);
           const closed = workItemCloseTool.execute(
             args,
@@ -574,7 +551,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
       }
     },
     "chat.message": async (_input, output) => {
-      if (!shouldInjectForAgent(output.message.agent, knownSubagents)) {
+      if (!shouldInjectForAgent(output.message.agent)) {
         return;
       }
 

@@ -872,7 +872,7 @@ describe("workflow persistence", () => {
   });
 });
 
-function createToolContext(sessionID: string, agent = "build") {
+function createToolContext(sessionID: string, agent = "vv-controller") {
   return {
     sessionID,
     messageID: "message-1",
@@ -1921,18 +1921,31 @@ describe("workflow plugin integration", () => {
     expect(promptCalls).toHaveLength(0);
   });
 
-  test("guidance injects for primary sessions only", async () => {
+  test("guidance injects for vv-controller sessions only", async () => {
     const { plugin } = await createWorkflowPluginHarness();
 
-    await plugin.config?.({
-      agent: {
-        "custom-reviewer": {
-          mode: "subagent",
-        },
-      },
-    } as never);
-
     const primaryOutput = {
+      message: {
+        agent: "vv-controller",
+        system: undefined as string | undefined,
+      },
+      parts: [],
+    };
+    await plugin["chat.message"]?.(
+      {
+        sessionID: "session-guidance",
+        agent: "vv-controller",
+      } as never,
+      primaryOutput as never,
+    );
+
+    expect(primaryOutput.message.system).toContain("<workflow_protocol>");
+    expect(primaryOutput.message.system).toContain("work_item_open");
+    expect(primaryOutput.message.system).toContain("VVOC_WORK_ITEM_ID");
+    expect(primaryOutput.message.system).toContain("<assignment>");
+    expect(primaryOutput.message.system).toContain("tagged assignment bodies");
+
+    const buildOutput = {
       message: {
         agent: "build",
         system: undefined as string | undefined,
@@ -1944,14 +1957,9 @@ describe("workflow plugin integration", () => {
         sessionID: "session-guidance",
         agent: "build",
       } as never,
-      primaryOutput as never,
+      buildOutput as never,
     );
-
-    expect(primaryOutput.message.system).toContain("<workflow_protocol>");
-    expect(primaryOutput.message.system).toContain("work_item_open");
-    expect(primaryOutput.message.system).toContain("VVOC_WORK_ITEM_ID");
-    expect(primaryOutput.message.system).toContain("<assignment>");
-    expect(primaryOutput.message.system).toContain("tagged assignment bodies");
+    expect(buildOutput.message.system).toBeUndefined();
 
     const enhancerOutput = {
       message: {
@@ -1984,22 +1992,19 @@ describe("workflow plugin integration", () => {
       trackedOutput as never,
     );
     expect(trackedOutput.message.system).toBeUndefined();
+  });
 
-    const configuredSubagentOutput = {
-      message: {
-        agent: "custom-reviewer",
-        system: undefined as string | undefined,
-      },
-      parts: [],
-    };
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-guidance",
-        agent: "custom-reviewer",
-      } as never,
-      configuredSubagentOutput as never,
+  test("work-item tools reject non-vv-controller agents", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+
+    await expect(
+      plugin.tool?.work_item_open?.execute(
+        { items: [{ key: "WI-DENIED", title: "Denied tool access" }] },
+        createToolContext("session-denied", "build") as never,
+      ),
+    ).rejects.toThrow(
+      "WORKFLOW_TOOL_DENIED: work_item_open is only available to vv-controller sessions. Current agent: build.",
     );
-    expect(configuredSubagentOutput.message.system).toBeUndefined();
   });
 });
 

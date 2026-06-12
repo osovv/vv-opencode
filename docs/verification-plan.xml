@@ -93,8 +93,8 @@
       </required-signals>
     </VF-RENAME-AGENTS>
     <VF-WORKFLOW-TOOLS NAME="WorkItemTools" USE_CASES="UC-010" DATA_FLOW="DF-WORKFLOW-TOOLS" PRIORITY="high">
-      <scenario>Main session calls work_item_open, work_item_list, or work_item_close.</scenario>
-      <expected-outcome>Items are created with deterministic IDs, same key plus same title returns same ID, same key plus different title fails, list reflects current state, and close is explicit.</expected-outcome>
+      <scenario>vv-controller session calls work_item_open, work_item_list, or work_item_close.</scenario>
+      <expected-outcome>Items are created with deterministic IDs, same key plus same title returns same ID, same key plus different title fails, list reflects current state, close is explicit, and non-vv-controller agents are rejected.</expected-outcome>
       <required-signals>
         <trace-sequence>work_item_open -&gt; idempotent create or return -&gt; work_item_list -&gt; state reflects open items -&gt; work_item_close -&gt; state reflects closed</trace-sequence>
       </required-signals>
@@ -980,7 +980,7 @@
         <check-2>bun x tsc --noEmit</check-2>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">work_item_open with batch items returns structured results with IDs and headers.</scenario-1>
+        <scenario-1 kind="success">vv-controller work_item_open with batch items returns structured results with IDs and headers.</scenario-1>
         <scenario-2 kind="success">work_item_list returns all open items with state, counters, and review round.</scenario-2>
         <scenario-3 kind="success">work_item_close closes the specified item and confirms.</scenario-3>
         <scenario-4 kind="success">work_item_list with includeClosed=true returns closed items in addition to open items.</scenario-4>
@@ -1017,7 +1017,8 @@
         <scenario-10c kind="success">Malformed tracked output inside a recognized resumable wrapper gets one same-session repair attempt before state transition continues.</scenario-10c>
         <scenario-10d kind="failure">If the one-shot resumable repair still returns malformed tracked output, workflow halts with RESULT_PROTOCOL_ERROR.</scenario-10d>
         <scenario-10e kind="failure">Foreign or partial `&lt;task_result&gt;` wrappers without a recognized OpenCode task envelope and resume metadata are not unwrapped and still halt workflow.</scenario-10e>
-        <scenario-11 kind="success">Eligible orchestrating primary agents receive workflow protocol guidance, including header-first tracked prompts plus lightweight tagged assignment bodies. Helper primary enhancer and known subagents do not.</scenario-11>
+        <scenario-11 kind="success">Only vv-controller receives workflow protocol guidance, including header-first tracked prompts plus lightweight tagged assignment bodies.</scenario-11>
+        <scenario-12 kind="failure">Non-vv-controller agents cannot execute work_item_open, work_item_list, or work_item_close.</scenario-12>
       </scenarios>
       <required-log-markers>
         <marker-1>[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch validated</marker-1>
@@ -1030,12 +1031,13 @@
       </required-log-markers>
       <required-trace-assertions>
         <assertion-1>The plugin must not interfere with untracked task launches.</assertion-1>
-        <assertion-2>The plugin must not inject workflow guidance into known subagent prompts or helper-primary enhancer prompts.</assertion-2>
+        <assertion-2>The plugin must inject workflow guidance only into vv-controller prompts.</assertion-2>
         <assertion-3>Tracked launch validation must continue accepting prompts where `VVOC_WORK_ITEM_ID` stays on line 1 and the remaining assignment body uses lightweight XML-like tags.</assertion-3>
         <assertion-4>NEEDS_CONTEXT must always halt workflow and return control to main session.</assertion-4>
         <assertion-5>Protocol errors must halt automation rather than falling back to heuristic behavior.</assertion-5>
         <assertion-6>The plugin must parse the inner `&lt;task_result&gt;` content from OpenCode task outputs instead of treating wrapper metadata as subagent protocol fields.</assertion-6>
         <assertion-7>When resumable repair is attempted, the plugin must resume only the same child session and must stop after one attempt.</assertion-7>
+        <assertion-8>work_item_* tools must fail closed for every non-vv-controller agent.</assertion-8>
       </required-trace-assertions>
       <wave-follow-up>Add integration tests that simulate full tracked subagent lifecycle with mock tool execution.</wave-follow-up>
       <phase-follow-up>Validate workflow enforcement with real OpenCode sessions once the plugin is installed.</phase-follow-up>
