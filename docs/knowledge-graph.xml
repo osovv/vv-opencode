@@ -56,13 +56,14 @@
     </M-CLI-MANAGED-AGENTS>
 
     <M-CLI-MANAGED-SKILLS NAME="ManagedSkills" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled vv-spec, vv-plan, and vv-review skill templates plus managed skill metadata for file path resolution, bundled template loading, and project/global skill lookup.</purpose>
+      <purpose>Define bundled vv-spec, vv-plan, vv-review, vv-execute, and vv-reflect skill templates plus managed skill metadata for file path resolution, bundled template loading, reference file discovery, and project/global skill lookup.</purpose>
       <path>src/lib/managed-skills.ts + templates/skills/**/SKILL.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
-        <const-MANAGED_SKILL_NAMES PURPOSE="Canonical vvoc-managed skill names: vv-spec, vv-plan, vv-review." />
+        <const-MANAGED_SKILL_NAMES PURPOSE="Canonical vvoc-managed skill names: vv-spec, vv-plan, vv-review, vv-execute, vv-reflect." />
         <fn-loadManagedSkillTemplate PURPOSE="Load a bundled skill template for a managed vvoc skill." />
+        <fn-listManagedSkillReferenceFiles PURPOSE="List bundled reference files for managed vvoc skills." />
       </annotations>
     </M-CLI-MANAGED-SKILLS>
 
@@ -178,12 +179,12 @@
 
 
     <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions, including vv-controller, while skipping known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, and vv-code-reviewer so main-session behavior can be steered globally.</purpose>
+      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions, including repository-memory lookup guidance for .vvoc lessons and runbooks, while skipping known subagents so main-session behavior can be steered globally.</purpose>
       <path>src/plugins/system-context-injection/index.ts</path>
       <depends>M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
       <annotations>
-        <export-SystemContextInjectionPlugin PURPOSE="Inject main-session system guidance such as proactive explore instructions and workflow protocol without polluting known subagents." />
+        <export-SystemContextInjectionPlugin PURPOSE="Inject main-session system guidance such as proactive explore instructions, repository-memory lookup, and workflow protocol without polluting known subagents." />
       </annotations>
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
