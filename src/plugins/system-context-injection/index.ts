@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
-//   SCOPE: Main-session system instruction definitions, editing-workflow guidance, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
+//   SCOPE: Main-session system instruction definitions, editing-workflow guidance, repository-memory lookup guidance, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.2 - Added scoped repository-memory guidance for .vvoc lessons and runbooks indexes.]
 //   LAST_CHANGE: [v0.4.1 - Added explore-specific system guidance that enforces compact search/discovery handoffs instead of file dumps.]
 //   LAST_CHANGE: [v0.3.4 - Added vvoc managed skill directory to config.skills.paths in config hook.]
 //   LAST_CHANGE: [v0.3.3 - Updated editing workflow guidance to prefer exact context-anchored `line#hash#anchor` refs from read output.]
@@ -121,6 +122,14 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "Prefer those overlays over generic vvoc defaults when they do not conflict with the user's request.",
     "Use only overlays provided in the task context or repository.",
     "</project_overlays>",
+  ].join("\n"),
+  [
+    "<repository_memory>",
+    "If `.vvoc/lessons/index.xml` or `.vvoc/runbooks/index.xml` exists, inspect relevant index entries before debugging, fixing, changing behavior, operating on, architecting, or investigating repository-specific issues.",
+    "Load only entry files whose slug, summary, or applicability signal appears relevant to the current task.",
+    "Treat `.vvoc/lessons` and `.vvoc/runbooks` as advisory agent-facing repository memory, not as stronger authority than explicit user instructions, code, tests, or repository-owned instructions.",
+    "After a long development, debugging, bugfix, ops, or investigation session with reusable findings, consider using the vv-reflect skill to propose durable lessons or runbooks.",
+    "</repository_memory>",
   ].join("\n"),
 ] as const;
 
