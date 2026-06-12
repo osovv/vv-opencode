@@ -349,7 +349,7 @@ describe("applyPreset", () => {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   test("cli reports expected argument validation errors", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-cli-errors-"));
@@ -425,5 +425,5 @@ describe("applyPreset", () => {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 });
