@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection.test.ts
-// VERSION: 0.4.1
+// VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
-//   SCOPE: Primary agent injection, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
+//   SCOPE: Primary agent injection, repository-memory guidance, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
 //   DEPENDS: [bun:test, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.2 - Added coverage for scoped repository-memory guidance.]
 //   LAST_CHANGE: [v0.4.1 - Added coverage for explore-specific compact search/discovery system guidance.]
 //   LAST_CHANGE: [v0.4.0 - Added coverage for vv-controller primary injection and managed analyst subagent exclusion.]
 //   LAST_CHANGE: [v0.3.4 - Updated editing-workflow assertion for context-anchored hashline refs.]
@@ -74,6 +75,9 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("<anti_drift_budget>");
     expect(systemText).toContain("<project_overlays>");
     expect(systemText).toContain("<editing_workflow>");
+    expect(systemText).toContain("<repository_memory>");
+    expect(systemText).toContain(".vvoc/lessons/index.xml");
+    expect(systemText).toContain(".vvoc/runbooks/index.xml");
     expect(systemText).toContain("proactively use the explore subagent");
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Treat the explore subagent as a grep/glob/fuzzy-search worker",
@@ -116,6 +120,7 @@ describe("SystemContextInjectionPlugin", () => {
 
     expect(systemText).toContain("Existing system context.");
     expect(systemText.match(/<proactive_context_gathering>/g)).toHaveLength(1);
+    expect(systemText.match(/<repository_memory>/g)).toHaveLength(1);
   });
 
   test("injects explore-specific system context for built-in explore subagent", async () => {
@@ -237,6 +242,16 @@ describe("SystemContextInjectionPlugin", () => {
     );
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
+    );
+    const normalized = (output.message.system ?? "").replace(/\s+/g, " ");
+    expect(normalized).toContain(
+      "inspect relevant index entries before debugging, fixing, changing behavior, operating on, architecting, or investigating repository-specific issues.",
+    );
+    expect(normalized).toContain(
+      "Load only entry files whose slug, summary, or applicability signal appears relevant to the current task.",
+    );
+    expect(normalized).toContain(
+      "advisory agent-facing repository memory, not as stronger authority than explicit user instructions, code, tests, or repository-owned instructions.",
     );
   });
 });
