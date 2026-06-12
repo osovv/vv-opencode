@@ -347,6 +347,7 @@
         <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-7>
         <scenario-8 kind="success">Managed prompt templates keep a stable enhancer schema plus consistent status/reporting vocabulary across implementer, reviewers, and investigator flows.</scenario-8>
         <scenario-9 kind="success">Managed prompt templates externalize compact working state, support rerouting and project-owned overlays, preserve semantic continuity, require explicit material assumptions, and guard against drift.</scenario-9>
+        <scenario-10 kind="success">Managed skill install and sync distribute vv-reflect alongside vv-spec, vv-plan, vv-review, and vv-execute without creating .vvoc/lessons, .vvoc/runbooks, or fallback indexes eagerly.</scenario-10>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -587,9 +588,10 @@
         <check-2>bun x tsc --noEmit</check-2>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">Primary agents such as `build` and `enhancer` receive the injected proactive-context, editing-workflow, standard-trajectory, task-routing, working-state, reroute, semantic-continuity, assumption-discipline, anti-drift, and project-overlay guidance exactly once.</scenario-1>
+        <scenario-1 kind="success">Primary agents such as `build` and `enhancer` receive the injected proactive-context, repository-memory, editing-workflow, standard-trajectory, task-routing, working-state, reroute, semantic-continuity, assumption-discipline, anti-drift, and project-overlay guidance exactly once.</scenario-1>
         <scenario-2 kind="success">Known subagents such as `explore` do not receive the injected guidance.</scenario-2>
         <scenario-3 kind="success">Custom config-defined subagents stay excluded after the plugin observes config mode metadata.</scenario-3>
+        <scenario-4 kind="success">Primary agents receive scoped repository-memory guidance that points to .vvoc/lessons/index.xml and .vvoc/runbooks/index.xml, loads only relevant entries, and treats repository memory as advisory below user instructions, code, tests, and repository-owned instructions.</scenario-4>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
