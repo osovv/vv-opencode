@@ -57,7 +57,7 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     );
 
     process.chdir(projectDir);
-    process.exitCode = undefined;
+    process.exitCode = 0;
 
     const { stdout, stderr } = await captureOutput(async () => {
       await (
@@ -78,7 +78,7 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     expect(process.exitCode ?? 0).toBe(1);
   } finally {
     process.chdir(initialCwd);
-    process.exitCode = initialExitCode;
+    process.exitCode = initialExitCode ?? 0;
     await rm(configHome, { recursive: true, force: true });
     await rm(projectDir, { recursive: true, force: true });
   }
