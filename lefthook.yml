@@ -7,3 +7,8 @@ pre-commit:
       run: bun run fmt:check
     check-exports:
       run: bun run scripts/check-exports.ts
+
+commit-msg:
+  commands:
+    commitlint:
+      run: bunx commitlint --edit "$1"
