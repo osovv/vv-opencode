@@ -26,6 +26,7 @@ export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored l
 5. Tags MUST be copied exactly from read output or >>> mismatch output. NEVER guess or reconstruct tags.
 6. Batch = multiple operations in edits[], NOT one big replace covering everything. Each operation targets the smallest possible change.
 7. lines must contain plain replacement text only (no LINE#HASH#ANCHOR| prefixes, no diff + markers).
+8. CRITICAL: Double-quote characters inside lines strings MUST be escaped as \\". Unescaped \\" inside a JSON string will break the parser. Example: ["const x = \\"hello\\";"] — NOT ["const x = "hello";"]. Single quotes and backticks do NOT need escaping.
 </must>
 
 <operations>
