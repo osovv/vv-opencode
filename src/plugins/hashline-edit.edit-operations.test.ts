@@ -24,6 +24,7 @@ import {
   applyInsertAfter,
   applyInsertBefore,
   applyPrepend,
+  applySetLine,
 } from "./hashline-edit/edit-operation-primitives.js";
 import { applyHashlineEditsWithReport } from "./hashline-edit/edit-operations.js";
 import { computeLineHash } from "./hashline-edit/hash-computation.js";
@@ -195,5 +196,25 @@ describe("hashline edit-operations", () => {
 
   test("prepends to an empty file without introducing an extra blank line", () => {
     expect(applyPrepend([""], ["line1"])).toEqual(["line1"]);
+  });
+
+  test("applySetLine throws when given multi-line replacement", () => {
+    const lines = ["line 1", "line 2", "line 3"];
+
+    expect(() =>
+      applySetLine(lines, anchorFor(lines, 2), ["replacement A", "replacement B"]),
+    ).toThrow(/single-line replacement only/);
+  });
+
+  test("rejects replace edit with multi-line payload through batch API", () => {
+    const content = "line 1\nline 2\nline 3";
+    const lines = content.split("\n");
+    const edits: HashlineEdit[] = [
+      { op: "replace" as const, pos: anchorFor(lines, 2), lines: ["A", "B"] },
+    ];
+
+    expect(() => applyHashlineEditsWithReport(content, edits)).toThrow(
+      /single-line replacement only/,
+    );
   });
 });

@@ -63,6 +63,13 @@ function normalizeReplaceEdit(edit: RawHashlineEdit, index: number): ReplaceEdit
       `Edit ${index}: replace does not accept end — use "replace_range" for multi-line replacements`,
     );
   }
+  if (Array.isArray(edit.lines) && edit.lines.length > 1) {
+    throw new Error(
+      `Edit ${index}: replace is for single-line replacement only. ` +
+        `You passed ${edit.lines.length} replacement lines. Use "replace_range" with pos + end for multi-line replacement.`,
+    );
+  }
+
   return {
     op: "replace",
     pos,

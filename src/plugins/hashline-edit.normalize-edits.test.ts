@@ -51,6 +51,12 @@ describe("hashline normalize-edits", () => {
     expect(() => normalizeHashlineEdits(input)).toThrow(/requires both pos and end/i);
   });
 
+  test("rejects replace with multi-line lines payload", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: ["line1", "line2"] }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/single-line replacement only/i);
+  });
+
   test("maps anchored append and prepend while preserving op", () => {
     const input: RawHashlineEdit[] = [
       { op: "append", pos: "2#VK", lines: ["after"] },

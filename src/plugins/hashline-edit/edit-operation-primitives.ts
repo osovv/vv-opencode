@@ -62,6 +62,13 @@ export function applySetLine(
     return restoreLeadingIndent(originalLine, entry);
   });
 
+  if (replacement.length > 1) {
+    throw new Error(
+      "applySetLine: replace is for single-line replacement only. " +
+        `Removing 1 line but inserting ${replacement.length} lines. Use applyReplaceLines (replace_range) for multi-line replacement.`,
+    );
+  }
+
   result.splice(line - 1, 1, ...replacement);
   return result;
 }

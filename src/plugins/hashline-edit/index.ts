@@ -451,19 +451,30 @@ export const HashlineEditPlugin: Plugin = async () => {
           rename: z.string().optional().describe("Rename the file after edits are applied"),
           edits: z
             .array(
-              z.object({
-                op: z.enum(["replace", "replace_range", "append", "prepend"]),
-                pos: z.string().optional().describe("Primary anchor in LINE#HASH#ANCHOR format"),
-                end: z
-                  .string()
-                  .optional()
-                  .describe(
-                    "Range end for replace_range in LINE#HASH#ANCHOR format (required for replace_range, rejected for replace)",
-                  ),
-                lines: z
-                  .union([z.array(z.string()), z.string(), z.null()])
-                  .describe("Replacement or inserted lines as plain text content"),
-              }),
+              z
+                .object({
+                  op: z.enum(["replace", "replace_range", "append", "prepend"]),
+                  pos: z.string().optional().describe("Primary anchor in LINE#HASH#ANCHOR format"),
+                  end: z
+                    .string()
+                    .optional()
+                    .describe(
+                      "Range end for replace_range in LINE#HASH#ANCHOR format (required for replace_range, rejected for replace)",
+                    ),
+                  lines: z
+                    .union([z.array(z.string()), z.string(), z.null()])
+                    .describe("Replacement or inserted lines as plain text content"),
+                })
+                .refine(
+                  (obj) =>
+                    !(obj.op === "replace" && Array.isArray(obj.lines) && obj.lines.length > 1),
+                  {
+                    message:
+                      "replace accepts at most 1 replacement line. " +
+                      "Use array with 1 element, a string, or null. " +
+                      "For multi-line replacement, use replace_range with pos + end.",
+                  },
+                ),
             )
             .describe("Hash-anchored edit operations to apply to the file"),
         },
