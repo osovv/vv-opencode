@@ -91,5 +91,9 @@
   "engines": {
     "bun": ">=1.3.8"
   },
-  "packageManager": "bun@1.3.8"
+  "packageManager": "bun@1.3.8",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/osovv/vv-opencode.git"
+  }
 }
