@@ -269,7 +269,7 @@ function parseChangelogRange(
   let capturing = false;
   let currentEntry: string[] = [];
   for (const line of lines) {
-    const headerMatch = /^##\s+\[([^\]]+)\]/.exec(line);
+    const headerMatch = /^##\s*(?:<small>)?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/.exec(line);
     if (headerMatch) {
       const entryVersion = headerMatch[1] ?? "";
       if (capturing) {

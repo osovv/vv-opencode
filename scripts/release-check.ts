@@ -24,7 +24,7 @@ const CHANGELOG_PATH = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url)
 const EXPECTED_PACKAGE_NAME = "@osovv/vv-opencode";
 const EXPECTED_SCHEMA_CONST = 3;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const CHANGELOG_VERSION_HEADER = /^##\s+\[/m;
+const CHANGELOG_VERSION_HEADER = /^##\s+/m;
 
 interface PackageJson {
   name?: string;
