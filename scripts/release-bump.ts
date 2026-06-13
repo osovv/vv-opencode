@@ -162,7 +162,7 @@ function runOpencodeSummary(request: OpencodeRunRequest): OpencodeRunResult {
     signal: result.signal,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
-    timedOut: result.error?.name === "TimeoutError" || result.signal === "SIGTERM",
+    timedOut: typeof result.error === "object" && result.error !== null && "code" in result.error && result.error.code === "ETIMEDOUT",
     errorCode: typeof result.error === "object" && result.error && "code" in result.error ? String(result.error.code) : undefined,
   };
 }
