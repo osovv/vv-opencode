@@ -276,11 +276,18 @@ bun run release:bump patch   # or minor, major, prerelease, or explicit semver
 This will:
 1. Reject if the worktree is dirty
 2. Bump `package.json` via `npm version --no-git-tag-version`
-3. Update `schemas/vvoc/v3.json` `$id` to the new version
-4. Run `release:check` for consistency
-5. Create a release commit and annotated tag `vX.Y.Z`
-6. Push the current branch and the created tag to `origin`
+3. Generate a required AI release summary with `opencode --pure run`
+4. Prepend a `### Summary` section plus conventional commit details to `CHANGELOG.md`
+5. Update `schemas/vvoc/v3.json` `$id` to the new version
+6. Run `release:check` for consistency
+7. Create a release commit and annotated tag `vX.Y.Z`
+8. Push the current branch and the created tag to `origin`
 
+Required local release prerequisite:
+- `opencode` must be available from `PATH`.
+- The summary model defaults to `deepseek/deepseek-v4-flash`.
+- Override with `VVOC_RELEASE_SUMMARY_MODEL=provider/model`.
+- Override the per-attempt timeout with `VVOC_RELEASE_SUMMARY_TIMEOUT_MS=120000`.
 Run `release:bump` from a checked-out branch with push access to `origin`. The tag push is what triggers the publish workflow.
 
 The GitHub Actions workflow triggers on `v*` tag pushes, verifies the tag matches

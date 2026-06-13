@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
 // VERSION: 1.1.0
-//   PURPOSE: Wrapper around npm version --no-git-tag-version that generates changelog, patches schema $id, runs release checks, then commits, tags, and pushes the release.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
+//   PURPOSE: Wrapper around npm version --no-git-tag-version that generates changelog, generates a required AI summary, patches schema $id, runs release checks, then commits, tags, and pushes the release.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -10,16 +10,31 @@
 // START_MODULE_MAP
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
 //   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
+//   collectReleaseCommitMetadata - Collects commit metadata from latest reachable tag to HEAD for summary input.
+//   generateReleaseSummaryForRelease - Runs restricted opencode summary generation with retry and validation.
+//   injectSummaryIntoChangelogEntry - Inserts required ### Summary into the generated changelog entry.
+//   runOpencodeSummary - Invokes opencode --pure run with stdin prompt and returns exit/signal/stdout/stderr.
+//   sleepMs - Blocks synchronously for the given milliseconds between retry attempts.
 //   prependToChangelog - Prepends a changelog entry to CHANGELOG.md, creating the file if missing.
 //   updateSchemaId - Patches only the hosted schema $id text for the new package version.
 //   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, and CHANGELOG changes before commit.
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
-//   main - Runs the guarded release bump, changelog generation, consistency check, commit, tag, and push flow.
+//   main - Runs the guarded release bump, changelog generation, mandatory AI summary generation, consistency check, commit, tag, and push flow.
 // END_MODULE_MAP
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import {
+  buildReleaseSummaryAgentConfig,
+  collectReleaseCommitMetadata,
+  generateReleaseSummaryWithRetries,
+  injectSummaryIntoChangelogEntry,
+  resolveReleaseSummaryOptions,
+  type OpencodeRunRequest,
+  type OpencodeRunResult,
+} from "./release-summary.ts";
 
 const PKG_PATH = fileURLToPath(new URL("../package.json", import.meta.url));
 const SCHEMA_PATH = fileURLToPath(new URL("../schemas/vvoc/v3.json", import.meta.url));
@@ -117,6 +132,44 @@ function runCapture(command: string, args: string[], failureMessage: string): st
     console.error(`  ${String(err)}`);
     process.exit(1);
   }
+}
+/** Runs opencode for one release summary attempt using stdin and JSONL output. */
+function runOpencodeSummary(request: OpencodeRunRequest): OpencodeRunResult {
+  const result = spawnSync(
+    "opencode",
+    [
+      "--pure",
+      "run",
+      "--format",
+      "json",
+      "--agent",
+      "release-summary",
+      "--model",
+      request.model,
+      "Generate the required release changelog summary from stdin. Return only the <summary> envelope.",
+    ],
+    {
+      encoding: "utf8",
+      input: request.input,
+      env: request.env,
+      timeout: request.timeoutMs,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+
+  return {
+    status: result.status,
+    signal: result.signal,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    timedOut: result.error?.name === "TimeoutError" || result.signal === "SIGTERM",
+    errorCode: typeof result.error === "object" && result.error && "code" in result.error ? String(result.error.code) : undefined,
+  };
+}
+
+/** Sleeps synchronously between release summary retry attempts. */
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 
@@ -261,6 +314,21 @@ function main(): void {
     const today = new Date().toISOString().slice(0, 10);
     changelogEntry = `## [${newVersion}] - ${today}\n\n_No user-facing changes._`;
   }
+
+  // START_BLOCK_GENERATE_SUMMARY
+  console.log("\nGenerating release summary with OpenCode...\n");
+  const summaryOptions = resolveReleaseSummaryOptions(process.env);
+  const commits = collectReleaseCommitMetadata(runCapture);
+  const summary = generateReleaseSummaryWithRetries(
+    runOpencodeSummary,
+    { version: newVersion, changelogEntry, commits },
+    summaryOptions,
+    sleepMs,
+  );
+  changelogEntry = injectSummaryIntoChangelogEntry(changelogEntry, summary);
+  console.log("Release summary generated and injected into changelog entry.");
+  // END_BLOCK_GENERATE_SUMMARY
+
   prependToChangelog(changelogEntry);
   console.log("Changelog entry prepended to CHANGELOG.md");
   // END_BLOCK_GENERATE_CHANGELOG

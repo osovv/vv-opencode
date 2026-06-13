@@ -27,9 +27,9 @@
     </VF-CONFIG-SYNC>
     <VF-RELEASE-AUTOMATION NAME="ReleaseAutomation" USE_CASES="UC-RELEASE" DATA_FLOW="DF-RELEASE" PRIORITY="high">
       <scenario>Maintainer runs `bun run release:bump &lt;target&gt;`, pushes the release commit, and pushes the generated `v*` tag.</scenario>
-      <expected-outcome>The local wrapper refuses dirty worktrees, bumps `package.json` without npm-created tags, patches only the hosted vvoc schema `$id` package version, runs `release:check`, creates a release commit plus `vX.Y.Z` tag, and the GitHub Actions publish workflow only publishes when the tag exactly matches `package.json.version` and all package checks pass.</expected-outcome>
+      <expected-outcome>The local wrapper refuses dirty worktrees, bumps `package.json` without npm-created tags, generates a mandatory AI release changelog summary through restricted `opencode --pure run` with retry and validation, prepends a `### Summary` section plus conventional commit details to `CHANGELOG.md`, patches only the hosted vvoc schema `$id` package version, runs `release:check` (which validates the latest changelog summary), creates a release commit plus `vX.Y.Z` tag, and the GitHub Actions publish workflow only publishes when the tag exactly matches `package.json.version` and all package checks pass. Summary generation failure after three retries aborts the release before any changelog write, schema patch, commit, tag, or push.</expected-outcome>
       <required-signals>
-        <trace-sequence>release:bump -&gt; npm version --no-git-tag-version -&gt; schema `$id` patch -&gt; release:check -&gt; git commit/tag -&gt; tag workflow verifies `v${package.version}` -&gt; typecheck/lint/fmt/test/pack -&gt; npm publish --provenance</trace-sequence>
+        <trace-sequence>release:bump -&gt; npm version --no-git-tag-version -&gt; changelog generation -&gt; summary generation (opencode --pure run with retry) -&gt; summary validation -&gt; changelog prepend -&gt; schema `$id` patch -&gt; release:check (validates latest summary) -&gt; git commit/tag -&gt; tag workflow verifies `v${package.version}` -&gt; typecheck/lint/fmt/test/pack -&gt; npm publish --provenance</trace-sequence>
       </required-signals>
     </VF-RELEASE-AUTOMATION>
     <VF-ROLE-MANAGEMENT NAME="RoleManagement" USE_CASES="UC-008" DATA_FLOW="DF-ROLE-MANAGEMENT" PRIORITY="high">
