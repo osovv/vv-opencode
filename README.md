@@ -4,8 +4,11 @@
 
 <p>
   <a href="https://www.npmjs.com/package/@osovv/vv-opencode"><img src="https://img.shields.io/npm/v/%40osovv%2Fvv-opencode?style=flat&label=npm&color=blue" alt="npm"></a>
+  <a href="https://github.com/osovv/vv-opencode/actions/workflows/publish.yml"><img src="https://github.com/osovv/vv-opencode/actions/workflows/publish.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/osovv/vv-opencode/releases"><img src="https://img.shields.io/github/v/release/osovv/vv-opencode?style=flat&label=release" alt="release"></a>
+  <a href="https://github.com/osovv/vv-opencode"><img src="https://img.shields.io/github/stars/osovv/vv-opencode?style=flat&color=yellow" alt="stars"></a>
   <a href="https://bun.sh"><img src="https://img.shields.io/badge/runtime-bun-%23f9f9f9?style=flat&logo=bun" alt="bun"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat" alt="MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/osovv/vv-opencode?style=flat&color=green" alt="MIT"></a>
 </p>
 
 ---
@@ -147,6 +150,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 | `vvoc preset list\|show\|<name>` | Inspect or apply named presets |
 | `vvoc guardian config` | Print or write guardian section |
 | `vvoc plugin list` | List OpenCode plugin entries |
+| `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
 | `vvoc patch-provider stepfun-ai\|zai\|openai` | Patch a global OpenCode config preset |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync |
@@ -312,3 +316,9 @@ The workflow uses npm provenance/trusted publishing (`id-token: write`) and does
 ## Optional: RTK
 
 [RTK](https://github.com/rtk-ai/rtk) is a CLI proxy that reduces token usage for common developer commands. The interactive `vvoc init` flow recommends it after setup.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

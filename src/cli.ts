@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.10 - Aligned module dependency metadata with the actual imported command tree.]
+//   LAST_CHANGE: [v0.2.11 - Aligned meta description with package.json, README, and GitHub repo; license and badge polish.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
@@ -44,7 +44,8 @@ const main = defineCommand({
   meta: {
     name: "vvoc",
     version: packageVersion,
-    description: "Install and sync vv-opencode plugins for OpenCode.",
+    description:
+      "Portable OpenCode workflow toolkit — 6 plugins, managed agents & skills, a spec-to-code pipeline, security, and the vvoc CLI.",
   },
   subCommands: {
     completion,

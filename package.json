@@ -1,7 +1,7 @@
 {
   "name": "@osovv/vv-opencode",
   "version": "0.35.12",
-  "description": "Portable OpenCode workflow plugins, explicit memory, and CLI tooling.",
+  "description": "Portable OpenCode workflow toolkit — 6 plugins, managed agents & skills, a spec-to-code pipeline, security, and the vvoc CLI.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,13 +11,21 @@
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
     "plugins",
     "workflow",
-    "guardian",
-    "xdg",
-    "grace",
+    "agent-workflow",
+    "ai-agent",
+    "agent-framework",
+    "llm",
+    "spec-to-code",
     "bun",
-    "citty"
+    "cli",
+    "typescript",
+    "developer-tools",
+    "guardian",
+    "prompt-engineering",
+    "security"
   ],
   "bin": {
     "vvoc": "./dist/cli.js"
