@@ -2,35 +2,36 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Upgrade the global vvoc package by checking npm, installing the latest release with Bun, triggering a fresh sync subprocess, and reinstalling shell completions.
-//   SCOPE: npm registry query, version comparison, best-effort changelog fetching, global Bun install, post-install sync execution, and post-upgrade shell completion installation.
-//   DEPENDS: [citty, src/lib/package.ts, Bun]
-//   LINKS: [M-CLI-UPGRADE]
-//   ROLE: RUNTIME
+//   SCOPE: npm registry query, version comparison, jsDelivr changelog fetching with version-range parsing, optional pre-release version resolution, global Bun install, post-install sync execution, and post-upgrade shell completion installation.
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   default - Upgrade command definition for vvoc.
+// START_MODULE_MAP
+//   default - Upgrade command definition for vvoc with --allow-prerelease flag.
 //   runUpgradeFlow - Execute the full global upgrade, post-install sync, and completion install flow.
 //   buildInstallCommand - Build the Bun global install command for a specific version.
 //   buildPostInstallCompletionCommand - Build the fresh subprocess command for the default global completion flow.
-//   fetchLatestVersion - Query npm registry for latest version.
-//   fetchChangelog - Fetch changelog from npm registry.
+//   fetchLatestVersion - Query npm registry for latest stable version.
+//   fetchLatestVersionIncludingPrerelease - Query npm registry for highest version including pre-releases.
+//   fetchChangelog - Fetch CHANGELOG.md from jsDelivr and extract entries between two versions.
+//   parseChangelogRange - Extract Keep a Changelog entries from full text between two version bounds.
 //   UpgradeFlowResult - Upgrade flow result type.
 //   UpgradeSubprocessResult - Subprocess result type.
 //   buildPostInstallSyncCommand - Build post-install sync command.
-// END_MODULE_MAP
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Redesigned upgrade into a global-only Bun install flow that runs post-install sync in a fresh subprocess.]
 //   LAST_CHANGE: [v0.25.6 - Added post-upgrade shell completion installation after successful sync.]
-// END_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Replaced npm description changelog with jsDelivr CHANGELOG.md fetch and version-range parsing. Added --allow-prerelease flag.]
 
 import { defineCommand } from "citty";
 import { getPackageVersion, PACKAGE_NAME } from "../lib/package.js";
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
+const JSDELIVR_BASE = "https://cdn.jsdelivr.net/npm";
 type UpgradeCommand = readonly [string, ...string[]];
 
 export type UpgradeFlowResult = {
@@ -54,14 +55,26 @@ type UpgradeDependencies = {
   runSubprocess: (command: UpgradeCommand) => Promise<UpgradeSubprocessResult>;
 };
 
+type UpgradeOptions = {
+  /** When true, include pre-release versions when resolving the latest version. */
+  allowPrerelease?: boolean;
+};
+
 export default defineCommand({
   meta: {
     name: "upgrade",
     description: "Upgrade the global vvoc package and sync config.",
   },
-  async run() {
+  args: {
+    allowPrerelease: {
+      type: "boolean",
+      description: "Allow upgrade to pre-release versions (alpha, beta, rc)",
+      default: false,
+    },
+  },
+  async run({ args }) {
     // START_BLOCK_RUN_UPGRADE
-    const result = await runUpgradeFlow();
+    const result = await runUpgradeFlow({}, { allowPrerelease: args.allowPrerelease });
     if (result.exitCode !== 0) {
       process.exitCode = result.exitCode;
     }
@@ -71,15 +84,21 @@ export default defineCommand({
 
 export async function runUpgradeFlow(
   overrides: Partial<UpgradeDependencies> = {},
+  options: UpgradeOptions = {},
 ): Promise<UpgradeFlowResult> {
   const logger = overrides.logger ?? console;
-  const fetchLatest = overrides.fetchLatestVersion ?? fetchLatestVersion;
+  const resolveLatest = options.allowPrerelease
+    ? (overrides.fetchLatestVersion ?? fetchLatestVersionIncludingPrerelease)
+    : (overrides.fetchLatestVersion ?? fetchLatestVersion);
   const fetchReleaseNotes = overrides.fetchChangelog ?? fetchChangelog;
   const getCurrentVersion = overrides.getCurrentVersion ?? getPackageVersion;
   const runSubprocess = overrides.runSubprocess ?? runSubprocessCommand;
 
   try {
-    const [currentVersion, latestVersion] = await Promise.all([getCurrentVersion(), fetchLatest()]);
+    const [currentVersion, latestVersion] = await Promise.all([
+      getCurrentVersion(),
+      resolveLatest(),
+    ]);
 
     if (!latestVersion) {
       logger.error("NETWORK_ERROR: Could not reach npm registry");
@@ -215,33 +234,81 @@ export async function fetchLatestVersion(): Promise<string | null> {
   }
 }
 
+/**
+ * Fetch CHANGELOG.md from jsDelivr CDN for the target version,
+ * then extract all entries between fromVersion (exclusive) and toVersion (inclusive).
+ * Returns null on any fetch or parse failure for graceful degradation.
+ */
 export async function fetchChangelog(
-  _fromVersion: string,
-  _toVersion: string,
+  fromVersion: string,
+  toVersion: string,
 ): Promise<string | null> {
+  try {
+    const url = `${JSDELIVR_BASE}/${encodeURIComponent(PACKAGE_NAME)}@${encodeURIComponent(toVersion)}/CHANGELOG.md`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const fullText = await response.text();
+    return parseChangelogRange(fullText, fromVersion, toVersion);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract all Keep a Changelog entries from fullText between fromVersion (exclusive)
+ * and toVersion (inclusive). Returns concatenated entries with original whitespace,
+ * or null if parsing fails.
+ */
+function parseChangelogRange(
+  fullText: string,
+  fromVersion: string,
+  toVersion: string,
+): string | null {
+  const entries: string[] = [];
+  const lines = fullText.split("\n");
+  let capturing = false;
+  let currentEntry: string[] = [];
+  for (const line of lines) {
+    const headerMatch = /^##\s+\[([^\]]+)\]/.exec(line);
+    if (headerMatch) {
+      const entryVersion = headerMatch[1] ?? "";
+      if (capturing) {
+        entries.push(currentEntry.join("\n"));
+        currentEntry = [];
+      }
+      if (entryVersion === fromVersion) {
+        // Stop — we've reached the from version (exclusive).
+        break;
+      }
+      capturing = entryVersion === toVersion || (capturing && entryVersion !== fromVersion);
+    }
+    if (capturing) {
+      currentEntry.push(line);
+    }
+  }
+  if (capturing && currentEntry.length > 0) {
+    entries.push(currentEntry.join("\n"));
+  }
+  return entries.length > 0 ? entries.reverse().join("\n\n").trim() : null;
+}
+
+/**
+ * Fetch the highest version from npm registry including pre-release versions.
+ * Returns the maximum version string or null on failure.
+ */
+export async function fetchLatestVersionIncludingPrerelease(): Promise<string | null> {
   try {
     const url = `${NPM_REGISTRY}/${encodeURIComponent(PACKAGE_NAME)}`;
     const response = await fetch(url, {
-      method: "GET",
       headers: { Accept: "application/json" },
     });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as {
-      versions?: Record<string, { description?: string }>;
-      "dist-tags"?: { latest: string };
-    };
-
-    const latest = data["dist-tags"]?.latest;
-    if (!latest || !data.versions) {
-      return null;
-    }
-
-    const versionData = data.versions[latest];
-    return versionData?.description ?? null;
+    if (!response.ok) return null;
+    const data = (await response.json()) as { versions?: Record<string, unknown> };
+    if (!data.versions) return null;
+    const allVersions = Object.keys(data.versions);
+    if (allVersions.length === 0) return null;
+    allVersions.sort((a, b) => compareVersions(a, b));
+    return allVersions[allVersions.length - 1] ?? null;
   } catch {
     return null;
   }
