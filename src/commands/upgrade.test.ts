@@ -2,7 +2,7 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-UPGRADE - global-only Bun upgrade and fresh subprocess sync.
-//   SCOPE: Already-latest handling, registry failures, Bun install execution, post-install sync behavior, and changelog output.
+//   SCOPE: Already-latest handling, registry failures, Bun install execution, post-install sync behavior, jsDelivr changelog output, multi-version changelog display, graceful degradation, and prerelease version resolution.
 //   DEPENDS: [src/commands/upgrade.ts]
 //   LINKS: [M-CLI-UPGRADE]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [v0.6.0 - Added tests for multi-version changelog, graceful degradation, and --allow-prerelease flag.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -183,6 +183,72 @@ test("runUpgradeFlow - warns when post-install sync fails but keeps upgrade succ
   expect(logger.warnLines.join("\n")).toContain("Run `vvoc sync` manually");
 });
 
+test("runUpgradeFlow - displays multi-version changelog between current and latest", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  const changelog = `## [0.15.0] - 2026-06-13
+
+### Features
+* feat(test): mock feature
+
+### Bug Fixes
+* fix(test): mock fix
+
+## [0.14.5] - 2026-06-12
+
+### Documentation
+* docs(test): mock docs
+`;
+  const result = await runUpgradeFlow({
+    fetchLatestVersion: async () => "0.15.0",
+    fetchChangelog: async () => changelog,
+    getCurrentVersion: async () => "0.14.4",
+    logger,
+    runSubprocess: async (command) => {
+      commands.push([...command]);
+      return { exitCode: 0, stderr: "", stdout: "ok" };
+    },
+  });
+  expect(result.status).toBe("upgraded");
+  expect(logger.logLines.some((line) => line.includes("0.14.5"))).toBe(true);
+  expect(logger.logLines.some((line) => line.includes("0.15.0"))).toBe(true);
+  expect(logger.logLines.join("\n")).toContain("mock feature");
+  expect(logger.logLines.join("\n")).toContain("mock docs");
+});
+
+test("runUpgradeFlow - proceeds without changelog when fetch returns null", async () => {
+  const logger = createLoggerCapture();
+  const result = await runUpgradeFlow({
+    fetchLatestVersion: async () => "0.36.0",
+    fetchChangelog: async () => null,
+    getCurrentVersion: async () => "0.35.10",
+    logger,
+    runSubprocess: async () => ({ exitCode: 0, stderr: "", stdout: "ok" }),
+  });
+  expect(result.exitCode).toBe(0);
+  expect(result.status).toBe("upgraded");
+  expect(logger.logLines.join("\n")).not.toContain("--- Changelog ---");
+});
+
+test("runUpgradeFlow - resolves prerelease version with allowPrerelease option", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  const result = await runUpgradeFlow(
+    {
+      getCurrentVersion: async () => "0.35.10",
+      fetchLatestVersion: async () => "0.36.0-beta.1",
+      fetchChangelog: async () => null,
+      logger,
+      runSubprocess: async (command) => {
+        commands.push([...command]);
+        return { exitCode: 0, stderr: "", stdout: "ok" };
+      },
+    },
+    { allowPrerelease: true },
+  );
+  expect(result.status).toBe("upgraded");
+  expect(commands[0]?.[3]).toContain("0.36.0-beta.1");
+});
 function createLoggerCapture(): {
   error: (message: string) => void;
   errorLines: string[];
