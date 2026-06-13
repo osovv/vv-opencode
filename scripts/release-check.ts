@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-check.ts
 // VERSION: 1.0.0
-// START_MODULE_CONTRACT
-//   PURPOSE: Verify release consistency: package name, version, schema $id, and schema config format const.
-//   SCOPE: Reads package.json and schemas/vvoc/v3.json, validates that schema $id matches expected CDN URL for the current package version, and that schema config format const is correct.
+//   PURPOSE: Verify release consistency: package name, version, schema $id, schema config format const, and CHANGELOG.md.
+//   SCOPE: Reads package.json, schemas/vvoc/v3.json, and CHANGELOG.md; validates that schema $id matches expected CDN URL, that schema config format const is correct, and that CHANGELOG.md exists with valid content.
 //   DEPENDS: [node:fs]
 //   LINKS: []
 //   ROLE: SCRIPT
@@ -12,7 +11,7 @@
 //
 // START_MODULE_MAP
 //   readJson - Reads and parses a JSON file with a path-aware failure.
-//   main - Validates package identity, package version, schema $id, and vvoc config format version.
+//   main - Validates package identity, package version, schema $id, vvoc config format version, and CHANGELOG.md.
 // END_MODULE_MAP
 
 import { readFileSync } from "node:fs";
@@ -20,10 +19,12 @@ import { fileURLToPath } from "node:url";
 
 const PKG_PATH = fileURLToPath(new URL("../package.json", import.meta.url));
 const SCHEMA_PATH = fileURLToPath(new URL("../schemas/vvoc/v3.json", import.meta.url));
+const CHANGELOG_PATH = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url));
 
 const EXPECTED_PACKAGE_NAME = "@osovv/vv-opencode";
 const EXPECTED_SCHEMA_CONST = 3;
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const CHANGELOG_VERSION_HEADER = /^##\s+\[/m;
 
 interface PackageJson {
   name?: string;
@@ -87,6 +88,19 @@ function main(): void {
     errors.push(
       `schemas/vvoc/v3.json properties.version.const is ${String(versionConst)}, expected ${EXPECTED_SCHEMA_CONST}`,
     );
+  }
+
+  // Validate CHANGELOG.md
+  let changelogText: string | null = null;
+  try {
+    changelogText = readFileSync(CHANGELOG_PATH, "utf8");
+  } catch {
+    // File doesn't exist — handled below.
+  }
+  if (!changelogText) {
+    errors.push("CHANGELOG.md is missing or empty");
+  } else if (!CHANGELOG_VERSION_HEADER.test(changelogText)) {
+    errors.push("CHANGELOG.md contains no version headers (expected ## [version] format)");
   }
 
   if (errors.length > 0) {
