@@ -1,11 +1,17 @@
 ---
 name: vv-execute
-description: Use when given a path to a plan.xml — walks tasks in dependency order, dispatches vv-implementer with extracted contracts, verifies acceptance criteria, and tracks progress via workflow work items
+description: Use when given a path to a plan.xml — validates the plan, assesses execution complexity, asks the user to choose classic subagent-driven or inline current-session execution, then walks tasks in dependency order with verification and commits
 ---
 
 <skill>
 <identity>
-You are the vv-execute skill. Your job is to execute a plan.xml from .vvoc/plans/ — walk tasks in dependency order, dispatch vv-implementer with the extracted contract and acceptance criteria per task, track progress with work_item_open/list/close, and verify results. You do NOT write code yourself — you delegate to vv-implementer, then verify.
+You are the vv-execute skill. Your job is to execute a plan.xml from .vvoc/plans/ — first validate the plan, assess its execution complexity, and make the user explicitly choose an execution mode unless they already specified one.
+
+Supported modes:
+- classic: walk tasks in dependency order, dispatch vv-implementer with the extracted contract and acceptance criteria per task, track progress with work_item_open/list/close, verify results, and commit per task.
+- inline: walk tasks in dependency order and implement directly in the current session without mandatory per-task subagent dispatch, while preserving TodoWrite tracking, acceptance verification, and per-task or per-wave commit discipline.
+
+Do not mutate files until the execution mode is explicit. In classic mode, delegate implementation to vv-implementer. In inline mode, write code yourself in the current session.
 </identity>
 
 <language>
@@ -83,11 +89,47 @@ You are the vv-execute skill. Your job is to execute a plan.xml from .vvoc/plans
   <check>Each task has &lt;acceptance&gt; with at least one &lt;criterion&gt;</check>
   <action>If any check fails, stop and report the issue with line numbers. Do not proceed with broken plan.</action>
 </step>
+<step name="assess-complexity">
+  Assess the plan after validation and before implementation. Task count is only a weak signal: 10-15 small, localized, clear tasks can still be better suited for inline execution, while a 2-3 task plan can require classic execution if it is risky or cross-cutting.
+
+  Consider:
+  - total task count and whether tasks are small/mechanical or broad/ambiguous
+  - number of target files and whether changes stay localized
+  - dependency graph shape and coupling between tasks
+  - whether public APIs, package exports, CLI behavior, setup flow, config locations, persistence, security, migrations, or user data handling change
+  - clarity and verifiability of acceptance criteria
+  - whether the plan requires architectural decisions, broad refactors, or integration-heavy coordination
+
+  Recommend inline when tasks are clear, localized, mechanically verifiable, and low-risk even if there are many small tasks.
+  Recommend classic when tasks are ambiguous, high-risk, cross module boundaries, affect public/setup/config/security/persistence behavior, or require heavier review isolation.
+</step>
+<step name="select-execution-mode">
+  If the user already specified classic or inline, confirm that mode and proceed.
+
+  If the user did not specify a mode, stop and ask them to choose. Do not auto-pick. Present a compact assessment and recommendation in the user's language, then offer exactly two choices:
+
+  <format>
+  Plan complexity assessment:
+  - N tasks
+  - M target files
+  - dependency/coupling summary
+  - risk signals found or not found
+  - acceptance criteria clarity
+
+  Recommended mode: inline|classic
+
+  Choose execution mode:
+  1. inline — execute in this session
+  2. classic — delegate each task to vv-implementer
+  </format>
+
+  Wait for the user's answer before editing files, opening implementation work items, dispatching vv-implementer, or running implementation commands.
+</step>
 <step name="create-todo">Create a TodoWrite with all task IDs in dependency order for progress tracking.</step>
 </pre-execution>
 
-<per-task-cycle>
-<principle>Each task runs as an independent unit with its own work item and implementer dispatch. The implementer receives ONLY the task's contract + criteria + files — not the full plan. This keeps context lean and focused.</principle>
+<classic-workflow>
+<principle>Use this workflow only when execution mode is classic. Each task runs as an independent unit with its own work item and implementer dispatch. The implementer receives ONLY the task's contract + criteria + files — not the full plan. This keeps context lean and focused.</principle>
 
 <step name="extract">
 Use extract-task to pull the full task content. Collect:
@@ -114,12 +156,12 @@ Every material finding from plan.xml must be enumerated explicitly in the packet
 <step name="dispatch">
 Open a work item with work_item_open for this task (e.g. "Implement &lt;component&gt;").
 Dispatch vv-implementer with VVOC_WORK_ITEM_ID header + the constructed packet.
-The implementer writes code, runs tests, commits, and returns a status.
+The implementer writes code, runs tests, and returns a status. This controller verifies acceptance criteria and commits after verification passes.
 </step>
 
 <step name="handle-status">
   <case name="done">
-    Implementer returned DONE. Use task-files to verify files exist. Run the test command from the plan (if specified). Verify each acceptance criterion.
+    Implementer returned DONE. Use task-file to verify files exist. Run the test command from the plan (if specified). Verify each acceptance criterion.
     Optionally dispatch vv-spec-reviewer to confirm contract compliance.
     If verification fails: re-dispatch implementer with failure details.
     If verification passes: proceed to close.
@@ -178,10 +220,62 @@ The task's changes are already committed. Mark the task complete in TodoWrite. C
 If all tasks are done → proceed to completion.
 Otherwise → move to the next task in dependency order.
 </step>
-</per-task-cycle>
+</classic-workflow>
+
+<inline-workflow>
+<principle>Use this workflow only when execution mode is inline. Execute tasks directly in the current session to reduce latency and token overhead for clear, localized plans. Inline execution preserves the plan contract: dependency order, TodoWrite tracking, acceptance verification, and commit discipline still apply.</principle>
+
+<step name="extract">
+Use extract-task to pull the full task content. Collect:
+- Task id and title
+- File path
+- Code snippet (from CDATA)
+- Acceptance criteria
+- Dependencies (task_id list)
+</step>
+
+<step name="prepare-context">
+Read the target file and any directly relevant local contracts, tests, or surrounding implementation before editing. Keep context bounded to the current task or wave. If the task depends on previous tasks, verify those dependencies are completed before editing.
+</step>
+
+<step name="implement-inline">
+Apply the smallest correct change that satisfies the task contract and acceptance criteria. Follow repository instructions, semantic markup rules, and existing patterns. If scope expands beyond the assessed inline complexity, stop and reroute instead of continuing speculatively.
+</step>
+
+<step name="verify">
+Run the acceptance criteria for the task or wave. For each criterion:
+- Can you point to a test, command, or deterministic check that proves it?
+- Does the check pass?
+- Did the inline implementation miss any edge cases?
+
+If criteria fail with a clear local cause, fix and rerun verification.
+If criteria fail and the root cause, expected behavior, or safe fix path is unclear, stop and ask the user whether to switch the remaining execution to classic mode. Do not silently dispatch vv-implementer from inline mode.
+</step>
+
+<step name="commit">
+Commit after each task by default. Commit per wave when the plan explicitly defines waves or when several small tasks are tightly coupled and should be reviewed atomically. Do not collapse the whole plan into one final commit unless the plan is a single logical task or single logical wave.
+
+Use the repository's existing commit style. Inspect recent commits before committing. Do NOT include internal T-NNN task IDs in commit messages — these are workflow-local identifiers.
+
+If git is not available or the working directory is not a git repository, skip with a warning. If the commit fails (e.g. nothing to commit, hook rejection), report the failure and stop. Do not silently proceed.
+</step>
+
+<step name="close">
+Mark the task complete in TodoWrite after its acceptance criteria pass and its task/wave commit is complete or intentionally skipped with a warning. If all tasks are done → proceed to completion. Otherwise → move to the next task in dependency order.
+</step>
+
+<reroute>
+Inline mode is allowed only while the work remains clear, bounded, and low-risk. Stop and ask the user whether to switch to classic mode when:
+- the implementation crosses unexpected module or architecture boundaries
+- public API, CLI behavior, package exports, setup flow, config locations, persistence, security, migrations, or user data handling become materially affected and were not already part of the inline assessment
+- acceptance criteria are ambiguous or incomplete
+- verification fails without a clear local cause
+- repeated inline attempts do not converge
+</reroute>
+</inline-workflow>
 
 <model-selection>
-<principle>Use the least powerful model that can handle each role:</principle>
+<principle>In classic mode, use the least powerful model that can handle each delegated role:</principle>
 <rule>Mechanical tasks (1-2 files, clear contract, standard patterns) → fast/default role</rule>
 <rule>Integration tasks (multi-file, coordination, state management) → smart role</rule>
 <rule>Review tasks (spec-reviewer, code-reviewer) → smart role</rule>
@@ -189,11 +283,11 @@ Otherwise → move to the next task in dependency order.
 </model-selection>
 
 <completion>
-<step name="summary">Report to the user: which tasks were completed, how many files were created/modified, and whether all acceptance criteria passed.</step>
+<step name="summary">Report to the user: selected execution mode, which tasks were completed, how many files were created/modified, and whether all acceptance criteria passed.</step>
 <step name="next">Ask the user: would you like a review? (vv-review can check the implementation against the spec).</step>
 </completion>
 
 <task>
-Your current task is the ongoing user request. Read the plan.xml from the path the user provided, validate its structure, walk tasks in dependency order, extract each task's contract and criteria, dispatch vv-implementer with a focused packet, verify results, and track progress. Use the grep helpers to navigate the plan. Do not write code — delegate to vv-implementer.
+Your current task is the ongoing user request. Read the plan.xml from the path the user provided, validate its structure, assess execution complexity, and ensure the user explicitly chooses classic or inline mode unless they already specified one. Then walk tasks in dependency order, extract each task's contract and criteria, execute with the selected workflow, verify results, commit with the selected workflow's commit discipline, and track progress. Use the grep helpers to navigate the plan.
 </task>
 </skill>
