@@ -192,6 +192,12 @@ describe("buildReleaseSummaryPrompt", () => {
     expect(prompt).toContain("</summary>");
   });
 
+  test("instructs model to avoid AI wording in changelog summary", () => {
+    const prompt = buildReleaseSummaryPrompt(samplePromptInput());
+    expect(prompt).toContain("Do NOT mention AI");
+    expect(prompt).toContain("without the AI label");
+  });
+
   test("requires English summary", () => {
     const prompt = buildReleaseSummaryPrompt(samplePromptInput());
     expect(prompt).toMatch(/English/);
@@ -313,6 +319,12 @@ describe("extractSummaryEnvelope", () => {
     const result = extractSummaryEnvelope(validSummaryXml("A new release with important fixes."));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.summary).toBe("A new release with important fixes.");
+  });
+
+  test("extracts single-line summary envelope", () => {
+    const result = extractSummaryEnvelope("<summary>A concise release summary.</summary>");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.summary).toBe("A concise release summary.");
   });
 
   test("rejects text before envelope", () => {

@@ -225,7 +225,8 @@ export function buildReleaseSummaryPrompt(input: ReleaseSummaryPromptInput): str
     "- Write ONLY the <summary> envelope. No other text before or after.",
     "- The summary must be one concise paragraph in English.",
     "- Do NOT include markdown headings, code fences, or bullet points.",
-    "- Do NOT mention that an AI generated this summary.",
+    "- Do NOT mention AI, LLMs, language models, or generated-by-AI phrasing in the summary text.",
+    "- If commit text mentions AI-generated summaries, describe the user value as release summaries or changelog summaries without the AI label.",
     "- Focus on user-facing impact: what changed, why it matters.",
     "",
     "Changelog entry for this release:",
@@ -326,7 +327,7 @@ export function parseOpencodeRunJsonOutput(stdout: string): ReleaseSummaryAttemp
 // extractSummaryEnvelope
 // ---------------------------------------------------------------------------
 
-const SUMMARY_ENVELOPE_RE = /^<summary>\s*\n([\s\S]*?)\n\s*<\/summary>$/;
+const SUMMARY_ENVELOPE_RE = /^<summary>\s*([\s\S]*?)\s*<\/summary>$/;
 
 /**
  * Extracts and validates the single XML-like <summary>...</summary> envelope.
