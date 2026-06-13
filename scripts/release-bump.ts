@@ -1,21 +1,20 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
 // VERSION: 1.1.0
-// START_MODULE_CONTRACT
-//   PURPOSE: Wrapper around npm version --no-git-tag-version that patches schema $id, runs release checks, then commits, tags, and pushes the release.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
-//   DEPENDS: [node:fs, node:child_process]
-//   LINKS: [scripts/release-check.ts]
+//   PURPOSE: Wrapper around npm version --no-git-tag-version that generates changelog, patches schema $id, runs release checks, then commits, tags, and pushes the release.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
+//   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
+//   prependToChangelog - Prepends a changelog entry to CHANGELOG.md, creating the file if missing.
 //   updateSchemaId - Patches only the hosted schema $id text for the new package version.
-//   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json and schema changes before commit.
+//   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, and CHANGELOG changes before commit.
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
-//   main - Runs the guarded release bump, consistency check, commit, tag, and push flow.
+//   main - Runs the guarded release bump, changelog generation, consistency check, commit, tag, and push flow.
 // END_MODULE_MAP
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -24,9 +23,10 @@ import { fileURLToPath } from "node:url";
 
 const PKG_PATH = fileURLToPath(new URL("../package.json", import.meta.url));
 const SCHEMA_PATH = fileURLToPath(new URL("../schemas/vvoc/v3.json", import.meta.url));
+const CHANGELOG_PATH = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url));
 
 const PACKAGE_NAME = "@osovv/vv-opencode";
-const ALLOWED_RELEASE_FILES = new Set(["package.json", "schemas/vvoc/v3.json"]);
+const ALLOWED_RELEASE_FILES = new Set(["package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"]);
 const RELEASE_TYPES = new Set([
   "major",
   "minor",
@@ -119,6 +119,36 @@ function runCapture(command: string, args: string[], failureMessage: string): st
   }
 }
 
+
+/**
+ * Runs conventional-changelog as a subprocess to generate a changelog entry
+ * from git history. Uses the conventionalcommits preset and generates for the
+ * latest release (commits since last tag).
+ * Returns the stdout output. Throws on subprocess failure.
+ */
+function generateChangelog(): string {
+  return runCapture(
+    "bun",
+    ["x", "conventional-changelog", "-p", "conventionalcommits", "-r", "1"],
+    "conventional-changelog failed. Release aborted."
+  ).trim();
+}
+
+/**
+ * Prepends the given changelog entry to CHANGELOG.md.
+ * If the file does not exist, creates it with the entry as its full content.
+ * Preserves existing content below the newly prepended entry.
+ */
+function prependToChangelog(entry: string): void {
+  let existing = "";
+  try {
+    existing = readFileSync(CHANGELOG_PATH, "utf8").trim();
+  } catch {
+    // File does not exist yet — create from scratch.
+  }
+  const content = existing ? `${entry}\n\n${existing}` : `${entry}\n`;
+  writeFileSync(CHANGELOG_PATH, content, "utf8");
+}
 function updateSchemaId(newVersion: string): void {
   const expectedSchemaId = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${newVersion}/schemas/vvoc/v3.json`;
   const schemaText = readFileSync(SCHEMA_PATH, "utf8");
@@ -223,6 +253,17 @@ function main(): void {
   }
   console.log(`New version: ${newVersion}`);
 
+
+  // START_BLOCK_GENERATE_CHANGELOG
+  console.log("\nGenerating changelog entry...\n");
+  let changelogEntry = generateChangelog();
+  if (!changelogEntry) {
+    const today = new Date().toISOString().slice(0, 10);
+    changelogEntry = `## [${newVersion}] - ${today}\n\n_No user-facing changes._`;
+  }
+  prependToChangelog(changelogEntry);
+  console.log("Changelog entry prepended to CHANGELOG.md");
+  // END_BLOCK_GENERATE_CHANGELOG
   // START_BLOCK_UPDATE_SCHEMA_ID
   updateSchemaId(newVersion);
   // END_BLOCK_UPDATE_SCHEMA_ID
@@ -240,10 +281,10 @@ function main(): void {
   assertTagDoesNotExist(tagName);
 
   console.log("\nCreating release commit and tag...\n");
-  run("git", ["add", "package.json", "schemas/vvoc/v3.json"], "git add failed.");
+  run("git", ["add", "package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"], "git add failed.");
   run(
     "git",
-    ["commit", "-m", `chore: bump version from ${currentVersion} to ${newVersion}`],
+    ["commit", "-m", `chore: bump version from ${currentVersion} to ${newVersion} with changelog`],
     "git commit failed. package.json and schema have been updated but may not be committed.",
   );
   run("git", ["tag", "-a", tagName, "-m", tagName], "git tag failed. Release commit was created without a tag.");
