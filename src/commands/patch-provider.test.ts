@@ -135,6 +135,7 @@ describe("applyPatchProviderPreset", () => {
             models?: Record<
               string,
               {
+                id?: string;
                 name?: string;
                 reasoning?: boolean;
                 variants?: Record<string, unknown>;
