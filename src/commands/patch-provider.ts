@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.2 - Added vv-gpt-5dot5-xhigh model and updated openai patch preset summary.]
+//   LAST_CHANGE: [v0.4.3 - Added reasoning:true to vv-gpt-5.4-xhigh and vv-gpt-5.5-xhigh in openai patch preset.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -83,6 +83,7 @@ const OPENAI_PATCH = {
       name: "VV GPT-5.4-XHigh",
       id: "gpt-5.4",
       variants: {},
+      reasoning: true,
       options: {
         reasoningEffort: "xhigh",
         reasoningSummary: "auto",
@@ -93,6 +94,7 @@ const OPENAI_PATCH = {
       name: "VV GPT-5.5-XHigh",
       id: "gpt-5.5",
       variants: {},
+      reasoning: true,
       options: {
         reasoningEffort: "xhigh",
         reasoningSummary: "auto",

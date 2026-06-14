@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Updated openai coverage to enforce provider-only alias patching while preserving root model role references.]
+//   LAST_CHANGE: [v0.4.3 - Added reasoning:true expectation in openai patch test.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -136,7 +136,7 @@ describe("applyPatchProviderPreset", () => {
               string,
               {
                 name?: string;
-                id?: string;
+                reasoning?: boolean;
                 variants?: Record<string, unknown>;
                 options?: {
                   reasoningEffort?: string;
@@ -155,6 +155,7 @@ describe("applyPatchProviderPreset", () => {
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]).toEqual({
         name: "VV GPT-5.4-XHigh",
         id: "gpt-5.4",
+        reasoning: true,
         variants: {},
         options: {
           reasoningEffort: "xhigh",
