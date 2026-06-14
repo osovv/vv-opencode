@@ -68,6 +68,8 @@ vv-implementer → vv-spec-reviewer → vv-code-reviewer
 Done
 ```
 
+Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifacts by moving specs to `.vvoc/specs/archive/` and plans to `.vvoc/plans/archive/`.
+
 ### XML grep
 
 Plans and specs are XML documents, making every element grep-able:
@@ -89,7 +91,7 @@ grep '/\*\*' .vvoc/plans/*.xml
 grep '<component>' .vvoc/plans/*.xml
 ```
 
-All four skills are auto-triggered by `vv-controller` via its built-in `<skill_trigger_rule>` — no slash commands needed. The controller checks whether `vv-spec`, `vv-plan`, `vv-review`, or `vv-reflect` applies before routing any request.
+Managed skills are installed by `vvoc`. `vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute` and `vv-reflect` are available as managed skills for plan execution and durable session memory.
 
 ---
 
@@ -100,7 +102,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 **vv-opencode collapses that into a single `vvoc install`.** It owns the wiring so you don't have to:
 
 - **Six plugins, one entry** — all plugins are exported from a single pinned package entry
-- **Managed agent & skill system** — `vv-controller` auto-triggers `vv-spec`, `vv-plan`, `vv-review`, and `vv-reflect` skills before routing to domain-specialized subagents
+- **Managed agent & skill system** — `vv-controller` routes `vv-spec`, `vv-plan`, and `vv-review`; bundled managed skills also include `vv-execute` and `vv-reflect`
 - **Model roles & presets** — assign models to roles (`smart`, `fast`, `vision`, …) and switch provider presets with one command
 - **Security-first** — a `guardian` agent reviews permission requests, secrets are redacted from LLM-bound chat
 - **Stale-line-number defense** — hashline-backed `edit` prevents write-against-wrong-snapshot bugs
@@ -113,7 +115,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 |---|---|
 | **Plugins** | 6 plugins in one pinned package entry — workflow orchestration, model roles, guardian, hashline edit, system context injection, secrets redaction |
 | **Agent System** | `vv-controller` routes work: direct for small changes, `investigator` for bugs, implementer+reviewer loop for risky work, analyst+architect for large features |
-| **Skills** | `vv-spec` interviews you and writes an XML spec; `vv-plan` maps the spec to interface contracts and acceptance criteria; `vv-review` runs a review-only workflow; `vv-reflect` preserves reusable session findings as repository memory — all auto-triggered |
+| **Skills** | `vv-spec` interviews you and writes an XML spec; `vv-plan` maps the spec to interface contracts and acceptance criteria; `vv-execute` runs approved plans; `vv-review` runs a review-only workflow; `vv-reflect` preserves reusable session findings as repository memory |
 | **Spec-to-Code Pipeline** | `vv-spec` → spec review → `vv-plan` → plan review → `vv-implementer` → code review. Three independent review gates cover requirements, contracts, and implementation |
 | **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, skills, prompts, presets |
 | **CLI Tooling** | 15+ commands: install, sync, status, doctor, role management, presets, guardian config, shell completion, upgrade |

@@ -24,6 +24,18 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
   <command>sed -n '/&lt;meta&gt;/,/&lt;\/meta&gt;/p' PLAN_PATH</command>
   <purpose>Extract plan metadata: summary, waves, complexity</purpose>
 </helper>
+<helper name="plan-document-status">
+  <command>sed -n '1,20p' PLAN_PATH | grep '&lt;status&gt;'</command>
+  <purpose>Extract the top-level plan lifecycle status. Valid document statuses are draft, approved, applied.</purpose>
+</helper>
+<helper name="linked-spec">
+  <command>sed -n '1,20p' PLAN_PATH | grep '&lt;spec&gt;'</command>
+  <purpose>Extract the spec path linked from the plan.</purpose>
+</helper>
+<helper name="spec-document-status">
+  <command>sed -n '1,20p' SPEC_PATH | grep '&lt;status&gt;'</command>
+  <purpose>Extract the top-level linked spec lifecycle status. Valid document statuses are draft, approved, applied.</purpose>
+</helper>
 <helper name="architecture">
   <command>sed -n '/&lt;architecture&gt;/,/&lt;\/architecture&gt;/p' PLAN_PATH</command>
   <purpose>Extract full architecture section with modules, files, contracts</purpose>
@@ -82,7 +94,15 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
 <step name="load-plan">Read plan.xml from .vvoc/plans/. Use list-tasks and count-tasks to understand scope. Use dependency-graph to determine execution order.</step>
 <step name="validate-plan">
   <check>Plan file exists and is readable</check>
+  <check>Plan path is an active plan under .vvoc/plans/ and not already under .vvoc/plans/archive/</check>
   <check>Plan contains &lt;plan&gt; root tag</check>
+  <check>Plan contains a non-empty top-level &lt;status&gt; whose value is approved</check>
+  <check>If the top-level plan status is draft, stop and ask the user to approve the plan first. Do not execute draft plans.</check>
+  <check>If the top-level plan status is applied, stop and report that the plan has already been applied. Do not re-execute applied plans.</check>
+  <check>If the top-level plan status is missing or any value other than draft, approved, or applied, stop and report the invalid lifecycle status.</check>
+  <check>Plan contains a non-empty &lt;spec&gt; path pointing to a readable active spec under .vvoc/specs/ and not under .vvoc/specs/archive/</check>
+  <check>The linked spec's top-level &lt;status&gt; is approved</check>
+  <check>If the linked spec status is draft, applied, missing, or invalid, stop and report that vv-execute requires an approved active spec.</check>
   <check>Plan contains &lt;tasks&gt; section with at least one &lt;task&gt;</check>
   <check>Each task has non-empty &lt;id&gt;, &lt;title&gt;, and &lt;file&gt;</check>
   <check>Each task has &lt;snippet&gt; (may be empty but must exist)</check>
@@ -283,11 +303,16 @@ Inline mode is allowed only while the work remains clear, bounded, and low-risk.
 </model-selection>
 
 <completion>
+<step name="prepare-archive">After all tasks are complete, all required verification has passed, and all required task/wave commits are complete, prepare archival before reporting completion. Create .vvoc/specs/archive/ and .vvoc/plans/archive/ if needed. Resolve destination paths from the basenames of the active spec and plan. Never clobber existing archive files; if a destination already exists, append a timestamp suffix before the .xml extension.</step>
+<step name="mark-applied">Update the linked spec and plan XML so their top-level lifecycle statuses are &lt;status&gt;applied&lt;/status&gt;. Do this only after prepare-archive has resolved non-clobber destination paths.</step>
+<step name="archive-artifacts">Move the applied spec from .vvoc/specs/ to .vvoc/specs/archive/ and the applied plan from .vvoc/plans/ to .vvoc/plans/archive/. If either move fails, stop and report the exact source and destination paths; do not claim execution is complete.</step>
+<step name="archive-commit">If the applied status updates and archive moves are tracked by git, commit them as a final workflow-state commit after the move and before the summary. Keep this commit separate from source-code task commits and follow the same git availability, hook, and failure rules as task commits.</step>
 <step name="summary">Report to the user: selected execution mode, which tasks were completed, how many files were created/modified, and whether all acceptance criteria passed.</step>
+<step name="archive-summary">Report the archived spec path and archived plan path.</step>
 <step name="next">Ask the user: would you like a review? (vv-review can check the implementation against the spec).</step>
 </completion>
 
 <task>
-Your current task is the ongoing user request. Read the plan.xml from the path the user provided, validate its structure, assess execution complexity, and ensure the user explicitly chooses classic or inline mode unless they already specified one. Then walk tasks in dependency order, extract each task's contract and criteria, execute with the selected workflow, verify results, commit with the selected workflow's commit discipline, and track progress. Use the grep helpers to navigate the plan.
+Your current task is the ongoing user request. Read the plan.xml from the path the user provided, validate its structure and lifecycle status, verify the plan is approved, verify the linked active spec exists and is approved, assess execution complexity, and ensure the user explicitly chooses classic or inline mode unless they already specified one. Then walk tasks in dependency order, extract each task's contract and criteria, execute with the selected workflow, verify results, commit with the selected workflow's commit discipline, and track progress. After all tasks and required commits are complete, mark the linked spec and plan as applied, move them to .vvoc/specs/archive/ and .vvoc/plans/archive/ without clobbering existing files, and report the archive paths. Use the grep helpers to navigate the plan.
 </task>
 </skill>

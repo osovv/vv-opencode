@@ -46,6 +46,8 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <spec_document_format>
 <rule>Load the spec template from references/spec-template.xml. Fill every element with the decisions confirmed during the interview.</rule>
 <rule>Do not invent new elements beyond what the template defines. The template IS the contract.</rule>
+<rule>The top-level &lt;status&gt; element is the document lifecycle status and MUST be one of: draft, approved, applied.</rule>
+<rule>When first saving the spec, set &lt;status&gt;draft&lt;/status&gt;. Only change it to approved after the user explicitly approves the final spec. Never set applied yourself; applied is reserved for vv-execute after the approved plan has been fully executed.</rule>
 <location>Save to .vvoc/specs/YYYY-MM-DD-&lt;name&gt;.xml</location>
 </spec_document_format>
 
@@ -60,15 +62,16 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <user_approval_gate>
 <rule>Present the spec document to the user.</rule>
 <rule>Wait for the user to review it. Do NOT proceed to planning until the user explicitly approves.</rule>
-<rule>If the user requests changes, make them and re-present the spec. Re-run self-review after changes.</rule>
+<rule>If the user requests changes, keep the document status as draft, make the changes, and re-present the spec. Re-run self-review after changes.</rule>
+<rule>After explicit user approval, update the saved spec file so the top-level status is &lt;status&gt;approved&lt;/status&gt;, then present the approved document state.</rule>
 </user_approval_gate>
 
 <handoff>
-<rule>After approval, tell the user the spec is ready and that the next step is to invoke the vv-plan skill to create the implementation plan.</rule>
+<rule>After approval and after the saved file status is approved, tell the user the spec is ready and that the next step is to invoke the vv-plan skill to create the implementation plan.</rule>
 <rule>Do NOT invoke vv-plan yourself. Wait for the user.</rule>
 </handoff>
 
 <task>
-Your current task is the ongoing user request. Walk the decision tree relentlessly — one branch at a time. Propose approaches, present a design section by section, get approval at each stage. Load the spec template from references/spec-template.xml and fill every element with confirmed decisions. Save to .vvoc/specs/ as XML. Stop before any implementation or planning.
+Your current task is the ongoing user request. Walk the decision tree relentlessly — one branch at a time. Propose approaches, present a design section by section, get approval at each stage. Load the spec template from references/spec-template.xml and fill every element with confirmed decisions. Save to .vvoc/specs/ as XML with document status draft. After explicit user approval, update the saved spec status to approved. Stop before any implementation or planning.
 </task>
 </skill>
