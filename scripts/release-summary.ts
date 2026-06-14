@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide deterministic helpers for mandatory release changelog summary generation and validation.
-//   SCOPE: Environment option parsing, commit metadata formatting, restricted OpenCode config construction, JSONL event parsing, XML-like summary extraction, summary validation, retry orchestration, changelog injection, and latest changelog summary validation.
+//   SCOPE: Environment option parsing, commit metadata and full per-commit diff formatting, restricted OpenCode config construction, JSONL event parsing, XML-like summary extraction, summary validation, retry orchestration, changelog injection, and latest changelog summary validation.
 //   DEPENDS: [node:child_process]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
@@ -14,7 +14,7 @@
 //   DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS - Default per-attempt OpenCode timeout.
 //   RELEASE_SUMMARY_MAX_ATTEMPTS - Total attempts before release:bump aborts.
 //   resolveReleaseSummaryOptions - Parses env overrides and returns validated model/timeout settings.
-//   collectReleaseCommitMetadata - Reads git metadata from latest reachable tag to HEAD through an injected runner.
+//   collectReleaseCommitMetadata - Reads git metadata and full per-commit diffs from latest reachable tag to HEAD through an injected runner.
 //   buildReleaseSummaryPrompt - Builds the stdin prompt payload for the restricted release-summary agent.
 //   buildReleaseSummaryAgentConfig - Builds OPENCODE_CONFIG_CONTENT for the restricted primary release-summary agent.
 //   parseOpencodeRunJsonOutput - Parses OpenCode JSONL stdout into accumulated model text or a failure.
@@ -42,6 +42,8 @@ export interface ReleaseCommitMetadata {
   subject: string;
   /** Trimmed commit body, or an empty string when the commit has no body. */
   body: string;
+  /** Full textual patch for this commit, or an empty string when no textual diff is available. */
+  diff: string;
 }
 
 /** Validated runtime options for summary generation. */
@@ -137,7 +139,7 @@ export function resolveReleaseSummaryOptions(env: NodeJS.ProcessEnv): ReleaseSum
 
 /**
  * Finds commits since the latest reachable tag using injected git command output.
- * Uses all reachable history when no tag is available.
+ * Uses all reachable history when no tag is available and attaches each commit's full textual patch.
  */
 export function collectReleaseCommitMetadata(runCapture: CaptureCommand): ReleaseCommitMetadata[] {
   let range: string;
@@ -161,10 +163,18 @@ export function collectReleaseCommitMetadata(runCapture: CaptureCommand): Releas
   for (const entry of entries) {
     const lines = entry.split("\n").filter(Boolean);
     const hashLine = lines[0] ?? "";
+    const fullHash = hashLine.slice(0, 40);
     const hash = hashLine.slice(0, 7);
     const subject = hashLine.slice(40).trim();
     const body = lines.slice(1).join("\n").trim();
-    commits.push({ hash, subject, body });
+    const diff = fullHash
+      ? runCapture(
+        "git",
+        ["show", "--format=", "--patch", "--find-renames", fullHash],
+        `git show failed while collecting full diff for commit ${hash}.`,
+      ).trim()
+      : "";
+    commits.push({ hash, subject, body, diff });
   }
 
   return commits;
@@ -204,12 +214,16 @@ export function buildReleaseSummaryAgentConfig(model: string): string {
 
 /**
  * Builds a deterministic prompt payload for stdin.
- * The prompt instructs the model to return only a single <summary> envelope in English.
+ * The prompt includes full commit diff context and instructs the model to return only a single <summary> envelope in English.
  */
 export function buildReleaseSummaryPrompt(input: ReleaseSummaryPromptInput): string {
   const commitList = input.commits.map((c) => {
     let line = `  ${c.hash}: ${c.subject}`;
     if (c.body) line += `\n    ${c.body.split("\n").join("\n    ")}`;
+    line += `\n    Full diff:`;
+    line += c.diff
+      ? `\n${c.diff.split("\n").map((diffLine) => `      ${diffLine}`).join("\n")}`
+      : "\n      (no textual diff captured)";
     return line;
   }).join("\n\n");
 
@@ -227,12 +241,14 @@ export function buildReleaseSummaryPrompt(input: ReleaseSummaryPromptInput): str
     "- Do NOT include markdown headings, code fences, or bullet points.",
     "- Do NOT mention AI, LLMs, language models, or generated-by-AI phrasing in the summary text.",
     "- If commit text mentions AI-generated summaries, describe the user value as release summaries or changelog summaries without the AI label.",
+    "- Use only the changelog entry, commit metadata, and full commit diffs below as factual source material.",
+    "- Do NOT invent status names, workflow states, commands, files, config keys, or user-facing behavior that are not present in the provided changelog, commit metadata, or diffs.",
     "- Focus on user-facing impact: what changed, why it matters.",
     "",
     "Changelog entry for this release:",
     input.changelogEntry,
     "",
-    "Commits in this release:",
+    "Commits and full diffs in this release:",
     commitList,
   ].join("\n");
 }

@@ -2,7 +2,7 @@
 // FILE: scripts/release-bump.ts
 // VERSION: 1.1.0
 //   PURPOSE: Wrapper around npm version --no-git-tag-version that generates changelog, generates a required AI summary, patches schema $id, runs release checks, then commits, tags, and pushes the release.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -10,7 +10,7 @@
 // START_MODULE_MAP
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
 //   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
-//   collectReleaseCommitMetadata - Collects commit metadata from latest reachable tag to HEAD for summary input.
+//   collectReleaseCommitMetadata - Collects commit metadata and full per-commit diffs from latest reachable tag to HEAD for summary input.
 //   generateReleaseSummaryForRelease - Runs restricted opencode summary generation with retry and validation.
 //   injectSummaryIntoChangelogEntry - Inserts required ### Summary into the generated changelog entry.
 //   runOpencodeSummary - Invokes opencode --pure run with stdin prompt and returns exit/signal/stdout/stderr.
@@ -42,6 +42,7 @@ const CHANGELOG_PATH = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url)
 
 const PACKAGE_NAME = "@osovv/vv-opencode";
 const ALLOWED_RELEASE_FILES = new Set(["package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"]);
+const CAPTURE_MAX_BUFFER = 128 * 1024 * 1024;
 const RELEASE_TYPES = new Set([
   "major",
   "minor",
@@ -126,7 +127,7 @@ function run(command: string, args: string[], failureMessage: string): string {
 
 function runCapture(command: string, args: string[], failureMessage: string): string {
   try {
-    return execFileSync(command, args, { encoding: "utf8" });
+    return execFileSync(command, args, { encoding: "utf8", maxBuffer: CAPTURE_MAX_BUFFER });
   } catch (err) {
     console.error(`\n✗ ${failureMessage}`);
     console.error(`  ${String(err)}`);

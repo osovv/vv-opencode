@@ -80,8 +80,18 @@ function samplePromptInput(overrides?: Partial<ReleaseSummaryPromptInput>): Rele
     version: "1.2.3",
     changelogEntry: `## <small>1.2.3 (2026-06-13)</small>\n\n* feat: add new feature\n* fix: resolve a bug`,
     commits: [
-      { hash: "abc1234", subject: "feat: add new feature", body: "This adds a long-awaited feature for users." },
-      { hash: "def5678", subject: "fix: resolve a bug", body: "" },
+      {
+        hash: "abc1234",
+        subject: "feat: add new feature",
+        body: "This adds a long-awaited feature for users.",
+        diff: "diff --git a/src/feature.ts b/src/feature.ts\n+export const enabled = true;",
+      },
+      {
+        hash: "def5678",
+        subject: "fix: resolve a bug",
+        body: "",
+        diff: "diff --git a/src/bug.ts b/src/bug.ts\n-return false;\n+return true;",
+      },
     ],
     ...overrides,
   };
@@ -186,6 +196,20 @@ describe("buildReleaseSummaryPrompt", () => {
     expect(prompt).toContain("long-awaited feature");
   });
 
+  test("includes full commit diffs", () => {
+    const prompt = buildReleaseSummaryPrompt(samplePromptInput());
+    expect(prompt).toContain("Commits and full diffs in this release");
+    expect(prompt).toContain("diff --git a/src/feature.ts b/src/feature.ts");
+    expect(prompt).toContain("+export const enabled = true;");
+    expect(prompt).toContain("diff --git a/src/bug.ts b/src/bug.ts");
+  });
+
+  test("instructs model not to invent facts outside provided diffs", () => {
+    const prompt = buildReleaseSummaryPrompt(samplePromptInput());
+    expect(prompt).toContain("Use only the changelog entry, commit metadata, and full commit diffs");
+    expect(prompt).toContain("Do NOT invent status names");
+  });
+
   test("instructs XML-like envelope format", () => {
     const prompt = buildReleaseSummaryPrompt(samplePromptInput());
     expect(prompt).toContain("<summary>");
@@ -249,6 +273,26 @@ describe("collectReleaseCommitMetadata", () => {
     };
     const commits = collectReleaseCommitMetadata(capture);
     expect(commits.length).toBe(0);
+  });
+
+  test("attaches full patch diff for each commit", () => {
+    const fullHash = "c".repeat(40);
+    const calls: string[] = [];
+    const capture = (cmd: string, args: string[], _msg: string): string => {
+      calls.push(`${cmd} ${args.join(" ")}`);
+      if (cmd === "git" && args[0] === "describe") return "v1.2.2\n";
+      if (cmd === "git" && args[0] === "log") {
+        return `${fullHash}feat: add grounded summary context\n\n---GITLOG---\n`;
+      }
+      if (cmd === "git" && args[0] === "show") {
+        return "diff --git a/scripts/release-summary.ts b/scripts/release-summary.ts\n+full diff context\n";
+      }
+      return "";
+    };
+    const commits = collectReleaseCommitMetadata(capture);
+    expect(calls).toContain(`git show --format= --patch --find-renames ${fullHash}`);
+    expect(commits[0]!.diff).toContain("diff --git a/scripts/release-summary.ts");
+    expect(commits[0]!.diff).toContain("+full diff context");
   });
 });
 
