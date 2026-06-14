@@ -1,3 +1,11 @@
+## <small>0.35.17 (2026-06-14)</small>
+
+### Summary
+
+This release improves the accuracy of automatically generated changelog summaries by feeding the full textual diff of each commit into the summary generation prompt, so the model can ground its output in the actual file changes rather than relying solely on commit titles and metadata. This means release notes are now more faithful to what was really modified, reducing the risk of invented or misleading descriptions in the changelog.
+
+* fix(release): include commit diffs in summaries ([f1c930c](https://github.com/osovv/vv-opencode/commit/f1c930c))
+
 ## <small>0.35.16 (2026-06-14)</small>
 
 ### Summary
