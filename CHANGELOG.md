@@ -1,3 +1,12 @@
+## <small>0.35.16 (2026-06-14)</small>
+
+### Summary
+
+This release introduces lifecycle statuses for skills specs and plans, giving users clearer visibility into the state of their skill workflows—whether a spec is being drafted, reviewed, or finalized, and whether a plan is in progress, completed, or blocked—making it easier to track progress and identify next steps in skills-based automation.
+
+* feat(skills): add spec and plan lifecycle statuses ([5c7c095](https://github.com/osovv/vv-opencode/commit/5c7c095))
+* chore: add typecheck to lefthook pre-commit ([cca0f03](https://github.com/osovv/vv-opencode/commit/cca0f03))
+
 ## <small>0.35.15 (2026-06-14)</small>
 
 ### Summary
