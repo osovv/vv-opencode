@@ -1,3 +1,11 @@
+## <small>0.35.14 (2026-06-14)</small>
+
+### Summary
+
+This release adds the `reasoning: true` flag to the `vv-gpt-5.4-xhigh` and `vv-gpt-5.5-xhigh` OpenAI model configurations in the provider patch, enabling reasoning capabilities for these high-capacity models and ensuring consistent behavior with other models in the lineup.
+
+* fix(patch-provider): add reasoning:true to vv-gpt-5.4-xhigh and vv-gpt-5.5-xhigh openai models ([88975ec](https://github.com/osovv/vv-opencode/commit/88975ec))
+
 ## <small>0.35.13 (2026-06-14)</small>
 
 ### Summary
