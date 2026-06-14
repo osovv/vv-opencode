@@ -3,6 +3,8 @@ pre-commit:
   commands:
     lint:
       run: bun run lint
+    typecheck:
+      run: bun run typecheck
     format:
       run: bun run fmt:check
     check-exports:
