@@ -1,3 +1,11 @@
+## <small>0.35.15 (2026-06-14)</small>
+
+### Summary
+
+This release fixes a test issue by adding a missing `id` field to an inline type in the patch-provider test, ensuring test accuracy and preventing potential false failures during validation.
+
+* fix: add missing id field to inline type in patch-provider test ([6f6e33c](https://github.com/osovv/vv-opencode/commit/6f6e33c))
+
 ## <small>0.35.14 (2026-06-14)</small>
 
 ### Summary
