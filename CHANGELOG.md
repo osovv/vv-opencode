@@ -1,3 +1,11 @@
+## <small>0.35.19 (2026-06-15)</small>
+
+### Summary
+
+The vv-reflect skill now synthesizes generalized lessons and reusable procedures instead of session recaps, capturing durable domain knowledge, business context, and product intent so that future agents can apply insights to similar-but-not-identical tasks rather than replaying what happened in a single session.
+
+* feat(skills): improve vv-reflect lesson synthesis ([d458c15](https://github.com/osovv/vv-opencode/commit/d458c15))
+
 ## <small>0.35.18 (2026-06-15)</small>
 
 ### Summary
