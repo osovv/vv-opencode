@@ -1,3 +1,11 @@
+## <small>0.35.18 (2026-06-15)</small>
+
+### Summary
+
+Updated the vv-osovv preset's smart agent to use `openai/vv-gpt-5.5-xhigh`, replacing the previous DeepSeek-based model, to deliver higher-quality responses for complex reasoning tasks while continuing to use existing fast, vision, and default agents for other workloads.
+
+* feat(preset): update vv-osovv smart model to openai/vv-gpt-5.5-xhigh ([89752e2](https://github.com/osovv/vv-opencode/commit/89752e2))
+
 ## <small>0.35.17 (2026-06-14)</small>
 
 ### Summary
