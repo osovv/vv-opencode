@@ -63,11 +63,11 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     },
   },
   "vv-osovv": {
-    description: "Personal osovv role assignments (deepseek + stepfun + minimax).",
+    description: "Personal osovv role assignments (deepseek + stepfun + minimax + gpt).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "stepfun/step-3.7-flash",
-      smart: "deepseek/deepseek-v4-pro",
+      smart: "openai/vv-gpt-5.5-xhigh",
       vision: "minimax-coding-plan/MiniMax-M2.7",
     },
   },
