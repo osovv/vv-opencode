@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.2.5
+// VERSION: 1.2.7
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -18,6 +18,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.7 - Added vv-reflect template coverage for user-provided domain and product insight capture.]
+//   LAST_CHANGE: [v1.2.6 - Added vv-reflect template coverage for generalized lesson synthesis instead of current-session recaps.]
 //   LAST_CHANGE: [v1.2.5 - Updated managed vv-controller registration expectations to seed and sync `model = vv-role:smart` while preserving root defaults.]
 //   LAST_CHANGE: [v1.2.4 - Added static schema regression coverage for the package-versioned URL and plugins property placement.]
 //   LAST_CHANGE: [v1.2.3 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
@@ -819,6 +821,15 @@ describe("managed skill files", () => {
     expect(skillText).toContain("name: vv-reflect");
     expect(skillText).toContain("Do not use or create .vvoc/reflect.jsonc");
     expect(skillText).toContain("Use only the current visible chat context");
+    expect(skillText).toContain("generalized knowledge");
+    expect(skillText).toContain(
+      "A lesson is not a transcript, changelog item, bug report, or solved-task summary",
+    );
+    expect(skillText).toContain("similar-but-not-identical future task");
+    expect(skillText).toContain("durable user-provided knowledge");
+    expect(skillText).toContain("business context, domain semantics, product intent");
+    expect(skillText).toContain("Treat explicit user explanations as first-class evidence");
+    expect(skillText).toContain("If proposed content reads like a current-session recap");
     expect(skillText).toContain("wait for explicit per-entry");
     expect(skillText).toContain(
       "Treat silence or general agreement without clear approval as not yet approved",
