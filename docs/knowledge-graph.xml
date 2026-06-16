@@ -63,12 +63,12 @@
     </M-RELEASE-AUTOMATION>
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define bundled guardian, vv-controller, enhancer, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
+      <purpose>Define bundled guardian, vv-controller, enhancer, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator prompt templates plus managed agent metadata, including built-in role bindings for managed OpenCode agent registrations.</purpose>
       <path>src/lib/managed-agents.ts + templates/agents/*.md</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
-        <const-MANAGED_OPENCODE_AGENTS PURPOSE="Canonical managed OpenCode agent definitions used for vv-controller, enhancer, analyst/architect, and tracked subagent registration." />
+        <const-MANAGED_OPENCODE_AGENTS PURPOSE="Canonical managed OpenCode agent definitions used for vv-controller, enhancer, and tracked subagent registration." />
         <fn-loadManagedAgentPromptTemplate PURPOSE="Load a bundled prompt template for a managed vvoc agent." />
       </annotations>
     </M-CLI-MANAGED-AGENTS>

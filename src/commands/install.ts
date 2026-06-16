@@ -23,7 +23,6 @@
 import { defineCommand } from "citty";
 import {
   describeWriteResult,
-  ensureManagedPlanDirectory,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
   installManagedAgentPrompts,
@@ -82,10 +81,6 @@ export default defineCommand({
       force: Boolean(args.force),
     })) {
       console.log(describeWriteResult(result));
-    }
-
-    if (paths.scope === "project") {
-      console.log(describeWriteResult(await ensureManagedPlanDirectory(paths)));
     }
 
     const vvocConfig = await installVvocConfig(paths);

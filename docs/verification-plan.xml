@@ -85,7 +85,7 @@
     </VF-GUARDIAN-REVIEW>
     <VF-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjection" USE_CASES="UC-006" DATA_FLOW="DF-SYSTEM-CONTEXT" PRIORITY="medium">
       <scenario>User starts a primary chat session with vvoc installed.</scenario>
-      <expected-outcome>The main-session user message carries reusable vvoc system guidance for proactive context gathering, an editing workflow that prefers `read` plus the hashline-backed `edit` tool over shell rewrites, standard trajectories, task routing, compact working state, reroute-on-evidence, semantic continuity, assumption discipline, anti-drift budgeting, and project-overlay precedence, while known subagents including vv-analyst and vv-architect do not inherit that guidance. Skill discovery avoids global OpenCode skills in project/env-sandboxed sessions and registers project-local skills when present.</expected-outcome>
+      <expected-outcome>The main-session user message carries reusable vvoc system guidance for proactive context gathering, an editing workflow that prefers `read` plus the hashline-backed `edit` tool over shell rewrites, standard trajectories, task routing, compact working state, reroute-on-evidence, semantic continuity, assumption discipline, anti-drift budgeting, and project-overlay precedence, while known subagents do not inherit that guidance. Skill discovery avoids global OpenCode skills in project/env-sandboxed sessions and registers project-local skills when present.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append message.system guidance -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -136,7 +136,7 @@
     </VF-LOOP-GATE>
     <VF-WORKFLOW-GUIDANCE NAME="WorkflowGuidance" USE_CASES="UC-014" DATA_FLOW="DF-WORKFLOW-GUIDANCE" PRIORITY="medium">
       <scenario>Main session starts a chat with WorkflowPlugin active.</scenario>
-      <expected-outcome>Eligible orchestrating primary agents including vv-controller receive workflow protocol guidance, including the header-first plus lightweight tagged assignment-body convention for tracked prompts. Helper primaries such as enhancer and known subagents including vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
+      <expected-outcome>Eligible orchestrating primary agents including vv-controller receive workflow protocol guidance, including the header-first plus lightweight tagged assignment-body convention for tracked prompts. Helper primaries such as enhancer and known subagents including vv-implementer, vv-spec-reviewer, vv-code-reviewer do not inherit it.</expected-outcome>
       <required-signals>
         <trace-sequence>chat.message -&gt; resolved primary agent -&gt; append workflow system instruction -&gt; skip known subagents</trace-sequence>
       </required-signals>
@@ -475,7 +475,7 @@
         <check-4>bun run fmt:check</check-4>
       </module-checks>
       <scenarios>
-        <scenario-1 kind="success">MANAGED_OPENCODE_AGENTS exposes vv-controller, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator definitions.</scenario-1>
+        <scenario-1 kind="success">MANAGED_OPENCODE_AGENTS exposes vv-controller, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and investigator definitions.</scenario-1>
         <scenario-2 kind="success">loadManagedAgentPromptTemplate resolves bundled prompt file paths.</scenario-2>
         <scenario-3 kind="success">loadManagedAgentPromptText resolves project-local prompts first, then global prompts, then bundled fallback.</scenario-3>
         <scenario-4 kind="failure">Unknown managed agent names fail with a clear error.</scenario-4>

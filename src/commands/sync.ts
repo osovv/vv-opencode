@@ -23,7 +23,6 @@
 import { defineCommand } from "citty";
 import {
   describeWriteResult,
-  ensureManagedPlanDirectory,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
   resolvePaths,
@@ -67,8 +66,6 @@ export default defineCommand({
     const opencode = await ensurePackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
-    const managedPlans =
-      paths.scope === "project" ? await ensureManagedPlanDirectory(paths) : undefined;
     const managedSkills = await syncManagedSkillFiles(paths, { force: Boolean(args.force) });
     const vvocConfig = await syncVvocConfig(paths);
 
@@ -78,9 +75,6 @@ export default defineCommand({
     );
     for (const result of managedPrompts) {
       console.log(describeWriteResult(result));
-    }
-    if (managedPlans) {
-      console.log(describeWriteResult(managedPlans));
     }
     for (const result of managedSkills) {
       console.log(describeWriteResult(result));

@@ -18,7 +18,7 @@
 //   getGlobalVvocDir - Resolves the global vvoc config directory.
 //   getGlobalVvocConfigPath - Resolves the canonical global vvoc config file path.
 //   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
-//   getVvocPlansDir - Resolves the managed vvoc planning artifact directory for a vvoc config root.
+//   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getVvocSkillsDir - Resolves the managed vvoc skills directory for a vvoc config root.
 //   getGlobalOpencodeSkillsDir - Resolves the global OpenCode skills directory for skill discovery via symlink.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
@@ -83,10 +83,6 @@ export function getGlobalVvocConfigPath(configHomeOverride?: string): string {
 
 export function getVvocAgentsDir(vvocDir: string): string {
   return join(vvocDir, "agents");
-}
-
-export function getVvocPlansDir(vvocDir: string): string {
-  return join(vvocDir, "plans");
 }
 
 export function getVvocSkillsDir(vvocDir: string): string {

@@ -47,7 +47,6 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   PACKAGE_NAME,
-  ensureManagedPlanDirectory,
   ensureManagedAgentRegistrationsConfigText,
   ensurePackageConfigText,
   ensurePackageInstalled,
@@ -696,11 +695,6 @@ describe("managed prompt install", () => {
 
       const promptResults = await installManagedAgentPrompts(paths, { force: true });
       expect(promptResults).toHaveLength(7);
-      const planDirResult = await ensureManagedPlanDirectory(paths);
-      expect(planDirResult.action).toBe("created");
-      const repeatedPlanDirResult = await ensureManagedPlanDirectory(paths);
-      expect(repeatedPlanDirResult.action).toBe("kept");
-      expect(repeatedPlanDirResult.path).toBe(join(projectDir, ".vvoc", "plans"));
 
       const openCode = ensureManagedAgentRegistrationsConfigText(undefined, paths);
       const parsed = parse(openCode) as { agent?: Record<string, { prompt?: string }> };
@@ -1069,7 +1063,6 @@ describe("resolvePaths", () => {
     expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
     expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
-    expect(paths.managedPlansDirPath).toBe("/tmp/vvoc-config-home/vvoc/plans");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
   });
 
@@ -1085,7 +1078,6 @@ describe("resolvePaths", () => {
     expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
     expect(paths.vvocConfigPath).toBe("/workspace/project/.vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
-    expect(paths.managedPlansDirPath).toBe("/workspace/project/.vvoc/plans");
     expect(paths.managedSkillsDirPath).toBe("/workspace/project/.vvoc/skills");
   });
 });

@@ -76,7 +76,6 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedAgentsDirPath + "/vv-spec-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-code-reviewer.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/investigator.md")).toBe(true);
-      expect(existsSync(paths.managedPlansDirPath)).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-spec/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-plan/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-review/SKILL.md")).toBe(true);

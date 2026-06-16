@@ -24,7 +24,6 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import {
-  ensureManagedPlanDirectory,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
   installManagedAgentPrompts,
@@ -156,11 +155,6 @@ export async function runInit(options: {
     p.log.info(result.path + " - " + result.action);
   }
 
-  if (finalPaths.scope === "project") {
-    const planDirectoryResult = await ensureManagedPlanDirectory(finalPaths);
-    p.log.info(planDirectoryResult.path + " - " + planDirectoryResult.action);
-  }
-
   p.log.step("Scaffolding canonical vvoc config...");
   const vvocConfigResult = await installVvocConfig(finalPaths);
   p.log.info(vvocConfigResult.path + " - " + vvocConfigResult.action);
@@ -196,9 +190,6 @@ async function runInitNonInteractive(options: {
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
   await installManagedSkillFiles(paths, { force: true });
-  if (paths.scope === "project") {
-    await ensureManagedPlanDirectory(paths);
-  }
   await installVvocConfig(paths);
   if (paths.scope === "global") {
     await ensureManagedSkillSymlink(configDir);

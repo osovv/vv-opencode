@@ -91,7 +91,7 @@
 
     <M-CLI-MANAGED-AGENTS NAME="ManagedAgents" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
       <contract>
-        <purpose>Describe vvoc-managed OpenCode agents, resolve managed prompt paths, and load bundled or scoped prompt text for managed agent registrations. `vv-controller` is the managed default primary, `vv-analyst` and `vv-architect` are plan-writing subagents, and tracked subagents follow the `vv-*` naming convention.</purpose>
+        <purpose>Describe vvoc-managed OpenCode agents, resolve managed prompt paths, and load bundled or scoped prompt text for managed agent registrations. `vv-controller` is the managed default primary, tracked subagents follow the `vv-*` naming convention, and the `vv-spec` and `vv-plan` skills handle spec/interview/synthesis and implementation planning.</purpose>
         <inputs>
           <param name="managedAgentName | promptName | resolvedPaths" type="string | object" />
         </inputs>
@@ -120,7 +120,7 @@
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <notes>
         <note-1>Managed prompts resolve from project-local `.vvoc/agents/` first, then the global vvoc agents directory, while bundled templates remain the installation baseline.</note-1>
-        <note-2>Tracked subagents are `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`. Prompt files follow the same naming. `vv-analyst` and `vv-architect` are untracked and may write only `.vvoc/plans/**`.</note-2>
+        <note-2>Tracked subagents are `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`. Prompt files follow the same naming. The `vv-spec` and `vv-plan` skills handle spec/interview/synthesis and implementation planning, writing durable artifacts under `.vvoc/specs/&lt;id&gt;/`.</note-2>
         <note-3>`vv-controller` is a managed primary agent. `enhancer` remains a separate managed helper primary.</note-3>
       </notes>
     </M-CLI-MANAGED-AGENTS>

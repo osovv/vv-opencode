@@ -33,7 +33,6 @@
 //   syncManagedAgentRegistrations - Syncs the canonical vvoc-managed OpenCode agent registrations and tool gating into OpenCode config.
 //   installManagedAgentPrompts - Creates managed vvoc prompt files for the bundled Guardian and managed OpenCode agents when missing.
 //   syncManagedAgentPrompts - Rewrites managed vvoc prompt files for the bundled Guardian and managed OpenCode agents.
-//   ensureManagedPlanDirectory - Creates the managed vvoc planning artifact directory when missing.
 //   installManagedSkillFiles - Creates managed vvoc skill files from bundled templates.
 //   syncManagedSkillFiles - Rewrites managed vvoc skill files from bundled templates.
 //   ensureManagedSkillSymlink - Creates symlink from OpenCode skills dir to vvoc skills dir for skill discovery.
@@ -60,7 +59,7 @@
 //   LAST_CHANGE: [v1.1.1 - Fixed syncManagedSkillFiles to not sync references when parent skill is skipped (user-owned/custom). Added regression coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched project-scope writes to .opencode/.vvoc layers and added local managed skills path registration.]
 //   LAST_CHANGE: [v0.5.1 - Added ensureManagedSkillSymlink. Fixed renderManagedSkill to preserve YAML frontmatter.]
-//   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts.]
+//   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts. Removed in v1.2.0 — superseded by spec package layout under .vvoc/specs/<id>/.]
 //   LAST_CHANGE: [v0.5.0 - Replaced managed command registrations (vv-plan/vv-review) with managed skills system. Added managedSkillsDirPath to ResolvedPaths. Added installManagedSkillFiles and syncManagedSkillFiles.]
 //   LAST_CHANGE: [v0.9.7 - Removed variant splitting from agent model read/write helpers so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.9.6 - Added managed OpenCode `tools.apply_patch = false` writes during install/init/sync so sessions stay on the hashline-backed `edit` override.]
@@ -121,7 +120,6 @@ import {
   getGlobalOpencodeSkillsDir,
   getGlobalVvocDir,
   getVvocAgentsDir,
-  getVvocPlansDir,
   getVvocSkillsDir,
 } from "./vvoc-paths.js";
 
@@ -175,7 +173,6 @@ export type ResolvedPaths = {
   vvocBaseDir: string;
   vvocConfigPath: string;
   managedAgentsDirPath: string;
-  managedPlansDirPath: string;
   managedSkillsDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
@@ -231,7 +228,6 @@ export async function resolvePaths(options: {
   const targets = await resolveConfigWriteTargets(options);
   const configHome = getConfigHome(options.configDir);
   const managedAgentsDirPath = getVvocAgentsDir(targets.vvocBaseDir);
-  const managedPlansDirPath = getVvocPlansDir(targets.vvocBaseDir);
   const managedSkillsDirPath = getVvocSkillsDir(targets.vvocBaseDir);
 
   return {
@@ -243,7 +239,6 @@ export async function resolvePaths(options: {
     vvocBaseDir: targets.vvocBaseDir,
     vvocConfigPath: targets.vvocConfigPath,
     managedAgentsDirPath,
-    managedPlansDirPath,
     managedSkillsDirPath,
     opencodeConfigPath: targets.opencodeConfigPath,
     opencodeAlternatePaths: await resolveOpenCodeAlternates(
@@ -513,16 +508,6 @@ export async function syncManagedAgentPrompts(
   }
 
   return results;
-}
-
-export async function ensureManagedPlanDirectory(
-  paths: Pick<ResolvedPaths, "managedPlansDirPath">,
-): Promise<WriteResult> {
-  const createdPath = await mkdir(paths.managedPlansDirPath, { recursive: true });
-  return {
-    action: createdPath ? "created" : "kept",
-    path: paths.managedPlansDirPath,
-  };
 }
 
 // START_BLOCK_MANAGED_SKILL_FUNCTIONS
@@ -1099,7 +1084,6 @@ export async function inspectInstallationForScope(options: {
     vvocConfigPath,
     opencodeAlternatePaths: [],
     managedAgentsDirPath: getVvocAgentsDir(dirname(vvocConfigPath)),
-    managedPlansDirPath: getVvocPlansDir(dirname(vvocConfigPath)),
     managedSkillsDirPath: getVvocSkillsDir(dirname(vvocConfigPath)),
   };
 

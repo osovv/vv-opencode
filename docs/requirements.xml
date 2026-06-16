@@ -43,7 +43,7 @@
       <Action>Starts a primary chat session with vvoc installed.</Action>
       <Goal>To inject reusable main-session guidance such as proactive explore usage without polluting known subagent prompts, including the managed controller primary session.</Goal>
       <Preconditions>The package is enabled in OpenCode and a primary agent session is being created.</Preconditions>
-      <AcceptanceCriteria>Eligible primary agents including `vv-controller` receive the reusable guidance exactly once, while known subagents, `vv-analyst`, `vv-architect`, and internal helper agents do not inherit it.</AcceptanceCriteria>
+      <AcceptanceCriteria>Eligible primary agents including `vv-controller` receive the reusable guidance exactly once, while known subagents and internal helper agents do not inherit it.</AcceptanceCriteria>
       <Priority>medium</Priority>
       <RelatedFlows>DF-SYSTEM-CONTEXT</RelatedFlows>
     </UC-006>
@@ -171,7 +171,7 @@
     <item-4>No target-based model override UX after the role-based cutover.</item-4>
     <item-5>No semantic task grouping or embedding-based work-item identity in workflow v1.</item-5>
     <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
-    <item-7>No workflow tracking for `investigator`, `guardian`, `enhancer`, `vv-analyst`, or `vv-architect` in v1.</item-7>
+    <item-7>No workflow tracking for `investigator`, `guardian`, `enhancer` in v1.</item-7>
     <item-8>No per-plugin granularity beyond the vvoc-managed plugin set in v1 — plugin toggle does not extend to user-defined OpenCode plugins.</item-8>
   </NonGoals>
 
@@ -191,7 +191,7 @@
     <constraint-11>`NEEDS_CONTEXT` is a hard stop. Main session must gather context before workflow continues.</constraint-11>
     <constraint-12>Tracked subagent names must follow the `vv-*` naming convention: `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`.</constraint-12>
     <constraint-13>Workflow plugin must not pollute untracked subagent prompts or untracked task launches.</constraint-13>
-    <constraint-14>`vv-analyst` and `vv-architect` may write durable plan artifacts only under project-local `.vvoc/plans/`.</constraint-14>
+    <constraint-14>The `vv-spec` and `vv-plan` skills write durable spec and plan artifacts under project-local `.vvoc/specs/&lt;id&gt;/`.</constraint-14>
     <constraint-15>`vvoc install` and `vvoc sync` treat OpenCode `default_agent`, managed agent definitions, and managed `/vv-plan` plus `/vv-review` command definitions as vvoc-owned.</constraint-15>
   </Constraints>
 
