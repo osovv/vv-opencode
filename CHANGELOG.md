@@ -1,3 +1,12 @@
+## <small>0.35.21 (2026-06-16)</small>
+
+### Summary
+
+This maintenance release removes the dead `.vvoc/plans/` directory path and stale `vv-analyst` and `vv-architect` agent references, as planning artifacts now live exclusively under the `.vvoc/specs/<id>/` layout. The GRACE documentation (development plan, verification plan, knowledge graph, and requirements) has been updated to reflect the current architecture, and several module contracts, maps, and change summaries have been corrected or added. These changes reduce code surface, eliminate confusion from outdated references, and ensure that project documentation accurately describes the managed skills and spec-driven planning flow.
+
+* chore: refresh GRACE artifacts after full integrity scan ([e0df404](https://github.com/osovv/vv-opencode/commit/e0df404))
+* refactor: remove dead .vvoc/plans/ code path and stale vv-analyst/vv-architect references ([f4076e1](https://github.com/osovv/vv-opencode/commit/f4076e1))
+
 ## <small>0.35.20 (2026-06-16)</small>
 
 ### Summary
