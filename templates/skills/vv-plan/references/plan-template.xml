@@ -1,5 +1,6 @@
 <plan>
   <spec></spec>
+  <design-context></design-context>  <!-- optional, populated when sibling file exists -->
   <created></created>
   <status>draft</status>
 

@@ -1,0 +1,62 @@
+<design-context>
+  <!--
+    design-context.xml is optional curated design memory.
+    It captures decision rationale, rejected alternatives,
+    scenarios, fragile assumptions, deferred decisions,
+    and revisit triggers.
+
+    spec.xml remains normative. design-context.xml is
+    explanatory context for the planner and reviewers.
+    It is NOT read by code-generating models as a
+    requirements source.
+
+    Consider offering this file when the session involves:
+    - complex tradeoffs or non-obvious decisions
+    - rejected alternatives worth preserving
+    - external integrations or third-party constraints
+    - sync, import, migration, rollback, or cutover semantics
+    - fragile or time-sensitive assumptions
+    - deferred decisions with revisit triggers
+    - the user explicitly asks to preserve reasoning
+  -->
+  <decisions>
+    <decision>
+      <topic></topic>
+      <choice></choice>
+      <rationale></rationale>
+      <alternatives_considered>
+        <alternative>
+          <name></name>
+          <reason_rejected></reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+  </decisions>
+  <assumptions>
+    <assumption>
+      <statement></statement>
+      <confidence></confidence>
+      <fragile_if></fragile_if>
+    </assumption>
+  </assumptions>
+  <deferred>
+    <item>
+      <decision></decision>
+      <why_deferred></why_deferred>
+      <revisit_trigger></revisit_trigger>
+    </item>
+  </deferred>
+  <scenarios>
+    <scenario>
+      <name></name>
+      <context></context>
+      <implications></implications>
+    </scenario>
+  </scenarios>
+  <external_constraints>
+    <constraint>
+      <source></source>
+      <impact></impact>
+    </constraint>
+  </external_constraints>
+</design-context>

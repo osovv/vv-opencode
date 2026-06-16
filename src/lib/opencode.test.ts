@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.2.7
+// VERSION: 1.2.8
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -15,9 +15,11 @@
 //   canonical vvoc config tests - Verify schema v3 seeding, managed preset refresh, and strict pre-role rejection.
 //   provider helper tests - Verify conservative provider patch helpers remain comment-safe.
 //   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
+//   managed skill files tests - Verify managed skill/reference install, sync, and custom-skill reference safety.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.8 - Added regression test for syncManagedSkillFiles not syncing references when parent skill is skipped (config-safety).]
 //   LAST_CHANGE: [v1.2.7 - Added vv-reflect template coverage for user-provided domain and product insight capture.]
 //   LAST_CHANGE: [v1.2.6 - Added vv-reflect template coverage for generalized lesson synthesis instead of current-session recaps.]
 //   LAST_CHANGE: [v1.2.5 - Updated managed vv-controller registration expectations to seed and sync `model = vv-role:smart` while preserving root defaults.]
@@ -720,7 +722,7 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await installManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(7); // 5 SKILL.md + 2 reference files
+      expect(results).toHaveLength(8); // 5 SKILL.md + 3 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       for (const r of results) {
         const isSkill = r.path.endsWith("SKILL.md");
@@ -728,6 +730,11 @@ describe("managed skill files", () => {
         expect(isSkill || isReference).toBe(true);
       }
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
+      expect(
+        results.some((r) =>
+          r.path.endsWith(join("vv-spec", "references", "design-context-template.xml")),
+        ),
+      ).toBe(true);
       expect(await exists(join(projectDir, ".vvoc", "lessons"))).toBe(false);
       expect(await exists(join(projectDir, ".vvoc", "runbooks"))).toBe(false);
     } finally {
@@ -744,7 +751,7 @@ describe("managed skill files", () => {
       await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
 
       const results = await installManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(6); // vv-spec skipped + 4 other SKILL.md + 1 plan ref
+      expect(results).toHaveLength(6); // vv-spec skipped + 4 other SKILL.md + 1 plan ref (design-context not synced when vv-spec skipped)
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
       expect(vvSpec?.reason).toContain("has no YAML frontmatter");
@@ -774,9 +781,14 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await syncManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(7); // 5 SKILL.md + 2 reference files
+      expect(results).toHaveLength(8); // 5 SKILL.md + 3 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
+      expect(
+        results.some((r) =>
+          r.path.endsWith(join("vv-spec", "references", "design-context-template.xml")),
+        ),
+      ).toBe(true);
       expect(await exists(join(projectDir, ".vvoc", "lessons"))).toBe(false);
       expect(await exists(join(projectDir, ".vvoc", "runbooks"))).toBe(false);
     } finally {
@@ -801,6 +813,40 @@ describe("managed skill files", () => {
     }
   });
 
+  test("syncManagedSkillFiles does not sync references when parent skill is skipped", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-skills-skip-ref-"));
+    try {
+      const paths = await resolvePaths({ scope: "project", cwd: projectDir });
+      // Create custom vv-spec SKILL.md (no YAML frontmatter)
+      const specDir = join(paths.managedSkillsDirPath, "vv-spec");
+      await mkdir(specDir, { recursive: true });
+      await writeFile(join(specDir, "SKILL.md"), "# My custom vv-spec skill\n", "utf8");
+
+      // Create custom reference file with content different from template
+      const refDir = join(specDir, "references");
+      await mkdir(refDir, { recursive: true });
+      const customRefContent = "<custom>user-owned reference</custom>\n";
+      await writeFile(join(refDir, "design-context-template.xml"), customRefContent, "utf8");
+
+      const results = await syncManagedSkillFiles(paths, { force: false });
+
+      // vv-spec skill should be skipped
+      const vvSpec = results.find((r) => r.path.endsWith(join("vv-spec", "SKILL.md")));
+      expect(vvSpec?.action).toBe("skipped");
+      expect(vvSpec?.reason).toContain("no YAML frontmatter");
+
+      // No vv-spec reference file should appear in results (references not synced)
+      const specRefResults = results.filter((r) => r.path.includes(join("vv-spec", "references")));
+      expect(specRefResults).toHaveLength(0);
+
+      // Custom reference file content on disk must be unchanged
+      const actualRefContent = await readFile(join(refDir, "design-context-template.xml"), "utf8");
+      expect(actualRefContent).toBe(customRefContent);
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("syncManagedSkillFiles keeps unchanged managed files", async () => {
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-keep-"));
     try {
@@ -808,7 +854,7 @@ describe("managed skill files", () => {
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: false });
       const kept = results.filter((r) => r.action === "kept");
-      expect(kept).toHaveLength(7); // 5 SKILL.md + 2 reference files
+      expect(kept).toHaveLength(8); // 5 SKILL.md + 3 reference files
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -820,7 +866,7 @@ describe("managed skill files", () => {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(7); // 5 SKILL.md + 2 reference files
+      expect(results).toHaveLength(8); // 5 SKILL.md + 3 reference files
       for (const r of results) {
         expect(["kept", "updated"]).toContain(r.action);
       }

@@ -57,6 +57,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.1 - Fixed syncManagedSkillFiles to not sync references when parent skill is skipped (user-owned/custom). Added regression coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched project-scope writes to .opencode/.vvoc layers and added local managed skills path registration.]
 //   LAST_CHANGE: [v0.5.1 - Added ensureManagedSkillSymlink. Fixed renderManagedSkill to preserve YAML frontmatter.]
 //   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts.]
@@ -565,9 +566,13 @@ export async function syncManagedSkillFiles(
   const results: WriteResult[] = [];
 
   for (const skillName of MANAGED_SKILL_NAMES) {
-    results.push(await syncManagedSkill(paths, skillName, options));
-    const refResults = await syncManagedSkillReferences(paths.managedSkillsDirPath, skillName);
-    results.push(...refResults);
+    const skillResult = await syncManagedSkill(paths, skillName, options);
+    results.push(skillResult);
+    // Only sync references when the parent skill was not skipped (user-owned/custom)
+    if (skillResult.action !== "skipped") {
+      const refResults = await syncManagedSkillReferences(paths.managedSkillsDirPath, skillName);
+      results.push(...refResults);
+    }
   }
 
   return results;

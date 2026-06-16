@@ -395,8 +395,9 @@
         <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-7>
         <scenario-8 kind="success">Managed prompt templates keep a stable enhancer schema plus consistent status/reporting vocabulary across implementer, reviewers, and investigator flows.</scenario-8>
         <scenario-9 kind="success">Managed prompt templates externalize compact working state, support rerouting and project-owned overlays, preserve semantic continuity, require explicit material assumptions, and guard against drift.</scenario-9>
-        <scenario-10 kind="success">Managed skill install and sync distribute vv-reflect alongside vv-spec, vv-plan, vv-review, and vv-execute without creating .vvoc/lessons, .vvoc/runbooks, or fallback indexes eagerly.</scenario-10>
+        <scenario-10 kind="success">Managed skill install and sync distribute vv-reflect alongside vv-spec, vv-plan, vv-review, and vv-execute, including bundled skill reference files such as vv-spec design-context-template.xml, without creating .vvoc/lessons, .vvoc/runbooks, or fallback indexes eagerly.</scenario-10>
         <scenario-11 kind="success">Project-scope install/init/sync do not create global OpenCode config, global vvoc config, or global OpenCode skill symlink side effects.</scenario-11>
+        <scenario-12 kind="failure">Managed skill sync must not overwrite or create reference files when the parent SKILL.md is user-owned/custom (no YAML frontmatter) and force is false. This prevents silent clobbering of custom reference files.</scenario-12>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>

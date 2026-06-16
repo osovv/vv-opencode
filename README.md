@@ -37,24 +37,27 @@ Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` 
 
 ## Spec-to-Code Pipeline
 
-The core workflow is a three-stage pipeline with independent review gates at each level:
+The core workflow is a three-stage pipeline with independent review gates at each level. All artifacts for one feature live in a single spec package directory:
 
 ```
 User request
     │
     ▼ auto-trigger
-vv-spec  ───────────────────────────────────────→  .vvoc/specs/*.xml
+vv-spec  ───────────────────────────────────────→  .vvoc/specs/<id>/spec.xml
     │   Grill-me interview (one question at a time)
     │   Decision tree with recommended answers
     │   vv-analyst + vv-architect synthesis
+    │   Optionally creates .vvoc/specs/<id>/design-context.xml
+    │   for complex sessions (design memory, not requirements)
     │
     ├── ① Spec review: requirements correct, complete, unambiguous?
     │
     ▼ auto-trigger (after approval)
-vv-plan  ───────────────────────────────────────→  .vvoc/plans/*-plan.xml
+vv-plan  ───────────────────────────────────────→  .vvoc/specs/<id>/plan.xml
+    │   Reads sibling design-context.xml when present (explanatory only)
     │   Interface contracts with JSDoc behavior descriptions
-    │   Acceptance criteria per task (grep: `<criterion-N>`)
-    │   Dependency ordering (grep: `<depends-on>`)
+    │   Acceptance criteria per task (grep: `<criterion>`)
+    │   Dependency ordering (grep: `<task_id>`)
     │   Three-layer review model: spec → plan → code
     │
     ├── ② Plan review: every spec requirement → task? Contracts match spec?
@@ -71,27 +74,30 @@ vv-implementer → vv-spec-reviewer → vv-code-reviewer
 Done
 ```
 
-Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifacts by moving specs to `.vvoc/specs/archive/` and plans to `.vvoc/plans/archive/`.
+Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/<id>/` to `.vvoc/specs/archive/<id>-<timestamp>/` (canonical) or legacy individual files to `.vvoc/specs/archive/` and `.vvoc/plans/archive/`.
 
 ### XML grep
 
 Plans and specs are XML documents, making every element grep-able:
 
 ```bash
-# Extract tasks from plan
-grep '<task-[0-9]\+>' .vvoc/plans/*.xml
+# Extract tasks from plan (canonical layout)
+grep '<id>T-' .vvoc/specs/*/plan.xml
+
+# Extract tasks from plan (legacy layout)
+grep '<id>T-' .vvoc/plans/*.xml
 
 # Extract all acceptance criteria
-grep '<criterion-[0-9]\+>' .vvoc/plans/*.xml
+grep '<criterion>' .vvoc/specs/*/plan.xml
 
 # Extract dependency graph
-grep '<depends-on>task-' .vvoc/plans/*.xml
+grep '<task_id>' .vvoc/specs/*/plan.xml
 
 # Extract method signatures
-grep '/\*\*' .vvoc/plans/*.xml
+grep '/\*\*' .vvoc/specs/*/plan.xml
 
-# Extract all components from plan
-grep '<component>' .vvoc/plans/*.xml
+# Extract all modules from architecture
+grep '<name>' .vvoc/specs/*/plan.xml
 ```
 
 Managed skills are installed by `vvoc`. `vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute` and `vv-reflect` are available as managed skills for plan execution and durable session memory.
@@ -207,7 +213,11 @@ OpenCode config          → ./.opencode/opencode.json(c)
 vvoc config              → ./.vvoc/vvoc.json
 Managed agent prompts    → ./.vvoc/agents/*.md
 Managed skills           → ./.vvoc/skills/*/SKILL.md
-Planning artifacts       → ./.vvoc/plans/*
+Spec package directory   → ./.vvoc/specs/<id>/
+  spec.xml              # normative spec document (required)
+  design-context.xml    # curated design memory (optional)
+  plan.xml              # implementation plan (created by vv-plan)
+Planning artifacts       → ./.vvoc/plans/*  (legacy, for vv-analyst/vv-architect durable plans)
 ```
 
 Legacy root-level `./opencode.json` and `./opencode.jsonc` are intentionally not used as vvoc project layers.
@@ -219,8 +229,10 @@ Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md  (global)
                            ./.vvoc/agents/*.md                 (project)
 Managed skills           → $XDG_CONFIG_HOME/vvoc/skills/*/SKILL.md  (global)
                            ./.vvoc/skills/*/SKILL.md               (project)
-Spec documents           → ./.vvoc/specs/*
-Planning artifacts       → ./.vvoc/plans/*
+Spec documents           → ./.vvoc/specs/<id>/spec.xml
+Optional design context  → ./.vvoc/specs/<id>/design-context.xml
+Implementation plans     → ./.vvoc/specs/<id>/plan.xml  (canonical)
+                           ./.vvoc/plans/*              (legacy, for vv-analyst/vv-architect)
 Persisted data           → $XDG_DATA_HOME/vvoc/
 Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect fallback)
                            ./.vvoc/runbooks/*.xml             (lazy vv-reflect fallback)
@@ -265,8 +277,8 @@ Five workflow skills are scaffolded alongside agents:
 
 | Skill | Trigger | Output | Grep-able |
 |---|---|---|---|
-| `vv-spec` | Creative/feature request, no spec exists | `.vvoc/specs/*.xml` | `<user-story>`, `<fr-1>`, `<sc-1>` |
-| `vv-plan` | Approved spec exists | `.vvoc/plans/*-plan.xml` | `<task-N>`, `<criterion-N>`, `<depends-on>`, `/**` JSDoc |
+| `vv-spec` | Creative/feature request, no spec exists | `.vvoc/specs/<id>/spec.xml` + optional `design-context.xml` | `<goal>`, `<architecture>`, `<component>` |
+| `vv-plan` | Approved spec exists | `.vvoc/specs/<id>/plan.xml` | `<id>T-`, `<criterion>`, `<task_id>`, `/**` JSDoc |
 | `vv-execute` | Approved plan exists | Applies and archives spec/plan artifacts | `<status>`, `<task>`, `<acceptance>` |
 | `vv-review` | Review request | Findings report | — |
 | `vv-reflect` | End of a long development, debugging, bugfix, ops, or investigation session | Existing repo docs or `.vvoc/lessons/*.xml` / `.vvoc/runbooks/*.xml` | XML fallback indexes and entry tags |

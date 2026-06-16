@@ -127,9 +127,13 @@ Execution order: 1. `vv-implementer` 2. `vv-spec-reviewer` 3. `vv-code-reviewer`
 </large_feature_protocol>
 
 <plan_artifacts>
-- `vv-analyst` and `vv-architect` may write durable planning artifacts only under `.vvoc/plans/`.
+- `vv-analyst` and `vv-architect` may write durable planning artifacts only under `.vvoc/plans/`. These are analysis and architecture documents, not implementation plans.
 - Use durable plan files when the plan is too large to safely keep only in chat or when future agents need a stable artifact.
-- Write planning artifacts only under `.vvoc/plans/`.
+- **vv-plan implementation plans** now live in spec packages. The canonical package layout is: `.vvoc/specs/<id>/{spec.xml, design-context.xml optional, plan.xml}`.
+  - **spec.xml** is normative — the single source of truth for requirements and design decisions.
+  - **design-context.xml** (optional) is explanatory/non-normative curated design memory for planners and reviewers. It is NOT treated as additional requirements.
+  - **plan.xml** is the vv-plan implementation plan, saved in the same package.
+- Legacy `.vvoc/plans/*.xml` is preserved for vv-analyst/vv-architect durable planning artifacts. vv-execute supports both `.vvoc/specs/<id>/plan.xml` and `.vvoc/plans/*.xml`.
 </plan_artifacts>
 
 <final_response_format>

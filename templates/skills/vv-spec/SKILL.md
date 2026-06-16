@@ -1,6 +1,6 @@
 ---
 name: vv-spec
-description: Use BEFORE any implementation or planning — interviews the user one question at a time, proposes approaches, presents a design, and writes a spec document to .vvoc/specs/
+description: Use BEFORE any implementation or planning — interviews the user one question at a time, proposes approaches, presents a design, writes a spec document to .vvoc/specs/<id>/spec.xml, and optionally creates a design-context.xml companion for complex sessions
 ---
 
 <skill>
@@ -28,6 +28,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <principle>Cover every section of the spec template: goal, architecture, tech-stack, components, data-flow, error-handling, testing, non-goals. The roadmap shown at the start IS the coverage checklist. A section is "closed" only when its template element is fully decidable.</principle>
 <principle>YAGNI ruthlessly: prune dead branches — remove unnecessary features from every approach.</principle>
 <principle>After design is confirmed, synthesize the spec yourself. You are the expensive model — deep analysis and architectural design are your responsibility, not a subagent's.</principle>
+<principle>Maintain a structured internal decision/rationale ledger during the interview. For each decision point, track: the decision, options considered, chosen option, rationale, rejected alternatives (with reasons), and any assumptions, deferred decisions, or revisit triggers. This ledger is the raw material for design-context.xml — it is synthesized from curated decisions, not reconstructed from conversation memory.</principle>
 <principle>Open the interview with a DECISION-TREE ROADMAP: show the spec template sections (goal, architecture, tech-stack, components, data-flow, error-handling, testing, non-goals) AND the major forks that may arise within each. State traversal order (highest-impact first). The purpose is predictability of the full landscape, not brevity — the user is working, so a large honest surface is welcome. Note the tree is dynamic: the branch actually taken depends on answers, but every reachable fork is shown up front.</principle>
 <principle>Mark the CURRENT SECTION on every question message (a short header). The user must always know their location in the tree. This reduces disorientation in long interviews; it does not skip content.</principle>
 <principle>After the first substantive exchange, give an HONEST DEPTH ESTIMATE (approximate decision points remaining). If the estimate is high (roughly 12–15+), do NOT shorten the interview. Surface it as a signal that the prompt/context needs upgrading: offer the user ways to provide richer context up front (existing PRD, requirements doc, reference project, voice description), or propose decomposition into sub-projects. A large estimate means MORE context, not fewer questions.</principle>
@@ -48,8 +49,32 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <rule>Do not invent new elements beyond what the template defines. The template IS the contract.</rule>
 <rule>The top-level &lt;status&gt; element is the document lifecycle status and MUST be one of: draft, approved, applied.</rule>
 <rule>When first saving the spec, set &lt;status&gt;draft&lt;/status&gt;. Only change it to approved after the user explicitly approves the final spec. Never set applied yourself; applied is reserved for vv-execute after the approved plan has been fully executed.</rule>
-<location>Save to .vvoc/specs/YYYY-MM-DD-&lt;name&gt;.xml</location>
+<location>Canonical layout — all artifacts for one feature live in a single spec package directory:</location>
+<layout>
+.vvoc/specs/&lt;id&gt;/
+  spec.xml              # normative spec document (required)
+  design-context.xml    # curated design memory (optional)
+  plan.xml              # implementation plan (created by vv-plan)
+</layout>
+<rule>Save spec.xml to .vvoc/specs/&lt;id&gt;/spec.xml. Derive &lt;id&gt; as a safe slug from the feature name (e.g., cache-store, batch-migration). Ensure the slug: (a) contains only lowercase alphanumeric characters, hyphens, and underscores; (b) does not start or end with a hyphen or underscore. Reject reserved names: draft, archive, template, plan, spec, vvoc, or names that match path-like patterns (contain /, \, .., or match an existing filesystem path separator). If .vvoc/specs/&lt;id&gt;/ already exists, check whether it is a continuation of the same draft session (same spec package from the same feature) — if yes, overwrite; if not, stop and ask the user for a different id or explicit overwrite approval. Do not silently overwrite or merge an unrelated existing package. Do not use date prefixes — the package directory is the organizational unit.</rule>
+<rule>After creating or updating spec.xml, consider whether the session warrants a design-context.xml companion (see design_context section below).</rule>
 </spec_document_format>
+
+<design_context>
+<principle>design-context.xml is optional curated design memory. It preserves decision-relevant rationale, alternatives, scenarios, assumptions, deferred decisions, and revisit triggers — not a raw transcript or chain-of-thought dump.</principle>
+<principle>spec.xml remains normative. design-context.xml is explanatory context for the planner and reviewers. It does NOT override or expand the spec.</principle>
+<rule>Recommend offering design-context.xml when the session involves any of the following triggers — these are heuristics for when the companion would add value, not automatic creation rules:</rule>
+<trigger>complex tradeoffs or non-obvious decisions</trigger>
+<trigger>rejected alternatives worth preserving for future reference</trigger>
+<trigger>external integrations or third-party constraints</trigger>
+<trigger>sync, import, migration, rollback, or cutover semantics</trigger>
+<trigger>fragile or time-sensitive assumptions</trigger>
+<trigger>deferred decisions with explicit revisit triggers</trigger>
+<trigger>the user explicitly asks to preserve reasoning or design rationale</trigger>
+<rule>Load the design context template from references/design-context-template.xml. Fill only the sections that are relevant — leave unused sections empty or omit them.</rule>
+<rule>Do NOT include the full interview transcript, raw conversation dumps, chain-of-thought traces, or repetitive restatements of spec.xml content.</rule>
+<rule>Save design-context.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/design-context.xml</rule>
+</design_context>
 
 <self_review>
 <check>Placeholder scan: Any TBD, TODO, incomplete sections, or vague requirements? Fix them.</check>
@@ -62,6 +87,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <user_approval_gate>
 <rule>Present the spec document to the user.</rule>
 <rule>Wait for the user to review it. Do NOT proceed to planning until the user explicitly approves.</rule>
+<rule>If a design-context.xml was proposed or created during the session, present it alongside spec.xml. Label the companion clearly as explanatory/non-normative context for planners and reviewers — spec.xml wins on any conflict. If the user requests changes, keep the spec as draft and update both spec.xml and design-context.xml as needed before re-presenting.</rule>
 <rule>If the user requests changes, keep the document status as draft, make the changes, and re-present the spec. Re-run self-review after changes.</rule>
 <rule>After explicit user approval, update the saved spec file so the top-level status is &lt;status&gt;approved&lt;/status&gt;, then present the approved document state.</rule>
 </user_approval_gate>
@@ -72,6 +98,6 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 </handoff>
 
 <task>
-Your current task is the ongoing user request. Walk the decision tree relentlessly — one branch at a time. Propose approaches, present a design section by section, get approval at each stage. Load the spec template from references/spec-template.xml and fill every element with confirmed decisions. Save to .vvoc/specs/ as XML with document status draft. After explicit user approval, update the saved spec status to approved. Stop before any implementation or planning.
+Your current task is the ongoing user request. Walk the decision tree relentlessly — one branch at a time. Propose approaches, present a design section by section, get approval at each stage. Load the spec template from references/spec-template.xml and fill every element with confirmed decisions. Save to .vvoc/specs/&lt;id&gt;/spec.xml as XML with document status draft. Optionally create .vvoc/specs/&lt;id&gt;/design-context.xml for complex sessions. After explicit user approval, update the saved spec status to approved. Stop before any implementation or planning.
 </task>
 </skill>
