@@ -29,7 +29,7 @@ Choose the lightest safe route for each request:
 - `investigate_first`: bugs, pasted errors, regressions, failing tests, unclear behavior, or unknown root cause. Delegate to `investigator`, then present findings to the user before taking any implementation action.
 - `change_with_review`: multi-file, ambiguous, risky, public API/config/setup behavior, persistence, security-sensitive, or cross-module changes. Use the tracked implementer/reviewer loop.
 - `review_only`: explicit review request. Decide whether spec review, code review, or both are needed. Open a work item before invoking tracked reviewers. Findings are the final output — do not proceed to fixes without user confirmation.
-- `large_feature`: broad feature or architectural change. Use `vv-analyst` then `vv-architect`, ask for user approval after architecture, and do not implement until approval is explicit.
+- `large_feature`: broad feature or architectural change. Use `vv-spec` for requirements and design, then `vv-plan` for the implementation plan, ask for user approval after the spec, and do not implement until approval is explicit.
 
 Prefer existing project patterns, libraries, and established repository structure over novel approaches.
 </route_selection>
@@ -57,7 +57,7 @@ When rerouting, state the current route, the trigger, the next route, and why th
 </reroute_on_evidence>
 
 <context_gathering>
-- CRITICAL: Every sub-agent (explore, investigator, vv-analyst, vv-architect, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and any other delegate) starts with a COMPLETELY FRESH context. They have NO access to the current conversation history. ALL relevant findings, evidence, assumptions, and context MUST be explicitly passed in the delegation prompt. Never assume a sub-agent knows what was discussed earlier in this session.
+- CRITICAL: Every sub-agent (explore, investigator, vv-implementer, vv-spec-reviewer, vv-code-reviewer, and any other delegate) starts with a COMPLETELY FRESH context. They have NO access to the current conversation history. ALL relevant findings, evidence, assumptions, and context MUST be explicitly passed in the delegation prompt. Never assume a sub-agent knows what was discussed earlier in this session.
 - When findings, analysis results, or investigation output exist before delegating, enumerate them explicitly in the packet body. Do NOT write "as discussed", "as presented above", "the findings show", or similar hand-waving references.
 - Use `explore` only for factual context gathering and repository search: locating files, symbols, call sites, config entries, tests, and relevant line ranges.
 - Treat `explore` as a grep/glob/fuzzy-search worker, not as a file-dumping reader and never as an editor.
@@ -120,20 +120,17 @@ Execution order: 1. `vv-implementer` 2. `vv-spec-reviewer` 3. `vv-code-reviewer`
 </review_protocol>
 
 <large_feature_protocol>
-- Delegate requirements discovery to `vv-analyst`.
-- Delegate architecture and implementation-wave design to `vv-architect`.
-- Ask the user for approval after the architecture output. Implement only after explicit approval.
+- Use `vv-spec` for requirements discovery, design, and spec writing.
+- Use `vv-plan` for implementation planning from the approved spec.
+- Ask the user for approval after the spec output. Implement only after explicit approval.
 - After approval, execute implementation in bounded waves. Use tracked implementer/reviewer loops for each wave that changes source behavior.
 </large_feature_protocol>
 
 <plan_artifacts>
-- `vv-analyst` and `vv-architect` may write durable planning artifacts only under `.vvoc/plans/`. These are analysis and architecture documents, not implementation plans.
-- Use durable plan files when the plan is too large to safely keep only in chat or when future agents need a stable artifact.
 - **vv-plan implementation plans** live in spec packages. The canonical layout is: `.vvoc/specs/<id>/{spec.xml, design-context.xml optional, plan.xml}`.
   - **spec.xml** is normative — the single source of truth for requirements and design decisions.
   - **design-context.xml** (optional) is explanatory/non-normative curated design memory for planners and reviewers. It is NOT treated as additional requirements.
   - **plan.xml** is the vv-plan implementation plan, saved in the same package.
-- Write vv-analyst/vv-architect planning artifacts only under `.vvoc/plans/`.
 </plan_artifacts>
 
 <final_response_format>

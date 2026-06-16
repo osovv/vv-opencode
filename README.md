@@ -46,7 +46,7 @@ User request
 vv-spec  ───────────────────────────────────────→  .vvoc/specs/<id>/spec.xml
     │   Grill-me interview (one question at a time)
     │   Decision tree with recommended answers
-    │   vv-analyst + vv-architect synthesis
+    │   Deep synthesis by expensive model (no sub-agent delegation)
     │   Optionally creates .vvoc/specs/<id>/design-context.xml
     │   for complex sessions (design memory, not requirements)
     │
@@ -214,7 +214,7 @@ Spec package directory   → ./.vvoc/specs/<id>/
   spec.xml              # normative spec document (required)
   design-context.xml    # curated design memory (optional)
   plan.xml              # implementation plan (created by vv-plan)
-Planning artifacts       → ./.vvoc/plans/*  (vv-analyst/vv-architect durable plans)
+
 ```
 
 Legacy root-level `./opencode.json` and `./opencode.jsonc` are intentionally not used as vvoc project layers.
@@ -257,8 +257,6 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 |---|---|
 | `vv-controller` | Default primary agent — routes work to the right subagent |
 | `enhancer` | Prompt enhancement |
-| `vv-analyst` | Requirements analysis for large features |
-| `vv-architect` | Module/contract/wave design |
 | `vv-implementer` | Focused implementation with verification |
 | `vv-spec-reviewer` | Checks implementation against spec |
 | `vv-code-reviewer` | Engineering review for bugs and maintainability |
