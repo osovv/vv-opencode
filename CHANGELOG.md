@@ -1,3 +1,14 @@
+## <small>0.35.20 (2026-06-16)</small>
+
+### Summary
+
+This release introduces layered project-scope configuration, allowing users to isolate vv-opencode setup to individual projects with `vvoc install --scope project`, while the new `vvoc launch` command launches OpenCode with deterministic config sources for sandboxed testing. Complex spec sessions now support an optional `design-context.xml` companion that preserves decision rationale and rejected alternatives for planners and reviewers without expanding the normative spec, and the skill sync system gains config-safety rules that prevent silent overwrites of user-owned reference files. Documentation and templates have been cleaned up by removing stale references to legacy sub-agents and folder layouts, consolidating the spec package directory as the canonical organizational unit and making the user-facing workflow documentation more accurate.
+
+* docs: remove legacy folder references from docs and templates ([10879d4](https://github.com/osovv/vv-opencode/commit/10879d4))
+* docs: remove stale vv-analyst/vv-architect references ([30e9bab](https://github.com/osovv/vv-opencode/commit/30e9bab))
+* feat(config): support layered project scope ([beaaa4b](https://github.com/osovv/vv-opencode/commit/beaaa4b))
+* feat(skills): add spec package design context ([5181cdf](https://github.com/osovv/vv-opencode/commit/5181cdf))
+
 ## <small>0.35.19 (2026-06-15)</small>
 
 ### Summary
