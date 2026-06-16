@@ -9,6 +9,13 @@
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 
+// START_MODULE_MAP
+//   collectReleaseConsistencyErrors - Returns all package, schema, and changelog summary consistency errors for tests and main.
+// END_MODULE_MAP
+
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.0 - Initial test coverage for release-check consistency validation.]
+// END_CHANGE_SUMMARY
 import { describe, expect, test } from "bun:test";
 import { collectReleaseConsistencyErrors, type ReleaseConsistencyInputs } from "./release-check.ts";
 

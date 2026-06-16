@@ -16,6 +16,7 @@
 //   ConfigReadScope - Supported read scopes for list/show/diagnostic commands.
 //   ConfigSourceKind - Source kind labels for selected config sources.
 //   ConfigSource - Metadata describing a selected config source.
+//   ConfigWriteTargets - Resolved global or project write target paths.
 //   ProjectConfigRoot - Nearest project config layer metadata.
 //   ConfigLayerOptions - Common layered config resolution inputs.
 //   findNearestProjectConfigRoot - Finds the closest ancestor with .vvoc/vvoc.json or .opencode/opencode.json(c).

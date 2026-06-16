@@ -21,6 +21,7 @@
 //   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getVvocSkillsDir - Resolves the managed vvoc skills directory for a vvoc config root.
 //   getGlobalOpencodeSkillsDir - Resolves the global OpenCode skills directory for skill discovery via symlink.
+//   getGlobalVvocDataDir - Resolves the global vvoc data directory from XDG data home.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
 //   getProjectVvocDir - Resolves the project-local vvoc config directory.
 //   getProjectOpencodeDir - Resolves the project-local OpenCode config directory.

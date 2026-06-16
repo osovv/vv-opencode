@@ -50,6 +50,25 @@
       </notes>
     </M-MODEL-ROLES>
 
+    <M-CONFIG-LAYERS NAME="ConfigLayers" TYPE="UTILITY" LAYER="0" ORDER="2" STATUS="implemented">
+      <contract>
+        <purpose>Resolve vvoc and OpenCode configuration sources across explicit environment overrides, nearest project-local layers, global layers, and built-in defaults, plus canonical project/global write targets.</purpose>
+      </contract>
+      <interface>
+        <export-VVOC_CONFIG_ENV PURPOSE="Environment variable name for explicit vvoc config selection." />
+        <export-OPENCODE_CONFIG_ENV PURPOSE="Environment variable name for explicit OpenCode config selection." />
+        <export-findNearestProjectConfigRoot PURPOSE="Walk upward from cwd and find the nearest ancestor containing .vvoc/vvoc.json or .opencode/opencode.json(c)." />
+        <export-resolveConfigWriteTargets PURPOSE="Return canonical global or project write paths; project scope writes .opencode/opencode.json and .vvoc/vvoc.json." />
+        <export-resolveVvocConfigSource PURPOSE="Resolve vvoc config source metadata for global, project, or effective reads." />
+        <export-resolveOpenCodeConfigSource PURPOSE="Resolve OpenCode config source metadata for global, project, or effective reads." />
+        <export-loadEffectiveVvocConfigForRuntime PURPOSE="Load vvoc config for runtime plugins using env -> project -> global -> default precedence." />
+      </interface>
+      <depends>none</depends>
+      <target>
+        <source>src/lib/config-layers.ts + src/lib/vvoc-paths.ts</source>
+      </target>
+      <verification-ref>V-M-CONFIG-LAYERS</verification-ref>
+    </M-CONFIG-LAYERS>
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" LAYER="0" ORDER="2" STATUS="implemented">
       <contract>
         <purpose>Resolve OpenCode and canonical vvoc config paths, edit JSONC safely, pin the current vvoc package version in OpenCode config, write role-reference based OpenCode root defaults, built-in `explore`, managed default-agent/command entries, and managed agents conservatively, render canonical vvoc schema v3, refresh built-in role presets, and inspect installation state.</purpose>
@@ -125,6 +144,23 @@
       </notes>
     </M-CLI-MANAGED-AGENTS>
 
+    <M-CLI-MANAGED-SKILLS NAME="ManagedSkills" TYPE="UTILITY" LAYER="0" ORDER="4" STATUS="implemented">
+      <contract>
+        <purpose>Define bundled vv-spec, vv-plan, vv-review, vv-execute, and vv-reflect skill templates plus managed skill metadata for file path resolution, bundled template loading, reference file discovery, and project/global skill lookup.</purpose>
+      </contract>
+      <interface>
+        <export-MANAGED_SKILL_NAMES PURPOSE="Canonical vvoc-managed skill names." />
+        <export-loadManagedSkillTemplate PURPOSE="Load the bundled template for a managed vvoc skill." />
+        <export-loadManagedSkillReference PURPOSE="Load a bundled reference file for a managed vvoc skill." />
+        <export-listManagedSkillReferenceNames PURPOSE="List reference file names for a managed vvoc skill." />
+        <export-loadManagedSkillText PURPOSE="Load managed skill text from project or global vvoc config roots." />
+      </interface>
+      <depends>src/lib/vvoc-paths.ts</depends>
+      <target>
+        <source>src/lib/managed-skills.ts + templates/skills/**/SKILL.md</source>
+      </target>
+      <verification-ref>V-M-CLI-MANAGED-SKILLS</verification-ref>
+    </M-CLI-MANAGED-SKILLS>
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" LAYER="1" ORDER="1" STATUS="implemented">
       <contract>
         <purpose>Expose init, install, sync, status, doctor, version, role, preset, plugin list, config validate, patch-provider, completion, guardian config, and upgrade subcommands through citty while delegating role-aware config mutation to the helper layer.</purpose>
@@ -963,6 +999,23 @@
         <note-4>Write errors are logged as warnings but do not block in-memory operations.</note-4>
       </notes>
     </M-WORKFLOW-PERSISTENCE>
+
+    <M-RELEASE-AUTOMATION NAME="ReleaseAutomation" TYPE="SCRIPT" LAYER="0" ORDER="15" STATUS="implemented">
+      <contract>
+        <purpose>Guard npm releases with a local version-bump wrapper, mandatory AI-generated changelog summary, schema $id consistency check, latest changelog summary validation, and tag-gated GitHub Actions publish workflow.</purpose>
+      </contract>
+      <interface>
+        <script-release-bump PURPOSE="Wrapper around npm version and AI summary generation, then release commit/tag/push." />
+        <script-release-check PURPOSE="Verify package/schema/changelog consistency before release." />
+        <script-release-summary PURPOSE="Deterministic helpers for release summary model config, prompt construction, and validation." />
+      </interface>
+      <depends>M-CLI-CONFIG</depends>
+      <target>
+        <source>scripts/release-bump.ts + scripts/release-check.ts + scripts/release-summary.ts + .github/workflows/publish.yml + schemas/vvoc/v3.json</source>
+        <tests>scripts/release-summary.test.ts + scripts/release-check.test.ts</tests>
+      </target>
+      <verification-ref>V-M-RELEASE-AUTOMATION</verification-ref>
+    </M-RELEASE-AUTOMATION>
   </Modules>
 
   <DataFlow>

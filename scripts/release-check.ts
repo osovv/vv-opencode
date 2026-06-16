@@ -15,6 +15,10 @@
 //   main - Reads release files, prints consistency errors, and exits nonzero on failure.
 // END_MODULE_MAP
 
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Added latest changelog summary validation to release consistency checks.]
+// END_CHANGE_SUMMARY
+
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { validateLatestChangelogSummary } from "./release-summary.ts";

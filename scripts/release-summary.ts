@@ -23,7 +23,20 @@
 //   injectSummaryIntoChangelogEntry - Inserts ### Summary after the release heading.
 //   validateLatestChangelogSummary - Validates only the top changelog release block.
 //   generateReleaseSummaryWithRetries - Runs the injected OpenCode runner with retry/backoff and returns a valid summary.
+//   RELEASE_SUMMARY_AGENT_NAME - Canonical release-summary agent name.
+//   ReleaseCommitMetadata - Commit metadata type including full per-commit diff.
+//   ReleaseSummaryOptions - Validated runtime options for summary generation.
+//   ReleaseSummaryPromptInput - Input used to build the release summary prompt.
+//   CaptureCommand - Function used to execute capture-only commands.
+//   OpencodeRunRequest - Request passed to the injected OpenCode runner.
+//   OpencodeRunResult - Result returned by the injected OpenCode runner.
+//   OpencodeRunner - Function used to invoke OpenCode.
+//   ReleaseSummaryAttempt - Failure or success for one summary generation attempt.
+//   SummaryValidationResult - Parsed latest changelog block validation result.
 // END_MODULE_MAP
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.0 - Initial module for deterministic release summary generation and validation.]
+// END_CHANGE_SUMMARY
 
 export const DEFAULT_RELEASE_SUMMARY_MODEL = "deepseek/deepseek-v4-flash";
 export const DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS = 120_000;

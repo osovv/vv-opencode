@@ -1,26 +1,34 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
 // VERSION: 1.1.0
+// START_MODULE_CONTRACT
 //   PURPOSE: Wrapper around npm version --no-git-tag-version that generates changelog, generates a required AI summary, patches schema $id, runs release checks, then commits, tags, and pushes the release.
 //   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
+//   DEPENDS: [node:fs, node:child_process, scripts/release-summary.ts]
+//   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
-//   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
-//   collectReleaseCommitMetadata - Collects commit metadata and full per-commit diffs from latest reachable tag to HEAD for summary input.
-//   generateReleaseSummaryForRelease - Runs restricted opencode summary generation with retry and validation.
-//   injectSummaryIntoChangelogEntry - Inserts required ### Summary into the generated changelog entry.
-//   runOpencodeSummary - Invokes opencode --pure run with stdin prompt and returns exit/signal/stdout/stderr.
+//   readPackageVersion - Reads the package version from package.json.
+//   run - Runs a command via execFileSync with inherited stdio and exits on failure.
+//   runCapture - Runs a command and captures stdout as a string.
+//   runOpencodeSummary - Invokes opencode --pure run with stdin prompt for one summary attempt.
 //   sleepMs - Blocks synchronously for the given milliseconds between retry attempts.
+//   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
 //   prependToChangelog - Prepends a changelog entry to CHANGELOG.md, creating the file if missing.
 //   updateSchemaId - Patches only the hosted schema $id text for the new package version.
 //   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, and CHANGELOG changes before commit.
+//   assertTagDoesNotExist - Verifies the release tag does not already exist.
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
 //   main - Runs the guarded release bump, changelog generation, mandatory AI summary generation, consistency check, commit, tag, and push flow.
 // END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Updated for full per-commit diff context in release summaries plus mandatory summary generation.]
+// END_CHANGE_SUMMARY
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";

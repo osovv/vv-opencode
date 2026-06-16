@@ -487,6 +487,29 @@
       </required-trace-assertions>
     </V-M-CLI-MANAGED-AGENTS>
 
+    <V-M-CLI-MANAGED-SKILLS MODULE="M-CLI-MANAGED-SKILLS" PRIORITY="medium">
+      <test-files>
+        <file>src/lib/opencode.test.ts</file>
+      </test-files>
+      <module-checks>
+        <check-1>bun x tsc --noEmit</check-1>
+        <check-2>bun run lint</check-2>
+        <check-3>bun run fmt:check</check-3>
+      </module-checks>
+      <scenarios>
+        <scenario-1 kind="success">MANAGED_SKILL_NAMES exposes vv-spec, vv-plan, vv-review, vv-execute, and vv-reflect.</scenario-1>
+        <scenario-2 kind="success">loadManagedSkillTemplate resolves bundled SKILL.md files for each managed skill.</scenario-2>
+        <scenario-3 kind="success">loadManagedSkillReference loads bundled reference files such as vv-spec design-context-template.xml.</scenario-3>
+        <scenario-4 kind="success">listManagedSkillReferenceNames returns reference file names or an empty array when no references exist.</scenario-4>
+        <scenario-5 kind="success">loadManagedSkillText resolves from project-local first, then global, then throws when neither exists.</scenario-5>
+        <scenario-6 kind="failure">Unknown managed skill names fail with a clear error.</scenario-6>
+      </scenarios>
+      <required-log-markers />
+      <required-trace-assertions>
+        <assertion-1>Skills must resolve in deterministic order: project-local before global.</assertion-1>
+        <assertion-2>Missing reference directories must return an empty array rather than throwing.</assertion-2>
+      </required-trace-assertions>
+    </V-M-CLI-MANAGED-SKILLS>
     <V-M-VVOC-PRESET-REGISTRY MODULE="M-VVOC-PRESET-REGISTRY" PRIORITY="medium">
       <test-files>
         <file>src/lib/opencode.test.ts</file>

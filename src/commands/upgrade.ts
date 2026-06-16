@@ -3,20 +3,21 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Upgrade the global vvoc package by checking npm, installing the latest release with Bun, triggering a fresh sync subprocess, and reinstalling shell completions.
 //   SCOPE: npm registry query, version comparison, jsDelivr changelog fetching with version-range parsing, optional pre-release version resolution, global Bun install, post-install sync execution, and post-upgrade shell completion installation.
+//   DEPENDS: [src/lib/package.ts, citty]
+//   LINKS: [M-CLI-UPGRADE, V-M-CLI-UPGRADE]
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   default - Upgrade command definition for vvoc.
-// START_MODULE_MAP
-//   default - Upgrade command definition for vvoc with --allow-prerelease flag.
 //   runUpgradeFlow - Execute the full global upgrade, post-install sync, and completion install flow.
 //   buildInstallCommand - Build the Bun global install command for a specific version.
 //   buildPostInstallCompletionCommand - Build the fresh subprocess command for the default global completion flow.
 //   fetchLatestVersion - Query npm registry for latest stable version.
 //   fetchLatestVersionIncludingPrerelease - Query npm registry for highest version including pre-releases.
 //   fetchChangelog - Fetch CHANGELOG.md from jsDelivr and extract entries between two versions.
-//   parseChangelogRange - Extract Keep a Changelog entries from full text between two version bounds.
+
 //   UpgradeFlowResult - Upgrade flow result type.
 //   UpgradeSubprocessResult - Subprocess result type.
 //   buildPostInstallSyncCommand - Build post-install sync command.
@@ -26,7 +27,7 @@
 //   LAST_CHANGE: [v0.5.0 - Redesigned upgrade into a global-only Bun install flow that runs post-install sync in a fresh subprocess.]
 //   LAST_CHANGE: [v0.25.6 - Added post-upgrade shell completion installation after successful sync.]
 //   LAST_CHANGE: [v0.6.0 - Replaced npm description changelog with jsDelivr CHANGELOG.md fetch and version-range parsing. Added --allow-prerelease flag.]
-
+// END_CHANGE_SUMMARY
 import { defineCommand } from "citty";
 import { getPackageVersion, PACKAGE_NAME } from "../lib/package.js";
 
