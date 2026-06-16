@@ -18,17 +18,34 @@
       </annotations>
     </M-MODEL-ROLES>
 
+    <M-CONFIG-LAYERS NAME="ConfigLayers" TYPE="UTILITY" STATUS="implemented">
+      <purpose>Resolve vvoc and OpenCode configuration sources across explicit environment overrides, nearest project-local layers, global layers, and built-in defaults, plus canonical project/global write targets.</purpose>
+      <path>src/lib/config-layers.ts + src/lib/vvoc-paths.ts</path>
+      <depends>none</depends>
+      <verification-ref>V-M-CONFIG-LAYERS</verification-ref>
+      <annotations>
+        <const-VVOC_CONFIG_ENV PURPOSE="Explicit vvoc config file override used by runtime and launch." />
+        <const-OPENCODE_CONFIG_ENV PURPOSE="Explicit OpenCode config file override used by diagnostics and launch." />
+        <fn-findNearestProjectConfigRoot PURPOSE="Walk upward from cwd and find the nearest ancestor containing .vvoc/vvoc.json or .opencode/opencode.json(c)." />
+        <fn-resolveConfigWriteTargets PURPOSE="Return canonical global or project write paths; project scope writes .opencode/opencode.json and .vvoc/vvoc.json." />
+        <fn-resolveVvocConfigSource PURPOSE="Resolve vvoc config source metadata for global, project, or effective reads." />
+        <fn-resolveOpenCodeConfigSource PURPOSE="Resolve OpenCode config source metadata for global, project, or effective reads." />
+        <fn-loadEffectiveVvocConfigForRuntime PURPOSE="Load vvoc config for runtime plugins using env -&gt; project -&gt; global -&gt; default precedence." />
+      </annotations>
+    </M-CONFIG-LAYERS>
+
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Path resolution, JSONC-aware OpenCode config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, managed command definitions, built-in `explore`, and managed agents, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
-      <path>src/lib/opencode.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/vvoc-preset-registry.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
-      <depends>M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS, M-CLI-AGENT-MODELS</depends>
+      <purpose>Layer-aware OpenCode/vvoc config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, built-in `explore`, managed agents, local skill path registration, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
+      <path>src/lib/opencode.ts + src/lib/config-layers.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/vvoc-preset-registry.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
+      <depends>M-CONFIG-LAYERS, M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS, M-CLI-AGENT-MODELS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
-        <fn-resolvePaths PURPOSE="Resolve OpenCode config paths plus the canonical vvoc.json path for the selected scope." />
+        <fn-resolvePaths PURPOSE="Resolve OpenCode and vvoc paths using canonical global or project-local layers." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
-        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, `default_agent: vv-controller`, managed `/vv-plan` and `/vv-review` commands, built-in `explore`, and vvoc-managed OpenCode agent registrations on canonical values and `vv-role:*` model references." />
+        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, `default_agent: vv-controller`, built-in `explore`, vvoc-managed OpenCode agent registrations, tools.apply_patch=false, and local managed skill discovery path on canonical values." />
         <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v3 and reject unsupported pre-role versions." />
-        <fn-syncVvocConfig PURPOSE="Rewrite the canonical vvoc.json document while preserving valid user-owned role assignments and refreshing managed `vv-*` role presets." />
+        <fn-syncVvocConfig PURPOSE="Rewrite the selected vvoc.json document while preserving valid user-owned role assignments, plugin toggles, and refreshing managed `vv-*` role presets." />
+        <fn-inspectInstallationForScope PURPOSE="Inspect status/doctor sources using global, project, or effective layered source selection." />
       </annotations>
     </M-CLI-CONFIG>
 
@@ -85,33 +102,34 @@
     </M-CLI-AGENT-MODELS>
 
     <M-PLUGIN-TOGGLE-CONFIG NAME="PluginToggleConfig" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a shared `isPluginEnabled()` helper that each plugin factory can call at load time.</purpose>
+      <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a shared effective-config `isPluginEnabled()` helper that each plugin factory can call at load time.</purpose>
       <path>src/lib/plugin-toggle-config.ts</path>
-      <depends>none</depends>
+      <depends>M-CONFIG-LAYERS</depends>
       <verification-ref>V-M-PLUGIN-TOGGLE-CONFIG</verification-ref>
       <annotations>
         <const-PLUGIN_TOGGLE_NAMES PURPOSE="Canonical list of vvoc-managed plugin names: guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction." />
-        <fn-createDefaultPluginToggleConfig PURPOSE="Return a Record<string, boolean> with all known plugins set to true." />
-        <fn-isPluginEnabled PURPOSE="Read the canonical vvoc.json and return whether the named plugin is enabled. Default to true if plugins section is absent." />
-        <type-VvocPluginToggleConfig PURPOSE="Type alias for Record<string, boolean>." />
+        <fn-createDefaultPluginToggleConfig PURPOSE="Return a Record&lt;string, boolean&gt; with all known plugins set to true." />
+        <fn-isPluginEnabled PURPOSE="Read the effective vvoc config and return whether the named plugin is enabled. Default to true if the specific plugin toggle is absent." />
+        <type-VvocPluginToggleConfig PURPOSE="Type alias for Record&lt;string, boolean&gt;." />
       </annotations>
     </M-PLUGIN-TOGGLE-CONFIG>
 
     <M-CLI-COMMANDS NAME="VVOCCommands" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Compose the `vvoc` CLI and expose init, sync, status, doctor, version, plugin list, config validate, role, preset, patch-provider, completion, guardian config, and upgrade commands for the role-based model system.</purpose>
+      <purpose>Compose the `vvoc` CLI and expose init, install, sync, launch, status, doctor, version, plugin list/toggle, config validate, role, preset, patch-provider, completion, guardian config, and upgrade commands for layered project/global config usage.</purpose>
       <path>src/cli.ts + src/commands/*.ts</path>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CONFIG-LAYERS, M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-COMMANDS</verification-ref>
       <annotations>
         <export-init PURPOSE="Bootstrap package registration and role-based config scaffolding (interactive by default)." />
-        <export-sync PURPOSE="Refresh managed vvoc config files plus role-reference OpenCode root defaults, built-in `explore`, and managed agents." />
+        <export-sync PURPOSE="Refresh managed vvoc config files plus role-reference OpenCode root defaults, built-in `explore`, local skill paths, and managed agents in global or project scope." />
+        <export-launch PURPOSE="Spawn opencode with OPENCODE_CONFIG and VVOC_CONFIG set to effective, project, or global config sources." />
       </annotations>
     </M-CLI-COMMANDS>
 
     <M-PLUGIN-MODEL-ROLES NAME="ModelRolesPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Resolve `vv-role:*` references in OpenCode root model fields plus agent and command definitions during plugin config hooks.</purpose>
+      <purpose>Resolve `vv-role:*` references in OpenCode root model fields plus agent and command definitions during plugin config hooks using effective vvoc config source precedence.</purpose>
       <path>src/plugins/model-roles/index.ts</path>
-      <depends>M-MODEL-ROLES, M-CLI-CONFIG</depends>
+      <depends>M-CONFIG-LAYERS, M-MODEL-ROLES, M-CLI-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-MODEL-ROLES</verification-ref>
       <annotations>
         <export-ModelRolesPlugin PURPOSE="Config-hook plugin that resolves `vv-role:*` references for supported OpenCode config fields." />
@@ -119,27 +137,27 @@
     </M-PLUGIN-MODEL-ROLES>
 
     <M-CLI-ROLE NAME="RoleCommand" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>List, set, and unset semantic role assignments in canonical vvoc.json for built-in and user-defined roles.</purpose>
+      <purpose>List semantic role assignments from global/project/effective vvoc config and set/unset assignments in global or project vvoc config for built-in and user-defined roles.</purpose>
       <path>src/commands/role.ts + src/lib/model-roles.ts</path>
-      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
+      <depends>M-CONFIG-LAYERS, M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-CLI-ROLE</verification-ref>
       <annotations>
-        <fn-listRoles PURPOSE="Render built-in and custom role assignments from canonical vvoc.json." />
-        <fn-setRole PURPOSE="Write a normalized concrete model assignment for a role." />
-        <fn-unsetRole PURPOSE="Remove a custom role assignment while protecting built-in roles." />
-        <cmd-role PURPOSE="vvoc role list|set|unset - CLI command for semantic role management." />
+        <fn-listRoles PURPOSE="Render built-in and custom role assignments from selected global/project/effective vvoc config." />
+        <fn-setRole PURPOSE="Write a normalized concrete model assignment for a role to global or project vvoc config." />
+        <fn-unsetRole PURPOSE="Remove a custom role assignment from global or project vvoc config while protecting built-in roles." />
+        <cmd-role PURPOSE="vvoc role list|set|unset --scope global|project|effective - CLI command for semantic role management." />
       </annotations>
     </M-CLI-ROLE>
 
     <M-CLI-PRESET NAME="PresetCommand" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>List, show, and apply declarative named role presets stored in canonical vvoc.json without rewriting OpenCode config directly.</purpose>
+      <purpose>List/show declarative named role presets from global/project/effective vvoc config and apply presets to global or project vvoc config without rewriting OpenCode config directly.</purpose>
       <path>src/commands/preset.ts + src/lib/model-roles.ts + src/lib/vvoc-preset-registry.ts</path>
-      <depends>M-CLI-CONFIG, M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY</depends>
+      <depends>M-CONFIG-LAYERS, M-CLI-CONFIG, M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY</depends>
       <verification-ref>V-M-CLI-PRESET</verification-ref>
       <annotations>
-        <fn-resolvePreset PURPOSE="Validate a preset name against the current vvoc.json preset map." />
-        <fn-applyPreset PURPOSE="Apply only the listed role assignments through canonical vvoc config writes." />
-        <cmd-preset PURPOSE="vvoc preset &lt;name&gt; - CLI command for declarative multi-role model switching." />
+        <fn-resolvePreset PURPOSE="Validate a preset name against the selected vvoc.json preset map." />
+        <fn-applyPreset PURPOSE="Apply only the listed role assignments through global or project vvoc config writes." />
+        <cmd-preset PURPOSE="vvoc preset &lt;name&gt; --scope global|project - CLI command for declarative multi-role model switching." />
       </annotations>
     <notes>
       <note-1>Built-in presets: `vv-openai`, `vv-zai`, `vv-minimax`, `vv-deepseek`.</note-1>
@@ -159,9 +177,9 @@
     </M-VVOC-PRESET-REGISTRY>
 
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role.</purpose>
+      <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role in the effective vvoc config source.</purpose>
       <path>src/plugins/guardian/index.ts + templates/agents/guardian.md</path>
-      <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
+      <depends>M-CONFIG-LAYERS, M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
       <annotations>
         <export-GuardianPlugin PURPOSE="Register Guardian hooks for config, events, tool intent capture, and permission review via a hidden subagent." />
@@ -180,9 +198,9 @@
 
 
     <M-PLUGIN-SYSTEM-CONTEXT-INJECTION NAME="SystemContextInjectionPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions, including repository-memory lookup guidance for .vvoc lessons and runbooks, while skipping known subagents so main-session behavior can be steered globally.</purpose>
+      <purpose>Inject reusable system guidance and workflow protocol instructions into primary chat sessions, including repository-memory lookup guidance for .vvoc lessons and runbooks, while registering skill discovery paths according to effective config scope and skipping known subagents.</purpose>
       <path>src/plugins/system-context-injection/index.ts</path>
-      <depends>M-CLI-MANAGED-AGENTS</depends>
+      <depends>M-CONFIG-LAYERS, M-CLI-MANAGED-AGENTS</depends>
       <verification-ref>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</verification-ref>
       <annotations>
         <export-SystemContextInjectionPlugin PURPOSE="Inject main-session system guidance such as proactive explore instructions, repository-memory lookup, and workflow protocol without polluting known subagents." />
@@ -190,9 +208,9 @@
     </M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
 
     <M-PLUGIN-SECRETS-REDACTION NAME="SecretsRedactionPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Redact secrets from messages before LLM requests and restore them after, protecting sensitive values from provider-bound payloads.</purpose>
+      <purpose>Redact secrets from messages before LLM requests and restore them after, loading redaction settings from the effective vvoc config source.</purpose>
       <path>src/plugins/secrets-redaction.ts + src/plugins/secrets-redaction/*.ts</path>
-      <depends>M-CLI-CONFIG</depends>
+      <depends>M-CONFIG-LAYERS, M-CLI-CONFIG</depends>
       <verification-ref>V-M-PLUGIN-SECRETS-REDACTION</verification-ref>
       <annotations>
         <export-SecretsRedactionPlugin PURPOSE="Main plugin factory for chat-message redaction, completion restoration, and tool-argument restoration." />
@@ -283,7 +301,7 @@
     </M-PLUGIN-WORKFLOW>
 
     <M-WORKFLOW-PERSISTENCE NAME="WorkflowPersistence" TYPE="DATA_LAYER" STATUS="implemented">
-      <purpose>Hydrate and snapshot work-item workflow state from/to per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.</purpose>
+      <purpose>Hydrate and snapshot work-item workflow state from/to per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json.</purpose>
       <path>src/plugins/workflow/persistence.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-WORKFLOW-PERSISTENCE</verification-ref>
@@ -317,15 +335,15 @@
     </M-CLI-PLUGIN-LIST>
 
     <M-CLI-PLUGIN-TOGGLE NAME="PluginToggle" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Add `vvoc plugin enable <name>` and `vvoc plugin disable <name>` subcommands that mutate the `plugins` section in canonical vvoc.json.</purpose>
+      <purpose>Add `vvoc plugin enable &lt;name&gt;` and `vvoc plugin disable &lt;name&gt;` subcommands that mutate the `plugins` section in the selected vvoc.json.</purpose>
       <path>src/commands/plugin-toggle.ts</path>
       <depends>M-CLI-CONFIG, M-PLUGIN-TOGGLE-CONFIG</depends>
       <verification-ref>V-M-CLI-PLUGIN-TOGGLE</verification-ref>
       <annotations>
-        <fn-enablePlugin PURPOSE="Set plugins[<name>] = true in canonical vvoc.json." />
-        <fn-disablePlugin PURPOSE="Set plugins[<name>] = false in canonical vvoc.json." />
-        <cmd-plugin_enable PURPOSE="vvoc plugin enable <name> - CLI subcommand." />
-        <cmd-plugin_disable PURPOSE="vvoc plugin disable <name> - CLI subcommand." />
+        <fn-enablePlugin PURPOSE="Set plugins[&lt;name&gt;] = true in the selected vvoc.json." />
+        <fn-disablePlugin PURPOSE="Set plugins[&lt;name&gt;] = false in the selected vvoc.json." />
+        <cmd-plugin_enable PURPOSE="vvoc plugin enable &lt;name&gt; - CLI subcommand." />
+        <cmd-plugin_disable PURPOSE="vvoc plugin disable &lt;name&gt; - CLI subcommand." />
       </annotations>
       <notes>
         <note-1>Validates plugin name against PLUGIN_TOGGLE_NAMES before writing.</note-1>

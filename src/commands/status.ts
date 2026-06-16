@@ -2,8 +2,8 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Show the current vv-opencode installation status.
-//   SCOPE: Scope parsing, inspection lookup, and human-readable status output for OpenCode and the canonical vvoc.json config.
-//   DEPENDS: [citty, src/lib/opencode.ts]
+//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable status output for OpenCode and vvoc config.
+//   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,11 +14,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added global/project/effective status scopes with selected source reporting.]
 //   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output and unresolved role-reference reporting sourced from installation inspection.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
-import { inspectInstallation, resolvePaths, type Scope } from "../lib/opencode.js";
+import type { ConfigReadScope } from "../lib/config-layers.js";
+import { inspectInstallationForScope } from "../lib/opencode.js";
 
 export default defineCommand({
   meta: {
@@ -28,9 +30,9 @@ export default defineCommand({
   args: {
     scope: {
       type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "Inspect global or project config.",
+      options: ["global", "project", "effective"],
+      default: "effective",
+      description: "Inspect global, project-local, or effective layered config.",
     },
     "config-dir": {
       type: "string",
@@ -39,16 +41,17 @@ export default defineCommand({
   },
   async run({ args }) {
     // START_BLOCK_PRINT_STATUS_REPORT
-    const scope = args.scope === "project" ? "project" : "global";
+    const scope = resolveReadScope(args.scope);
     const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({
-      scope: scope as Scope,
-      cwd: process.cwd(),
-      configDir,
-    });
-    const inspection = await inspectInstallation(paths);
+    const inspection = await inspectInstallationForScope({ scope, cwd: process.cwd(), configDir });
 
     console.log(`Scope: ${inspection.scope}`);
+    console.log(
+      `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
+    );
+    console.log(
+      `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
+    );
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(`OpenCode config exists: ${inspection.opencode.exists ? "yes" : "no"}`);
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
@@ -88,3 +91,7 @@ export default defineCommand({
     // END_BLOCK_PRINT_STATUS_REPORT
   },
 });
+
+function resolveReadScope(value: unknown): ConfigReadScope {
+  return value === "global" || value === "project" ? value : "effective";
+}

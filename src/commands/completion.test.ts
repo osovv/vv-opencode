@@ -84,7 +84,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="completion config doctor guardian init install patch-provider preset plugin role status sync upgrade version"',
+    'local commands="completion config doctor guardian init install launch patch-provider preset plugin role status sync upgrade version"',
   );
 });
 

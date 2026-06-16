@@ -1,9 +1,9 @@
 // FILE: src/commands/preset.ts
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
-//   PURPOSE: List, show, and apply declarative named role presets from canonical vvoc.json.
-//   SCOPE: Canonical preset lookup, preset rendering, and role-only preset application against canonical vvoc.json.
-//   DEPENDS: [citty, node:fs/promises, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
+//   PURPOSE: List, show, and apply declarative named role presets from scoped vvoc.json layers.
+//   SCOPE: Effective/global/project preset lookup, preset rendering, and role-only preset application against selected vvoc.json writes.
+//   DEPENDS: [citty, node:fs/promises, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-PRESET, M-CLI-CONFIG, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added scoped preset reads and global/project role-only preset writes.]
 //   LAST_CHANGE: [v0.4.0 - Switched preset application to canonical role-only writes and removed legacy scope/OpenCode target mutation behavior.]
 //   LAST_CHANGE: [v0.4.1 - Stopped preset flows from running sync rewrites; now bootstrap vvoc.json only when missing and keep existing config sections untouched unless listed roles change.]
 //   LAST_CHANGE: [v0.4.2 - Switched existing-file preset flows to strict raw vvoc.json validation and role-only document mutation without preset reseeding side effects.]
@@ -26,6 +27,11 @@
 import { defineCommand } from "citty";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+  loadVvocConfigForRead,
+  type ConfigReadScope,
+  type ConfigWriteScope,
+} from "../lib/config-layers.js";
 import { parseModelSelection } from "../lib/model-roles.js";
 import { resolvePaths } from "../lib/opencode.js";
 import {
@@ -65,6 +71,13 @@ const configDirArg = {
   description: "Override the global config home.",
 };
 
+const scopeArg = {
+  type: "enum" as const,
+  options: ["global", "project", "effective"],
+  description:
+    "Read global, project-local, or effective config; preset application writes global or project.",
+};
+
 export default defineCommand({
   meta: {
     name: "preset",
@@ -73,6 +86,7 @@ export default defineCommand({
   args: {
     command: commandArg,
     preset: presetArg,
+    scope: scopeArg,
     "config-dir": configDirArg,
   },
   async run({ args }) {
@@ -112,9 +126,9 @@ export function formatPreset(_name: string, preset: VvocPreset): string {
 
 export async function applyPreset(
   presetName: string,
-  options: { cwd?: string; configDir?: string } = {},
+  options: { cwd?: string; configDir?: string; scope?: ConfigWriteScope } = {},
 ): Promise<{ name: string; preset: VvocPreset; changes: AppliedPresetChange[]; path: string }> {
-  const { config, paths } = await loadGlobalVvocConfig(options);
+  const { config, paths } = await loadScopedVvocConfigForWrite(options);
   const resolved = resolvePreset(presetName, config.presets);
   const entries = Object.entries(resolved.preset.agents);
   const nextRoles: Record<string, string> = { ...config.roles };
@@ -142,7 +156,7 @@ export async function applyPreset(
 }
 
 async function listPresets(
-  options: { cwd?: string; configDir?: string } = {},
+  options: { cwd?: string; configDir?: string; scope?: ConfigReadScope } = {},
 ): Promise<ListedPreset[]> {
   return listConfiguredPresets(await readConfiguredPresets(options));
 }
@@ -151,13 +165,14 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
   const command = typeof args.command === "string" ? args.command.trim() : "";
   const presetName = typeof args.preset === "string" ? args.preset.trim() : "";
   const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+  const readScope = resolveReadScope(args.scope);
 
   if (!command || command === "list") {
     if (presetName) {
       throw new Error(`unexpected extra argument for \`vvoc preset list\`: ${presetName}`);
     }
 
-    const presets = await listPresets({ cwd: process.cwd(), configDir });
+    const presets = await listPresets({ cwd: process.cwd(), configDir, scope: readScope });
 
     if (presets.length === 0) {
       console.log("No presets configured.");
@@ -178,7 +193,11 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
       throw new Error("preset name required for `vvoc preset show <name>`");
     }
 
-    const presets = await readConfiguredPresets({ cwd: process.cwd(), configDir });
+    const presets = await readConfiguredPresets({
+      cwd: process.cwd(),
+      configDir,
+      scope: readScope,
+    });
     const resolved = resolvePreset(presetName, presets);
     process.stdout.write(formatPreset(resolved.name, resolved.preset));
     return;
@@ -191,6 +210,7 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
   const applied = await applyPreset(command, {
     cwd: process.cwd(),
     configDir,
+    scope: resolveWriteScope(args.scope),
   });
 
   console.log(`Applied preset ${applied.name}:`);
@@ -200,15 +220,24 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
 }
 
 async function readConfiguredPresets(
-  options: { cwd?: string; configDir?: string } = {},
+  options: { cwd?: string; configDir?: string; scope?: ConfigReadScope } = {},
 ): Promise<VvocPresets> {
-  const { config } = await loadGlobalVvocConfig(options);
+  const { config } = await loadVvocConfigForRead({
+    scope: options.scope ?? "effective",
+    cwd: options.cwd ?? process.cwd(),
+    configDir: options.configDir,
+    allowDefault: true,
+  });
   return config.presets;
 }
 
-async function loadGlobalVvocConfig(options: { cwd?: string; configDir?: string }) {
+async function loadScopedVvocConfigForWrite(options: {
+  cwd?: string;
+  configDir?: string;
+  scope?: ConfigWriteScope;
+}) {
   const paths = await resolvePaths({
-    scope: "global",
+    scope: options.scope ?? "global",
     cwd: options.cwd ?? process.cwd(),
     configDir: options.configDir,
   });
@@ -266,4 +295,15 @@ function normalizePresetModelSelection(value: unknown, context: string): string 
     throw new Error(`${context}: model selection is required`);
   }
   return value;
+}
+
+function resolveReadScope(value: unknown): ConfigReadScope {
+  return value === "global" || value === "project" ? value : "effective";
+}
+
+function resolveWriteScope(value: unknown): ConfigWriteScope {
+  if (value === "effective") {
+    throw new Error("preset application supports --scope global or --scope project, not effective");
+  }
+  return value === "project" ? "project" : "global";
 }

@@ -40,7 +40,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
@@ -179,10 +179,13 @@ describe("managed OpenCode role-reference rewrites", () => {
   // keep root small note
   "small_model": "openai/gpt-5-mini",
       "default_agent": "plan",
-      "tools": {
+  "tools": {
     // keep tools note
     "read": true,
     "apply_patch": true
+  },
+  "skills": {
+    "paths": ["./custom-skills"]
   },
   "agent": {
     // keep managed note
@@ -207,6 +210,7 @@ describe("managed OpenCode role-reference rewrites", () => {
       tools?: { apply_patch?: boolean; read?: boolean };
       default_agent?: string;
       agent?: Record<string, { model?: string; prompt?: string }>;
+      skills?: { paths?: string[] };
       command?: Record<string, { agent?: string; template?: string }>;
     };
 
@@ -225,7 +229,9 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.agent?.build?.model).toBe("openai/gpt-5");
     expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
-    expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
+    expect(parsed.agent?.enhancer?.prompt).toBe("{file:../.vvoc/agents/enhancer.md}");
+    expect(parsed.skills?.paths).toContain("./custom-skills");
+    expect(parsed.skills?.paths).toContain("../.vvoc/skills");
   });
 
   test("sync removes legacy tracked managed entries and preserves unrelated agents", async () => {
@@ -249,13 +255,13 @@ describe("managed OpenCode role-reference rewrites", () => {
     "implementer": {
       "description": "Implements approved changes with focused verification and a minimal diff.",
       "model": "vv-role:default",
-      "prompt": "{file:.vvoc/agents/implementer.md}",
+      "prompt": "{file:../.vvoc/agents/implementer.md}",
       "mode": "subagent"
     },
     "spec-reviewer": {
       "description": "Checks an implementation against the requested spec and flags missing or extra behavior.",
       "model": "vv-role:smart",
-      "prompt": "{file:.vvoc/agents/spec-reviewer.md}",
+      "prompt": "{file:../.vvoc/agents/spec-reviewer.md}",
       "mode": "subagent",
       "permission": {
         "edit": "deny"
@@ -264,7 +270,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     "code-reviewer": {
       "description": "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
       "model": "vv-role:smart",
-      "prompt": "{file:.vvoc/agents/code-reviewer.md}",
+      "prompt": "{file:../.vvoc/agents/code-reviewer.md}",
       "mode": "subagent",
       "permission": {
         "edit": "deny"
@@ -273,6 +279,7 @@ describe("managed OpenCode role-reference rewrites", () => {
   }
 }\n`;
 
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
       await writeFile(paths.opencodeConfigPath, preRenameConfig, "utf8");
       const result = await syncManagedAgentRegistrations(paths);
       const syncedText = await readFile(paths.opencodeConfigPath, "utf8");
@@ -289,13 +296,13 @@ describe("managed OpenCode role-reference rewrites", () => {
       expect(synced.agent?.["code-reviewer"]).toBeUndefined();
 
       expect(synced.agent?.["vv-implementer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-implementer.md}",
+        "{file:../.vvoc/agents/vv-implementer.md}",
       );
       expect(synced.agent?.["vv-spec-reviewer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-spec-reviewer.md}",
+        "{file:../.vvoc/agents/vv-spec-reviewer.md}",
       );
       expect(synced.agent?.["vv-code-reviewer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-code-reviewer.md}",
+        "{file:../.vvoc/agents/vv-code-reviewer.md}",
       );
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -331,6 +338,7 @@ describe("managed OpenCode role-reference rewrites", () => {
   }
 }\n`;
 
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
       await writeFile(paths.opencodeConfigPath, customNamedConfig, "utf8");
       const result = await syncManagedAgentRegistrations(paths);
       const syncedText = await readFile(paths.opencodeConfigPath, "utf8");
@@ -347,13 +355,13 @@ describe("managed OpenCode role-reference rewrites", () => {
       expect(synced.agent?.["code-reviewer"]?.prompt).toBe("{file:./custom-code-reviewer.md}");
 
       expect(synced.agent?.["vv-implementer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-implementer.md}",
+        "{file:../.vvoc/agents/vv-implementer.md}",
       );
       expect(synced.agent?.["vv-spec-reviewer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-spec-reviewer.md}",
+        "{file:../.vvoc/agents/vv-spec-reviewer.md}",
       );
       expect(synced.agent?.["vv-code-reviewer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-code-reviewer.md}",
+        "{file:../.vvoc/agents/vv-code-reviewer.md}",
       );
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -374,13 +382,13 @@ describe("managed OpenCode role-reference rewrites", () => {
     "implementer": {
       "description": "Custom team implementer",
       "mode": "subagent",
-      "prompt": "{file:.vvoc/agents/implementer.md}",
+      "prompt": "{file:../.vvoc/agents/implementer.md}",
       "model": "vv-role:smart"
     },
     "spec-reviewer": {
       "description": "Checks an implementation against the requested spec and flags missing or extra behavior.",
       "mode": "subagent",
-      "prompt": "{file:.vvoc/agents/spec-reviewer.md}",
+      "prompt": "{file:../.vvoc/agents/spec-reviewer.md}",
       "model": "vv-role:smart",
       "permission": {
         "edit": "allow"
@@ -389,7 +397,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     "code-reviewer": {
       "description": "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
       "mode": "primary",
-      "prompt": "{file:.vvoc/agents/code-reviewer.md}",
+      "prompt": "{file:../.vvoc/agents/code-reviewer.md}",
       "model": "vv-role:smart",
       "permission": {
         "edit": "deny"
@@ -398,6 +406,7 @@ describe("managed OpenCode role-reference rewrites", () => {
   }
 }\n`;
 
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
       await writeFile(paths.opencodeConfigPath, customizedLegacyPathConfig, "utf8");
       const result = await syncManagedAgentRegistrations(paths);
       const synced = parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
@@ -410,22 +419,26 @@ describe("managed OpenCode role-reference rewrites", () => {
       expect(result.changed).toBe(true);
       expect(synced.agent?.implementer?.description).toBe("Custom team implementer");
       expect(synced.agent?.implementer?.model).toBe("vv-role:smart");
-      expect(synced.agent?.implementer?.prompt).toBe("{file:.vvoc/agents/implementer.md}");
+      expect(synced.agent?.implementer?.prompt).toBe("{file:../.vvoc/agents/implementer.md}");
 
-      expect(synced.agent?.["spec-reviewer"]?.prompt).toBe("{file:.vvoc/agents/spec-reviewer.md}");
+      expect(synced.agent?.["spec-reviewer"]?.prompt).toBe(
+        "{file:../.vvoc/agents/spec-reviewer.md}",
+      );
       expect(synced.agent?.["spec-reviewer"]?.model).toBe("vv-role:smart");
 
       expect(synced.agent?.["code-reviewer"]?.mode).toBe("primary");
-      expect(synced.agent?.["code-reviewer"]?.prompt).toBe("{file:.vvoc/agents/code-reviewer.md}");
+      expect(synced.agent?.["code-reviewer"]?.prompt).toBe(
+        "{file:../.vvoc/agents/code-reviewer.md}",
+      );
 
       expect(synced.agent?.["vv-implementer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-implementer.md}",
+        "{file:../.vvoc/agents/vv-implementer.md}",
       );
       expect(synced.agent?.["vv-spec-reviewer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-spec-reviewer.md}",
+        "{file:../.vvoc/agents/vv-spec-reviewer.md}",
       );
       expect(synced.agent?.["vv-code-reviewer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-code-reviewer.md}",
+        "{file:../.vvoc/agents/vv-code-reviewer.md}",
       );
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -453,12 +466,13 @@ describe("managed OpenCode role-reference rewrites", () => {
     "implementer": {
       "description": "Implements approved changes with focused verification and a minimal diff.",
       "mode": "subagent",
-      "prompt": "{file:.vvoc/agents/implementer.md}",
+      "prompt": "{file:../.vvoc/agents/implementer.md}",
       "model": "vv-role:default"
     }
   }
 }\n`;
 
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
       await writeFile(paths.opencodeConfigPath, legacyManagedShapeConfig, "utf8");
       const result = await syncManagedAgentRegistrations(paths);
       const synced = parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
@@ -466,10 +480,10 @@ describe("managed OpenCode role-reference rewrites", () => {
       };
 
       expect(result.changed).toBe(true);
-      expect(synced.agent?.implementer?.prompt).toBe("{file:.vvoc/agents/implementer.md}");
+      expect(synced.agent?.implementer?.prompt).toBe("{file:../.vvoc/agents/implementer.md}");
       expect(synced.agent?.implementer?.model).toBe("vv-role:default");
       expect(synced.agent?.["vv-implementer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-implementer.md}",
+        "{file:../.vvoc/agents/vv-implementer.md}",
       );
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -688,10 +702,12 @@ describe("managed prompt install", () => {
 
       const openCode = ensureManagedAgentRegistrationsConfigText(undefined, paths);
       const parsed = parse(openCode) as { agent?: Record<string, { prompt?: string }> };
-      expect(parsed.agent?.["vv-controller"]?.prompt).toBe("{file:.vvoc/agents/vv-controller.md}");
-      expect(parsed.agent?.enhancer?.prompt).toBe("{file:.vvoc/agents/enhancer.md}");
+      expect(parsed.agent?.["vv-controller"]?.prompt).toBe(
+        "{file:../.vvoc/agents/vv-controller.md}",
+      );
+      expect(parsed.agent?.enhancer?.prompt).toBe("{file:../.vvoc/agents/enhancer.md}");
       expect(parsed.agent?.["vv-implementer"]?.prompt).toBe(
-        "{file:.vvoc/agents/vv-implementer.md}",
+        "{file:../.vvoc/agents/vv-implementer.md}",
       );
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -1011,18 +1027,20 @@ describe("resolvePaths", () => {
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
   });
 
-  test("keeps project prompts in .vvoc but canonical config global", async () => {
+  test("keeps project config, prompts, and skills in canonical local layers", async () => {
     const paths = await resolvePaths({
       scope: "project",
       cwd: "/workspace/project",
       configDir: "/tmp/vvoc-config-home",
     });
 
-    expect(paths.opencodeBaseDir).toBe("/workspace/project");
-    expect(paths.vvocBaseDir).toBe("/tmp/vvoc-config-home/vvoc");
-    expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
+    expect(paths.opencodeBaseDir).toBe("/workspace/project/.opencode");
+    expect(paths.opencodeConfigPath).toBe("/workspace/project/.opencode/opencode.json");
+    expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
+    expect(paths.vvocConfigPath).toBe("/workspace/project/.vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
     expect(paths.managedPlansDirPath).toBe("/workspace/project/.vvoc/plans");
+    expect(paths.managedSkillsDirPath).toBe("/workspace/project/.vvoc/skills");
   });
 });
 
@@ -1038,7 +1056,8 @@ describe("inspectInstallation", () => {
         configDir: configHome,
       });
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
 
       await writeFile(
         paths.vvocConfigPath,

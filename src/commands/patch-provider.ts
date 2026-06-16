@@ -1,8 +1,8 @@
 // FILE: src/commands/patch-provider.ts
 // VERSION: 0.4.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Apply global OpenCode patch presets.
-//   SCOPE: Patch preset validation, global OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
+//   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
+//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-PATCH-PROVIDER, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -13,10 +13,11 @@
 //   default - PatchProvider command definition for vvoc.
 //   resolvePatchProviderPreset - Validate an OpenCode patch preset name and return its config.
 //   PatchProviderPresetName - Supported built-in patch-provider preset names.
-//   applyPatchProviderPreset - Apply the selected OpenCode patch preset to global OpenCode config.
+//   applyPatchProviderPreset - Apply the selected OpenCode patch preset to global or project OpenCode config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added --scope global|project provider patch writes.]
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true to vv-gpt-5.4-xhigh and vv-gpt-5.5-xhigh in openai patch preset.]
 // END_CHANGE_SUMMARY
 
@@ -27,6 +28,7 @@ import {
   writeOpenCodeProviderObject,
   writeProviderBaseUrl,
 } from "../lib/opencode.js";
+import type { Scope } from "../lib/opencode.js";
 
 type ProviderBaseUrlPatchPreset = {
   kind: "provider-base-url";
@@ -138,6 +140,13 @@ const configDirArg = {
   description: "Override the global config home used for opencode/.",
 };
 
+const writeScopeArg = {
+  type: "enum" as const,
+  options: ["global", "project"],
+  default: "global",
+  description: "Write global config or project-local config.",
+};
+
 // START_BLOCK_PROVIDER_PRESET_RESOLUTION
 export function resolvePatchProviderPreset(name: string): PatchPreset {
   const presetName = name.trim() as PatchProviderPresetName;
@@ -151,11 +160,11 @@ export function resolvePatchProviderPreset(name: string): PatchPreset {
 
 export async function applyPatchProviderPreset(
   presetName: string,
-  options: { cwd?: string; configDir?: string } = {},
+  options: { cwd?: string; configDir?: string; scope?: Scope } = {},
 ) {
   const preset = resolvePatchProviderPreset(presetName);
   const paths = await resolvePaths({
-    scope: "global",
+    scope: options.scope ?? "global",
     cwd: options.cwd ?? process.cwd(),
     configDir: options.configDir,
   });
@@ -176,6 +185,7 @@ export default defineCommand({
   },
   args: {
     preset: presetArg,
+    scope: writeScopeArg,
     "config-dir": configDirArg,
   },
   async run({ args }) {
@@ -184,6 +194,7 @@ export default defineCommand({
     const { preset, result } = await applyPatchProviderPreset(presetName, {
       cwd: process.cwd(),
       configDir,
+      scope: args.scope === "project" ? "project" : "global",
     });
 
     console.log(`${describeWriteResult(result)} (${preset.summary})`);

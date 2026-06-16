@@ -14,17 +14,21 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.10.0 - Added strict project-scope validation missing-layer coverage.]
 //   LAST_CHANGE: [v0.9.0 - Replaced legacy v1/v2 acceptance checks with canonical v3 role-based failure coverage including unsupported-version and preset role-path errors.]
 //   LAST_CHANGE: [v0.9.1 - Aligned OpenAI default-role fixtures with GPT-5.4 while smart remains vv-gpt-5.5-xhigh.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
+import { access, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   VVOC_CONFIG_SCHEMA_URL,
   createDefaultVvocConfig,
   renderVvocConfig,
 } from "../lib/vvoc-config.js";
-import { validateVvocConfigContent } from "./config-validate.js";
+import { validateVvocConfig, validateVvocConfigContent } from "./config-validate.js";
 
 const FP = "/test/vvoc.json";
 
@@ -210,4 +214,20 @@ test("validateVvocConfigContent - malformed preset role assignment fails with pr
         error.includes("INVALID_MODEL_SELECTION: modelSelection expected provider/model"),
     ),
   ).toBe(true);
+});
+
+test("validateVvocConfig with project scope is strict and does not create config", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-validate-project-"));
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-validate-global-"));
+
+  try {
+    const result = await validateVvocConfig(projectDir, configHome, "project");
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain("vvoc install --scope project");
+    await expect(access(join(projectDir, ".vvoc", "vvoc.json"))).rejects.toBeDefined();
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  }
 });

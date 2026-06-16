@@ -39,6 +39,7 @@
 //
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v2.4.1 - Preserved strict-parsed plugin toggle values instead of resetting them to defaults.]
 //   LAST_CHANGE: [v2.3.4 - Moved built-in vvoc preset definitions and managed-name detection to a shared internal preset registry.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
 //   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
@@ -477,7 +478,7 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
         value.secretsRedaction as SecretsRedactionConfig,
       ),
       presets: createVvocPresets(value.presets as VvocPresets),
-      plugins: createDefaultPluginToggleConfig(),
+      plugins: createPluginToggleConfig(value.plugins),
     },
   };
 }
@@ -514,6 +515,21 @@ function createVvocPresets(overrides: VvocPresets = {}): VvocPresets {
   }
 
   return presets;
+}
+
+function createPluginToggleConfig(overrides: unknown = {}): VvocPluginToggleConfig {
+  const config = createDefaultPluginToggleConfig();
+  if (!isPlainObject(overrides)) {
+    return config;
+  }
+
+  for (const [pluginName, pluginValue] of Object.entries(overrides)) {
+    if (typeof pluginValue === "boolean") {
+      config[pluginName] = pluginValue;
+    }
+  }
+
+  return config;
 }
 
 function isBuiltinVvocPresetName(name: string): boolean {

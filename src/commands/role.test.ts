@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Added project-scope role write isolation coverage.]
 //   LAST_CHANGE: [v0.1.0 - Added coverage for role list/set/unset and built-in role protections.]
 // END_CHANGE_SUMMARY
 
@@ -107,6 +108,36 @@ describe("role helpers", () => {
       expect(config?.roles.default).toBeDefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("setRoleAssignment with project scope writes only project-local vvoc config", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-role-project-global-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-role-project-local-"));
+
+    try {
+      await setRoleAssignment("team-review", "openai/gpt-5.4", {
+        cwd: projectDir,
+        configDir: configHome,
+        scope: "project",
+      });
+      const projectPaths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+      const globalPaths = await resolvePaths({
+        scope: "global",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      const projectConfig = await readVvocConfig(projectPaths);
+      expect(projectConfig?.roles["team-review"]).toBe("openai/gpt-5.4");
+      await expect(access(globalPaths.vvocConfigPath, fsConstants.F_OK)).rejects.toBeDefined();
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
     }
   });
 

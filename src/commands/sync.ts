@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink sync for project-scope sync.]
 //   LAST_CHANGE: [v0.5.0 - Added managed skill file sync during vvoc sync.]
 //   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope sync.]
 //   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config syncing with canonical vvoc.json refresh.]
@@ -86,8 +87,10 @@ export default defineCommand({
     }
     console.log(describeWriteResult(vvocConfig));
 
-    const symlinkResult = await ensureManagedSkillSymlink(configDir);
-    console.log(describeWriteResult(symlinkResult));
+    if (paths.scope === "global") {
+      const symlinkResult = await ensureManagedSkillSymlink(configDir);
+      console.log(describeWriteResult(symlinkResult));
+    }
     // END_BLOCK_APPLY_SYNC_COMMAND
   },
 });

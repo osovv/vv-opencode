@@ -1,8 +1,8 @@
 // FILE: src/commands/plugin-toggle.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Provide `vvoc plugin enable <name>` and `vvoc plugin disable <name>` subcommands that mutate the `plugins` section in canonical vvoc.json.
-//   SCOPE: Plugin name validation, vvoc.json read/write, and CLI output.
+//   PURPOSE: Provide `vvoc plugin enable <name>` and `vvoc plugin disable <name>` subcommands that mutate the `plugins` section in scoped vvoc.json layers.
+//   SCOPE: Plugin name validation, global/project vvoc.json bootstrap, read/write, and CLI output.
 //   DEPENDS: [citty, node:fs/promises, src/lib/opencode.js, src/lib/plugin-toggle-config.js]
 //   LINKS: [M-CLI-PLUGIN-TOGGLE, M-CLI-CONFIG, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
@@ -15,12 +15,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle writes while preserving global defaults.]
 //   LAST_CHANGE: [v1.0.0 - Initial implementation for runtime plugin enable/disable.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { readFile, writeFile } from "node:fs/promises";
-import { resolvePaths } from "../lib/opencode.js";
+import { resolvePaths, syncVvocConfig } from "../lib/opencode.js";
 import { PLUGIN_TOGGLE_NAMES } from "../lib/plugin-toggle-config.js";
 import type { Scope } from "../lib/opencode.js";
 
@@ -33,6 +34,7 @@ async function togglePlugin(
   configDir?: string,
 ): Promise<string> {
   const paths = await resolvePaths({ scope, cwd, configDir });
+  await syncVvocConfig(paths);
 
   // Read current vvoc.json
   let content: string;

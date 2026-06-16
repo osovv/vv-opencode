@@ -1,8 +1,8 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.8.1
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
-//   SCOPE: Non-interactive init path, managed agent registration, managed agent prompt scaffolding, canonical config scaffolding, and idempotent re-run handling.
+//   SCOPE: Non-interactive init path, local project config layers, managed agent/skill/plan scaffolding, canonical config scaffolding, global side-effect guards, and idempotent re-run handling.
 //   DEPENDS: [src/commands/init.ts]
 //   LINKS: [M-CLI-INIT]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.9.0 - Added project-local .opencode/.vvoc assertions and global side-effect guards for scoped init.]
 //   LAST_CHANGE: [v0.8.1 - Updated init expectations so the managed vv-controller agent is seeded with the built-in smart role.]
 //   LAST_CHANGE: [v0.8.1 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
@@ -64,6 +65,8 @@ describe("init scenarios", () => {
       const { readFileSync, existsSync } = await import("node:fs");
       const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
 
+      expect(paths.opencodeConfigPath).toBe(join(tmpDir, ".opencode", "opencode.json"));
+      expect(paths.vvocConfigPath).toBe(join(tmpDir, ".vvoc", "vvoc.json"));
       expect(existsSync(paths.opencodeConfigPath)).toBe(true);
       expect(existsSync(paths.vvocConfigPath)).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
@@ -78,6 +81,8 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedSkillsDirPath + "/vv-plan/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-review/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-execute/SKILL.md")).toBe(true);
+      expect(existsSync(join(configHome, "opencode"))).toBe(false);
+      expect(existsSync(join(configHome, "vvoc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
@@ -89,6 +94,7 @@ describe("init scenarios", () => {
         default_agent: string;
         agent: Record<string, { model?: string; prompt?: string }>;
         command: Record<string, { agent?: string }>;
+        skills?: { paths?: string[] };
       };
       const vvocConfig = parseVvocConfigText(vvocContent, paths.vvocConfigPath);
 
@@ -112,6 +118,7 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent["vv-code-reviewer"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent.investigator?.prompt).toContain("{file:");
+      expect(opencodeConfig.skills?.paths).toContain("../.vvoc/skills");
 
       expect(vvocConfig.version).toBe(VVOC_CONFIG_VERSION);
       expect(vvocConfig.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);

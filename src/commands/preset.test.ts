@@ -25,7 +25,7 @@
 import { describe, expect, test } from "bun:test";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyPreset, formatPreset, listConfiguredPresets, resolvePreset } from "./preset.js";
 import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
@@ -76,7 +76,7 @@ describe("applyPreset", () => {
       });
       const defaultConfig = createDefaultVvocConfig();
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
 
       await writeFile(
         paths.vvocConfigPath,
@@ -103,6 +103,7 @@ describe("applyPreset", () => {
       const applied = await applyPreset("openai", {
         cwd: projectDir,
         configDir: configHome,
+        scope: "project",
       });
 
       expect(applied.changes.map((change) => change.roleId)).toEqual(["default", "smart"]);
@@ -159,16 +160,18 @@ describe("applyPreset", () => {
         configDir: configHome,
       });
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
       await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
 
       const opencodeText =
         '{\n  "$schema": "https://opencode.ai/config.json",\n  "plugin": ["example/plugin"],\n  "agent": {\n    "general": {\n      "model": "vv-role:default"\n    }\n  }\n}\n';
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
       await writeFile(paths.opencodeConfigPath, opencodeText, "utf8");
 
       await applyPreset("vv-zai", {
         cwd: projectDir,
         configDir: configHome,
+        scope: "project",
       });
 
       const afterText = await readFile(paths.opencodeConfigPath, "utf8");
@@ -216,13 +219,14 @@ describe("applyPreset", () => {
         },
       };
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
       await writeFile(paths.vvocConfigPath, `${JSON.stringify(seededConfig, null, 2)}\n`, "utf8");
 
       const before = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       await applyPreset("custom", {
         cwd: projectDir,
         configDir: configHome,
+        scope: "project",
       });
       const after = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
 
@@ -320,12 +324,22 @@ describe("applyPreset", () => {
         configDir: configHome,
       });
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
       await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
 
       const cliPath = fileURLToPath(new URL("../cli.ts", import.meta.url));
       const command = Bun.spawn({
-        cmd: [process.execPath, "run", cliPath, "preset", "vv-zai", "--config-dir", configHome],
+        cmd: [
+          process.execPath,
+          "run",
+          cliPath,
+          "preset",
+          "vv-zai",
+          "--scope",
+          "project",
+          "--config-dir",
+          configHome,
+        ],
         cwd: projectDir,
         stdout: "pipe",
         stderr: "pipe",
@@ -362,7 +376,7 @@ describe("applyPreset", () => {
         configDir: configHome,
       });
 
-      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
       await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
 
       const cliPath = fileURLToPath(new URL("../cli.ts", import.meta.url));

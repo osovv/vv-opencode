@@ -1,9 +1,9 @@
 // FILE: src/commands/config-validate.ts
 // VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Validate the canonical vvoc.json configuration file with human-readable error reporting.
-//   SCOPE: Canonical vvoc config file discovery, strict JSON parse error reporting, JSON Schema validation, and pass/fail terminal output.
-//   DEPENDS: [citty, jsonc-parser, src/lib/opencode.js, src/lib/vvoc-config.ts]
+//   PURPOSE: Validate a selected vvoc.json configuration file with human-readable error reporting.
+//   SCOPE: Layered vvoc config file discovery, strict JSON parse error reporting, JSON Schema validation, and pass/fail terminal output without creating files.
+//   DEPENDS: [citty, jsonc-parser, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-CONFIG-VALIDATE, M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -18,13 +18,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Added global/project/effective validation scopes without creating missing configs.]
 //   LAST_CHANGE: [v0.6.0 - Added explicit unsupported-version reporting and path-aware semantic role assignment validation for roles/presets.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { parse, type ParseError } from "jsonc-parser";
 import { readFileSync } from "node:fs";
-import { resolvePaths } from "../lib/opencode.js";
+import { resolveVvocConfigSource, type ConfigReadScope } from "../lib/config-layers.js";
 import { parseModelSelection } from "../lib/model-roles.js";
 import { VVOC_CONFIG_VERSION, validateVvocConfigDocument } from "../lib/vvoc-config.js";
 
@@ -42,6 +43,12 @@ export default defineCommand({
     description: "Validate the canonical vvoc.json configuration file.",
   },
   args: {
+    scope: {
+      type: "enum",
+      options: ["global", "project", "effective"],
+      default: "effective",
+      description: "Validate global, project-local, or effective layered config.",
+    },
     "config-dir": {
       type: "string",
       description: "Override the global config home used for vvoc/.",
@@ -50,7 +57,7 @@ export default defineCommand({
   async run({ args }) {
     // START_BLOCK_RUN_VALIDATE
     const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const result = await validateVvocConfig(process.cwd(), configDir);
+    const result = await validateVvocConfig(process.cwd(), configDir, resolveReadScope(args.scope));
 
     printResult(result);
     process.exitCode = result.valid ? 0 : 1;
@@ -61,9 +68,23 @@ export default defineCommand({
 export async function validateVvocConfig(
   cwd: string,
   configDir?: string,
+  scope: ConfigReadScope = "effective",
 ): Promise<ConfigValidateResult> {
-  const paths = await resolvePaths({ scope: "global", cwd, configDir });
-  return validateVvocConfigFile(paths.vvocConfigPath);
+  const source = await resolveVvocConfigSource({
+    scope,
+    cwd,
+    configDir,
+    allowDefault: false,
+  });
+  if (source.kind === "missing" || !source.path) {
+    const label = source.path ?? `${scope} vvoc config`;
+    return {
+      path: label,
+      valid: false,
+      errors: [`${label} - ${source.reason ?? "vvoc config missing"}`],
+    };
+  }
+  return validateVvocConfigFile(source.path);
 }
 
 export function validateVvocConfigContent(content: string, filePath: string): ConfigValidateResult {
@@ -201,4 +222,8 @@ function collectRoleAssignmentMapErrors(value: unknown, basePath: string, errors
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function resolveReadScope(value: unknown): ConfigReadScope {
+  return value === "global" || value === "project" ? value : "effective";
 }

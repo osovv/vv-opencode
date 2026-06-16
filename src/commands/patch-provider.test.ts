@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added project-scope OpenCode patch isolation coverage.]
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true expectation in openai patch test.]
 // END_CHANGE_SUMMARY
 
@@ -220,6 +221,29 @@ describe("applyPatchProviderPreset", () => {
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]?.name).toBe("VV GPT-5.4-XHigh");
     } finally {
       await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("writes project-scope patch to .opencode without creating global OpenCode config", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-global-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-project-"));
+
+    try {
+      const { result } = await applyPatchProviderPreset("openai", {
+        cwd: projectDir,
+        configDir: configHome,
+        scope: "project",
+      });
+      const content = await readFile(join(projectDir, ".opencode", "opencode.json"), "utf8");
+
+      expect(result.path).toBe(join(projectDir, ".opencode", "opencode.json"));
+      expect(content).toContain('"openai"');
+      await expect(
+        readFile(join(configHome, "opencode", "opencode.json"), "utf8"),
+      ).rejects.toBeDefined();
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
     }
   });
 });

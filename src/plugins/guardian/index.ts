@@ -2,8 +2,8 @@
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Review OpenCode permission requests with a constrained Guardian agent and safe deny behavior.
-//   SCOPE: Guardian runtime config loading from canonical vvoc.json, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
-//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
+//   SCOPE: Guardian runtime config loading from the effective vvoc config source, managed prompt loading, transcript extraction, risk-assessment prompt construction, permission reply orchestration, and plugin event hooks.
+//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, node:fs/promises, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Loaded Guardian runtime policy and fast-role model from the effective vvoc config source.]
 //   LAST_CHANGE: [v0.4.2 - Corrected module metadata annotations to match file path and active dependency usage.]
 //   LAST_CHANGE: [v0.4.1 - Prioritized roles.fast as Guardian's default runtime model while still honoring non-model guardian policy config and env model overrides.]
 //   LAST_CHANGE: [v0.4.0 - Resolved Guardian runtime model from roles.fast before subagent registration and added explicit guardian failure codes.]
@@ -23,19 +24,14 @@
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import type { Message, Part } from "@opencode-ai/sdk";
 import { appendFile, readFile, unlink } from "node:fs/promises";
+import { loadEffectiveVvocConfigForRuntime } from "../../lib/config-layers.js";
 import { loadManagedAgentPromptText } from "../../lib/managed-agents.js";
 import {
   ROLE_REFERENCE_PREFIX,
   resolveRoleReference,
   type ModelRolesError,
 } from "../../lib/model-roles.js";
-import {
-  createDefaultVvocConfig,
-  createGuardianConfig,
-  loadLenientVvocConfigText,
-  type GuardianConfigOverrides,
-} from "../../lib/vvoc-config.js";
-import { getGlobalVvocConfigPath } from "../../lib/vvoc-paths.js";
+import { createGuardianConfig, type GuardianConfigOverrides } from "../../lib/vvoc-config.js";
 import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const GUARDIAN_AGENT = "guardian";
@@ -299,6 +295,33 @@ function resolveGuardianRoleSelection(roleMap: Record<string, string>): {
   }
 }
 
+async function loadGuardianRuntimeConfig(directory: string): Promise<GuardianRuntimeConfig> {
+  const loaded = await loadEffectiveVvocConfigForRuntime({ cwd: directory });
+  const sources = [loaded.source.path ?? loaded.source.kind];
+  const warnings = [...loaded.warnings];
+  const canonicalConfig = loaded.config;
+  const roleMap = loaded.source.path
+    ? loadConfiguredRoleMapOrThrow(await readFile(loaded.source.path, "utf8"), loaded.source.path)
+    : canonicalConfig.roles;
+  const resolvedRoleSelection = resolveGuardianRoleSelection(roleMap);
+  const baseConfig = canonicalConfig.guardian;
+  const envConfig = readGuardianEnvConfig(sources, warnings);
+  const merged = createGuardianConfig({
+    ...baseConfig,
+    ...resolvedRoleSelection,
+    ...envConfig,
+  });
+
+  return {
+    model: merged.model,
+    timeoutMs: merged.timeoutMs,
+    approvalRiskThreshold: merged.approvalRiskThreshold,
+    reviewToastDurationMs: merged.reviewToastDurationMs,
+    sources,
+    warnings,
+  };
+}
+
 function loadConfiguredRoleMapOrThrow(
   configText: string,
   configPath: string,
@@ -335,41 +358,6 @@ function loadConfiguredRoleMapOrThrow(
   }
 
   return roleMap;
-}
-
-async function loadGuardianRuntimeConfig(_directory: string): Promise<GuardianRuntimeConfig> {
-  const sources: string[] = [];
-  const warnings: string[] = [];
-  const configPath = getGlobalVvocConfigPath();
-  const configText = await readFile(configPath, "utf8").catch((error) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
-    throw error;
-  });
-  const canonicalConfig = configText
-    ? (sources.push(configPath), loadLenientVvocConfigText(configText, configPath, warnings))
-    : createDefaultVvocConfig();
-  const roleMap = configText
-    ? loadConfiguredRoleMapOrThrow(configText, configPath)
-    : canonicalConfig.roles;
-  const resolvedRoleSelection = resolveGuardianRoleSelection(roleMap);
-  const baseConfig = canonicalConfig.guardian;
-  const envConfig = readGuardianEnvConfig(sources, warnings);
-  const merged = createGuardianConfig({
-    ...baseConfig,
-    ...resolvedRoleSelection,
-    ...envConfig,
-  });
-
-  return {
-    model: merged.model,
-    timeoutMs: merged.timeoutMs,
-    approvalRiskThreshold: merged.approvalRiskThreshold,
-    reviewToastDurationMs: merged.reviewToastDurationMs,
-    sources,
-    warnings,
-  };
 }
 // END_BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG
 

@@ -16,14 +16,16 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle isolation coverage.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle CLI.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
 import { mkdtempSync, mkdirSync } from "node:fs";
-import { writeFile, readFile } from "node:fs/promises";
+import { writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { disableCommand } from "./plugin-toggle.js";
 
 describe("plugin toggle", () => {
   test("PLUGIN_TOGGLE_NAMES contains expected names", async () => {
@@ -65,5 +67,30 @@ describe("plugin toggle", () => {
     const plugins = updated.plugins as Record<string, unknown>;
     expect(plugins.guardian).toBe(false);
     expect(plugins["hashline-edit"]).toBe(true);
+  });
+
+  test("disable command with project scope writes project-local toggles only", async () => {
+    const configHome = mkdtempSync(join(tmpdir(), "vvoc-toggle-global-"));
+    const projectDir = mkdtempSync(join(tmpdir(), "vvoc-toggle-project-"));
+    const initialCwd = process.cwd();
+
+    try {
+      process.chdir(projectDir);
+      await (
+        disableCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
+      ).run({
+        args: { plugin: "guardian", scope: "project", "config-dir": configHome },
+      });
+
+      const local = JSON.parse(await readFile(join(projectDir, ".vvoc", "vvoc.json"), "utf8")) as {
+        plugins?: Record<string, boolean>;
+      };
+      expect(local.plugins?.guardian).toBe(false);
+      await expect(readFile(join(configHome, "vvoc", "vvoc.json"), "utf8")).rejects.toBeDefined();
+    } finally {
+      process.chdir(initialCwd);
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
   });
 });

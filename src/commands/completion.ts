@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Added launch to top-level completion output.]
 //   LAST_CHANGE: [v0.5.15 - Switched built-in preset completions to the shared internal preset registry so managed names stay in sync.]
 //   LAST_CHANGE: [v0.5.14 - Restricted unset-role completions so shell suggestions no longer imply built-in roles are unsettable.]
 // END_CHANGE_SUMMARY
@@ -36,6 +37,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
   "guardian",
   "init",
   "install",
+  "launch",
   "patch-provider",
   "preset",
   "plugin",

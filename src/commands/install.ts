@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink creation for project-scope installs.]
 //   LAST_CHANGE: [v0.5.0 - Added managed skill file install during vvoc install.]
 //   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope install.]
 //   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config scaffolding with canonical vvoc.json creation.]
@@ -90,8 +91,10 @@ export default defineCommand({
     const vvocConfig = await installVvocConfig(paths);
     console.log(describeWriteResult(vvocConfig));
 
-    const symlinkResult = await ensureManagedSkillSymlink(configDir);
-    console.log(describeWriteResult(symlinkResult));
+    if (paths.scope === "global") {
+      const symlinkResult = await ensureManagedSkillSymlink(configDir);
+      console.log(describeWriteResult(symlinkResult));
+    }
     // END_BLOCK_APPLY_INSTALL_COMMAND
   },
 });

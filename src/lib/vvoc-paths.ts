@@ -1,8 +1,8 @@
 // FILE: src/lib/vvoc-paths.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and project-local conventions.
-//   SCOPE: XDG config/data home lookup, canonical vvoc config path derivation, managed agent/plan/skills directory resolution, and deterministic project data directory naming.
+//   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and canonical project-local conventions.
+//   SCOPE: XDG config/data home lookup, canonical global and project config path derivation, managed agent/plan/skills directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -23,10 +23,12 @@
 //   getGlobalOpencodeSkillsDir - Resolves the global OpenCode skills directory for skill discovery via symlink.
 //   getGlobalVvocProjectDataDir - Resolves a deterministic per-project data directory inside the vvoc data root.
 //   getProjectVvocDir - Resolves the project-local vvoc config directory.
-//   getProjectLegacyOpencodeDir - Resolves the old project-local OpenCode directory path.
+//   getProjectOpencodeDir - Resolves the project-local OpenCode config directory.
+//   getProjectVvocConfigPath - Resolves the project-local vvoc config file path.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added canonical project .opencode and .vvoc/vvoc.json helpers and removed legacy root OpenCode path semantics.]
 //   LAST_CHANGE: [v0.5.1 - Added getGlobalOpencodeSkillsDir for OpenCode skills directory resolution.]
 //   LAST_CHANGE: [v0.5.0 - Added the managed skills directory helper.]
 //   LAST_CHANGE: [v0.3.0 - Added the canonical global vvoc config file path helper for vvoc.json.]
@@ -106,8 +108,12 @@ export function getProjectVvocDir(cwd: string): string {
   return join(cwd, VVOC_DIRECTORY_NAME);
 }
 
-export function getProjectLegacyOpencodeDir(cwd: string): string {
+export function getProjectOpencodeDir(cwd: string): string {
   return join(cwd, ".opencode");
+}
+
+export function getProjectVvocConfigPath(cwd: string): string {
+  return join(getProjectVvocDir(cwd), VVOC_CONFIG_FILE_NAME);
 }
 
 function sanitizeSegment(value: string): string {

@@ -26,7 +26,10 @@ To scope everything to the current project instead of the global OpenCode config
 
 ```bash
 vvoc install --scope project
+vvoc launch --scope project
 ```
+
+Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` launch may still apply OpenCode's native config discovery and merge behavior; `vvoc launch --scope project` is the hard sandbox path and starts OpenCode with `OPENCODE_CONFIG` and `VVOC_CONFIG` pinned to those local files, so you can smoke-test vv-opencode in one repository without mutating your primary global setup.
 
 > **Already installed?** Run `vvoc sync` anytime to refresh plugins, prompts, skills, and presets.
 
@@ -118,7 +121,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 | **Skills** | `vv-spec` interviews you and writes an XML spec; `vv-plan` maps the spec to interface contracts and acceptance criteria; `vv-execute` runs approved plans; `vv-review` runs a review-only workflow; `vv-reflect` preserves reusable session findings as repository memory |
 | **Spec-to-Code Pipeline** | `vv-spec` → spec review → `vv-plan` → plan review → `vv-implementer` → code review. Three independent review gates cover requirements, contracts, and implementation |
 | **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, skills, prompts, presets |
-| **CLI Tooling** | 15+ commands: install, sync, status, doctor, role management, presets, guardian config, shell completion, upgrade |
+| **CLI Tooling** | 16+ commands: install, sync, launch, status, doctor, role management, presets, guardian config, shell completion, upgrade |
 | **Security** | GuardianPlugin reviews shell-permission requests; SecretsRedactionPlugin strips tokens before LLM requests; both configurable via `vvoc.json` |
 | **Model Roles** | Assign provider/model/variant to roles (`default`, `smart`, `fast`, `vision`, custom); switch between `vv-openai`, `vv-zai`, `vv-deepseek`, `vv-minimax` presets |
 | **Workflow Tracking** | Work items with open/list/close for tracked implementation-to-review pipelines |
@@ -145,6 +148,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 | `vvoc init` | Interactive bootstrap flow |
 | `vvoc install` | Non-interactive setup and scaffolding |
 | `vvoc sync` | Refresh plugin entry, agents, prompts, skills, config |
+| `vvoc launch` | Launch OpenCode with deterministic `OPENCODE_CONFIG` and `VVOC_CONFIG` sources |
 | `vvoc status` | Show current installation state |
 | `vvoc doctor` | Diagnose setup problems (exits non-zero on issues) |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
@@ -153,7 +157,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 | `vvoc guardian config` | Print or write guardian section |
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
-| `vvoc patch-provider stepfun-ai\|zai\|openai` | Patch a global OpenCode config preset |
+| `vvoc patch-provider stepfun-ai\|zai\|openai` | Patch an OpenCode provider preset in global or project scope |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync |
 | `vvoc version` | Print installed version |
@@ -165,9 +169,11 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 ```bash
 # View current assignments
 vvoc role list
+vvoc role list --scope effective
 
 # Assign models to roles
 vvoc role set default openai/gpt-5.4
+vvoc role set team-review anthropic/claude-sonnet-4-5 --scope project
 vvoc role set smart openai/vv-gpt-5.5-xhigh
 vvoc role set fast openai/gpt-5.4-mini
 
@@ -187,9 +193,28 @@ Presets are partial — applying one only changes the roles it defines. Managed 
 
 ## Config & Data Layout
 
+Mutating commands default to global for backward compatibility. Add `--scope project` to write a project-local layer. Read/diagnostic commands accept `--scope global|project|effective`, where `effective` resolves in this order:
+
+1. explicit env override (`VVOC_CONFIG` / `OPENCODE_CONFIG`)
+2. nearest project layer
+3. global layer
+4. built-in defaults when the command/runtime permits defaults
+
+Canonical project-local paths:
+
+```text
+OpenCode config          → ./.opencode/opencode.json(c)
+vvoc config              → ./.vvoc/vvoc.json
+Managed agent prompts    → ./.vvoc/agents/*.md
+Managed skills           → ./.vvoc/skills/*/SKILL.md
+Planning artifacts       → ./.vvoc/plans/*
 ```
-OpenCode config          → OpenCode-managed paths (global or project)
-vvoc.json (canonical)    → $XDG_CONFIG_HOME/vvoc/vvoc.json
+
+Legacy root-level `./opencode.json` and `./opencode.jsonc` are intentionally not used as vvoc project layers.
+
+```
+Global OpenCode config   → $XDG_CONFIG_HOME/opencode/opencode.json
+Global vvoc config       → $XDG_CONFIG_HOME/vvoc/vvoc.json
 Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md  (global)
                            ./.vvoc/agents/*.md                 (project)
 Managed skills           → $XDG_CONFIG_HOME/vvoc/skills/*/SKILL.md  (global)
@@ -202,6 +227,17 @@ Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect 
 ```
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`.
+
+### Deterministic local launch
+
+Use `vvoc launch` when you want the vvoc-selected config files to be the only files OpenCode sees for this run:
+
+```bash
+vvoc install --scope project
+vvoc launch --scope project -- run "hello"
+```
+
+`vvoc launch --scope project` is strict and non-mutating: if `.opencode/opencode.json` or `.vvoc/vvoc.json` is missing, it fails with a hint to run `vvoc install --scope project`. `--scope effective` follows the layered lookup order, and `--scope global` uses the global config paths.
 
 ---
 
@@ -225,12 +261,13 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 ## Managed Skills
 
-Four workflow skills are scaffolded alongside agents:
+Five workflow skills are scaffolded alongside agents:
 
 | Skill | Trigger | Output | Grep-able |
 |---|---|---|---|
 | `vv-spec` | Creative/feature request, no spec exists | `.vvoc/specs/*.xml` | `<user-story>`, `<fr-1>`, `<sc-1>` |
 | `vv-plan` | Approved spec exists | `.vvoc/plans/*-plan.xml` | `<task-N>`, `<criterion-N>`, `<depends-on>`, `/**` JSDoc |
+| `vv-execute` | Approved plan exists | Applies and archives spec/plan artifacts | `<status>`, `<task>`, `<acceptance>` |
 | `vv-review` | Review request | Findings report | — |
 | `vv-reflect` | End of a long development, debugging, bugfix, ops, or investigation session | Existing repo docs or `.vvoc/lessons/*.xml` / `.vvoc/runbooks/*.xml` | XML fallback indexes and entry tags |
 

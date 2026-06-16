@@ -1,9 +1,9 @@
 // FILE: src/lib/opencode.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage OpenCode config mutation, provider patching, and the canonical vvoc.json config file.
-//   SCOPE: Scope-aware path resolution, pinned plugin writes, top-level OpenCode model/default writes, managed OpenCode default-agent, command, and tool gating, provider baseURL patching, provider object patching, managed OpenCode agent registration/model overrides, managed agent prompt sync, managed skill file install/sync, version-aware canonical vvoc config rendering and sync, and installation inspection.
-//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
+//   PURPOSE: Manage OpenCode config mutation, provider patching, and scoped vvoc.json config files.
+//   SCOPE: Layer-aware path resolution, pinned plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, version-aware vvoc config rendering, and installation inspection.
+//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -45,6 +45,7 @@
 //   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model override in OpenCode config.
 //   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
+//   inspectInstallationForScope - Reads installation state using strict/effective layered source resolution.
 //   describeWriteResult - Formats config write outcomes for CLI output.
 //   ManagedAgentModelMap - Map of managed agent names to model selections.
 //   OpenCodeAgentOverride - Agent override config for OpenCode.
@@ -56,6 +57,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Switched project-scope writes to .opencode/.vvoc layers and added local managed skills path registration.]
 //   LAST_CHANGE: [v0.5.1 - Added ensureManagedSkillSymlink. Fixed renderManagedSkill to preserve YAML frontmatter.]
 //   LAST_CHANGE: [v1.0.1 - Added managed plan directory resolution and creation for analyst/architect artifacts.]
 //   LAST_CHANGE: [v0.5.0 - Replaced managed command registrations (vv-plan/vv-review) with managed skills system. Added managedSkillsDirPath to ResolvedPaths. Added installManagedSkillFiles and syncManagedSkillFiles.]
@@ -107,12 +109,16 @@ import {
 } from "./vvoc-config.js";
 import { getPinnedPackageSpecifier, PACKAGE_NAME } from "./package.js";
 import {
+  resolveConfigWriteTargets,
+  resolveOpenCodeConfigSource,
+  resolveVvocConfigSource,
+  type ConfigReadScope,
+  type ConfigSource,
+} from "./config-layers.js";
+import {
   getConfigHome,
-  getGlobalOpencodeDir,
   getGlobalOpencodeSkillsDir,
-  getGlobalVvocConfigPath,
   getGlobalVvocDir,
-  getProjectVvocDir,
   getVvocAgentsDir,
   getVvocPlansDir,
   getVvocSkillsDir,
@@ -163,6 +169,7 @@ export type ResolvedPaths = {
   scope: Scope;
   cwd: string;
   configHome: string;
+  projectRoot?: string;
   opencodeBaseDir: string;
   vvocBaseDir: string;
   vvocConfigPath: string;
@@ -184,7 +191,7 @@ export type OpenCodeAgentOverride = { model?: string };
 export type ManagedAgentOverrideMap = Record<ManagedOpenCodeAgentName, OpenCodeAgentOverride>;
 
 export type InstallationInspection = {
-  scope: Scope;
+  scope: ConfigReadScope;
   opencode: {
     path: string;
     exists: boolean;
@@ -220,31 +227,28 @@ export async function resolvePaths(options: {
   cwd: string;
   configDir?: string;
 }): Promise<ResolvedPaths> {
+  const targets = await resolveConfigWriteTargets(options);
   const configHome = getConfigHome(options.configDir);
-  const vvocBaseDir = getGlobalVvocDir(options.configDir);
-  const opencodeBaseDir =
-    options.scope === "global" ? getGlobalOpencodeDir(options.configDir) : options.cwd;
-  const managedAgentsBaseDir =
-    options.scope === "global" ? vvocBaseDir : getProjectVvocDir(options.cwd);
-  const managedAgentsDirPath = getVvocAgentsDir(managedAgentsBaseDir);
-  const managedPlansDirPath = getVvocPlansDir(managedAgentsBaseDir);
-  const managedSkillsDirPath = getVvocSkillsDir(managedAgentsBaseDir);
-  const opencodeSelection = await selectPrimaryPath(
-    OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
-  );
+  const managedAgentsDirPath = getVvocAgentsDir(targets.vvocBaseDir);
+  const managedPlansDirPath = getVvocPlansDir(targets.vvocBaseDir);
+  const managedSkillsDirPath = getVvocSkillsDir(targets.vvocBaseDir);
 
   return {
     scope: options.scope,
     cwd: options.cwd,
     configHome,
-    opencodeBaseDir,
-    vvocBaseDir,
-    vvocConfigPath: getGlobalVvocConfigPath(options.configDir),
+    projectRoot: targets.projectRoot,
+    opencodeBaseDir: targets.opencodeBaseDir,
+    vvocBaseDir: targets.vvocBaseDir,
+    vvocConfigPath: targets.vvocConfigPath,
     managedAgentsDirPath,
     managedPlansDirPath,
     managedSkillsDirPath,
-    opencodeConfigPath: opencodeSelection.primary,
-    opencodeAlternatePaths: opencodeSelection.alternates,
+    opencodeConfigPath: targets.opencodeConfigPath,
+    opencodeAlternatePaths: await resolveOpenCodeAlternates(
+      targets.opencodeBaseDir,
+      targets.opencodeConfigPath,
+    ),
   };
 }
 // END_BLOCK_RESOLVE_CONFIG_PATHS
@@ -292,7 +296,10 @@ export function ensurePackageConfigText(
 // START_BLOCK_ENSURE_MANAGED_AGENT_CONFIG
 export function ensureManagedAgentRegistrationsConfigText(
   text: string | undefined,
-  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  paths: Pick<
+    ResolvedPaths,
+    "managedAgentsDirPath" | "managedSkillsDirPath" | "opencodeConfigPath"
+  >,
 ): string {
   const builtInRoleBindings = getBuiltInRoleBindings();
   const rootRoleRefs = {
@@ -323,6 +330,9 @@ export function ensureManagedAgentRegistrationsConfigText(
           Object.entries(builtInAgentModelRefs).map(([name, model]) => [name, { model }]),
         ),
         ...managedRegistrations,
+      },
+      skills: {
+        paths: [getManagedSkillsPathReference(paths)],
       },
       command: {},
     });
@@ -433,7 +443,10 @@ export function ensureManagedAgentRegistrationsConfigText(
     }
   }
 
-  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+  return ensureManagedSkillsPathConfigText(
+    ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT))),
+    paths,
+  );
 }
 
 export async function syncManagedAgentRegistrations(paths: ResolvedPaths): Promise<{
@@ -751,7 +764,10 @@ export async function writeOpenCodeProviderObject(
 
 // START_BLOCK_MANAGED_AGENT_MODEL_IO
 export async function writeManagedAgentModel(
-  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
+  paths: Pick<
+    ResolvedPaths,
+    "managedAgentsDirPath" | "managedSkillsDirPath" | "opencodeConfigPath"
+  >,
   agentName: ManagedOpenCodeAgentName,
   options: { model?: string; ensureEntry: boolean },
 ): Promise<WriteResult> {
@@ -1034,6 +1050,62 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     problems,
   };
 }
+
+export async function inspectInstallationForScope(options: {
+  scope: ConfigReadScope;
+  cwd: string;
+  configDir?: string;
+}): Promise<InstallationInspection & { opencodeSource: ConfigSource; vvocSource: ConfigSource }> {
+  const [opencodeSource, vvocSource] = await Promise.all([
+    resolveOpenCodeConfigSource({
+      scope: options.scope,
+      cwd: options.cwd,
+      configDir: options.configDir,
+    }),
+    resolveVvocConfigSource({
+      scope: options.scope,
+      cwd: options.cwd,
+      configDir: options.configDir,
+      allowDefault: options.scope === "effective",
+    }),
+  ]);
+
+  if (options.scope === "project") {
+    const missingSource = [opencodeSource, vvocSource].find((source) => source.kind === "missing");
+    if (missingSource) {
+      throw new Error(
+        missingSource.reason ?? "project config missing; run vvoc install --scope project",
+      );
+    }
+  }
+
+  const fallbackPaths = await resolvePaths({
+    scope: options.scope === "global" ? "global" : "project",
+    cwd: options.cwd,
+    configDir: options.configDir,
+  });
+  const opencodeConfigPath = opencodeSource.path ?? fallbackPaths.opencodeConfigPath;
+  const vvocConfigPath = vvocSource.path ?? fallbackPaths.vvocConfigPath;
+  const scopedPaths: ResolvedPaths = {
+    ...fallbackPaths,
+    opencodeBaseDir: dirname(opencodeConfigPath),
+    vvocBaseDir: dirname(vvocConfigPath),
+    opencodeConfigPath,
+    vvocConfigPath,
+    opencodeAlternatePaths: [],
+    managedAgentsDirPath: getVvocAgentsDir(dirname(vvocConfigPath)),
+    managedPlansDirPath: getVvocPlansDir(dirname(vvocConfigPath)),
+    managedSkillsDirPath: getVvocSkillsDir(dirname(vvocConfigPath)),
+  };
+
+  const inspection = await inspectInstallation(scopedPaths);
+  return {
+    ...inspection,
+    scope: options.scope,
+    opencodeSource,
+    vvocSource,
+  };
+}
 // END_BLOCK_INSPECT_INSTALLATION_STATE
 
 export function describeWriteResult(result: WriteResult): string {
@@ -1083,6 +1155,13 @@ function readPluginList(document: JsonObject, label: string): string[] {
     throw new Error(`${label}: expected "plugin" to be an array of strings`);
   }
   return raw.slice();
+}
+
+function readStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+    throw new Error(`${label}: expected an array of strings`);
+  }
+  return value.slice();
 }
 
 function normalizePluginList(currentPlugins: string[], packageSpecifier: string): string[] {
@@ -1279,6 +1358,42 @@ function getManagedOpenCodeAgentPromptReference(
   const promptPath = getManagedPromptPath(paths, agentName);
   const promptRef = relative(dirname(paths.opencodeConfigPath), promptPath).replaceAll("\\", "/");
   return `{file:${promptRef.startsWith(".") ? promptRef : `./${promptRef}`}}`;
+}
+
+function getManagedSkillsPathReference(
+  paths: Pick<ResolvedPaths, "managedSkillsDirPath" | "opencodeConfigPath">,
+): string {
+  const skillsRef = relative(
+    dirname(paths.opencodeConfigPath),
+    paths.managedSkillsDirPath,
+  ).replaceAll("\\", "/");
+  return skillsRef.startsWith(".") ? skillsRef : `./${skillsRef}`;
+}
+
+function ensureManagedSkillsPathConfigText(
+  text: string,
+  paths: Pick<ResolvedPaths, "managedSkillsDirPath" | "opencodeConfigPath">,
+): string {
+  const document = parseObjectDocument(text, "OpenCode config");
+  const skills = readOptionalObject(document, "skills", "OpenCode config");
+  const rawPaths = skills?.paths;
+  const currentPaths =
+    rawPaths === undefined ? [] : readStringArray(rawPaths, "OpenCode config: skills.paths");
+  const managedSkillsPath = getManagedSkillsPathReference(paths);
+
+  if (currentPaths.includes(managedSkillsPath)) {
+    return text;
+  }
+
+  const nextPaths = [...currentPaths, managedSkillsPath];
+  const nextText = applyEdits(
+    text,
+    modify(text, ["skills", "paths"], nextPaths, {
+      formattingOptions: JSON_FORMAT,
+    }),
+  );
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 
 function getLegacyTrackedManagedPromptReferences(
@@ -1733,21 +1848,18 @@ async function writeText(path: string, text: string): Promise<void> {
   await writeFile(path, text, "utf8");
 }
 
-async function selectPrimaryPath(candidates: string[]): Promise<{
-  primary: string;
-  alternates: string[];
-}> {
-  const existing: string[] = [];
+async function resolveOpenCodeAlternates(
+  opencodeBaseDir: string,
+  selectedPath: string,
+): Promise<string[]> {
+  const alternates: string[] = [];
 
-  for (const candidate of candidates) {
-    if ((await readOptionalText(candidate)) !== undefined) {
-      existing.push(candidate);
+  for (const candidate of OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name))) {
+    if (candidate !== selectedPath && (await readOptionalText(candidate)) !== undefined) {
+      alternates.push(candidate);
     }
   }
 
-  return {
-    primary: existing[0] ?? candidates[0],
-    alternates: existing.slice(1),
-  };
+  return alternates;
 }
 // END_BLOCK_FILESYSTEM_HELPERS

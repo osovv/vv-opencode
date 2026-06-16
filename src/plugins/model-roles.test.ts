@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Added effective runtime source precedence coverage for env and project-local vvoc config.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for ModelRolesPlugin role resolution and failure semantics.]
 // END_CHANGE_SUMMARY
 
@@ -26,6 +27,7 @@ import { ModelRolesPlugin } from "./model-roles/index.js";
 
 const tempDirs: string[] = [];
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
+const previousVvocConfig = process.env.VVOC_CONFIG;
 
 afterEach(async () => {
   while (tempDirs.length > 0) {
@@ -39,6 +41,12 @@ afterEach(async () => {
     delete process.env.XDG_CONFIG_HOME;
   } else {
     process.env.XDG_CONFIG_HOME = previousConfigHome;
+  }
+
+  if (previousVvocConfig === undefined) {
+    delete process.env.VVOC_CONFIG;
+  } else {
+    process.env.VVOC_CONFIG = previousVvocConfig;
   }
 });
 
@@ -82,6 +90,50 @@ async function createPluginWithRoles(overrides: Record<string, string>) {
     $: {} as never,
   });
 
+  return { plugin, logs };
+}
+
+async function writeVvocConfig(
+  rootDir: string,
+  overrides: Record<string, string>,
+): Promise<string> {
+  await mkdir(join(rootDir, "vvoc"), { recursive: true });
+  const configPath = join(rootDir, "vvoc", "vvoc.json");
+  const baseConfig = createDefaultVvocConfig();
+  await writeFile(
+    configPath,
+    JSON.stringify(
+      {
+        ...baseConfig,
+        roles: {
+          ...baseConfig.roles,
+          ...overrides,
+        },
+      },
+      null,
+      2,
+    ) + "\n",
+    "utf8",
+  );
+  return configPath;
+}
+
+async function createPluginInProject(projectDir: string) {
+  const logs: unknown[] = [];
+  const plugin = await ModelRolesPlugin({
+    client: {
+      app: {
+        log: async (payload: unknown) => {
+          logs.push(payload);
+        },
+      },
+    } as never,
+    project: {} as never,
+    directory: projectDir,
+    worktree: projectDir,
+    serverUrl: new URL("http://localhost"),
+    $: {} as never,
+  });
   return { plugin, logs };
 }
 
@@ -140,6 +192,72 @@ describe("ModelRolesPlugin", () => {
     expect(config.agent.explore.model).toBe("openai/gpt-5.4-mini");
 
     expect(config.command.plan.model).toBe("openai/gpt-5.4-mini");
+  });
+
+  test("prefers nearest project vvoc config over global config", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-model-roles-global-layer-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-model-roles-local-layer-"));
+    tempDirs.push(configHome, projectDir);
+    process.env.XDG_CONFIG_HOME = configHome;
+    await writeVvocConfig(configHome, { default: "openai/global-model" });
+    await mkdir(join(projectDir, ".vvoc"), { recursive: true });
+    const localConfig = createDefaultVvocConfig();
+    await writeFile(
+      join(projectDir, ".vvoc", "vvoc.json"),
+      JSON.stringify(
+        { ...localConfig, roles: { ...localConfig.roles, default: "openai/local-model" } },
+        null,
+        2,
+      ) + "\n",
+      "utf8",
+    );
+
+    const { plugin } = await createPluginInProject(projectDir);
+    const config: Record<string, any> = { model: "vv-role:default" };
+    await plugin.config?.(config as never);
+
+    expect(config.model).toBe("openai/local-model");
+  });
+
+  test("prefers VVOC_CONFIG over local and global config", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-model-roles-env-global-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-model-roles-env-project-"));
+    const envDir = await mkdtemp(join(tmpdir(), "vvoc-model-roles-env-selected-"));
+    tempDirs.push(configHome, projectDir, envDir);
+    process.env.XDG_CONFIG_HOME = configHome;
+    await writeVvocConfig(configHome, { default: "openai/global-model" });
+    await mkdir(join(projectDir, ".vvoc"), { recursive: true });
+    await writeFile(
+      join(projectDir, ".vvoc", "vvoc.json"),
+      JSON.stringify(
+        {
+          ...createDefaultVvocConfig(),
+          roles: { ...createDefaultVvocConfig().roles, default: "openai/local-model" },
+        },
+        null,
+        2,
+      ) + "\n",
+      "utf8",
+    );
+    process.env.VVOC_CONFIG = await writeVvocConfig(envDir, { default: "openai/env-model" });
+
+    const { plugin } = await createPluginInProject(projectDir);
+    const config: Record<string, any> = { model: "vv-role:default" };
+    await plugin.config?.(config as never);
+
+    expect(config.model).toBe("openai/env-model");
+  });
+
+  test("invalid local vvoc config fails fast instead of falling back to global", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-model-roles-invalid-global-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-model-roles-invalid-local-"));
+    tempDirs.push(configHome, projectDir);
+    process.env.XDG_CONFIG_HOME = configHome;
+    await writeVvocConfig(configHome, { default: "openai/global-model" });
+    await mkdir(join(projectDir, ".vvoc"), { recursive: true });
+    await writeFile(join(projectDir, ".vvoc", "vvoc.json"), "{ invalid json", "utf8");
+
+    await expect(createPluginInProject(projectDir)).rejects.toThrow(/failed to parse|invalid/i);
   });
 
   test("does not rewrite literal provider/model values that do not use vv-role syntax", async () => {

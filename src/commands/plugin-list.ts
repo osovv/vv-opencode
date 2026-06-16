@@ -1,9 +1,9 @@
 // FILE: src/commands/plugin-list.ts
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Display all installed OpenCode plugins with their status (enabled/disabled) and source paths.
-//   SCOPE: Scope parsing, plugin array inspection, table rendering, and graceful handling of missing config.
-//   DEPENDS: [citty, node:fs/promises, src/lib/opencode.js, src/lib/plugin-toggle-config.js]
+//   PURPOSE: Display installed OpenCode plugins with their status (enabled/disabled) and selected source paths.
+//   SCOPE: Read-scope parsing, plugin array inspection, effective vvoc plugin toggle loading, table rendering, and graceful handling of missing config.
+//   DEPENDS: [citty, src/lib/config-layers.ts]
 //   LINKS: [M-CLI-PLUGIN-LIST, M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -15,17 +15,20 @@
 //   renderPluginTable - Renders a table of plugins with name, source, and enabled status.
 //   PluginEntry - Parsed plugin entry information.
 //   parsePluginSpecifier - Parse plugin specifier string.
-//   loadVvocPluginToggles - Read plugin toggle state from vvoc.json.
+//   loadVvocPluginToggles - Read plugin toggle state from the selected vvoc source.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added effective/project/global plugin list scopes and source-matched vvoc toggles.]
 //   LAST_CHANGE: [v0.4.0 - Initial GRACE implementation for plugin list command.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
-import { resolvePaths, type Scope } from "../lib/opencode.js";
-import { readFile } from "node:fs/promises";
-import { getGlobalVvocConfigPath } from "../lib/vvoc-paths.js";
+import {
+  loadVvocConfigForRead,
+  resolveOpenCodeConfigSource,
+  type ConfigReadScope,
+} from "../lib/config-layers.js";
 
 export type PluginEntry = {
   name: string;
@@ -41,9 +44,9 @@ export default defineCommand({
   args: {
     scope: {
       type: "enum",
-      options: ["global", "project"],
-      default: "global",
-      description: "List plugins from global or project config.",
+      options: ["global", "project", "effective"],
+      default: "effective",
+      description: "List plugins from global, project-local, or effective layered config.",
     },
     "config-dir": {
       type: "string",
@@ -57,35 +60,46 @@ export default defineCommand({
   },
   async run({ args }) {
     // START_BLOCK_RUN_PLUGIN_LIST
-    const scope = args.scope === "project" ? "project" : "global";
+    const scope = resolveReadScope(args.scope);
     const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
     const verbose = args.verbose === true;
     const cwd = process.cwd();
 
-    const paths = await resolvePaths({ scope, cwd, configDir });
+    const source = await resolveOpenCodeConfigSource({ scope, cwd, configDir });
     const plugins = await listPlugins(scope, cwd, configDir);
 
     if (verbose) {
       console.log(`Scope: ${scope}`);
-      console.log(`OpenCode config: ${paths.opencodeConfigPath}`);
+      console.log(`OpenCode source: ${source.kind}${source.path ? ` ${source.path}` : ""}`);
     }
 
-    const vvocToggles = await loadVvocPluginToggles();
+    const vvocToggles = await loadVvocPluginToggles(scope, cwd, configDir);
     renderPluginTable(plugins, vvocToggles);
     // END_BLOCK_RUN_PLUGIN_LIST
   },
 });
 
 export async function listPlugins(
-  scope: Scope,
+  scope: ConfigReadScope,
   cwd: string,
   configDir?: string,
 ): Promise<PluginEntry[]> {
-  const paths = await resolvePaths({ scope, cwd, configDir });
+  const source = await resolveOpenCodeConfigSource({ scope, cwd, configDir });
+  if (source.kind === "missing") {
+    if (scope === "project") {
+      throw new Error(
+        source.reason ?? "project OpenCode config missing; run vvoc install --scope project",
+      );
+    }
+    return [];
+  }
+  if (!source.path) {
+    return [];
+  }
 
   try {
     const { readFileSync } = await import("node:fs");
-    const content = readFileSync(paths.opencodeConfigPath, "utf8");
+    const content = readFileSync(source.path, "utf8");
     const { parse } = await import("jsonc-parser");
     const errors: import("jsonc-parser").ParseError[] = [];
     const parsed = parse(content, errors, { allowTrailingComma: true, disallowComments: false });
@@ -131,15 +145,14 @@ export function parsePluginSpecifier(specifier: string): PluginEntry {
   return { name, source, enabled };
 }
 
-export async function loadVvocPluginToggles(): Promise<Record<string, boolean> | null> {
+export async function loadVvocPluginToggles(
+  scope: ConfigReadScope = "effective",
+  cwd = process.cwd(),
+  configDir?: string,
+): Promise<Record<string, boolean> | null> {
   try {
-    const configPath = getGlobalVvocConfigPath();
-    const content = await readFile(configPath, "utf8");
-    const parsed = JSON.parse(content) as Record<string, unknown>;
-    if (typeof parsed.plugins !== "object" || parsed.plugins === null) {
-      return null;
-    }
-    return parsed.plugins as Record<string, boolean>;
+    const { config } = await loadVvocConfigForRead({ scope, cwd, configDir, allowDefault: true });
+    return config.plugins;
   } catch {
     return null;
   }
@@ -195,4 +208,8 @@ export function renderPluginTable(
       console.log(`  ${pluginName.padEnd(toggleNameWidth)}  ${statusText}`);
     }
   }
+}
+
+function resolveReadScope(value: unknown): ConfigReadScope {
+  return value === "global" || value === "project" ? value : "effective";
 }

@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.1 - Added selected source reporting assertions for project status.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
 
@@ -58,6 +59,8 @@ test("status prints built-in role inventory after init-style seeding", async () 
     });
 
     expect(stdout).toContain("Roles:");
+    expect(stdout).toContain("OpenCode source: project");
+    expect(stdout).toContain("vvoc source: project");
     const defaultIndex = stdout.indexOf("  default:");
     const smartIndex = stdout.indexOf("  smart:");
     const fastIndex = stdout.indexOf("  fast:");

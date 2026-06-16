@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.8.0 - Skipped global managed skill symlink creation for project-scope init.]
 //   LAST_CHANGE: [v0.7.1 - Added managed skill file scaffolding during vvoc init.]
 //   LAST_CHANGE: [v0.7.0 - Ensured the project-local managed planning artifact directory exists during project-scope init.]
 //   LAST_CHANGE: [v0.6.1 - Exported runInit as the command helper and kept the non-interactive path internal so the module map matches the public surface.]
@@ -164,9 +165,11 @@ export async function runInit(options: {
   const vvocConfigResult = await installVvocConfig(finalPaths);
   p.log.info(vvocConfigResult.path + " - " + vvocConfigResult.action);
 
-  p.log.step("Creating skill symlink...");
-  const symlinkResult = await ensureManagedSkillSymlink(configDir);
-  p.log.info(symlinkResult.path + " - " + symlinkResult.action);
+  if (finalPaths.scope === "global") {
+    p.log.step("Creating skill symlink...");
+    const symlinkResult = await ensureManagedSkillSymlink(configDir);
+    p.log.info(symlinkResult.path + " - " + symlinkResult.action);
+  }
 
   p.outro(`vvoc initialized successfully
 
@@ -197,5 +200,7 @@ async function runInitNonInteractive(options: {
     await ensureManagedPlanDirectory(paths);
   }
   await installVvocConfig(paths);
-  await ensureManagedSkillSymlink(configDir);
+  if (paths.scope === "global") {
+    await ensureManagedSkillSymlink(configDir);
+  }
 }

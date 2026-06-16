@@ -14,11 +14,22 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added effective-scope plugin listing and vvoc toggle source coverage.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { parsePluginSpecifier, renderPluginTable, type PluginEntry } from "./plugin-list.js";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  loadVvocPluginToggles,
+  listPlugins,
+  parsePluginSpecifier,
+  renderPluginTable,
+  type PluginEntry,
+} from "./plugin-list.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 test("parsePluginSpecifier - npm package plugin", () => {
   const result = parsePluginSpecifier("@osovv/vv-opencode");
@@ -105,6 +116,38 @@ describe("renderPluginTable", () => {
     expect(output).toContain("enabled");
     expect(output).toContain("disabled");
   });
+});
+
+test("effective plugin listing uses project OpenCode and matching project vvoc toggles", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-plugin-list-project-"));
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-plugin-list-global-"));
+
+  try {
+    await mkdir(join(projectDir, ".opencode"), { recursive: true });
+    await mkdir(join(projectDir, ".vvoc"), { recursive: true });
+    await writeFile(
+      join(projectDir, ".opencode", "opencode.json"),
+      JSON.stringify({ plugin: ["@osovv/vv-opencode"] }, null, 2) + "\n",
+      "utf8",
+    );
+    await writeFile(
+      join(projectDir, ".vvoc", "vvoc.json"),
+      renderVvocConfig({
+        ...createDefaultVvocConfig(),
+        plugins: { ...createDefaultVvocConfig().plugins, guardian: false },
+      }),
+      "utf8",
+    );
+
+    const plugins = await listPlugins("effective", projectDir, configHome);
+    const toggles = await loadVvocPluginToggles("effective", projectDir, configHome);
+
+    expect(plugins.map((plugin) => plugin.name)).toEqual(["@osovv/vv-opencode"]);
+    expect(toggles?.guardian).toBe(false);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  }
 });
 
 function captureStdout(fn: () => void): string {
