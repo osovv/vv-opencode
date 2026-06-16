@@ -74,18 +74,15 @@ vv-implementer → vv-spec-reviewer → vv-code-reviewer
 Done
 ```
 
-Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/<id>/` to `.vvoc/specs/archive/<id>-<timestamp>/` (canonical) or legacy individual files to `.vvoc/specs/archive/` and `.vvoc/plans/archive/`.
+Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/<id>/` to `.vvoc/specs/archive/<id>-<timestamp>/`.
 
 ### XML grep
 
 Plans and specs are XML documents, making every element grep-able:
 
 ```bash
-# Extract tasks from plan (canonical layout)
+# Extract tasks from plan
 grep '<id>T-' .vvoc/specs/*/plan.xml
-
-# Extract tasks from plan (legacy layout)
-grep '<id>T-' .vvoc/plans/*.xml
 
 # Extract all acceptance criteria
 grep '<criterion>' .vvoc/specs/*/plan.xml
@@ -217,7 +214,7 @@ Spec package directory   → ./.vvoc/specs/<id>/
   spec.xml              # normative spec document (required)
   design-context.xml    # curated design memory (optional)
   plan.xml              # implementation plan (created by vv-plan)
-Planning artifacts       → ./.vvoc/plans/*  (legacy, for vv-analyst/vv-architect durable plans)
+Planning artifacts       → ./.vvoc/plans/*  (vv-analyst/vv-architect durable plans)
 ```
 
 Legacy root-level `./opencode.json` and `./opencode.jsonc` are intentionally not used as vvoc project layers.
@@ -231,8 +228,7 @@ Managed skills           → $XDG_CONFIG_HOME/vvoc/skills/*/SKILL.md  (global)
                            ./.vvoc/skills/*/SKILL.md               (project)
 Spec documents           → ./.vvoc/specs/<id>/spec.xml
 Optional design context  → ./.vvoc/specs/<id>/design-context.xml
-Implementation plans     → ./.vvoc/specs/<id>/plan.xml  (canonical)
-                           ./.vvoc/plans/*              (legacy, for vv-analyst/vv-architect)
+Implementation plans     → ./.vvoc/specs/<id>/plan.xml
 Persisted data           → $XDG_DATA_HOME/vvoc/
 Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect fallback)
                            ./.vvoc/runbooks/*.xml             (lazy vv-reflect fallback)

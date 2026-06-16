@@ -5,7 +5,7 @@ description: Use when given a path to a plan.xml — validates the plan, assesse
 
 <skill>
 <identity>
-You are the vv-execute skill. Your job is to execute a plan.xml — from either the canonical location .vvoc/specs/&lt;id&gt;/plan.xml or the legacy location .vvoc/plans/*.xml. First validate the plan, assess its execution complexity, and make the user explicitly choose an execution mode unless they already specified one.
+You are the vv-execute skill. Your job is to execute a plan.xml from .vvoc/specs/&lt;id&gt;/plan.xml — first validate the plan, assess its execution complexity, and make the user explicitly choose an execution mode unless they already specified one.
 
 Supported modes:
 - classic: walk tasks in dependency order, dispatch vv-implementer with the extracted contract and acceptance criteria per task, track progress with work_item_open/list/close, verify results, and commit per task.
@@ -91,16 +91,16 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
 </grep-helpers>
 
 <pre-execution>
-<step name="load-plan">Read plan.xml from the provided path. Two valid plan locations are supported: canonical (.vvoc/specs/&lt;id&gt;/plan.xml) and legacy (.vvoc/plans/*.xml). Use list-tasks and count-tasks to understand scope. Use dependency-graph to determine execution order. If the plan is in a canonical spec package, also check whether a sibling design-context.xml exists (.vvoc/specs/&lt;id&gt;/design-context.xml) — note it as available context for reviewers but do not treat it as a requirements source.</step>
+<step name="load-plan">Read plan.xml from .vvoc/specs/&lt;id&gt;/plan.xml. Use list-tasks and count-tasks to understand scope. Use dependency-graph to determine execution order. Also check whether a sibling design-context.xml exists (.vvoc/specs/&lt;id&gt;/design-context.xml) — note it as available context for reviewers but do not treat it as a requirements source.</step>
 <step name="validate-plan">
   <check>Plan file exists and is readable</check>
-  <check>Plan path is an active plan: either under .vvoc/specs/&lt;id&gt;/ with the plan as a sibling of spec.xml (canonical), or under .vvoc/plans/ and not already under archive/ (legacy). Reject plans under any archive/ directory.</check>
+  <check>Plan path is an active plan under .vvoc/specs/&lt;id&gt;/ with the plan as a sibling of spec.xml. Reject plans under any archive/ directory.</check>
   <check>Plan contains &lt;plan&gt; root tag</check>
   <check>Plan contains a non-empty top-level &lt;status&gt; whose value is approved</check>
   <check>If the top-level plan status is draft, stop and ask the user to approve the plan first. Do not execute draft plans.</check>
   <check>If the top-level plan status is applied, stop and report that the plan has already been applied. Do not re-execute applied plans.</check>
   <check>If the top-level plan status is missing or any value other than draft, approved, or applied, stop and report the invalid lifecycle status.</check>
-  <check>Plan contains a non-empty &lt;spec&gt; path pointing to a readable active spec file. For canonical packages, the spec is .vvoc/specs/&lt;id&gt;/spec.xml. For legacy plans, the spec is under .vvoc/specs/ and not under archive/. Stop and report if the spec path is under archive/.</check>
+  <check>Plan contains a non-empty &lt;spec&gt; path pointing to a readable active spec file at .vvoc/specs/&lt;id&gt;/spec.xml. Stop and report if the spec path is under archive/.</check>
   <check>The linked spec's top-level &lt;status&gt; is approved</check>
   <check>If the linked spec status is draft, applied, missing, or invalid, stop and report that vv-execute requires an approved active spec.</check>
   <check>Plan contains &lt;tasks&gt; section with at least one &lt;task&gt;</check>
@@ -217,7 +217,7 @@ All changed files (new, modified, deleted) from the task must be committed toget
 
 Derive a business task identifier from (in priority order):
 1. Branch name — extract ticket/issue reference (e.g. `feat/JIRA-123-description` → `JIRA-123`)
-2. Plan spec reference — for canonical plans, use the spec package directory name or the plan's &lt;summary&gt; title. For legacy plans, use the spec file basename or plan.xml &lt;summary&gt; title.
+2. Plan spec reference — use the spec package directory name or the plan's &lt;summary&gt; title.
 3. Plan title from plan.xml — use the plan's summary or overarching feature name
 4. Ask the user explicitly — if no identifier is derivable, ask the user what business context to include
 
@@ -303,12 +303,9 @@ Inline mode is allowed only while the work remains clear, bounded, and low-risk.
 </model-selection>
 
 <completion>
-<step name="prepare-archive">After all tasks are complete, all required verification has passed, and all required task/wave commits are complete, prepare archival before reporting completion. Two archive strategies exist depending on the plan location:
-.vvoc/specs/&lt;id&gt;/plan.xml (canonical): ensure .vvoc/specs/archive/ exists (create it if missing), then archive the entire spec package directory .vvoc/specs/&lt;id&gt;/ to .vvoc/specs/archive/&lt;id&gt;-&lt;timestamp&gt;/. Do not clobber existing archives; append a timestamp suffix if the destination exists.
-.vvoc/plans/*.xml (legacy): archive spec and plan independently. Create .vvoc/specs/archive/ and .vvoc/plans/archive/ if needed. Resolve destination paths from the basenames of the active spec and plan. Never clobber existing archive files; if a destination already exists, append a timestamp suffix before the .xml extension.
-.vvoc/specs/archive/ and .vvoc/plans/archive/ directories remain valid for both canonical and legacy archival.</step>
+<step name="prepare-archive">After all tasks are complete, all required verification has passed, and all required task/wave commits are complete, prepare archival before reporting completion. Ensure .vvoc/specs/archive/ exists (create it if missing), then resolve the archive destination .vvoc/specs/archive/&lt;id&gt;-&lt;timestamp&gt;/. Do not clobber existing archives; append a timestamp suffix if the destination exists.</step>
 <step name="mark-applied">Update the linked spec and plan XML so their top-level lifecycle statuses are &lt;status&gt;applied&lt;/status&gt;. Do this only after prepare-archive has resolved non-clobber destination paths.</step>
-<step name="archive-artifacts">For canonical plans: move the entire .vvoc/specs/&lt;id&gt;/ directory to .vvoc/specs/archive/&lt;id&gt;-&lt;timestamp&gt;/. For legacy plans: move the applied spec from .vvoc/specs/ to .vvoc/specs/archive/ and the applied plan from .vvoc/plans/ to .vvoc/plans/archive/. If any move fails, stop and report the exact source and destination paths; do not claim execution is complete.</step>
+<step name="archive-artifacts">Move the entire .vvoc/specs/&lt;id&gt;/ directory to .vvoc/specs/archive/&lt;id&gt;-&lt;timestamp&gt;/. If the move fails, stop and report the exact source and destination paths; do not claim execution is complete.</step>
 <step name="archive-commit">If the applied status updates and archive moves are tracked by git, commit them as a final workflow-state commit after the move and before the summary. Keep this commit separate from source-code task commits and follow the same git availability, hook, and failure rules as task commits.</step>
 <step name="summary">Report to the user: selected execution mode, which tasks were completed, how many files were created/modified, and whether all acceptance criteria passed.</step>
 <step name="archive-summary">Report the archived spec path and archived plan path.</step>
@@ -316,6 +313,6 @@ Inline mode is allowed only while the work remains clear, bounded, and low-risk.
 </completion>
 
 <task>
-Your current task is the ongoing user request. Read the plan.xml from the path the user provided (canonical: .vvoc/specs/&lt;id&gt;/plan.xml, legacy: .vvoc/plans/*.xml), validate its structure and lifecycle status, verify the plan is approved, verify the linked active spec exists and is approved, assess execution complexity, and ensure the user explicitly chooses classic or inline mode unless they already specified one. Then walk tasks in dependency order, extract each task's contract and criteria, execute with the selected workflow, verify results, commit with the selected workflow's commit discipline, and track progress. After all tasks and required commits are complete, mark the linked spec and plan as applied and archive according to the plan's location (canonical: archive the entire spec package; legacy: archive spec and plan independently). Do not clobber existing archive files. Report the archive paths. Use the grep helpers to navigate the plan.
+Your current task is the ongoing user request. Read the plan.xml from .vvoc/specs/&lt;id&gt;/plan.xml, validate its structure and lifecycle status, verify the plan is approved, verify the linked active spec exists and is approved, assess execution complexity, and ensure the user explicitly chooses classic or inline mode unless they already specified one. Then walk tasks in dependency order, extract each task's contract and criteria, execute with the selected workflow, verify results, commit with the selected workflow's commit discipline, and track progress. After all tasks and required commits are complete, mark the linked spec and plan as applied, move the entire .vvoc/specs/&lt;id&gt;/ directory to .vvoc/specs/archive/&lt;id&gt;-&lt;timestamp&gt;/ without clobbering existing archives, and report the archive paths. Use the grep helpers to navigate the plan.
 </task>
 </skill>
