@@ -164,7 +164,7 @@ describe("applyPatchProviderPreset", () => {
         reasoning: true,
         variants: {},
         limit: {
-          context: 400000,
+          context: 1050000,
           output: 128000,
         },
         options: {
