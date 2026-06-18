@@ -149,7 +149,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.agent?.plan).toBeUndefined();
     expect(parsed.agent?.general).toBeUndefined();
     expect(parsed.agent?.explore?.model).toBe("vv-role:fast");
-    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:orchestrator");
+    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.["vv-controller"]?.mode).toBe("primary");
     expect(parsed.agent?.["vv-controller"]?.prompt).toBe("{file:../vvoc/agents/vv-controller.md}");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
@@ -228,7 +228,7 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.tools?.read).toBe(true);
     expect(parsed.tools?.apply_patch).toBe(false);
     expect(parsed.agent?.build?.model).toBe("openai/gpt-5");
-    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:orchestrator");
+    expect(parsed.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.model).toBe("vv-role:smart");
     expect(parsed.agent?.enhancer?.prompt).toBe("{file:../.vvoc/agents/enhancer.md}");
     expect(parsed.skills?.paths).toContain("./custom-skills");
@@ -549,7 +549,7 @@ describe("canonical vvoc config helpers", () => {
       expect(openCodeConfig.agent?.build).toBeUndefined();
       expect(openCodeConfig.agent?.general).toBeUndefined();
       expect(openCodeConfig.agent?.explore?.model).toBe("vv-role:fast");
-      expect(openCodeConfig.agent?.["vv-controller"]?.model).toBe("vv-role:orchestrator");
+      expect(openCodeConfig.agent?.["vv-controller"]?.model).toBe("vv-role:smart");
       expect(openCodeConfig.agent?.enhancer?.model).toBe("vv-role:smart");
 
       expect(vvocConfig?.version).toBe(3);
@@ -559,7 +559,6 @@ describe("canonical vvoc config helpers", () => {
       expect(vvocConfig?.roles.fast).toBeDefined();
       expect(vvocConfig?.roles.vision).toBeDefined();
       expect(vvocConfig?.roles.reviewer).toBeDefined();
-      expect(vvocConfig?.roles.orchestrator).toBeDefined();
       expect(Object.keys(vvocConfig?.presets ?? {})).toEqual([
         "vv-openai",
         "vv-zai",
@@ -1144,7 +1143,6 @@ describe("inspectInstallation", () => {
         "fast",
         "vision",
         "reviewer",
-        "orchestrator",
         "custom",
       ]);
       expect(inspection.roles.unresolvedReferences).toEqual([

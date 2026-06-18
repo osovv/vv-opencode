@@ -25,7 +25,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Added reviewer and orchestrator roles, re-bound vv-controller to orchestrator and reviewers to reviewer role, keeping enhancer and investigator on smart.]
+//   LAST_CHANGE: [v0.3.1 - Added reviewer role, removed orchestrator. Reviewers bound to reviewer, vv-controller back on smart.]
 //   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect role bindings. Analysis and architecture are now done directly by the expensive model through interactive skills (vv-spec, vv-plan).
 //   LAST_CHANGE: [v0.1.3 - Removed variant splitting from model selection parsing so provider/model:free passes through unchanged.]
 //   LAST_CHANGE: [v0.1.2 - Renamed tracked managed-agent role binding keys to vv-* names for implementer/spec/code reviewer roles.]
@@ -33,14 +33,7 @@
 //   LAST_CHANGE: [v0.1.0 - Added role ID validation, role reference resolution helpers, model selection parsing, and deterministic built-in role bindings.]
 // END_CHANGE_SUMMARY
 
-export const BUILTIN_ROLE_NAMES = [
-  "default",
-  "smart",
-  "fast",
-  "vision",
-  "reviewer",
-  "orchestrator",
-] as const;
+export const BUILTIN_ROLE_NAMES = ["default", "smart", "fast", "vision", "reviewer"] as const;
 export type BuiltInRoleName = (typeof BUILTIN_ROLE_NAMES)[number];
 
 export const ROLE_REFERENCE_PREFIX = "vv-role:";
@@ -106,7 +99,7 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
   },
   managedAgents: {
     guardian: "fast",
-    "vv-controller": "orchestrator",
+    "vv-controller": "smart",
     enhancer: "smart",
     "vv-implementer": "default",
     "vv-spec-reviewer": "reviewer",

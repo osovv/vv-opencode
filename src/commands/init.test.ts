@@ -106,7 +106,7 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent.plan).toBeUndefined();
       expect(opencodeConfig.agent.general).toBeUndefined();
       expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
-      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:orchestrator");
+      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
       expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:reviewer");
@@ -127,7 +127,6 @@ describe("init scenarios", () => {
       expect(vvocConfig.roles.fast).toBeDefined();
       expect(vvocConfig.roles.vision).toBeDefined();
       expect(vvocConfig.roles.reviewer).toBeDefined();
-      expect(vvocConfig.roles.orchestrator).toBeDefined();
       expect(vvocConfig.presets["vv-openai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-minimax"]?.agents.default).toBeDefined();

@@ -38,14 +38,7 @@ import {
 
 describe("built-in roles", () => {
   test("exposes built-in role ids deterministically", () => {
-    expect(BUILTIN_ROLE_NAMES).toEqual([
-      "default",
-      "smart",
-      "fast",
-      "vision",
-      "reviewer",
-      "orchestrator",
-    ]);
+    expect(BUILTIN_ROLE_NAMES).toEqual(["default", "smart", "fast", "vision", "reviewer"]);
 
     const bindings = getBuiltInRoleBindings();
     expect(bindings).toEqual({
@@ -58,7 +51,7 @@ describe("built-in roles", () => {
       },
       managedAgents: {
         guardian: "fast",
-        "vv-controller": "orchestrator",
+        "vv-controller": "smart",
         enhancer: "smart",
         "vv-implementer": "default",
         "vv-spec-reviewer": "reviewer",

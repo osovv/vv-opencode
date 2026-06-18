@@ -109,7 +109,6 @@ test("validateVvocConfigContent - missing required built-in role ids fails with 
           smart: "openai/vv-gpt-5.5-xhigh",
           fast: "openai/gpt-5.4-mini",
           reviewer: "openai/gpt-5.4",
-          orchestrator: "openai/gpt-5.4",
           helper: "openai/gpt-5.4",
         },
       },

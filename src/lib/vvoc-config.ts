@@ -305,7 +305,6 @@ function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Reco
     fast: "openai/gpt-5.4-mini",
     vision: "openai/gpt-5.4",
     reviewer: "openai/gpt-5.4",
-    orchestrator: "openai/gpt-5.4",
   } as const;
   const roles: Record<string, string> = { ...defaults };
 
