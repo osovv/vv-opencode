@@ -140,6 +140,10 @@ describe("applyPatchProviderPreset", () => {
                 name?: string;
                 reasoning?: boolean;
                 variants?: Record<string, unknown>;
+                limit?: {
+                  context?: number;
+                  output?: number;
+                };
                 options?: {
                   reasoningEffort?: string;
                   reasoningSummary?: string;
@@ -159,6 +163,10 @@ describe("applyPatchProviderPreset", () => {
         id: "gpt-5.4",
         reasoning: true,
         variants: {},
+        limit: {
+          context: 1050000,
+          output: 128000,
+        },
         options: {
           reasoningEffort: "xhigh",
           reasoningSummary: "auto",

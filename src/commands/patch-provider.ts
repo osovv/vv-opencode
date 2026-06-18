@@ -85,6 +85,10 @@ const OPENAI_PATCH = {
       name: "VV GPT-5.4-XHigh",
       id: "gpt-5.4",
       variants: {},
+      limit: {
+        context: 1050000,
+        output: 128000,
+      },
       reasoning: true,
       options: {
         reasoningEffort: "xhigh",
@@ -96,6 +100,10 @@ const OPENAI_PATCH = {
       name: "VV GPT-5.5-XHigh",
       id: "gpt-5.5",
       variants: {},
+      limit: {
+        context: 1050000,
+        output: 128000,
+      },
       reasoning: true,
       options: {
         reasoningEffort: "xhigh",

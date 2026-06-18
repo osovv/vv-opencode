@@ -101,7 +101,6 @@ import {
   createGuardianConfig,
   parseVersionedVvocConfigText,
   loadLenientVvocConfigText,
-  parseVvocConfigText,
   renderVvocConfig,
   type GuardianConfig,
   type GuardianConfigOverrides,
