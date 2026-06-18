@@ -1,3 +1,12 @@
+## <small>0.35.23 (2026-06-18)</small>
+
+### Summary
+
+This release improves compatibility and model configuration by adding explicit 1.05M context and 128k output limits to OpenAI patch-preset models (GPT-5.4 and GPT-5.5), ensuring those models operate at their intended capacity, and by switching the sync, read, and guardian config paths to use lenient config parsing so that older 4-role configurations without the reviewer role are gracefully upgraded with defaults instead of causing errors. This prevents upgrade breakage for users with legacy configs and ensures the new reviewer role is automatically populated.
+
+* fix: add 1.05M context / 128k output limits to openai patch-preset models ([8c5b48c](https://github.com/osovv/vv-opencode/commit/8c5b48c))
+* fix: use lenient config parsing in sync/read paths to handle old 4-role configs ([ae11b70](https://github.com/osovv/vv-opencode/commit/ae11b70))
+
 ## <small>0.35.22 (2026-06-18)</small>
 
 ### Summary
