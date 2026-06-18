@@ -1,3 +1,13 @@
+## <small>0.35.22 (2026-06-18)</small>
+
+### Summary
+
+This release removes the orchestrator role, simplifying the built-in role system to five roles with a clean smart and reviewer split. The vv-controller agent has been re-bound to the smart role, and all built-in presets have been updated to drop the orchestrator entry. Additionally, the vv-zai preset now correctly assigns the GLM-5.1 model to the reviewer role and the GLM-5-turbo model to the orchestrator role before its removal, ensuring proper review model selection. This reduces configuration complexity and clarifies the separation between primary smart agents and dedicated reviewers.
+
+* refactor: remove orchestrator role, keep only smart + reviewer split ([86779bd](https://github.com/osovv/vv-opencode/commit/86779bd))
+* fix: swap zai reviewer/orchestrator models — glm-5.1 for review, glm-5-turbo for orchestration ([877a57b](https://github.com/osovv/vv-opencode/commit/877a57b))
+* feat: add reviewer and orchestrator roles, split smart role bindings ([42baa72](https://github.com/osovv/vv-opencode/commit/42baa72))
+
 ## <small>0.35.21 (2026-06-16)</small>
 
 ### Summary
