@@ -174,7 +174,7 @@ Every material finding from plan.xml must be enumerated explicitly in the packet
 </step>
 
 <step name="dispatch">
-Open a work item with work_item_open for this task (e.g. "Implement &lt;component&gt;").
+Open an implementation work item with work_item_open for this task (e.g. `{ key, title, mode: "implementation", requiredReviewers: ["spec", "code"] }`).
 Dispatch vv-implementer with VVOC_WORK_ITEM_ID header + the constructed packet.
 The implementer writes code, runs tests, and returns a status. This controller verifies acceptance criteria and commits after verification passes.
 </step>

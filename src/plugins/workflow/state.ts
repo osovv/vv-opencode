@@ -1,45 +1,81 @@
 // FILE: src/plugins/workflow/state.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage in-memory workflow work-item state scoped by session with idempotent open semantics.
-//   SCOPE: Session-scoped work-item storage, id generation, idempotent open-by-key, state transitions, review counters, and close/list/get operations.
-//   DEPENDS: [src/plugins/workflow/protocol.ts]
+//   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent and collect-all review rounds.
+//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata, launch-time in-flight tracking, result-time round aggregation, close gating, and review-round helpers.
+//   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts]
 //   LINKS: [M-WORKFLOW-STATE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   WorkItemMode - Explicit workflow intent stored on each work item.
+//   ReviewerRole - Domain reviewer role IDs accepted by work_item_open.
+//   ReviewerAgentName - Tracked reviewer subagent names mapped from reviewer roles.
+//   ReviewRound - Explicit current-round reviewer progress and results.
 //   WorkItemState - Allowed lifecycle states for a tracked work item.
-//   WorkItemRecord - Canonical in-memory state record for a work item.
-//   WorkItemStore - Store interface exposing deterministic workflow state operations.
-//   OpenWorkItemResult - Structured open operation result with idempotency and conflict signaling.
-//   CloseWorkItemResult - Structured close operation result.
-//   TransitionWorkItemStateResult - Structured transition operation result.
-//   createWorkItemStore - Creates a new in-memory store instance, optionally hydrated from persisted data.
-//   openWorkItem - Opens an item idempotently by (sessionId, key).
-//   getWorkItem - Fetches an item by session and work-item id.
-//   listWorkItems - Lists session items with optional closed inclusion.
-//   closeWorkItem - Closes an existing open item.
-//   transitionWorkItemState - Applies deterministic state transitions and increments review counters.
-//   getReviewRound - Computes review round as max(specReviewCount, codeReviewCount).
-//   WorkItemStoreData - JSON-serializable store data structure for persistence.
+//   WorkItemRecord - Canonical in-memory and persisted state record for a work item.
+//   WorkItemStore - Store interface exposing open, launch, result, list, close, and snapshot operations.
+//   createWorkItemStore - Creates a new scoped in-memory work-item store.
+//   openWorkItem - Creates or returns an existing work item by idempotency key.
+//   beginTrackedLaunch - Validates tracked launch and marks reviewers in flight.
+//   applyTrackedResult - Applies parsed tracked output and aggregates review rounds.
+//   getWorkItem - Retrieves a work item by ID.
+//   listWorkItems - Lists session work items with optional closed inclusion.
+//   closeWorkItem - Closes only ready_to_close work items.
+//   getReviewRound - Computes visible review round from current or completed round state.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Replaced inferred sequential reviewer states with explicit work-item mode, reviewer intent, in-flight tracking, and collect-all review-round aggregation.]
 //   LAST_CHANGE: [v0.2.0 - Allowed fresh review-only work items to transition directly from reviewer outcomes.]
 //   LAST_CHANGE: [v0.1.2 - Required actor metadata for tracked transitions so reviewer counters cannot be bypassed by actor-less updates.]
 //   LAST_CHANGE: [v0.1.1 - Enforced deterministic transition invariants with sticky hard-stop states and optional closed-item listing support.]
 //   LAST_CHANGE: [v0.1.0 - Added session-scoped in-memory workflow state store with idempotent open, transitions, close/list/get, and review-round helpers.]
 // END_CHANGE_SUMMARY
 
-import type { TrackedAgentName } from "./protocol.js";
+import type { ParsedResultBlock, TrackedAgentName } from "./protocol.js";
+import {
+  getAllowedNextAgents,
+  getReviewerRoleForAgent,
+  hasNeedsContextResult,
+  isRoundSettled,
+  resolveCompletedRoundState,
+} from "./transitions.js";
+
+export const WORK_ITEM_MODES = ["implementation", "review_only"] as const;
+export type WorkItemMode = (typeof WORK_ITEM_MODES)[number];
+
+export const REVIEWER_ROLES = ["spec", "code"] as const;
+export type ReviewerRole = (typeof REVIEWER_ROLES)[number];
+
+export type ReviewerAgentName = "vv-spec-reviewer" | "vv-code-reviewer";
+export type ReviewerResultStatus = "PASS" | "FAIL" | "NEEDS_CONTEXT";
+
+export type ReviewRoundResult = {
+  reviewer: ReviewerRole;
+  agent: ReviewerAgentName;
+  status: ReviewerResultStatus;
+  completedAt: string;
+};
+
+export type ReviewRound = {
+  round: number;
+  requiredReviewers: ReviewerRole[];
+  pendingReviewers: ReviewerRole[];
+  inFlightReviewers: ReviewerRole[];
+  completedReviewers: ReviewerRole[];
+  results: Partial<Record<ReviewerRole, ReviewRoundResult>>;
+  status: "active" | "completed";
+  createdAt: string;
+  completedAt?: string;
+};
 
 export type WorkItemState =
   | "open"
   | "awaiting_implementer"
-  | "awaiting_spec_review"
-  | "awaiting_code_review"
+  | "awaiting_reviews"
   | "needs_context"
   | "blocked"
   | "ready_to_close"
@@ -50,12 +86,24 @@ export type WorkItemRecord = {
   workItemId: string;
   key: string;
   title: string;
+  mode: WorkItemMode;
+  requiredReviewers: ReviewerRole[];
   state: WorkItemState;
+  currentRound?: ReviewRound;
+  completedReviewRoundCount: number;
   specReviewCount: number;
   codeReviewCount: number;
   createdAt: string;
   updatedAt: string;
   closedAt?: string;
+};
+
+export type OpenWorkItemInput = {
+  sessionId: string;
+  key: string;
+  title: string;
+  mode: WorkItemMode;
+  requiredReviewers: ReviewerRole[];
 };
 
 export type OpenWorkItemResult =
@@ -67,9 +115,9 @@ export type OpenWorkItemResult =
     }
   | {
       ok: false;
-      errorCode: "WORK_ITEM_KEY_CONFLICT";
+      errorCode: "INVALID_INPUT" | "WORK_ITEM_KEY_CONFLICT";
       message: string;
-      existingWorkItemId: string;
+      existingWorkItemId?: string;
     };
 
 export type CloseWorkItemResult =
@@ -80,22 +128,54 @@ export type CloseWorkItemResult =
     }
   | {
       ok: false;
-      errorCode: "WORK_ITEM_NOT_FOUND" | "WORK_ITEM_ALREADY_CLOSED";
+      errorCode: "WORK_ITEM_NOT_FOUND" | "WORK_ITEM_ALREADY_CLOSED" | "READY_TO_CLOSE_REQUIRED";
       message: string;
     };
 
-export type TransitionWorkItemStateResult =
+export type LaunchWorkItemErrorCode =
+  | "WORK_ITEM_NOT_FOUND"
+  | "WORK_ITEM_ALREADY_CLOSED"
+  | "INVALID_NEXT_AGENT"
+  | "REVIEW_ROUND_NOT_ACTIVE"
+  | "REVIEWER_NOT_REQUIRED"
+  | "REVIEWER_ALREADY_IN_FLIGHT"
+  | "REVIEWER_ALREADY_COMPLETED"
+  | "REVIEW_ROUND_NEEDS_CONTEXT";
+
+export type BeginTrackedLaunchResult =
   | {
       ok: true;
       record: WorkItemRecord;
+      reviewer?: ReviewerRole;
+      reviewRound: number;
     }
   | {
       ok: false;
-      errorCode:
-        | "WORK_ITEM_NOT_FOUND"
-        | "WORK_ITEM_ALREADY_CLOSED"
-        | "INVALID_STATE_TRANSITION"
-        | "MISSING_TRANSITION_ACTOR";
+      errorCode: LaunchWorkItemErrorCode;
+      message: string;
+      allowedAgents: TrackedAgentName[];
+    };
+
+export type TrackedResultStateErrorCode =
+  | "WORK_ITEM_NOT_FOUND"
+  | "WORK_ITEM_ALREADY_CLOSED"
+  | "INVALID_RESULT_AGENT"
+  | "REVIEW_ROUND_NOT_ACTIVE"
+  | "REVIEWER_NOT_REQUIRED"
+  | "REVIEWER_NOT_IN_FLIGHT"
+  | "REVIEWER_ALREADY_COMPLETED";
+
+export type ApplyTrackedResultResult =
+  | {
+      ok: true;
+      record: WorkItemRecord;
+      fromState: WorkItemState;
+      toState: WorkItemState;
+      aggregateComplete: boolean;
+    }
+  | {
+      ok: false;
+      errorCode: TrackedResultStateErrorCode;
       message: string;
     };
 
@@ -106,17 +186,23 @@ export type WorkItemStoreData = {
 };
 
 export type WorkItemStore = {
-  openWorkItem: (input: { sessionId: string; key: string; title: string }) => OpenWorkItemResult;
+  openWorkItem: (input: OpenWorkItemInput) => OpenWorkItemResult;
+  beginTrackedLaunch: (input: {
+    sessionId: string;
+    workItemId: string;
+    agent: TrackedAgentName;
+  }) => BeginTrackedLaunchResult;
+  applyTrackedResult: (input: {
+    sessionId: string;
+    workItemId: string;
+    result: ParsedResultBlock;
+  }) => ApplyTrackedResultResult;
   getWorkItem: (sessionId: string, workItemId: string) => WorkItemRecord | undefined;
   listWorkItems: (sessionId: string, options?: { includeClosed?: boolean }) => WorkItemRecord[];
   closeWorkItem: (sessionId: string, workItemId: string) => CloseWorkItemResult;
-  transitionWorkItemState: (input: {
-    sessionId: string;
-    workItemId: string;
-    state: WorkItemState;
-    actor?: TrackedAgentName;
-  }) => TransitionWorkItemStateResult;
-  getReviewRound: (record: Pick<WorkItemRecord, "specReviewCount" | "codeReviewCount">) => number;
+  getReviewRound: (
+    record: Pick<WorkItemRecord, "completedReviewRoundCount" | "currentRound">,
+  ) => number;
   /** Expose internal store data for persistence snapshotting. */
   getStoreData: () => WorkItemStoreData;
 };
@@ -125,9 +211,22 @@ function createRecordLookupKey(sessionId: string, workItemId: string): string {
   return `${sessionId}::${workItemId}`;
 }
 
+function cloneRound(round: ReviewRound): ReviewRound {
+  return {
+    ...round,
+    requiredReviewers: [...round.requiredReviewers],
+    pendingReviewers: [...round.pendingReviewers],
+    inFlightReviewers: [...round.inFlightReviewers],
+    completedReviewers: [...round.completedReviewers],
+    results: { ...round.results },
+  };
+}
+
 function cloneRecord(record: WorkItemRecord): WorkItemRecord {
   return {
     ...record,
+    requiredReviewers: [...record.requiredReviewers],
+    ...(record.currentRound ? { currentRound: cloneRound(record.currentRound) } : {}),
   };
 }
 
@@ -139,10 +238,69 @@ function toIsoNow(): string {
   return new Date().toISOString();
 }
 
+function isReviewerRole(value: unknown): value is ReviewerRole {
+  return value === "spec" || value === "code";
+}
+
+function canonicalizeReviewers(value: readonly ReviewerRole[]): ReviewerRole[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  if (!value.every(isReviewerRole)) return undefined;
+  const unique = new Set(value);
+  if (unique.size !== value.length) return undefined;
+  return [...value].sort((left, right) => {
+    if (left === right) return 0;
+    return left === "spec" ? -1 : 1;
+  });
+}
+
+function sameReviewerSet(left: readonly ReviewerRole[], right: readonly ReviewerRole[]): boolean {
+  return left.length === right.length && left.every((entry, index) => entry === right[index]);
+}
+
+function createReviewRound(
+  requiredReviewers: ReviewerRole[],
+  round: number,
+  now: string,
+): ReviewRound {
+  return {
+    round,
+    requiredReviewers: [...requiredReviewers],
+    pendingReviewers: [...requiredReviewers],
+    inFlightReviewers: [],
+    completedReviewers: [],
+    results: {},
+    status: "active",
+    createdAt: now,
+  };
+}
+
+function createLaunchError(
+  record: WorkItemRecord | undefined,
+  errorCode: LaunchWorkItemErrorCode,
+  message: string,
+): BeginTrackedLaunchResult {
+  return {
+    ok: false,
+    errorCode,
+    message,
+    allowedAgents: record ? getAllowedNextAgents(record) : [],
+  };
+}
+
 function openWorkItemInStore(
   store: WorkItemStoreData,
-  input: { sessionId: string; key: string; title: string },
+  input: OpenWorkItemInput,
 ): OpenWorkItemResult {
+  const requiredReviewers = canonicalizeReviewers(input.requiredReviewers);
+  if (!requiredReviewers) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message:
+        "INVALID_INPUT: requiredReviewers must be a non-empty canonical set of spec/code reviewers",
+    };
+  }
+
   const sessionIndex =
     store.keyIndexBySession.get(input.sessionId) ??
     (() => {
@@ -156,11 +314,15 @@ function openWorkItemInStore(
     const existing = store.records.get(createRecordLookupKey(input.sessionId, existingId));
     if (!existing) {
       sessionIndex.delete(input.key);
-    } else if (existing.title !== input.title) {
+    } else if (
+      existing.title !== input.title ||
+      existing.mode !== input.mode ||
+      !sameReviewerSet(existing.requiredReviewers, requiredReviewers)
+    ) {
       return {
         ok: false,
         errorCode: "WORK_ITEM_KEY_CONFLICT",
-        message: `WORK_ITEM_KEY_CONFLICT: key ${input.key} is already associated with a different title`,
+        message: `WORK_ITEM_KEY_CONFLICT: key ${input.key} is already associated with different workflow intent`,
         existingWorkItemId: existing.workItemId,
       };
     } else {
@@ -181,7 +343,13 @@ function openWorkItemInStore(
     workItemId,
     key: input.key,
     title: input.title,
-    state: "open",
+    mode: input.mode,
+    requiredReviewers,
+    state: input.mode === "review_only" ? "awaiting_reviews" : "open",
+    ...(input.mode === "review_only"
+      ? { currentRound: createReviewRound(requiredReviewers, 1, now) }
+      : {}),
+    completedReviewRoundCount: 0,
     specReviewCount: 0,
     codeReviewCount: 0,
     createdAt: now,
@@ -206,71 +374,6 @@ function getWorkItemInStore(
 ): WorkItemRecord | undefined {
   const record = store.records.get(createRecordLookupKey(sessionId, workItemId));
   return record ? cloneRecord(record) : undefined;
-}
-
-function isTransitionAllowed(fromState: WorkItemState, toState: WorkItemState): boolean {
-  const allowed: Record<WorkItemState, WorkItemState[]> = {
-    open: [
-      "awaiting_implementer",
-      "awaiting_spec_review",
-      "awaiting_code_review",
-      "needs_context",
-      "blocked",
-      "ready_to_close",
-    ],
-    awaiting_implementer: ["awaiting_spec_review", "needs_context", "blocked"],
-    awaiting_spec_review: ["awaiting_code_review", "awaiting_implementer", "needs_context"],
-    awaiting_code_review: ["ready_to_close", "awaiting_implementer", "needs_context"],
-    ready_to_close: [],
-    needs_context: [],
-    blocked: [],
-    closed: [],
-  };
-  return allowed[fromState].includes(toState);
-}
-
-function getAllowedActorsForState(state: WorkItemState): TrackedAgentName[] {
-  if (state === "open" || state === "awaiting_implementer") {
-    return state === "open"
-      ? ["vv-implementer", "vv-spec-reviewer", "vv-code-reviewer"]
-      : ["vv-implementer"];
-  }
-  if (state === "awaiting_spec_review") {
-    return ["vv-spec-reviewer"];
-  }
-  if (state === "awaiting_code_review") {
-    return ["vv-code-reviewer"];
-  }
-  return [];
-}
-
-function isActorStateTransitionAllowed(
-  actor: TrackedAgentName | undefined,
-  fromState: WorkItemState,
-  toState: WorkItemState,
-): boolean {
-  if (!actor) {
-    return true;
-  }
-
-  if (actor === "vv-implementer") {
-    return (
-      (fromState === "open" || fromState === "awaiting_implementer") &&
-      ["awaiting_spec_review", "needs_context", "blocked"].includes(toState)
-    );
-  }
-
-  if (actor === "vv-spec-reviewer") {
-    return (
-      (fromState === "open" || fromState === "awaiting_spec_review") &&
-      ["awaiting_code_review", "awaiting_implementer", "needs_context"].includes(toState)
-    );
-  }
-
-  return (
-    (fromState === "open" || fromState === "awaiting_code_review") &&
-    ["ready_to_close", "awaiting_implementer", "needs_context"].includes(toState)
-  );
 }
 
 function listWorkItemsInStore(
@@ -314,6 +417,14 @@ function closeWorkItemInStore(
     };
   }
 
+  if (existing.state !== "ready_to_close") {
+    return {
+      ok: false,
+      errorCode: "READY_TO_CLOSE_REQUIRED",
+      message: `READY_TO_CLOSE_REQUIRED: ${workItemId} is ${existing.state} and cannot be closed`,
+    };
+  }
+
   const now = toIsoNow();
   const updated: WorkItemRecord = {
     ...existing,
@@ -330,15 +441,222 @@ function closeWorkItemInStore(
   };
 }
 
-function transitionWorkItemStateInStore(
+function beginTrackedLaunchInStore(
   store: WorkItemStoreData,
-  input: {
-    sessionId: string;
-    workItemId: string;
-    state: WorkItemState;
-    actor?: TrackedAgentName;
-  },
-): TransitionWorkItemStateResult {
+  input: { sessionId: string; workItemId: string; agent: TrackedAgentName },
+): BeginTrackedLaunchResult {
+  const lookupKey = createRecordLookupKey(input.sessionId, input.workItemId);
+  const existing = store.records.get(lookupKey);
+  if (!existing) {
+    return createLaunchError(
+      undefined,
+      "WORK_ITEM_NOT_FOUND",
+      `WORK_ITEM_NOT_FOUND: ${input.workItemId}`,
+    );
+  }
+  if (existing.state === "closed") {
+    return createLaunchError(
+      existing,
+      "WORK_ITEM_ALREADY_CLOSED",
+      `WORK_ITEM_ALREADY_CLOSED: ${input.workItemId} is already closed`,
+    );
+  }
+
+  const role = getReviewerRoleForAgent(input.agent);
+  if (!role) {
+    if (!getAllowedNextAgents(existing).includes(input.agent)) {
+      return createLaunchError(
+        existing,
+        "INVALID_NEXT_AGENT",
+        `INVALID_NEXT_AGENT: ${input.agent} is not allowed for ${existing.state}`,
+      );
+    }
+    return {
+      ok: true,
+      record: cloneRecord(existing),
+      reviewRound: getReviewRound(existing),
+    };
+  }
+
+  const round = existing.currentRound;
+  if (existing.state !== "awaiting_reviews" || !round || round.status !== "active") {
+    return createLaunchError(
+      existing,
+      "REVIEW_ROUND_NOT_ACTIVE",
+      `REVIEW_ROUND_NOT_ACTIVE: ${input.workItemId} has no active review round`,
+    );
+  }
+  if (!round.requiredReviewers.includes(role)) {
+    return createLaunchError(
+      existing,
+      "REVIEWER_NOT_REQUIRED",
+      `REVIEWER_NOT_REQUIRED: ${role} is not required for ${input.workItemId}`,
+    );
+  }
+  if (hasNeedsContextResult(round)) {
+    return createLaunchError(
+      existing,
+      "REVIEW_ROUND_NEEDS_CONTEXT",
+      `REVIEW_ROUND_NEEDS_CONTEXT: ${input.workItemId} is waiting for in-flight reviewers after NEEDS_CONTEXT`,
+    );
+  }
+  if (round.inFlightReviewers.includes(role)) {
+    return createLaunchError(
+      existing,
+      "REVIEWER_ALREADY_IN_FLIGHT",
+      `REVIEWER_ALREADY_IN_FLIGHT: ${role} is already in flight for ${input.workItemId}`,
+    );
+  }
+  if (round.completedReviewers.includes(role)) {
+    return createLaunchError(
+      existing,
+      "REVIEWER_ALREADY_COMPLETED",
+      `REVIEWER_ALREADY_COMPLETED: ${role} already completed for ${input.workItemId}`,
+    );
+  }
+  if (!round.pendingReviewers.includes(role)) {
+    return createLaunchError(
+      existing,
+      "INVALID_NEXT_AGENT",
+      `INVALID_NEXT_AGENT: ${role} is not pending for ${input.workItemId}`,
+    );
+  }
+
+  const updatedRound: ReviewRound = {
+    ...round,
+    pendingReviewers: round.pendingReviewers.filter((reviewer) => reviewer !== role),
+    inFlightReviewers: [...round.inFlightReviewers, role],
+  };
+  const updated: WorkItemRecord = {
+    ...existing,
+    currentRound: updatedRound,
+    updatedAt: toIsoNow(),
+  };
+  store.records.set(lookupKey, updated);
+
+  return {
+    ok: true,
+    record: cloneRecord(updated),
+    reviewer: role,
+    reviewRound: updatedRound.round,
+  };
+}
+
+function applyImplementerResult(
+  existing: WorkItemRecord,
+  result: ParsedResultBlock,
+  now: string,
+): WorkItemRecord {
+  if (result.status === "DONE" || result.status === "DONE_WITH_CONCERNS") {
+    return {
+      ...existing,
+      state: "awaiting_reviews",
+      currentRound: createReviewRound(
+        existing.requiredReviewers,
+        existing.completedReviewRoundCount + 1,
+        now,
+      ),
+      updatedAt: now,
+    };
+  }
+  if (result.status === "NEEDS_CONTEXT") {
+    return {
+      ...existing,
+      state: "needs_context",
+      updatedAt: now,
+    };
+  }
+  return {
+    ...existing,
+    state: "blocked",
+    updatedAt: now,
+  };
+}
+
+type ApplyTrackedResultFailure = Extract<ApplyTrackedResultResult, { ok: false }>;
+
+function applyReviewerResult(
+  existing: WorkItemRecord,
+  role: ReviewerRole,
+  result: ParsedResultBlock,
+  now: string,
+): ApplyTrackedResultFailure | WorkItemRecord {
+  const round = existing.currentRound;
+  if (existing.state !== "awaiting_reviews" || !round || round.status !== "active") {
+    return {
+      ok: false,
+      errorCode: "REVIEW_ROUND_NOT_ACTIVE",
+      message: `REVIEW_ROUND_NOT_ACTIVE: ${existing.workItemId} has no active review round`,
+    };
+  }
+  if (!round.requiredReviewers.includes(role)) {
+    return {
+      ok: false,
+      errorCode: "REVIEWER_NOT_REQUIRED",
+      message: `REVIEWER_NOT_REQUIRED: ${role} is not required for ${existing.workItemId}`,
+    };
+  }
+  if (round.completedReviewers.includes(role) || round.results[role]) {
+    return {
+      ok: false,
+      errorCode: "REVIEWER_ALREADY_COMPLETED",
+      message: `REVIEWER_ALREADY_COMPLETED: ${role} already completed for ${existing.workItemId}`,
+    };
+  }
+  if (!round.inFlightReviewers.includes(role)) {
+    return {
+      ok: false,
+      errorCode: "REVIEWER_NOT_IN_FLIGHT",
+      message: `REVIEWER_NOT_IN_FLIGHT: ${role} was not in flight for ${existing.workItemId}`,
+    };
+  }
+
+  const status = result.status as ReviewerResultStatus;
+  const reviewerResult: ReviewRoundResult = {
+    reviewer: role,
+    agent: result.agent as ReviewerAgentName,
+    status,
+    completedAt: now,
+  };
+  let updatedRound: ReviewRound = {
+    ...round,
+    inFlightReviewers: round.inFlightReviewers.filter((reviewer) => reviewer !== role),
+    completedReviewers: [...round.completedReviewers, role],
+    results: {
+      ...round.results,
+      [role]: reviewerResult,
+    },
+  };
+
+  const aggregateComplete = isRoundSettled(updatedRound);
+  const nextState = aggregateComplete
+    ? resolveCompletedRoundState(existing, updatedRound)
+    : "awaiting_reviews";
+  if (aggregateComplete) {
+    updatedRound = {
+      ...updatedRound,
+      status: "completed",
+      completedAt: now,
+    };
+  }
+
+  return {
+    ...existing,
+    state: nextState,
+    currentRound: updatedRound,
+    completedReviewRoundCount: aggregateComplete
+      ? Math.max(existing.completedReviewRoundCount, updatedRound.round)
+      : existing.completedReviewRoundCount,
+    specReviewCount: role === "spec" ? existing.specReviewCount + 1 : existing.specReviewCount,
+    codeReviewCount: role === "code" ? existing.codeReviewCount + 1 : existing.codeReviewCount,
+    updatedAt: now,
+  };
+}
+
+function applyTrackedResultInStore(
+  store: WorkItemStoreData,
+  input: { sessionId: string; workItemId: string; result: ParsedResultBlock },
+): ApplyTrackedResultResult {
   const lookupKey = createRecordLookupKey(input.sessionId, input.workItemId);
   const existing = store.records.get(lookupKey);
   if (!existing) {
@@ -348,7 +666,6 @@ function transitionWorkItemStateInStore(
       message: `WORK_ITEM_NOT_FOUND: no work item ${input.workItemId} for session ${input.sessionId}`,
     };
   }
-
   if (existing.state === "closed") {
     return {
       ok: false,
@@ -357,74 +674,60 @@ function transitionWorkItemStateInStore(
     };
   }
 
-  const allowedActors = getAllowedActorsForState(existing.state);
-  if (allowedActors.length > 0 && !input.actor) {
-    return {
-      ok: false,
-      errorCode: "MISSING_TRANSITION_ACTOR",
-      message: `MISSING_TRANSITION_ACTOR: state ${existing.state} requires actor metadata`,
-    };
+  const now = toIsoNow();
+  const fromState = existing.state;
+  let updated: WorkItemRecord | ApplyTrackedResultResult;
+  const role = getReviewerRoleForAgent(input.result.agent);
+  if (!role) {
+    if (
+      existing.mode !== "implementation" ||
+      (existing.state !== "open" && existing.state !== "awaiting_implementer")
+    ) {
+      return {
+        ok: false,
+        errorCode: "INVALID_RESULT_AGENT",
+        message: `INVALID_RESULT_AGENT: ${input.result.agent} cannot produce a result for ${existing.state}`,
+      };
+    }
+    updated = applyImplementerResult(existing, input.result, now);
+  } else {
+    updated = applyReviewerResult(existing, role, input.result, now);
   }
 
-  if (input.actor && allowedActors.length > 0 && !allowedActors.includes(input.actor)) {
-    return {
-      ok: false,
-      errorCode: "INVALID_STATE_TRANSITION",
-      message: `INVALID_STATE_TRANSITION: actor ${input.actor} is not allowed for state ${existing.state}`,
-    };
+  if ("ok" in updated && updated.ok === false) {
+    return updated;
   }
-
-  if (!isTransitionAllowed(existing.state, input.state)) {
-    return {
-      ok: false,
-      errorCode: "INVALID_STATE_TRANSITION",
-      message: `INVALID_STATE_TRANSITION: cannot transition from ${existing.state} to ${input.state}`,
-    };
-  }
-
-  if (!isActorStateTransitionAllowed(input.actor, existing.state, input.state)) {
-    return {
-      ok: false,
-      errorCode: "INVALID_STATE_TRANSITION",
-      message: `INVALID_STATE_TRANSITION: actor ${input.actor ?? "<none>"} cannot transition from ${existing.state} to ${input.state}`,
-    };
-  }
-
-  const updated: WorkItemRecord = {
-    ...existing,
-    state: input.state,
-    updatedAt: toIsoNow(),
-    specReviewCount:
-      input.actor === "vv-spec-reviewer" ? existing.specReviewCount + 1 : existing.specReviewCount,
-    codeReviewCount:
-      input.actor === "vv-code-reviewer" ? existing.codeReviewCount + 1 : existing.codeReviewCount,
-  };
 
   store.records.set(lookupKey, updated);
-
   return {
     ok: true,
     record: cloneRecord(updated),
+    fromState,
+    toState: updated.state,
+    aggregateComplete:
+      role !== undefined &&
+      updated.currentRound?.status === "completed" &&
+      fromState === "awaiting_reviews",
   };
 }
 
 // START_CONTRACT: getReviewRound
-//   PURPOSE: Compute deterministic review round from reviewer counters.
-//   INPUTS: { record: Pick<WorkItemRecord, "specReviewCount" | "codeReviewCount"> - review counters }
-//   OUTPUTS: { number - max(specReviewCount, codeReviewCount) }
+//   PURPOSE: Compute visible review round from current explicit round or completed round count.
+//   INPUTS: { record: Pick<WorkItemRecord, "completedReviewRoundCount" | "currentRound"> - review-round metadata }
+//   OUTPUTS: { number - current active/completed round number or completed round count }
 //   SIDE_EFFECTS: [none]
 //   LINKS: [M-WORKFLOW-STATE]
 // END_CONTRACT: getReviewRound
 export function getReviewRound(
-  record: Pick<WorkItemRecord, "specReviewCount" | "codeReviewCount">,
+  record: Pick<WorkItemRecord, "completedReviewRoundCount" | "currentRound">,
 ): number {
-  return Math.max(record.specReviewCount, record.codeReviewCount);
+  return record.currentRound?.round ?? record.completedReviewRoundCount;
 }
 
 // START_CONTRACT: createWorkItemStore
-//   PURPOSE: Create a session-scoped in-memory work-item store, optionally hydrated from a previous session's persisted data.
+//   PURPOSE: Create a session-scoped in-memory work-item store, optionally hydrated from persisted data.
 //   INPUTS: { hydrateData?: WorkItemStoreData | null - optional persisted store data to restore }
-//   OUTPUTS: { WorkItemStore - operation surface for open/get/list/close/transition operations }
+//   OUTPUTS: { WorkItemStore - operation surface for open/get/list/close/launch/result operations }
 //   SIDE_EFFECTS: [none]
 //   LINKS: [M-WORKFLOW-STATE, M-WORKFLOW-PERSISTENCE]
 // END_CONTRACT: createWorkItemStore
@@ -443,32 +746,58 @@ export function createWorkItemStore(hydrateData?: WorkItemStoreData | null): Wor
 
   return {
     openWorkItem: (input) => openWorkItemInStore(data, input),
+    beginTrackedLaunch: (input) => beginTrackedLaunchInStore(data, input),
+    applyTrackedResult: (input) => applyTrackedResultInStore(data, input),
     getWorkItem: (sessionId, workItemId) => getWorkItemInStore(data, sessionId, workItemId),
     listWorkItems: (sessionId, options) => listWorkItemsInStore(data, sessionId, options),
     closeWorkItem: (sessionId, workItemId) => closeWorkItemInStore(data, sessionId, workItemId),
-    transitionWorkItemState: (input) => transitionWorkItemStateInStore(data, input),
     getReviewRound,
     getStoreData: () => data,
   };
 }
 
 // START_CONTRACT: openWorkItem
-//   PURPOSE: Open a work item idempotently by (sessionId, key) while enforcing key/title consistency.
-//   INPUTS: { store: WorkItemStoreData - backing store, input: { sessionId, key, title } - open parameters }
-//   OUTPUTS: { OpenWorkItemResult - success with record/header or WORK_ITEM_KEY_CONFLICT }
+//   PURPOSE: Open a work item idempotently by (sessionId, key) while enforcing explicit workflow intent consistency.
+//   INPUTS: { store: WorkItemStore - backing store, input: OpenWorkItemInput - open parameters with mode and requiredReviewers }
+//   OUTPUTS: { OpenWorkItemResult - success with record/header or deterministic failure }
 //   SIDE_EFFECTS: [Mutates in-memory work-item store]
 //   LINKS: [M-WORKFLOW-STATE]
 // END_CONTRACT: openWorkItem
-export function openWorkItem(
-  store: WorkItemStore,
-  input: { sessionId: string; key: string; title: string },
-): OpenWorkItemResult {
+export function openWorkItem(store: WorkItemStore, input: OpenWorkItemInput): OpenWorkItemResult {
   return store.openWorkItem(input);
+}
+
+// START_CONTRACT: beginTrackedLaunch
+//   PURPOSE: Validate a tracked launch and mark reviewer launches in flight for the current round.
+//   INPUTS: { store: WorkItemStore - backing store, input: { sessionId, workItemId, agent } - launch payload }
+//   OUTPUTS: { BeginTrackedLaunchResult - success with updated record or launch rejection }
+//   SIDE_EFFECTS: [Mutates in-memory work-item store for reviewer launches]
+//   LINKS: [M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS]
+// END_CONTRACT: beginTrackedLaunch
+export function beginTrackedLaunch(
+  store: WorkItemStore,
+  input: { sessionId: string; workItemId: string; agent: TrackedAgentName },
+): BeginTrackedLaunchResult {
+  return store.beginTrackedLaunch(input);
+}
+
+// START_CONTRACT: applyTrackedResult
+//   PURPOSE: Apply parsed tracked output, update explicit review rounds, and aggregate lifecycle state when rounds settle.
+//   INPUTS: { store: WorkItemStore - backing store, input: { sessionId, workItemId, result } - parsed result payload }
+//   OUTPUTS: { ApplyTrackedResultResult - success with updated record or result-state failure }
+//   SIDE_EFFECTS: [Mutates in-memory work-item store]
+//   LINKS: [M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS]
+// END_CONTRACT: applyTrackedResult
+export function applyTrackedResult(
+  store: WorkItemStore,
+  input: { sessionId: string; workItemId: string; result: ParsedResultBlock },
+): ApplyTrackedResultResult {
+  return store.applyTrackedResult(input);
 }
 
 // START_CONTRACT: getWorkItem
 //   PURPOSE: Return a work item by session and work-item id.
-//   INPUTS: { store: WorkItemStoreData - backing store, sessionId: string - session scope, workItemId: string - work item id }
+//   INPUTS: { store: WorkItemStore - backing store, sessionId: string - session scope, workItemId: string - work item id }
 //   OUTPUTS: { WorkItemRecord | undefined - matching record when present }
 //   SIDE_EFFECTS: [none]
 //   LINKS: [M-WORKFLOW-STATE]
@@ -483,7 +812,7 @@ export function getWorkItem(
 
 // START_CONTRACT: listWorkItems
 //   PURPOSE: List session work items with optional closed-item inclusion.
-//   INPUTS: { store: WorkItemStoreData - backing store, sessionId: string - session scope, options?: { includeClosed?: boolean } - list behavior options }
+//   INPUTS: { store: WorkItemStore - backing store, sessionId: string - session scope, options?: { includeClosed?: boolean } - list behavior options }
 //   OUTPUTS: { WorkItemRecord[] - records sorted by numeric work-item id }
 //   SIDE_EFFECTS: [none]
 //   LINKS: [M-WORKFLOW-STATE]
@@ -497,8 +826,8 @@ export function listWorkItems(
 }
 
 // START_CONTRACT: closeWorkItem
-//   PURPOSE: Close an existing open work item and stamp closedAt.
-//   INPUTS: { store: WorkItemStoreData - backing store, sessionId: string - session scope, workItemId: string - target id }
+//   PURPOSE: Close an existing ready_to_close work item and stamp closedAt.
+//   INPUTS: { store: WorkItemStore - backing store, sessionId: string - session scope, workItemId: string - target id }
 //   OUTPUTS: { CloseWorkItemResult - success with updated record/header or failure code }
 //   SIDE_EFFECTS: [Mutates in-memory work-item store]
 //   LINKS: [M-WORKFLOW-STATE]
@@ -510,24 +839,3 @@ export function closeWorkItem(
 ): CloseWorkItemResult {
   return store.closeWorkItem(sessionId, workItemId);
 }
-
-// START_CONTRACT: transitionWorkItemState
-//   PURPOSE: Update work-item state deterministically and maintain reviewer counters.
-//   INPUTS: { store: WorkItemStoreData - backing store, input: { sessionId, workItemId, state, actor? } - transition payload }
-//   OUTPUTS: { TransitionWorkItemStateResult - success with updated record or failure code }
-//   SIDE_EFFECTS: [Mutates in-memory work-item store]
-//   LINKS: [M-WORKFLOW-STATE]
-// END_CONTRACT: transitionWorkItemState
-// START_BLOCK_TRANSITION_STATE
-export function transitionWorkItemState(
-  store: WorkItemStore,
-  input: {
-    sessionId: string;
-    workItemId: string;
-    state: WorkItemState;
-    actor?: TrackedAgentName;
-  },
-): TransitionWorkItemStateResult {
-  return store.transitionWorkItemState(input);
-}
-// END_BLOCK_TRANSITION_STATE

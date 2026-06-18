@@ -108,21 +108,21 @@
     </VF-RENAME-AGENTS>
     <VF-WORKFLOW-TOOLS NAME="WorkItemTools" USE_CASES="UC-010" DATA_FLOW="DF-WORKFLOW-TOOLS" PRIORITY="high">
       <scenario>vv-controller session calls work_item_open, work_item_list, or work_item_close.</scenario>
-      <expected-outcome>Items are created with deterministic IDs, same key plus same title returns same ID, same key plus different title fails, list reflects current state, close is explicit, and non-vv-controller agents are rejected.</expected-outcome>
+      <expected-outcome>Items are created with deterministic IDs and explicit `mode` plus `requiredReviewers`, legacy key/title-only opens fail, same key plus identical intent returns same ID, same key plus different title/mode/reviewers fails, list reflects lifecycle and round metadata, close succeeds only from `ready_to_close`, and non-vv-controller agents are rejected.</expected-outcome>
       <required-signals>
         <trace-sequence>work_item_open -&gt; idempotent create or return -&gt; work_item_list -&gt; state reflects open items -&gt; work_item_close -&gt; state reflects closed</trace-sequence>
       </required-signals>
     </VF-WORKFLOW-TOOLS>
     <VF-LAUNCH-ENFORCEMENT NAME="LaunchEnforcement" USE_CASES="UC-011" DATA_FLOW="DF-LAUNCH-ENFORCEMENT" PRIORITY="high">
       <scenario>Main session launches a tracked subagent through the task tool.</scenario>
-      <expected-outcome>Tracked launches without valid VVOC_WORK_ITEM_ID header are rejected, unknown work items are rejected, invalid route-specific transitions are blocked, review-only fresh work items may launch vv-spec-reviewer or vv-code-reviewer directly, round-limit overflow is rejected, and untracked launches pass through unaffected.</expected-outcome>
+      <expected-outcome>Tracked launches without valid VVOC_WORK_ITEM_ID header are rejected, unknown work items are rejected, invalid mode/lifecycle transitions are blocked, duplicate reviewer launches are rejected, reviewer launches after current-round NEEDS_CONTEXT are rejected, review-only work items may launch only required reviewers, implementation round-limit overflow is rejected, and untracked launches pass through unaffected.</expected-outcome>
       <required-signals>
         <trace-sequence>tool.execute.before(task) -&gt; inspect subagent_type -&gt; if tracked: validate header + work item + transition + round limit</trace-sequence>
       </required-signals>
     </VF-LAUNCH-ENFORCEMENT>
     <VF-RESULT-PARSING NAME="ResultParsing" USE_CASES="UC-012" DATA_FLOW="DF-RESULT-PARSING" PRIORITY="high">
       <scenario>A tracked subagent completes and returns output.</scenario>
-      <expected-outcome>Parsed results update workflow state correctly for implementation and review-only workflows, OpenCode task wrapper metadata is stripped before strict subagent result parsing, malformed resumable tracked outputs get at most one same-session repair attempt, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results otherwise fail closed, and counters increment deterministically.</expected-outcome>
+      <expected-outcome>Parsed results update explicit review-round state correctly for implementation and review-only workflows, reviewer results without a matching in-flight launch are rejected, parallel spec/code reviewers can both complete with FAIL in review-only mode, OpenCode task wrapper metadata is stripped before strict subagent result parsing, malformed resumable tracked outputs get at most one same-session repair attempt, aggregate NEEDS_CONTEXT and BLOCKED halt workflow, malformed results otherwise fail closed, and counters increment deterministically.</expected-outcome>
       <required-signals>
         <trace-sequence>tool.execute.after(task) -&gt; normalize recognized OpenCode task wrapper -&gt; parse top block -&gt; if malformed and resumable: attempt one same-session repair -&gt; validate VVOC_WORK_ITEM_ID + VVOC_STATUS -&gt; update state and counters -&gt; halt on protocol error or hard stop</trace-sequence>
       </required-signals>
@@ -279,8 +279,8 @@
       <telemetry>none required beyond explicit tool-result surfaces</telemetry>
     </VM-STATE-MANAGEMENT>
     <VM-TRANSITIONS MODULE="M-WORKFLOW-TRANSITIONS" FLOW="DF-LAUNCH-ENFORCEMENT" PRIORITY="high">
-      <scenario>Transition rules produce correct next states for all valid agent results, allow review-only fresh reviewer starts, and reject invalid transitions and round overflow.</scenario>
-      <primary-evidence>deterministic assertions on getNextState for all valid state+status combinations</primary-evidence>
+      <scenario>Transition rules produce correct allowed agents and aggregate lifecycle states for explicit work-item records, collect-all reviewers, and implementation-mode round overflow.</scenario>
+      <primary-evidence>deterministic assertions on getAllowedNextAgents, isAllowedTransition, resolveCompletedRoundState, and shouldBlockRound</primary-evidence>
       <trajectory-evidence>failure assertions for invalid transitions, round-limit exceeded, and disallowed agent launches</trajectory-evidence>
       <telemetry>none required beyond explicit transition-result surfaces</telemetry>
     </VM-TRANSITIONS>
@@ -1042,11 +1042,11 @@
       </module-checks>
       <scenarios>
         <scenario-1 kind="success">open or awaiting_implementer allows vv-implementer launch.</scenario-1>
-        <scenario-2 kind="success">vv-implementer DONE or DONE_WITH_CONCERNS transitions to awaiting_spec_review.</scenario-2>
-        <scenario-3 kind="success">vv-spec-reviewer PASS transitions to awaiting_code_review.</scenario-3>
-        <scenario-4 kind="success">vv-code-reviewer PASS transitions to ready_to_close.</scenario-4>
-        <scenario-5 kind="success">Reviewer FAIL transitions back to awaiting_implementer.</scenario-5>
-        <scenario-6 kind="success">NEEDS_CONTEXT transitions to needs_context hard stop.</scenario-6>
+        <scenario-2 kind="success">vv-implementer DONE or DONE_WITH_CONCERNS initializes a review round and transitions to awaiting_reviews.</scenario-2>
+        <scenario-3 kind="success">Required reviewers may launch in any order while pending and not in flight.</scenario-3>
+        <scenario-4 kind="success">All PASS results transition to ready_to_close after the full round completes.</scenario-4>
+        <scenario-5 kind="success">Implementation reviewer FAIL transitions back to awaiting_implementer only after the full round completes.</scenario-5>
+        <scenario-6 kind="success">Review-only reviewer FAIL is recorded as a completed finding and transitions to ready_to_close after the full round completes.</scenario-6>
         <scenario-7 kind="success">BLOCKED transitions to blocked hard stop.</scenario-7>
         <scenario-8 kind="failure">shouldBlockRound returns true when reviewRound exceeds MAX_REVIEW_ROUNDS.</scenario-8>
       </scenarios>

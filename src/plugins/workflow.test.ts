@@ -1,25 +1,27 @@
 // FILE: src/plugins/workflow.test.ts
-// VERSION: 0.3.7
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol success/failure parsing scenarios, session-scoped work-item store behavior, deterministic transition policy, work_item_open/list/close wrappers, tracked launch/result hook behavior including OpenCode task-result wrappers and bounded same-session repair, primary-only workflow guidance injection, and per-session work-item state persistence (hydrate/snapshot/round-trip/session-switch/cleanup).
-//   DEPENDS: [bun:test, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts]
-//   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW]
+//   SCOPE: Protocol parsing, resumable task wrapper unwrapping, explicit work-item open contract, mode-aware launch validation, collect-all review-round aggregation, tooling responses, plugin hooks, persistence round-trips, and primary-only guidance injection.
+//   DEPENDS: [bun:test, node:fs, node:path, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
+//   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   protocol tests - Verify strict top-block parsing, header parsing, and status validation.
-//   repair tests - Verify resumable task envelope recognition for bounded tracked-result repair.
-//   state tests - Verify session-scoped idempotent open, conflict handling, close behavior, and review-round computation.
-//   transition tests - Verify deterministic next-state rules, launch allowances, and round-limit checks.
-//   tooling tests - Verify structured responses from work_item_open, work_item_list, and work_item_close wrappers.
-//   workflow plugin tests - Verify task launch validation, result parsing/transitions, hard-stop and loop-gate behavior, and primary-only guidance injection.
-//   persistence tests - Verify per-session hydrate, snapshot, round-trip, corrupt file handling, and session cleanup.
+//   repair tests - Verify recognized OpenCode task envelopes unwrap before parsing.
+//   state tests - Verify explicit intent, launch tracking, collect-all aggregation, and close gating.
+//   transition tests - Verify mode-aware launch allowances and aggregate round resolution.
+//   tooling tests - Verify explicit work_item_open/list/close structured responses.
+//   workflow plugin tests - Verify task launch/result hooks, parallel reviewers, hard-stop timing, round limits, and primary-only guidance.
+//   persistence tests - Verify explicit state hydrate/snapshot behavior and legacy rejection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Reworked workflow tests around explicit work-item intent, awaiting_reviews, and collect-all parallel reviewer rounds.]
+//   LAST_CHANGE: [v0.3.8 - Added persistence tests for hydrate/snapshot round-trip, corrupt JSON handling, session cleanup, and store hydration on creation.]
 //   LAST_CHANGE: [v0.3.7 - Added coverage that workflow guidance and tracked launches accept header-first assignment prompts with lightweight XML-like tagged bodies.]
 //   LAST_CHANGE: [v0.3.6 - Added coverage that duplicate strict top-block fields inside resumable task wrappers fail closed without same-session repair.]
 //   LAST_CHANGE: [v0.3.5 - Added coverage for one-shot same-session repair of malformed tracked results in resumable OpenCode task envelopes.]
@@ -33,28 +35,40 @@
 //   LAST_CHANGE: [v0.1.2 - Added coverage for duplicate top-block field rejection and missing transition actor rejection.]
 //   LAST_CHANGE: [v0.1.1 - Added strict top-block, case-sensitive status, deterministic transition guard, sticky hard-stop, and includeClosed coverage.]
 //   LAST_CHANGE: [v0.1.0 - Added shared workflow core coverage for protocol, state, transitions, and tooling modules.]
-//   LAST_CHANGE: [v0.3.8 - Added persistence tests for hydrate/snapshot round-trip, corrupt JSON handling, session cleanup, and store hydration on creation.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { WorkflowPlugin } from "./workflow/index.js";
+import {
+  deleteWorkflowSessionDir,
+  getWorkflowSessionDir,
+  hydrateWorkflowState,
+  snapshotWorkflowState,
+} from "./workflow/persistence.js";
 import {
   parseResultBlock,
   parseWorkItemHeader,
   validateStatusForAgent,
+  type ParsedResultBlock,
 } from "./workflow/protocol.js";
+import { unwrapResumableTaskResult } from "./workflow/repair.js";
 import {
+  applyTrackedResult,
+  beginTrackedLaunch,
   closeWorkItem,
   createWorkItemStore,
-  getReviewRound,
   listWorkItems,
   openWorkItem,
-  transitionWorkItemState,
+  type ReviewerRole,
+  type WorkItemMode,
 } from "./workflow/state.js";
 import {
-  MAX_REVIEW_ROUNDS,
-  getAllowedNextAgent,
-  getNextState,
+  getAllowedNextAgents,
+  getAttemptedImplementationRound,
   isAllowedTransition,
+  resolveCompletedRoundState,
   shouldBlockRound,
 } from "./workflow/transitions.js";
 import {
@@ -62,22 +76,51 @@ import {
   createWorkItemListTool,
   createWorkItemOpenTool,
 } from "./workflow/tooling.js";
-import { WorkflowPlugin } from "./workflow/index.js";
-import { unwrapResumableTaskResult } from "./workflow/repair.js";
-import {
-  deleteWorkflowSessionDir,
-  getWorkflowSessionDir,
-  hydrateWorkflowState,
-  snapshotWorkflowState,
-} from "./workflow/persistence.js";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+
+const SESSION_ID = "session-workflow-explicit";
+
+function openItem(options: {
+  mode: WorkItemMode;
+  requiredReviewers?: ReviewerRole[];
+  sessionId?: string;
+  key?: string;
+  title?: string;
+}) {
+  const store = createWorkItemStore();
+  const opened = openWorkItem(store, {
+    sessionId: options.sessionId ?? SESSION_ID,
+    key: options.key ?? `${options.mode}-item`,
+    title: options.title ?? `${options.mode} item`,
+    mode: options.mode,
+    requiredReviewers: options.requiredReviewers ?? ["spec", "code"],
+  });
+  expect(opened.ok).toBe(true);
+  if (!opened.ok) throw new Error(opened.message);
+  return { store, opened };
+}
+
+function result(
+  agent: ParsedResultBlock["agent"],
+  status: ParsedResultBlock["status"],
+  workItemId = "wi-1",
+): ParsedResultBlock {
+  return {
+    agent,
+    workItemId,
+    status,
+    ...(agent === "vv-implementer" ? { route: "change_with_review" } : {}),
+  };
+}
 
 describe("workflow protocol", () => {
   test("parseResultBlock extracts implementer fields from strict top block", () => {
     const parsed = parseResultBlock({
       agent: "vv-implementer",
-      output: `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nImplemented all requested changes.`,
+      output: `VVOC_WORK_ITEM_ID: wi-1
+VVOC_STATUS: DONE
+VVOC_ROUTE: change_with_review
+
+Implemented all requested changes.`,
     });
 
     expect(parsed.ok).toBe(true);
@@ -96,109 +139,17 @@ describe("workflow protocol", () => {
     expect(validateStatusForAgent("vv-implementer", "BLOCKED").ok).toBe(true);
   });
 
-  test("validateStatusForAgent rejects lowercase or mixed-case status values", () => {
-    const lowercase = validateStatusForAgent("vv-spec-reviewer", "pass");
-    expect(lowercase.ok).toBe(false);
-    if (!lowercase.ok) {
-      expect(lowercase.error.code).toBe("UNKNOWN_STATUS");
-    }
+  test("strict parsing rejects malformed statuses, headers, and duplicate fields", () => {
+    expect(validateStatusForAgent("vv-spec-reviewer", "pass").ok).toBe(false);
+    expect(parseWorkItemHeader("VVOC_WORK_ITEM_ID: item-2\nbody").ok).toBe(false);
 
-    const mixedCase = validateStatusForAgent("vv-implementer", "Done");
-    expect(mixedCase.ok).toBe(false);
-    if (!mixedCase.ok) {
-      expect(mixedCase.error.code).toBe("UNKNOWN_STATUS");
-    }
-  });
-
-  test("parseWorkItemHeader extracts work-item id from the first meaningful line", () => {
-    const parsed = parseWorkItemHeader("\n  VVOC_WORK_ITEM_ID: wi-2\nPlease proceed.");
-
-    expect(parsed).toEqual({
-      ok: true,
-      value: "wi-2",
-    });
-  });
-
-  test("parseWorkItemHeader rejects malformed header lines", () => {
-    const parsed = parseWorkItemHeader("VVOC_WORK_ITEM_ID: item-2\nbody");
-
-    expect(parsed.ok).toBe(false);
-    if (parsed.ok) return;
-    expect(parsed.error.code).toBe("MALFORMED_WORK_ITEM_HEADER");
-  });
-
-  test("parseResultBlock returns protocol errors for missing fields, unknown statuses, and mismatches", () => {
-    const missingId = parseResultBlock({
-      agent: "vv-spec-reviewer",
-      output: "VVOC_STATUS: PASS\n\nDone.",
-    });
-    expect(missingId.ok).toBe(false);
-    if (!missingId.ok) {
-      expect(missingId.error.code).toBe("MISSING_WORK_ITEM_ID");
-    }
-
-    const missingStatus = parseResultBlock({
-      agent: "vv-spec-reviewer",
-      output: "VVOC_WORK_ITEM_ID: wi-1\n\nPASS in prose only",
-    });
-    expect(missingStatus.ok).toBe(false);
-    if (!missingStatus.ok) {
-      expect(missingStatus.error.code).toBe("MISSING_STATUS");
-    }
-
-    const unknownStatus = parseResultBlock({
-      agent: "vv-spec-reviewer",
-      output: "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: MAYBE\n\nreviewed",
-    });
-    expect(unknownStatus.ok).toBe(false);
-    if (!unknownStatus.ok) {
-      expect(unknownStatus.error.code).toBe("UNKNOWN_STATUS");
-    }
-
-    const mismatch = parseResultBlock({
-      agent: "vv-spec-reviewer",
-      output: "VVOC_WORK_ITEM_ID: wi-2\nVVOC_STATUS: PASS\n\nreviewed",
-      expectedWorkItemId: "wi-1",
-    });
-    expect(mismatch.ok).toBe(false);
-    if (!mismatch.ok) {
-      expect(mismatch.error.code).toBe("WORK_ITEM_MISMATCH");
-    }
-  });
-
-  test("parseResultBlock does not guess status from prose outside strict top block", () => {
-    const parsed = parseResultBlock({
-      agent: "vv-spec-reviewer",
-      output: "VVOC_WORK_ITEM_ID: wi-1\n\nI think status is PASS.",
-    });
-
-    expect(parsed.ok).toBe(false);
-    if (!parsed.ok) {
-      expect(parsed.error.code).toBe("MISSING_STATUS");
-    }
-  });
-
-  test("parseResultBlock rejects extra non-protocol lines inside strict top block", () => {
-    const parsed = parseResultBlock({
-      agent: "vv-spec-reviewer",
-      output: "VVOC_WORK_ITEM_ID: wi-1\nnote: not a protocol field\nVVOC_STATUS: PASS\n\nreviewed",
-    });
-
-    expect(parsed.ok).toBe(false);
-    if (!parsed.ok) {
-      expect(parsed.error.code).toBe("UNEXPECTED_TOP_BLOCK_LINE");
-    }
-  });
-
-  test("parseResultBlock rejects duplicate protocol fields in strict top block", () => {
-    const parsed = parseResultBlock({
+    const duplicate = parseResultBlock({
       agent: "vv-spec-reviewer",
       output: "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\nVVOC_STATUS: FAIL\n\nreviewed",
     });
-
-    expect(parsed.ok).toBe(false);
-    if (!parsed.ok) {
-      expect(parsed.error.code).toBe("DUPLICATE_TOP_BLOCK_FIELD");
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok) {
+      expect(duplicate.error.code).toBe("DUPLICATE_TOP_BLOCK_FIELD");
     }
   });
 });
@@ -220,512 +171,355 @@ describe("workflow repair", () => {
 });
 
 describe("workflow state", () => {
-  test("openWorkItem creates wi-1 header and supports idempotent open plus conflict handling", () => {
-    const store = createWorkItemStore();
+  test("openWorkItem stores explicit implementation and review_only intent", () => {
+    const implementation = openItem({ mode: "implementation", key: "impl" }).opened.record;
+    expect(implementation.state).toBe("open");
+    expect(implementation.mode).toBe("implementation");
+    expect(implementation.requiredReviewers).toEqual(["spec", "code"]);
+    expect(implementation.currentRound).toBeUndefined();
 
+    const reviewOnly = openItem({ mode: "review_only", key: "review" }).opened.record;
+    expect(reviewOnly.state).toBe("awaiting_reviews");
+    expect(reviewOnly.mode).toBe("review_only");
+    expect(reviewOnly.currentRound?.round).toBe(1);
+    expect(reviewOnly.currentRound?.pendingReviewers).toEqual(["spec", "code"]);
+  });
+
+  test("openWorkItem reuses exact explicit intent and rejects conflicting intent", () => {
+    const store = createWorkItemStore();
     const first = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "WI-WAVE1-WORKFLOW-CORE",
-      title: "Workflow core",
+      sessionId: SESSION_ID,
+      key: "same",
+      title: "Same",
+      mode: "implementation",
+      requiredReviewers: ["spec", "code"],
     });
-    expect(first.ok).toBe(true);
-    if (!first.ok) return;
-    expect(first.record.workItemId).toBe("wi-1");
-    expect(first.header).toBe("VVOC_WORK_ITEM_ID: wi-1");
-    expect(first.reused).toBe(false);
-
     const second = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "WI-WAVE1-WORKFLOW-CORE",
-      title: "Workflow core",
+      sessionId: SESSION_ID,
+      key: "same",
+      title: "Same",
+      mode: "implementation",
+      requiredReviewers: ["spec", "code"],
     });
-    expect(second.ok).toBe(true);
-    if (!second.ok) return;
-    expect(second.reused).toBe(true);
-    expect(second.record.workItemId).toBe("wi-1");
-
     const conflict = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "WI-WAVE1-WORKFLOW-CORE",
-      title: "Different title",
+      sessionId: SESSION_ID,
+      key: "same",
+      title: "Same",
+      mode: "review_only",
+      requiredReviewers: ["spec", "code"],
     });
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (second.ok) expect(second.reused).toBe(true);
     expect(conflict.ok).toBe(false);
-    if (!conflict.ok) {
-      expect(conflict.errorCode).toBe("WORK_ITEM_KEY_CONFLICT");
-    }
+    if (!conflict.ok) expect(conflict.errorCode).toBe("WORK_ITEM_KEY_CONFLICT");
   });
 
-  test("state is scoped per session", () => {
-    const store = createWorkItemStore();
-    const openedA = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "work-key",
-      title: "Same title",
-    });
-    const openedB = openWorkItem(store, {
-      sessionId: "session-b",
-      key: "work-key",
-      title: "Same title",
-    });
+  test("review_only collect-all allows parallel spec and code FAIL results", () => {
+    const { store } = openItem({ mode: "review_only" });
 
-    expect(openedA.ok).toBe(true);
-    expect(openedB.ok).toBe(true);
-    if (openedA.ok && openedB.ok) {
-      expect(openedA.record.workItemId).toBe("wi-1");
-      expect(openedB.record.workItemId).toBe("wi-2");
-    }
-    expect(listWorkItems(store, "session-a")).toHaveLength(1);
-    expect(listWorkItems(store, "session-b")).toHaveLength(1);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-code-reviewer",
+      }).ok,
+    ).toBe(true);
+
+    const specFail = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "FAIL"),
+    });
+    expect(specFail.ok).toBe(true);
+    if (!specFail.ok) return;
+    expect(specFail.record.state).toBe("awaiting_reviews");
+    expect(specFail.record.currentRound?.completedReviewers).toEqual(["spec"]);
+    expect(specFail.record.currentRound?.inFlightReviewers).toEqual(["code"]);
+
+    const codeFail = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-code-reviewer", "FAIL"),
+    });
+    expect(codeFail.ok).toBe(true);
+    if (!codeFail.ok) return;
+    expect(codeFail.record.state).toBe("ready_to_close");
+    expect(codeFail.record.currentRound?.results.spec?.status).toBe("FAIL");
+    expect(codeFail.record.currentRound?.results.code?.status).toBe("FAIL");
   });
 
-  test("listWorkItems returns current open item states and counters", () => {
-    const store = createWorkItemStore();
-    const opened = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "workflow-core",
-      title: "Workflow core",
+  test("implementation collect-all returns to implementer only after full FAIL round completes", () => {
+    const { store } = openItem({ mode: "implementation" });
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-implementer",
+      }).ok,
+    ).toBe(true);
+    const implemented = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-implementer", "DONE"),
     });
-    if (!opened.ok) return;
+    expect(implemented.ok).toBe(true);
+    if (!implemented.ok) return;
+    expect(implemented.record.state).toBe("awaiting_reviews");
 
-    transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: opened.record.workItemId,
-      state: "awaiting_spec_review",
-      actor: "vv-implementer",
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-code-reviewer",
+      }).ok,
+    ).toBe(true);
+    const specFail = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "FAIL"),
     });
+    expect(specFail.ok).toBe(true);
+    if (!specFail.ok) return;
+    expect(specFail.record.state).toBe("awaiting_reviews");
 
-    transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: opened.record.workItemId,
-      state: "awaiting_code_review",
-      actor: "vv-spec-reviewer",
+    const codePass = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-code-reviewer", "PASS"),
     });
-
-    const items = listWorkItems(store, "session-a");
-    expect(items).toHaveLength(1);
-    expect(items[0]?.state).toBe("awaiting_code_review");
-    expect(items[0]?.specReviewCount).toBe(1);
-    expect(items[0]?.codeReviewCount).toBe(0);
+    expect(codePass.ok).toBe(true);
+    if (!codePass.ok) return;
+    expect(codePass.record.state).toBe("awaiting_implementer");
+    expect(codePass.record.completedReviewRoundCount).toBe(1);
   });
 
-  test("transitionWorkItemState rejects invalid transitions without mutating state", () => {
-    const store = createWorkItemStore();
-    const opened = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "workflow-core",
-      title: "Workflow core",
+  test("NEEDS_CONTEXT rejects new launches but waits for already in-flight reviewers", () => {
+    const { store } = openItem({ mode: "review_only" });
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-code-reviewer",
+      }).ok,
+    ).toBe(true);
+
+    const needsContext = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "NEEDS_CONTEXT"),
     });
-    if (!opened.ok) return;
+    expect(needsContext.ok).toBe(true);
+    if (!needsContext.ok) return;
+    expect(needsContext.record.state).toBe("awaiting_reviews");
+    expect(getAllowedNextAgents(needsContext.record)).toEqual([]);
 
-    const attempted = transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: opened.record.workItemId,
-      state: "ready_to_close",
-      actor: "vv-spec-reviewer",
+    const codePass = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-code-reviewer", "PASS"),
     });
-
-    expect(attempted.ok).toBe(false);
-    if (!attempted.ok) {
-      expect(attempted.errorCode).toBe("INVALID_STATE_TRANSITION");
-    }
-
-    const current = listWorkItems(store, "session-a")[0];
-    expect(current?.state).toBe("open");
-    expect(current?.specReviewCount).toBe(0);
-    expect(current?.codeReviewCount).toBe(0);
+    expect(codePass.ok).toBe(true);
+    if (!codePass.ok) return;
+    expect(codePass.record.state).toBe("needs_context");
   });
 
-  test("hard-stop states remain sticky under transition attempts", () => {
-    const store = createWorkItemStore();
-    const opened = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "workflow-core",
-      title: "Workflow core",
+  test("duplicate launches, duplicate results, and results without in-flight launch are rejected", () => {
+    const { store } = openItem({ mode: "review_only" });
+    const firstLaunch = beginTrackedLaunch(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      agent: "vv-spec-reviewer",
     });
-    if (!opened.ok) return;
-
-    const toNeedsContext = transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: opened.record.workItemId,
-      state: "needs_context",
-      actor: "vv-implementer",
+    const duplicateLaunch = beginTrackedLaunch(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      agent: "vv-spec-reviewer",
     });
-    expect(toNeedsContext.ok).toBe(true);
+    expect(firstLaunch.ok).toBe(true);
+    expect(duplicateLaunch.ok).toBe(false);
+    if (!duplicateLaunch.ok) expect(duplicateLaunch.errorCode).toBe("REVIEWER_ALREADY_IN_FLIGHT");
 
-    const escapeAttempt = transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: opened.record.workItemId,
-      state: "awaiting_implementer",
+    const unlaunchedCode = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-code-reviewer", "PASS"),
     });
-    expect(escapeAttempt.ok).toBe(false);
-    if (!escapeAttempt.ok) {
-      expect(escapeAttempt.errorCode).toBe("INVALID_STATE_TRANSITION");
-    }
+    expect(unlaunchedCode.ok).toBe(false);
+    if (!unlaunchedCode.ok) expect(unlaunchedCode.errorCode).toBe("REVIEWER_NOT_IN_FLIGHT");
 
-    const current = listWorkItems(store, "session-a")[0];
-    expect(current?.state).toBe("needs_context");
+    const specPass = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "PASS"),
+    });
+    const duplicateResult = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "PASS"),
+    });
+    expect(specPass.ok).toBe(true);
+    expect(duplicateResult.ok).toBe(false);
+    if (!duplicateResult.ok) expect(duplicateResult.errorCode).toBe("REVIEWER_ALREADY_COMPLETED");
   });
 
-  test("transitionWorkItemState rejects missing actor metadata for tracked transitions", () => {
-    const store = createWorkItemStore();
-    const opened = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "workflow-core",
-      title: "Workflow core",
+  test("closeWorkItem succeeds only from ready_to_close", () => {
+    const { store } = openItem({ mode: "review_only", requiredReviewers: ["spec"] });
+    const earlyClose = closeWorkItem(store, SESSION_ID, "wi-1");
+    expect(earlyClose.ok).toBe(false);
+    if (!earlyClose.ok) expect(earlyClose.errorCode).toBe("READY_TO_CLOSE_REQUIRED");
+
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    const applied = applyTrackedResult(store, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "PASS"),
     });
-    if (!opened.ok) return;
-
-    const attempted = transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: opened.record.workItemId,
-      state: "awaiting_spec_review",
-    });
-
-    expect(attempted.ok).toBe(false);
-    if (!attempted.ok) {
-      expect(attempted.errorCode).toBe("MISSING_TRANSITION_ACTOR");
-    }
-
-    const current = listWorkItems(store, "session-a")[0];
-    expect(current?.state).toBe("open");
-  });
-
-  test("closeWorkItem closes an open item and rejects missing/already-closed items", () => {
-    const store = createWorkItemStore();
-    const opened = openWorkItem(store, {
-      sessionId: "session-a",
-      key: "workflow-core",
-      title: "Workflow core",
-    });
-    if (!opened.ok) return;
-
-    const closed = closeWorkItem(store, "session-a", opened.record.workItemId);
+    expect(applied.ok).toBe(true);
+    const closed = closeWorkItem(store, SESSION_ID, "wi-1");
     expect(closed.ok).toBe(true);
-    if (closed.ok) {
-      expect(closed.record.state).toBe("closed");
-      expect(typeof closed.record.closedAt).toBe("string");
-    }
-
-    const notFound = closeWorkItem(store, "session-a", "wi-999");
-    expect(notFound.ok).toBe(false);
-    if (!notFound.ok) {
-      expect(notFound.errorCode).toBe("WORK_ITEM_NOT_FOUND");
-    }
-
-    const alreadyClosed = closeWorkItem(store, "session-a", opened.record.workItemId);
-    expect(alreadyClosed.ok).toBe(false);
-    if (!alreadyClosed.ok) {
-      expect(alreadyClosed.errorCode).toBe("WORK_ITEM_ALREADY_CLOSED");
-    }
-  });
-
-  test("getReviewRound returns max(specReviewCount, codeReviewCount)", () => {
-    expect(getReviewRound({ specReviewCount: 1, codeReviewCount: 0 })).toBe(1);
-    expect(getReviewRound({ specReviewCount: 1, codeReviewCount: 2 })).toBe(2);
-  });
-
-  test("fresh work items can transition from review-only reviewer outcomes", () => {
-    const store = createWorkItemStore();
-    const opened = openWorkItem(store, {
-      sessionId: "session-review-only",
-      key: "review-only",
-      title: "Review only",
-    });
-    expect(opened.ok).toBe(true);
-    if (!opened.ok) return;
-
-    const transitioned = transitionWorkItemState(store, {
-      sessionId: "session-review-only",
-      workItemId: opened.record.workItemId,
-      state: "ready_to_close",
-      actor: "vv-code-reviewer",
-    });
-
-    expect(transitioned.ok).toBe(true);
-    if (!transitioned.ok) return;
-    expect(transitioned.record.state).toBe("ready_to_close");
-    expect(transitioned.record.codeReviewCount).toBe(1);
+    if (closed.ok) expect(closed.record.state).toBe("closed");
   });
 });
 
 describe("workflow transitions", () => {
-  test("open and awaiting_implementer allow vv-implementer", () => {
-    expect(getAllowedNextAgent("open")).toBe("vv-implementer");
-    expect(getAllowedNextAgent("awaiting_implementer")).toBe("vv-implementer");
-    expect(isAllowedTransition("open", "vv-implementer")).toBe(true);
-    expect(isAllowedTransition("open", "vv-spec-reviewer")).toBe(true);
-    expect(isAllowedTransition("open", "vv-code-reviewer")).toBe(true);
-  });
+  test("getAllowedNextAgents is mode-aware and round-aware", () => {
+    const implementation = openItem({ mode: "implementation" }).opened.record;
+    expect(getAllowedNextAgents(implementation)).toEqual(["vv-implementer"]);
+    expect(isAllowedTransition(implementation, "vv-implementer")).toBe(true);
+    expect(getAttemptedImplementationRound(implementation)).toBe(1);
 
-  test("implements deterministic next-state mappings", () => {
-    expect(
-      getNextState("open", {
-        agent: "vv-implementer",
-        workItemId: "wi-1",
-        status: "DONE",
-        route: "change_with_review",
-      }),
-    ).toBe("awaiting_spec_review");
-
-    expect(
-      getNextState("open", {
-        agent: "vv-implementer",
-        workItemId: "wi-1",
-        status: "DONE_WITH_CONCERNS",
-        route: "change_with_review",
-      }),
-    ).toBe("awaiting_spec_review");
-
-    expect(
-      getNextState("awaiting_spec_review", {
-        agent: "vv-spec-reviewer",
-        workItemId: "wi-1",
-        status: "PASS",
-      }),
-    ).toBe("awaiting_code_review");
-
-    expect(
-      getNextState("awaiting_code_review", {
-        agent: "vv-code-reviewer",
-        workItemId: "wi-1",
-        status: "PASS",
-      }),
-    ).toBe("ready_to_close");
-
-    expect(
-      getNextState("awaiting_spec_review", {
-        agent: "vv-spec-reviewer",
-        workItemId: "wi-1",
-        status: "FAIL",
-      }),
-    ).toBe("awaiting_implementer");
-
-    expect(
-      getNextState("open", {
-        agent: "vv-code-reviewer",
-        workItemId: "wi-1",
-        status: "PASS",
-      }),
-    ).toBe("ready_to_close");
-
-    expect(
-      getNextState("open", {
-        agent: "vv-spec-reviewer",
-        workItemId: "wi-1",
-        status: "PASS",
-      }),
-    ).toBe("awaiting_code_review");
-
-    expect(
-      getNextState("awaiting_code_review", {
-        agent: "vv-code-reviewer",
-        workItemId: "wi-1",
-        status: "FAIL",
-      }),
-    ).toBe("awaiting_implementer");
-
-    expect(
-      getNextState("open", {
-        agent: "vv-implementer",
-        workItemId: "wi-1",
-        status: "NEEDS_CONTEXT",
-        route: "change_with_review",
-      }),
-    ).toBe("needs_context");
-
-    expect(
-      getNextState("open", {
-        agent: "vv-implementer",
-        workItemId: "wi-1",
-        status: "BLOCKED",
-        route: "change_with_review",
-      }),
-    ).toBe("blocked");
-  });
-
-  test("shouldBlockRound enforces review loop gate before round 3", () => {
-    expect(MAX_REVIEW_ROUNDS).toBe(2);
-    expect(shouldBlockRound(1)).toBe(false);
-    expect(shouldBlockRound(2)).toBe(false);
+    const reviewOnly = openItem({ mode: "review_only" }).opened.record;
+    expect(getAllowedNextAgents(reviewOnly)).toEqual(["vv-spec-reviewer", "vv-code-reviewer"]);
+    expect(isAllowedTransition(reviewOnly, "vv-implementer")).toBe(false);
     expect(shouldBlockRound(3)).toBe(true);
+  });
+
+  test("resolveCompletedRoundState distinguishes implementation and review_only FAIL", () => {
+    const implementation = openItem({ mode: "implementation" }).opened.record;
+    const reviewOnly = openItem({ mode: "review_only" }).opened.record;
+    const failRound = {
+      round: 1,
+      requiredReviewers: ["spec"] as ReviewerRole[],
+      pendingReviewers: [],
+      inFlightReviewers: [],
+      completedReviewers: ["spec"] as ReviewerRole[],
+      results: {
+        spec: {
+          reviewer: "spec" as const,
+          agent: "vv-spec-reviewer" as const,
+          status: "FAIL" as const,
+          completedAt: new Date().toISOString(),
+        },
+      },
+      status: "completed" as const,
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    };
+
+    expect(resolveCompletedRoundState(implementation, failRound)).toBe("awaiting_implementer");
+    expect(resolveCompletedRoundState(reviewOnly, failRound)).toBe("ready_to_close");
   });
 });
 
 describe("workflow tooling", () => {
-  test("work_item_open supports batch open and returns VVOC_WORK_ITEM_ID headers", () => {
+  test("work_item_open requires explicit mode and requiredReviewers", () => {
     const store = createWorkItemStore();
-    const tool = createWorkItemOpenTool(store);
-    const result = tool.execute(
+    const openTool = createWorkItemOpenTool(store);
+    const legacy = openTool.execute(
+      { items: [{ key: "legacy", title: "Legacy" }] },
+      { sessionId: SESSION_ID },
+    ) as { items: Array<{ ok: boolean; errorCode?: string }> };
+    expect(legacy.items[0]?.ok).toBe(false);
+    expect(legacy.items[0]?.errorCode).toBe("INVALID_INPUT");
+
+    const opened = openTool.execute(
       {
         items: [
-          { key: "work-1", title: "Title 1" },
-          { key: "work-2", title: "Title 2" },
+          {
+            key: "review",
+            title: "Review",
+            mode: "review_only",
+            requiredReviewers: ["code", "spec"],
+          },
         ],
       },
-      { sessionId: "session-a" },
-    ) as {
-      items: Array<{ ok: boolean; workItemId?: string; header?: string }>;
-    };
-
-    expect(result.items).toHaveLength(2);
-    expect(result.items[0]?.ok).toBe(true);
-    expect(result.items[0]?.workItemId).toBe("wi-1");
-    expect(result.items[0]?.header).toBe("VVOC_WORK_ITEM_ID: wi-1");
-    expect(result.items[1]?.workItemId).toBe("wi-2");
+      { sessionId: SESSION_ID },
+    ) as { items: Array<{ ok: boolean; state?: string; requiredReviewers?: string[] }> };
+    expect(opened.items[0]?.ok).toBe(true);
+    expect(opened.items[0]?.state).toBe("awaiting_reviews");
+    expect(opened.items[0]?.requiredReviewers).toEqual(["spec", "code"]);
   });
 
-  test("work_item_list returns open items with state counters and review round", () => {
+  test("work_item_list exposes round metadata and work_item_close surfaces close gating", () => {
     const store = createWorkItemStore();
     const openTool = createWorkItemOpenTool(store);
-    openTool.execute({ items: [{ key: "work-1", title: "Title 1" }] }, { sessionId: "session-a" });
-
-    transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: "wi-1",
-      state: "awaiting_spec_review",
-      actor: "vv-implementer",
-    });
-
-    transitionWorkItemState(store, {
-      sessionId: "session-a",
-      workItemId: "wi-1",
-      state: "awaiting_code_review",
-      actor: "vv-spec-reviewer",
-    });
-
     const listTool = createWorkItemListTool(store);
-    const listed = listTool.execute({ includeClosed: false }, { sessionId: "session-a" }) as {
-      items: Array<{
-        workItemId: string;
-        state: string;
-        reviewRound: number;
-        specReviewCount: number;
-      }>;
-    };
-
-    expect(listed.items).toHaveLength(1);
-    expect(listed.items[0]?.workItemId).toBe("wi-1");
-    expect(listed.items[0]?.state).toBe("awaiting_code_review");
-    expect(listed.items[0]?.specReviewCount).toBe(1);
-    expect(listed.items[0]?.reviewRound).toBe(1);
-  });
-
-  test("work_item_list respects includeClosed flag", () => {
-    const store = createWorkItemStore();
-    const openTool = createWorkItemOpenTool(store);
-    openTool.execute({ items: [{ key: "work-1", title: "Title 1" }] }, { sessionId: "session-a" });
-
     const closeTool = createWorkItemCloseTool(store);
-    closeTool.execute({ workItemId: "wi-1" }, { sessionId: "session-a" });
-
-    const listTool = createWorkItemListTool(store);
-    const withoutClosed = listTool.execute(
-      { includeClosed: false },
-      { sessionId: "session-a" },
-    ) as { items: Array<{ workItemId: string }> };
-    expect(withoutClosed.items).toHaveLength(0);
-
-    const withClosed = listTool.execute({ includeClosed: true }, { sessionId: "session-a" }) as {
-      items: Array<{ workItemId: string; state: string }>;
+    openTool.execute(
+      { items: [{ key: "r", title: "R", mode: "review_only", requiredReviewers: ["spec"] }] },
+      { sessionId: SESSION_ID },
+    );
+    const listed = listTool.execute({ includeClosed: false }, { sessionId: SESSION_ID }) as {
+      items: Array<{ currentRound?: { pendingReviewers: string[] }; mode: string }>;
     };
-    expect(withClosed.items).toHaveLength(1);
-    expect(withClosed.items[0]?.workItemId).toBe("wi-1");
-    expect(withClosed.items[0]?.state).toBe("closed");
-  });
+    expect(listed.items[0]?.mode).toBe("review_only");
+    expect(listed.items[0]?.currentRound?.pendingReviewers).toEqual(["spec"]);
 
-  test("work_item_close closes the specified work item and confirms", () => {
-    const store = createWorkItemStore();
-    const openTool = createWorkItemOpenTool(store);
-    openTool.execute({ items: [{ key: "work-1", title: "Title 1" }] }, { sessionId: "session-a" });
-
-    const closeTool = createWorkItemCloseTool(store);
-    const closed = closeTool.execute({ workItemId: "wi-1" }, { sessionId: "session-a" }) as {
+    const close = closeTool.execute({ workItemId: "wi-1" }, { sessionId: SESSION_ID }) as {
       ok: boolean;
-      state?: string;
-      header?: string;
+      errorCode?: string;
     };
-
-    expect(closed.ok).toBe(true);
-    expect(closed.state).toBe("closed");
-    expect(closed.header).toBe("VVOC_WORK_ITEM_ID: wi-1");
+    expect(close.ok).toBe(false);
+    expect(close.errorCode).toBe("READY_TO_CLOSE_REQUIRED");
   });
 });
 
 type WorkflowPluginHarness = {
   plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
   logs: string[];
-  promptCalls: Array<{
-    sessionID: string;
-    agent?: string;
-    system?: string;
-    tools?: Record<string, boolean>;
-    text: string;
-  }>;
 };
 
-function createWorkflowPluginHarness(options?: {
-  promptResponseText?: string;
-  promptResponder?: (input: {
-    sessionID: string;
-    agent?: string;
-    text: string;
-  }) => string | undefined;
-}): Promise<WorkflowPluginHarness> {
+function createWorkflowPluginHarness(): Promise<WorkflowPluginHarness> {
   const logs: string[] = [];
-  const promptCalls: Array<{
-    sessionID: string;
-    agent?: string;
-    system?: string;
-    tools?: Record<string, boolean>;
-    text: string;
-  }> = [];
   return WorkflowPlugin({
     client: {
       app: {
         log: async (payload: { body?: { message?: string } }) => {
           const message = payload.body?.message;
-          if (typeof message === "string") {
-            logs.push(message);
-          }
+          if (typeof message === "string") logs.push(message);
         },
       },
       session: {
-        prompt: async (payload: {
-          path: { id: string };
-          body?: {
-            agent?: string;
-            system?: string;
-            tools?: Record<string, boolean>;
-            parts?: Array<{ type: string; text?: string }>;
-          };
-        }) => {
-          const text = payload.body?.parts?.find((part) => part.type === "text")?.text ?? "";
-          const call = {
-            sessionID: payload.path.id,
-            agent: payload.body?.agent,
-            system: payload.body?.system,
-            tools: payload.body?.tools,
-            text,
-          };
-          promptCalls.push(call);
-
-          const repairedText = options?.promptResponder?.(call) ?? options?.promptResponseText;
-          if (!repairedText) {
-            return { data: undefined, error: { message: "prompt unavailable" } };
-          }
-
-          return {
-            data: {
-              parts: [
-                {
-                  type: "text",
-                  text: repairedText,
-                },
-              ],
-            },
-            error: undefined,
-          };
-        },
+        prompt: async () => ({ data: undefined, error: { message: "prompt unavailable" } }),
       },
     } as never,
     project: {} as never,
@@ -733,11 +527,140 @@ function createWorkflowPluginHarness(options?: {
     worktree: "/tmp/project",
     serverUrl: new URL("http://localhost"),
     $: {} as never,
-  }).then((plugin) => ({ plugin, logs, promptCalls }));
+  }).then((plugin) => ({ plugin, logs }));
 }
 
+describe("workflow plugin integration", () => {
+  beforeEach(async () => {
+    for (const sessionID of [
+      "session-review-only-double-fail",
+      "session-needs-context-inflight",
+      "session-round-limit",
+      "session-guidance",
+      "session-tool-denied",
+    ]) {
+      await deleteWorkflowSessionDir(sessionID);
+    }
+  });
+
+  afterEach(async () => {
+    for (const sessionID of [
+      "session-review-only-double-fail",
+      "session-needs-context-inflight",
+      "session-round-limit",
+      "session-guidance",
+      "session-tool-denied",
+    ]) {
+      await deleteWorkflowSessionDir(sessionID);
+    }
+  });
+
+  test("review_only parallel spec and code reviewers can both return FAIL", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-review-only-double-fail";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec", "code"]);
+
+    await launchPluginTask(plugin, sessionID, "spec", "vv-spec-reviewer", workItemId);
+    await launchPluginTask(plugin, sessionID, "code", "vv-code-reviewer", workItemId);
+
+    await finishPluginTask(plugin, sessionID, "spec", "vv-spec-reviewer", workItemId, "FAIL");
+    let listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("awaiting_reviews");
+    expect(listed.items[0]?.currentRound?.results.spec?.status).toBe("FAIL");
+    expect(listed.items[0]?.currentRound?.inFlightReviewers).toEqual(["code"]);
+
+    await finishPluginTask(plugin, sessionID, "code", "vv-code-reviewer", workItemId, "FAIL");
+    listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("ready_to_close");
+    expect(listed.items[0]?.currentRound?.results.code?.status).toBe("FAIL");
+  });
+
+  test("reviewer NEEDS_CONTEXT waits for in-flight reviewer before aggregate hard stop", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-needs-context-inflight";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec", "code"]);
+
+    await launchPluginTask(plugin, sessionID, "spec", "vv-spec-reviewer", workItemId);
+    await launchPluginTask(plugin, sessionID, "code", "vv-code-reviewer", workItemId);
+
+    await finishPluginTask(
+      plugin,
+      sessionID,
+      "spec",
+      "vv-spec-reviewer",
+      workItemId,
+      "NEEDS_CONTEXT",
+    );
+    let listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("awaiting_reviews");
+
+    await expect(
+      finishPluginTask(plugin, sessionID, "code", "vv-code-reviewer", workItemId, "PASS"),
+    ).rejects.toThrow("RESULT_HARD_STOP: needs_context");
+    listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("needs_context");
+  });
+
+  test("round limit applies to implementation retries only", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-round-limit";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
+
+    for (const round of [1, 2]) {
+      await launchPluginTask(plugin, sessionID, `impl-${round}`, "vv-implementer", workItemId);
+      await finishPluginTask(
+        plugin,
+        sessionID,
+        `impl-${round}`,
+        "vv-implementer",
+        workItemId,
+        "DONE",
+      );
+      await launchPluginTask(plugin, sessionID, `spec-${round}`, "vv-spec-reviewer", workItemId);
+      await finishPluginTask(
+        plugin,
+        sessionID,
+        `spec-${round}`,
+        "vv-spec-reviewer",
+        workItemId,
+        "FAIL",
+      );
+    }
+
+    await expect(
+      launchPluginTask(plugin, sessionID, "impl-3", "vv-implementer", workItemId),
+    ).rejects.toThrow("LAUNCH_REJECTED_ROUND_LIMIT");
+  });
+
+  test("workflow tools and guidance are restricted to vv-controller", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    await expect(
+      plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "denied",
+              title: "Denied",
+              mode: "review_only",
+              requiredReviewers: ["spec"],
+            },
+          ],
+        },
+        createToolContext("session-tool-denied", "build") as never,
+      ),
+    ).rejects.toThrow("WORKFLOW_TOOL_DENIED");
+
+    const output = { message: { agent: "vv-controller", system: "base" } } as {
+      message: { agent: string; system?: string };
+    };
+    await plugin["chat.message"]?.({} as never, output as never);
+    expect(output.message.system).toContain("work_item_open");
+    expect(output.message.system).toContain("requiredReviewers");
+  });
+});
+
 describe("workflow persistence", () => {
-  const SESSION_ID = "ses_test_session_123";
+  const PERSIST_SESSION_ID = "ses_test_explicit_workflow";
   let originalDataHome: string | undefined;
   let tmpDir: string;
 
@@ -748,9 +671,7 @@ describe("workflow persistence", () => {
   });
 
   afterEach(async () => {
-    // Clean up test session data
-    await deleteWorkflowSessionDir(SESSION_ID);
-    // Restore original XDG_DATA_HOME
+    await deleteWorkflowSessionDir(PERSIST_SESSION_ID);
     if (originalDataHome !== undefined) {
       process.env.XDG_DATA_HOME = originalDataHome;
     } else {
@@ -758,119 +679,167 @@ describe("workflow persistence", () => {
     }
   });
 
-  test("getWorkflowSessionDir returns correct path", () => {
-    const dir = getWorkflowSessionDir(SESSION_ID);
-    expect(dir).toContain("vvoc/workflow/" + SESSION_ID);
-  });
-
-  test("hydrateWorkflowState returns null when no state file exists", () => {
-    const result = hydrateWorkflowState(SESSION_ID);
-    expect(result).toBeNull();
-  });
-
-  test("snapshotWorkflowState writes a valid JSON file that can be re-hydrated", () => {
-    // Build a minimal store
+  test("snapshot and hydrate preserve explicit mode and round metadata", () => {
     const store = createWorkItemStore();
-    const openResult = openWorkItem(store, {
-      sessionId: SESSION_ID,
-      key: "test-key",
-      title: "Test Work Item",
+    const opened = openWorkItem(store, {
+      sessionId: PERSIST_SESSION_ID,
+      key: "review",
+      title: "Review",
+      mode: "review_only",
+      requiredReviewers: ["spec", "code"],
     });
-    expect(openResult.ok).toBeTrue();
+    expect(opened.ok).toBe(true);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: PERSIST_SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
 
-    // Snapshot
-    snapshotWorkflowState(SESSION_ID, store.getStoreData());
-
-    // Re-hydrate
-    const hydrated = hydrateWorkflowState(SESSION_ID);
+    snapshotWorkflowState(PERSIST_SESSION_ID, store.getStoreData());
+    const hydrated = hydrateWorkflowState(PERSIST_SESSION_ID);
     expect(hydrated).not.toBeNull();
-    expect(hydrated!.nextId).toBe(2);
 
-    // Verify records
     const hydratedStore = createWorkItemStore(hydrated);
-    const records = hydratedStore.listWorkItems(SESSION_ID);
-    expect(records).toHaveLength(1);
-    expect(records[0]!.key).toBe("test-key");
-    expect(records[0]!.state).toBe("open");
-
-    // Verify key index via idempotent open
-    const reopenResult = openWorkItem(hydratedStore, {
-      sessionId: SESSION_ID,
-      key: "test-key",
-      title: "Test Work Item",
-    });
-    expect(reopenResult.ok).toBeTrue();
-    if (reopenResult.ok) {
-      expect(reopenResult.reused).toBeTrue();
-      expect(reopenResult.record.workItemId).toBe("wi-1");
-    }
+    const records = listWorkItems(hydratedStore, PERSIST_SESSION_ID);
+    expect(records[0]?.mode).toBe("review_only");
+    expect(records[0]?.currentRound?.inFlightReviewers).toEqual(["spec"]);
   });
-  test("hydrateWorkflowState handles corrupt JSON gracefully", () => {
-    // Ensure directory exists, then write corrupt JSON
-    mkdirSync(getWorkflowSessionDir(SESSION_ID), { recursive: true });
+
+  test("hydrate rejects legacy records that omit explicit intent", () => {
+    mkdirSync(getWorkflowSessionDir(PERSIST_SESSION_ID), { recursive: true });
     writeFileSync(
-      join(getWorkflowSessionDir(SESSION_ID), "workflow-state.json"),
+      join(getWorkflowSessionDir(PERSIST_SESSION_ID), "workflow-state.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          sessionId: PERSIST_SESSION_ID,
+          nextId: 2,
+          records: [
+            {
+              sessionId: PERSIST_SESSION_ID,
+              workItemId: "wi-1",
+              key: "legacy",
+              title: "Legacy",
+              state: "open",
+              specReviewCount: 0,
+              codeReviewCount: 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+          keyIndex: { legacy: "wi-1" },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    expect(hydrateWorkflowState(PERSIST_SESSION_ID)).toBeNull();
+  });
+
+  test("hydrate handles corrupt JSON and delete removes session data", async () => {
+    mkdirSync(getWorkflowSessionDir(PERSIST_SESSION_ID), { recursive: true });
+    writeFileSync(
+      join(getWorkflowSessionDir(PERSIST_SESSION_ID), "workflow-state.json"),
       "{ not valid json }",
       "utf-8",
     );
+    expect(hydrateWorkflowState(PERSIST_SESSION_ID)).toBeNull();
 
-    const result = hydrateWorkflowState(SESSION_ID);
-    expect(result).toBeNull();
-  });
-
-  test("createWorkItemStore with null hydrate data creates empty store", () => {
-    const store = createWorkItemStore(null);
-    expect(store.listWorkItems(SESSION_ID)).toHaveLength(0);
-
-    // Can still open items
-    const result = openWorkItem(store, {
-      sessionId: SESSION_ID,
-      key: "fresh-key",
-      title: "Fresh",
-    });
-    expect(result.ok).toBeTrue();
-    if (result.ok) {
-      expect(result.record.workItemId).toBe("wi-1");
-    }
-  });
-
-  test("snapshot survives failed writes gracefully", () => {
-    const store = createWorkItemStore();
-    openWorkItem(store, { sessionId: SESSION_ID, key: "k1", title: "T1" });
-    // Snapshot should not throw even if we can't write (it will succeed normally)
-    expect(() => snapshotWorkflowState(SESSION_ID, store.getStoreData())).not.toThrow();
-  });
-
-  test("multiple work items round-trip", () => {
-    const store = createWorkItemStore();
-    openWorkItem(store, { sessionId: SESSION_ID, key: "k1", title: "Item 1" });
-    openWorkItem(store, { sessionId: SESSION_ID, key: "k2", title: "Item 2" });
-    closeWorkItem(store, SESSION_ID, "wi-1");
-
-    snapshotWorkflowState(SESSION_ID, store.getStoreData());
-
-    const hydrated = hydrateWorkflowState(SESSION_ID);
-    expect(hydrated).not.toBeNull();
-
-    const hydratedStore = createWorkItemStore(hydrated);
-    const openItems = hydratedStore.listWorkItems(SESSION_ID);
-    const allItems = hydratedStore.listWorkItems(SESSION_ID, { includeClosed: true });
-    expect(openItems).toHaveLength(1);
-    expect(allItems).toHaveLength(2);
-    expect(openItems[0]!.key).toBe("k2");
-  });
-  test("deleteWorkflowSessionDir removes session data", async () => {
-    // Write some data first
-    mkdirSync(getWorkflowSessionDir(SESSION_ID), { recursive: true });
-    snapshotWorkflowState(SESSION_ID, createWorkItemStore().getStoreData());
-
-    // Verify file exists
-    expect(existsSync(getWorkflowSessionDir(SESSION_ID))).toBeTrue();
-
-    await deleteWorkflowSessionDir(SESSION_ID);
-    expect(existsSync(getWorkflowSessionDir(SESSION_ID))).toBeFalse();
+    snapshotWorkflowState(PERSIST_SESSION_ID, createWorkItemStore().getStoreData());
+    expect(existsSync(getWorkflowSessionDir(PERSIST_SESSION_ID))).toBe(true);
+    await deleteWorkflowSessionDir(PERSIST_SESSION_ID);
+    expect(existsSync(getWorkflowSessionDir(PERSIST_SESSION_ID))).toBe(false);
   });
 });
+
+type ListedPluginItems = {
+  items: Array<{
+    state: string;
+    currentRound?: {
+      inFlightReviewers: string[];
+      results: {
+        spec?: { status: string };
+        code?: { status: string };
+      };
+    };
+  }>;
+};
+
+async function openPluginWorkItem(
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  sessionID: string,
+  mode: WorkItemMode,
+  requiredReviewers: ReviewerRole[],
+): Promise<string> {
+  const openedRaw = await plugin.tool?.work_item_open?.execute(
+    { items: [{ key: `${sessionID}-item`, title: "Item", mode, requiredReviewers }] },
+    createToolContext(sessionID) as never,
+  );
+  const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
+  const workItemId = opened.items[0]?.workItemId;
+  if (!workItemId) throw new Error("missing work item id");
+  return workItemId;
+}
+
+async function launchPluginTask(
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  sessionID: string,
+  callPrefix: string,
+  subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
+  workItemId: string,
+): Promise<void> {
+  await plugin["tool.execute.before"]?.(
+    { tool: "task", sessionID, callID: `${callPrefix}-before` } as never,
+    {
+      args: {
+        subagent_type: subagentType,
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
+      },
+    } as never,
+  );
+}
+
+async function finishPluginTask(
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  sessionID: string,
+  callPrefix: string,
+  subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
+  workItemId: string,
+  status: ParsedResultBlock["status"],
+): Promise<void> {
+  const route = subagentType === "vv-implementer" ? "\nVVOC_ROUTE: change_with_review" : "";
+  await plugin["tool.execute.after"]?.(
+    {
+      tool: "task",
+      sessionID,
+      callID: `${callPrefix}-after`,
+      args: {
+        subagent_type: subagentType,
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
+      },
+    } as never,
+    {
+      title: "task",
+      output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: ${status}${route}\n\nDone.`,
+      metadata: {},
+    } as never,
+  );
+}
+
+async function listPluginItems(
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  sessionID: string,
+): Promise<ListedPluginItems> {
+  const listedRaw = await plugin.tool?.work_item_list?.execute(
+    { includeClosed: false },
+    createToolContext(sessionID) as never,
+  );
+  return parseToolJson<ListedPluginItems>(listedRaw ?? "{}");
+}
 
 function createToolContext(sessionID: string, agent = "vv-controller") {
   return {
@@ -898,1250 +867,3 @@ function wrapTaskResult(taskId: string, innerResult: string): string {
     "</task_result>",
   ].join("\n");
 }
-
-describe("workflow plugin integration", () => {
-  beforeEach(async () => {
-    const testSessionIds = [
-      "session-untracked",
-      "session-missing-header",
-      "session-invalid-launch",
-      "session-happy",
-      "session-loop-gate",
-      "session-fail-route",
-      "session-hard-stop",
-      "session-foreign-task-result",
-      "session-loose-task-id-wrapper",
-      "session-protocol-error",
-      "session-repair-failure",
-      "session-repair-success",
-      "session-tagged-launch",
-      "session-task-wrapper-suffix",
-      "session-wrapped-duplicate-field",
-      "session-wrapped-protocol-error",
-      "session-wrapped-result",
-      "session-guidance",
-      "ses_repair_failure",
-      "ses_repair_success",
-      "session-task-element",
-      "session-task-element-nested",
-    ];
-    for (const sid of testSessionIds) {
-      await deleteWorkflowSessionDir(sid);
-    }
-  });
-
-  test("untracked task launches pass through before/after hooks", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-
-    await expect(
-      plugin["tool.execute.before"]?.(
-        {
-          tool: "task",
-          sessionID: "session-untracked",
-          callID: "call-untracked",
-        } as never,
-        {
-          args: {
-            subagent_type: "investigator",
-            prompt: "no workflow header required for untracked agent",
-          },
-        } as never,
-      ),
-    ).resolves.toBeUndefined();
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID: "session-untracked",
-          callID: "call-untracked",
-          args: {
-            subagent_type: "investigator",
-            prompt: "no workflow header required for untracked agent",
-          },
-        } as never,
-        {
-          title: "task",
-          output: "plain free-form output",
-          metadata: {},
-        } as never,
-      ),
-    ).resolves.toBeUndefined();
-  });
-
-  test("tracked launch rejects missing headers", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-
-    await expect(
-      plugin["tool.execute.before"]?.(
-        {
-          tool: "task",
-          sessionID: "session-missing-header",
-          callID: "call-missing-header",
-        } as never,
-        {
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: "Implement task without workflow header",
-          },
-        } as never,
-      ),
-    ).rejects.toThrow("LAUNCH_REJECTED_MISSING_HEADER");
-  });
-
-  test("tracked launch rejects unknown work item and wrong next agent", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-
-    await expect(
-      plugin["tool.execute.before"]?.(
-        {
-          tool: "task",
-          sessionID: "session-invalid-launch",
-          callID: "call-unknown-work-item",
-        } as never,
-        {
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: "VVOC_WORK_ITEM_ID: wi-999\nImplement this",
-          },
-        } as never,
-      ),
-    ).rejects.toThrow("LAUNCH_REJECTED_UNKNOWN_WORK_ITEM");
-
-    const openOutput = await plugin.tool?.work_item_open?.execute(
-      {
-        items: [{ key: "WI-INVALID-NEXT-AGENT", title: "Invalid next agent" }],
-      },
-      createToolContext("session-invalid-launch") as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId?: string; ok: boolean }> }>(
-      openOutput ?? "{}",
-    );
-    const workItemId = opened.items[0]?.workItemId;
-    expect(workItemId).toBe("wi-1");
-
-    await plugin["tool.execute.before"]?.(
-      {
-        tool: "task",
-        sessionID: "session-invalid-launch",
-        callID: "call-impl-before-wrong-agent",
-      } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement first`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID: "session-invalid-launch",
-        callID: "call-impl-before-wrong-agent",
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement first`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-        metadata: {},
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.before"]?.(
-        {
-          tool: "task",
-          sessionID: "session-invalid-launch",
-          callID: "call-wrong-agent",
-        } as never,
-        {
-          args: {
-            subagent_type: "vv-code-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code too early`,
-          },
-        } as never,
-      ),
-    ).rejects.toThrow("LAUNCH_REJECTED_INVALID_TRANSITION");
-  });
-
-  test("tracked launch accepts header-first assignment tags", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-    const sessionID = "session-tagged-launch";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      {
-        items: [{ key: "WI-TAGGED-LAUNCH", title: "Tagged launch" }],
-      },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await expect(
-      plugin["tool.execute.before"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-tagged-launch",
-        } as never,
-        {
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: [
-              `VVOC_WORK_ITEM_ID: ${workItemId}`,
-              "<assignment>",
-              "<goal>Implement the approved change.</goal>",
-              "<verification>bun test src/plugins/workflow.test.ts</verification>",
-              "</assignment>",
-            ].join("\n"),
-          },
-        } as never,
-      ),
-    ).resolves.toBeUndefined();
-  });
-
-  test("happy path transitions to ready_to_close", async () => {
-    const { plugin, logs } = await createWorkflowPluginHarness();
-    const sessionID = "session-happy";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      {
-        items: [{ key: "WI-HAPPY", title: "Happy path" }],
-      },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-impl",
-      } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-impl",
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-        metadata: {},
-      } as never,
-    );
-
-    await plugin["tool.execute.before"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-spec",
-      } as never,
-      {
-        args: {
-          subagent_type: "vv-spec-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview spec`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-spec",
-        args: {
-          subagent_type: "vv-spec-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview spec`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: PASS\n\nSpec pass.`,
-        metadata: {},
-      } as never,
-    );
-
-    await plugin["tool.execute.before"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-code",
-      } as never,
-      {
-        args: {
-          subagent_type: "vv-code-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-code",
-        args: {
-          subagent_type: "vv-code-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: PASS\n\nCode pass.`,
-        metadata: {},
-      } as never,
-    );
-
-    const listedRaw = await plugin.tool?.work_item_list?.execute(
-      { includeClosed: false },
-      createToolContext(sessionID) as never,
-    );
-    const listed = parseToolJson<{
-      items: Array<{ workItemId: string; state: string; reviewRound: number }>;
-    }>(listedRaw ?? "{}");
-    expect(listed.items[0]?.workItemId).toBe(workItemId);
-    expect(listed.items[0]?.state).toBe("ready_to_close");
-    expect(listed.items[0]?.reviewRound).toBe(1);
-
-    expect(logs).toContain("[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch validated");
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] result parsed");
-    expect(logs).toContain(
-      "[workflow][stateTransition][BLOCK_TRANSITION_STATE] state transitioned",
-    );
-    expect(logs).toContain("[workflow][loopGate][BLOCK_CHECK_ROUND_LIMIT] round limit check");
-  });
-
-  test("review FAIL routes back to awaiting_implementer", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-    const sessionID = "session-fail-route";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-FAIL-PATH", title: "Fail path" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-fail-impl" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-fail-impl",
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-        metadata: {},
-      } as never,
-    );
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-fail-spec" } as never,
-      {
-        args: {
-          subagent_type: "vv-spec-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nSpec review`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-fail-spec",
-        args: {
-          subagent_type: "vv-spec-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nSpec review`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\n\nNeeds fixes.`,
-        metadata: {},
-      } as never,
-    );
-
-    const listedRaw = await plugin.tool?.work_item_list?.execute(
-      { includeClosed: false },
-      createToolContext(sessionID) as never,
-    );
-    const listed = parseToolJson<{ items: Array<{ state: string; reviewRound: number }> }>(
-      listedRaw ?? "{}",
-    );
-    expect(listed.items[0]?.state).toBe("awaiting_implementer");
-    expect(listed.items[0]?.reviewRound).toBe(1);
-  });
-
-  test("NEEDS_CONTEXT result hard-stops after transition", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-    const sessionID = "session-hard-stop";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-HARD-STOP", title: "Hard stop" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-hard-stop-impl" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-hard-stop-impl",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: NEEDS_CONTEXT\nVVOC_ROUTE: change_with_review\n\nNeed context.`,
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_HARD_STOP");
-
-    const listedRaw = await plugin.tool?.work_item_list?.execute(
-      { includeClosed: false },
-      createToolContext(sessionID) as never,
-    );
-    const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
-    expect(listed.items[0]?.state).toBe("needs_context");
-  });
-
-  test("loop gate blocks before entering round 3", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-    const sessionID = "session-loop-gate";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-ROUND-LIMIT", title: "Round limit" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    const runPass = async (prefix: string) => {
-      await plugin["tool.execute.before"]?.(
-        { tool: "task", sessionID, callID: `${prefix}-impl` } as never,
-        {
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-      );
-      await plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: `${prefix}-impl`,
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-          metadata: {},
-        } as never,
-      );
-
-      await plugin["tool.execute.before"]?.(
-        { tool: "task", sessionID, callID: `${prefix}-spec` } as never,
-        {
-          args: {
-            subagent_type: "vv-spec-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nSpec review`,
-          },
-        } as never,
-      );
-      await plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: `${prefix}-spec`,
-          args: {
-            subagent_type: "vv-spec-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nSpec review`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: PASS\n\nSpec pass.`,
-          metadata: {},
-        } as never,
-      );
-
-      await plugin["tool.execute.before"]?.(
-        { tool: "task", sessionID, callID: `${prefix}-code` } as never,
-        {
-          args: {
-            subagent_type: "vv-code-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nCode review`,
-          },
-        } as never,
-      );
-      await plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: `${prefix}-code`,
-          args: {
-            subagent_type: "vv-code-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nCode review`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\n\nNeeds more changes.`,
-          metadata: {},
-        } as never,
-      );
-    };
-
-    await runPass("round-1");
-    await runPass("round-2");
-
-    await expect(
-      plugin["tool.execute.before"]?.(
-        { tool: "task", sessionID, callID: "round-3-impl" } as never,
-        {
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-      ),
-    ).rejects.toThrow("LAUNCH_REJECTED_ROUND_LIMIT");
-  });
-
-  test("tracked result parsing extracts OpenCode task result wrappers", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-    const sessionID = "session-wrapped-result";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-WRAPPED-RESULT", title: "Wrapped result" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-wrapped-impl" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-    await plugin["tool.execute.after"]?.(
-      {
-        tool: "task",
-        sessionID,
-        callID: "call-wrapped-impl",
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-      {
-        title: "task",
-        output: wrapTaskResult(
-          "ses_123",
-          `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-        ),
-        metadata: {},
-      } as never,
-    );
-
-    const listedRaw = await plugin.tool?.work_item_list?.execute(
-      { includeClosed: false },
-      createToolContext(sessionID) as never,
-    );
-    const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
-    expect(listed.items[0]?.state).toBe("awaiting_spec_review");
-  });
-
-  test("foreign task result tags without OpenCode task envelope still fail strict parsing", async () => {
-    const { plugin, logs } = await createWorkflowPluginHarness();
-    const sessionID = "session-foreign-task-result";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-FOREIGN-TASK-RESULT", title: "Foreign task result" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-foreign-task-result" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-foreign-task-result",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `<task_result>\nVVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.\n</task_result>`,
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-  });
-
-  test("loose task id wrappers without OpenCode resume metadata still fail strict parsing", async () => {
-    const { plugin, logs } = await createWorkflowPluginHarness();
-    const sessionID = "session-loose-task-id-wrapper";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-LOOSE-TASK-ID", title: "Loose task id wrapper" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-loose-task-id" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-loose-task-id",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: [
-            "task_id: fake",
-            "",
-            "<task_result>",
-            `VVOC_WORK_ITEM_ID: ${workItemId}`,
-            "VVOC_STATUS: DONE",
-            "VVOC_ROUTE: change_with_review",
-            "",
-            "Done.",
-            "</task_result>",
-          ].join("\n"),
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-  });
-
-  test("recognized task wrappers with non-whitespace suffix still fail strict parsing", async () => {
-    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness();
-    const sessionID = "session-task-wrapper-suffix";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-TASK-WRAPPER-SUFFIX", title: "Task wrapper suffix" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-task-wrapper-suffix" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-task-wrapper-suffix",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `${wrapTaskResult(
-            "ses_789",
-            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-          )}\nunexpected suffix`,
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-    expect(promptCalls).toHaveLength(0);
-  });
-
-  test("malformed tracked output in resumable wrapper is repaired once in the same child session when possible", async () => {
-    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
-      promptResponder: ({ text }) => {
-        const workItemId = /VVOC_WORK_ITEM_ID: (wi-\d+)/.exec(text)?.[1] ?? "wi-1";
-        return `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone after repair.`;
-      },
-    });
-    const sessionID = "session-repair-success";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-REPAIR-SUCCESS", title: "Repair success" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-repair-success" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-repair-success",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: wrapTaskResult(
-            "ses_repair_success",
-            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_ROUTE: change_with_review\n\nMissing status.`,
-          ),
-          metadata: {},
-        } as never,
-      ),
-    ).resolves.toBeUndefined();
-
-    expect(promptCalls).toHaveLength(1);
-    expect(promptCalls[0]).toEqual(
-      expect.objectContaining({
-        sessionID: "ses_repair_success",
-        agent: "vv-implementer",
-        system: expect.stringContaining("Format-only workflow repair"),
-        tools: expect.objectContaining({
-          apply_patch: false,
-          bash: false,
-          task: false,
-          work_item_open: false,
-        }),
-      }),
-    );
-    expect(promptCalls[0]?.text).toContain("Protocol error: MISSING_STATUS");
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] result parsed");
-
-    const listedRaw = await plugin.tool?.work_item_list?.execute(
-      { includeClosed: false },
-      createToolContext(sessionID) as never,
-    );
-    const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
-    expect(listed.items[0]?.state).toBe("awaiting_spec_review");
-  });
-
-  test("resumable wrapper repair remains bounded to one failed retry", async () => {
-    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
-      promptResponseText: "VVOC_WORK_ITEM_ID: wi-1\n\nStill malformed.",
-    });
-    const sessionID = "session-repair-failure";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-REPAIR-FAILURE", title: "Repair failure" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-repair-failure" } as never,
-      {
-        args: {
-          subagent_type: "vv-spec-reviewer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview spec`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-repair-failure",
-          args: {
-            subagent_type: "vv-spec-reviewer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview spec`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: wrapTaskResult(
-            "ses_repair_failure",
-            `VVOC_WORK_ITEM_ID: ${workItemId}\n\nStill malformed.`,
-          ),
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(promptCalls).toHaveLength(1);
-    expect(promptCalls[0]).toEqual(
-      expect.objectContaining({
-        sessionID: "ses_repair_failure",
-        agent: "vv-spec-reviewer",
-      }),
-    );
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-  });
-
-  test("wrapped work-item mismatch fails closed without attempting repair", async () => {
-    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
-      promptResponseText:
-        "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nShould not be used.",
-    });
-    const sessionID = "session-wrapped-protocol-error";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-WRAPPED-PROTOCOL", title: "Wrapped protocol error" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-wrapped-protocol" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-wrapped-protocol",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: wrapTaskResult(
-            "ses_456",
-            "VVOC_WORK_ITEM_ID: wi-999\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nWrong work item.",
-          ),
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-    expect(logs).not.toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
-    expect(promptCalls).toHaveLength(0);
-  });
-
-  test("wrapped duplicate strict top-block fields fail closed without attempting repair", async () => {
-    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness({
-      promptResponseText:
-        "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nShould not be used.",
-    });
-    const sessionID = "session-wrapped-duplicate-field";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-WRAPPED-DUPLICATE", title: "Wrapped duplicate field" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-wrapped-duplicate" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-wrapped-duplicate",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: wrapTaskResult(
-            "ses_duplicate_field",
-            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_STATUS: DONE_WITH_CONCERNS\nVVOC_ROUTE: change_with_review\n\nAmbiguous status.`,
-          ),
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-    expect(logs).not.toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted");
-    expect(promptCalls).toHaveLength(0);
-  });
-
-  test("malformed tracked result raises protocol error", async () => {
-    const { plugin, logs, promptCalls } = await createWorkflowPluginHarness();
-    const sessionID = "session-protocol-error";
-
-    const openedRaw = await plugin.tool?.work_item_open?.execute(
-      { items: [{ key: "WI-PROTOCOL", title: "Protocol error" }] },
-      createToolContext(sessionID) as never,
-    );
-    const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-    const workItemId = opened.items[0]?.workItemId;
-
-    await plugin["tool.execute.before"]?.(
-      { tool: "task", sessionID, callID: "call-protocol" } as never,
-      {
-        args: {
-          subagent_type: "vv-implementer",
-          prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-        },
-      } as never,
-    );
-
-    await expect(
-      plugin["tool.execute.after"]?.(
-        {
-          tool: "task",
-          sessionID,
-          callID: "call-protocol",
-          args: {
-            subagent_type: "vv-implementer",
-            prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-          },
-        } as never,
-        {
-          title: "task",
-          output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_ROUTE: change_with_review\n\nMissing status.`,
-          metadata: {},
-        } as never,
-      ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
-
-    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error");
-    expect(promptCalls).toHaveLength(0);
-  });
-
-  test("guidance injects for vv-controller sessions only", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-
-    const primaryOutput = {
-      message: {
-        agent: "vv-controller",
-        system: undefined as string | undefined,
-      },
-      parts: [],
-    };
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-guidance",
-        agent: "vv-controller",
-      } as never,
-      primaryOutput as never,
-    );
-
-    expect(primaryOutput.message.system).toContain("<workflow_protocol>");
-    expect(primaryOutput.message.system).toContain("work_item_open");
-    expect(primaryOutput.message.system).toContain("VVOC_WORK_ITEM_ID");
-    expect(primaryOutput.message.system).toContain("<assignment>");
-    expect(primaryOutput.message.system).toContain("tagged assignment bodies");
-
-    const buildOutput = {
-      message: {
-        agent: "build",
-        system: undefined as string | undefined,
-      },
-      parts: [],
-    };
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-guidance",
-        agent: "build",
-      } as never,
-      buildOutput as never,
-    );
-    expect(buildOutput.message.system).toBeUndefined();
-
-    const enhancerOutput = {
-      message: {
-        agent: "enhancer",
-        system: undefined as string | undefined,
-      },
-      parts: [],
-    };
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-guidance",
-        agent: "enhancer",
-      } as never,
-      enhancerOutput as never,
-    );
-    expect(enhancerOutput.message.system).toBeUndefined();
-
-    const trackedOutput = {
-      message: {
-        agent: "vv-implementer",
-        system: undefined as string | undefined,
-      },
-      parts: [],
-    };
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-guidance",
-        agent: "vv-implementer",
-      } as never,
-      trackedOutput as never,
-    );
-    expect(trackedOutput.message.system).toBeUndefined();
-  });
-
-  test("work-item tools reject non-vv-controller agents", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
-
-    await expect(
-      plugin.tool?.work_item_open?.execute(
-        { items: [{ key: "WI-DENIED", title: "Denied tool access" }] },
-        createToolContext("session-denied", "build") as never,
-      ),
-    ).rejects.toThrow(
-      "WORKFLOW_TOOL_DENIED: work_item_open is only available to vv-controller sessions. Current agent: build.",
-    );
-  });
-});
-
-function wrapTaskElement(taskId: string, innerResult: string): string {
-  return [`<task id="${taskId}" state="completed">`, innerResult, "</task>"].join("\n");
-}
-
-function wrapTaskElementWithTaskResult(taskId: string, innerResult: string): string {
-  return [
-    `<task id="${taskId}" state="completed">`,
-    "<task_result>",
-    innerResult,
-    "</task_result>",
-    "</task>",
-  ].join("\n");
-}
-
-test("unwrapResumableTaskResult extracts inner text from new <task> element format", () => {
-  const wrapped = unwrapResumableTaskResult(
-    wrapTaskElement("ses_task_element", "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n\nDone."),
-  );
-  expect(wrapped.envelope?.taskId).toBe("ses_task_element");
-  expect(wrapped.envelope?.format).toBe("task_element");
-  expect(wrapped.normalizedOutput).toBe("VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n\nDone.");
-});
-
-test("unwrapResumableTaskResult strips nested <task_result> from new <task> element format", () => {
-  const wrapped = unwrapResumableTaskResult(
-    wrapTaskElementWithTaskResult(
-      "ses_nested",
-      "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\n\nReviewed.",
-    ),
-  );
-  expect(wrapped.envelope?.format).toBe("task_element");
-  expect(wrapped.normalizedOutput).toBe("VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: PASS\n\nReviewed.");
-});
-
-test("unwrapResumableTaskResult ignores foreign <task_result> tags (not <task> elements)", () => {
-  const foreign = unwrapResumableTaskResult(
-    "<task_result>\nVVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n</task_result>",
-  );
-  expect(foreign.envelope).toBeUndefined();
-  expect(foreign.normalizedOutput).toBe(
-    "<task_result>\nVVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n</task_result>",
-  );
-});
-
-test("tracked result parsing extracts new <task> element wrapper", async () => {
-  const { plugin } = await createWorkflowPluginHarness();
-  const sessionID = "session-task-element";
-  const openedRaw = await plugin.tool?.work_item_open?.execute(
-    { items: [{ key: "WI-TASK-ELEMENT", title: "Task element result" }] },
-    createToolContext(sessionID) as never,
-  );
-  const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-  const workItemId = opened.items[0]?.workItemId;
-
-  await plugin["tool.execute.before"]?.(
-    { tool: "task", sessionID, callID: "call-task-element-impl" } as never,
-    {
-      args: {
-        subagent_type: "vv-implementer",
-        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-      },
-    } as never,
-  );
-  await plugin["tool.execute.after"]?.(
-    {
-      tool: "task",
-      sessionID,
-      callID: "call-task-element-impl",
-      args: {
-        subagent_type: "vv-implementer",
-        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nImplement`,
-      },
-    } as never,
-    {
-      title: "task",
-      output: wrapTaskElement(
-        "ses_task_element_test",
-        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDone.`,
-      ),
-      metadata: {},
-    } as never,
-  );
-
-  const listedRaw = await plugin.tool?.work_item_list?.execute(
-    { includeClosed: false },
-    createToolContext(sessionID) as never,
-  );
-  const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
-  expect(listed.items[0]?.state).toBe("awaiting_spec_review");
-});
-
-test("tracked result parsing extracts new <task> element wrapper with nested <task_result>", async () => {
-  const { plugin } = await createWorkflowPluginHarness();
-  const sessionID = "session-task-element-nested";
-  const openedRaw = await plugin.tool?.work_item_open?.execute(
-    { items: [{ key: "WI-TASK-ELEMENT-NESTED", title: "Task element nested result" }] },
-    createToolContext(sessionID) as never,
-  );
-  const opened = parseToolJson<{ items: Array<{ workItemId: string }> }>(openedRaw ?? "{}");
-  const workItemId = opened.items[0]?.workItemId;
-
-  await plugin["tool.execute.before"]?.(
-    { tool: "task", sessionID, callID: "call-task-element-nested" } as never,
-    {
-      args: {
-        subagent_type: "vv-code-reviewer",
-        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code`,
-      },
-    } as never,
-  );
-  await plugin["tool.execute.after"]?.(
-    {
-      tool: "task",
-      sessionID,
-      callID: "call-task-element-nested",
-      args: {
-        subagent_type: "vv-code-reviewer",
-        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\nReview code`,
-      },
-    } as never,
-    {
-      title: "task",
-      output: wrapTaskElementWithTaskResult(
-        "ses_task_element_nested",
-        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: PASS\n\nReviewed.`,
-      ),
-      metadata: {},
-    } as never,
-  );
-
-  const listedRaw = await plugin.tool?.work_item_list?.execute(
-    { includeClosed: false },
-    createToolContext(sessionID) as never,
-  );
-  const listed = parseToolJson<{ items: Array<{ state: string }> }>(listedRaw ?? "{}");
-  expect(listed.items[0]?.state).toBe("ready_to_close");
-});

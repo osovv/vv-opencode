@@ -77,18 +77,18 @@
     <UC-010>
       <Actor>User</Actor>
       <Action>Calls `work_item_open`, `work_item_list`, or `work_item_close` tools during a primary OpenCode session.</Action>
-      <Goal>To create, inspect, and close explicit work items that bind every tracked subagent launch to a discrete identity and lifecycle.</Goal>
+      <Goal>To create, inspect, and close explicit-intent work items that bind every tracked subagent launch to a discrete identity, workflow mode, required reviewer set, lifecycle, and current review round.</Goal>
       <Preconditions>The package is enabled in OpenCode and the WorkflowPlugin is active.</Preconditions>
-      <AcceptanceCriteria>Work items are created with idempotent keys, state transitions follow the deterministic workflow state machine, list reflects current state, and close is explicit.</AcceptanceCriteria>
+      <AcceptanceCriteria>Work items are created with idempotent keys plus required `mode` and `requiredReviewers`, legacy key/title-only open calls fail, list reflects lifecycle and review-round metadata, and close succeeds only from `ready_to_close`.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-WORKFLOW-TOOLS</RelatedFlows>
     </UC-010>
     <UC-011>
       <Actor>User</Actor>
       <Action>Launches a tracked subagent (`vv-implementer`, `vv-spec-reviewer`, or `vv-code-reviewer`) through the `task` tool.</Action>
-      <Goal>To enforce that every tracked subagent launch carries a valid work-item header, targets an existing open work item, follows the allowed route-specific transition, and does not exceed the review round limit.</Goal>
+      <Goal>To enforce that every tracked subagent launch carries a valid work-item header, targets an existing open work item, follows the stored mode and current review-round policy, and does not exceed the implementation-mode review round limit.</Goal>
       <Preconditions>The WorkflowPlugin is active and the tracked subagent name is registered in the managed agents list.</Preconditions>
-      <AcceptanceCriteria>Tracked launches without valid `VVOC_WORK_ITEM_ID` are rejected, unknown work items are rejected, invalid route-specific transitions are rejected, review-only fresh work items may start with `vv-spec-reviewer` or `vv-code-reviewer`, and round-limit overflow is rejected. Untracked launches pass through unaffected.</AcceptanceCriteria>
+      <AcceptanceCriteria>Tracked launches without valid `VVOC_WORK_ITEM_ID` are rejected, unknown work items are rejected, invalid mode/lifecycle launches are rejected, duplicate reviewer launches are rejected, reviewer launches after current-round `NEEDS_CONTEXT` are rejected, implementation-mode round-limit overflow is rejected, review-only items launch only required reviewers, and untracked launches pass through unaffected.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-LAUNCH-ENFORCEMENT</RelatedFlows>
     </UC-011>
@@ -97,7 +97,7 @@
       <Action>A tracked subagent completes and returns output to the main session.</Action>
       <Goal>To parse the strict top-block protocol fields from tracked subagent output, validate work-item identity and status, update workflow state, and halt on protocol errors or hard-stop statuses.</Goal>
       <Preconditions>The tracked subagent was launched through a valid work-item identity.</Preconditions>
-      <AcceptanceCriteria>Parsed results update workflow state correctly, `NEEDS_CONTEXT` and `BLOCKED` halt workflow, malformed results fail closed, and counters increment deterministically.</AcceptanceCriteria>
+      <AcceptanceCriteria>Parsed results update explicit review-round state correctly, reviewer results must correspond to in-flight launches, parallel required reviewers can complete independently, review-only `FAIL` is reported without routing to implementer, implementation `FAIL` rounds route to implementer only after collect-all completion, aggregate `NEEDS_CONTEXT` and `BLOCKED` halt workflow, malformed results fail closed, and counters increment deterministically.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-RESULT-PARSING</RelatedFlows>
     </UC-012>

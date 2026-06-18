@@ -248,32 +248,36 @@
     </M-WORKFLOW-REPAIR>
 
     <M-WORKFLOW-STATE NAME="WorkflowState" TYPE="DATA_LAYER" STATUS="implemented">
-      <purpose>In-memory work-item state store with lifecycle management, route-aware state transitions including review-only reviewer starts, counter tracking, round-limit enforcement, optional closed-item listing keyed by (sessionId, workItemId), and file-backed persistence via hydrate/snapshot delegate.</purpose>
+      <purpose>In-memory work-item state store with explicit workflow intent, required reviewer roles, collect-all review-round metadata, launch-time in-flight tracking, result-time aggregation, counter tracking, ready_to_close close gating, optional closed-item listing keyed by (sessionId, workItemId), and file-backed persistence via hydrate/snapshot delegate.</purpose>
       <path>src/plugins/workflow/state.ts</path>
       <depends>M-WORKFLOW-PROTOCOL, M-WORKFLOW-PERSISTENCE</depends>
       <verification-ref>V-M-WORKFLOW-STATE</verification-ref>
       <annotations>
         <type-WorkItemState PURPOSE="Union of all work-item lifecycle states." />
-        <type-WorkItemRecord PURPOSE="Full work-item state record with counters and metadata." />
+        <type-WorkItemMode PURPOSE="Explicit workflow intent: implementation or review_only." />
+        <type-ReviewerRole PURPOSE="Domain reviewer role IDs: spec and code." />
+        <type-ReviewRound PURPOSE="Current review-round required, pending, in-flight, completed, and result metadata." />
+        <type-WorkItemRecord PURPOSE="Full work-item state record with explicit intent, counters, current round, and metadata." />
         <fn-createWorkItemStore PURPOSE="Create a new scoped in-memory work-item store." />
         <fn-openWorkItem PURPOSE="Create or return an existing work item by idempotency key." />
         <fn-getWorkItem PURPOSE="Retrieve a work item by ID." />
         <fn-listWorkItems PURPOSE="List session work items with optional closed-item inclusion." />
-        <fn-closeWorkItem PURPOSE="Close an open work item." />
-        <fn-transitionWorkItemState PURPOSE="Apply a deterministic tracked transition while validating actor and state constraints." />
+        <fn-closeWorkItem PURPOSE="Close a ready_to_close work item." />
+        <fn-beginTrackedLaunch PURPOSE="Validate a tracked launch and mark reviewers in flight." />
+        <fn-applyTrackedResult PURPOSE="Apply parsed tracked output, record reviewer results, and aggregate full review rounds." />
         <fn-getReviewRound PURPOSE="Compute the current review round from spec and code review counters." />
       </annotations>
     </M-WORKFLOW-STATE>
 
     <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" STATUS="implemented">
-      <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution including fresh review-only reviewer starts, and loop-gate policy enforcement.</purpose>
+      <purpose>Deterministic explicit-intent launch policy, reviewer role mapping, collect-all review-round settlement, mode-specific aggregate state resolution, and implementation retry loop-gate enforcement.</purpose>
       <path>src/plugins/workflow/transitions.ts</path>
       <depends>M-WORKFLOW-PROTOCOL</depends>
       <verification-ref>V-M-WORKFLOW-TRANSITIONS</verification-ref>
       <annotations>
-        <fn-getNextState PURPOSE="Compute the next work-item state given the current state and a tracked agent result." />
-        <fn-getAllowedNextAgent PURPOSE="Return the allowed tracked agent for the current work-item state." />
-        <fn-isAllowedTransition PURPOSE="Check whether launching a specific tracked agent is valid from the current state." />
+        <fn-getAllowedNextAgents PURPOSE="Return all tracked agents currently allowed for an explicit work item." />
+        <fn-isAllowedTransition PURPOSE="Check whether launching a specific tracked agent is valid for a work item." />
+        <fn-resolveCompletedRoundState PURPOSE="Resolve mode-specific lifecycle state after a full review round settles." />
         <fn-shouldBlockRound PURPOSE="Check whether the current review round exceeds the allowed limit." />
       </annotations>
     </M-WORKFLOW-TRANSITIONS>

@@ -127,7 +127,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 | **CLI Tooling** | 16+ commands: install, sync, launch, status, doctor, role management, presets, guardian config, shell completion, upgrade |
 | **Security** | GuardianPlugin reviews shell-permission requests; SecretsRedactionPlugin strips tokens before LLM requests; both configurable via `vvoc.json` |
 | **Model Roles** | Assign provider/model/variant to roles (`default`, `smart`, `fast`, `vision`, custom); switch between `vv-openai`, `vv-zai`, `vv-deepseek`, `vv-minimax` presets |
-| **Workflow Tracking** | Work items with open/list/close for tracked implementation-to-review pipelines |
+| **Workflow Tracking** | Explicit-intent work items with open/list/close for tracked implementation and review-only pipelines |
 
 ---
 
@@ -135,12 +135,29 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 
 | Plugin | What it does |
 |---|---|
-| **WorkflowPlugin** | Tracked orchestration around `task` for subagents; registers `work_item_open/list/close` tools for implementation-to-review pipelines with state-machine enforcement and round-limit gating |
+| **WorkflowPlugin** | Tracked orchestration around `task` for subagents; registers `work_item_open/list/close` tools with explicit `mode` (`implementation` or `review_only`), `requiredReviewers` (`spec`, `code`), collect-all reviewer rounds, state-machine enforcement, and implementation retry round-limit gating |
 | **ModelRolesPlugin** | Resolves `vv-role:*` references in OpenCode config at startup; translates `:variant` suffixes into native model+variant fields |
 | **GuardianPlugin** | Reviews OpenCode permission requests with a constrained guardian agent and safe-deny defaults; configurable model, timeout, risk threshold |
 | **HashlineEditPlugin** | Replaces OpenCode's `edit` with hash-anchored variant; rewrites `read` output to `line#hash` format; rejects stale snapshots to prevent drift bugs |
 | **SystemContextInjectionPlugin** | Injects reusable system guidance into primary sessions without polluting subagent prompts; encourages proactive `explore` usage; registers vvoc skill directory for OpenCode skill discovery |
 | **SecretsRedactionPlugin** | Redacts secrets (tokens, keys, emails, UUIDs, IPs) before LLM requests; restores placeholders afterward; configurable patterns |
+
+Workflow work items are opened with explicit intent. For implementation loops, controllers use:
+
+```json
+{
+  "items": [
+    {
+      "key": "implement-feature",
+      "title": "Implement feature",
+      "mode": "implementation",
+      "requiredReviewers": ["spec", "code"]
+    }
+  ]
+}
+```
+
+For review-only reports, use `"mode": "review_only"`. In review-only mode, reviewer `FAIL` is a completed finding result: required reviewers are collected independently, parallel `spec` and `code` reviewers may both return `FAIL`, and the item does not route to `vv-implementer` unless the user explicitly requests fixes.
 
 ---
 

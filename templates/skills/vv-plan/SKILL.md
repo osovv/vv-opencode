@@ -160,7 +160,7 @@ export type CacheStoreOptions = {
 <rule>If the user requests changes, keep the plan status as draft, make the changes, re-run self-review, save the updated plan, and ask for approval again.</rule>
 <rule>After explicit user approval, update the saved plan file so the top-level status is &lt;status&gt;approved&lt;/status&gt;.</rule>
 <rule>After the saved plan status is approved, present the user with two execution options:</rule>
-<option name="workflow">Workflow tracked loop (recommended) — vv-implementer executes tasks, followed by vv-spec-reviewer and vv-code-reviewer. Uses work_item_open/close for each implementation wave.</option>
+<option name="workflow">Workflow tracked loop (recommended) — vv-implementer executes tasks, followed by required reviewers. Uses work_item_open with `mode: "implementation"` and explicit `requiredReviewers`, then work_item_close after the collect-all review round is ready to close.</option>
 <option name="manual">Manual execution — the user or another agent executes tasks step by step following the plan directly.</option>
 <rule>Wait for the user's choice. Do NOT start implementation.</rule>
 </execution_handoff>

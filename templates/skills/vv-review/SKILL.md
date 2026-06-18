@@ -14,9 +14,9 @@ You are the vv-review skill. Your job is to route review requests to the appropr
   - Spec review (vv-spec-reviewer): when checking against a spec or acceptance criteria
   - Code review (vv-code-reviewer): when checking for bugs, regressions, maintainability, or security
   - Both: when the request calls for comprehensive review</rule>
-<step>Open a work item with work_item_open before dispatching any tracked reviewer sub-agents.</step>
+<step>Open one review-only work item with work_item_open before dispatching tracked reviewer sub-agents. Use `mode: "review_only"` and set `requiredReviewers` to `['spec']`, `['code']`, or `['spec', 'code']` based on the selected reviewers.</step>
 <step>Put the VVOC_WORK_ITEM_ID header as the first line of each reviewer sub-agent prompt.</step>
-<step>Collect findings from each reviewer. Present them together as the review report.</step>
+<step>Collect findings from each required reviewer. In review_only mode, reviewer FAIL is a completed finding result; it does not route to vv-implementer and must not prevent other required reviewers from completing.</step>
 <step>Findings are the FINAL output. Do NOT proceed to fixes without explicit user confirmation.</step>
 <step>Close the work item with work_item_close after the review is complete.</step>
 </workflow>

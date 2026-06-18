@@ -1,11 +1,12 @@
 // FILE: src/plugins/workflow/persistence.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Hydrate and snapshot work-item workflow state from/to per-session JSON
 //     files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.
 //   SCOPE: Read/write WorkItemStoreData (nextId, records, keyIndexBySession) as
-//     serializable JSON. Directory auto-creation on snapshot. Safe null return on
-//     missing or corrupt files.
+//     serializable JSON, including explicit work-item mode and review-round fields.
+//     Directory auto-creation on snapshot. Safe null return on missing, corrupt,
+//     or legacy incomplete files.
 //   DEPENDS: [node:fs, node:path, src/lib/vvoc-paths.ts, src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-PERSISTENCE]
 //   ROLE: RUNTIME
@@ -21,6 +22,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.0 - Validated explicit workflow intent and review-round fields during hydrate so legacy incomplete records fail closed.]
 //   LAST_CHANGE: [v0.1.0 - Initial implementation of per-session hydrate/snapshot.]
 // END_CHANGE_SUMMARY
 
@@ -28,7 +30,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { getGlobalVvocDataDir } from "../../lib/vvoc-paths.js";
-import type { WorkItemRecord, WorkItemStoreData } from "./state.js";
+import type {
+  ReviewerRole,
+  ReviewRound,
+  WorkItemMode,
+  WorkItemRecord,
+  WorkItemState,
+  WorkItemStoreData,
+} from "./state.js";
 
 // START_BLOCK_SERIALIZATION_TYPES
 /**
@@ -46,6 +55,66 @@ export type PersistedWorkflowState = {
   keyIndex: Record<string, string>;
 };
 // END_BLOCK_SERIALIZATION_TYPES
+
+const VALID_STATES: ReadonlySet<WorkItemState> = new Set([
+  "open",
+  "awaiting_implementer",
+  "awaiting_reviews",
+  "needs_context",
+  "blocked",
+  "ready_to_close",
+  "closed",
+]);
+
+function isWorkItemMode(value: unknown): value is WorkItemMode {
+  return value === "implementation" || value === "review_only";
+}
+
+function isReviewerRole(value: unknown): value is ReviewerRole {
+  return value === "spec" || value === "code";
+}
+
+function isReviewRound(value: unknown): value is ReviewRound {
+  if (!value || typeof value !== "object") return false;
+  const round = value as ReviewRound;
+  return (
+    Number.isInteger(round.round) &&
+    Array.isArray(round.requiredReviewers) &&
+    round.requiredReviewers.every(isReviewerRole) &&
+    Array.isArray(round.pendingReviewers) &&
+    round.pendingReviewers.every(isReviewerRole) &&
+    Array.isArray(round.inFlightReviewers) &&
+    round.inFlightReviewers.every(isReviewerRole) &&
+    Array.isArray(round.completedReviewers) &&
+    round.completedReviewers.every(isReviewerRole) &&
+    !!round.results &&
+    typeof round.results === "object" &&
+    (round.status === "active" || round.status === "completed") &&
+    typeof round.createdAt === "string"
+  );
+}
+
+function isWorkItemRecord(value: unknown, sessionId: string): value is WorkItemRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as WorkItemRecord;
+  return (
+    record.sessionId === sessionId &&
+    typeof record.workItemId === "string" &&
+    typeof record.key === "string" &&
+    typeof record.title === "string" &&
+    isWorkItemMode(record.mode) &&
+    Array.isArray(record.requiredReviewers) &&
+    record.requiredReviewers.length > 0 &&
+    record.requiredReviewers.every(isReviewerRole) &&
+    VALID_STATES.has(record.state) &&
+    Number.isInteger(record.completedReviewRoundCount) &&
+    Number.isInteger(record.specReviewCount) &&
+    Number.isInteger(record.codeReviewCount) &&
+    typeof record.createdAt === "string" &&
+    typeof record.updatedAt === "string" &&
+    (record.currentRound === undefined || isReviewRound(record.currentRound))
+  );
+}
 
 /**
  * Resolve the per-session workflow data directory.
@@ -83,6 +152,10 @@ export function hydrateWorkflowState(sessionId: string): WorkItemStoreData | nul
 
     // Validate minimal expected shape
     if (parsed.version !== 1 || !Array.isArray(parsed.records)) {
+      return null;
+    }
+
+    if (!parsed.records.every((record) => isWorkItemRecord(record, sessionId))) {
       return null;
     }
 

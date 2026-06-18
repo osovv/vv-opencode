@@ -692,7 +692,7 @@
 
     <M-WORKFLOW-TRANSITIONS NAME="WorkflowTransitions" TYPE="CORE_LOGIC" LAYER="0" ORDER="12" STATUS="implemented">
       <contract>
-        <purpose>Deterministic transition rules between work-item states, allowed next-agent resolution including review-only fresh reviewer starts, and loop-gate policy enforcement with a round limit of 2.</purpose>
+        <purpose>Deterministic explicit-intent launch policy, allowed next-agent resolution from work-item records, reviewer role mapping, collect-all review-round settlement, mode-specific aggregate state resolution, and implementation retry loop-gate policy with a round limit of 2.</purpose>
         <inputs>
           <param name="currentState" type="WorkItemState" />
           <param name="agentName | resultStatus" type="string" />
@@ -723,7 +723,7 @@
       </observability>
       <verification-ref>V-M-WORKFLOW-TRANSITIONS</verification-ref>
       <notes>
-        <note-1>Implementation workflow: open/awaiting_implementer → vv-implementer → awaiting_spec_review → vv-spec-reviewer → awaiting_code_review → vv-code-reviewer → ready_to_close.</note-1>
+        <note-1>Implementation workflow: open/awaiting_implementer → vv-implementer → awaiting_reviews → collect all required reviewers → ready_to_close or awaiting_implementer.</note-1>
         <note-1a>Review-only workflow may start a fresh open work item directly with vv-spec-reviewer or vv-code-reviewer.</note-1a>
         <note-2>FAIL from reviewers routes back to awaiting_implementer. NEEDS_CONTEXT and BLOCKED are hard stops.</note-2>
         <note-3>Round limit uses `max(specReviewCount, codeReviewCount)`. Rounds 1 and 2 allowed, round 3 blocked.</note-3>

@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.2.6
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
-//   SCOPE: work_item_open/list/close tool registration, tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/state transitions, round-limit gating, and chat.message guidance injection with subagent filtering.
+//   SCOPE: work_item_open/list/close tool registration, explicit tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/round aggregation, implementation-mode round-limit gating, and chat.message guidance injection with subagent filtering.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Integrated explicit work-item intent, reviewer in-flight tracking, and collect-all review-round result aggregation.]
 //   LAST_CHANGE: [v0.2.6 - Restricted work-item tools and workflow guidance injection to vv-controller sessions only.]
 //   LAST_CHANGE: [v0.2.5 - Limited resumable result repair to safe format-only protocol errors and disabled tool use during repair prompts where supported.]
 //   LAST_CHANGE: [v0.2.4 - Added a single same-session repair attempt for malformed tracked results inside recognized resumable OpenCode task envelopes.]
@@ -38,17 +39,17 @@ import {
   type TrackedAgentName,
 } from "./protocol.js";
 import {
+  applyTrackedResult,
+  beginTrackedLaunch,
   createWorkItemStore,
   getReviewRound,
   getWorkItem,
-  transitionWorkItemState,
   type WorkItemRecord,
   type WorkItemStore,
 } from "./state.js";
 import {
-  getAllowedNextAgent,
-  getNextState,
-  isAllowedTransition,
+  getAllowedNextAgents,
+  getAttemptedImplementationRound,
   shouldBlockRound,
 } from "./transitions.js";
 import {
@@ -139,7 +140,7 @@ function stringifyToolOutput(value: Record<string, unknown>): string {
 
 function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number): string {
   return [
-    "LAUNCH_REJECTED_ROUND_LIMIT: review loop gate blocked tracked launch before entering round 3.",
+    "LAUNCH_REJECTED_ROUND_LIMIT: review loop gate blocked tracked launch before entering a disallowed implementation retry round.",
     `Work item ${record.workItemId} is in state ${record.state} at reviewRound=${getReviewRound(record)} and cannot start round ${attemptedRound}.`,
     "Next action: call work_item_list for this session, resolve concerns with explicit context, then open/continue a fresh work item instead of retrying the same loop.",
   ].join(" ");
@@ -192,6 +193,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             z.object({
               key: z.string(),
               title: z.string(),
+              mode: z.string(),
+              requiredReviewers: z.array(z.string()),
             }),
           ),
         },
@@ -286,31 +289,14 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         );
       }
 
-      const allowedNextAgent = getAllowedNextAgent(workItem.state);
-      if (!isAllowedTransition(workItem.state, subagentType)) {
-        await client.app.log({
-          body: {
-            service: "workflow",
-            level: "warn",
-            message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
-            extra: {
-              sessionID: input.sessionID,
-              agent: subagentType,
-              workItemId: workItem.workItemId,
-              state: workItem.state,
-              allowedNextAgent,
-              reason: "INVALID_NEXT_AGENT",
-            },
-          },
-        });
-        throw new Error(
-          `${INVALID_NEXT_AGENT_MARKER} LAUNCH_REJECTED_INVALID_TRANSITION: ${workItem.workItemId} in state ${workItem.state} only allows ${allowedNextAgent ?? "no tracked agent"}.`,
-        );
-      }
-
+      const allowedNextAgents = getAllowedNextAgents(workItem);
       const reviewRound = getReviewRound(workItem);
-      const attemptedRound = subagentType === "vv-implementer" ? reviewRound + 1 : reviewRound;
-      const roundBlocked = subagentType === "vv-implementer" && shouldBlockRound(attemptedRound);
+      const attemptedRound =
+        subagentType === "vv-implementer" ? getAttemptedImplementationRound(workItem) : reviewRound;
+      const roundBlocked =
+        workItem.mode === "implementation" &&
+        subagentType === "vv-implementer" &&
+        shouldBlockRound(attemptedRound);
 
       await client.app.log({
         body: {
@@ -346,6 +332,34 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         throw new Error(createRoundLimitMessage(workItem, attemptedRound));
       }
 
+      const launched = beginTrackedLaunch(sessionStore, {
+        sessionId: input.sessionID,
+        workItemId: workItem.workItemId,
+        agent: subagentType,
+      });
+      if (!launched.ok) {
+        await client.app.log({
+          body: {
+            service: "workflow",
+            level: "warn",
+            message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
+            extra: {
+              sessionID: input.sessionID,
+              agent: subagentType,
+              workItemId: workItem.workItemId,
+              state: workItem.state,
+              allowedNextAgents,
+              reason: launched.errorCode,
+            },
+          },
+        });
+        throw new Error(
+          `${INVALID_NEXT_AGENT_MARKER} LAUNCH_REJECTED_INVALID_TRANSITION: ${workItem.workItemId} in state ${workItem.state} only allows ${launched.allowedAgents.join(", ") || "no tracked agent"}. ${launched.message}`,
+        );
+      }
+
+      snapshotSession(input.sessionID);
+
       await client.app.log({
         body: {
           service: "workflow",
@@ -357,6 +371,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             state: workItem.state,
             agent: subagentType,
             reviewRound,
+            attemptedRound,
+            mode: workItem.mode,
           },
         },
       });
@@ -501,14 +517,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         );
       }
 
-      const nextState = getNextState(current.state, parsed.value);
-      const transitioned = transitionWorkItemState(sessionStore, {
+      const applied = applyTrackedResult(sessionStore, {
         sessionId: input.sessionID,
         workItemId: parsed.value.workItemId,
-        state: nextState,
-        actor: subagentType,
+        result: parsed.value,
       });
-      if (!transitioned.ok) {
+      if (!applied.ok) {
         await client.app.log({
           body: {
             service: "workflow",
@@ -518,11 +532,11 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
               sessionID: input.sessionID,
               agent: subagentType,
               workItemId: parsed.value.workItemId,
-              reason: transitioned.errorCode,
+              reason: applied.errorCode,
             },
           },
         });
-        throw new Error(`RESULT_PROTOCOL_ERROR: ${transitioned.message}`);
+        throw new Error(`RESULT_PROTOCOL_ERROR: ${applied.message}`);
       }
 
       await client.app.log({
@@ -534,19 +548,21 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             sessionID: input.sessionID,
             agent: subagentType,
             workItemId: parsed.value.workItemId,
-            fromState: current.state,
-            toState: transitioned.record.state,
-            specReviewCount: transitioned.record.specReviewCount,
-            codeReviewCount: transitioned.record.codeReviewCount,
+            fromState: applied.fromState,
+            toState: applied.record.state,
+            specReviewCount: applied.record.specReviewCount,
+            codeReviewCount: applied.record.codeReviewCount,
+            reviewRound: getReviewRound(applied.record),
+            aggregateComplete: applied.aggregateComplete,
           },
         },
       });
 
       snapshotSession(input.sessionID);
 
-      if (parsed.value.status === "NEEDS_CONTEXT" || parsed.value.status === "BLOCKED") {
+      if (applied.record.state === "needs_context" || applied.record.state === "blocked") {
         throw new Error(
-          `RESULT_HARD_STOP: ${parsed.value.status} requires explicit user action. Inspect work_item_list before retrying.`,
+          `RESULT_HARD_STOP: ${applied.record.state} requires explicit user action. Inspect work_item_list before retrying.`,
         );
       }
     },

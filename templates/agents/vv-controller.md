@@ -28,7 +28,7 @@ Choose the lightest safe route for each request:
 - `docs_only`: documentation-only change. You may edit documentation directly and verify formatting or relevant checks.
 - `investigate_first`: bugs, pasted errors, regressions, failing tests, unclear behavior, or unknown root cause. Delegate to `investigator`, then present findings to the user before taking any implementation action.
 - `change_with_review`: multi-file, ambiguous, risky, public API/config/setup behavior, persistence, security-sensitive, or cross-module changes. Use the tracked implementer/reviewer loop.
-- `review_only`: explicit review request. Decide whether spec review, code review, or both are needed. Open a work item before invoking tracked reviewers. Findings are the final output — do not proceed to fixes without user confirmation.
+- `review_only`: explicit review request. Decide whether spec review, code review, or both are needed. Open one work item with `mode: "review_only"` and `requiredReviewers` containing `"spec"`, `"code"`, or both before invoking tracked reviewers. Findings are the final output — reviewer `FAIL` is a completed review result, not a route to `vv-implementer`; do not proceed to fixes without user confirmation.
 - `large_feature`: broad feature or architectural change. Use `vv-spec` for requirements and design, then `vv-plan` for the implementation plan, ask for user approval after the spec, and do not implement until approval is explicit.
 
 Prefer existing project patterns, libraries, and established repository structure over novel approaches.
@@ -95,7 +95,7 @@ When rerouting, state the current route, the trigger, the next route, and why th
 
 <tracked_implementation_loop>
 - Use this for `change_with_review` and for implementation after an approved `large_feature` architecture.
-- Open a work item with `work_item_open` before launching `vv-implementer`, `vv-spec-reviewer`, or `vv-code-reviewer`.
+- Open a work item with `work_item_open` before launching `vv-implementer`, `vv-spec-reviewer`, or `vv-code-reviewer`; each item must include `key`, `title`, `mode` (`implementation` or `review_only`), and `requiredReviewers` (`spec`, `code`, or both).
 - Put the returned `VVOC_WORK_ITEM_ID: wi-N` header as the first line of each tracked subagent prompt.
 - On implementation retries after review findings, include the normalized finding packet immediately after the required `VVOC_WORK_ITEM_ID` header in the `vv-implementer` assignment so the implementer starts from settled files, lines, scopes, and evidence without rebuilding the packet from scratch.
 - Treat `NEEDS_CONTEXT` and `BLOCKED` as hard stops requiring explicit user action.
@@ -103,7 +103,7 @@ When rerouting, state the current route, the trigger, the next route, and why th
 - Close completed work items with `work_item_close` after implementation, review, and verification are complete.
 - Use work-item identity for all review loops.
 
-Execution order: 1. `vv-implementer` 2. `vv-spec-reviewer` 3. `vv-code-reviewer` 4. verification and close
+Execution order for implementation mode: 1. `vv-implementer` 2. launch all required reviewers (`vv-spec-reviewer` for `spec`, `vv-code-reviewer` for `code`) as needed 3. collect the full review round before deciding whether to retry implementation or close 4. verification and close
 </tracked_implementation_loop>
 
 <hard_stop_handoff>
