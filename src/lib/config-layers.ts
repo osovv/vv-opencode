@@ -26,12 +26,20 @@
 //   resolveOpenCodeConfigSource - Resolves OpenCode source metadata for global, project, or effective reads.
 //   resolveConfigWriteTargets - Returns canonical global or project write paths.
 //   loadVvocConfigForRead - Loads vvoc config for CLI read/list/show commands without creating files.
-//   loadEffectiveVvocConfigForRuntime - Loads the effective vvoc config for runtime plugins.
+//   loadEffectiveVvocConfigForRuntime - Memoized load of the effective vvoc config for runtime plugins. Keys on (cwd, configDir).
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.1 - Memoized loadEffectiveVvocConfigForRuntime to eliminate redundant ancestor discovery across multiple plugins during startup.]
 //   LAST_CHANGE: [v1.0.0 - Added layered config source discovery, write target resolution, and runtime vvoc loading.]
 // END_CHANGE_SUMMARY
+
+// Memoization cache for loadEffectiveVvocConfigForRuntime to prevent redundant filesystem
+// traversal during a single process lifetime (multiple plugins sharing the same config source).
+const effectiveConfigCache = new Map<
+  string,
+  Promise<{ config: VvocConfig; source: ConfigSource; warnings: string[] }>
+>();
 
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -249,11 +257,30 @@ export async function loadVvocConfigForRead(
 export async function loadEffectiveVvocConfigForRuntime(
   options: Partial<ConfigLayerOptions> = {},
 ): Promise<{ config: VvocConfig; source: ConfigSource; warnings: string[] }> {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const configDir = options.configDir;
+  // Include XDG_CONFIG_HOME in the cache key so test suites that swap the config home
+  // (and any runtime setup that changes it) get fresh resolution.
+  const xdgHome = process.env.XDG_CONFIG_HOME ?? "";
+  const cacheKey = `${cwd}:${configDir ?? ""}:${xdgHome}`;
+  const cached = effectiveConfigCache.get(cacheKey);
+  if (cached) return cached;
+
+  const promise = _doLoadEffectiveVvocConfigForRuntime(options, cwd, configDir);
+  effectiveConfigCache.set(cacheKey, promise);
+  return promise;
+}
+
+async function _doLoadEffectiveVvocConfigForRuntime(
+  options: Partial<ConfigLayerOptions>,
+  cwd: string,
+  configDir: string | undefined,
+): Promise<{ config: VvocConfig; source: ConfigSource; warnings: string[] }> {
   const source = await resolveVvocConfigSource({
     scope: "effective",
     allowDefault: true,
-    cwd: options.cwd ?? process.cwd(),
-    configDir: options.configDir,
+    cwd,
+    configDir,
     env: options.env,
   });
 

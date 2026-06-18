@@ -1,3 +1,14 @@
+## <small>0.35.24 (2026-06-18)</small>
+
+### Summary
+
+This release restores the 1.05M context limit for the openai patch-preset after a brief adjustment to 400K for ChatGPT Pro plan compliance, and introduces explicit intent review rounds to the WorkflowPlugin: work items now require `mode` (implementation or review_only) and `requiredReviewers` (spec, code, or both), reviewers are launched and tracked in parallel, results are collected into a full review round before deciding the next lifecycle state, and review-only mode treats reviewer FAIL as a completed finding without routing to the implementer—giving users more deterministic and flexible pipeline control.
+
+* fix: restore 1.05M openai patch-preset limits ([9d5df8a](https://github.com/osovv/vv-opencode/commit/9d5df8a))
+* fix: set openai patch-preset context to 400K for ChatGPT Pro plan compliance ([0177f03](https://github.com/osovv/vv-opencode/commit/0177f03))
+* fix: use 400K context limit for openai patch-preset (ChatGPT Pro plan) ([84c6029](https://github.com/osovv/vv-opencode/commit/84c6029))
+* feat(workflow): add explicit intent review rounds ([f02e784](https://github.com/osovv/vv-opencode/commit/f02e784))
+
 ## <small>0.35.23 (2026-06-18)</small>
 
 ### Summary
