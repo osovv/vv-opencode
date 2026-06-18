@@ -44,8 +44,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "zai-coding-plan/glm-5.1",
       fast: "zai-coding-plan/glm-4.5-airx",
       vision: "zai-coding-plan/glm-4.6v",
-      reviewer: "zai-coding-plan/glm-5-turbo",
-      orchestrator: "zai-coding-plan/glm-5.1",
+      reviewer: "zai-coding-plan/glm-5.1",
+      orchestrator: "zai-coding-plan/glm-5-turbo",
     },
   },
   "vv-minimax": {
