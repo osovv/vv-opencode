@@ -77,8 +77,11 @@ function redactAssistantState(
 }
 
 export const SecretsRedactionPlugin: Plugin = async (ctx) => {
-  const { config, path, warnings } = await loadConfig(ctx.directory);
+  if (!(await isPluginEnabled("secrets-redaction"))) {
+    return {};
+  }
 
+  const { config, path, warnings } = await loadConfig(ctx.directory);
   if (config.debug) {
     await ctx.client.app.log({
       body: {
@@ -97,10 +100,6 @@ export const SecretsRedactionPlugin: Plugin = async (ctx) => {
         message: warning,
       },
     });
-  }
-
-  if (!(await isPluginEnabled("secrets-redaction"))) {
-    return {};
   }
 
   const patternSet = buildPatternSet(config.patterns);
