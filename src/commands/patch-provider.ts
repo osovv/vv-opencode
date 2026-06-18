@@ -86,7 +86,7 @@ const OPENAI_PATCH = {
       id: "gpt-5.4",
       variants: {},
       limit: {
-        context: 1050000,
+        context: 400000,
         output: 128000,
       },
       reasoning: true,
@@ -101,7 +101,7 @@ const OPENAI_PATCH = {
       id: "gpt-5.5",
       variants: {},
       limit: {
-        context: 1050000,
+        context: 400000,
         output: 128000,
       },
       reasoning: true,
