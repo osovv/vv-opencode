@@ -15,6 +15,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.9.0 - Added project-local .opencode/.vvoc assertions and global side-effect guards for scoped init.]
+//   LAST_CHANGE: [v0.10.0 - Updated init expectations for reviewer and orchestrator role bindings.]
 //   LAST_CHANGE: [v0.8.1 - Updated init expectations so the managed vv-controller agent is seeded with the built-in smart role.]
 //   LAST_CHANGE: [v0.8.1 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
 //   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
@@ -105,11 +106,11 @@ describe("init scenarios", () => {
       expect(opencodeConfig.agent.plan).toBeUndefined();
       expect(opencodeConfig.agent.general).toBeUndefined();
       expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
-      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:orchestrator");
       expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
-      expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent["vv-code-reviewer"]?.model).toBe("vv-role:smart");
+      expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:reviewer");
+      expect(opencodeConfig.agent["vv-code-reviewer"]?.model).toBe("vv-role:reviewer");
       expect(opencodeConfig.agent.investigator?.model).toBe("vv-role:smart");
       expect(opencodeConfig.agent["vv-controller"]?.prompt).toContain("{file:");
       expect(opencodeConfig.agent.enhancer?.prompt).toContain("{file:");
@@ -125,6 +126,8 @@ describe("init scenarios", () => {
       expect(vvocConfig.roles.smart).toBeDefined();
       expect(vvocConfig.roles.fast).toBeDefined();
       expect(vvocConfig.roles.vision).toBeDefined();
+      expect(vvocConfig.roles.reviewer).toBeDefined();
+      expect(vvocConfig.roles.orchestrator).toBeDefined();
       expect(vvocConfig.presets["vv-openai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-minimax"]?.agents.default).toBeDefined();

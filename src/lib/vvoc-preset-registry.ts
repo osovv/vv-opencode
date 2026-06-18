@@ -33,6 +33,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "openai/vv-gpt-5.5-xhigh",
       fast: "openai/gpt-5.4-mini",
       vision: "openai/gpt-5.4",
+      reviewer: "openai/gpt-5.4",
+      orchestrator: "openai/gpt-5.4-xhigh",
     },
   },
   "vv-zai": {
@@ -42,6 +44,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "zai-coding-plan/glm-5.1",
       fast: "zai-coding-plan/glm-4.5-airx",
       vision: "zai-coding-plan/glm-4.6v",
+      reviewer: "zai-coding-plan/glm-5-turbo",
+      orchestrator: "zai-coding-plan/glm-5.1",
     },
   },
   "vv-minimax": {
@@ -51,6 +55,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "minimax-coding-plan/MiniMax-M2.7",
       fast: "minimax-coding-plan/MiniMax-M2.1",
       vision: "minimax-coding-plan/MiniMax-M2.7",
+      reviewer: "minimax-coding-plan/MiniMax-M2.7",
+      orchestrator: "minimax-coding-plan/MiniMax-M2.7",
     },
   },
   "vv-deepseek": {
@@ -60,15 +66,19 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "deepseek/deepseek-v4-pro",
       fast: "deepseek/deepseek-v4-flash",
       vision: "deepseek/deepseek-v4-pro",
+      reviewer: "deepseek/deepseek-v4-pro",
+      orchestrator: "deepseek/deepseek-v4-pro",
     },
   },
   "vv-osovv": {
-    description: "Personal osovv role assignments (deepseek + stepfun + minimax + gpt).",
+    description: "Personal osovv role assignments (deepseek + stepfun + minimax + gpt + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "stepfun/step-3.7-flash",
       smart: "openai/vv-gpt-5.5-xhigh",
       vision: "minimax-coding-plan/MiniMax-M2.7",
+      reviewer: "zai-coding-plan/glm-5.1",
+      orchestrator: "openai/gpt-5.4-xhigh",
     },
   },
 } as const satisfies Record<string, BuiltinVvocPresetDefinition>;

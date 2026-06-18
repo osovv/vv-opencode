@@ -17,6 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Updated binding expectations for reviewer and orchestrator role additions.]
 //   LAST_CHANGE: [v0.2.1 - Updated deterministic managed-agent binding expectations so vv-controller resolves to the built-in smart role.]
 //   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect binding expectations. Agents removed from managed-agents list.
 //   LAST_CHANGE: [v0.1.2 - Updated built-in managed-agent binding expectations to vv-* tracked role keys.]
@@ -37,7 +38,14 @@ import {
 
 describe("built-in roles", () => {
   test("exposes built-in role ids deterministically", () => {
-    expect(BUILTIN_ROLE_NAMES).toEqual(["default", "smart", "fast", "vision"]);
+    expect(BUILTIN_ROLE_NAMES).toEqual([
+      "default",
+      "smart",
+      "fast",
+      "vision",
+      "reviewer",
+      "orchestrator",
+    ]);
 
     const bindings = getBuiltInRoleBindings();
     expect(bindings).toEqual({
@@ -50,11 +58,11 @@ describe("built-in roles", () => {
       },
       managedAgents: {
         guardian: "fast",
-        "vv-controller": "smart",
+        "vv-controller": "orchestrator",
         enhancer: "smart",
         "vv-implementer": "default",
-        "vv-spec-reviewer": "smart",
-        "vv-code-reviewer": "smart",
+        "vv-spec-reviewer": "reviewer",
+        "vv-code-reviewer": "reviewer",
         investigator: "smart",
       },
     });

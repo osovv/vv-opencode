@@ -39,6 +39,7 @@
 //
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v2.5.0 - Added reviewer and orchestrator role defaults to createDefaultRoleAssignments.]
 //   LAST_CHANGE: [v2.4.1 - Preserved strict-parsed plugin toggle values instead of resetting them to defaults.]
 //   LAST_CHANGE: [v2.3.4 - Moved built-in vvoc preset definitions and managed-name detection to a shared internal preset registry.]
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
@@ -303,7 +304,9 @@ function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Reco
     smart: "openai/vv-gpt-5.5-xhigh",
     fast: "openai/gpt-5.4-mini",
     vision: "openai/gpt-5.4",
-  };
+    reviewer: "openai/gpt-5.4",
+    orchestrator: "openai/gpt-5.4",
+  } as const;
   const roles: Record<string, string> = { ...defaults };
 
   for (const [roleId, modelSelection] of Object.entries(overrides)) {
