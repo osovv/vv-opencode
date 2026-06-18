@@ -100,6 +100,7 @@ import {
   createDefaultVvocConfig,
   createGuardianConfig,
   parseVersionedVvocConfigText,
+  loadLenientVvocConfigText,
   parseVvocConfigText,
   renderVvocConfig,
   type GuardianConfig,
@@ -901,7 +902,7 @@ export async function readVvocConfig(
   paths: Pick<ResolvedPaths, "vvocConfigPath">,
 ): Promise<VvocConfig | undefined> {
   const currentText = await readOptionalText(paths.vvocConfigPath);
-  return currentText ? parseVvocConfigText(currentText, paths.vvocConfigPath) : undefined;
+  return currentText ? loadLenientVvocConfigText(currentText, paths.vvocConfigPath, []) : undefined;
 }
 
 export async function installVvocConfig(
@@ -915,7 +916,7 @@ export async function syncVvocConfig(
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.vvocConfigPath);
   const nextConfig = currentText
-    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
+    ? loadLenientVvocConfigText(currentText, paths.vvocConfigPath, [])
     : createDefaultVvocConfig();
   return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
@@ -927,7 +928,7 @@ export async function writeGuardianConfig(
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.vvocConfigPath);
   const currentConfig = currentText
-    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
+    ? loadLenientVvocConfigText(currentText, paths.vvocConfigPath, [])
     : createDefaultVvocConfig();
   const nextConfig: VvocConfig = {
     ...currentConfig,

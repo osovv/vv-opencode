@@ -676,8 +676,17 @@ describe("canonical vvoc config helpers", () => {
         "utf8",
       );
 
-      await expect(readVvocConfig(paths)).rejects.toThrow(/version|roles/);
-      await expect(syncVvocConfig(paths)).rejects.toThrow(/version|roles/);
+      const lenientConfig = await readVvocConfig(paths);
+      expect(lenientConfig).toBeDefined();
+      expect(lenientConfig!.roles.default).toBeDefined();
+      expect(lenientConfig!.roles.reviewer).toBeDefined();
+      const syncResult = await syncVvocConfig(paths);
+      expect(syncResult.action).toBe("updated");
+      const fixedText = await readFile(paths.vvocConfigPath, "utf8");
+      const fixedConfig = JSON.parse(fixedText);
+      expect(fixedConfig.version).toBe(3);
+      expect(fixedConfig.roles.default).toBeDefined();
+      expect(fixedConfig.roles.reviewer).toBeDefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
