@@ -1,3 +1,12 @@
+## <small>0.35.26 (2026-06-19)</small>
+
+### Summary
+
+This release memoizes config resolution to eliminate a 5–10 second startup delay on slow filesystems, and introduces explicit intent review rounds in the WorkflowPlugin, giving users deterministic control over implementation and review-only pipelines—work items now require a <code>mode</code> and <code>requiredReviewers</code> set, reviewers launch in parallel with collect-all round aggregation, and review-only failures are treated as completed findings rather than routing back to the implementer. It also restores the OpenAI patch‑preset context limit to 1.05M after a brief compliance adjustment.
+
+* chore: bump version from 0.35.24 to 0.35.25 with changelog ([70854dc](https://github.com/osovv/vv-opencode/commit/70854dc))
+* perf(config): memoize loadEffectiveVvocConfigForRuntime to fix startup regression ([a83c73c](https://github.com/osovv/vv-opencode/commit/a83c73c))
+
 ## <small>0.35.25 (2026-06-19)</small>
 
 ### Summary
