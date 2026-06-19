@@ -1,3 +1,15 @@
+## <small>0.35.25 (2026-06-19)</small>
+
+### Summary
+
+This release introduces explicit intent review rounds to the WorkflowPlugin, giving users deterministic control over implementation and review-only pipelines—work items now require a `mode` and `requiredReviewers` set, reviewers launch in parallel with collect-all round aggregation, and review-only failures are treated as completed findings rather than routing back to the implementer. It also memoizes config resolution to eliminate a 5–10 second startup regression on slow filesystems, and restores the OpenAI patch-preset context limit to 1.05M after a brief compliance adjustment.
+
+* perf(config): memoize loadEffectiveVvocConfigForRuntime to fix startup regression ([6ef4f4e](https://github.com/osovv/vv-opencode/commit/6ef4f4e))
+* fix: restore 1.05M openai patch-preset limits ([9d5df8a](https://github.com/osovv/vv-opencode/commit/9d5df8a))
+* fix: set openai patch-preset context to 400K for ChatGPT Pro plan compliance ([0177f03](https://github.com/osovv/vv-opencode/commit/0177f03))
+* fix: use 400K context limit for openai patch-preset (ChatGPT Pro plan) ([84c6029](https://github.com/osovv/vv-opencode/commit/84c6029))
+* feat(workflow): add explicit intent review rounds ([f02e784](https://github.com/osovv/vv-opencode/commit/f02e784))
+
 ## <small>0.35.24 (2026-06-18)</small>
 
 ### Summary
