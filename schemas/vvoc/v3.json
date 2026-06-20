@@ -22,7 +22,7 @@
         "minLength": 1,
         "pattern": "^[a-z][a-z0-9-]*$"
       },
-      "minProperties": 4,
+      "minProperties": 5,
       "additionalProperties": {
         "type": "string",
         "minLength": 1
@@ -34,7 +34,6 @@
       "required": ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
       "properties": {
         "model": { "type": "string", "minLength": 1 },
-        "variant": { "type": "string", "minLength": 1 },
         "timeoutMs": { "type": "integer", "minimum": 1 },
         "approvalRiskThreshold": { "type": "integer", "minimum": 0, "maximum": 100 },
         "reviewToastDurationMs": { "type": "integer", "minimum": 1 }

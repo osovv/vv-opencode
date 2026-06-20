@@ -52,7 +52,7 @@
 
     <M-CONFIG-LAYERS NAME="ConfigLayers" TYPE="UTILITY" LAYER="0" ORDER="2" STATUS="implemented">
       <contract>
-        <purpose>Resolve vvoc and OpenCode configuration sources across explicit environment overrides, nearest project-local layers, global layers, and built-in defaults, plus canonical project/global write targets.</purpose>
+        <purpose>Resolve vvoc and OpenCode configuration sources across explicit environment overrides, nearest project-local layers, global layers, and built-in defaults, provide one shared runtime vvoc startup snapshot for plugins, plus canonical project/global write targets.</purpose>
       </contract>
       <interface>
         <export-VVOC_CONFIG_ENV PURPOSE="Environment variable name for explicit vvoc config selection." />
@@ -61,7 +61,8 @@
         <export-resolveConfigWriteTargets PURPOSE="Return canonical global or project write paths; project scope writes .opencode/opencode.json and .vvoc/vvoc.json." />
         <export-resolveVvocConfigSource PURPOSE="Resolve vvoc config source metadata for global, project, or effective reads." />
         <export-resolveOpenCodeConfigSource PURPOSE="Resolve OpenCode config source metadata for global, project, or effective reads." />
-        <export-loadEffectiveVvocConfigForRuntime PURPOSE="Load vvoc config for runtime plugins using env -> project -> global -> default precedence." />
+        <export-loadVvocConfig PURPOSE="Load the effective vvoc config once for runtime plugins and return the same startup promise on repeated matching calls." />
+        <export-loadEffectiveVvocConfigForRuntime PURPOSE="Backward-compatible alias for loadVvocConfig." />
       </interface>
       <depends>none</depends>
       <target>
@@ -840,24 +841,22 @@
       </observability>
       <verification-ref>V-M-CLI-AGENT-MODELS</verification-ref>
     </M-CLI-AGENT-MODELS>
-    <M-PLUGIN-TOGGLE-CONFIG NAME="PluginToggleConfig" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="planned">
+    <M-PLUGIN-TOGGLE-CONFIG NAME="PluginToggleConfig" TYPE="UTILITY" LAYER="0" ORDER="3" STATUS="implemented">
       <contract>
-        <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a shared `isPluginEnabled()` helper that each plugin factory can call at load time.</purpose>
+        <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a pure `isPluginEnabled()` helper over an already-loaded vvoc config snapshot.</purpose>
         <inputs>
+          <param name="config" type="{ plugins?: Record&lt;string, boolean&gt; }" />
           <param name="pluginName" type="string" />
         </inputs>
         <outputs>
           <param name="boolean" type="whether the plugin is enabled in vvoc.json" />
         </outputs>
-        <errors>
-          <error code="CONFIG_NOT_FOUND" />
-          <error code="INVALID_VVOC_CONFIG" />
-        </errors>
+        <errors>none</errors>
       </contract>
       <interface>
         <export-PLUGIN_TOGGLE_NAMES PURPOSE="Canonical list of vvoc-managed plugin names: guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction." />
         <export-createDefaultPluginToggleConfig PURPOSE="Return a Record&lt;string, boolean&gt; with all known plugins set to true." />
-        <export-isPluginEnabled PURPOSE="Read the canonical vvoc.json and return whether the named plugin is enabled. If the plugins section is absent, default to true." />
+        <export-isPluginEnabled PURPOSE="Return whether the named plugin is enabled from a loaded vvoc config object. If the plugins section is absent, default to true." />
         <export-VvocPluginToggleConfig PURPOSE="Type alias for Record&lt;string, boolean&gt;." />
       </interface>
       <depends>none</depends>
@@ -872,7 +871,7 @@
       <verification-ref>V-M-PLUGIN-TOGGLE-CONFIG</verification-ref>
       <notes>
         <note-1>Plugin names are kebab-case matching the OpenCode sub-path export convention: guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction.</note-1>
-        <note-2>If vvoc.json cannot be read or the `plugins` section is missing, return true (backward compatibility).</note-2>
+        <note-2>Filesystem discovery belongs to loadVvocConfig; this helper only interprets an already-loaded plugins section.</note-2>
       </notes>
     </M-PLUGIN-TOGGLE-CONFIG>
 
@@ -1105,8 +1104,8 @@
     </DF-PLUGIN-TOGGLE>
     <DF-PLUGIN-TOGGLE-CHECK NAME="PluginToggleCheck" TRIGGER="plugin factory initialization (every session start)">
       <step-1>Plugin factory is called by OpenCode at startup.</step-1>
-      <step-2>Read canonical vvoc.json via getGlobalVvocConfigPath().</step-2>
-      <step-3>Call isPluginEnabled(pluginName) which checks the `plugins` section.</step-3>
+      <step-2>Read the shared runtime vvoc config snapshot via loadVvocConfig({ cwd: directory }).</step-2>
+      <step-3>Call isPluginEnabled(vvoc.config, pluginName) which checks the loaded `plugins` section.</step-3>
       <step-4>If false, return {} (empty hooks) and emit a log message.</step-4>
       <step-5>If true, proceed with normal initialization and hook registration.</step-5>
       <evidence>Disabled plugins do not register any hooks. Enabled plugins behave identically to before the toggle was added.</evidence>

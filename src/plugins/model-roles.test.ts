@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify ModelRolesPlugin role-reference resolution and explicit failure behavior.
 //   SCOPE: Root and nested field resolution, literal passthrough behavior, and unknown failure paths with stable markers.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/vvoc-config.ts, src/plugins/model-roles/index.ts]
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/model-roles/index.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES, V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
 //   LAST_CHANGE: [v0.2.0 - Added effective runtime source precedence coverage for env and project-local vvoc config.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for ModelRolesPlugin role resolution and failure semantics.]
 // END_CHANGE_SUMMARY
@@ -22,6 +23,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import { ModelRolesPlugin } from "./model-roles/index.js";
 
@@ -30,6 +32,8 @@ const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const previousVvocConfig = process.env.VVOC_CONFIG;
 
 afterEach(async () => {
+  resetVvocConfigForTests();
+
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
@@ -51,6 +55,7 @@ afterEach(async () => {
 });
 
 async function createPluginWithRoles(overrides: Record<string, string>) {
+  resetVvocConfigForTests();
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-model-roles-config-"));
   const projectDir = await mkdtemp(join(tmpdir(), "vvoc-model-roles-project-"));
   tempDirs.push(configHome, projectDir);
@@ -119,6 +124,7 @@ async function writeVvocConfig(
 }
 
 async function createPluginInProject(projectDir: string) {
+  resetVvocConfigForTests();
   const logs: unknown[] = [];
   const plugin = await ModelRolesPlugin({
     client: {

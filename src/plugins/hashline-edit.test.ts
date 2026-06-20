@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
 //   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, normalization heuristics, and BOM/CRLF preservation.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Reset the runtime vvoc config singleton between plugin fixture directories.]
 //   LAST_CHANGE: [v0.5.0 - Added regression coverage preventing post-read source snapshots from being mixed into stale visible rows.]
 //   LAST_CHANGE: [v0.4.0 - Added regression coverage for full-snapshot context anchors on partial and truncated read output.]
 //   LAST_CHANGE: [v0.3.0 - Updated read output expectations for anchor hash format (line#hash#anchor|content).]
@@ -21,7 +22,7 @@
 //   LAST_CHANGE: [v0.1.0 - Added a default-on hash-anchored edit override that rewrites Read output to `line#hash|content` and rejects stale anchors on edit.
 // END_CHANGE_SUMMARY
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +33,23 @@ import {
 } from "./hashline-edit/edit-operation-primitives.js";
 import { computeAnchorHash, computeLineHash } from "./hashline-edit/hash-computation.js";
 import { HashlineEditPlugin } from "./hashline-edit/index.js";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
+
+const previousConfigHome = process.env.XDG_CONFIG_HOME;
+
+beforeEach(() => {
+  resetVvocConfigForTests();
+  process.env.XDG_CONFIG_HOME = join(tmpdir(), `vvoc-hashline-empty-config-${process.pid}`);
+});
+
+afterEach(() => {
+  resetVvocConfigForTests();
+  if (previousConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = previousConfigHome;
+  }
+});
 
 function createPluginInput(directory: string) {
   return {

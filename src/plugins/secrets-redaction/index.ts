@@ -2,8 +2,8 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: OpenCode plugin that redacts secrets from messages before LLM requests and restores them after.
-//   SCOPE: 3 hook handlers — chat.messages.transform, text.complete, tool.execute.before
-//   DEPENDS: session, engine, patterns, restore, deep, config
+//   SCOPE: Startup vvoc config snapshot use plus 3 hook handlers — chat.messages.transform, text.complete, tool.execute.before
+//   DEPENDS: src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, session, engine, patterns, restore, deep, config
 //   LINKS: knowledge-graph://plugins/secrets-redaction
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,16 +14,18 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.0 - Used the shared startup vvoc config snapshot for plugin toggles and redaction settings.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
 
-import { loadConfig } from "./config.js";
+import { resolveSecretsRedactionRuntimeConfig } from "./config.js";
 import { buildPatternSet } from "./patterns.js";
 import { redactText } from "./engine.js";
 import { restoreText } from "./restore.js";
 import { redactDeep, restoreDeep } from "./deep.js";
 import { PlaceholderSession } from "./session.js";
-import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import { loadVvocConfig } from "../../lib/config-layers.js";
+import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { Plugin } from "@opencode-ai/plugin";
 import type { Part, TextPart, ReasoningPart } from "@opencode-ai/sdk/client";
 
@@ -77,11 +79,12 @@ function redactAssistantState(
 }
 
 export const SecretsRedactionPlugin: Plugin = async (ctx) => {
-  if (!(await isPluginEnabled("secrets-redaction"))) {
+  const vvoc = await loadVvocConfig({ cwd: ctx.directory });
+  if (!isVvocPluginEnabled(vvoc.config, "secrets-redaction")) {
     return {};
   }
 
-  const { config, path, warnings } = await loadConfig(ctx.directory);
+  const { config, path, warnings } = resolveSecretsRedactionRuntimeConfig(vvoc);
   if (config.debug) {
     await ctx.client.app.log({
       body: {

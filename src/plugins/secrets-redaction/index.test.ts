@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
 //   SCOPE: chat message redaction, assistant state redaction, text completion restore, and tool arg restore.
-//   DEPENDS: bun:test, node:fs/promises, node:os, node:path, index
+//   DEPENDS: bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, index
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
 //   LAST_CHANGE: [v1.1.0 - Switched test fixtures to the canonical vvoc.json config file and ignored legacy local config files.]
 // END_CHANGE_SUMMARY
 
@@ -21,6 +22,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resetVvocConfigForTests } from "../../lib/config-layers.js";
 import { createDefaultVvocConfig } from "../../lib/vvoc-config.js";
 import { SecretsRedactionPlugin } from "./index.js";
 
@@ -31,6 +33,8 @@ const tempDirs: string[] = [];
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 
 afterEach(async () => {
+  resetVvocConfigForTests();
+
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
@@ -46,6 +50,7 @@ afterEach(async () => {
 });
 
 async function createPlugin() {
+  resetVvocConfigForTests();
   const directory = await mkdtemp(join(tmpdir(), "vvoc-secrets-redaction-"));
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-secrets-config-"));
   tempDirs.push(directory);
@@ -61,7 +66,6 @@ async function createPlugin() {
       {
         ...createDefaultVvocConfig(),
         secretsRedaction: {
-          enabled: true,
           secret: "test-secret-for-redaction",
           ttlMs: 0,
           maxMappings: 10000,

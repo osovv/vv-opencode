@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vvoc and OpenCode config layers for global, project, and effective scopes.
-//   SCOPE: Env override handling, ancestor project-root discovery, project write-root selection, global fallback paths, runtime vvoc loading, and source metadata.
+//   SCOPE: Env override handling, ancestor project-root discovery, project write-root selection, global fallback paths, singleton runtime vvoc loading, and source metadata.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CONFIG-LAYERS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -26,29 +26,21 @@
 //   resolveOpenCodeConfigSource - Resolves OpenCode source metadata for global, project, or effective reads.
 //   resolveConfigWriteTargets - Returns canonical global or project write paths.
 //   loadVvocConfigForRead - Loads vvoc config for CLI read/list/show commands without creating files.
-//   loadEffectiveVvocConfigForRuntime - Memoized load of the effective vvoc config for runtime plugins. Keys on (cwd, configDir).
+//   VvocConfigSnapshot - Immutable runtime vvoc config snapshot plus source metadata.
+//   loadVvocConfig - Singleton effective vvoc config load for runtime plugins.
+//   loadEffectiveVvocConfigForRuntime - Backward-compatible alias for loadVvocConfig.
+//   resetVvocConfigForTests - Clears the runtime singleton for deterministic tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Replaced keyed runtime memoization with a single loadVvocConfig startup promise shared by all plugins.]
 //   LAST_CHANGE: [v1.0.1 - Memoized loadEffectiveVvocConfigForRuntime to eliminate redundant ancestor discovery across multiple plugins during startup.]
 //   LAST_CHANGE: [v1.0.0 - Added layered config source discovery, write target resolution, and runtime vvoc loading.]
 // END_CHANGE_SUMMARY
 
-// Memoization cache for loadEffectiveVvocConfigForRuntime to prevent redundant filesystem
-// traversal during a single process lifetime (multiple plugins sharing the same config source).
-const effectiveConfigCache = new Map<
-  string,
-  Promise<{ config: VvocConfig; source: ConfigSource; warnings: string[] }>
->();
-
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import {
-  createDefaultVvocConfig,
-  loadLenientVvocConfigText,
-  parseVvocConfigText,
-  type VvocConfig,
-} from "./vvoc-config.js";
+import { createDefaultVvocConfig, parseVvocConfigText, type VvocConfig } from "./vvoc-config.js";
 import {
   getGlobalOpencodeDir,
   getGlobalVvocConfigPath,
@@ -70,6 +62,25 @@ export type ConfigSource = {
   rootDir?: string;
   reason?: string;
 };
+
+export type VvocConfigSnapshot = Readonly<{
+  config: VvocConfig;
+  source: ConfigSource;
+  warnings: readonly string[];
+  loadedAt: string;
+}>;
+
+export type LoadVvocConfigOptions = Partial<ConfigLayerOptions>;
+
+type RuntimeVvocConfigSignature = Readonly<{
+  cwd: string;
+  configDir?: string;
+  vvocConfigEnv?: string;
+  xdgConfigHome?: string;
+}>;
+
+let runtimeConfigPromise: Promise<VvocConfigSnapshot> | undefined;
+let runtimeConfigSignature: RuntimeVvocConfigSignature | undefined;
 
 export type ProjectConfigRoot = {
   rootDir: string;
@@ -254,38 +265,49 @@ export async function loadVvocConfigForRead(
   };
 }
 
-export async function loadEffectiveVvocConfigForRuntime(
-  options: Partial<ConfigLayerOptions> = {},
-): Promise<{ config: VvocConfig; source: ConfigSource; warnings: string[] }> {
+export function loadVvocConfig(options: LoadVvocConfigOptions = {}): Promise<VvocConfigSnapshot> {
   const cwd = resolve(options.cwd ?? process.cwd());
-  const configDir = options.configDir;
-  // Include XDG_CONFIG_HOME in the cache key so test suites that swap the config home
-  // (and any runtime setup that changes it) get fresh resolution.
-  const xdgHome = process.env.XDG_CONFIG_HOME ?? "";
-  const cacheKey = `${cwd}:${configDir ?? ""}:${xdgHome}`;
-  const cached = effectiveConfigCache.get(cacheKey);
-  if (cached) return cached;
+  const signature = createRuntimeSignature(options, cwd);
+  if (runtimeConfigPromise) {
+    assertSameRuntimeSignature(runtimeConfigSignature, signature);
+    return runtimeConfigPromise;
+  }
 
-  const promise = _doLoadEffectiveVvocConfigForRuntime(options, cwd, configDir);
-  effectiveConfigCache.set(cacheKey, promise);
-  return promise;
+  runtimeConfigSignature = signature;
+  runtimeConfigPromise = _doLoadVvocConfig(options, signature);
+  return runtimeConfigPromise;
 }
 
-async function _doLoadEffectiveVvocConfigForRuntime(
-  options: Partial<ConfigLayerOptions>,
-  cwd: string,
-  configDir: string | undefined,
-): Promise<{ config: VvocConfig; source: ConfigSource; warnings: string[] }> {
+export function loadEffectiveVvocConfigForRuntime(
+  options: LoadVvocConfigOptions = {},
+): Promise<VvocConfigSnapshot> {
+  return loadVvocConfig(options);
+}
+
+export function resetVvocConfigForTests(): void {
+  runtimeConfigPromise = undefined;
+  runtimeConfigSignature = undefined;
+}
+
+async function _doLoadVvocConfig(
+  options: LoadVvocConfigOptions,
+  signature: RuntimeVvocConfigSignature,
+): Promise<VvocConfigSnapshot> {
   const source = await resolveVvocConfigSource({
     scope: "effective",
     allowDefault: true,
-    cwd,
-    configDir,
+    cwd: signature.cwd,
+    configDir: signature.configDir,
     env: options.env,
   });
 
   if (source.kind === "default") {
-    return { config: createDefaultVvocConfig(), source, warnings: [] };
+    return freezeSnapshot({
+      config: createDefaultVvocConfig(),
+      source,
+      warnings: [],
+      loadedAt: new Date().toISOString(),
+    });
   }
 
   if (!source.path) {
@@ -293,15 +315,84 @@ async function _doLoadEffectiveVvocConfigForRuntime(
   }
 
   const text = await readFile(source.path, "utf8");
-  if (source.kind === "env" || source.kind === "project") {
-    return { config: parseVvocConfigText(text, source.path), source, warnings: [] };
-  }
-
-  const warnings: string[] = [];
-  const config = loadLenientVvocConfigText(text, source.path, warnings);
-  return { config, source, warnings };
+  return freezeSnapshot({
+    config: parseVvocConfigText(text, source.path),
+    source,
+    warnings: [],
+    loadedAt: new Date().toISOString(),
+  });
 }
 // END_BLOCK_RUNTIME_VVOC_LOADING
+
+function createRuntimeSignature(
+  options: LoadVvocConfigOptions,
+  cwd: string,
+): RuntimeVvocConfigSignature {
+  return compactSignature({
+    cwd,
+    configDir: normalizeOptionalSignatureValue(options.configDir),
+    vvocConfigEnv: normalizeOptionalSignatureValue(
+      readRuntimeEnvValue(options.env, VVOC_CONFIG_ENV),
+    ),
+    xdgConfigHome: normalizeOptionalSignatureValue(process.env.XDG_CONFIG_HOME),
+  });
+}
+
+function readRuntimeEnvValue(env: NodeJS.ProcessEnv | undefined, key: string): string | undefined {
+  return env ? env[key] : process.env[key];
+}
+
+function normalizeOptionalSignatureValue(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function compactSignature(signature: RuntimeVvocConfigSignature): RuntimeVvocConfigSignature {
+  return Object.fromEntries(
+    Object.entries(signature).filter(([, value]) => value !== undefined),
+  ) as RuntimeVvocConfigSignature;
+}
+
+function assertSameRuntimeSignature(
+  existing: RuntimeVvocConfigSignature | undefined,
+  next: RuntimeVvocConfigSignature,
+): void {
+  if (existing && JSON.stringify(existing) === JSON.stringify(next)) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "VVOC_CONFIG_ALREADY_LOADED: loadVvocConfig was already initialized with a different runtime source.",
+      `existing=${JSON.stringify(existing)}`,
+      `next=${JSON.stringify(next)}`,
+    ].join(" "),
+  );
+}
+
+function freezeSnapshot(snapshot: {
+  config: VvocConfig;
+  source: ConfigSource;
+  warnings: string[];
+  loadedAt: string;
+}): VvocConfigSnapshot {
+  return deepFreeze(snapshot) as VvocConfigSnapshot;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  for (const propertyValue of Object.values(value as Record<string, unknown>)) {
+    deepFreeze(propertyValue);
+  }
+
+  return Object.freeze(value);
+}
 
 async function resolveProjectVvocSource(cwd: string): Promise<ConfigSource> {
   const root = await findNearestProjectConfigRoot(cwd);

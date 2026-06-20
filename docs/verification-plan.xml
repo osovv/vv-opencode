@@ -365,6 +365,7 @@
         <scenario-3 kind="success">Effective reads prefer VVOC_CONFIG/OPENCODE_CONFIG, then project, then global, then defaults where allowed.</scenario-3>
         <scenario-4 kind="success">--config-dir changes only global source paths and never project-root discovery.</scenario-4>
         <scenario-5 kind="failure">Root-level ./opencode.json and ./opencode.jsonc are ignored as legacy unsupported project layers.</scenario-5>
+        <scenario-6 kind="success">Runtime loadVvocConfig returns one shared startup promise for repeated matching calls and rejects conflicting runtime initialization options.</scenario-6>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -699,8 +700,7 @@
         <scenario-4 kind="success">isPluginEnabled returns true when plugins[name] is true.</scenario-4>
         <scenario-5 kind="success">isPluginEnabled returns false when plugins[name] is false.</scenario-5>
         <scenario-6 kind="failure">isPluginEnabled returns true for unknown plugin names (safe default).</scenario-6>
-        <scenario-7 kind="success">isPluginEnabled returns true from built-in defaults when no project/global vvoc.json exists.</scenario-7>
-        <scenario-8 kind="failure">isPluginEnabled fails fast for malformed env-selected or project-selected vvoc config instead of falling back to global/default toggles.</scenario-8>
+        <scenario-7 kind="success">isPluginEnabled is pure over the supplied loaded config object and performs no filesystem discovery.</scenario-7>
       </scenarios>
       <required-log-markers>
         <marker-1>[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED]</marker-1>
@@ -709,7 +709,7 @@
         <assertion-1>isPluginEnabled must not mutate vvoc.json or any external state.</assertion-1>
         <assertion-2>isPluginEnabled must resolve to a boolean and must never throw for valid input.</assertion-2>
       </required-trace-assertions>
-      <wave-follow-up>Add file-based fixture tests for the full suite of config shapes (with section, without section, malformed JSON).</wave-follow-up>
+      <wave-follow-up>Add integration fixture tests at plugin level for enabled/disabled toggles loaded through the runtime vvoc config snapshot.</wave-follow-up>
     </V-M-PLUGIN-TOGGLE-CONFIG>
 
     <V-M-CLI-PLUGIN-TOGGLE MODULE="M-CLI-PLUGIN-TOGGLE" PRIORITY="medium">

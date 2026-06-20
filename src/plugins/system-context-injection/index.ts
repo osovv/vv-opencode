@@ -2,7 +2,7 @@
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
-//   SCOPE: Main-session system instruction definitions, editing-workflow guidance, repository-memory lookup guidance, known subagent filtering, config-aware custom subagent tracking, and chat.message system prompt injection.
+//   SCOPE: Main-session system instruction definitions, editing-workflow guidance, repository-memory lookup guidance, known subagent filtering, startup vvoc config snapshot use, config-aware custom subagent tracking, and chat.message system prompt injection.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Used the shared startup vvoc config snapshot for plugin toggles and skill-path source decisions.]
 //   LAST_CHANGE: [v0.5.0 - Used effective vvoc source resolution to avoid forcing global skill discovery into project sandbox sessions.]
 //   LAST_CHANGE: [v0.4.2 - Added scoped repository-memory guidance for .vvoc lessons and runbooks indexes.]
 //   LAST_CHANGE: [v0.4.1 - Added explore-specific system guidance that enforces compact search/discovery handoffs instead of file dumps.]
@@ -28,9 +29,9 @@
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
-import { resolveVvocConfigSource } from "../../lib/config-layers.js";
+import { loadVvocConfig } from "../../lib/config-layers.js";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
-import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { existsSync } from "node:fs";
 import {
   getGlobalOpencodeSkillsDir,
@@ -222,9 +223,11 @@ function appendSystemContexts(
 // END_BLOCK_SYSTEM_CONTEXT_FORMATTING
 
 // START_BLOCK_PLUGIN_ENTRY
-export const SystemContextInjectionPlugin: Plugin = async () => {
-  if (!(await isPluginEnabled("system-context-injection"))) return {};
+export const SystemContextInjectionPlugin: Plugin = async ({ directory }) => {
+  const vvoc = await loadVvocConfig({ cwd: directory });
+  if (!isVvocPluginEnabled(vvoc.config, "system-context-injection")) return {};
   const knownSubagents = createKnownSubagentSet();
+  const projectRoot = vvoc.source.rootDir ?? directory;
 
   return {
     config: async (config) => {
@@ -232,13 +235,7 @@ export const SystemContextInjectionPlugin: Plugin = async () => {
       const configRecord = config as Record<string, unknown>;
       const skills = (configRecord.skills ?? {}) as Record<string, unknown>;
       const skillsPaths = (skills.paths ?? []) as string[];
-      const effectiveSource = await resolveVvocConfigSource({
-        scope: "effective",
-        cwd: process.cwd(),
-        allowDefault: true,
-      });
-      const shouldAvoidGlobalSkills =
-        effectiveSource.kind === "project" || effectiveSource.kind === "env";
+      const shouldAvoidGlobalSkills = vvoc.source.kind === "project" || vvoc.source.kind === "env";
 
       if (!shouldAvoidGlobalSkills) {
         // Register the global OpenCode skills directory — vvoc sync creates a symlink there
@@ -250,10 +247,10 @@ export const SystemContextInjectionPlugin: Plugin = async () => {
       }
 
       // Register project-local skills dir when it exists
-      const projectSkillsDir = getVvocSkillsDir(getProjectVvocDir(process.cwd()));
+      const projectSkillsDir = getVvocSkillsDir(getProjectVvocDir(projectRoot));
       const currentPaths = (skills.paths ?? []) as string[];
       if (
-        effectiveSource.kind !== "default" &&
+        vvoc.source.kind !== "default" &&
         existsSync(projectSkillsDir) &&
         !currentPaths.includes(projectSkillsDir)
       ) {

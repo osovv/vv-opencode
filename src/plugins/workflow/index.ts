@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
 //   SCOPE: work_item_open/list/close tool registration, explicit tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/round aggregation, implementation-mode round-limit gating, and chat.message guidance injection with subagent filtering.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/managed-agents.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
 //   LAST_CHANGE: [v0.3.0 - Integrated explicit work-item intent, reviewer in-flight tracking, and collect-all review-round result aggregation.]
 //   LAST_CHANGE: [v0.2.6 - Restricted work-item tools and workflow guidance injection to vv-controller sessions only.]
 //   LAST_CHANGE: [v0.2.5 - Limited resumable result repair to safe format-only protocol errors and disabled tool use during repair prompts where supported.]
@@ -58,7 +59,8 @@ import {
   createWorkItemOpenTool,
 } from "./tooling.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
-import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import { loadVvocConfig } from "../../lib/config-layers.js";
+import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import {
   deleteWorkflowSessionDir,
   hydrateWorkflowState,
@@ -148,7 +150,8 @@ function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number)
 
 // START_BLOCK_PLUGIN_ENTRY
 export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
-  if (!(await isPluginEnabled("workflow"))) return {};
+  const vvoc = await loadVvocConfig({ cwd: directory });
+  if (!isVvocPluginEnabled(vvoc.config, "workflow")) return {};
 
   // START_BLOCK_PERSISTENCE_SETUP
   // Each session (main or subagent) gets its own isolated store.

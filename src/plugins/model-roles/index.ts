@@ -2,7 +2,7 @@
 // VERSION: 0.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vv-role references in supported OpenCode config model fields during plugin config hooks.
-//   SCOPE: Canonical role-map loading, supported field traversal, role reference resolution, structured logging, and explicit failure surfaces.
+//   SCOPE: Canonical role-map extraction from the shared startup vvoc config snapshot, supported field traversal, role reference resolution, structured logging, and explicit failure surfaces.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES]
 //   ROLE: RUNTIME
@@ -14,19 +14,20 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.0 - Used the shared startup vvoc config snapshot for plugin toggles and role-map loading.]
 //   LAST_CHANGE: [v0.2.0 - Loaded role assignments from the effective vvoc config source.]
 //   LAST_CHANGE: [v0.1.0 - Added startup config-hook role resolution for supported OpenCode model fields with explicit unknown-role and unsupported-target errors.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
-import { loadEffectiveVvocConfigForRuntime } from "../../lib/config-layers.js";
+import { loadVvocConfig, type VvocConfigSnapshot } from "../../lib/config-layers.js";
 import {
   isRoleReference,
   resolveRoleReference,
   type ModelRolesError,
   type ResolvedRoleSelection,
 } from "../../lib/model-roles.js";
-import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 type ModelRolesPluginErrorCode = "UNKNOWN_ROLE" | "INVALID_ROLE_ASSIGNMENT";
 
@@ -85,12 +86,11 @@ function asModelRolesError(error: unknown): ModelRolesError | undefined {
 // END_BLOCK_ERROR_UTILS
 
 // START_BLOCK_ROLE_MAP_LOADING
-async function loadCanonicalRoleMap(options: { cwd?: string } = {}): Promise<{
+function loadCanonicalRoleMap(loaded: VvocConfigSnapshot): {
   roleMap: Record<string, string>;
   sources: string[];
   warningCount: number;
-}> {
-  const loaded = await loadEffectiveVvocConfigForRuntime(options);
+} {
   return {
     roleMap: loaded.config.roles,
     sources: [loaded.source.path ?? loaded.source.kind],
@@ -195,10 +195,11 @@ function resolveNestedModelFields(
 
 // START_BLOCK_PLUGIN_ENTRY
 export const ModelRolesPlugin: Plugin = async ({ client, directory }) => {
-  if (!(await isPluginEnabled("model-roles", { cwd: directory }))) return {};
+  const vvoc = await loadVvocConfig({ cwd: directory });
+  if (!isVvocPluginEnabled(vvoc.config, "model-roles")) return {};
   return {
     config: async (config) => {
-      const { roleMap, sources, warningCount } = await loadCanonicalRoleMap({ cwd: directory });
+      const { roleMap, sources, warningCount } = loadCanonicalRoleMap(vvoc);
 
       await client.app.log({
         body: {

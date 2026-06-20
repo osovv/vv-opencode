@@ -2,18 +2,19 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify layered vvoc and OpenCode config source resolution.
-//   SCOPE: Temp-dir coverage for project-root discovery, env/global/default/missing source kinds, and write target selection.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts]
+//   SCOPE: Temp-dir coverage for project-root discovery, env/global/default/missing source kinds, write target selection, and singleton runtime config loading.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   config layer resolution tests - Verify source precedence, strict project lookup, and global/project root isolation.
+//   config layer resolution tests - Verify source precedence, strict project lookup, global/project root isolation, and runtime singleton behavior.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.0 - Added runtime loadVvocConfig singleton-promise coverage.]
 //   LAST_CHANGE: [v1.0.0 - Added deterministic temp-dir tests for layered config resolution.]
 // END_CHANGE_SUMMARY
 
@@ -25,16 +26,21 @@ import {
   OPENCODE_CONFIG_ENV,
   VVOC_CONFIG_ENV,
   findNearestProjectConfigRoot,
+  loadVvocConfig,
   resolveConfigWriteTargets,
   resolveOpenCodeConfigSource,
   resolveProjectWriteRoot,
   resolveVvocConfigSource,
+  resetVvocConfigForTests,
 } from "./config-layers.js";
 import { getProjectOpencodeDir, getProjectVvocConfigPath } from "./vvoc-paths.js";
+import { createDefaultVvocConfig } from "./vvoc-config.js";
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  resetVvocConfigForTests();
+
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) await rm(dir, { recursive: true, force: true });
@@ -50,6 +56,11 @@ async function createTempRoot(prefix: string): Promise<string> {
 async function touch(path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "{}\n", "utf8");
+}
+
+async function writeValidVvocConfig(path: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(createDefaultVvocConfig(), null, 2), "utf8");
 }
 
 describe("config layer resolution", () => {
@@ -215,5 +226,30 @@ describe("config layer resolution", () => {
     expect(targets.opencodeBaseDir).toBe(getProjectOpencodeDir(projectDir));
     expect(targets.opencodeConfigPath).toBe(join(projectDir, ".opencode", "opencode.json"));
     expect(targets.vvocConfigPath).toBe(join(projectDir, ".vvoc", "vvoc.json"));
+  });
+
+  test("loadVvocConfig returns the same startup promise for repeated runtime calls", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-runtime-project-");
+    const configHome = await createTempRoot("vvoc-layer-runtime-global-");
+    await writeValidVvocConfig(join(configHome, "vvoc", "vvoc.json"));
+
+    const first = loadVvocConfig({ cwd: projectDir, configDir: configHome });
+    const second = loadVvocConfig({ cwd: projectDir, configDir: configHome });
+
+    expect(second).toBe(first);
+    await expect(first).resolves.toMatchObject({ source: { kind: "global" } });
+  });
+
+  test("loadVvocConfig rejects conflicting runtime initialization options", async () => {
+    const firstDir = await createTempRoot("vvoc-layer-runtime-first-");
+    const secondDir = await createTempRoot("vvoc-layer-runtime-second-");
+    const configHome = await createTempRoot("vvoc-layer-runtime-conflict-home-");
+
+    const first = loadVvocConfig({ cwd: firstDir, configDir: configHome });
+
+    expect(() => loadVvocConfig({ cwd: secondDir, configDir: configHome })).toThrow(
+      "VVOC_CONFIG_ALREADY_LOADED",
+    );
+    await expect(first).resolves.toMatchObject({ source: { kind: "default" } });
   });
 });

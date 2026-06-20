@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output with context-anchored hash references.
 //   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, file mutation execution, and success metadata emission.
-//   DEPENDS: [@opencode-ai/plugin, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
 //   LAST_CHANGE: [v0.4.0 - Read source snapshots are loaded only for eligible read output and only trusted when visible rows still match the file.]
 //   LAST_CHANGE: [v0.3.0 - Read output now uses the full file snapshot when available so partial and truncated reads emit edit-valid context anchors.]
 //   LAST_CHANGE: [v0.2.0 - Read output now emits context-anchored hashes (line#hash#anchor|content) for collision-resistant edit anchors.]
@@ -27,7 +28,8 @@ import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.
 import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
 import { HashlineMismatchError } from "./validation.js";
-import { isPluginEnabled } from "../../lib/plugin-toggle-config.js";
+import { loadVvocConfig } from "../../lib/config-layers.js";
+import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const z = tool.schema;
 const CONTENT_OPEN_TAG = "<content>";
@@ -430,8 +432,9 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
   }
 }
 
-export const HashlineEditPlugin: Plugin = async () => {
-  if (!(await isPluginEnabled("hashline-edit"))) return {};
+export const HashlineEditPlugin: Plugin = async ({ directory }) => {
+  const vvoc = await loadVvocConfig({ cwd: directory });
+  if (!isVvocPluginEnabled(vvoc.config, "hashline-edit")) return {};
   return {
     "tool.execute.after": async (input, output) => {
       if (!isReadTool(input.tool) || typeof output.output !== "string") {

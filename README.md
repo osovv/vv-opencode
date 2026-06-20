@@ -253,6 +253,8 @@ Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect 
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`.
 
+Runtime plugins load the effective `vvoc.json` once during OpenCode startup and share the same immutable config snapshot for the lifetime of the process. There is no live reload; restart OpenCode after changing `vvoc.json`.
+
 ### Deterministic local launch
 
 Use `vvoc launch` when you want the vvoc-selected config files to be the only files OpenCode sees for this run:

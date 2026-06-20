@@ -2,8 +2,8 @@
 // VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify Guardian plugin role-based runtime config and permission review fallback behavior.
-//   SCOPE: Hidden subagent registration, built-in fast-role model resolution, initialization failure signaling, and review fallback behavior.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/vvoc-config.ts, src/plugins/guardian/index.ts]
+//   SCOPE: Hidden subagent registration, built-in fast-role model resolution, strict startup config failure signaling, and review fallback behavior.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/guardian/index.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -11,10 +11,12 @@
 //
 // START_MODULE_MAP
 //   GuardianPlugin config tests - Verify hidden subagent registration and fast-role model resolution.
-//   GuardianPlugin failure tests - Verify fast-role resolution failures and manual fallback behavior.
+//   GuardianPlugin failure tests - Verify strict fast-role config failures and manual fallback behavior.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Updated invalid fast-role expectation for strict shared vvoc config loading.]
+//   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated Guardian fixtures.]
 //   LAST_CHANGE: [v0.2.1 - Added regression coverage ensuring stale guardian model fields cannot override roles.fast defaults while env model overrides still can.]
 //   LAST_CHANGE: [v0.2.0 - Added fast-role resolution, initialization failure, and manual fallback behavior coverage.]
 //   LAST_CHANGE: [v0.1.0 - Added coverage for Guardian plugin config registration as a hidden subagent.]
@@ -24,6 +26,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import { GuardianPlugin } from "./guardian/index.js";
 
@@ -33,6 +36,8 @@ const previousPath = process.env.PATH;
 const previousGuardianModelEnv = process.env.OPENCODE_GUARDIAN_MODEL;
 
 afterEach(async () => {
+  resetVvocConfigForTests();
+
   while (tempDirs.length > 0) {
     const path = tempDirs.pop();
     if (path) {
@@ -60,6 +65,7 @@ afterEach(async () => {
 });
 
 async function setupGuardianWorkspace(options?: { roleFast?: string; guardianModel?: string }) {
+  resetVvocConfigForTests();
   const roleFast = options?.roleFast ?? "openai/test-fast-model";
   const projectDir = await mkdtemp(join(tmpdir(), "vvoc-guardian-project-"));
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-guardian-config-home-"));
@@ -212,7 +218,7 @@ test("GuardianPlugin still allows env model override over the roles.fast default
   expect(guardian?.model).toBe("openai/env-guardian-model");
 });
 
-test("GuardianPlugin fails loudly when built-in fast role cannot resolve to a concrete model", async () => {
+test("GuardianPlugin fails loudly when built-in fast role is invalid in vvoc config", async () => {
   const { projectDir } = await setupGuardianWorkspace({
     roleFast: "not-a-valid-model-selection",
   });
@@ -230,9 +236,7 @@ test("GuardianPlugin fails loudly when built-in fast role cannot resolve to a co
       serverUrl: new URL("http://localhost"),
       $: {} as never,
     }),
-  ).rejects.toMatchObject({
-    code: "UNKNOWN_ROLE",
-  });
+  ).rejects.toThrow(/INVALID_MODEL_SELECTION|provider\/model/);
 });
 
 test("Guardian review failures fall back to manual approval without auto-allow", async () => {

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify primary-session system context injection behavior.
 //   SCOPE: Primary agent injection, repository-memory guidance, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
-//   DEPENDS: [bun:test, src/plugins/system-context-injection/index.ts]
+//   DEPENDS: [bun:test, src/lib/config-layers.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between plugin fixtures.]
 //   LAST_CHANGE: [v0.4.2 - Added coverage for scoped repository-memory guidance.]
 //   LAST_CHANGE: [v0.4.1 - Added coverage for explore-specific compact search/discovery system guidance.]
 //   LAST_CHANGE: [v0.4.0 - Added coverage for vv-controller primary injection and managed analyst subagent exclusion.]
@@ -26,8 +27,25 @@
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for primary-session-only system context injection.]
 // END_CHANGE_SUMMARY
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { SystemContextInjectionPlugin } from "./system-context-injection/index.js";
+
+const previousConfigHome = process.env.XDG_CONFIG_HOME;
+
+beforeEach(() => {
+  resetVvocConfigForTests();
+  process.env.XDG_CONFIG_HOME = `/tmp/vvoc-system-context-empty-config-${process.pid}`;
+});
+
+afterEach(() => {
+  resetVvocConfigForTests();
+  if (previousConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = previousConfigHome;
+  }
+});
 
 function createPluginInput() {
   return {

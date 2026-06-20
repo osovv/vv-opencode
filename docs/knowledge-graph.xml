@@ -30,7 +30,8 @@
         <fn-resolveConfigWriteTargets PURPOSE="Return canonical global or project write paths; project scope writes .opencode/opencode.json and .vvoc/vvoc.json." />
         <fn-resolveVvocConfigSource PURPOSE="Resolve vvoc config source metadata for global, project, or effective reads." />
         <fn-resolveOpenCodeConfigSource PURPOSE="Resolve OpenCode config source metadata for global, project, or effective reads." />
-        <fn-loadEffectiveVvocConfigForRuntime PURPOSE="Load vvoc config for runtime plugins using env -&gt; project -&gt; global -&gt; default precedence." />
+        <fn-loadVvocConfig PURPOSE="Load the effective vvoc config once for runtime plugins, returning the same startup promise and immutable snapshot on all matching calls." />
+        <fn-loadEffectiveVvocConfigForRuntime PURPOSE="Backward-compatible alias for loadVvocConfig." />
       </annotations>
     </M-CONFIG-LAYERS>
 
@@ -102,14 +103,14 @@
     </M-CLI-AGENT-MODELS>
 
     <M-PLUGIN-TOGGLE-CONFIG NAME="PluginToggleConfig" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a shared effective-config `isPluginEnabled()` helper that each plugin factory can call at load time.</purpose>
+      <purpose>Define the canonical plugin toggle names, the `plugins` section shape in vvoc.json, default-all-true values, and a pure `isPluginEnabled()` helper over an already-loaded vvoc config snapshot.</purpose>
       <path>src/lib/plugin-toggle-config.ts</path>
-      <depends>M-CONFIG-LAYERS</depends>
+      <depends>none</depends>
       <verification-ref>V-M-PLUGIN-TOGGLE-CONFIG</verification-ref>
       <annotations>
         <const-PLUGIN_TOGGLE_NAMES PURPOSE="Canonical list of vvoc-managed plugin names: guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction." />
         <fn-createDefaultPluginToggleConfig PURPOSE="Return a Record&lt;string, boolean&gt; with all known plugins set to true." />
-        <fn-isPluginEnabled PURPOSE="Read the effective vvoc config and return whether the named plugin is enabled. Default to true if the specific plugin toggle is absent." />
+        <fn-isPluginEnabled PURPOSE="Return whether the named plugin is enabled from a loaded vvoc config object. Default to true if the specific plugin toggle is absent." />
         <type-VvocPluginToggleConfig PURPOSE="Type alias for Record&lt;string, boolean&gt;." />
       </annotations>
     </M-PLUGIN-TOGGLE-CONFIG>

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
 //   SCOPE: Protocol parsing, resumable task wrapper unwrapping, explicit work-item open contract, mode-aware launch validation, collect-all review-round aggregation, tooling responses, plugin hooks, persistence round-trips, and primary-only guidance injection.
-//   DEPENDS: [bun:test, node:fs, node:path, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
+//   DEPENDS: [bun:test, node:fs, node:path, src/lib/config-layers.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between workflow plugin fixtures.]
 //   LAST_CHANGE: [v0.4.0 - Reworked workflow tests around explicit work-item intent, awaiting_reviews, and collect-all parallel reviewer rounds.]
 //   LAST_CHANGE: [v0.3.8 - Added persistence tests for hydrate/snapshot round-trip, corrupt JSON handling, session cleanup, and store hydration on creation.]
 //   LAST_CHANGE: [v0.3.7 - Added coverage that workflow guidance and tracked launches accept header-first assignment prompts with lightweight XML-like tagged bodies.]
@@ -40,6 +41,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { WorkflowPlugin } from "./workflow/index.js";
 import {
   deleteWorkflowSessionDir,
@@ -77,6 +79,7 @@ import {
   createWorkItemOpenTool,
 } from "./workflow/tooling.js";
 
+const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const SESSION_ID = "session-workflow-explicit";
 
 function openItem(options: {
@@ -532,6 +535,9 @@ function createWorkflowPluginHarness(): Promise<WorkflowPluginHarness> {
 
 describe("workflow plugin integration", () => {
   beforeEach(async () => {
+    resetVvocConfigForTests();
+    process.env.XDG_CONFIG_HOME = `/tmp/vvoc-workflow-empty-config-${process.pid}`;
+
     for (const sessionID of [
       "session-review-only-double-fail",
       "session-needs-context-inflight",
@@ -544,6 +550,14 @@ describe("workflow plugin integration", () => {
   });
 
   afterEach(async () => {
+    resetVvocConfigForTests();
+
+    if (previousConfigHome === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = previousConfigHome;
+    }
+
     for (const sessionID of [
       "session-review-only-double-fail",
       "session-needs-context-inflight",
