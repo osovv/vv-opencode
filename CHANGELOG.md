@@ -1,3 +1,11 @@
+## <small>0.35.27 (2026-06-20)</small>
+
+### Summary
+
+Runtime plugins now load the effective vvoc configuration once during startup and share an immutable snapshot for the lifetime of the process, replacing the previous pattern where each plugin independently discovered and loaded the config. This internal refactor ensures all plugins see the same configuration values, eliminates redundant filesystem reads, and makes plugin toggle checks a pure operation on the already-loaded config object. Users should restart OpenCode after changing <code>vvoc.json</code> — there is no live reload — but otherwise no behavioral changes are expected; this change primarily improves consistency and startup efficiency across Guardian, Hashline Edit, Model Roles, Secrets Redaction, System Context Injection, and Workflow plugins.
+
+* refactor(config): load vvoc runtime config once ([04e414e](https://github.com/osovv/vv-opencode/commit/04e414e))
+
 ## <small>0.35.26 (2026-06-19)</small>
 
 ### Summary
