@@ -10,12 +10,24 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   WORK_ITEM_MODES - Canonical workflow intent values accepted by work_item_open.
 //   WorkItemMode - Explicit workflow intent stored on each work item.
+//   REVIEWER_ROLES - Canonical reviewer role IDs accepted by work_item_open.
 //   ReviewerRole - Domain reviewer role IDs accepted by work_item_open.
 //   ReviewerAgentName - Tracked reviewer subagent names mapped from reviewer roles.
+//   ReviewerResultStatus - Reviewer result statuses that participate in round aggregation.
+//   ReviewRoundResult - Stored result payload for one reviewer in a review round.
 //   ReviewRound - Explicit current-round reviewer progress and results.
 //   WorkItemState - Allowed lifecycle states for a tracked work item.
 //   WorkItemRecord - Canonical in-memory and persisted state record for a work item.
+//   OpenWorkItemInput - Required input fields for idempotent work-item creation.
+//   OpenWorkItemResult - Success or validation result returned by work-item creation.
+//   CloseWorkItemResult - Success or validation result returned by work-item close.
+//   LaunchWorkItemErrorCode - Launch-time validation error codes for tracked agents.
+//   BeginTrackedLaunchResult - Success or validation result returned when marking a tracked launch in flight.
+//   TrackedResultStateErrorCode - Result-time state validation error codes for tracked outputs.
+//   ApplyTrackedResultResult - Success or validation result returned when applying tracked output.
+//   WorkItemStoreData - Snapshot shape used by workflow persistence.
 //   WorkItemStore - Store interface exposing open, launch, result, list, close, and snapshot operations.
 //   createWorkItemStore - Creates a new scoped in-memory work-item store.
 //   openWorkItem - Creates or returns an existing work item by idempotency key.

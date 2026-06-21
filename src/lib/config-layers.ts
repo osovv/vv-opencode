@@ -19,6 +19,7 @@
 //   ConfigWriteTargets - Resolved global or project write target paths.
 //   ProjectConfigRoot - Nearest project config layer metadata.
 //   ConfigLayerOptions - Common layered config resolution inputs.
+//   LoadVvocConfigOptions - Optional runtime config inputs accepted by loadVvocConfig.
 //   findNearestProjectConfigRoot - Finds the closest ancestor with .vvoc/vvoc.json or .opencode/opencode.json(c).
 //   resolveProjectWriteRoot - Selects the project root that project-scope mutations write to.
 //   resolveProjectOpenCodeConfigPath - Selects the canonical project .opencode/opencode.json(c) path.

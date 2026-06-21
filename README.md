@@ -120,7 +120,7 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 | Area | What you get |
 |---|---|
 | **Plugins** | 6 plugins in one pinned package entry — workflow orchestration, model roles, guardian, hashline edit, system context injection, secrets redaction |
-| **Agent System** | `vv-controller` routes work: direct for small changes, `investigator` for bugs, implementer+reviewer loop for risky work, analyst+architect for large features |
+| **Agent System** | `vv-controller` routes work: direct for small changes, `investigator` for bugs, implementer+reviewer loop for risky work, and `vv-spec`/`vv-plan` for large features |
 | **Skills** | `vv-spec` interviews you and writes an XML spec; `vv-plan` maps the spec to interface contracts and acceptance criteria; `vv-execute` runs approved plans; `vv-review` runs a review-only workflow; `vv-reflect` preserves reusable session findings as repository memory |
 | **Spec-to-Code Pipeline** | `vv-spec` → spec review → `vv-plan` → plan review → `vv-implementer` → code review. Three independent review gates cover requirements, contracts, and implementation |
 | **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, skills, prompts, presets |
