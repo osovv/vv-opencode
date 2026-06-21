@@ -20,11 +20,18 @@
     </VF-PLUGIN-INSTALL>
     <VF-CONFIG-SYNC NAME="ManagedConfigSync" USE_CASES="UC-002" DATA_FLOW="DF-CONFIG-SYNC" PRIORITY="high">
       <scenario>User syncs managed vvoc config after changing package versions or moving to another device.</scenario>
-      <expected-outcome>Canonical vvoc schema v3 and managed prompt/skill files are rewritten canonically in the selected global or project layer, the managed default controller stays present in OpenCode config with `model = vv-role:smart`, enhancer/subagent registrations stay present with canonical values and `vv-role:*` references, managed OpenCode config keeps `tools.apply_patch = false`, managed `vv-*` presets are refreshed to vvoc defaults, current explicit role-based values and plugin toggles survive the vvoc.json rewrite where applicable, project scope does not create global skill symlinks or global configs, and pre-role vvoc schemas fail loudly instead of being migrated.</expected-outcome>
+      <expected-outcome>Canonical vvoc schema v3 with required sections including `plugins` and managed prompt/skill files are rewritten canonically in the selected global or project layer, the managed default controller stays present in OpenCode config with `model = vv-role:smart`, enhancer/subagent registrations stay present with canonical values and `vv-role:*` references, managed OpenCode config keeps `tools.apply_patch = false`, managed `vv-*` presets are refreshed to vvoc defaults, current explicit role-based values and plugin toggles survive the vvoc.json rewrite where applicable, project scope does not create global skill symlinks or global configs, old or incomplete vvoc schemas fail loudly without rewrite instead of being migrated, and old pre-rename agent or command entries are left untouched rather than cleaned up.</expected-outcome>
       <required-signals>
         <trace-sequence>inspect canonical config -&gt; parse current role values -&gt; render canonical JSON -&gt; syncManagedAgentRegistrations</trace-sequence>
       </required-signals>
     </VF-CONFIG-SYNC>
+    <VF-STRICT-CURRENT-CUTOVER NAME="StrictCurrentCutover" USE_CASES="UC-002,UC-020" DATA_FLOW="DF-CONFIG-SYNC,DF-UPGRADE,DF-GUARDIAN-REVIEW,DF-HASHLINE-EDIT" PRIORITY="high">
+      <scenario>User has old config, old runtime SDK surfaces, old hashline anchors, or old managed entries after the legacy cutover.</scenario>
+      <expected-outcome>Config mutation paths strict-parse existing vvoc.json and fail before writing on v1/v2/pre-role/incomplete/malformed config, status and doctor report diagnostics without repair, upgrade reports package-install-success plus sync-warning as a partial upgrade with manual fix instructions, Guardian ignores removed old SDK permission methods, Hashline rejects old hash algorithms, and sync writes current managed registrations while leaving old entries untouched.</expected-outcome>
+      <required-signals>
+        <trace-sequence>strict parse current v3 -&gt; refuse invalid existing config before write -&gt; diagnostic commands report parseError -&gt; runtime fallback removal tests assert old branches are not called</trace-sequence>
+      </required-signals>
+    </VF-STRICT-CURRENT-CUTOVER>
     <VF-LAYERED-CONFIG NAME="LayeredConfig" USE_CASES="UC-LAYERED-CONFIG" DATA_FLOW="DF-LAYERED-CONFIG" PRIORITY="high">
       <scenario>Commands or runtime plugins resolve vvoc/OpenCode config from env overrides, nearest project layer, global layer, or defaults.</scenario>
       <expected-outcome>Effective reads choose env overrides first, then nearest project-local .vvoc/.opencode files, then global config, then defaults only when allowed. Project read/list/validate/launch is strict and never falls back to global when local config is missing or invalid. Project writes create or update only ./.opencode/** and ./.vvoc/**.</expected-outcome>
@@ -183,9 +190,9 @@
 
   <VerificationMatrix SCOPE="Phase-12">
     <VM-PLUGIN-TOGGLE-CONFIG MODULE="M-PLUGIN-TOGGLE-CONFIG" FLOW="DF-PLUGIN-TOGGLE-CHECK" PRIORITY="medium">
-      <scenario>isPluginEnabled reads vvoc.json and returns true/false based on the plugins section. Defaults to true when section is missing.</scenario>
+      <scenario>isPluginEnabled reads an already-loaded config object and returns true/false based on the plugins section. Canonical vvoc.json validation still requires the plugins section in schema v3.</scenario>
       <primary-evidence>deterministic assertions on isPluginEnabled with known plugin names and config fixtures</primary-evidence>
-      <trajectory-evidence>edge-case assertions for missing config, missing plugins section, unknown plugin names</trajectory-evidence>
+      <trajectory-evidence>edge-case assertions for missing config, missing individual plugin toggles, unknown plugin names, plus schema validation coverage for missing plugins section</trajectory-evidence>
       <telemetry>none required beyond return-value surfaces</telemetry>
     </VM-PLUGIN-TOGGLE-CONFIG>
     <VM-CLI-PLUGIN-TOGGLE MODULE="M-CLI-PLUGIN-TOGGLE" FLOW="DF-PLUGIN-TOGGLE" PRIORITY="medium">
@@ -216,13 +223,13 @@
       <telemetry>none required beyond explicit thrown-error surfaces</telemetry>
     </VM-ROLE-PARSING>
     <VM-CONFIG-SEED MODULE="M-CLI-CONFIG" FLOW="DF-PLUGIN-INSTALL" PRIORITY="high">
-      <scenario>Install or init seeds schema v3, built-in roles, managed `vv-*` role presets, managed default controller, managed command definitions, and role-reference OpenCode root defaults plus built-in `explore` and managed agents, with vv-controller specifically bound to `vv-role:smart`.</scenario>
+      <scenario>Install or init seeds schema v3 including plugins, built-in roles, managed `vv-*` role presets, managed default controller, managed skills, and role-reference OpenCode root defaults plus built-in `explore` and managed agents, with vv-controller specifically bound to `vv-role:smart`.</scenario>
       <primary-evidence>temp-home integration checks plus exact config assertions</primary-evidence>
       <trajectory-evidence>OpenCode config diff assertions proving `vv-role:*` writes instead of literal provider/model writes</trajectory-evidence>
       <telemetry>installation inspection output plus stable config snapshots</telemetry>
     </VM-CONFIG-SEED>
     <VM-CONFIG-SYNC MODULE="M-CLI-CONFIG" FLOW="DF-CONFIG-SYNC" PRIORITY="high">
-      <scenario>Sync preserves user-owned custom roles while refreshing managed role presets, keeping root defaults, `default_agent`, managed command definitions, built-in `explore`, and managed agents on canonical managed values, and rejecting unsupported pre-role schemas.</scenario>
+      <scenario>Sync preserves user-owned custom roles and plugin toggles while refreshing managed role presets, keeping root defaults, `default_agent`, built-in `explore`, and current managed agents on canonical managed values; it rejects old or invalid vvoc schemas and leaves old command/agent entries untouched.</scenario>
       <primary-evidence>deterministic config round-trip assertions</primary-evidence>
       <trajectory-evidence>trace assertions on parse -&gt; refresh -&gt; rewrite order</trajectory-evidence>
       <telemetry>stable rewrite summaries and doctor/status inspection snapshots</telemetry>
@@ -377,6 +384,7 @@
       <test-files>
         <file>src/lib/config-layers.test.ts</file>
         <file>src/lib/opencode.test.ts</file>
+        <file>src/commands/sync.test.ts</file>
         <file>src/lib/managed-agents.test.ts</file>
       </test-files>
       <module-checks>
@@ -391,20 +399,22 @@
         <scenario-2 kind="success">Existing JSONC comments survive plugin insertion and managed OpenCode role-reference rewrites while sibling `tools.*` entries stay untouched when `tools.apply_patch` is forced false.</scenario-2>
         <scenario-3 kind="success">Global path resolution separates `opencode/` from `vvoc/vvoc.json`, while project scope writes .opencode/opencode.json plus .vvoc/vvoc.json/agents/skills/plans.</scenario-3>
         <scenario-4 kind="success">Managed enhancer/subagent registrations point OpenCode at scope-correct prompt references and use `vv-role:*` model values instead of hardcoded provider/model strings.</scenario-4>
-        <scenario-5 kind="success">Canonical vvoc.json is fully seeded, section writes preserve unrelated sections, drifted managed presets including `vv-deepseek` are refreshed during canonical rewrites, and custom non-managed presets survive unchanged.</scenario-5>
+        <scenario-5 kind="success">Canonical vvoc.json is fully seeded with required schema v3 sections including `plugins`, section writes preserve unrelated sections, drifted managed presets including `vv-deepseek` are refreshed during canonical rewrites, and custom non-managed presets survive unchanged.</scenario-5>
         <scenario-6 kind="success">Install and sync write root OpenCode `model = vv-role:default`, `small_model = vv-role:fast`, `tools.apply_patch = false`, built-in `agent.explore`, and managed agent role references instead of concrete provider/model values.</scenario-6>
-        <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role vvoc schema versions instead of migrating them.</scenario-7>
+        <scenario-7 kind="failure">Strict reads and sync fail on unsupported pre-role, missing required `plugins`, malformed, or otherwise invalid existing vvoc config instead of migrating or repairing it.</scenario-7>
         <scenario-8 kind="success">Managed prompt templates keep a stable enhancer schema plus consistent status/reporting vocabulary across implementer, reviewers, and investigator flows.</scenario-8>
         <scenario-9 kind="success">Managed prompt templates externalize compact working state, support rerouting and project-owned overlays, preserve semantic continuity, require explicit material assumptions, and guard against drift.</scenario-9>
         <scenario-10 kind="success">Managed skill install and sync distribute vv-reflect alongside vv-spec, vv-plan, vv-review, and vv-execute, including bundled skill reference files such as vv-spec design-context-template.xml, without creating .vvoc/lessons, .vvoc/runbooks, or fallback indexes eagerly.</scenario-10>
         <scenario-11 kind="success">Project-scope install/init/sync do not create global OpenCode config, global vvoc config, or global OpenCode skill symlink side effects.</scenario-11>
         <scenario-12 kind="failure">Managed skill sync must not overwrite or create reference files when the parent SKILL.md is user-owned/custom (no YAML frontmatter) and force is false. This prevents silent clobbering of custom reference files.</scenario-12>
+        <scenario-13 kind="success">syncManagedAgentRegistrations writes current vvoc-managed agent registrations while preserving old-name agents and old command entries instead of cleaning them up.</scenario-13>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>Sync must keep the canonical role map in vvoc.json and keep OpenCode config role-reference based instead of storing concrete target overrides there.</assertion-1>
         <assertion-2>Install and sync must not materialize literal provider/model defaults into managed OpenCode model-bearing fields, except inside lower-level provider alias patch objects.</assertion-2>
         <assertion-3>Project-scope writes must stay inside .opencode and .vvoc under the selected project root.</assertion-3>
+        <assertion-4>Existing invalid vvoc.json content must remain byte-for-byte unchanged when strict sync rejects it.</assertion-4>
       </required-trace-assertions>
       <wave-follow-up>Expand temp-home smoke coverage for `vvoc install` and `vvoc sync` so seeded role references and managed prompt writes stay deterministic.</wave-follow-up>
       <phase-follow-up>Add snapshot coverage for rendered OpenCode config that includes all managed role-reference fields in one fixture.</phase-follow-up>
@@ -538,6 +548,7 @@
     <V-M-CLI-COMMANDS MODULE="M-CLI-COMMANDS" PRIORITY="medium">
       <test-files>
         <file>src/commands/completion.test.ts</file>
+        <file>src/commands/sync.test.ts</file>
         <file>src/commands/launch.test.ts</file>
         <file>src/commands/status.test.ts</file>
         <file>src/commands/doctor.test.ts</file>
@@ -558,6 +569,7 @@
         <scenario-4 kind="success">`vvoc status` and `vvoc doctor` report selected source kind/path, role assignments, and unresolved role problems without depending on the removed `vvoc agent` surface.</scenario-4>
         <scenario-5 kind="success">`vvoc launch` builds deterministic opencode args/env, forwards passthrough args, and preserves subprocess exit code.</scenario-5>
         <scenario-6 kind="failure">`vvoc launch --scope project` fails with an install hint when the project layer is missing.</scenario-6>
+        <scenario-7 kind="failure">`vvoc sync` rejects invalid existing vvoc config, preserves the original file content, and does not silently repair old schemas.</scenario-7>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -611,6 +623,7 @@
         <scenario-2 kind="success">Guardian resolves its runtime model from the built-in `fast` role without depending on `ModelRolesPlugin` hook ordering.</scenario-2>
         <scenario-3 kind="failure">Guardian initialization fails loudly when the built-in `fast` role cannot be resolved to a valid concrete model selection.</scenario-3>
         <scenario-4 kind="failure">Review failures fall back to manual approval instead of silently allowing.</scenario-4>
+        <scenario-5 kind="failure">Permission response handling never calls the removed old SDK `postSessionIdPermissionsPermissionId` branch; it uses current `permission.reply` or the current HTTP reply fallback.</scenario-5>
       </scenarios>
       <required-log-markers>
         <marker-1>[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded</marker-1>
@@ -620,6 +633,7 @@
       <required-trace-assertions>
         <assertion-1>Auto-allow only occurs when Guardian returns a risk score below the configured threshold.</assertion-1>
         <assertion-2>The built-in `fast` role must be resolved before Guardian agent registration is exposed to OpenCode runtime hooks.</assertion-2>
+        <assertion-3>Guardian tests must prove removed old permission API methods are ignored, not invoked as a compatibility fallback.</assertion-3>
       </required-trace-assertions>
       <wave-follow-up>Add isolated behavioral tests around assessment parsing and decision thresholds.</wave-follow-up>
       <phase-follow-up>Add a temp-config harness that verifies Guardian role resolution and env override precedence if model env escapes remain supported.</phase-follow-up>
@@ -649,6 +663,7 @@
         <scenario-10 kind="failure">If visible read rows no longer match the file by the time the read hook runs, the enhancer must not pair stale displayed content with anchors from the later file snapshot.</scenario-10>
         <scenario-11 kind="failure">Insert operations anchored inside a multi-line replacement range are rejected instead of being applied after range-collapse line drift.</scenario-11>
         <scenario-12 kind="failure">Insert operations anchored to a deleted single-line replacement are rejected instead of being applied after delete-induced line drift.</scenario-12>
+        <scenario-13 kind="failure">Old whitespace-collapsed hashline hashes are rejected; validation accepts only current line hash and context anchor computation.</scenario-13>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -657,6 +672,7 @@
         <assertion-3>The write-back path must preserve the original BOM and line-ending style recorded during canonicalization.</assertion-3>
         <assertion-4>Read-output context anchors must be computed from the same full-file line content that edit validation uses when the read hook can resolve the file path.</assertion-4>
         <assertion-5>Read-output source snapshots must be trusted only when visible non-truncated rows still match the file content.</assertion-5>
+        <assertion-6>Hash validation must not try a removed legacy hash algorithm after current hash comparison fails.</assertion-6>
       </required-trace-assertions>
       <wave-follow-up>Add direct validation and batch-ordering tests if live sessions still report corruption after the new regression coverage lands.</wave-follow-up>
     </V-M-PLUGIN-HASHLINE-EDIT>
@@ -696,7 +712,7 @@
       <scenarios>
         <scenario-1 kind="success">PLUGIN_TOGGLE_NAMES exposes exactly guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction.</scenario-1>
         <scenario-2 kind="success">createDefaultPluginToggleConfig returns all-known-plugins record with all values set to true.</scenario-2>
-        <scenario-3 kind="success">isPluginEnabled returns true for a known plugin when the plugins section is absent (backward compatibility).</scenario-3>
+        <scenario-3 kind="success">isPluginEnabled returns true for a known plugin when the already-loaded config object lacks a specific toggle, while schema validation separately rejects persisted vvoc.json files missing the required plugins section.</scenario-3>
         <scenario-4 kind="success">isPluginEnabled returns true when plugins[name] is true.</scenario-4>
         <scenario-5 kind="success">isPluginEnabled returns false when plugins[name] is false.</scenario-5>
         <scenario-6 kind="failure">isPluginEnabled returns true for unknown plugin names (safe default).</scenario-6>
@@ -804,12 +820,14 @@
         <scenario-2 kind="failure">Invalid JSON reports parse error with line/column.</scenario-2>
         <scenario-3 kind="failure">Missing required built-in role ids, invalid role assignment strings, or invalid field types report the schema path and error.</scenario-3>
         <scenario-4 kind="failure">Presets with malformed role assignments fail semantic validation with the offending preset and role path.</scenario-4>
-        <scenario-5 kind="failure">Pre-role vvoc schema versions report an unsupported-version failure instead of being accepted leniently.</scenario-5>
+        <scenario-5 kind="failure">Pre-role vvoc schema versions report an unsupported-version failure instead of being accepted or migrated.</scenario-5>
+        <scenario-6 kind="failure">Current schema v3 documents missing the required `plugins` section fail validation.</scenario-6>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>Schema validation must reject pre-role vvoc schema versions before attempting any field-level validation.</assertion-1>
         <assertion-2>Semantic validation for presets must report the offending preset name and role path in the error message.</assertion-2>
+        <assertion-3>Schema validation must treat `plugins` as a required current-v3 section, not as an optional compatibility default.</assertion-3>
       </required-trace-assertions>
       <wave-follow-up>Run against real config files in the repository.</wave-follow-up>
     </V-M-CLI-CONFIG-VALIDATE>
@@ -853,7 +871,7 @@
         <scenario-1 kind="success">Lists all plugins when OpenCode config has a populated plugin array.</scenario-1>
         <scenario-2 kind="success">Shows `ModelRolesPlugin` when the package exports are wired correctly.</scenario-2>
         <scenario-3 kind="success">When vvoc.json has a plugins section, the vvoc status column shows enabled/disabled per vvoc-managed plugin.</scenario-3>
-        <scenario-4 kind="success">When vvoc.json has no plugins section, vvoc status column shows N/A or equivalent indicator.</scenario-4>
+        <scenario-4 kind="success">When selected vvoc config is missing or strict parsing fails, the OpenCode plugin list still renders and vvoc toggle details are omitted rather than inferred from a legacy default.</scenario-4>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
@@ -951,11 +969,13 @@
         <scenario-1 kind="success">Reports `already latest` when npm returns same version.</scenario-1>
         <scenario-2 kind="success">When npm returns a newer version, the command runs exactly `bun add -g @osovv/vv-opencode@&lt;latest&gt;` and then runs `vvoc sync` without project scope arguments.</scenario-2>
         <scenario-3 kind="failure">Registry or network failure is caught and reported gracefully.</scenario-3>
+        <scenario-4 kind="failure">When package installation succeeds but post-install sync exits non-zero or fails to launch, the command returns `sync-warning`, reports a partial upgrade, and instructs the user to fix vvoc.json manually before rerunning sync.</scenario-4>
       </scenarios>
       <required-log-markers />
       <required-trace-assertions>
         <assertion-1>The upgrade command must detect and report &quot;already latest&quot; without making any network install attempt.</assertion-1>
         <assertion-2>Network failures must be caught and reported gracefully without crashing or leaving partial state.</assertion-2>
+        <assertion-3>Post-install sync failure must not be described as completed config refresh or automatic migration; it is a partial upgrade warning.</assertion-3>
       </required-trace-assertions>
       <wave-follow-up>Mock npm registry responses and subprocess execution so upgrade coverage never performs real global installs.</wave-follow-up>
     </V-M-CLI-UPGRADE>
@@ -1294,7 +1314,7 @@
         <command-8>bun run pack:check</command-8>
       </commands>
       <required-evidence>
-        <evidence-1>isPluginEnabled returns correct boolean for all config shapes including missing section.</evidence-1>
+        <evidence-1>isPluginEnabled returns correct boolean for loaded config objects, while schema validation rejects persisted current-v3 configs that omit the required plugins section.</evidence-1>
         <evidence-2>CLI enable/disable round-trips cleanly and validates plugin names.</evidence-2>
         <evidence-3>Each plugin factory returns {} when its plugin name is set to false in vvoc.json.</evidence-3>
         <evidence-4>vvoc plugin list shows a vvoc status column reflecting the plugins section.</evidence-4>

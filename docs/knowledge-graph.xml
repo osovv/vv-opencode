@@ -36,17 +36,17 @@
     </M-CONFIG-LAYERS>
 
     <M-CLI-CONFIG NAME="OpenCodeConfigTools" TYPE="UTILITY" STATUS="implemented">
-      <purpose>Layer-aware OpenCode/vvoc config mutation, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, built-in `explore`, managed agents, local skill path registration, canonical vvoc schema v3 rendering with built-in role presets, and installation inspection.</purpose>
+      <purpose>Layer-aware OpenCode/vvoc config mutation with strict current schema v3 parsing, pinned plugin registration, role-reference writes for root OpenCode model fields, managed `default_agent`, built-in `explore`, current managed agents, local skill path registration, canonical vvoc schema v3 rendering with required plugins and built-in role presets, and diagnostic installation inspection.</purpose>
       <path>src/lib/opencode.ts + src/lib/config-layers.ts + src/lib/package.ts + src/lib/vvoc-config.ts + src/lib/vvoc-preset-registry.ts + src/lib/model-roles.ts + src/lib/vvoc-paths.ts + schemas/vvoc/v3.json</path>
       <depends>M-CONFIG-LAYERS, M-MODEL-ROLES, M-VVOC-PRESET-REGISTRY, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS, M-CLI-AGENT-MODELS</depends>
       <verification-ref>V-M-CLI-CONFIG</verification-ref>
       <annotations>
         <fn-resolvePaths PURPOSE="Resolve OpenCode and vvoc paths using canonical global or project-local layers." />
         <fn-ensurePackageInstalled PURPOSE="Add the pinned vvoc package specifier to the OpenCode plugin array if needed." />
-        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, `default_agent: vv-controller`, built-in `explore`, vvoc-managed OpenCode agent registrations, tools.apply_patch=false, and local managed skill discovery path on canonical values." />
-        <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as schema v3 and reject unsupported pre-role versions." />
-        <fn-syncVvocConfig PURPOSE="Rewrite the selected vvoc.json document while preserving valid user-owned role assignments, plugin toggles, and refreshing managed `vv-*` role presets." />
-        <fn-inspectInstallationForScope PURPOSE="Inspect status/doctor sources using global, project, or effective layered source selection." />
+        <fn-syncManagedAgentRegistrations PURPOSE="Ensure OpenCode config keeps root defaults, `default_agent: vv-controller`, built-in `explore`, current vvoc-managed OpenCode agent registrations, tools.apply_patch=false, and local managed skill discovery path on canonical values while leaving old unrelated agent/command entries untouched." />
+        <fn-parseVersionedVvocConfigText PURPOSE="Strictly parse vvoc.json as current schema v3, including required plugins, and reject unsupported or incomplete legacy shapes." />
+        <fn-syncVvocConfig PURPOSE="Rewrite the selected vvoc.json document only after strict-reading a valid current config, preserving user-owned role assignments and plugin toggles while refreshing managed `vv-*` role presets." />
+        <fn-inspectInstallationForScope PURPOSE="Inspect status/doctor sources using global, project, or effective layered source selection and report invalid vvoc config diagnostics without repair." />
       </annotations>
     </M-CLI-CONFIG>
 
@@ -178,7 +178,7 @@
     </M-VVOC-PRESET-REGISTRY>
 
     <M-PLUGIN-GUARDIAN NAME="GuardianPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role in the effective vvoc config source.</purpose>
+      <purpose>Review OpenCode permission requests using a constrained hidden Guardian subagent whose runtime model resolves from the built-in `fast` role in the effective strict-current vvoc config source, then reply through the current OpenCode permission API or current HTTP reply fallback.</purpose>
       <path>src/plugins/guardian/index.ts + templates/agents/guardian.md</path>
       <depends>M-CONFIG-LAYERS, M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-PLUGIN-GUARDIAN</verification-ref>
@@ -188,7 +188,7 @@
     </M-PLUGIN-GUARDIAN>
 
     <M-PLUGIN-HASHLINE-EDIT NAME="HashlineEditPlugin" TYPE="INTEGRATION" STATUS="implemented">
-      <purpose>Replace OpenCode's default `edit` tool with a hash-anchored variant and rewrite `read` output to stable `line#hash#anchor|content` rows so stale edits are rejected before file corruption.</purpose>
+      <purpose>Replace OpenCode's default `edit` tool with a current hash-anchored variant and rewrite `read` output to stable `line#hash#anchor|content` rows so stale or old-algorithm edits are rejected before file corruption.</purpose>
       <path>src/plugins/hashline-edit/*.ts</path>
       <depends>none</depends>
       <verification-ref>V-M-PLUGIN-HASHLINE-EDIT</verification-ref>
@@ -306,7 +306,7 @@
     </M-PLUGIN-WORKFLOW>
 
     <M-WORKFLOW-PERSISTENCE NAME="WorkflowPersistence" TYPE="DATA_LAYER" STATUS="implemented">
-      <purpose>Hydrate and snapshot work-item workflow state from/to per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json.</purpose>
+      <purpose>Hydrate and snapshot work-item workflow state from/to per-session JSON files under $XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json, treating missing, corrupt, or incomplete state as fail-closed empty state.</purpose>
       <path>src/plugins/workflow/persistence.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-WORKFLOW-PERSISTENCE</verification-ref>
@@ -317,7 +317,7 @@
       </annotations>
     </M-WORKFLOW-PERSISTENCE>
     <M-CLI-CONFIG-VALIDATE NAME="ConfigValidate" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Validate canonical vvoc.json against the role-based vvoc JSON Schema v3 with human-readable error reporting.</purpose>
+      <purpose>Validate canonical strict-current vvoc.json against the role-based vvoc JSON Schema v3, including the required plugins section, with human-readable error reporting.</purpose>
       <path>src/commands/config-validate.ts + src/commands/config.ts</path>
       <depends>M-CLI-CONFIG, M-MODEL-ROLES</depends>
       <verification-ref>V-M-CLI-CONFIG-VALIDATE</verification-ref>
@@ -393,12 +393,12 @@
     </M-CLI-INIT>
 
     <M-CLI-UPGRADE NAME="Upgrade" TYPE="ENTRY_POINT" STATUS="implemented">
-      <purpose>Check npm for updates, install the latest global package with Bun, and run post-install sync from a fresh subprocess.</purpose>
+      <purpose>Check npm for updates, install the latest global package with Bun, and run post-install sync from a fresh subprocess while reporting sync failure as an explicit partial upgrade.</purpose>
       <path>src/commands/upgrade.ts</path>
       <depends>M-CLI-CONFIG</depends>
       <verification-ref>V-M-CLI-UPGRADE</verification-ref>
       <annotations>
-        <fn-runUpgradeFlow PURPOSE="Execute the full upgrade flow, including Bun global install and warning-only post-install sync handling." />
+        <fn-runUpgradeFlow PURPOSE="Execute the full upgrade flow, including Bun global install and partial-upgrade warning handling when post-install sync fails." />
         <cmd-upgrade PURPOSE="vvoc upgrade - CLI command for globally upgrading vvoc and then running sync." />
       </annotations>
     </M-CLI-UPGRADE>

@@ -179,7 +179,7 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
 | `vvoc patch-provider stepfun-ai\|zai\|openai` | Patch an OpenCode provider preset in global or project scope |
 | `vvoc completion` | Install shell completions |
-| `vvoc upgrade` | Upgrade global package and run follow-up sync |
+| `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |
 
 ---
@@ -251,7 +251,11 @@ Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect 
                            ./.vvoc/runbooks/*.xml             (lazy vv-reflect fallback)
 ```
 
-Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`.
+Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`. The current config contract is strict: `vvoc.json` must be canonical version 3 and include required sections such as `plugins`. Existing v1/v2/pre-role, incomplete, malformed, or otherwise invalid config files fail instead of being migrated or repaired. `vvoc install` and `vvoc sync` may create a fresh canonical config when no config exists, but they refuse to rewrite an invalid existing `vvoc.json`; fix the file manually and rerun `vvoc sync`.
+
+`vvoc status` and `vvoc doctor` are diagnostic exceptions: they report the selected config path and validation problem without normalizing or rewriting the file. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; in that case it reports a partial upgrade, leaves config unchanged, and tells you to fix `vvoc.json` manually before rerunning `vvoc sync`.
+
+Runtime compatibility is current-only. Guardian permission replies use the current OpenCode permission reply path (with the current HTTP reply fallback), Hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
 
 Runtime plugins load the effective `vvoc.json` once during OpenCode startup and share the same immutable config snapshot for the lifetime of the process. There is no live reload; restart OpenCode after changing `vvoc.json`.
 

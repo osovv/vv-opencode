@@ -16,16 +16,16 @@
       <Action>Runs `vvoc install` for global or project scope.</Action>
       <Goal>To register `@osovv/vv-opencode` in OpenCode config, seed canonical role assignments in `$XDG_CONFIG_HOME/vvoc/vvoc.json`, set the managed default controller agent, and write shared OpenCode model fields and managed agents to `vv-role:*` references instead of concrete provider-specific model IDs.</Goal>
       <Preconditions>Bun and OpenCode are available, and the target config locations are writable.</Preconditions>
-      <AcceptanceCriteria>The package name appears in the resolved OpenCode config, canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`, built-in roles are fully seeded, OpenCode `default_agent` is `vv-controller`, managed `/vv-plan` and `/vv-review` command definitions exist, and OpenCode model-bearing fields reference `vv-role:*` semantics rather than literal target-specific overrides.</AcceptanceCriteria>
+      <AcceptanceCriteria>The package name appears in the resolved OpenCode config, canonical `vvoc.json` is created under `$XDG_CONFIG_HOME/vvoc/`, built-in roles are fully seeded, OpenCode `default_agent` is `vv-controller`, managed skills such as `vv-plan` and `vv-review` are installed through the vvoc skills path, and OpenCode model-bearing fields reference `vv-role:*` semantics rather than literal target-specific overrides.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-PLUGIN-INSTALL</RelatedFlows>
     </UC-001>
     <UC-002>
       <Actor>User</Actor>
       <Action>Runs `vvoc sync` on another machine or after package updates.</Action>
-      <Goal>To refresh canonical vvoc-owned config, managed prompt files, built-in role presets, default controller selection, managed command definitions, and managed OpenCode registrations without reintroducing target-based model config or legacy vvoc schema migrations.</Goal>
-      <Preconditions>The target OpenCode config and canonical vvoc config can be created or updated.</Preconditions>
-      <AcceptanceCriteria>The canonical `vvoc.json` file is rewritten canonically as the current role-based schema, managed prompts are refreshed, OpenCode `default_agent` remains `vv-controller`, managed `/vv-plan` and `/vv-review` commands are refreshed, and managed OpenCode fields continue to point at `vv-role:*` references.</AcceptanceCriteria>
+      <Goal>To refresh canonical vvoc-owned config, managed prompt and skill files, built-in role presets, default controller selection, and current managed OpenCode registrations without reintroducing target-based model config, old managed command cleanup, or legacy vvoc schema migrations.</Goal>
+      <Preconditions>The target OpenCode config and canonical vvoc config can be created or updated. If a vvoc config already exists, it must be valid current version 3.</Preconditions>
+      <AcceptanceCriteria>The canonical `vvoc.json` file is rewritten only from a strict-valid current schema v3 document with required sections such as `plugins`, invalid or old existing configs fail before any rewrite, managed prompts and skills are refreshed, OpenCode `default_agent` remains `vv-controller`, old pre-rename or old command entries are left untouched, and managed OpenCode fields continue to point at `vv-role:*` references.</AcceptanceCriteria>
       <Priority>high</Priority>
       <RelatedFlows>DF-CONFIG-SYNC</RelatedFlows>
     </UC-002>
@@ -164,6 +164,15 @@
       <Priority>medium</Priority>
       <RelatedFlows>DF-PLUGIN-LIST</RelatedFlows>
     </UC-019>
+    <UC-020>
+      <Actor>User</Actor>
+      <Action>Runs `vvoc upgrade` when their existing vvoc config is old or invalid.</Action>
+      <Goal>To complete the package installation while making any strict post-install sync failure explicit and recoverable by manual config repair.</Goal>
+      <Preconditions>Bun can install the package globally, and the follow-up `vvoc sync` may encounter an invalid existing `vvoc.json`.</Preconditions>
+      <AcceptanceCriteria>The package install result remains successful, the command reports a partial upgrade with the sync failure reason, no migration or repair is attempted, and the user is instructed to fix `vvoc.json` manually and rerun `vvoc sync`.</AcceptanceCriteria>
+      <Priority>high</Priority>
+      <RelatedFlows>DF-UPGRADE</RelatedFlows>
+    </UC-020>
   </UseCases>
 
   <NonGoals>
@@ -173,6 +182,9 @@
     <item-6>No full persistent recovery across process restarts in workflow v1.</item-6>
     <item-7>No workflow tracking for `investigator`, `guardian`, `enhancer` in v1.</item-7>
     <item-8>No per-plugin granularity beyond the vvoc-managed plugin set in v1 — plugin toggle does not extend to user-defined OpenCode plugins.</item-8>
+    <item-9>No automatic migration, lenient repair, backup-and-recreate behavior, or old-field defaulting for existing v1/v2/pre-role/incomplete/malformed vvoc configs.</item-9>
+    <item-10>No runtime compatibility fallback for removed Guardian old SDK permission methods or old Hashline hash algorithms; the current OpenCode permission reply path and current hashline anchors are required.</item-10>
+    <item-11>No deletion or migration of old pre-rename managed-agent or old command entries during sync; current sync writes current managed registrations and leaves those old entries untouched.</item-11>
   </NonGoals>
 
   <Constraints>
@@ -181,7 +193,7 @@
     <constraint-3>Persisted vvoc data must live under `$XDG_DATA_HOME/vvoc/`, not inside the OpenCode config tree.</constraint-3>
     <constraint-4>Config writes must be idempotent and preserve existing JSONC comments in the main OpenCode config where practical.</constraint-4>
     <constraint-16>The `plugins` toggle section governs vvoc-managed plugins only: `guardian`, `hashline-edit`, `model-roles`, `system-context-injection`, `workflow`, and `secrets-redaction`. User-registered OpenCode plugins are out of scope.</constraint-16>
-    <constraint-17>If the `plugins` section is absent from vvoc.json, all vvoc plugins are treated as enabled (backward compatibility).</constraint-17>
+    <constraint-17>Canonical vvoc schema v3 requires the `plugins` section. The pure `isPluginEnabled` helper may still default a missing individual toggle to enabled only after a config object has already been loaded.</constraint-17>
     <constraint-18>The `vvoc sync` command must preserve the `plugins` section values rather than resetting them to defaults.</constraint-18>
     <constraint-6>Generated canonical vvoc config must be fully seeded and versioned by schema rather than split across multiple CLI-managed files.</constraint-6>
     <constraint-7>Semantic role assignments must live in canonical global vvoc config, while OpenCode config stores `vv-role:*` references that are resolved at runtime.</constraint-7>
@@ -192,7 +204,11 @@
     <constraint-12>Tracked subagent names must follow the `vv-*` naming convention: `vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`.</constraint-12>
     <constraint-13>Workflow plugin must not pollute untracked subagent prompts or untracked task launches.</constraint-13>
     <constraint-14>The `vv-spec` and `vv-plan` skills write durable spec and plan artifacts under project-local `.vvoc/specs/&lt;id&gt;/`.</constraint-14>
-    <constraint-15>`vvoc install` and `vvoc sync` treat OpenCode `default_agent`, managed agent definitions, and managed `/vv-plan` plus `/vv-review` command definitions as vvoc-owned.</constraint-15>
+    <constraint-15>`vvoc install` and `vvoc sync` treat OpenCode `default_agent`, current managed agent definitions, and managed skills path contents as vvoc-owned.</constraint-15>
+    <constraint-19>Existing vvoc config files must be parsed strictly as current schema v3 before mutation; `status` and `doctor` may catch parse failures only to report diagnostics without repair.</constraint-19>
+    <constraint-20>`vvoc upgrade` must treat post-install sync failure as a partial upgrade: package installation can remain successful, but config must remain unchanged and the user must manually fix `vvoc.json` before rerunning sync.</constraint-20>
+    <constraint-21>Guardian permission replies must use the current OpenCode permission reply path or current HTTP reply fallback; old SDK permission method names are not called.</constraint-21>
+    <constraint-22>Hashline edit validation must accept only current line and context hash anchors.</constraint-22>
   </Constraints>
 
   <Risks>
@@ -206,6 +222,8 @@
     <risk-9>Forcing OpenCode `default_agent` to `vv-controller` during sync may surprise users who intentionally selected another default primary agent.</risk-9>
     <risk-10>A user disables a critical plugin (e.g., `workflow` or `model-roles`) and forgets to re-enable it, causing workflow enforcement or role resolution to silently stop working.</risk-10>
     <risk-11>Config-less plugins (`hashline-edit`, `system-context-injection`) need new config-reading code that could fail in edge cases like unreadable vvoc.json.</risk-11>
+    <risk-12>Users with old or hand-edited vvoc configs must manually update them to schema v3 before sync or runtime plugins can proceed.</risk-12>
+    <risk-13>OpenCode or saved edit references from removed compatibility eras may fail loudly until users update OpenCode or refresh hashline reads.</risk-13>
   </Risks>
 
   <OpenQuestions>
