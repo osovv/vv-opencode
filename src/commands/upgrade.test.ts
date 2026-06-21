@@ -1,8 +1,8 @@
 // FILE: src/commands/upgrade.test.ts
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Tests for M-CLI-UPGRADE - global-only Bun upgrade and fresh subprocess sync.
-//   SCOPE: Already-latest handling, registry failures, Bun install execution, post-install sync behavior, jsDelivr changelog output, multi-version changelog display, graceful degradation, and prerelease version resolution.
+//   PURPOSE: Tests for M-CLI-UPGRADE - global-only Bun upgrade, fresh subprocess sync, and partial-upgrade warnings.
+//   SCOPE: Already-latest handling, registry failures, Bun install execution, post-install sync behavior, partial sync-warning messaging, jsDelivr changelog output, multi-version changelog display, graceful degradation, and prerelease version resolution.
 //   DEPENDS: [src/commands/upgrade.ts]
 //   LINKS: [M-CLI-UPGRADE]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Added explicit partial-upgrade warning coverage for sync failures and sync launch errors.]
 //   LAST_CHANGE: [v0.6.0 - Added tests for multi-version changelog, graceful degradation, and --allow-prerelease flag.]
 // END_CHANGE_SUMMARY
 
@@ -180,7 +181,38 @@ test("runUpgradeFlow - warns when post-install sync fails but keeps upgrade succ
     ["vvoc", "sync"],
   ]);
   expect(logger.warnLines.join("\n")).toContain("sync failed");
-  expect(logger.warnLines.join("\n")).toContain("Run `vvoc sync` manually");
+  expect(logger.warnLines.join("\n")).toContain("Upgrade partial");
+  expect(logger.warnLines.join("\n")).toContain("Fix vvoc.json manually, then run `vvoc sync`.");
+});
+
+test("runUpgradeFlow - warns partial upgrade when post-install sync launch throws", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  let callCount = 0;
+
+  const result = await runUpgradeFlow({
+    fetchLatestVersion: async () => "0.15.0",
+    fetchChangelog: async () => null,
+    getCurrentVersion: async () => "0.14.0",
+    logger,
+    runSubprocess: async (command) => {
+      commands.push([...command]);
+      callCount += 1;
+      if (callCount === 1) {
+        return { exitCode: 0, stderr: "", stdout: "installed" };
+      }
+      throw new Error("sync launch failed");
+    },
+  });
+
+  expect(result).toEqual({ exitCode: 0, status: "sync-warning" });
+  expect(commands).toEqual([
+    ["bun", "add", "-g", "@osovv/vv-opencode@0.15.0"],
+    ["vvoc", "sync"],
+  ]);
+  expect(logger.warnLines.join("\n")).toContain("sync launch failed");
+  expect(logger.warnLines.join("\n")).toContain("Upgrade partial");
+  expect(logger.warnLines.join("\n")).toContain("Fix vvoc.json manually, then run `vvoc sync`.");
 });
 
 test("runUpgradeFlow - displays multi-version changelog between current and latest", async () => {

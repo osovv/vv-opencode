@@ -24,6 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Made post-upgrade sync failures explicit partial upgrades with manual vvoc.json fix instructions.]
 //   LAST_CHANGE: [v0.5.0 - Redesigned upgrade into a global-only Bun install flow that runs post-install sync in a fresh subprocess.]
 //   LAST_CHANGE: [v0.25.6 - Added post-upgrade shell completion installation after successful sync.]
 //   LAST_CHANGE: [v0.6.0 - Replaced npm description changelog with jsDelivr CHANGELOG.md fetch and version-range parsing. Added --allow-prerelease flag.]
@@ -462,6 +463,9 @@ function logProcessOutput(write: (message: string) => void, output: string): voi
 
 function warnManualSync(logger: UpgradeLogger, reason: string): void {
   logger.warn(reason);
-  logger.warn("Upgrade installed successfully, but post-install sync did not complete.");
-  logger.warn("Run `vvoc sync` manually to finish refreshing the global config.");
+  logger.warn(
+    "Upgrade partial: package installation completed, but vvoc config sync did not complete.",
+  );
+  logger.warn("Your vvoc config was not migrated or repaired automatically.");
+  logger.warn("Fix vvoc.json manually, then run `vvoc sync`.");
 }
