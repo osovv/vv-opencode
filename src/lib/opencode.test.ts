@@ -19,6 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.3.0 - Added strict current-only vvoc config rejection and no-rewrite mutation coverage.]
 //   LAST_CHANGE: [v1.2.8 - Added regression test for syncManagedSkillFiles not syncing references when parent skill is skipped (config-safety).]
 //   LAST_CHANGE: [v1.2.7 - Added vv-reflect template coverage for user-provided domain and product insight capture.]
 //   LAST_CHANGE: [v1.2.6 - Added vv-reflect template coverage for generalized lesson synthesis instead of current-session recaps.]
@@ -40,6 +41,7 @@
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -62,11 +64,13 @@ import {
   syncManagedAgentRegistrations,
   syncManagedSkillFiles,
   syncVvocConfig,
+  writeGuardianConfig,
   writeProviderBaseUrl,
   writeOpenCodeProviderObject,
 } from "./opencode.js";
 import {
   createDefaultVvocConfig,
+  parseVvocConfigText,
   renderVvocConfig,
   VVOC_CONFIG_SCHEMA_URL,
 } from "./vvoc-config.js";
@@ -501,13 +505,59 @@ describe("canonical vvoc config helpers", () => {
     const schema = JSON.parse(schemaText) as {
       $id?: string;
       plugins?: unknown;
+      required?: string[];
       properties?: { version?: { const?: number }; plugins?: unknown };
     };
 
     expect(schema.$id).toBe(VVOC_CONFIG_SCHEMA_URL);
     expect(schema.properties?.version?.const).toBe(3);
+    expect(schema.required).toContain("plugins");
     expect(schema.properties?.plugins).toBeDefined();
     expect(schema.plugins).toBeUndefined();
+  });
+
+  test("rendered default vvoc config validates against runtime and published schemas", async () => {
+    const rendered = renderVvocConfig(createDefaultVvocConfig());
+    expect(() => parseVvocConfigText(rendered, "rendered vvoc config")).not.toThrow();
+
+    const publishedSchema = JSON.parse(
+      await readFile(new URL("../../schemas/vvoc/v3.json", import.meta.url), "utf8"),
+    ) as Record<string, unknown>;
+    const ajv = new Ajv2020({ allErrors: true, strict: false });
+    const validate = ajv.compile(publishedSchema);
+    const valid = validate(JSON.parse(rendered));
+
+    expect(validate.errors ?? []).toEqual([]);
+    expect(valid).toBe(true);
+  });
+
+  test("parseVvocConfigText rejects old, incomplete, and old-field documents", () => {
+    const current = createDefaultVvocConfig();
+    const withoutVersion = { ...current } as Record<string, unknown>;
+    delete withoutVersion.version;
+    const withoutPlugins = { ...current } as Record<string, unknown>;
+    delete withoutPlugins.plugins;
+
+    const invalidDocuments: Array<[string, Record<string, unknown>]> = [
+      ["version 1", { ...current, version: 1 }],
+      ["version 2", { ...current, version: 2 }],
+      ["missing version", withoutVersion],
+      ["missing plugins", withoutPlugins],
+      [
+        "old secretsRedaction.enabled",
+        {
+          ...current,
+          secretsRedaction: {
+            ...current.secretsRedaction,
+            enabled: false,
+          },
+        },
+      ],
+    ];
+
+    for (const [label, document] of invalidDocuments) {
+      expect(() => parseVvocConfigText(JSON.stringify(document), label)).toThrow();
+    }
   });
 
   test("fresh install creates schema v3 vvoc config and pins package in plugin array", async () => {
@@ -610,6 +660,10 @@ describe("canonical vvoc config helpers", () => {
                 },
               },
             },
+            plugins: {
+              ...createDefaultVvocConfig().plugins,
+              "secrets-redaction": false,
+            },
           },
           null,
           2,
@@ -640,12 +694,34 @@ describe("canonical vvoc config helpers", () => {
       expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-v4-flash");
       expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/deepseek-v4-flash");
       expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5-turbo");
+      expect(synced?.plugins["secrets-redaction"]).toBe(false);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("strict reads and sync reject unsupported pre-role vvoc schemas", async () => {
+  test("readVvocConfig returns undefined only when absent and sync creates canonical config", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-strict-absent-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+
+      expect(await readVvocConfig(paths)).toBeUndefined();
+      const syncResult = await syncVvocConfig(paths);
+      expect(syncResult.action).toBe("created");
+      const created = await readVvocConfig(paths);
+      expect(created?.version).toBe(3);
+      expect(created?.plugins).toEqual(createDefaultVvocConfig().plugins);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("strict reads and sync reject unsupported pre-role vvoc schemas without rewriting", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-v2-reject-"));
 
     try {
@@ -676,17 +752,32 @@ describe("canonical vvoc config helpers", () => {
         "utf8",
       );
 
-      const lenientConfig = await readVvocConfig(paths);
-      expect(lenientConfig).toBeDefined();
-      expect(lenientConfig!.roles.default).toBeDefined();
-      expect(lenientConfig!.roles.reviewer).toBeDefined();
-      const syncResult = await syncVvocConfig(paths);
-      expect(syncResult.action).toBe("updated");
-      const fixedText = await readFile(paths.vvocConfigPath, "utf8");
-      const fixedConfig = JSON.parse(fixedText);
-      expect(fixedConfig.version).toBe(3);
-      expect(fixedConfig.roles.default).toBeDefined();
-      expect(fixedConfig.roles.reviewer).toBeDefined();
+      const originalText = await readFile(paths.vvocConfigPath, "utf8");
+
+      await expect(readVvocConfig(paths)).rejects.toThrow();
+      await expect(syncVvocConfig(paths)).rejects.toThrow();
+      expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(originalText);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("writeGuardianConfig rejects invalid existing vvoc config without rewriting", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-guardian-invalid-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      const invalidText =
+        JSON.stringify({ ...createDefaultVvocConfig(), plugins: undefined }) + "\n";
+      await writeFile(paths.vvocConfigPath, invalidText, "utf8");
+
+      await expect(writeGuardianConfig(paths, { timeoutMs: 12_345 })).rejects.toThrow();
+      expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(invalidText);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and scoped vvoc.json config files.
-//   SCOPE: Layer-aware path resolution, pinned plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, version-aware vvoc config rendering, and installation inspection.
+//   SCOPE: Layer-aware path resolution, pinned plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict current vvoc config rendering, and installation inspection.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -56,6 +56,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.0 - Switched vvoc config mutation paths to strict current-only parsing for existing vvoc.json files.]
 //   LAST_CHANGE: [v1.1.1 - Fixed syncManagedSkillFiles to not sync references when parent skill is skipped (user-owned/custom). Added regression coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched project-scope writes to .opencode/.vvoc layers and added local managed skills path registration.]
 //   LAST_CHANGE: [v0.5.1 - Added ensureManagedSkillSymlink. Fixed renderManagedSkill to preserve YAML frontmatter.]
@@ -99,8 +100,8 @@ import {
 import {
   createDefaultVvocConfig,
   createGuardianConfig,
+  parseVvocConfigText,
   parseVersionedVvocConfigText,
-  loadLenientVvocConfigText,
   renderVvocConfig,
   type GuardianConfig,
   type GuardianConfigOverrides,
@@ -901,7 +902,7 @@ export async function readVvocConfig(
   paths: Pick<ResolvedPaths, "vvocConfigPath">,
 ): Promise<VvocConfig | undefined> {
   const currentText = await readOptionalText(paths.vvocConfigPath);
-  return currentText ? loadLenientVvocConfigText(currentText, paths.vvocConfigPath, []) : undefined;
+  return currentText ? parseVvocConfigText(currentText, paths.vvocConfigPath) : undefined;
 }
 
 export async function installVvocConfig(
@@ -915,7 +916,7 @@ export async function syncVvocConfig(
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.vvocConfigPath);
   const nextConfig = currentText
-    ? loadLenientVvocConfigText(currentText, paths.vvocConfigPath, [])
+    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
     : createDefaultVvocConfig();
   return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
@@ -927,7 +928,7 @@ export async function writeGuardianConfig(
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.vvocConfigPath);
   const currentConfig = currentText
-    ? loadLenientVvocConfigText(currentText, paths.vvocConfigPath, [])
+    ? parseVvocConfigText(currentText, paths.vvocConfigPath)
     : createDefaultVvocConfig();
   const nextConfig: VvocConfig = {
     ...currentConfig,

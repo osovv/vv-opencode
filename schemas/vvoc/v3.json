@@ -5,7 +5,7 @@
   "description": "Canonical vvoc configuration document.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "version", "roles", "guardian", "secretsRedaction", "presets"],
+  "required": ["$schema", "version", "roles", "guardian", "secretsRedaction", "presets", "plugins"],
   "properties": {
     "$schema": {
       "type": "string",

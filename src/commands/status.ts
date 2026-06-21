@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Printed vvoc config parse diagnostics during status without mutating invalid config files.]
 //   LAST_CHANGE: [v0.5.0 - Added global/project/effective status scopes with selected source reporting.]
 //   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output and unresolved role-reference reporting sourced from installation inspection.]
 // END_CHANGE_SUMMARY
@@ -57,6 +58,9 @@ export default defineCommand({
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(`vvoc config exists: ${inspection.vvoc.exists ? "yes" : "no"}`);
+    console.log(
+      `vvoc config parse: ${inspection.vvoc.parseError ? inspection.vvoc.parseError : inspection.vvoc.exists ? "ok" : "missing"}`,
+    );
     console.log(`vvoc config version: ${inspection.vvoc.version ?? "missing"}`);
     console.log(
       `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
@@ -86,6 +90,12 @@ export default defineCommand({
       console.log("Warnings:");
       for (const warning of inspection.warnings) {
         console.log(`- ${warning}`);
+      }
+    }
+    if (inspection.problems.length > 0) {
+      console.log("Problems:");
+      for (const problem of inspection.problems) {
+        console.log(`- ${problem}`);
       }
     }
     // END_BLOCK_PRINT_STATUS_REPORT
