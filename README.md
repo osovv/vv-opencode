@@ -1,6 +1,6 @@
 # @osovv/vv-opencode
 
-**Portable OpenCode workflow toolkit** — one command bootstraps a managed agent ecosystem, skill-driven spec-to-code pipeline, security-and-productivity plugins, and a unified CLI.
+**Curated, opinionated OpenCode plugin set** for spec-first, review-driven, safer agentic development — with managed agents, skills, safety plugins, and the `vvoc` CLI.
 
 <p>
   <a href="https://www.npmjs.com/package/@osovv/vv-opencode"><img src="https://img.shields.io/npm/v/%40osovv%2Fvv-opencode?style=flat&label=npm&color=blue" alt="npm"></a>

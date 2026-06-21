@@ -1,7 +1,7 @@
 {
   "name": "@osovv/vv-opencode",
   "version": "0.35.28",
-  "description": "Portable OpenCode workflow toolkit — 6 plugins, managed agents & skills, a spec-to-code pipeline, security, and the vvoc CLI.",
+  "description": "A curated, opinionated set of OpenCode plugins for spec-first, review-driven, safer agentic development.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
