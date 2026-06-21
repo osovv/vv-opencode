@@ -20,6 +20,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.3.0 - Added strict current-only vvoc config rejection and no-rewrite mutation coverage.]
+//   LAST_CHANGE: [v1.4.0 - Updated managed registration coverage so old-name agents and old command entries remain untouched.]
 //   LAST_CHANGE: [v1.2.8 - Added regression test for syncManagedSkillFiles not syncing references when parent skill is skipped (config-safety).]
 //   LAST_CHANGE: [v1.2.7 - Added vv-reflect template coverage for user-provided domain and product insight capture.]
 //   LAST_CHANGE: [v1.2.6 - Added vv-reflect template coverage for generalized lesson synthesis instead of current-session recaps.]
@@ -239,8 +240,8 @@ describe("managed OpenCode role-reference rewrites", () => {
     expect(parsed.skills?.paths).toContain("../.vvoc/skills");
   });
 
-  test("sync removes legacy tracked managed entries and preserves unrelated agents", async () => {
-    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-legacy-agent-migration-"));
+  test("sync preserves old-name agents and old command entries while adding current managed agents", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-current-agent-sync-"));
 
     try {
       const paths = await resolvePaths({
@@ -248,7 +249,7 @@ describe("managed OpenCode role-reference rewrites", () => {
         cwd: projectDir,
       });
 
-      const preRenameConfig = `{
+      const existingConfig = `{
   "model": "openai/gpt-5",
   "small_model": "openai/gpt-5-mini",
   "agent": {
@@ -281,25 +282,40 @@ describe("managed OpenCode role-reference rewrites", () => {
         "edit": "deny"
       }
     }
+  },
+  "command": {
+    "vv-plan": {
+      "agent": "plan",
+      "template": "legacy plan"
+    },
+    "vv-review": {
+      "agent": "reviewer",
+      "template": "legacy review"
+    }
   }
 }\n`;
 
       await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
-      await writeFile(paths.opencodeConfigPath, preRenameConfig, "utf8");
+      await writeFile(paths.opencodeConfigPath, existingConfig, "utf8");
       const result = await syncManagedAgentRegistrations(paths);
       const syncedText = await readFile(paths.opencodeConfigPath, "utf8");
       const synced = parse(syncedText) as {
         agent?: Record<string, { model?: string; prompt?: string }>;
+        command?: Record<string, { agent?: string; template?: string }>;
       };
 
       expect(result.changed).toBe(true);
       expect(syncedText).toContain("// keep unrelated user agent");
       expect(synced.agent?.["custom-helper"]?.model).toBe("openai/gpt-5-mini");
-
-      expect(synced.agent?.implementer).toBeUndefined();
-      expect(synced.agent?.["spec-reviewer"]).toBeUndefined();
-      expect(synced.agent?.["code-reviewer"]).toBeUndefined();
-
+      expect(synced.agent?.implementer?.prompt).toBe("{file:../.vvoc/agents/implementer.md}");
+      expect(synced.agent?.["spec-reviewer"]?.prompt).toBe(
+        "{file:../.vvoc/agents/spec-reviewer.md}",
+      );
+      expect(synced.agent?.["code-reviewer"]?.prompt).toBe(
+        "{file:../.vvoc/agents/code-reviewer.md}",
+      );
+      expect(synced.command?.["vv-plan"]?.template).toBe("legacy plan");
+      expect(synced.command?.["vv-review"]?.template).toBe("legacy review");
       expect(synced.agent?.["vv-implementer"]?.prompt).toBe(
         "{file:../.vvoc/agents/vv-implementer.md}",
       );

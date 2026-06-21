@@ -1,8 +1,8 @@
 // FILE: src/plugins/guardian.test.ts
 // VERSION: 0.2.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify Guardian plugin role-based runtime config and permission review fallback behavior.
-//   SCOPE: Hidden subagent registration, built-in fast-role model resolution, strict startup config failure signaling, and review fallback behavior.
+//   PURPOSE: Verify Guardian plugin role-based runtime config and current permission reply behavior.
+//   SCOPE: Hidden subagent registration, built-in fast-role model resolution, strict startup config failure signaling, current permission reply/HTTP fallback behavior, and review fallback behavior.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/guardian/index.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN]
 //   ROLE: TEST
@@ -11,10 +11,11 @@
 //
 // START_MODULE_MAP
 //   GuardianPlugin config tests - Verify hidden subagent registration and fast-role model resolution.
-//   GuardianPlugin failure tests - Verify strict fast-role config failures and manual fallback behavior.
+//   GuardianPlugin failure tests - Verify strict fast-role config failures, current permission reply handling, and manual fallback behavior.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Added coverage proving Guardian ignores the old permission API and keeps current HTTP reply fallback.]
 //   LAST_CHANGE: [v0.3.1 - Updated invalid fast-role expectation for strict shared vvoc config loading.]
 //   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated Guardian fixtures.]
 //   LAST_CHANGE: [v0.2.1 - Added regression coverage ensuring stale guardian model fields cannot override roles.fast defaults while env model overrides still can.]
@@ -34,6 +35,7 @@ const tempDirs: string[] = [];
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const previousPath = process.env.PATH;
 const previousGuardianModelEnv = process.env.OPENCODE_GUARDIAN_MODEL;
+const previousGuardianDisabledEnv = process.env.OPENCODE_GUARDIAN_DISABLED;
 
 afterEach(async () => {
   resetVvocConfigForTests();
@@ -61,6 +63,12 @@ afterEach(async () => {
     delete process.env.OPENCODE_GUARDIAN_MODEL;
   } else {
     process.env.OPENCODE_GUARDIAN_MODEL = previousGuardianModelEnv;
+  }
+
+  if (previousGuardianDisabledEnv === undefined) {
+    delete process.env.OPENCODE_GUARDIAN_DISABLED;
+  } else {
+    process.env.OPENCODE_GUARDIAN_DISABLED = previousGuardianDisabledEnv;
   }
 });
 
@@ -237,6 +245,109 @@ test("GuardianPlugin fails loudly when built-in fast role is invalid in vvoc con
       $: {} as never,
     }),
   ).rejects.toThrow(/INVALID_MODEL_SELECTION|provider\/model/);
+});
+
+test("Guardian disabled-mode deny replies through permission.reply and ignores the old permission method", async () => {
+  const { projectDir } = await setupGuardianWorkspace();
+  const replyCalls: unknown[] = [];
+  let oldPermissionMethodCalled = false;
+  process.env.OPENCODE_GUARDIAN_DISABLED = "1";
+
+  const plugin = await GuardianPlugin({
+    client: {
+      permission: {
+        reply: async (input: unknown) => {
+          replyCalls.push(input);
+          return { data: true };
+        },
+      },
+      postSessionIdPermissionsPermissionId: async () => {
+        oldPermissionMethodCalled = true;
+        return { data: true };
+      },
+    } as never,
+    project: {} as never,
+    directory: projectDir,
+    worktree: projectDir,
+    serverUrl: new URL("http://localhost"),
+    $: {} as never,
+  });
+
+  await plugin.event?.({
+    event: {
+      type: "permission.asked",
+      properties: {
+        id: "perm_current",
+        sessionID: "session_current",
+        permission: "bash",
+      },
+    },
+  } as never);
+
+  expect(replyCalls).toEqual([
+    {
+      requestID: "perm_current",
+      directory: projectDir,
+      reply: "reject",
+      message: "Guardian nested reviews do not allow additional permissions.",
+    },
+  ]);
+  expect(oldPermissionMethodCalled).toBe(false);
+});
+
+test("Guardian disabled-mode deny uses current HTTP reply fallback when permission.reply is absent", async () => {
+  const { projectDir } = await setupGuardianWorkspace();
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; body?: string }> = [];
+  process.env.OPENCODE_GUARDIAN_DISABLED = "1";
+
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    requests.push({
+      url: String(input),
+      body: typeof init?.body === "string" ? init.body : undefined,
+    });
+    return new Response(JSON.stringify(true), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const plugin = await GuardianPlugin({
+      client: {} as never,
+      project: {} as never,
+      directory: projectDir,
+      worktree: projectDir,
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    });
+
+    await plugin.event?.({
+      event: {
+        type: "permission.asked",
+        properties: {
+          id: "perm_http",
+          sessionID: "session_http",
+          permission: "bash",
+        },
+      },
+    } as never);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  expect(requests).toHaveLength(1);
+  const requestUrl = new URL(requests[0]?.url ?? "http://localhost");
+  expect(requestUrl.origin).toBe("http://localhost");
+  expect(requestUrl.pathname).toBe("/permission/perm_http/reply");
+  expect(requestUrl.searchParams.get("directory")).toBe(projectDir);
+  expect(JSON.parse(requests[0]?.body ?? "{}") as unknown).toEqual({
+    reply: "reject",
+    message: "Guardian nested reviews do not allow additional permissions.",
+  });
 });
 
 test("Guardian review failures fall back to manual approval without auto-allow", async () => {

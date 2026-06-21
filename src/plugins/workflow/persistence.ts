@@ -1,12 +1,12 @@
 // FILE: src/plugins/workflow/persistence.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Hydrate and snapshot work-item workflow state from/to per-session JSON
 //     files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.
 //   SCOPE: Read/write WorkItemStoreData (nextId, records, keyIndexBySession) as
 //     serializable JSON, including explicit work-item mode and review-round fields.
 //     Directory auto-creation on snapshot. Safe null return on missing, corrupt,
-//     or legacy incomplete files.
+//     or incomplete persisted files.
 //   DEPENDS: [node:fs, node:path, src/lib/vvoc-paths.ts, src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-PERSISTENCE]
 //   ROLE: RUNTIME
@@ -22,7 +22,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Validated explicit workflow intent and review-round fields during hydrate so legacy incomplete records fail closed.]
+//   LAST_CHANGE: [v0.2.1 - Reworded persisted-state validation as corrupt/incomplete data handling while keeping fail-closed hydrate behavior.]
+//   LAST_CHANGE: [v0.2.0 - Validated explicit workflow intent and review-round fields during hydrate so incomplete records fail closed.]
 //   LAST_CHANGE: [v0.1.0 - Initial implementation of per-session hydrate/snapshot.]
 // END_CHANGE_SUMMARY
 
@@ -134,7 +135,7 @@ function getWorkflowStatePath(sessionId: string): string {
 // START_CONTRACT: hydrateWorkflowState
 //   PURPOSE: Read and parse the per-session workflow-state.json, returning a
 //     WorkItemStoreData suitable for restoring an in-memory store. Returns null
-//     when the file is missing or corrupt. Never throws.
+//     when the file is missing, corrupt, or incomplete. Never throws.
 //   INPUTS: { sessionId: string - OpenCode session identifier }
 //   OUTPUTS: { WorkItemStoreData | null - restored store data or null }
 //   SIDE_EFFECTS: [none]

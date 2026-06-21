@@ -16,10 +16,11 @@
 //   transition tests - Verify mode-aware launch allowances and aggregate round resolution.
 //   tooling tests - Verify explicit work_item_open/list/close structured responses.
 //   workflow plugin tests - Verify task launch/result hooks, parallel reviewers, hard-stop timing, round limits, and primary-only guidance.
-//   persistence tests - Verify explicit state hydrate/snapshot behavior and legacy rejection.
+//   persistence tests - Verify explicit state hydrate/snapshot behavior and corrupt/incomplete data rejection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.1 - Reworded workflow persisted-state rejection coverage as corrupt/incomplete data handling.]
 //   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between workflow plugin fixtures.]
 //   LAST_CHANGE: [v0.4.0 - Reworked workflow tests around explicit work-item intent, awaiting_reviews, and collect-all parallel reviewer rounds.]
 //   LAST_CHANGE: [v0.3.8 - Added persistence tests for hydrate/snapshot round-trip, corrupt JSON handling, session cleanup, and store hydration on creation.]
@@ -457,12 +458,12 @@ describe("workflow tooling", () => {
   test("work_item_open requires explicit mode and requiredReviewers", () => {
     const store = createWorkItemStore();
     const openTool = createWorkItemOpenTool(store);
-    const legacy = openTool.execute(
-      { items: [{ key: "legacy", title: "Legacy" }] },
+    const invalid = openTool.execute(
+      { items: [{ key: "invalid", title: "Invalid" }] },
       { sessionId: SESSION_ID },
     ) as { items: Array<{ ok: boolean; errorCode?: string }> };
-    expect(legacy.items[0]?.ok).toBe(false);
-    expect(legacy.items[0]?.errorCode).toBe("INVALID_INPUT");
+    expect(invalid.items[0]?.ok).toBe(false);
+    expect(invalid.items[0]?.errorCode).toBe("INVALID_INPUT");
 
     const opened = openTool.execute(
       {
@@ -721,7 +722,7 @@ describe("workflow persistence", () => {
     expect(records[0]?.currentRound?.inFlightReviewers).toEqual(["spec"]);
   });
 
-  test("hydrate rejects legacy records that omit explicit intent", () => {
+  test("hydrate rejects incomplete records that omit explicit intent", () => {
     mkdirSync(getWorkflowSessionDir(PERSIST_SESSION_ID), { recursive: true });
     writeFileSync(
       join(getWorkflowSessionDir(PERSIST_SESSION_ID), "workflow-state.json"),
@@ -735,8 +736,8 @@ describe("workflow persistence", () => {
             {
               sessionId: PERSIST_SESSION_ID,
               workItemId: "wi-1",
-              key: "legacy",
-              title: "Legacy",
+              key: "incomplete",
+              title: "Incomplete",
               state: "open",
               specReviewCount: 0,
               codeReviewCount: 0,
@@ -744,7 +745,7 @@ describe("workflow persistence", () => {
               updatedAt: new Date().toISOString(),
             },
           ],
-          keyIndex: { legacy: "wi-1" },
+          keyIndex: { incomplete: "wi-1" },
         },
         null,
         2,

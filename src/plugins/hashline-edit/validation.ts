@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/validation.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Parse and validate hashline references with optional context-anchored hashes against the current file snapshot before edits are applied.
-//   SCOPE: Anchor normalization, line reference parsing with optional anchor hash, full-batch validation with anchor-hash verification, mismatch diagnostics, and compatibility fallback for legacy hashes.
+//   SCOPE: Anchor normalization, line reference parsing with optional anchor hash, full-batch validation with anchor-hash verification, and mismatch diagnostics for current hashline anchors.
 //   DEPENDS: [src/plugins/hashline-edit/constants.ts, src/plugins/hashline-edit/hash-computation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -19,12 +19,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Removed old hash compatibility fallback so validation accepts only current line and context hashes.]
 //   LAST_CHANGE: [v0.3.0 - Anchor normalization now preserves context-anchor hashes when refs contain spaces around both separators.]
 //   LAST_CHANGE: [v0.2.0 - Added optional context-anchored hash support to LineRef, isCompatibleLineHash, validateLineRef/validateLineRefs, mismatch formatting, and remap generation for collision-resistant anchors.]
 // END_CHANGE_SUMMARY
 
 import { HASHLINE_REF_PATTERN } from "./constants.js";
-import { computeAnchorHash, computeLegacyLineHash, computeLineHash } from "./hash-computation.js";
+import { computeAnchorHash, computeLineHash } from "./hash-computation.js";
 
 export interface LineRef {
   line: number;
@@ -43,7 +44,7 @@ const LINE_REF_EXTRACT_PATTERN = /([0-9]+#[ZPMQVRWSNKTXJBYH]{2}(?:#[ZPMQVRWSNKTX
 const ANCHOR_HASH_EXTRACT_RE = /#([ZPMQVRWSNKTXJBYH]{2})$/;
 
 function isLineHashCompatible(line: number, content: string, hash: string): boolean {
-  return computeLineHash(line, content) === hash || computeLegacyLineHash(line, content) === hash;
+  return computeLineHash(line, content) === hash;
 }
 
 function isCompatibleLineHash(

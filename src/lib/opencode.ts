@@ -24,7 +24,7 @@
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
 //   ensureProviderBaseUrlConfigText - Ensures OpenCode config contains the requested provider options.baseURL override.
-//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, agent registrations, and tool gating. Managed command entries are removed in favor of skills.
+//   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, agent registrations, and tool gating.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
 //   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
@@ -56,6 +56,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.3.0 - Removed old-name managed-agent and managed-command cleanup from syncManagedAgentRegistrations.]
 //   LAST_CHANGE: [v1.2.0 - Switched vvoc config mutation paths to strict current-only parsing for existing vvoc.json files.]
 //   LAST_CHANGE: [v1.1.1 - Fixed syncManagedSkillFiles to not sync references when parent skill is skipped (user-owned/custom). Added regression coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched project-scope writes to .opencode/.vvoc layers and added local managed skills path registration.]
@@ -128,31 +129,8 @@ export const CLI_NAME = "vvoc";
 export { PACKAGE_NAME };
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
 const MANAGED_MARKER = "Managed by vvoc";
-const LEGACY_TRACKED_MANAGED_AGENT_NAMES = [
-  "implementer",
-  "spec-reviewer",
-  "code-reviewer",
-] as const;
-const LEGACY_TRACKED_ROLE_BINDINGS = {
-  implementer: "default",
-  "spec-reviewer": "smart",
-  "code-reviewer": "smart",
-} as const;
-const LEGACY_TRACKED_PROMPT_FILE_NAMES = {
-  implementer: "implementer.md",
-  "spec-reviewer": "spec-reviewer.md",
-  "code-reviewer": "code-reviewer.md",
-} as const;
-const LEGACY_TRACKED_DESCRIPTIONS = {
-  implementer: "Implements approved changes with focused verification and a minimal diff.",
-  "spec-reviewer":
-    "Checks an implementation against the requested spec and flags missing or extra behavior.",
-  "code-reviewer":
-    "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
-} as const;
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
 const MANAGED_DEFAULT_AGENT = "vv-controller";
-const MANAGED_COMMAND_NAMES_TO_REMOVE = ["vv-plan", "vv-review"] as const;
 
 const JSON_FORMAT = {
   insertSpaces: true,
@@ -451,15 +429,13 @@ export async function syncManagedAgentRegistrations(paths: ResolvedPaths): Promi
   changed: boolean;
 }> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
-  const syncedText = ensureManagedAgentRegistrationsConfigText(currentText, paths);
-  const nextText = await cleanupLegacyTrackedManagedEntries(syncedText, paths);
-  const nextText2 = cleanupManagedCommandEntries(nextText);
+  const nextText = ensureManagedAgentRegistrationsConfigText(currentText, paths);
 
-  if (currentText === nextText2) {
+  if (currentText === nextText) {
     return { path: paths.opencodeConfigPath, changed: false };
   }
 
-  await writeText(paths.opencodeConfigPath, nextText2);
+  await writeText(paths.opencodeConfigPath, nextText);
   return { path: paths.opencodeConfigPath, changed: true };
 }
 // END_BLOCK_ENSURE_MANAGED_AGENT_CONFIG
@@ -1209,25 +1185,6 @@ function readAgentMap(document: JsonObject, label: string): Record<string, JsonO
   return entries;
 }
 
-function readCommandMap(document: JsonObject, label: string): Record<string, JsonObject> {
-  const raw = document.command;
-  if (raw === undefined) {
-    return {};
-  }
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`${label}: expected "command" to be an object`);
-  }
-
-  const entries: Record<string, JsonObject> = {};
-  for (const [name, value] of Object.entries(raw as JsonObject)) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error(`${label}: expected "command.${name}" to be an object`);
-    }
-    entries[name] = value as JsonObject;
-  }
-  return entries;
-}
-
 function readProviderMap(document: JsonObject, label: string): Record<string, JsonObject> {
   const raw = document.provider;
   if (raw === undefined) {
@@ -1382,139 +1339,6 @@ function ensureManagedSkillsPathConfigText(
       formattingOptions: JSON_FORMAT,
     }),
   );
-
-  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
-}
-
-function getLegacyTrackedManagedPromptReferences(
-  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
-  agentName: (typeof LEGACY_TRACKED_MANAGED_AGENT_NAMES)[number],
-): Set<string> {
-  const promptPath = join(paths.managedAgentsDirPath, LEGACY_TRACKED_PROMPT_FILE_NAMES[agentName]);
-  const promptRef = relative(dirname(paths.opencodeConfigPath), promptPath).replaceAll("\\", "/");
-  const normalized = promptRef.startsWith(".") ? promptRef : `./${promptRef}`;
-  const references = new Set<string>([`{file:${normalized}}`]);
-
-  if (normalized.startsWith(".") && !normalized.startsWith("../") && !normalized.startsWith("./")) {
-    references.add(`{file:./${normalized}}`);
-  }
-
-  return references;
-}
-
-function isLegacyTrackedManagedRegistration(
-  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
-  agentName: (typeof LEGACY_TRACKED_MANAGED_AGENT_NAMES)[number],
-  entry: JsonObject,
-): boolean {
-  const expectedKeys = new Set<string>(
-    agentName === "implementer"
-      ? ["description", "mode", "prompt", "model"]
-      : ["description", "mode", "prompt", "model", "permission"],
-  );
-
-  if (Object.keys(entry).length !== expectedKeys.size) {
-    return false;
-  }
-
-  for (const key of Object.keys(entry)) {
-    if (!expectedKeys.has(key)) {
-      return false;
-    }
-  }
-
-  if (entry.mode !== "subagent") {
-    return false;
-  }
-
-  if (typeof entry.prompt !== "string") {
-    return false;
-  }
-
-  const expectedLegacyRefs = getLegacyTrackedManagedPromptReferences(paths, agentName);
-  if (!expectedLegacyRefs.has(entry.prompt.trim())) {
-    return false;
-  }
-
-  if (entry.model !== createRoleReference(LEGACY_TRACKED_ROLE_BINDINGS[agentName])) {
-    return false;
-  }
-
-  if (entry.description !== LEGACY_TRACKED_DESCRIPTIONS[agentName]) {
-    return false;
-  }
-
-  if (agentName === "implementer") {
-    return entry.permission === undefined;
-  }
-
-  return JSON.stringify(entry.permission) === JSON.stringify({ edit: "deny" });
-}
-
-async function cleanupLegacyTrackedManagedEntries(
-  text: string,
-  paths: Pick<ResolvedPaths, "managedAgentsDirPath" | "opencodeConfigPath">,
-): Promise<string> {
-  const document = parseObjectDocument(text, "OpenCode config");
-  const currentAgents = readAgentMap(document, "OpenCode config");
-  let nextText = text;
-
-  for (const legacyTrackedName of LEGACY_TRACKED_MANAGED_AGENT_NAMES) {
-    const currentEntry = currentAgents[legacyTrackedName];
-    if (!currentEntry) {
-      continue;
-    }
-
-    if (!isLegacyTrackedManagedRegistration(paths, legacyTrackedName, currentEntry)) {
-      continue;
-    }
-
-    if (!(await canDeleteLegacyTrackedManagedEntry(paths, legacyTrackedName))) {
-      continue;
-    }
-
-    nextText = applyEdits(
-      nextText,
-      modify(nextText, ["agent", legacyTrackedName], undefined, {
-        formattingOptions: JSON_FORMAT,
-      }),
-    );
-  }
-
-  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
-}
-
-async function canDeleteLegacyTrackedManagedEntry(
-  paths: Pick<ResolvedPaths, "managedAgentsDirPath">,
-  agentName: (typeof LEGACY_TRACKED_MANAGED_AGENT_NAMES)[number],
-): Promise<boolean> {
-  const legacyPromptPath = join(
-    paths.managedAgentsDirPath,
-    LEGACY_TRACKED_PROMPT_FILE_NAMES[agentName],
-  );
-  const promptText = await readOptionalText(legacyPromptPath);
-  if (promptText === undefined) {
-    return true;
-  }
-
-  return isManagedFile(promptText);
-}
-
-function cleanupManagedCommandEntries(text: string): string {
-  const document = parseObjectDocument(text, "OpenCode config");
-  const currentCommands = readCommandMap(document, "OpenCode config");
-  let nextText = text;
-
-  for (const commandName of MANAGED_COMMAND_NAMES_TO_REMOVE) {
-    if (currentCommands[commandName] !== undefined) {
-      nextText = applyEdits(
-        nextText,
-        modify(nextText, ["command", commandName], undefined, {
-          formattingOptions: JSON_FORMAT,
-        }),
-      );
-    }
-  }
 
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }

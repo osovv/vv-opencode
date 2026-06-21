@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Removed old SDK permission reply fallback; Guardian now uses current permission.reply or HTTP reply only.]
 //   LAST_CHANGE: [v0.6.0 - Used the shared startup vvoc config snapshot for plugin toggles and Guardian runtime config resolution.]
 //   LAST_CHANGE: [v0.5.0 - Loaded Guardian runtime policy and fast-role model from the effective vvoc config source.]
 //   LAST_CHANGE: [v0.4.2 - Corrected module metadata annotations to match file path and active dependency usage.]
@@ -854,7 +855,6 @@ async function replyToPermission(
   client: Parameters<Plugin>[0]["client"],
   serverUrl: URL,
   directory: string,
-  sessionID: string,
   requestID: string,
   decision: "allow" | "deny",
   message?: string,
@@ -877,47 +877,6 @@ async function replyToPermission(
 
     if (response.data !== true) {
       throw new Error("permission.reply was not acknowledged");
-    }
-
-    return true;
-  }
-
-  const legacyClient = client as {
-    postSessionIdPermissionsPermissionId?: (input: {
-      path: {
-        id: string;
-        permissionID: string;
-      };
-      query?: {
-        directory?: string;
-      };
-      body: {
-        response: "once" | "always" | "reject";
-      };
-    }) => Promise<{
-      data?: boolean;
-      error?: unknown;
-    }>;
-  };
-
-  if (legacyClient.postSessionIdPermissionsPermissionId) {
-    const response = await legacyClient.postSessionIdPermissionsPermissionId({
-      path: {
-        id: sessionID,
-        permissionID: requestID,
-      },
-      query: directory ? { directory } : undefined,
-      body: {
-        response: reply,
-      },
-    });
-
-    if (response.error) {
-      throw new Error(`legacy permission respond failed: ${JSON.stringify(response.error)}`);
-    }
-
-    if (response.data !== true) {
-      throw new Error("legacy permission respond was not acknowledged");
     }
 
     return true;
@@ -1073,7 +1032,6 @@ async function reviewPermissionRequest(
             client,
             serverUrl,
             directory,
-            permissionEvent.sessionID,
             permissionEvent.id,
             "allow",
           );
@@ -1245,7 +1203,6 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
           client,
           serverUrl,
           directory,
-          properties.sessionID,
           properties.id,
           "deny",
           "Guardian nested reviews do not allow additional permissions.",

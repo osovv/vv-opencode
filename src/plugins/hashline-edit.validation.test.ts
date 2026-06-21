@@ -1,9 +1,9 @@
 // FILE: src/plugins/hashline-edit.validation.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline reference parsing and validation diagnostics.
-//   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, context-anchor preservation, legacy hash acceptance, mismatch context, and line-number suggestion hints.
-//   DEPENDS: [bun:test, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/validation.ts]
+//   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, context-anchor preservation, old hash rejection, mismatch context, and line-number suggestion hints.
+//   DEPENDS: [bun:test, src/plugins/hashline-edit/constants.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,11 +14,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Replaced old whitespace-collapsed hash acceptance coverage with rejection coverage.]
 //   LAST_CHANGE: [v0.3.0 - Added regression coverage for spaced context-anchor references preserving their anchor hash.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { computeLegacyLineHash, computeLineHash } from "./hashline-edit/hash-computation.js";
+import { HASHLINE_DICT } from "./hashline-edit/constants.js";
+import { computeLineHash } from "./hashline-edit/hash-computation.js";
 import { parseLineRef, validateLineRef, validateLineRefs } from "./hashline-edit/validation.js";
 
 describe("hashline validation", () => {
@@ -50,11 +52,12 @@ describe("hashline validation", () => {
     expect(parseLineRef("42 # VK # MB")).toEqual({ line: 42, hash: "VK", anchorHash: "MB" });
   });
 
-  test("accepts legacy hashes for whitespace-variant content", () => {
+  test("rejects old whitespace-collapsed hashes for whitespace-variant content", () => {
     const lines = ["if (a && b) {"];
-    const legacyHash = computeLegacyLineHash(1, "if(a&&b){");
+    const oldWhitespaceCollapsedHash = HASHLINE_DICT[Bun.hash.xxHash32("if(a&&b){", 0) % 256]!;
 
-    expect(() => validateLineRef(lines, `1#${legacyHash}`)).not.toThrow();
+    expect(oldWhitespaceCollapsedHash).not.toBe(computeLineHash(1, lines[0] ?? ""));
+    expect(() => validateLineRef(lines, `1#${oldWhitespaceCollapsedHash}`)).toThrow();
   });
 
   test("shows mismatch context with >>> markers for batched validation", () => {
