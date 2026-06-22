@@ -32,9 +32,11 @@
     <Command>bun run release:check</Command>
   </ReleaseGates>
   <Publishing>
-    <Policy>Publishing is manual from the terminal with npm publish unless explicitly changed.</Policy>
-    <Workflow>.github/workflows/publish.yml publishes only from v* tags after package and schema consistency checks.</Workflow>
-    <LocalBump>bun run release:bump wraps npm version, AI changelog summary generation, schema id patching, release checks, commit, and tag creation.</LocalBump>
+    <Policy>Publishing is tag-gated through .github/workflows/publish.yml after a local bun run release:bump prepares and pushes the release commit and v* tag.</Policy>
+    <Workflow>.github/workflows/publish.yml verifies the tag, release consistency, typecheck, lint, format, tests, pack check, then publishes to npm and creates a GitHub Release.</Workflow>
+    <LocalBump>bun run release:bump wraps npm version, AI changelog summary generation, schema id patching, release checks, release commit, tag creation, and push.</LocalBump>
+    <TrustedPublishing>The workflow uses npm provenance/trusted publishing through id-token permissions.</TrustedPublishing>
+    <NormalPushes>Normal branch pushes must not publish the package.</NormalPushes>
   </Publishing>
   <Rollback>
     <Expectation>Package rollback is managed by npm version selection and by rerunning vvoc sync or fixing vvoc.json manually when strict config validation blocks mutation.</Expectation>

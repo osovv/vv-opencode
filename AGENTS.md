@@ -38,7 +38,7 @@ Legacy `docs/*.xml` files are GRACE 3 migration sources only. They are not curre
 
 1. `src/` is the source of truth for implementation behavior.
 2. `dist/` is generated output. Never edit it manually.
-3. Publishing is manual from the terminal with `npm publish`. Do not add CI publish workflows unless explicitly requested.
+3. Release and publishing policy is defined in `.grace/context/deployment.xml`; do not duplicate release-flow details here.
 4. If CLI behavior, package exports, setup flow, or config locations change, update `README.md` in the same change.
 5. This package manages user config, so prefer conservative, idempotent writes over aggressive rewrites.
 6. If modules, public exports, data flows, verification strategy, commands, critical scenarios, or log markers change, update the relevant `.grace` graph and verification artifacts in the same change.
