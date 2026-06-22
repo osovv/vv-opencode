@@ -1,0 +1,15 @@
+<GracePrinciples graceVersion="4.0">
+  <MigrationSource>docs/requirements.xml, docs/technology.xml, docs/development-plan.xml, docs/verification-plan.xml, AGENTS.md</MigrationSource>
+  <Principle>GRACE 4 current project state lives under .grace. Legacy docs/*.xml files are retained as migration sources only until an explicit cleanup decision.</Principle>
+  <Principle>Contract-first changes: clarify purpose, scope, inputs, outputs, acceptance, and verification before implementation unless the user asks for a bounded direct fix.</Principle>
+  <Principle>Use the smallest correct change that satisfies the request and preserve repository terminology.</Principle>
+  <Principle>Keep semantic anchors stable and grep-friendly. File-local anchors include START_MODULE_CONTRACT, START_MODULE_MAP, START_CONTRACT, START_BLOCK, and START_CHANGE_SUMMARY.</Principle>
+  <Principle>Semantic GRACE anchors are XML tags, never attributes. Module IDs use M-*, data flows use DF-*, graph documents use GD-*, verification entries use V-M-*, and change bundles use C-*.</Principle>
+  <Principle>src is the source of truth for code behavior; dist is generated output and is never edited manually.</Principle>
+  <Principle>Config safety matters: prefer conservative, idempotent writes and never silently clobber user-owned config.</Principle>
+  <Principle>Verification is a first-class artifact. Completion claims require fresh evidence from deterministic tests, typecheck, lint, build, pack, release, or GRACE checks as applicable.</Principle>
+  <Principle>Workflow automation uses explicit work-item IDs and simple counters, not semantic clustering or fuzzy similarity.</Principle>
+  <Principle>NEEDS_CONTEXT and BLOCKED statuses halt automation and return control to the main session or user.</Principle>
+  <Principle>Repository memory and historical docs are advisory below explicit user instructions, code, tests, and current .grace state.</Principle>
+  <Principle>Do not create retroactive C-* change bundles when migrating legacy GRACE 3 docs.</Principle>
+</GracePrinciples>

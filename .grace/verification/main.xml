@@ -1,0 +1,135 @@
+<GraceVerificationDocument graceVersion="4.0">
+  <VD-MAIN>
+    <V-M-MODEL-ROLES />
+    <V-M-CONFIG-LAYERS />
+    <V-M-CLI-CONFIG />
+    <V-M-RELEASE-AUTOMATION />
+    <V-M-CLI-MANAGED-AGENTS />
+    <V-M-CLI-MANAGED-SKILLS />
+    <V-M-CLI-AGENT-MODELS />
+    <V-M-PLUGIN-TOGGLE-CONFIG />
+    <V-M-CLI-COMMANDS />
+    <V-M-PLUGIN-MODEL-ROLES />
+    <V-M-PLUGIN-GUARDIAN />
+    <V-M-PLUGIN-HASHLINE-EDIT />
+    <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+    <V-M-PLUGIN-SECRETS-REDACTION />
+    <V-M-CLI-ROLE />
+    <V-M-CLI-CONFIG-VALIDATE />
+    <V-M-CLI-PRESET />
+    <V-M-VVOC-PRESET-REGISTRY />
+    <V-M-CLI-PLUGIN-LIST />
+    <V-M-CLI-PLUGIN-TOGGLE />
+    <V-M-CLI-PATCH-PROVIDER />
+    <V-M-CLI-COMPLETION />
+    <V-M-CLI-INIT />
+    <V-M-CLI-UPGRADE />
+    <V-M-WORKFLOW-PROTOCOL />
+    <V-M-WORKFLOW-REPAIR />
+    <V-M-WORKFLOW-STATE />
+    <V-M-WORKFLOW-TRANSITIONS />
+    <V-M-WORKFLOW-TOOLING />
+    <V-M-PLUGIN-WORKFLOW />
+    <V-M-WORKFLOW-PERSISTENCE />
+    <GlobalPolicy>
+      <DeterministicFirst>true</DeterministicFirst>
+      <LogFormat>[service][function][block] message</LogFormat>
+      <TraceMarkerFormat>[service][function][BLOCK_NAME] message</TraceMarkerFormat>
+      <Redaction>Never log secrets, credentials, raw tokens, or high-risk payloads beyond bounded existing policies.</Redaction>
+      <FreshEvidence>Completion claims require fresh command output or documented blockers.</FreshEvidence>
+    </GlobalPolicy>
+    <VerificationAnchors>
+      <V-M-MODEL-ROLES />
+      <V-M-CONFIG-LAYERS />
+      <V-M-CLI-CONFIG />
+      <V-M-RELEASE-AUTOMATION />
+      <V-M-CLI-MANAGED-AGENTS />
+      <V-M-CLI-MANAGED-SKILLS />
+      <V-M-CLI-AGENT-MODELS />
+      <V-M-PLUGIN-TOGGLE-CONFIG />
+      <V-M-CLI-COMMANDS />
+      <V-M-PLUGIN-MODEL-ROLES />
+      <V-M-PLUGIN-GUARDIAN />
+      <V-M-PLUGIN-HASHLINE-EDIT />
+      <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <V-M-PLUGIN-SECRETS-REDACTION />
+      <V-M-CLI-ROLE />
+      <V-M-CLI-CONFIG-VALIDATE />
+      <V-M-CLI-PRESET />
+      <V-M-VVOC-PRESET-REGISTRY />
+      <V-M-CLI-PLUGIN-LIST />
+      <V-M-CLI-PLUGIN-TOGGLE />
+      <V-M-CLI-PATCH-PROVIDER />
+      <V-M-CLI-COMPLETION />
+      <V-M-CLI-INIT />
+      <V-M-CLI-UPGRADE />
+      <V-M-WORKFLOW-PROTOCOL />
+      <V-M-WORKFLOW-REPAIR />
+      <V-M-WORKFLOW-STATE />
+      <V-M-WORKFLOW-TRANSITIONS />
+      <V-M-WORKFLOW-TOOLING />
+      <V-M-PLUGIN-WORKFLOW />
+      <V-M-WORKFLOW-PERSISTENCE />
+    </VerificationAnchors>
+    <CriticalFlows>
+      <VF-PLUGIN-INSTALL><Flow>DF-PLUGIN-INSTALL</Flow><Priority>high</Priority><Expected>Pinned plugin specifier, vv-controller default agent, managed agents/skills, tools.apply_patch false, role-reference model fields, and seeded vvoc schema v3.</Expected></VF-PLUGIN-INSTALL>
+      <VF-CONFIG-SYNC><Flow>DF-CONFIG-SYNC</Flow><Priority>high</Priority><Expected>Canonical vvoc schema v3 is refreshed while role assignments and plugin toggles survive; invalid or old configs fail before rewrite.</Expected></VF-CONFIG-SYNC>
+      <VF-STRICT-CURRENT-CUTOVER><Flow>DF-CONFIG-SYNC, DF-UPGRADE, DF-GUARDIAN-REVIEW, DF-HASHLINE-EDIT</Flow><Priority>high</Priority><Expected>Old configs, SDK paths, and hash algorithms fail loudly or are ignored rather than repaired or used as compatibility fallbacks.</Expected></VF-STRICT-CURRENT-CUTOVER>
+      <VF-LAYERED-CONFIG><Flow>DF-LAYERED-CONFIG</Flow><Priority>high</Priority><Expected>Reads choose env, nearest project, global, then defaults where allowed; project writes stay inside selected project root.</Expected></VF-LAYERED-CONFIG>
+      <VF-VVOC-LAUNCH><Flow>DF-VVOC-LAUNCH</Flow><Priority>high</Priority><Expected>Launch plan sets OPENCODE_CONFIG and VVOC_CONFIG, forwards args, preserves child exit code, and reports missing project layer with install hint.</Expected></VF-VVOC-LAUNCH>
+      <VF-RELEASE-AUTOMATION><Flow>DF-RELEASE</Flow><Priority>high</Priority><Expected>release:bump and tag publish flow validate package version, schema id, changelog summary, quality checks, build, pack, and npm publish gating.</Expected></VF-RELEASE-AUTOMATION>
+      <VF-ROLE-MANAGEMENT><Flow>DF-ROLE-MANAGEMENT</Flow><Priority>high</Priority><Expected>Built-in roles are visible, custom roles round-trip, concrete assignments normalize, and built-in role deletion is blocked.</Expected></VF-ROLE-MANAGEMENT>
+      <VF-ROLE-RESOLUTION><Flow>DF-ROLE-RESOLUTION</Flow><Priority>high</Priority><Expected>Supported vv-role:* fields resolve to concrete model selections and unknown roles fail without fallback.</Expected></VF-ROLE-RESOLUTION>
+      <VF-PRESET-SWITCH><Flow>DF-PRESET-SWITCH</Flow><Priority>high</Priority><Expected>Applying a preset mutates only listed roles and never rewrites OpenCode config directly.</Expected></VF-PRESET-SWITCH>
+      <VF-HASHLINE-EDIT><Flow>DF-HASHLINE-EDIT</Flow><Priority>high</Priority><Expected>Read output emits current anchors, anchored edits preserve text envelope, and stale or old hash anchors are rejected.</Expected></VF-HASHLINE-EDIT>
+      <VF-GUARDIAN-REVIEW><Flow>DF-GUARDIAN-REVIEW</Flow><Priority>high</Priority><Expected>Guardian resolves config/model, logs bounded markers, auto-allows only below threshold, and falls back to manual approval on higher risk or failure.</Expected></VF-GUARDIAN-REVIEW>
+      <VF-SYSTEM-CONTEXT-INJECTION><Flow>DF-SYSTEM-CONTEXT</Flow><Priority>medium</Priority><Expected>Eligible primaries receive reusable guidance exactly once; known subagents are skipped.</Expected></VF-SYSTEM-CONTEXT-INJECTION>
+      <VF-SECRETS-REDACTION><Flow>DF-SECRETS-REDACTION</Flow><Priority>high</Priority><Expected>Provider-bound payloads are redacted and local completions/tool execution restore placeholders where needed.</Expected></VF-SECRETS-REDACTION>
+      <VF-WORKFLOW-TOOLS><Flow>DF-WORKFLOW-TOOLS</Flow><Priority>high</Priority><Expected>Work-item tools create deterministic IDs, enforce explicit mode/reviewers, list lifecycle metadata, and close only ready items.</Expected></VF-WORKFLOW-TOOLS>
+      <VF-LAUNCH-ENFORCEMENT><Flow>DF-LAUNCH-ENFORCEMENT</Flow><Priority>high</Priority><Expected>Tracked launches require VVOC_WORK_ITEM_ID and valid state; invalid launches are rejected and untracked launches pass through.</Expected></VF-LAUNCH-ENFORCEMENT>
+      <VF-RESULT-PARSING><Flow>DF-RESULT-PARSING</Flow><Priority>high</Priority><Expected>Tracked outputs parse strict top blocks, update explicit round state, repair only bounded resumable envelopes, and halt on malformed or hard-stop results.</Expected></VF-RESULT-PARSING>
+      <VF-LOOP-GATE><Flow>DF-LOOP-GATE</Flow><Priority>high</Priority><Expected>Rounds one and two are allowed and round three is blocked deterministically without semantic heuristics.</Expected></VF-LOOP-GATE>
+      <VF-WORKFLOW-PERSISTENCE><Flow>DF-WORKFLOW-PERSISTENCE</Flow><Priority>high</Priority><Expected>Per-session workflow state hydrates, snapshots, switches, and cleans up without throwing on missing or corrupt files.</Expected></VF-WORKFLOW-PERSISTENCE>
+      <VF-PLUGIN-TOGGLE><Flow>DF-PLUGIN-TOGGLE, DF-PLUGIN-TOGGLE-CHECK</Flow><Priority>medium</Priority><Expected>Known plugins can be enabled or disabled, sync preserves values, list reports status, and disabled plugins return empty hooks.</Expected></VF-PLUGIN-TOGGLE>
+    </CriticalFlows>
+    <ModuleVerification>
+      <V-M-MODEL-ROLES><TestFiles><File>src/lib/model-roles.test.ts</File></TestFiles><Checks><Command>bun test src/lib/model-roles.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-MODEL-ROLES>
+      <V-M-CONFIG-LAYERS><TestFiles><File>src/lib/config-layers.test.ts</File></TestFiles><Checks><Command>bun test src/lib/config-layers.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-CONFIG-LAYERS>
+      <V-M-CLI-CONFIG><TestFiles><File>src/lib/opencode.test.ts</File><File>src/lib/managed-agents.test.ts</File><File>src/commands/sync.test.ts</File></TestFiles><Checks><Command>bun test src/lib/opencode.test.ts</Command><Command>bun test src/lib/managed-agents.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-CONFIG>
+      <V-M-RELEASE-AUTOMATION><TestFiles><File>scripts/release-check.test.ts</File><File>scripts/release-summary.test.ts</File></TestFiles><Checks><Command>bun run release:check</Command><Command>bun run typecheck</Command><Command>bun run fmt:check</Command><Command>bun run pack:check</Command></Checks></V-M-RELEASE-AUTOMATION>
+      <V-M-CLI-MANAGED-AGENTS><TestFiles><File>src/lib/managed-agents.test.ts</File></TestFiles><Checks><Command>bun test src/lib/managed-agents.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-CLI-MANAGED-AGENTS>
+      <V-M-CLI-MANAGED-SKILLS><TestFiles><File>src/lib/opencode.test.ts</File></TestFiles><Checks><Command>bun x tsc --noEmit</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-MANAGED-SKILLS>
+      <V-M-CLI-AGENT-MODELS><TestFiles><File>src/lib/agent-models.test.ts</File></TestFiles><Checks><Command>bun x tsc --noEmit</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run build</Command></Checks></V-M-CLI-AGENT-MODELS>
+      <V-M-PLUGIN-TOGGLE-CONFIG><TestFiles><File>src/lib/plugin-toggle-config.test.ts</File></TestFiles><Checks><Command>bun test src/lib/plugin-toggle-config.test.ts</Command><Command>bun x tsc --noEmit</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-PLUGIN-TOGGLE-CONFIG>
+      <V-M-CLI-COMMANDS><TestFiles><File>src/commands/*.test.ts</File></TestFiles><Checks><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run build</Command><Command>bun test</Command></Checks></V-M-CLI-COMMANDS>
+      <V-M-PLUGIN-MODEL-ROLES><TestFiles><File>src/plugins/model-roles.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/model-roles.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-PLUGIN-MODEL-ROLES>
+      <V-M-PLUGIN-GUARDIAN><TestFiles><File>src/plugins/guardian.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/guardian.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-PLUGIN-GUARDIAN>
+      <V-M-PLUGIN-HASHLINE-EDIT><TestFiles><File>src/plugins/hashline-edit*.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/hashline-edit*.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-PLUGIN-HASHLINE-EDIT>
+      <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION><TestFiles><File>src/plugins/system-context-injection.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/system-context-injection.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
+      <V-M-PLUGIN-SECRETS-REDACTION><TestFiles><File>src/plugins/secrets-redaction/*.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/secrets-redaction/*.test.ts</Command><Command>bun run typecheck</Command><Command>bun run lint</Command></Checks></V-M-PLUGIN-SECRETS-REDACTION>
+      <V-M-CLI-ROLE><TestFiles><File>src/commands/role.test.ts</File></TestFiles><Checks><Command>bun test src/commands/role.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-ROLE>
+      <V-M-CLI-CONFIG-VALIDATE><TestFiles><File>src/commands/config-validate.test.ts</File></TestFiles><Checks><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run build</Command></Checks></V-M-CLI-CONFIG-VALIDATE>
+      <V-M-CLI-PRESET><TestFiles><File>src/commands/preset.test.ts</File></TestFiles><Checks><Command>bun test src/commands/preset.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-PRESET>
+      <V-M-CLI-PLUGIN-LIST><TestFiles><File>src/commands/plugin-list.test.ts</File></TestFiles><Checks><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run build</Command></Checks></V-M-CLI-PLUGIN-LIST>
+      <V-M-CLI-PLUGIN-TOGGLE><TestFiles><File>src/commands/plugin-toggle.test.ts</File></TestFiles><Checks><Command>bun test src/commands/plugin-toggle.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-PLUGIN-TOGGLE>
+      <V-M-CLI-PATCH-PROVIDER><TestFiles><File>src/commands/patch-provider.test.ts</File></TestFiles><Checks><Command>bun test src/commands/patch-provider.test.ts</Command><Command>bun run build</Command></Checks></V-M-CLI-PATCH-PROVIDER>
+      <V-M-CLI-COMPLETION><TestFiles><File>src/commands/completion.test.ts</File></TestFiles><Checks><Command>bun test src/commands/completion.test.ts</Command><Command>bun run build</Command></Checks></V-M-CLI-COMPLETION>
+      <V-M-CLI-INIT><TestFiles><File>src/commands/init.test.ts</File></TestFiles><Checks><Command>bun test src/commands/init.test.ts</Command><Command>bun run build</Command></Checks></V-M-CLI-INIT>
+      <V-M-CLI-UPGRADE><TestFiles><File>src/commands/upgrade.test.ts</File></TestFiles><Checks><Command>bun test src/commands/upgrade.test.ts</Command><Command>bun run build</Command></Checks></V-M-CLI-UPGRADE>
+      <V-M-WORKFLOW-PROTOCOL><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-WORKFLOW-PROTOCOL>
+      <V-M-WORKFLOW-REPAIR><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-WORKFLOW-REPAIR>
+      <V-M-WORKFLOW-STATE><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-WORKFLOW-STATE>
+      <V-M-WORKFLOW-TRANSITIONS><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-WORKFLOW-TRANSITIONS>
+      <V-M-WORKFLOW-TOOLING><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-WORKFLOW-TOOLING>
+      <V-M-PLUGIN-WORKFLOW><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command><Command>bun run build</Command></Checks></V-M-PLUGIN-WORKFLOW>
+      <V-M-WORKFLOW-PERSISTENCE><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-WORKFLOW-PERSISTENCE>
+      <V-M-VVOC-PRESET-REGISTRY><TestFiles><File>src/lib/opencode.test.ts</File><File>src/commands/preset.test.ts</File><File>src/commands/completion.test.ts</File></TestFiles><Checks><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run build</Command></Checks></V-M-VVOC-PRESET-REGISTRY>
+    </ModuleVerification>
+    <PhaseGates>
+      <Gate-Phase-11><Goal>Documentation, verification artifacts, build, pack, and release checks are current.</Goal><Commands><Command>bun run release:check</Command><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun test</Command><Command>bun run build</Command><Command>bun run pack:check</Command></Commands></Gate-Phase-11>
+      <Gate-Phase-12><Goal>Plugin runtime toggle behavior is covered.</Goal><Commands><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun test src/lib/plugin-toggle-config.test.ts src/commands/plugin-toggle.test.ts</Command><Command>bun test src/commands/plugin-list.test.ts</Command><Command>bun test src/plugins/secrets-redaction/*.test.ts</Command><Command>bun run build</Command><Command>bun run pack:check</Command></Commands></Gate-Phase-12>
+      <Gate-Phase-13><Goal>Workflow persistence works across process restarts and session switches.</Goal><Commands><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun run build</Command><Command>bun run pack:check</Command></Commands></Gate-Phase-13>
+      <Gate-GRACE-4-MIGRATION><Goal>GRACE 4 .grace state is valid after migration.</Goal><Commands><Command>bunx @osovv/grace-cli@rc lint --path .</Command><Command>bunx @osovv/grace-cli@rc status --path .</Command></Commands></Gate-GRACE-4-MIGRATION>
+    </PhaseGates>
+  </VD-MAIN>
+</GraceVerificationDocument>

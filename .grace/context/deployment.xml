@@ -1,0 +1,43 @@
+<GraceDeployment graceVersion="4.0">
+  <MigrationSource>docs/technology.xml, docs/verification-plan.xml, package.json, README.md</MigrationSource>
+  <Applicability>applicable</Applicability>
+  <Target>Public npm package @osovv/vv-opencode with Bun CLI binary vvoc and OpenCode plugin exports.</Target>
+  <PackageFiles>
+    <File>dist</File>
+    <File>schemas</File>
+    <File>templates</File>
+    <File>README.md</File>
+    <File>CHANGELOG.md</File>
+  </PackageFiles>
+  <Exports>
+    <Export>@osovv/vv-opencode</Export>
+    <Export>@osovv/vv-opencode/plugins/guardian</Export>
+    <Export>@osovv/vv-opencode/plugins/hashline-edit</Export>
+    <Export>@osovv/vv-opencode/plugins/model-roles</Export>
+    <Export>@osovv/vv-opencode/plugins/system-context-injection</Export>
+    <Export>@osovv/vv-opencode/plugins/workflow</Export>
+    <Export>@osovv/vv-opencode/plugins/secrets-redaction</Export>
+  </Exports>
+  <InstallAndSync>
+    <Global>vvoc install and vvoc sync may write OpenCode config under $XDG_CONFIG_HOME/opencode and vvoc config under $XDG_CONFIG_HOME/vvoc.</Global>
+    <Project>Project scope writes only .opencode and .vvoc under the selected project root.</Project>
+    <Launch>vvoc launch pins OPENCODE_CONFIG and VVOC_CONFIG for deterministic sandboxed OpenCode startup.</Launch>
+  </InstallAndSync>
+  <ReleaseGates>
+    <Command>bun run typecheck</Command>
+    <Command>bun run lint</Command>
+    <Command>bun run fmt:check</Command>
+    <Command>bun test</Command>
+    <Command>bun run build</Command>
+    <Command>bun run pack:check</Command>
+    <Command>bun run release:check</Command>
+  </ReleaseGates>
+  <Publishing>
+    <Policy>Publishing is manual from the terminal with npm publish unless explicitly changed.</Policy>
+    <Workflow>.github/workflows/publish.yml publishes only from v* tags after package and schema consistency checks.</Workflow>
+    <LocalBump>bun run release:bump wraps npm version, AI changelog summary generation, schema id patching, release checks, commit, and tag creation.</LocalBump>
+  </Publishing>
+  <Rollback>
+    <Expectation>Package rollback is managed by npm version selection and by rerunning vvoc sync or fixing vvoc.json manually when strict config validation blocks mutation.</Expectation>
+  </Rollback>
+</GraceDeployment>

@@ -1,0 +1,165 @@
+<GraceRequirements graceVersion="4.0">
+  <ProjectName>@osovv/vv-opencode</ProjectName>
+  <Annotation>Portable OpenCode workflow package with plugins and a Bun CLI for install, sync, semantic model-role assignment, controller-led workflow routing, safer editing, secrets redaction, and cross-device setup.</Annotation>
+  <Keywords>opencode, plugins, workflow, model-roles, hashline-edit, work-items, controller, bun, typescript</Keywords>
+  <MigrationSource>docs/requirements.xml</MigrationSource>
+  <SourceOfTruth>
+    <CurrentState>.grace</CurrentState>
+    <LegacyState>docs/*.xml are GRACE 3 migration sources only and are not current GRACE 4 state.</LegacyState>
+  </SourceOfTruth>
+  <Users>
+    <User>Engineer who wants a portable OpenCode workflow across devices, providers, and repositories without hardcoding provider-specific model IDs into shared agents, subagents, skills, or commands.</User>
+    <User>Maintainer who needs deterministic package, CLI, plugin, workflow, and release behavior for @osovv/vv-opencode.</User>
+  </Users>
+  <Goals>
+    <Goal>Register and sync vvoc-owned OpenCode plugin, agent, skill, and config surfaces safely through the Bun CLI binary named vvoc.</Goal>
+    <Goal>Keep shared workflow definitions portable by using semantic vv-role:* model references and resolving them from the selected canonical vvoc config at runtime.</Goal>
+    <Goal>Make multi-agent work explicit through work items, tracked subagent headers, strict result protocol fields, reviewer result collection, hard stops, and bounded review rounds.</Goal>
+    <Goal>Reduce long-run risk through Guardian permission review, secrets redaction, safer hash-anchored edits, and conservative config mutation.</Goal>
+    <Goal>Keep specs, plans, prompts, skills, config, graph, and verification artifacts grep-friendly and deterministic.</Goal>
+  </Goals>
+  <UseCases>
+    <UC-001>
+      <Action>User runs vvoc install for global or project scope.</Action>
+      <Goal>Register @osovv/vv-opencode in OpenCode config, seed canonical vvoc config, set vv-controller as managed default, install managed agents and skills, and write role-reference based model fields.</Goal>
+      <Acceptance>The pinned package appears in OpenCode plugin config, vvoc.json is created or safely refreshed, built-in roles and presets are seeded, default_agent is vv-controller, managed skills are installed, and model-bearing fields use vv-role:* references.</Acceptance>
+      <RelatedFlow>DF-PLUGIN-INSTALL</RelatedFlow>
+    </UC-001>
+    <UC-002>
+      <Action>User runs vvoc sync after updates or on another machine.</Action>
+      <Goal>Refresh vvoc-owned config, prompts, skills, role presets, default controller selection, and current managed OpenCode registrations without repairing invalid legacy configs.</Goal>
+      <Acceptance>Valid current schema v3 config is rewritten canonically while role assignments and plugin toggles are preserved; invalid or old configs fail before rewrite; old pre-rename entries are left untouched.</Acceptance>
+      <RelatedFlow>DF-CONFIG-SYNC</RelatedFlow>
+    </UC-002>
+    <UC-005>
+      <Action>Provider-bound chat or tool payloads contain secrets while SecretsRedactionPlugin is active.</Action>
+      <Goal>Prevent raw secrets from being sent to LLM providers while restoring placeholders where local runtime needs originals.</Goal>
+      <Acceptance>Secrets are replaced before provider-bound requests, restored after completions and before tool execution, and stable for stable configured secrets.</Acceptance>
+      <RelatedFlow>DF-SECRETS-REDACTION</RelatedFlow>
+    </UC-005>
+    <UC-006>
+      <Action>A primary chat session starts with vvoc installed.</Action>
+      <Goal>Inject reusable main-session guidance while avoiding prompt pollution for known subagents.</Goal>
+      <Acceptance>Eligible primary agents including vv-controller receive guidance once; known subagents and helper agents do not inherit it.</Acceptance>
+      <RelatedFlow>DF-SYSTEM-CONTEXT</RelatedFlow>
+    </UC-006>
+    <UC-007>
+      <Action>User runs vvoc preset list, show, or apply.</Action>
+      <Goal>Inspect and apply declarative role presets in canonical vvoc.json without rewriting OpenCode target fields directly.</Goal>
+      <Acceptance>Only roles listed by the selected preset are changed, unlisted roles remain unchanged, and OpenCode config stays role-reference based.</Acceptance>
+      <RelatedFlow>DF-PRESET-SWITCH</RelatedFlow>
+    </UC-007>
+    <UC-008>
+      <Action>User runs vvoc role list, set, or unset.</Action>
+      <Goal>Manage built-in and user-defined semantic roles referenced as vv-role:&lt;role-id&gt;.</Goal>
+      <Acceptance>Built-in roles are visible, valid custom roles can be added, model selections normalize consistently, and built-in roles cannot be removed accidentally.</Acceptance>
+      <RelatedFlow>DF-ROLE-MANAGEMENT</RelatedFlow>
+    </UC-008>
+    <UC-009>
+      <Action>OpenCode config uses model: vv-role:&lt;role-id&gt; in supported fields.</Action>
+      <Goal>Resolve shared semantic model intent to user-local concrete provider/model selections at OpenCode startup.</Goal>
+      <Acceptance>Supported fields resolve to concrete models, variant-bearing assignments are split where safe, and unresolved roles fail loudly without fallback.</Acceptance>
+      <RelatedFlow>DF-ROLE-RESOLUTION</RelatedFlow>
+    </UC-009>
+    <UC-010>
+      <Action>Controller calls work_item_open, work_item_list, or work_item_close.</Action>
+      <Goal>Bind tracked subagent launches to explicit work-item identity, mode, required reviewers, lifecycle, and review-round metadata.</Goal>
+      <Acceptance>Open calls require idempotent keys, title, mode, and requiredReviewers; list returns lifecycle metadata; close succeeds only from ready_to_close.</Acceptance>
+      <RelatedFlow>DF-WORKFLOW-TOOLS</RelatedFlow>
+    </UC-010>
+    <UC-011>
+      <Action>Main session launches vv-implementer, vv-spec-reviewer, or vv-code-reviewer through task.</Action>
+      <Goal>Enforce valid work-item headers, open work-item identity, stored mode, current review-round policy, and implementation-mode review limits.</Goal>
+      <Acceptance>Missing, malformed, unknown, invalid transition, duplicate reviewer, after-hard-stop, and round-overflow launches are rejected; untracked launches pass through.</Acceptance>
+      <RelatedFlow>DF-LAUNCH-ENFORCEMENT</RelatedFlow>
+    </UC-011>
+    <UC-012>
+      <Action>A tracked subagent completes.</Action>
+      <Goal>Parse strict top-block protocol fields, validate identity and status, update workflow state, and halt on protocol errors or hard stops.</Goal>
+      <Acceptance>Reviewer results are collected per round, review-only FAIL is a completed finding result, NEEDS_CONTEXT and BLOCKED halt workflow, malformed results fail closed, and counters increment deterministically.</Acceptance>
+      <RelatedFlow>DF-RESULT-PARSING</RelatedFlow>
+    </UC-012>
+    <UC-013>
+      <Action>A tracked review cycle repeats after implementation fixes.</Action>
+      <Goal>Cap repeated review churn with explicit counters keyed by work item.</Goal>
+      <Acceptance>Rounds one and two are allowed, round three is rejected with explicit next-action guidance, and no semantic heuristics are used.</Acceptance>
+      <RelatedFlow>DF-LOOP-GATE</RelatedFlow>
+    </UC-013>
+    <UC-014>
+      <Action>Main session starts with WorkflowPlugin active.</Action>
+      <Goal>Inject workflow protocol guidance into eligible primary sessions.</Goal>
+      <Acceptance>vv-controller receives guidance for work items, headers, hard-stop handling, state inspection, and loop gates; helper primaries and known subagents are skipped.</Acceptance>
+      <RelatedFlow>DF-WORKFLOW-GUIDANCE</RelatedFlow>
+    </UC-014>
+    <UC-015>
+      <Action>User disables secrets-redaction through canonical vvoc config or vvoc plugin disable.</Action>
+      <Goal>Make the plugin return empty hooks on the next session so raw payloads reach the provider intentionally.</Goal>
+      <Acceptance>plugins["secrets-redaction"] is false, the plugin factory reads it, and other plugins continue to load normally.</Acceptance>
+      <RelatedFlow>DF-PLUGIN-TOGGLE</RelatedFlow>
+    </UC-015>
+    <UC-016>
+      <Action>User disables hashline-edit.</Action>
+      <Goal>Fall back to OpenCode default edit behavior when hashline-edit causes regressions.</Goal>
+      <Acceptance>plugins["hashline-edit"] false makes HashlineEditPlugin return empty hooks and leaves OpenCode default edit available.</Acceptance>
+      <RelatedFlow>DF-PLUGIN-TOGGLE</RelatedFlow>
+    </UC-016>
+    <UC-017>
+      <Action>User enables Guardian through vvoc plugin enable guardian.</Action>
+      <Goal>Set plugins.guardian true and re-enable Guardian on next session.</Goal>
+      <Acceptance>The CLI validates the plugin name, writes true, and prints restart guidance.</Acceptance>
+      <RelatedFlow>DF-PLUGIN-TOGGLE</RelatedFlow>
+    </UC-017>
+    <UC-018>
+      <Action>User syncs while plugins are disabled.</Action>
+      <Goal>Refresh managed config without resetting plugin toggles.</Goal>
+      <Acceptance>Disabled plugins stay disabled and enabled plugins stay enabled after sync.</Acceptance>
+      <RelatedFlow>DF-CONFIG-SYNC</RelatedFlow>
+    </UC-018>
+    <UC-019>
+      <Action>User lists plugins.</Action>
+      <Goal>See OpenCode-level plugin registration and vvoc-level enabled or disabled toggle status.</Goal>
+      <Acceptance>Output includes separate vvoc status based on canonical vvoc.json plugins section.</Acceptance>
+      <RelatedFlow>DF-PLUGIN-LIST</RelatedFlow>
+    </UC-019>
+    <UC-020>
+      <Action>User runs vvoc upgrade with old or invalid existing vvoc config.</Action>
+      <Goal>Finish package installation while making post-install sync failure explicit and recoverable by manual config repair.</Goal>
+      <Acceptance>The package install can succeed, sync failure is reported as partial upgrade, config remains unchanged, and user is instructed to fix vvoc.json manually.</Acceptance>
+      <RelatedFlow>DF-UPGRADE</RelatedFlow>
+    </UC-020>
+  </UseCases>
+  <NonGoals>
+    <NonGoal>No backward compatibility or automatic migration path for pre-role vvoc schemas after schema v3.</NonGoal>
+    <NonGoal>No target-based model override UX after the role-based cutover.</NonGoal>
+    <NonGoal>No semantic task grouping, embeddings, n-grams, or fuzzy work-item identity in workflow v1.</NonGoal>
+    <NonGoal>No workflow tracking for investigator, guardian, or enhancer in workflow v1.</NonGoal>
+    <NonGoal>No per-plugin toggle support beyond the vvoc-managed plugin set.</NonGoal>
+    <NonGoal>No silent cleanup of old pre-rename managed-agent or command entries during sync.</NonGoal>
+  </NonGoals>
+  <Constraints>
+    <Constraint>OpenCode config remains in OpenCode-managed paths; vvoc-managed settings live in $XDG_CONFIG_HOME/vvoc/vvoc.json or project-local .vvoc where supported.</Constraint>
+    <Constraint>Persisted vvoc data lives under $XDG_DATA_HOME/vvoc, not OpenCode config.</Constraint>
+    <Constraint>Config writes must be conservative, idempotent, strict on current schema v3, and comment-preserving where practical.</Constraint>
+    <Constraint>Role resolution fails loudly for unknown roles.</Constraint>
+    <Constraint>Workflow enforcement uses explicit IDs and simple counters only.</Constraint>
+    <Constraint>NEEDS_CONTEXT is a hard stop.</Constraint>
+    <Constraint>Tracked subagent names follow vv-* naming: vv-implementer, vv-spec-reviewer, vv-code-reviewer.</Constraint>
+    <Constraint>vv-spec and vv-plan skills write durable spec packages under project-local .vvoc/specs/&lt;id&gt;.</Constraint>
+    <Constraint>Guardian uses current OpenCode permission reply paths only.</Constraint>
+    <Constraint>Hashline edit validation accepts only current line and context hash anchors.</Constraint>
+  </Constraints>
+  <Risks>
+    <Risk>Shared workflows may reference custom roles not assigned on another machine, causing startup failures.</Risk>
+    <Risk>Unsafe rewrites of user-maintained config could damage trust in the CLI.</Risk>
+    <Risk>OpenCode plugin and SDK surface area may evolve.</Risk>
+    <Risk>Provider alias models may be required for some role assignments.</Risk>
+    <Risk>LLMs may produce malformed tracked subagent top-block protocol output.</Risk>
+    <Risk>In-memory or persisted workflow state can confuse users after process or session transitions if diagnostics are weak.</Risk>
+    <Risk>Forcing default_agent to vv-controller may surprise users who intentionally selected another default.</Risk>
+  </Risks>
+  <OpenQuestions>
+    <Question>Should future versions validate role assignments against provider-declared capabilities such as vision?</Question>
+    <Question>Should diagnostics discover literal provider/model strings still present in OpenCode config fields?</Question>
+    <Question>Should investigator become a tracked agent in a future workflow version?</Question>
+  </OpenQuestions>
+</GraceRequirements>

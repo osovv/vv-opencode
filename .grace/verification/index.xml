@@ -1,0 +1,41 @@
+<GraceVerificationIndex graceVersion="4.0">
+  <MigrationSource>docs/verification-plan.xml</MigrationSource>
+  <VerificationDocuments>
+    <VD-MAIN>
+      <Path>verification/main.xml</Path>
+      <Owns>
+        <V-M-MODEL-ROLES />
+        <V-M-CONFIG-LAYERS />
+        <V-M-CLI-CONFIG />
+        <V-M-RELEASE-AUTOMATION />
+        <V-M-CLI-MANAGED-AGENTS />
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-CLI-AGENT-MODELS />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CLI-COMMANDS />
+        <V-M-PLUGIN-MODEL-ROLES />
+        <V-M-PLUGIN-GUARDIAN />
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-PLUGIN-SECRETS-REDACTION />
+        <V-M-CLI-ROLE />
+        <V-M-CLI-CONFIG-VALIDATE />
+        <V-M-CLI-PRESET />
+        <V-M-VVOC-PRESET-REGISTRY />
+        <V-M-CLI-PLUGIN-LIST />
+        <V-M-CLI-PLUGIN-TOGGLE />
+        <V-M-CLI-PATCH-PROVIDER />
+        <V-M-CLI-COMPLETION />
+        <V-M-CLI-INIT />
+        <V-M-CLI-UPGRADE />
+        <V-M-WORKFLOW-PROTOCOL />
+        <V-M-WORKFLOW-REPAIR />
+        <V-M-WORKFLOW-STATE />
+        <V-M-WORKFLOW-TRANSITIONS />
+        <V-M-WORKFLOW-TOOLING />
+        <V-M-PLUGIN-WORKFLOW />
+        <V-M-WORKFLOW-PERSISTENCE />
+      </Owns>
+    </VD-MAIN>
+  </VerificationDocuments>
+</GraceVerificationIndex>

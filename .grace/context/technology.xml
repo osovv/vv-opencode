@@ -1,0 +1,55 @@
+<GraceTechnology graceVersion="4.0">
+  <MigrationSource>docs/technology.xml</MigrationSource>
+  <Language>TypeScript 5.8.2</Language>
+  <Runtime>Bun 1.3.8</Runtime>
+  <Framework>citty 0.2.2</Framework>
+  <Package>
+    <Name>@osovv/vv-opencode</Name>
+    <Version>0.35.29</Version>
+    <Binary>vvoc</Binary>
+    <PackageManager>bun@1.3.8</PackageManager>
+  </Package>
+  <Dependencies>
+    <Dependency>@opencode-ai/plugin 1.3.17 for typed OpenCode plugin API, hooks, config mutation, and custom tool helpers.</Dependency>
+    <Dependency>@opencode-ai/sdk 1.3.17 for OpenCode client types and Guardian/runtime interactions.</Dependency>
+    <Dependency>citty 0.2.2 for CLI command tree and argument parsing.</Dependency>
+    <Dependency>jsonc-parser 3.3.1 for JSONC-aware config parsing and edits.</Dependency>
+    <Dependency>@clack/prompts for interactive init prompts.</Dependency>
+    <Dependency>ajv for vvoc schema validation.</Dependency>
+  </Dependencies>
+  <Tooling>
+    <Tool>bun test for tests.</Tool>
+    <Tool>tsc for typecheck and build.</Tool>
+    <Tool>oxlint with denied warnings for source linting.</Tool>
+    <Tool>oxfmt for formatting source files.</Tool>
+    <Tool>lefthook for pre-commit hooks.</Tool>
+    <Tool>bunx @osovv/grace-cli@rc for GRACE 4 status and lint validation during this migration.</Tool>
+  </Tooling>
+  <ConfigLayout>
+    <OpenCode>OpenCode config remains in opencode.json or opencode.jsonc under OpenCode-managed global/project paths. Model-bearing fields may store vv-role:* references and are resolved by ModelRolesPlugin at runtime.</OpenCode>
+    <Vvoc>vvoc-managed settings live in $XDG_CONFIG_HOME/vvoc/vvoc.json or project-local .vvoc/vvoc.json depending on scope. Project-local .vvoc also stores managed agents, skills, and spec packages.</Vvoc>
+    <Data>Persisted data lives under $XDG_DATA_HOME/vvoc, including workflow persistence.</Data>
+  </ConfigLayout>
+  <TestingStack>
+    <ModuleLevel>bun test targeted files for lib, command, plugin, workflow, secrets, hashline, and release automation modules.</ModuleLevel>
+    <WaveLevel>bun run typecheck, bun run lint, bun run fmt:check, bun test.</WaveLevel>
+    <PhaseLevel>bun run check, bun run build, bun run pack:check, bun run release:check before release-sensitive work.</PhaseLevel>
+  </TestingStack>
+  <Observability>
+    <Logger>OpenCode app log through client.app.log plus Guardian best-effort debug file in /tmp where applicable.</Logger>
+    <LogFormat>[service][function][block] message.</LogFormat>
+    <RequiredFields>service, level, message, requestID, sessionID where runtime context provides them.</RequiredFields>
+    <Redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside bounded existing Guardian truncation policy.</Redaction>
+  </Observability>
+  <OperationalConstraints>
+    <Constraint>Prefer existing project libraries and established repository patterns.</Constraint>
+    <Constraint>Use Bun commands directly for project checks and bunx for grace-cli in this migration.</Constraint>
+    <Constraint>Do not edit generated dist output manually.</Constraint>
+    <Constraint>Root package exports must stay valid for @osovv/vv-opencode and plugin subpaths.</Constraint>
+    <Constraint>Publishing remains manual from terminal with npm publish; do not add CI publish workflows unless explicitly requested.</Constraint>
+  </OperationalConstraints>
+  <DeliveryShape>
+    <Shape>One public npm package exporting GuardianPlugin, HashlineEditPlugin, ModelRolesPlugin, SystemContextInjectionPlugin, WorkflowPlugin, and SecretsRedactionPlugin, plus a Bun CLI binary named vvoc.</Shape>
+    <ManualReview>docs/technology.xml mentions MemoryPlugin, but current package exports and src/plugins do not contain a Memory plugin. This was migrated as stale legacy drift, not current state.</ManualReview>
+  </DeliveryShape>
+</GraceTechnology>

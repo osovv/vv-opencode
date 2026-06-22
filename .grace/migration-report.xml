@@ -1,0 +1,50 @@
+<GraceMigrationReport graceVersion="4.0">
+  <Source>GRACE 3 legacy docs in docs/* plus package.json and README.md for current package metadata</Source>
+  <Approval>User explicitly approved writing .grace artifacts after migration draft.</Approval>
+  <GeneratedGrace4Layout>
+    <Context>.grace/context</Context>
+    <Graph>.grace/graph</Graph>
+    <Verification>.grace/verification</Verification>
+    <Changes>.grace/changes</Changes>
+  </GeneratedGrace4Layout>
+  <SourcesUsed>
+    <SourceFile>docs/requirements.xml</SourceFile>
+    <SourceFile>docs/technology.xml</SourceFile>
+    <SourceFile>docs/development-plan.xml</SourceFile>
+    <SourceFile>docs/knowledge-graph.xml</SourceFile>
+    <SourceFile>docs/verification-plan.xml</SourceFile>
+    <SourceFile>docs/operational-packets.xml</SourceFile>
+    <SourceFile>docs/plans/workflow-plugin-v1.md</SourceFile>
+    <SourceFile>docs/workflow-plugin-handoff.md</SourceFile>
+    <SourceFile>docs/blocked-ideas.md</SourceFile>
+    <SourceFile>package.json</SourceFile>
+    <SourceFile>README.md</SourceFile>
+  </SourcesUsed>
+  <Ambiguities>
+    <Ambiguity>Legacy docs have version drift: requirements 0.6.0, technology 0.5.0, development and graph 0.8.0, verification 1.0.0, operational packets 0.2.0. GRACE 4 files use graceVersion 4.0.</Ambiguity>
+    <Ambiguity>Technology legacy doc mentions MemoryPlugin, but current package exports and source tree do not contain that plugin. It is marked manual-review and not migrated as current module state.</Ambiguity>
+    <Ambiguity>Historical workflow handoff and plan docs include superseded decisions. Current source, knowledge graph, verification plan, README, and package exports were treated as stronger evidence.</Ambiguity>
+  </Ambiguities>
+  <UnsupportedStructures>
+    <Unsupported>Legacy GRACE 3 docs remain under docs/* and are not valid GRACE 4 state.</Unsupported>
+    <Unsupported>No retroactive C-* change bundles were created for historical plans or completed work.</Unsupported>
+  </UnsupportedStructures>
+  <ManualReview>
+    <Item>Confirm whether MemoryPlugin should be removed from legacy references or reintroduced in a future approved change.</Item>
+    <Item>Review whether old docs/* should be archived or deleted after .grace passes validation and cleanup is explicitly approved.</Item>
+    <Item>Review whether function-level START_CONTRACT anchors should eventually be represented in graph documents or remain source-local only.</Item>
+  </ManualReview>
+  <ProposedCleanup>
+    <Item>Do not delete legacy docs in this migration step.</Item>
+    <Item>After validation, ask separately before deleting or archiving docs/*.xml and historical docs.</Item>
+    <Item>Keep .grace as current GRACE 4 state going forward.</Item>
+  </ProposedCleanup>
+  <Validation>
+    <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+    <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+    <Result>lint PASS with 0 errors and 0 warnings after anchor projection fixes.</Result>
+    <Result>status PASS as grace4 with 5 context artifacts, 31 graph modules, 31 verification entries, 0 active changes, 0 archived changes, and 0 integrity errors or warnings.</Result>
+    <Note>Some status invocations produced transient bunx FileNotFound errors while copying runtime files; retry succeeded without artifact changes.</Note>
+  </Validation>
+  <CleanupConfirmationRequired>true</CleanupConfirmationRequired>
+</GraceMigrationReport>
