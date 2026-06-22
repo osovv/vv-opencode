@@ -1,5 +1,4 @@
 <GraceUXGuidelines graceVersion="4.0">
-  <MigrationSource>docs/requirements.xml, docs/technology.xml, README.md</MigrationSource>
   <Applicability>applicable</Applicability>
   <Audience>Engineers and maintainers operating the vvoc CLI, managed OpenCode agents, skills, and plugins.</Audience>
   <Guideline>CLI output should be explicit about selected scope, selected config source, writes performed, skipped writes, and follow-up restart instructions.</Guideline>

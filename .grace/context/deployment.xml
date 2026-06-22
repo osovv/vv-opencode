@@ -1,5 +1,4 @@
 <GraceDeployment graceVersion="4.0">
-  <MigrationSource>docs/technology.xml, docs/verification-plan.xml, package.json, README.md</MigrationSource>
   <Applicability>applicable</Applicability>
   <Target>Public npm package @osovv/vv-opencode with Bun CLI binary vvoc and OpenCode plugin exports.</Target>
   <PackageFiles>
