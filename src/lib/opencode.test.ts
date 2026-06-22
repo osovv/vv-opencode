@@ -631,6 +631,7 @@ describe("canonical vvoc config helpers", () => {
         "vv-minimax",
         "vv-deepseek",
         "vv-osovv",
+        "vv-osovv-cheap",
       ]);
     } finally {
       await rm(configHome, { recursive: true, force: true });

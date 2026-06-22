@@ -37,43 +37,57 @@ Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` 
 
 ## Spec-to-Code Pipeline
 
-Agents are most useful when they do not jump straight from a vague request to edits. vvoc turns larger work into explicit artifacts first: a spec that captures intent, a plan that maps intent to implementation tasks, and review gates that catch mismatches before work is considered done.
-
-The core workflow is a three-stage pipeline with independent review gates at each level. All artifacts for one feature live in a single spec package directory:
+vvoc keeps larger agentic work from jumping straight into edits. The process turns a request into explicit artifacts first, then executes the approved plan with bounded implementation and review loops.
 
 ```
-User request
-    │
-    ▼ auto-trigger
-vv-spec  ───────────────────────────────────────→  .vvoc/specs/<id>/spec.xml
-    │   Grill-me interview (one question at a time)
-    │   Decision tree with recommended answers
-    │   Deep synthesis by expensive model (no sub-agent delegation)
-    │   Optionally creates .vvoc/specs/<id>/design-context.xml
-    │   for complex sessions (design memory, not requirements)
-    │
-    ├── ① Spec review: requirements correct, complete, unambiguous?
-    │
-    ▼ auto-trigger (after approval)
-vv-plan  ───────────────────────────────────────→  .vvoc/specs/<id>/plan.xml
-    │   Reads sibling design-context.xml when present (explanatory only)
-    │   Interface contracts with JSDoc behavior descriptions
-    │   Acceptance criteria per task (grep: `<criterion>`)
-    │   Dependency ordering (grep: `<task_id>`)
-    │   Three-layer review model: spec → plan → code
-    │
-    ├── ② Plan review: every spec requirement → task? Contracts match spec?
-    │
-    ▼ auto-trigger (after approval)
-vv-implementer → vv-spec-reviewer → vv-code-reviewer
-    │   Workflow tracked loop with work items
-    │   Spec review checks: code matches spec?
-    │   Code review checks: implementation matches plan contracts?
-    │
-    ├── ③ Code review: interfaces correct? All AC pass?
-    │
-    ▼
-Done
+Request / idea
+   ↓
+vv-spec
+   asks clarifying questions
+   writes .vvoc/specs/<id>/spec.xml
+   waits for spec approval
+   ↓
+vv-plan
+   reads the approved spec
+   writes .vvoc/specs/<id>/plan.xml
+   defines tasks, contracts, dependencies, and acceptance criteria
+   waits for plan approval
+   ↓
+vv-execute
+   applies the approved plan task by task
+   runs implementation + review internally
+   verifies before moving on
+   ↓
+Verified result
+```
+
+Inside `vv-execute`:
+
+```text
+Each plan task
+   ↓
+vv-implementer
+   implements the focused task and runs targeted verification
+   ↓
+vv-spec-reviewer
+   checks whether the result matches the approved spec
+   ↓
+vv-code-reviewer
+   checks bugs, regressions, maintainability, and missing tests
+   ↓
+verification
+   pass → next task
+   fail → bounded retry loop
+   needs context / blocked → stop and ask the user
+```
+
+All artifacts for one feature live together:
+
+```text
+.vvoc/specs/<id>/
+  spec.xml            # what should be built and why
+  design-context.xml  # optional design memory
+  plan.xml            # how to implement and verify it
 ```
 
 Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/<id>/` to `.vvoc/specs/archive/<id>-<timestamp>/`.
@@ -206,6 +220,7 @@ vvoc preset vv-zai
 vvoc preset vv-deepseek
 vvoc preset vv-minimax
 vvoc preset vv-osovv
+vvoc preset vv-osovv-cheap
 ```
 
 Built-in role IDs: `default`, `smart`, `fast`, `vision` + any custom lowercase-hyphenated IDs.

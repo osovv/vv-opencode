@@ -4,6 +4,7 @@
 
 This release completes the strict cutover from legacy behavior: vvoc config parsing now rigidly enforces canonical schema v3 with the `plugins` section as required, rejecting old, incomplete, or malformed `vvoc.json` files instead of silently migrating or repairing them; `vvoc status` and `vvoc doctor` report parse errors without mutating the file, and `vvoc upgrade` treats a failed post-install sync as a reported partial upgrade requiring manual config fix. Runtime compatibility fallbacks have been removed — Guardian permission replies use only the current OpenCode permission API or HTTP reply, Hashline edit anchors accept only current hashing algorithms, and `vvoc sync` no longer deletes old managed-agent names or managed command entries, leaving them untouched while writing current registrations. Users with existing v1/v2 configs must manually update to schema v3 before any sync, install, or plugin runtime will proceed.
 
+* feat(preset): add vv-osovv-cheap preset with zai smart and deepseek reviewer ([c2b7fb0](https://github.com/osovv/vv-opencode/commit/c2b7fb0))
 * docs: complete launch polish pass ([b026a79](https://github.com/osovv/vv-opencode/commit/b026a79))
 * docs: document strict legacy cutover ([cf99ccf](https://github.com/osovv/vv-opencode/commit/cf99ccf))
 * feat(config): enforce strict vvoc config parsing ([299a398](https://github.com/osovv/vv-opencode/commit/299a398))

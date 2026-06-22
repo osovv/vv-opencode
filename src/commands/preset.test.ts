@@ -39,6 +39,7 @@ describe("preset helpers", () => {
       "vv-minimax",
       "vv-deepseek",
       "vv-osovv",
+      "vv-osovv-cheap",
     ]);
   });
 
@@ -46,7 +47,14 @@ describe("preset helpers", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual(["vv-deepseek", "vv-minimax", "vv-openai", "vv-osovv", "vv-zai"]);
+    expect(presets).toEqual([
+      "vv-deepseek",
+      "vv-minimax",
+      "vv-openai",
+      "vv-osovv",
+      "vv-osovv-cheap",
+      "vv-zai",
+    ]);
   });
 
   test("formatPreset renders the expected preset object", () => {
@@ -142,7 +150,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-deepseek, vv-minimax, vv-openai, vv-osovv, vv-zai",
+        "unknown preset: missing. Available presets: vv-deepseek, vv-minimax, vv-openai, vv-osovv, vv-osovv-cheap, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });

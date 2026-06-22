@@ -76,6 +76,16 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       reviewer: "zai-coding-plan/glm-5.1",
     },
   },
+  "vv-osovv-cheap": {
+    description: "Cheap osovv role assignments (deepseek + stepfun + minimax + zai).",
+    agents: {
+      default: "deepseek/deepseek-v4-flash",
+      fast: "stepfun/step-3.7-flash",
+      smart: "zai-coding-plan/glm-5.1",
+      vision: "minimax-coding-plan/MiniMax-M2.7",
+      reviewer: "deepseek/deepseek-v4-pro",
+    },
+  },
 } as const satisfies Record<string, BuiltinVvocPresetDefinition>;
 
 export type BuiltInVvocPresetName = keyof typeof BUILTIN_VVOC_PRESET_REGISTRY;
