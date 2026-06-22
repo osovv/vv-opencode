@@ -1,3 +1,14 @@
+## <small>0.35.29 (2026-06-22)</small>
+
+### Summary
+
+This release adds the `vv-osovv-cheap` preset, which provides a more cost-effective set of model role assignments by combining deepseek, stepfun, minimax, and zai models, and updates the project documentation to clarify vvoc's role as a curated, opinionated plugin set that adds a structured spec-to-code process layer for safer, more portable agentic development—including formalized trajectories, review-driven execution, and long-run safety features.
+
+* feat(preset): add vv-osovv-cheap preset with zai smart and deepseek reviewer ([dfe1efe](https://github.com/osovv/vv-opencode/commit/dfe1efe))
+* docs: clarify vvoc process positioning ([3d78927](https://github.com/osovv/vv-opencode/commit/3d78927))
+* docs: explain plugin user benefits ([baf716b](https://github.com/osovv/vv-opencode/commit/baf716b))
+* docs: update project positioning ([7af2865](https://github.com/osovv/vv-opencode/commit/7af2865))
+
 ## <small>0.35.28 (2026-06-21)</small>
 
 ### Summary
