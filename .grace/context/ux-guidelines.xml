@@ -1,14 +1,39 @@
 <GraceUXGuidelines graceVersion="4.0">
   <Applicability>applicable</Applicability>
-  <Audience>Engineers and maintainers operating the vvoc CLI, managed OpenCode agents, skills, and plugins.</Audience>
-  <Guideline>CLI output should be explicit about selected scope, selected config source, writes performed, skipped writes, and follow-up restart instructions.</Guideline>
-  <Guideline>Invalid existing vvoc configs must fail loudly before mutation and should point users to manual repair plus rerun instructions.</Guideline>
-  <Guideline>Status and doctor are diagnostic exceptions: they report selected paths and validation problems without normalizing or rewriting config.</Guideline>
-  <Guideline>Mutating commands must be idempotent and conservative; reruns should report kept, updated, or created state rather than silently clobbering user-owned content.</Guideline>
-  <Guideline>Workflow prompts and tool results should preserve exact work-item IDs, tracked subagent names, mode, required reviewers, and hard-stop status language.</Guideline>
-  <Guideline>Review-only workflows report findings and stop before implementation unless the user explicitly asks for fixes.</Guideline>
-  <Guideline>Plugin toggle UX should distinguish OpenCode plugin registration from vvoc-level enabled or disabled status.</Guideline>
-  <Guideline>Secret and permission UX should favor bounded safe defaults, visible manual fallback, and no raw secret exposure in logs.</Guideline>
-  <Guideline>Hashline edit errors should fail loudly on stale anchors and include refreshed nearby anchors when available.</Guideline>
-  <Guideline>README examples are the user-facing CLI contract and must stay synchronized when command names, flags, setup flow, or config locations change.</Guideline>
+  <Audience>Engineers and maintainers designing vvoc CLI behavior, plugin UX, API surfaces, documentation, errors, reviews, and release communication.</Audience>
+  <Tone>
+    <Guideline>Use direct, plain language. Prefer outcome first, then context and next steps.</Guideline>
+    <Guideline>Do not hide uncertainty, partial completion, blocked states, skipped work, or residual user action.</Guideline>
+    <Guideline>Error messages should explain what happened, why it matters, and what the user can do next.</Guideline>
+    <Guideline>Do not blame users for invalid input, invalid config, stale state, or missing setup; describe the repair path.</Guideline>
+  </Tone>
+  <InterfaceDesign>
+    <Guideline>CLI, plugin, and API surfaces should be predictable, composable, scope-aware, and conservative by default.</Guideline>
+    <Guideline>Mutating commands should make targets, scope, writes, preserved state, skipped state, and follow-up actions explicit.</Guideline>
+    <Guideline>Diagnostic commands should inspect and explain state without unexpectedly mutating it.</Guideline>
+    <Guideline>Dangerous, destructive, broad, or cross-scope changes require explicit user intent.</Guideline>
+    <Guideline>Exit status and machine-readable surfaces should distinguish success, validation failure, partial completion, blocked state, and hard stop.</Guideline>
+  </InterfaceDesign>
+  <ConfigAndOwnership>
+    <Guideline>User-owned config and content must not be silently clobbered.</Guideline>
+    <Guideline>UX should distinguish managed vvoc-owned content from user-owned or unmanaged content.</Guideline>
+    <Guideline>Invalid existing config should fail with clear diagnostics and repair guidance before mutation.</Guideline>
+    <Guideline>Idempotent reruns should be treated as a normal happy path and should report kept, updated, or created state clearly.</Guideline>
+  </ConfigAndOwnership>
+  <WorkflowUX>
+    <Guideline>Workflow UX should make state visible: drafting, approval, implementation, review, applied, blocked, or needing context.</Guideline>
+    <Guideline>Review workflows should report findings before fixes and should not surprise users with implementation.</Guideline>
+    <Guideline>Hard stops should summarize known facts, missing context, and the next safe user action instead of continuing speculative automation.</Guideline>
+    <Guideline>Stable identifiers and statuses should be preserved so long workflows can be resumed safely.</Guideline>
+  </WorkflowUX>
+  <DocumentationAndReleaseLanguage>
+    <Guideline>README examples are user-facing contracts and should remain copy-pasteable and current.</Guideline>
+    <Guideline>Docs should clearly distinguish global, project, and effective scope when scope affects behavior.</Guideline>
+    <Guideline>Changelog and release summaries should explain user impact, compatibility impact, and required action, not only internal implementation details.</Guideline>
+    <Guideline>Release language must be grounded in actual changes and must not invent capabilities, compatibility, migration, or safety claims.</Guideline>
+  </DocumentationAndReleaseLanguage>
+  <SecurityAndPermissions>
+    <Guideline>Secrets, credentials, raw tokens, and sensitive payloads should not appear in normal output or logs.</Guideline>
+    <Guideline>Permission UX should favor bounded safe defaults, visible manual fallback, and clear diagnostic context.</Guideline>
+  </SecurityAndPermissions>
 </GraceUXGuidelines>
