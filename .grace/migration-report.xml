@@ -35,10 +35,18 @@
     <Item>Review whether function-level START_CONTRACT anchors should eventually be represented in graph documents or remain source-local only.</Item>
   </ManualReview>
   <ProposedCleanup>
-    <Item>Do not delete legacy docs in this migration step.</Item>
-    <Item>After validation, ask separately before deleting or archiving docs/*.xml and historical docs.</Item>
+    <Item>Legacy GRACE 3 XML docs were deleted after explicit user confirmation following the initial GRACE 4 migration commit.</Item>
+    <Item>Historical Markdown notes under docs/ are not GRACE 3 XML artifacts and were not deleted in this cleanup step.</Item>
     <Item>Keep .grace as current GRACE 4 state going forward.</Item>
   </ProposedCleanup>
+  <DeletedLegacyDocs>
+    <File>docs/requirements.xml</File>
+    <File>docs/technology.xml</File>
+    <File>docs/development-plan.xml</File>
+    <File>docs/knowledge-graph.xml</File>
+    <File>docs/verification-plan.xml</File>
+    <File>docs/operational-packets.xml</File>
+  </DeletedLegacyDocs>
   <Validation>
     <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
     <Command>bunx @osovv/grace-cli@rc status --path .</Command>
@@ -46,5 +54,6 @@
     <Result>status PASS as grace4 with 5 context artifacts, 31 graph modules, 31 verification entries, 0 active changes, 0 archived changes, and 0 integrity errors or warnings.</Result>
     <Note>Some status invocations produced transient bunx FileNotFound errors while copying runtime files; retry succeeded without artifact changes.</Note>
   </Validation>
-  <CleanupConfirmationRequired>true</CleanupConfirmationRequired>
+  <CleanupConfirmation>User approved legacy docs deletion after the migration commit.</CleanupConfirmation>
+  <CleanupConfirmationRequired>false</CleanupConfirmationRequired>
 </GraceMigrationReport>

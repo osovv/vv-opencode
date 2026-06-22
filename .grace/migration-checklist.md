@@ -8,4 +8,4 @@
 - [x] `bunx @osovv/grace-cli@rc lint --path .` passed or findings are understood.
 - [x] `bunx @osovv/grace-cli@rc status --path .` reports GRACE 4 state.
 - [x] Legacy cleanup proposal is explicit.
-- [ ] User explicitly confirmed cleanup before deleting or moving legacy docs.
+- [x] User explicitly confirmed cleanup before deleting or moving legacy docs.
