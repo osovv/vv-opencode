@@ -37,6 +37,8 @@ Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` 
 
 ## Spec-to-Code Pipeline
 
+Agents are most useful when they do not jump straight from a vague request to edits. vvoc turns larger work into explicit artifacts first: a spec that captures intent, a plan that maps intent to implementation tasks, and review gates that catch mismatches before work is considered done.
+
 The core workflow is a three-stage pipeline with independent review gates at each level. All artifacts for one feature live in a single spec package directory:
 
 ```
@@ -103,15 +105,16 @@ Managed skills are installed by `vvoc`. `vv-controller` explicitly routes `vv-sp
 
 ## Why vv-opencode?
 
-Setting up OpenCode for serious daily work means juggling config files, agent prompts, plugin wiring, model role assignments, and permission rules — every time, on every machine.
+OpenCode is a strong, flexible base for agentic coding, but it intentionally leaves the development process mostly up to you: when to clarify requirements, when to plan, when to investigate first, when to review, and how to keep longer runs safe. That flexibility is powerful, but it can also make agent work feel loose and inconsistent.
 
-**vv-opencode collapses that into a single `vvoc install`.** It owns the wiring so you don't have to:
+**vv-opencode adds a curated process layer on top of OpenCode:**
 
-- **Six plugins, one entry** — all plugins are exported from a single pinned package entry
-- **Managed agent & skill system** — `vv-controller` routes `vv-spec`, `vv-plan`, and `vv-review`; bundled managed skills also include `vv-execute` and `vv-reflect`
-- **Model roles & presets** — assign models to roles (`smart`, `fast`, `vision`, …) and switch provider presets with one command
-- **Security-first** — a `guardian` agent reviews permission requests, secrets are redacted from LLM-bound chat
-- **Stale-line-number defense** — hashline-backed `edit` prevents write-against-wrong-snapshot bugs
+- **Formalized trajectories** — small changes stay direct, unclear bugs start with investigation, large changes go through spec and plan, and risky implementation uses review loops
+- **Spec-first by default** — turn broad requests into explicit specs, plans, and review gates before implementation
+- **Review-driven execution** — keep implementation, spec review, and code review as separate steps instead of one agent silently doing everything
+- **Portable model choices** — use roles like `vv-role:smart` and `vv-role:fast` in shared agents, then map those roles per machine or project
+- **Long-run safety** — Guardian auto-approves routine low-risk permission requests, leaves risky ones to OpenCode's manual approval flow, and secrets redaction reduces accidental leakage
+- **Safer edits** — hashline-backed `edit` ties changes to fresh `read` output so agents are less likely to write against stale line numbers
 
 ---
 
@@ -119,15 +122,15 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 
 | Area | What you get |
 |---|---|
-| **Plugins** | 6 plugins in one pinned package entry — workflow orchestration, model roles, guardian, hashline edit, system context injection, secrets redaction |
-| **Agent System** | `vv-controller` routes work: direct for small changes, `investigator` for bugs, implementer+reviewer loop for risky work, and `vv-spec`/`vv-plan` for large features |
-| **Skills** | `vv-spec` interviews you and writes an XML spec; `vv-plan` maps the spec to interface contracts and acceptance criteria; `vv-execute` runs approved plans; `vv-review` runs a review-only workflow; `vv-reflect` preserves reusable session findings as repository memory |
-| **Spec-to-Code Pipeline** | `vv-spec` → spec review → `vv-plan` → plan review → `vv-implementer` → code review. Three independent review gates cover requirements, contracts, and implementation |
-| **One-Click Setup** | `vvoc install` or `vvoc sync` bootstraps everything — config, agents, skills, prompts, presets |
-| **CLI Tooling** | 16+ commands: install, sync, launch, status, doctor, role management, presets, guardian config, shell completion, upgrade |
-| **Security** | GuardianPlugin reviews shell-permission requests; SecretsRedactionPlugin strips tokens before LLM requests; both configurable via `vvoc.json` |
-| **Model Roles** | Assign provider/model/variant to roles (`default`, `smart`, `fast`, `vision`, custom); switch between `vv-openai`, `vv-zai`, `vv-deepseek`, `vv-minimax` presets |
-| **Workflow Tracking** | Explicit-intent work items with open/list/close for tracked implementation and review-only pipelines |
+| **Plugins** | A curated set of OpenCode plugins that make agentic work more structured, portable, and safer without hand-wiring each piece yourself |
+| **Agent System** | A default controller that picks the right path: direct changes for small work, investigation before unclear fixes, and implementer/reviewer loops for risky changes |
+| **Skills** | Guided workflows for turning ideas into specs, specs into plans, plans into execution, reviews into findings, and long sessions into reusable memory |
+| **Spec-to-Code Pipeline** | A repeatable path from request → spec → plan → implementation → review, so agents do not silently skip requirements or acceptance criteria |
+| **One-Click Setup** | Recreate the same opinionated workflow on a new machine or project with `vvoc install` / `vvoc sync` |
+| **CLI Tooling** | Operate and diagnose the setup from one CLI: install, sync, launch, status, doctor, roles, presets, plugin toggles, completion, and upgrade |
+| **Long-Run Safety** | Guardian keeps safe long/AFK runs moving by auto-approving routine low-risk permissions, while risky actions stay in OpenCode's manual approval flow; secrets redaction reduces accidental leakage |
+| **Model Roles** | Put roles like `vv-role:smart` or `vv-role:fast` in shared agents and skills instead of hardcoded model IDs, then choose provider/model mappings per environment |
+| **Workflow Tracking** | Replace free-form multi-agent chaos with explicit work items, bounded review rounds, reviewer result collection, and hard stops when more context is needed |
 
 ---
 
@@ -276,15 +279,15 @@ vvoc launch --scope project -- run "hello"
 
 All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
-| Agent | Role |
+| Agent | When it helps |
 |---|---|
-| `vv-controller` | Default primary agent — routes work to the right subagent |
-| `enhancer` | Prompt enhancement |
-| `vv-implementer` | Focused implementation with verification |
-| `vv-spec-reviewer` | Checks implementation against spec |
-| `vv-code-reviewer` | Engineering review for bugs and maintainability |
-| `investigator` | Root-cause analysis for unclear bugs |
-| `guardian` | Permission request review (plugin runtime) |
+| `vv-controller` | Default primary agent that routes small changes, investigations, reviews, and larger feature work through the right workflow |
+| `enhancer` | Improves rough requests before execution when a clearer prompt would help |
+| `vv-implementer` | Applies a focused approved change and verifies it before reporting completion |
+| `vv-spec-reviewer` | Checks whether implementation matches the requested spec and acceptance criteria |
+| `vv-code-reviewer` | Looks for bugs, regressions, maintainability risks, and missing tests |
+| `investigator` | Finds the root cause first when behavior is unclear or a failure needs diagnosis |
+| `guardian` | Supports GuardianPlugin by auto-approving routine low-risk permission requests and leaving risky ones for manual approval |
 
 ---
 
@@ -292,13 +295,15 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 Five workflow skills are scaffolded alongside agents:
 
-| Skill | Trigger | Output | Grep-able |
-|---|---|---|---|
-| `vv-spec` | Creative/feature request, no spec exists | `.vvoc/specs/<id>/spec.xml` + optional `design-context.xml` | `<goal>`, `<architecture>`, `<component>` |
-| `vv-plan` | Approved spec exists | `.vvoc/specs/<id>/plan.xml` | `<id>T-`, `<criterion>`, `<task_id>`, `/**` JSDoc |
-| `vv-execute` | Approved plan exists | Applies and archives spec/plan artifacts | `<status>`, `<task>`, `<acceptance>` |
-| `vv-review` | Review request | Findings report | — |
-| `vv-reflect` | End of a long development, debugging, bugfix, ops, or investigation session | Existing repo docs or `.vvoc/lessons/*.xml` / `.vvoc/runbooks/*.xml` | XML fallback indexes and entry tags |
+| Skill | When to use it | What it gives you |
+|---|---|---|
+| `vv-spec` | You have a feature or creative request and no agreed contract yet | A guided interview, recommended options, and a saved spec in `.vvoc/specs/<id>/spec.xml` |
+| `vv-plan` | A spec is approved and ready to implement | A task-level implementation plan with file targets, contracts, dependencies, and acceptance criteria |
+| `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification and applied spec/plan archival |
+| `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
+| `vv-reflect` | A long development, debugging, ops, or investigation session produced reusable knowledge | Durable notes in existing docs or `.vvoc/lessons` / `.vvoc/runbooks` for future agents |
+
+Spec and plan artifacts stay XML so requirements, tasks, acceptance criteria, and dependencies remain easy to grep and review.
 
 `vv-reflect` creates `.vvoc/lessons` and `.vvoc/runbooks` lazily only after approved fallback writes. It prefers an existing repository documentation convention when there is a high-confidence match.
 
