@@ -133,14 +133,14 @@ Setting up OpenCode for serious daily work means juggling config files, agent pr
 
 ## The Six Plugins
 
-| Plugin | What it does |
+| Plugin | What it helps you do |
 |---|---|
-| **WorkflowPlugin** | Tracked orchestration around `task` for subagents; registers `work_item_open/list/close` tools with explicit `mode` (`implementation` or `review_only`), `requiredReviewers` (`spec`, `code`), collect-all reviewer rounds, state-machine enforcement, and implementation retry round-limit gating |
-| **ModelRolesPlugin** | Resolves `vv-role:*` references in OpenCode config at startup; translates `:variant` suffixes into native model+variant fields |
-| **GuardianPlugin** | Reviews OpenCode permission requests with a constrained guardian agent and safe-deny defaults; configurable model, timeout, risk threshold |
-| **HashlineEditPlugin** | Replaces OpenCode's `edit` with hash-anchored variant; rewrites `read` output to `line#hash` format; rejects stale snapshots to prevent drift bugs |
-| **SystemContextInjectionPlugin** | Injects reusable system guidance into primary sessions without polluting subagent prompts; encourages proactive `explore` usage; registers vvoc skill directory for OpenCode skill discovery |
-| **SecretsRedactionPlugin** | Redacts secrets (tokens, keys, emails, UUIDs, IPs) before LLM requests; restores placeholders afterward; configurable patterns |
+| **WorkflowPlugin** | Keep multi-agent work structured with explicit work items, bounded implementation/review loops, reviewer result collection, and safe stops when more context is needed. |
+| **ModelRolesPlugin** | Use semantic model roles instead of hardcoded model IDs in OpenCode agents, subagents, and command configs — e.g. `vv-role:smart`, `vv-role:fast` — then map those roles per machine or project. |
+| **GuardianPlugin** | Keep long or AFK agent runs moving by auto-approving routine low-risk permission requests. If something looks risky, Guardian does not auto-approve it and leaves the decision to OpenCode's normal manual approval flow. |
+| **HashlineEditPlugin** | Make agent edits safer by tying changes to fresh `read` output, reducing wrong-line and stale-context edits. |
+| **SystemContextInjectionPlugin** | Give primary agents the vvoc workflow rules and skill discovery automatically, while keeping subagents focused and avoiding prompt pollution. |
+| **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
 
