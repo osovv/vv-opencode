@@ -1,5 +1,5 @@
 <GraceMigrationReport graceVersion="4.0">
-  <Source>GRACE 3 legacy docs in docs/* plus package.json and README.md for current package metadata</Source>
+  <Source>Initial migration used pre-migration XML docs that were later deleted, plus package.json and README.md for current package metadata.</Source>
   <Approval>User explicitly approved writing .grace artifacts after migration draft.</Approval>
   <GeneratedGrace4Layout>
     <Context>.grace/context</Context>
@@ -20,33 +20,31 @@
     <SourceFile>package.json</SourceFile>
     <SourceFile>README.md</SourceFile>
   </SourcesUsed>
-  <Ambiguities>
-    <Ambiguity>Legacy docs have version drift: requirements 0.6.0, technology 0.5.0, development and graph 0.8.0, verification 1.0.0, operational packets 0.2.0. GRACE 4 files use graceVersion 4.0.</Ambiguity>
-    <Ambiguity>Technology legacy doc mentions MemoryPlugin, but current package exports and source tree do not contain that plugin. It is marked manual-review and not migrated as current module state.</Ambiguity>
-    <Ambiguity>Historical workflow handoff and plan docs include superseded decisions. Current source, knowledge graph, verification plan, README, and package exports were treated as stronger evidence.</Ambiguity>
-  </Ambiguities>
-  <UnsupportedStructures>
-    <Unsupported>Legacy GRACE 3 docs remain under docs/* and are not valid GRACE 4 state.</Unsupported>
-    <Unsupported>No retroactive C-* change bundles were created for historical plans or completed work.</Unsupported>
-  </UnsupportedStructures>
-  <ManualReview>
-    <Item>Confirm whether MemoryPlugin should be removed from legacy references or reintroduced in a future approved change.</Item>
-    <Item>Review whether old docs/* should be archived or deleted after .grace passes validation and cleanup is explicitly approved.</Item>
-    <Item>Review whether function-level START_CONTRACT anchors should eventually be represented in graph documents or remain source-local only.</Item>
-  </ManualReview>
-  <ProposedCleanup>
-    <Item>Legacy GRACE 3 XML docs were deleted after explicit user confirmation following the initial GRACE 4 migration commit.</Item>
-    <Item>Historical Markdown notes under docs/ are not GRACE 3 XML artifacts and were not deleted in this cleanup step.</Item>
-    <Item>Keep .grace as current GRACE 4 state going forward.</Item>
-  </ProposedCleanup>
-  <DeletedLegacyDocs>
+  <MigrationFindings>
+    <Finding>Pre-migration XML docs had version drift across requirements, technology, development, graph, verification, and operational packet artifacts. Current GRACE 4 files use graceVersion 4.0.</Finding>
+    <Finding>Some pre-migration docs contained references not present in current package exports or source. Those references were not migrated as current state.</Finding>
+    <Finding>Historical workflow handoff and plan docs include superseded decisions. Current source, current .grace artifacts, README, and package exports were treated as stronger evidence.</Finding>
+  </MigrationFindings>
+  <Decisions>
+    <Decision>Keep .grace as current GRACE 4 state going forward.</Decision>
+    <Decision>Delete pre-migration XML docs after explicit user confirmation.</Decision>
+    <Decision>Keep historical Markdown notes under docs/ as advisory references only.</Decision>
+    <Decision>Delete superseded workflow handoff and workflow plugin plan Markdown notes after explicit user confirmation.</Decision>
+    <Decision>Do not create retroactive C-* change bundles for historical plans or completed work.</Decision>
+    <Decision>Keep function-level START_CONTRACT and START_BLOCK anchors source-local unless a future approved graph design changes that policy.</Decision>
+  </Decisions>
+  <DeletedPreMigrationDocs>
     <File>docs/requirements.xml</File>
     <File>docs/technology.xml</File>
     <File>docs/development-plan.xml</File>
     <File>docs/knowledge-graph.xml</File>
     <File>docs/verification-plan.xml</File>
     <File>docs/operational-packets.xml</File>
-  </DeletedLegacyDocs>
+  </DeletedPreMigrationDocs>
+  <DeletedAdvisoryDocs>
+    <File>docs/workflow-plugin-handoff.md</File>
+    <File>docs/plans/workflow-plugin-v1.md</File>
+  </DeletedAdvisoryDocs>
   <Validation>
     <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
     <Command>bunx @osovv/grace-cli@rc status --path .</Command>
@@ -54,6 +52,7 @@
     <Result>status PASS as grace4 with 5 context artifacts, 31 graph modules, 31 verification entries, 0 active changes, 0 archived changes, and 0 integrity errors or warnings.</Result>
     <Note>Some status invocations produced transient bunx FileNotFound errors while copying runtime files; retry succeeded without artifact changes.</Note>
   </Validation>
-  <CleanupConfirmation>User approved legacy docs deletion after the migration commit.</CleanupConfirmation>
+  <CleanupConfirmation>User approved pre-migration XML doc deletion after the migration commit.</CleanupConfirmation>
+  <CleanupConfirmation>User approved deletion of superseded workflow advisory Markdown docs.</CleanupConfirmation>
   <CleanupConfirmationRequired>false</CleanupConfirmationRequired>
 </GraceMigrationReport>
