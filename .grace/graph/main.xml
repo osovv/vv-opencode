@@ -119,7 +119,7 @@
       <DF-PLUGIN-TOGGLE-CHECK>Plugin factories load shared runtime config, call isPluginEnabled, return empty hooks when disabled, or proceed normally when enabled.</DF-PLUGIN-TOGGLE-CHECK>
       <DF-INIT>Init chooses interactive/non-interactive path, prompts when appropriate, writes managed prompts/config, and confirms setup.</DF-INIT>
       <DF-UPGRADE>Upgrade checks npm, installs latest globally with Bun, runs fresh vvoc sync, and reports partial upgrade if sync fails.</DF-UPGRADE>
-      <DF-RENAME-AGENTS>Install/sync scaffolds vv-implementer, vv-spec-reviewer, and vv-code-reviewer names and prompt files while preserving legacy entries.</DF-RENAME-AGENTS>
+      <DF-RENAME-AGENTS>Install/sync scaffolds vv-implementer, vv-spec-reviewer, and vv-code-reviewer names and prompt files while preserving pre-rename user-owned entries.</DF-RENAME-AGENTS>
       <DF-WORKFLOW-TOOLS>work_item_open/list/close create, inspect, and close explicit workflow items with deterministic IDs and state metadata.</DF-WORKFLOW-TOOLS>
       <DF-LAUNCH-ENFORCEMENT>WorkflowPlugin intercepts task launches, validates tracked subagent prompts, work-item existence, allowed transitions, and round limits.</DF-LAUNCH-ENFORCEMENT>
       <DF-RESULT-PARSING>WorkflowPlugin parses tracked subagent top blocks, unwraps task envelopes, attempts bounded repair, validates identity/status, updates state, and halts on protocol errors.</DF-RESULT-PARSING>
@@ -128,9 +128,7 @@
       <DF-WORKFLOW-PERSISTENCE>Workflow persistence hydrates per-session state, snapshots after mutations, switches session stores, and cleans deleted session data.</DF-WORKFLOW-PERSISTENCE>
     </DataFlows>
     <ManualReview>
-      <Item>MemoryPlugin appears in legacy technology docs but is not present in current source or package exports.</Item>
-      <Item>Function-level START_CONTRACT and START_BLOCK anchors remain source-local navigation structure and are not expanded into separate graph modules during this migration.</Item>
-      <Item>Historical workflow handoff and plan docs were used as context only; no retroactive C-* bundles were created.</Item>
+      <Item>Function-level START_CONTRACT and START_BLOCK anchors remain source-local navigation structure and are intentionally not expanded into separate graph modules.</Item>
     </ManualReview>
   </GD-MAIN>
 </GraceGraphDocument>

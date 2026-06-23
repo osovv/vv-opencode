@@ -1,5 +1,4 @@
 <GraceVerificationIndex graceVersion="4.0">
-  <MigrationSource>docs/verification-plan.xml</MigrationSource>
   <VerificationDocuments>
     <VD-MAIN>
       <Path>verification/main.xml</Path>

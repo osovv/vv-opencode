@@ -1,5 +1,4 @@
 <GraceGraphIndex graceVersion="4.0">
-  <MigrationSource>docs/knowledge-graph.xml, docs/development-plan.xml</MigrationSource>
   <GraphDocuments>
     <GD-MAIN>
       <Path>graph/main.xml</Path>

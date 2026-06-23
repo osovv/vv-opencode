@@ -16,7 +16,7 @@ This project uses the GRACE 4 `.grace` artifact model.
 - Active work: `.grace/changes/active/C-*/spec.xml` and `.grace/changes/active/C-*/plan.xml`
 - Completed or terminal work: `.grace/changes/archive/C-*/*`
 
-Legacy `docs/*.xml` files are GRACE 3 migration sources only. They are not current GRACE 4 state. Do not validate, convert, delete, or treat them as source of truth unless the user explicitly requests a legacy cleanup or audit step.
+Historical Markdown notes under `docs/` are advisory references only. They are below explicit user instructions, source code, tests, `README.md`, and current `.grace` state.
 
 ## Project Snapshot
 
@@ -104,7 +104,7 @@ Agents have freedom in HOW to implement, but not in WHAT to build. Contracts, sp
 - `vvoc install` should keep writing a pinned package specifier to the OpenCode plugin array.
 - If modules, public exports, dependencies, or data flows change, update `.grace/graph/*`.
 - If commands, test strategy, critical scenarios, phase gates, or log markers change, update `.grace/verification/*`.
-- Legacy `docs/*` GRACE 3 artifacts are retained only until explicit cleanup approval.
+- Historical Markdown notes under `docs/` are advisory only; do not treat them as GRACE source of truth.
 
 ## Semantic Markup Reference
 
@@ -212,4 +212,4 @@ src/
 4. After changing test files, commands, critical scenarios, phase gates, or log markers, update `.grace/verification/*`.
 5. After fixing bugs, add a `CHANGE_SUMMARY` entry and strengthen nearby verification if the old evidence was weak.
 6. Never remove semantic markup anchors unless the structure is intentionally replaced with better anchors.
-7. Do not create retroactive `C-*` bundles for historical GRACE 3 artifacts.
+7. Do not create retroactive `C-*` bundles for completed work.
