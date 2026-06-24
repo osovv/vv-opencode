@@ -1,0 +1,40 @@
+<GraceGraphIndex graceVersion="4.0">
+  <GraphDocuments>
+    <GD-MAIN>
+      <Path>graph/main.xml</Path>
+      <Owns>
+        <M-MODEL-ROLES />
+        <M-CONFIG-LAYERS />
+        <M-CLI-CONFIG />
+        <M-RELEASE-AUTOMATION />
+        <M-CLI-MANAGED-AGENTS />
+        <M-CLI-MANAGED-SKILLS />
+        <M-CLI-AGENT-MODELS />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CLI-COMMANDS />
+        <M-PLUGIN-MODEL-ROLES />
+        <M-CLI-ROLE />
+        <M-CLI-PRESET />
+        <M-VVOC-PRESET-REGISTRY />
+        <M-PLUGIN-GUARDIAN />
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-PLUGIN-SECRETS-REDACTION />
+        <M-WORKFLOW-PROTOCOL />
+        <M-WORKFLOW-REPAIR />
+        <M-WORKFLOW-STATE />
+        <M-WORKFLOW-TRANSITIONS />
+        <M-WORKFLOW-TOOLING />
+        <M-PLUGIN-WORKFLOW />
+        <M-WORKFLOW-PERSISTENCE />
+        <M-CLI-CONFIG-VALIDATE />
+        <M-CLI-PLUGIN-LIST />
+        <M-CLI-PLUGIN-TOGGLE />
+        <M-CLI-PATCH-PROVIDER />
+        <M-CLI-COMPLETION />
+        <M-CLI-INIT />
+        <M-CLI-UPGRADE />
+      </Owns>
+    </GD-MAIN>
+  </GraphDocuments>
+</GraceGraphIndex>
