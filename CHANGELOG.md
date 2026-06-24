@@ -1,3 +1,21 @@
+## <small>0.35.30 (2026-06-24)</small>
+
+### Summary
+
+Spec packages created by the vv-spec skill now use date-prefixed directory names (YYYY-MM-DD-slug) so active packages sort by creation date and are easier to identify, with corresponding updates to the vv-spec, vv-plan, and vv-controller skill and agent templates. The project documentation has been fully migrated to the GRACE 4 artifact model, replacing legacy XML sources under docs/ with the current .grace/ directory structure, and all GRACE context artifacts—requirements, technology, principles, deployment, and UX guidelines—have been refined for clarity and accuracy. Legacy GRACE 3 XML documents and superseded workflow plan handoff notes have been removed, and stale migration references have been cleaned up from graph and verification indexes.
+
+* feat(vv-spec): date-prefix spec packages ([0dba659](https://github.com/osovv/vv-opencode/commit/0dba659))
+* docs: drop migration report artifact ([327812d](https://github.com/osovv/vv-opencode/commit/327812d))
+* docs: finalize GRACE migration cleanup ([496236f](https://github.com/osovv/vv-opencode/commit/496236f))
+* docs: migrate project to GRACE 4 ([ba3e162](https://github.com/osovv/vv-opencode/commit/ba3e162))
+* docs: refine GRACE context requirements ([73245b1](https://github.com/osovv/vv-opencode/commit/73245b1))
+* docs: refine GRACE deployment context ([cd2da0f](https://github.com/osovv/vv-opencode/commit/cd2da0f))
+* docs: refine GRACE principles context ([ad1b050](https://github.com/osovv/vv-opencode/commit/ad1b050))
+* docs: refine GRACE technology context ([eeff4d2](https://github.com/osovv/vv-opencode/commit/eeff4d2))
+* docs: refine GRACE UX guidelines ([09d075a](https://github.com/osovv/vv-opencode/commit/09d075a))
+* docs: remove legacy GRACE 3 artifacts ([c9b910d](https://github.com/osovv/vv-opencode/commit/c9b910d))
+* docs: remove stale GRACE migration references ([6ad640a](https://github.com/osovv/vv-opencode/commit/6ad640a))
+
 ## <small>0.35.29 (2026-06-22)</small>
 
 ### Summary
