@@ -44,12 +44,12 @@ Request / idea
    ↓
 vv-spec
    asks clarifying questions
-   writes .vvoc/specs/<id>/spec.xml
+   writes .vvoc/specs/YYYY-MM-DD-<slug>/spec.xml
    waits for spec approval
    ↓
 vv-plan
    reads the approved spec
-   writes .vvoc/specs/<id>/plan.xml
+   writes .vvoc/specs/YYYY-MM-DD-<slug>/plan.xml
    defines tasks, contracts, dependencies, and acceptance criteria
    waits for plan approval
    ↓
@@ -84,13 +84,15 @@ verification
 All artifacts for one feature live together:
 
 ```text
-.vvoc/specs/<id>/
+.vvoc/specs/YYYY-MM-DD-<slug>/
   spec.xml            # what should be built and why
   design-context.xml  # optional design memory
   plan.xml            # how to implement and verify it
 ```
 
-Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/<id>/` to `.vvoc/specs/archive/<id>-<timestamp>/`.
+New `vv-spec` packages use a date-prefixed id (`YYYY-MM-DD-<slug>`, for example `2026-06-24-cache-store`) so active packages sort by creation date.
+
+Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/YYYY-MM-DD-<slug>/` to `.vvoc/specs/archive/YYYY-MM-DD-<slug>-<timestamp>/`.
 
 ### XML grep
 
@@ -245,7 +247,7 @@ OpenCode config          → ./.opencode/opencode.json(c)
 vvoc config              → ./.vvoc/vvoc.json
 Managed agent prompts    → ./.vvoc/agents/*.md
 Managed skills           → ./.vvoc/skills/*/SKILL.md
-Spec package directory   → ./.vvoc/specs/<id>/
+Spec package directory   → ./.vvoc/specs/YYYY-MM-DD-<slug>/
   spec.xml              # normative spec document (required)
   design-context.xml    # curated design memory (optional)
   plan.xml              # implementation plan (created by vv-plan)
@@ -261,9 +263,9 @@ Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md  (global)
                            ./.vvoc/agents/*.md                 (project)
 Managed skills           → $XDG_CONFIG_HOME/vvoc/skills/*/SKILL.md  (global)
                            ./.vvoc/skills/*/SKILL.md               (project)
-Spec documents           → ./.vvoc/specs/<id>/spec.xml
-Optional design context  → ./.vvoc/specs/<id>/design-context.xml
-Implementation plans     → ./.vvoc/specs/<id>/plan.xml
+Spec documents           → ./.vvoc/specs/YYYY-MM-DD-<slug>/spec.xml
+Optional design context  → ./.vvoc/specs/YYYY-MM-DD-<slug>/design-context.xml
+Implementation plans     → ./.vvoc/specs/YYYY-MM-DD-<slug>/plan.xml
 Persisted data           → $XDG_DATA_HOME/vvoc/
 Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect fallback)
                            ./.vvoc/runbooks/*.xml             (lazy vv-reflect fallback)
@@ -312,7 +314,7 @@ Five workflow skills are scaffolded alongside agents:
 
 | Skill | When to use it | What it gives you |
 |---|---|---|
-| `vv-spec` | You have a feature or creative request and no agreed contract yet | A guided interview, recommended options, and a saved spec in `.vvoc/specs/<id>/spec.xml` |
+| `vv-spec` | You have a feature or creative request and no agreed contract yet | A guided interview, recommended options, and a saved spec in `.vvoc/specs/YYYY-MM-DD-<slug>/spec.xml` |
 | `vv-plan` | A spec is approved and ready to implement | A task-level implementation plan with file targets, contracts, dependencies, and acceptance criteria |
 | `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification and applied spec/plan archival |
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |

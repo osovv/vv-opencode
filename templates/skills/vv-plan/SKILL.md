@@ -14,7 +14,7 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 </language>
 
 <prerequisites>
-<rule>An approved spec MUST exist at .vvoc/specs/&lt;id&gt;/spec.xml before planning begins. The spec package directory &lt;id&gt; derives from the feature name used during vv-spec.</rule>
+<rule>An approved spec MUST exist at .vvoc/specs/&lt;id&gt;/spec.xml before planning begins. For newly created specs, vv-spec derives &lt;id&gt; as a date-prefixed package id in the form YYYY-MM-DD-&lt;slug&gt; from the feature name.</rule>
 <rule>Read the spec file in full.</rule>
 <rule>Check whether a sibling design-context.xml exists at .vvoc/specs/&lt;id&gt;/design-context.xml. If it exists, read it as explanatory context only. design-context.xml does NOT override or expand spec.xml — spec.xml remains normative and wins on conflicts.</rule>
 <rule>The spec's top-level &lt;status&gt; MUST be approved. If the status is draft, missing, applied, or any other value, stop and tell the user the spec must be explicitly approved before planning.</rule>

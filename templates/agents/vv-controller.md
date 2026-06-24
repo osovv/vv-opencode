@@ -127,7 +127,7 @@ Execution order for implementation mode: 1. `vv-implementer` 2. launch all requi
 </large_feature_protocol>
 
 <plan_artifacts>
-- **vv-plan implementation plans** live in spec packages. The canonical layout is: `.vvoc/specs/<id>/{spec.xml, design-context.xml optional, plan.xml}`.
+- **vv-plan implementation plans** live in spec packages. The canonical layout is: `.vvoc/specs/YYYY-MM-DD-<slug>/{spec.xml, design-context.xml optional, plan.xml}`.
   - **spec.xml** is normative — the single source of truth for requirements and design decisions.
   - **design-context.xml** (optional) is explanatory/non-normative curated design memory for planners and reviewers. It is NOT treated as additional requirements.
   - **plan.xml** is the vv-plan implementation plan, saved in the same package.

@@ -1,6 +1,6 @@
 ---
 name: vv-spec
-description: Use BEFORE any implementation or planning — interviews the user one question at a time, proposes approaches, presents a design, writes a spec document to .vvoc/specs/<id>/spec.xml, and optionally creates a design-context.xml companion for complex sessions
+description: Use BEFORE any implementation or planning — interviews the user one question at a time, proposes approaches, presents a design, writes a spec document to .vvoc/specs/YYYY-MM-DD-<slug>/spec.xml, and optionally creates a design-context.xml companion for complex sessions
 ---
 
 <skill>
@@ -51,12 +51,12 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <rule>When first saving the spec, set &lt;status&gt;draft&lt;/status&gt;. Only change it to approved after the user explicitly approves the final spec. Never set applied yourself; applied is reserved for vv-execute after the approved plan has been fully executed.</rule>
 <location>Canonical layout — all artifacts for one feature live in a single spec package directory:</location>
 <layout>
-.vvoc/specs/&lt;id&gt;/
+.vvoc/specs/YYYY-MM-DD-&lt;slug&gt;/
   spec.xml              # normative spec document (required)
   design-context.xml    # curated design memory (optional)
   plan.xml              # implementation plan (created by vv-plan)
 </layout>
-<rule>Save spec.xml to .vvoc/specs/&lt;id&gt;/spec.xml. Derive &lt;id&gt; as a safe slug from the feature name (e.g., cache-store, batch-migration). Ensure the slug: (a) contains only lowercase alphanumeric characters, hyphens, and underscores; (b) does not start or end with a hyphen or underscore. Reject reserved names: draft, archive, template, plan, spec, vvoc, or names that match path-like patterns (contain /, \, .., or match an existing filesystem path separator). If .vvoc/specs/&lt;id&gt;/ already exists, check whether it is a continuation of the same draft session (same spec package from the same feature) — if yes, overwrite; if not, stop and ask the user for a different id or explicit overwrite approval. Do not silently overwrite or merge an unrelated existing package. Do not use date prefixes — the package directory is the organizational unit.</rule>
+<rule>Save spec.xml to .vvoc/specs/&lt;id&gt;/spec.xml, where &lt;id&gt; is a date-prefixed package id in the form YYYY-MM-DD-&lt;slug&gt; (for example, 2026-06-24-cache-store). Derive &lt;slug&gt; as a safe slug from the feature name (e.g., cache-store, batch-migration), then prefix it with the current date at spec creation time in YYYY-MM-DD format. Ensure the slug portion: (a) contains only lowercase alphanumeric characters, hyphens, and underscores; (b) does not start or end with a hyphen or underscore. Reject reserved slug values: draft, archive, template, plan, spec, vvoc, or names that match path-like patterns (contain /, \, .., or match an existing filesystem path separator). If .vvoc/specs/&lt;id&gt;/ already exists, check whether it is a continuation of the same draft session (same spec package from the same feature and date) — if yes, overwrite; if not, stop and ask the user for a different slug or explicit overwrite approval. Do not silently overwrite or merge an unrelated existing package.</rule>
 <rule>After creating or updating spec.xml, consider whether the session warrants a design-context.xml companion (see design_context section below).</rule>
 </spec_document_format>
 
@@ -73,7 +73,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <trigger>the user explicitly asks to preserve reasoning or design rationale</trigger>
 <rule>Load the design context template from references/design-context-template.xml. Fill only the sections that are relevant — leave unused sections empty or omit them.</rule>
 <rule>Do NOT include the full interview transcript, raw conversation dumps, chain-of-thought traces, or repetitive restatements of spec.xml content.</rule>
-<rule>Save design-context.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/design-context.xml</rule>
+<rule>Save design-context.xml as a sibling of spec.xml in the same date-prefixed spec package directory: .vvoc/specs/&lt;id&gt;/design-context.xml</rule>
 </design_context>
 
 <self_review>
@@ -98,6 +98,6 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 </handoff>
 
 <task>
-Your current task is the ongoing user request. Walk the decision tree relentlessly — one branch at a time. Propose approaches, present a design section by section, get approval at each stage. Load the spec template from references/spec-template.xml and fill every element with confirmed decisions. Save to .vvoc/specs/&lt;id&gt;/spec.xml as XML with document status draft. Optionally create .vvoc/specs/&lt;id&gt;/design-context.xml for complex sessions. After explicit user approval, update the saved spec status to approved. Stop before any implementation or planning.
+Your current task is the ongoing user request. Walk the decision tree relentlessly — one branch at a time. Propose approaches, present a design section by section, get approval at each stage. Load the spec template from references/spec-template.xml and fill every element with confirmed decisions. Save to .vvoc/specs/&lt;id&gt;/spec.xml, where &lt;id&gt; is YYYY-MM-DD-&lt;slug&gt; using the current date at spec creation time, as XML with document status draft. Optionally create .vvoc/specs/&lt;id&gt;/design-context.xml for complex sessions. After explicit user approval, update the saved spec status to approved. Stop before any implementation or planning.
 </task>
 </skill>

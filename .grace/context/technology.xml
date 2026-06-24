@@ -40,7 +40,7 @@
       <ProjectConfig>.vvoc/vvoc.json under the selected project root.</ProjectConfig>
       <ManagedAgents>.vvoc/agents/*.md for project-scoped managed agent prompts, with global counterparts under the vvoc config home.</ManagedAgents>
       <ManagedSkills>.vvoc/skills/*/SKILL.md for project-scoped managed skills, with global counterparts under the vvoc config home.</ManagedSkills>
-      <SpecPackages>.vvoc/specs/&lt;id&gt;/{spec.xml, design-context.xml optional, plan.xml}</SpecPackages>
+      <SpecPackages>.vvoc/specs/YYYY-MM-DD-&lt;slug&gt;/{spec.xml, design-context.xml optional, plan.xml}</SpecPackages>
     </Vvoc>
     <PersistedData>
       <Root>$XDG_DATA_HOME/vvoc/</Root>
