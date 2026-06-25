@@ -1,5 +1,5 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.9.0
+// VERSION: 0.10.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, local project config layers, managed agent/skill/plan scaffolding, canonical config scaffolding, global side-effect guards, and idempotent re-run handling.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.10.1 - Added init scaffolding expectation for vv-handoff managed skill.]
 //   LAST_CHANGE: [v0.9.0 - Added project-local .opencode/.vvoc assertions and global side-effect guards for scoped init.]
 //   LAST_CHANGE: [v0.10.0 - Updated init expectations for reviewer and orchestrator role bindings.]
 //   LAST_CHANGE: [v0.8.1 - Updated init expectations so the managed vv-controller agent is seeded with the built-in smart role.]
@@ -81,6 +82,8 @@ describe("init scenarios", () => {
       expect(existsSync(paths.managedSkillsDirPath + "/vv-plan/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-review/SKILL.md")).toBe(true);
       expect(existsSync(paths.managedSkillsDirPath + "/vv-execute/SKILL.md")).toBe(true);
+      expect(existsSync(paths.managedSkillsDirPath + "/vv-reflect/SKILL.md")).toBe(true);
+      expect(existsSync(paths.managedSkillsDirPath + "/vv-handoff/SKILL.md")).toBe(true);
       expect(existsSync(join(configHome, "opencode"))).toBe(false);
       expect(existsSync(join(configHome, "vvoc"))).toBe(false);
       expect(existsSync(join(tmpDir, ".vvoc", "guardian.jsonc"))).toBe(false);

@@ -68,9 +68,9 @@
     </UC-007>
     <UC-008>
       <Name>SpecToCodeSkills</Name>
-      <Action>User asks for feature design, implementation planning, plan execution, review-only findings, or durable reflection.</Action>
-      <Goal>Route larger or higher-risk work through managed skills such as vv-spec, vv-plan, vv-execute, vv-review, and vv-reflect.</Goal>
-      <Acceptance>Spec and plan artifacts are created before large implementation waves, review-only requests return findings before fixes, and long sessions can preserve reusable lessons or runbooks when approved.</Acceptance>
+      <Action>User asks for feature design, implementation planning, plan execution, review-only findings, durable reflection, or an end-of-session handoff.</Action>
+      <Goal>Route larger or higher-risk work through managed skills such as vv-spec, vv-plan, vv-execute, vv-review, vv-reflect, and vv-handoff.</Goal>
+      <Acceptance>Spec and plan artifacts are created before large implementation waves, review-only requests return findings before fixes, long sessions can preserve reusable lessons or runbooks when approved, and session handoffs can be written to .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml from already-visible context.</Acceptance>
       <RelatedFlow>DF-CONFIG-SYNC</RelatedFlow>
     </UC-008>
     <UC-009>

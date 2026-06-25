@@ -20,7 +20,7 @@ bun add -g @osovv/vv-opencode
 vvoc install
 ```
 
-That's it. `vvoc install` pins the package, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, review, and reflection skills.
+That's it. `vvoc install` pins the package, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, review, reflection, and handoff skills.
 
 To scope everything to the current project instead of the global OpenCode config:
 
@@ -115,7 +115,7 @@ grep '/\*\*' .vvoc/specs/*/plan.xml
 grep '<name>' .vvoc/specs/*/plan.xml
 ```
 
-Managed skills are installed by `vvoc`. `vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute` and `vv-reflect` are available as managed skills for plan execution and durable session memory.
+Managed skills are installed by `vvoc`. `vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute`, `vv-reflect`, and `vv-handoff` are available as managed skills for plan execution, durable repository memory, and end-of-session handoff notes.
 
 ---
 
@@ -251,6 +251,7 @@ Spec package directory   → ./.vvoc/specs/YYYY-MM-DD-<slug>/
   spec.xml              # normative spec document (required)
   design-context.xml    # curated design memory (optional)
   plan.xml              # implementation plan (created by vv-plan)
+Handoff notes            → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml
 
 ```
 
@@ -269,6 +270,7 @@ Implementation plans     → ./.vvoc/specs/YYYY-MM-DD-<slug>/plan.xml
 Persisted data           → $XDG_DATA_HOME/vvoc/
 Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect fallback)
                            ./.vvoc/runbooks/*.xml             (lazy vv-reflect fallback)
+Session handoff notes   → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml
 ```
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`. The current config contract is strict: `vvoc.json` must be canonical version 3 and include required sections such as `plugins`. Existing v1/v2/pre-role, incomplete, malformed, or otherwise invalid config files fail instead of being migrated or repaired. `vvoc install` and `vvoc sync` may create a fresh canonical config when no config exists, but they refuse to rewrite an invalid existing `vvoc.json`; fix the file manually and rerun `vvoc sync`.
@@ -310,7 +312,7 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 ## Managed Skills
 
-Five workflow skills are scaffolded alongside agents:
+Six workflow skills are scaffolded alongside agents:
 
 | Skill | When to use it | What it gives you |
 |---|---|---|
@@ -319,10 +321,13 @@ Five workflow skills are scaffolded alongside agents:
 | `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification and applied spec/plan archival |
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
 | `vv-reflect` | A long development, debugging, ops, or investigation session produced reusable knowledge | Durable notes in existing docs or `.vvoc/lessons` / `.vvoc/runbooks` for future agents |
+| `vv-handoff` | You are ending a session and want the visible context preserved for a future session | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, without running new checks or collecting fresh context |
 
 Spec and plan artifacts stay XML so requirements, tasks, acceptance criteria, and dependencies remain easy to grep and review.
 
 `vv-reflect` creates `.vvoc/lessons` and `.vvoc/runbooks` lazily only after approved fallback writes. It prefers an existing repository documentation convention when there is a high-confidence match.
+
+`vv-handoff` writes only the project-local XML handoff artifact from context already visible in the session. It records missing git, diff, or verification evidence as not collected in the current session instead of running commands.
 
 Skills are loaded by OpenCode at session start through `config.skills.paths` (registered by the SystemContextInjectionPlugin). The `vv-controller` agent's `<skill_trigger_rule>` ensures they are invoked automatically when the user's request matches their trigger conditions.
 

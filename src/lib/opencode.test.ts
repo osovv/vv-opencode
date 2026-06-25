@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.2.8
+// VERSION: 1.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
@@ -19,6 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.4.1 - Added managed skill distribution and behavioral coverage for vv-handoff.]
 //   LAST_CHANGE: [v1.3.0 - Added strict current-only vvoc config rejection and no-rewrite mutation coverage.]
 //   LAST_CHANGE: [v1.4.0 - Updated managed registration coverage so old-name agents and old command entries remain untouched.]
 //   LAST_CHANGE: [v1.2.8 - Added regression test for syncManagedSkillFiles not syncing references when parent skill is skipped (config-safety).]
@@ -834,7 +835,7 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await installManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(8); // 5 SKILL.md + 3 reference files
+      expect(results).toHaveLength(9); // 6 SKILL.md + 3 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       for (const r of results) {
         const isSkill = r.path.endsWith("SKILL.md");
@@ -842,6 +843,7 @@ describe("managed skill files", () => {
         expect(isSkill || isReference).toBe(true);
       }
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
+      expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(
         results.some((r) =>
           r.path.endsWith(join("vv-spec", "references", "design-context-template.xml")),
@@ -863,7 +865,7 @@ describe("managed skill files", () => {
       await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
 
       const results = await installManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(6); // vv-spec skipped + 4 other SKILL.md + 1 plan ref (design-context not synced when vv-spec skipped)
+      expect(results).toHaveLength(7); // vv-spec skipped + 5 other SKILL.md + 1 plan ref (design-context not synced when vv-spec skipped)
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
       expect(vvSpec?.reason).toContain("has no YAML frontmatter");
@@ -893,9 +895,10 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await syncManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(8); // 5 SKILL.md + 3 reference files
+      expect(results).toHaveLength(9); // 6 SKILL.md + 3 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
+      expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(
         results.some((r) =>
           r.path.endsWith(join("vv-spec", "references", "design-context-template.xml")),
@@ -966,7 +969,8 @@ describe("managed skill files", () => {
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: false });
       const kept = results.filter((r) => r.action === "kept");
-      expect(kept).toHaveLength(8); // 5 SKILL.md + 3 reference files
+      expect(kept).toHaveLength(9); // 6 SKILL.md + 3 reference files
+      expect(kept.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
     } finally {
       await rm(projectDir, { recursive: true, force: true });
     }
@@ -978,7 +982,8 @@ describe("managed skill files", () => {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(8); // 5 SKILL.md + 3 reference files
+      expect(results).toHaveLength(9); // 6 SKILL.md + 3 reference files
+      expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       for (const r of results) {
         expect(["kept", "updated"]).toContain(r.action);
       }
@@ -1018,6 +1023,30 @@ describe("managed skill files", () => {
     expect(skillText).toContain(
       "Do not add a CLI command, hook behavior, or automatic writer behavior",
     );
+  });
+
+  test("vv-handoff SKILL.md template contains required behavioral contracts", async () => {
+    const skillText = await readFile(
+      new URL("../../templates/skills/vv-handoff/SKILL.md", import.meta.url),
+      "utf8",
+    );
+    expect(skillText).toContain("name: vv-handoff");
+    expect(skillText).toContain(".vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml");
+    expect(skillText).toContain(
+      "Do not run shell commands, tests, lint, build, git status, git diff, web searches",
+    );
+    expect(skillText).toContain("not collected in current session");
+    expect(skillText).toContain("-2, then -3, and later integers");
+    expect(skillText).toContain("[REDACTED]");
+    expect(skillText).toContain("<original_request>");
+    expect(skillText).toContain("<completed_work>");
+    expect(skillText).toContain("<current_state_and_decisions>");
+    expect(skillText).toContain("<important_or_changed_files>");
+    expect(skillText).toContain("<known_commands_and_results>");
+    expect(skillText).toContain("<blockers_risks_unknowns>");
+    expect(skillText).toContain("<next_safe_step>");
+    expect(skillText).toContain("Do not create a CLI command, plugin, runtime hook");
+    expect(skillText).toContain("must not be schema-validated");
   });
 });
 

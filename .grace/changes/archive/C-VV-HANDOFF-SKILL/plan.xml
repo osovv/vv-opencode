@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-VV-HANDOFF-SKILL>
     <IntentSummary>Implement the approved vv-handoff skill as a packaged vvoc managed skill. The outcome is a bundled SKILL.md that instructs agents to write project-local .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml notes from already-visible session context only, plus managed-skill registration, tests, README, and GRACE metadata updates proving install/sync delivery.</IntentSummary>
     <BaselineAssertions>

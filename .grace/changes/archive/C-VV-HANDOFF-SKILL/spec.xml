@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-VV-HANDOFF-SKILL>
     <Summary>Add a packaged vv-handoff managed skill that writes session handoff XML notes under project-local .vvoc/handoff date-slug directories.</Summary>
     <Problem>Users need a lightweight end-of-session way to preserve the visible session context for a future session without running extra commands, creating a CLI command, or validating a formal schema.</Problem>
