@@ -90,7 +90,7 @@ All artifacts for one feature live together:
   plan.xml            # how to implement and verify it
 ```
 
-New `vv-spec` packages use a date-prefixed id (`YYYY-MM-DD-<slug>`, for example `2026-06-24-cache-store`) so active packages sort by creation date.
+New `vv-spec` packages use a date-prefixed id (`YYYY-MM-DD-<slug>`, for example `2026-06-24-cache-store`) so active packages sort by creation date. The prefix is date-only; it must not include hours, minutes, seconds, timezone, or a full ISO timestamp.
 
 Specs and plans use a top-level lifecycle status: `draft` while being written, `approved` after explicit user approval, and `applied` after successful execution. `vv-execute` archives applied artifact packages by moving the entire spec package directory `.vvoc/specs/YYYY-MM-DD-<slug>/` to `.vvoc/specs/archive/YYYY-MM-DD-<slug>-<timestamp>/`.
 
