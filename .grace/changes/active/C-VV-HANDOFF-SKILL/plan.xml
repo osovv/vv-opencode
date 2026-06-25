@@ -1,0 +1,164 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-VV-HANDOFF-SKILL>
+    <IntentSummary>Implement the approved vv-handoff skill as a packaged vvoc managed skill. The outcome is a bundled SKILL.md that instructs agents to write project-local .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml notes from already-visible session context only, plus managed-skill registration, tests, README, and GRACE metadata updates proving install/sync delivery.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>.grace/changes/active/C-VV-HANDOFF-SKILL/spec.xml</Value>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-CLI-INIT</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/managed-skills.ts</Value>
+        <Value>src/lib/opencode.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>src/commands/init.test.ts</Value>
+        <Value>templates/skills/vv-spec/SKILL.md</Value>
+        <Value>templates/skills/vv-plan/SKILL.md</Value>
+        <Value>templates/skills/vv-review/SKILL.md</Value>
+        <Value>templates/skills/vv-execute/SKILL.md</Value>
+        <Value>templates/skills/vv-reflect/SKILL.md</Value>
+      </MustExist>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-CLI-INIT</Module>
+      </MustVerify>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>spec.xml is approved and has exactly one direct C-VV-HANDOFF-SKILL wrapper.</Note>
+        <Note>src/lib/managed-skills.ts defines MANAGED_SKILL_NAMES as vv-spec, vv-plan, vv-review, vv-execute, and vv-reflect.</Note>
+        <Note>templates/skills currently contains the five managed skill template directories and no vv-handoff directory.</Note>
+        <Note>installManagedSkillFiles and syncManagedSkillFiles already iterate MANAGED_SKILL_NAMES and copy optional references, so delivery should not require new install/sync control flow.</Note>
+        <Note>src/lib/opencode.test.ts managed-skill tests currently assert five SKILL.md files plus three reference files.</Note>
+        <Note>src/commands/init.test.ts currently asserts several managed skills are scaffolded during project init and must gain vv-handoff coverage.</Note>
+      </Baseline>
+      <Target>
+        <Note>templates/skills/vv-handoff/SKILL.md exists with YAML frontmatter name vv-handoff and clear behavioral contracts.</Note>
+        <Note>MANAGED_SKILL_NAMES includes vv-handoff so existing install/sync loops create and refresh it.</Note>
+        <Note>The vv-handoff skill writes only .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml, derives the slug itself from the main goal, and handles path collisions with -2, -3, and later suffixes.</Note>
+        <Note>The vv-handoff skill forbids running commands, tests, git status, git diff, or other fresh context collection and records unavailable evidence as not collected in current session.</Note>
+        <Note>The vv-handoff skill requires secret redaction to [REDACTED] before file writes.</Note>
+        <Note>README and GRACE metadata describe vv-handoff and the .vvoc/handoff artifact location.</Note>
+        <Note>Managed-skill tests cover vv-handoff distribution and core prompt contracts.</Note>
+      </Target>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+        <M-CLI-CONFIG />
+        <M-CLI-INIT />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-CLI-CONFIG />
+        <V-M-CLI-INIT />
+      </VerificationAnchors>
+      <ContextArtifact>.grace/context/requirements.xml</ContextArtifact>
+      <GraphDocument>.grace/graph/main.xml</GraphDocument>
+      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+      <ChangeArtifact>.grace/changes/active/C-VV-HANDOFF-SKILL/spec.xml</ChangeArtifact>
+      <ChangeArtifact>.grace/changes/active/C-VV-HANDOFF-SKILL/plan.xml</ChangeArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>templates/skills/vv-handoff/SKILL.md</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/commands/init.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-VV-HANDOFF-SKILL/plan.xml</File>
+      <Glob>templates/skills/vv-handoff/**/*</Glob>
+    </ObservedWriteScope>
+    <StaleStateWarnings>
+      <Warning>Implementation must read each target file fresh before editing; line numbers in this plan are context anchors only and may be stale.</Warning>
+      <Warning>If implementation discovers that OpenCode skill invocation requires controller trigger-rule changes for vv-handoff, stop and update the plan or get explicit confirmation before expanding scope to M-CLI-MANAGED-AGENTS.</Warning>
+      <Warning>Do not add command execution or validation behavior to vv-handoff even if it seems useful; the approved spec intentionally limits the skill to already-known session context.</Warning>
+    </StaleStateWarnings>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Add the vv-handoff skill template.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create templates/skills/vv-handoff/SKILL.md with YAML frontmatter name vv-handoff and a concise description for end-of-session handoff note creation.</Criterion>
+          <Criterion>Skill instructions require using only current visible/known session context and explicitly forbid running shell commands, tests, lint, build, git status, git diff, web searches, or other fresh collection steps for the handoff.</Criterion>
+          <Criterion>Skill instructions require writing .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml, deriving session-slug from the main session goal, and using -2, -3, and later suffixes if the directory already exists.</Criterion>
+          <Criterion>Skill instructions define required XML sections for original request, completed work, current state and decisions, important or changed files, known checks/commands/results, blockers/risks/unknowns, and next safe step.</Criterion>
+          <Criterion>Skill instructions require replacing secrets such as tokens, API keys, passwords, cookies, private URLs, and similar sensitive values with [REDACTED] before writing.</Criterion>
+          <Criterion>Skill instructions state that missing git/diff/verification evidence must be written as not collected in current session rather than collected during handoff.</Criterion>
+          <Criterion>Skill instructions do not create or mention handoff.md as a canonical artifact and do not introduce schema validation.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Register vv-handoff as a managed skill.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add vv-handoff to MANAGED_SKILL_NAMES in src/lib/managed-skills.ts.</Criterion>
+          <Criterion>Update the MODULE_MAP and CHANGE_SUMMARY in src/lib/managed-skills.ts to mention vv-handoff.</Criterion>
+          <Criterion>Do not change installManagedSkillFiles or syncManagedSkillFiles unless tests prove the existing MANAGED_SKILL_NAMES loop is insufficient.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Update managed-skill tests for distribution and prompt contracts.</Title>
+        <DependsOn>T-001,T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update src/lib/opencode.test.ts managed-skill count assertions from five managed SKILL.md files plus three references to six managed SKILL.md files plus three references.</Criterion>
+          <Criterion>Add assertions that installManagedSkillFiles, syncManagedSkillFiles, kept sync, and force sync include vv-handoff/SKILL.md.</Criterion>
+          <Criterion>Adjust skip-count expectations affected by adding one additional non-skipped skill.</Criterion>
+          <Criterion>Add a vv-handoff SKILL.md behavioral contract test covering the output path, no-command rule, required sections, not-collected wording, collision suffixing, and [REDACTED] secret handling.</Criterion>
+          <Criterion>Update src/commands/init.test.ts to assert project init scaffolds vv-handoff/SKILL.md.</Criterion>
+          <Criterion>Update test MODULE_MAP or CHANGE_SUMMARY comments where repository conventions require it.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+          <Command>bun test src/commands/init.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Update README and GRACE durable metadata.</Title>
+        <DependsOn>T-001,T-002,T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update README managed-skill overview from five to six workflow skills and add a vv-handoff table row.</Criterion>
+          <Criterion>Document .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml in the project-local data layout without implying validation or automatic command execution.</Criterion>
+          <Criterion>Update .grace/graph/main.xml M-CLI-MANAGED-SKILLS to include vv-handoff in the managed skill template purpose.</Criterion>
+          <Criterion>Update .grace/verification/main.xml V-M-CLI-MANAGED-SKILLS so the verification contract includes bun test src/lib/opencode.test.ts for managed-skill distribution behavior.</Criterion>
+          <Criterion>Update .grace/context/requirements.xml only to the extent needed to record the new managed handoff artifact location and skill purpose; do not duplicate the full spec.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Run final focused and project-level verification.</Title>
+        <DependsOn>T-001,T-002,T-003,T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Focused tests for managed skills and init pass.</Criterion>
+          <Criterion>Typecheck, lint, format check, and GRACE lint pass.</Criterion>
+          <Criterion>If any expected verification cannot be run, record the skipped command and reason before review or handoff.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+          <Command>bun test src/commands/init.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+        </Verification>
+      </T-005>
+    </ImplementationPlan>
+  </C-VV-HANDOFF-SKILL>
+</GraceChangePlan>

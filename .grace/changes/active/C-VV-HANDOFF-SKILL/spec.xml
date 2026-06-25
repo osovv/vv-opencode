@@ -1,0 +1,49 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-VV-HANDOFF-SKILL>
+    <Summary>Add a packaged vv-handoff managed skill that writes session handoff XML notes under project-local .vvoc/handoff date-slug directories.</Summary>
+    <Problem>Users need a lightweight end-of-session way to preserve the visible session context for a future session without running extra commands, creating a CLI command, or validating a formal schema.</Problem>
+    <Goals>
+      <Goal>Provide a bundled managed OpenCode skill named vv-handoff delivered by existing vvoc install and sync managed-skill mechanisms.</Goal>
+      <Goal>Define skill behavior that writes .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml using an agent-derived slug and suffixes -2, -3, and so on on path collision.</Goal>
+      <Goal>Capture the current visible session context into required XML sections: original goal, completed work, current state and decisions, important or changed files, known commands/checks and results, blockers/risks/unknowns, and next safe step.</Goal>
+      <Goal>Require the skill to redact secrets before writing handoff.xml.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not add a separate vvoc CLI command, OpenCode plugin, runtime hook, or automatic end-of-session writer.</NonGoal>
+      <NonGoal>Do not create handoff.md or any non-XML canonical artifact.</NonGoal>
+      <NonGoal>Do not validate handoff.xml or introduce a formal schema for it.</NonGoal>
+      <NonGoal>Do not make vv-handoff run tests, lint, build, git status, git diff, or any other command for additional context collection.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>vv-handoff appears in the managed skill set and is installed/synced through existing managed skill delivery alongside vv-spec, vv-plan, vv-review, vv-execute, and vv-reflect.</Criterion>
+      <Criterion>The packaged skill instructions require writing only .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml in the current project, with session-slug generated from the main session goal and collision handling by suffixing -2, -3, and later integers.</Criterion>
+      <Criterion>The skill instructions require using only current visible/known session context and explicitly forbid running commands or checks to collect fresh context.</Criterion>
+      <Criterion>If git status, git diff, or verification evidence was not already collected in the current session, the handoff records it as not collected in current session rather than collecting it.</Criterion>
+      <Criterion>The handoff XML contains required sections for original request, completed work, current state and decisions, important or changed files, known checks/commands and results, blockers/risks/unknowns, and next safe step.</Criterion>
+      <Criterion>The skill instructions require secret redaction before writing, replacing tokens, keys, passwords, cookies, private URLs, and similar sensitive values with [REDACTED].</Criterion>
+      <Criterion>README managed-skill documentation and GRACE graph metadata reflect vv-handoff as a bundled managed skill.</Criterion>
+      <Criterion>Managed-skill install/sync tests or assertions are updated so vv-handoff is covered by existing managed-skill delivery verification.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-SKILLS />
+      <M-CLI-CONFIG />
+      <M-CLI-INIT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/commands/init.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run typecheck</ExpectedCommand>
+      <ExpectedCommand>bun run lint</ExpectedCommand>
+      <ExpectedCommand>bun run fmt:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedEvidence>Managed-skill tests show vv-handoff is installed and synced through existing delivery paths; typecheck/lint/format pass; GRACE lint accepts the updated change, graph, and verification artifacts.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>handoff.xml is a free-form XML note for agents and humans, not a schema-validated artifact.</Assumption>
+      <Assumption>The skill writes to project-local .vvoc/handoff/ only; global handoff storage is out of scope.</Assumption>
+      <Assumption>Implementation can be mostly prompt-template based; TypeScript changes are limited to managed-skill registration, packaging delivery tests, and docs/metadata updates unless implementation evidence shows more is needed.</Assumption>
+      <Assumption>Existing vvoc managed skill reference-copy support may be used only if implementation chooses to include optional reference templates; it is not required by this spec.</Assumption>
+      <Assumption>Conversation history hidden by compaction or unavailable to the active agent is not reconstructed; the skill uses only visible/known context at invocation time.</Assumption>
+    </Assumptions>
+  </C-VV-HANDOFF-SKILL>
+</GraceChangeSpec>
