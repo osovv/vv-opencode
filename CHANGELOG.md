@@ -1,3 +1,13 @@
+## <small>0.35.31 (2026-06-25)</small>
+
+### Summary
+
+This release adds the `vv-handoff` managed skill, a lightweight end-of-session tool that writes a project-local XML handoff note from already-visible session context—recording the original request, completed work, current state and decisions, important files, known command results, blockers, and the next safe step—without running shell commands or collecting fresh evidence, and with automatic secret redaction and collision-safe directory naming. The `vv-spec` skill documentation was also clarified to ensure spec package date prefixes remain date-only, excluding any time or timezone components.
+
+* docs(grace): add vv-handoff skill spec and plan ([490c96e](https://github.com/osovv/vv-opencode/commit/490c96e))
+* docs(vv-spec): clarify date-only spec package prefix ([cba76f5](https://github.com/osovv/vv-opencode/commit/cba76f5))
+* feat(skills): add vv-handoff managed skill ([a386c5a](https://github.com/osovv/vv-opencode/commit/a386c5a))
+
 ## <small>0.35.30 (2026-06-24)</small>
 
 ### Summary
