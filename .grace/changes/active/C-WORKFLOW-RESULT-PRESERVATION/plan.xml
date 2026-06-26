@@ -1,0 +1,199 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-WORKFLOW-RESULT-PRESERVATION>
+    <IntentSummary>Implement the approved workflow result preservation change by keeping strict tracked-result protocol semantics while carrying bounded subagent result context through parsing, state storage, work_item_list recovery, hard-stop errors, protocol errors, and format-only repair diagnostics.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-WORKFLOW-PROTOCOL</Value>
+        <Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>M-WORKFLOW-STATE</Value>
+        <Value>M-WORKFLOW-TOOLING</Value>
+        <Value>M-WORKFLOW-REPAIR</Value>
+        <Value>M-WORKFLOW-PERSISTENCE</Value>
+        <Value>src/plugins/workflow.test.ts</Value>
+      </MustExist>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-WORKFLOW-PROTOCOL</Module>
+        <Module>M-WORKFLOW-REPAIR</Module>
+        <Module>M-WORKFLOW-STATE</Module>
+        <Module>M-WORKFLOW-TOOLING</Module>
+        <Module>M-WORKFLOW-PERSISTENCE</Module>
+        <Module>M-PLUGIN-WORKFLOW</Module>
+      </MustVerify>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>M-WORKFLOW-PROTOCOL currently parses strict top-block metadata but does not expose body text from valid tracked results.</Note>
+        <Note>M-PLUGIN-WORKFLOW currently throws RESULT_PROTOCOL_ERROR and RESULT_HARD_STOP messages that omit original subagent result context.</Note>
+        <Note>M-WORKFLOW-STATE currently persists work-item status and review-round metadata without result body excerpts.</Note>
+        <Note>M-WORKFLOW-TOOLING currently serializes work_item_list without recovery excerpts for blocked or needs_context states.</Note>
+        <Note>M-WORKFLOW-REPAIR currently receives malformed output but does not have a dedicated missing-blank-line diagnostic path.</Note>
+        <Note>src/plugins/workflow.test.ts is the existing deterministic verification surface for protocol, repair, state, tooling, plugin integration, and persistence behavior.</Note>
+      </Baseline>
+      <Target>
+        <Note>Valid tracked results expose body text for bounded excerpt creation without weakening strict top-block parsing.</Note>
+        <Note>Malformed top blocks with body text before the required blank line fail closed with a missing-blank-line diagnostic and corrected format guidance.</Note>
+        <Note>Protocol failures, state-application failures, BLOCKED, and NEEDS_CONTEXT hard stops include capped original result context in controller-visible errors.</Note>
+        <Note>work_item_list exposes bounded result excerpts for blocked and needs_context recovery, including implementer and reviewer contexts.</Note>
+        <Note>Excerpt storage is deterministic, capped, and explicit about truncation.</Note>
+      </Target>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-WORKFLOW-PROTOCOL />
+        <M-WORKFLOW-REPAIR />
+        <M-WORKFLOW-STATE />
+        <M-WORKFLOW-TOOLING />
+        <M-WORKFLOW-PERSISTENCE />
+        <M-PLUGIN-WORKFLOW />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-WORKFLOW-PROTOCOL />
+        <V-M-WORKFLOW-REPAIR />
+        <V-M-WORKFLOW-STATE />
+        <V-M-WORKFLOW-TOOLING />
+        <V-M-WORKFLOW-PERSISTENCE />
+        <V-M-PLUGIN-WORKFLOW />
+      </VerificationAnchors>
+      <ContextArtifact>.grace/changes/active/C-WORKFLOW-RESULT-PRESERVATION/spec.xml</ContextArtifact>
+      <ContextArtifact>.grace/changes/active/C-WORKFLOW-RESULT-PRESERVATION/design-context.xml</ContextArtifact>
+      <GraphDocument>.grace/graph/main.xml</GraphDocument>
+      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/workflow/protocol.ts</File>
+      <File>src/plugins/workflow/repair.ts</File>
+      <File>src/plugins/workflow/state.ts</File>
+      <File>src/plugins/workflow/tooling.ts</File>
+      <File>src/plugins/workflow/persistence.ts</File>
+      <File>src/plugins/workflow/index.ts</File>
+      <File>src/plugins/workflow.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Extend workflow protocol parsing with result body and actionable missing-blank-line diagnostics.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>ParsedResultBlock includes the freeform result body that follows the blank line after the strict protocol top block.</Criterion>
+          <Criterion>The parser continues to require a blank line before any body text and does not silently accept malformed header-body separation.</Criterion>
+          <Criterion>A new stable protocol error code or equivalent diagnostic identifies body text inside the strict top block as a missing blank line before body.</Criterion>
+          <Criterion>The diagnostic includes the offending line and a corrected example with VVOC_WORK_ITEM_ID, VVOC_STATUS, optional VVOC_ROUTE, a blank line, then body text.</Criterion>
+          <Criterion>Existing duplicate-field, unknown-status, disallowed-status, work-item mismatch, and missing-route failures remain deterministic.</Criterion>
+          <Criterion>Update MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY in protocol.ts to describe body extraction and the new diagnostic.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Add deterministic bounded result excerpt handling to workflow result data.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Introduce a small workflow-owned result excerpt shape that contains text, truncation metadata, and enough source metadata to explain whether the excerpt came from parsed body text or normalized output.</Criterion>
+          <Criterion>Excerpt creation is deterministic and enforces a single explicit maximum character limit.</Criterion>
+          <Criterion>Valid parsed result bodies are preferred for hard-stop recovery excerpts; parse failures can fall back to normalized task output.</Criterion>
+          <Criterion>Excerpt text is omitted or marked empty when the subagent result has no usable body/output text rather than storing undefined behavior.</Criterion>
+          <Criterion>No unbounded raw subagent output is added to persisted workflow state.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Persist and expose bounded recovery excerpts in workflow state and work_item_list.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>WorkItemRecord can carry the latest relevant implementer result excerpt for blocked or needs_context recovery.</Criterion>
+          <Criterion>ReviewRoundResult can carry the reviewer result excerpt, especially for reviewer NEEDS_CONTEXT recovery.</Criterion>
+          <Criterion>applyTrackedResult stores excerpts without changing allowed statuses, lifecycle states, reviewer aggregation, counters, or round-limit semantics.</Criterion>
+          <Criterion>work_item_list serialization exposes the bounded excerpt fields in a stable, JSON-friendly shape.</Criterion>
+          <Criterion>Workflow persistence hydrates and snapshots optional excerpt fields while rejecting corrupt or structurally invalid persisted records as before.</Criterion>
+          <Criterion>Update MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY in state.ts, tooling.ts, and persistence.ts where scope or exported shapes change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Propagate result excerpts through workflow plugin protocol errors and hard stops.</Title>
+        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>When parsing fails after optional repair, RESULT_PROTOCOL_ERROR includes the protocol error plus a capped excerpt of the original normalized tracked task output.</Criterion>
+          <Criterion>When state application rejects a parsed result, RESULT_PROTOCOL_ERROR includes the state error plus a capped excerpt of the parsed body or normalized output.</Criterion>
+          <Criterion>When a result transitions the work item to needs_context or blocked, RESULT_HARD_STOP includes work item id, agent, status, and the bounded result excerpt.</Criterion>
+          <Criterion>Hard-stop state is still snapshotted before throwing, preserving current fail-closed behavior.</Criterion>
+          <Criterion>Logs do not need to include full excerpts; controller-visible thrown errors and work_item_list are the required recovery surfaces.</Criterion>
+          <Criterion>Update MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY in index.ts for result context propagation.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Improve format-only repair guidance for missing blank lines before result bodies.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Repair prompts receive enough protocol-error detail to identify the missing-blank-line case.</Criterion>
+          <Criterion>When the missing-blank-line diagnostic is present, the repair prompt explicitly instructs moving body text below a blank line after the protocol header.</Criterion>
+          <Criterion>Repair prompts continue to forbid additional implementation or review work and require preserving the same work item, status, route, and underlying outcome.</Criterion>
+          <Criterion>Existing safe repair eligibility remains bounded and does not include ambiguous duplicate-field outputs.</Criterion>
+          <Criterion>Update MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY in repair.ts.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Strengthen workflow regression tests for excerpts, diagnostics, repair guidance, and persistence.</Title>
+        <DependsOn>T-001, T-002, T-003, T-004, T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Tests cover valid BLOCKED and NEEDS_CONTEXT results whose thrown hard-stop errors include original result excerpts.</Criterion>
+          <Criterion>Tests cover work_item_list exposing implementer and reviewer recovery excerpts after blocked or needs_context states.</Criterion>
+          <Criterion>Tests cover malformed output after repair failure where RESULT_PROTOCOL_ERROR includes an original normalized output excerpt.</Criterion>
+          <Criterion>Tests cover state-application failures, such as duplicate reviewer result or reviewer not in flight, preserving a parsed result excerpt in the error.</Criterion>
+          <Criterion>Tests cover missing blank line before Findings/body text and assert the actionable diagnostic rather than the generic non-protocol line message.</Criterion>
+          <Criterion>Tests cover repair prompt text for the missing-blank-line case.</Criterion>
+          <Criterion>Tests cover excerpt truncation metadata and persistence round-trip of optional excerpt fields.</Criterion>
+          <Criterion>Update workflow.test.ts MODULE_MAP and CHANGE_SUMMARY for new test surfaces.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Update GRACE graph and verification artifacts for changed workflow module scope.</Title>
+        <DependsOn>T-001, T-003, T-004, T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>.grace/graph/main.xml reflects any changed workflow module purposes, dependencies, paths, or data-flow descriptions introduced by result body/excerpt handling.</Criterion>
+          <Criterion>.grace/verification/main.xml reflects strengthened verification intent for result parsing, hard stops, work_item_list recovery excerpts, and repair diagnostics.</Criterion>
+          <Criterion>No graph or verification anchors are renamed unless the implementation introduces an intentional new module, which this plan does not require.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Run final workflow-focused and repository quality verification.</Title>
+        <DependsOn>T-006, T-007</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Workflow tests pass with the new result preservation coverage.</Criterion>
+          <Criterion>Type checking, lint, format check, build, and GRACE validation pass or any skipped check is explicitly reported with reason.</Criterion>
+          <Criterion>The implementation remains within the approved scope and does not make the parser forgiving.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+          <Command>bun run build</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-008>
+    </ImplementationPlan>
+  </C-WORKFLOW-RESULT-PRESERVATION>
+</GraceChangePlan>

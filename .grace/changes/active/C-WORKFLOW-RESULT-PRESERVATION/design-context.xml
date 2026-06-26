@@ -1,0 +1,20 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-WORKFLOW-RESULT-PRESERVATION</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The workflow plugin currently parses tracked result metadata and then throws protocol or hard-stop errors that omit the original handoff body. The state model and work_item_list also expose status metadata without preserving the explanation. This is especially harmful for NEEDS_CONTEXT and BLOCKED because these statuses are meant to hand control back to the controller with a reason. The same area also produces a technically correct but unhelpful strict top-block error when a model writes Findings text directly after VVOC_STATUS instead of inserting the required blank line.</Rationale>
+  <Alternatives>
+    <Alternative>Forgiving parser: treat the first non-protocol line after the required fields as body even without a blank line. Deferred because it weakens the strict protocol and may hide malformed outputs.</Alternative>
+    <Alternative>Error-only excerpt: add the original output excerpt only to thrown errors. This is simpler but leaves work_item_list unable to support recovery after a hard stop.</Alternative>
+    <Alternative>Persist full raw subagent output. Rejected because workflow persistence should stay bounded and conservative.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>The exact excerpt size limit and field names are implementation details for the plan, provided the limit is deterministic and truncation is visible.</Decision>
+    <Decision>Whether excerpts preserve full normalized output or only body text may vary by failure mode, but hard-stop recovery must include the subagent explanation.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A vv-implementer returns VVOC_STATUS: BLOCKED followed by an explanation. The controller receives a hard-stop error that includes the explanation excerpt and can also inspect work_item_list for the same recovery context.</Scenario>
+    <Scenario>A vv-spec-reviewer returns VVOC_STATUS: NEEDS_CONTEXT with a question. If the review round settles into needs_context, work_item_list shows which reviewer requested context and includes the bounded excerpt.</Scenario>
+    <Scenario>A reviewer returns VVOC_WORK_ITEM_ID and VVOC_STATUS: FAIL, then immediately writes Findings text without a blank line. The workflow plugin fails closed with a missing-blank-line diagnostic and a corrected example rather than a generic non-protocol line message.</Scenario>
+    <Scenario>A malformed result is wrapped in a resumable OpenCode task envelope. The repair prompt preserves the outcome and instructs only format repair, including moving body text below a blank line when that is the detected issue.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

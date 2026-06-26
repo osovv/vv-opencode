@@ -1,0 +1,51 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-WORKFLOW-RESULT-PRESERVATION>
+    <Summary>Preserve tracked subagent result context and improve workflow protocol diagnostics for malformed top blocks and hard-stop outcomes.</Summary>
+    <Problem>Workflow result validation can replace or obscure the original tracked subagent response with only a workflow validation or hard-stop error. This leaves the controller without the subagent handoff context, especially for BLOCKED and NEEDS_CONTEXT outcomes. The strict top-block parser also reports body text placed immediately after VVOC_STATUS, such as Findings text without a separating blank line, as a generic non-protocol line instead of explaining the missing blank line fix.</Problem>
+    <Goals>
+      <Goal>Preserve a bounded, controller-visible excerpt of the original tracked subagent result when protocol validation, state application, BLOCKED, or NEEDS_CONTEXT handling stops workflow automation.</Goal>
+      <Goal>Expose enough result context through workflow recovery surfaces, including work_item_list, so the controller can understand why a work item entered needs_context or blocked without relying on hidden child-session history.</Goal>
+      <Goal>Detect body text accidentally placed inside the strict protocol top block and report an actionable missing-blank-line diagnostic with a corrected format example.</Goal>
+      <Goal>Keep malformed protocol handling fail-closed while improving repair prompts so format-only repair can move body text below the required blank line without changing the subagent outcome.</Goal>
+      <Goal>Cover result excerpt preservation, hard stops, protocol diagnostics, repair guidance, and truncation behavior with deterministic tests.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not make the result parser silently accept malformed outputs that omit the blank line between protocol header and body.</NonGoal>
+      <NonGoal>Do not store unbounded raw subagent outputs in workflow state or persistence.</NonGoal>
+      <NonGoal>Do not change tracked agent names, allowed VVOC_STATUS values, work-item lifecycle states, or review-round transition semantics except where needed to attach bounded result context.</NonGoal>
+      <NonGoal>Do not change OpenCode task execution semantics outside the vvoc workflow plugin hooks.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>When a tracked subagent returns a valid BLOCKED or NEEDS_CONTEXT result with body text, the resulting hard-stop error includes a capped excerpt of the original result body or normalized result output with work item, agent, and status context.</Criterion>
+      <Criterion>When a work item enters blocked or needs_context, work_item_list exposes a bounded result excerpt sufficient for controller recovery, including implementer hard-stop context and reviewer NEEDS_CONTEXT context.</Criterion>
+      <Criterion>When result parsing fails after optional repair, RESULT_PROTOCOL_ERROR includes the protocol failure plus a capped excerpt of the original normalized subagent output.</Criterion>
+      <Criterion>When state application rejects an otherwise parsed result, RESULT_PROTOCOL_ERROR includes the state error plus a capped excerpt of the parsed result body or normalized output.</Criterion>
+      <Criterion>When a line such as Findings appears in the strict top block after VVOC_WORK_ITEM_ID and VVOC_STATUS without a blank line, the protocol error identifies the missing blank line before the body and shows the corrected header-blank-line-body shape.</Criterion>
+      <Criterion>Result repair guidance for malformed top blocks explicitly instructs the subagent to move body text after a blank line while preserving the same work item, status, route, and underlying outcome.</Criterion>
+      <Criterion>Excerpt handling is deterministic, size-bounded, and marked as truncated when truncation occurs.</Criterion>
+      <Criterion>Existing valid strict result blocks, duplicate-field rejection, status validation, launch validation, review aggregation, and round-limit behavior continue to pass existing workflow tests.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-WORKFLOW-PROTOCOL />
+      <M-WORKFLOW-REPAIR />
+      <M-WORKFLOW-STATE />
+      <M-WORKFLOW-TOOLING />
+      <M-WORKFLOW-PERSISTENCE />
+      <M-PLUGIN-WORKFLOW />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/workflow.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run typecheck</ExpectedCommand>
+      <ExpectedCommand>bun run lint</ExpectedCommand>
+      <ExpectedCommand>bun run fmt:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedEvidence>Workflow tests include cases for hard-stop excerpt preservation, work_item_list recovery context, protocol-error excerpt preservation, missing-blank-line diagnostics for body text inside the strict top block, repair prompt guidance, and bounded truncation.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>OpenCode may surface a thrown tool.execute.after hook error instead of the original child task output; vvoc workflow errors therefore must carry enough context themselves.</Assumption>
+      <Assumption>Bounded excerpts are acceptable recovery context, but unbounded raw subagent output is not acceptable for persisted workflow state.</Assumption>
+      <Assumption>Existing secrets-redaction behavior remains responsible for provider-bound and tool-bound secret handling; this change only bounds and structures workflow result excerpts.</Assumption>
+      <Assumption>The strict protocol top block remains separated from freeform result body by a blank line.</Assumption>
+    </Assumptions>
+  </C-WORKFLOW-RESULT-PRESERVATION>
+</GraceChangeSpec>
