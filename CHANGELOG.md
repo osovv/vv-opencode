@@ -1,3 +1,13 @@
+## <small>0.35.32 (2026-06-26)</small>
+
+### Summary
+
+Workflow result preservation is now implemented: when a tracked subagent returns BLOCKED or NEEDS_CONTEXT, the controller receives the actual explanation in the error and can inspect it later through work_item_list, significantly improving recovery after hard stops. Protocol parsing now extracts the freeform result body after the required blank line, and if a subagent forgets that blank line, the error provides an actionable diagnostic with a corrected format example instead of a confusing generic message. The repair system also gains missing-blank-line guidance, increasing the chance of automatic format recovery without changing the subagent's outcome. All excerpts are bounded and explicitly truncated to prevent unbounded storage in persisted workflow state.
+
+* docs(grace): add workflow result preservation spec and plan ([c4f05fa](https://github.com/osovv/vv-opencode/commit/c4f05fa))
+* docs(grace): archive workflow result preservation change ([6efdc37](https://github.com/osovv/vv-opencode/commit/6efdc37))
+* feat(workflow): preserve tracked result context ([078e926](https://github.com/osovv/vv-opencode/commit/078e926))
+
 ## <small>0.35.31 (2026-06-25)</small>
 
 ### Summary
