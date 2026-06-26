@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-WORKFLOW-RESULT-PRESERVATION>
     <IntentSummary>Implement the approved workflow result preservation change by keeping strict tracked-result protocol semantics while carrying bounded subagent result context through parsing, state storage, work_item_list recovery, hard-stop errors, protocol errors, and format-only repair diagnostics.</IntentSummary>
     <BaselineAssertions>

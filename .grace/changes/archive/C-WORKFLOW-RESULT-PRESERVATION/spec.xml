@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-WORKFLOW-RESULT-PRESERVATION>
     <Summary>Preserve tracked subagent result context and improve workflow protocol diagnostics for malformed top blocks and hard-stop outcomes.</Summary>
     <Problem>Workflow result validation can replace or obscure the original tracked subagent response with only a workflow validation or hard-stop error. This leaves the controller without the subagent handoff context, especially for BLOCKED and NEEDS_CONTEXT outcomes. The strict top-block parser also reports body text placed immediately after VVOC_STATUS, such as Findings text without a separating blank line, as a generic non-protocol line instead of explaining the missing blank line fix.</Problem>
