@@ -2,7 +2,7 @@
 // VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses.
-//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions, explicit open-contract validation, round metadata serialization, and deterministic execution responses.
+//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions, explicit open-contract validation, round metadata and bounded recovery excerpt serialization, and deterministic execution responses.
 //   DEPENDS: [src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
@@ -13,11 +13,12 @@
 //   WorkflowToolContext - Minimal execution context required by workflow tools.
 //   WorkflowToolDefinition - Deterministic tool definition shape with execute handler.
 //   createWorkItemOpenTool - Creates work_item_open tool wrapper around explicit openWorkItem contract.
-//   createWorkItemListTool - Creates work_item_list tool wrapper with mode and round metadata.
+//   createWorkItemListTool - Creates work_item_list tool wrapper with mode, round metadata, and recovery excerpts.
 //   createWorkItemCloseTool - Creates work_item_close tool wrapper with ready_to_close gating responses.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.1 - Exposed bounded result excerpts in work-item serialization for blocked and needs_context recovery.]
 //   LAST_CHANGE: [v0.2.0 - Required explicit work-item mode and requiredReviewers, and exposed review-round metadata in list/open tool output.]
 //   LAST_CHANGE: [v0.1.1 - Wired work_item_list includeClosed flag into state listing options.]
 //   LAST_CHANGE: [v0.1.0 - Added workflow core tooling handlers for open/list/close operations with structured results and VVOC headers.]
@@ -146,6 +147,7 @@ function serializeWorkItem(record: WorkItemRecord): Record<string, unknown> {
     codeReviewCount: record.codeReviewCount,
     reviewRound: getReviewRound(record),
     currentRound: record.currentRound,
+    ...(record.resultExcerpt ? { resultExcerpt: record.resultExcerpt } : {}),
     completedReviewRoundCount: record.completedReviewRoundCount,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

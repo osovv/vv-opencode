@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/state.ts
 // VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent and collect-all review rounds.
-//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata, launch-time in-flight tracking, result-time round aggregation, close gating, and review-round helpers.
+//   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, and collect-all review rounds.
+//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, close gating, and review-round helpers.
 //   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts]
 //   LINKS: [M-WORKFLOW-STATE]
 //   ROLE: RUNTIME
@@ -16,6 +16,9 @@
 //   ReviewerRole - Domain reviewer role IDs accepted by work_item_open.
 //   ReviewerAgentName - Tracked reviewer subagent names mapped from reviewer roles.
 //   ReviewerResultStatus - Reviewer result statuses that participate in round aggregation.
+//   RESULT_EXCERPT_MAX_CHARS - Single deterministic maximum for bounded result excerpts.
+//   WorkflowResultExcerpt - Bounded recovery excerpt captured from parsed body or normalized output.
+//   createWorkflowResultExcerpt - Creates deterministic bounded result excerpts.
 //   ReviewRoundResult - Stored result payload for one reviewer in a review round.
 //   ReviewRound - Explicit current-round reviewer progress and results.
 //   WorkItemState - Allowed lifecycle states for a tracked work item.
@@ -40,6 +43,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.3.1 - Added bounded result excerpts to implementer hard-stop state and reviewer round results.]
 //   LAST_CHANGE: [v0.3.0 - Replaced inferred sequential reviewer states with explicit work-item mode, reviewer intent, in-flight tracking, and collect-all review-round aggregation.]
 //   LAST_CHANGE: [v0.2.0 - Allowed fresh review-only work items to transition directly from reviewer outcomes.]
 //   LAST_CHANGE: [v0.1.2 - Required actor metadata for tracked transitions so reviewer counters cannot be bypassed by actor-less updates.]
@@ -65,11 +69,24 @@ export type ReviewerRole = (typeof REVIEWER_ROLES)[number];
 export type ReviewerAgentName = "vv-spec-reviewer" | "vv-code-reviewer";
 export type ReviewerResultStatus = "PASS" | "FAIL" | "NEEDS_CONTEXT";
 
+export const RESULT_EXCERPT_MAX_CHARS = 500;
+
+export type WorkflowResultExcerptSource = "parsed_body" | "normalized_output";
+
+export type WorkflowResultExcerpt = {
+  source: WorkflowResultExcerptSource;
+  text: string;
+  truncated: boolean;
+  originalLength: number;
+  maxLength: number;
+};
+
 export type ReviewRoundResult = {
   reviewer: ReviewerRole;
   agent: ReviewerAgentName;
   status: ReviewerResultStatus;
   completedAt: string;
+  resultExcerpt?: WorkflowResultExcerpt;
 };
 
 export type ReviewRound = {
@@ -105,6 +122,7 @@ export type WorkItemRecord = {
   completedReviewRoundCount: number;
   specReviewCount: number;
   codeReviewCount: number;
+  resultExcerpt?: WorkflowResultExcerpt;
   createdAt: string;
   updatedAt: string;
   closedAt?: string;
@@ -208,6 +226,7 @@ export type WorkItemStore = {
     sessionId: string;
     workItemId: string;
     result: ParsedResultBlock;
+    resultExcerpt?: WorkflowResultExcerpt;
   }) => ApplyTrackedResultResult;
   getWorkItem: (sessionId: string, workItemId: string) => WorkItemRecord | undefined;
   listWorkItems: (sessionId: string, options?: { includeClosed?: boolean }) => WorkItemRecord[];
@@ -223,6 +242,26 @@ function createRecordLookupKey(sessionId: string, workItemId: string): string {
   return `${sessionId}::${workItemId}`;
 }
 
+function cloneExcerpt(excerpt: WorkflowResultExcerpt): WorkflowResultExcerpt {
+  return { ...excerpt };
+}
+
+function cloneRoundResult(result: ReviewRoundResult): ReviewRoundResult {
+  return {
+    ...result,
+    ...(result.resultExcerpt ? { resultExcerpt: cloneExcerpt(result.resultExcerpt) } : {}),
+  };
+}
+
+function cloneRoundResults(
+  results: Partial<Record<ReviewerRole, ReviewRoundResult>>,
+): Partial<Record<ReviewerRole, ReviewRoundResult>> {
+  return {
+    ...(results.spec ? { spec: cloneRoundResult(results.spec) } : {}),
+    ...(results.code ? { code: cloneRoundResult(results.code) } : {}),
+  };
+}
+
 function cloneRound(round: ReviewRound): ReviewRound {
   return {
     ...round,
@@ -230,7 +269,7 @@ function cloneRound(round: ReviewRound): ReviewRound {
     pendingReviewers: [...round.pendingReviewers],
     inFlightReviewers: [...round.inFlightReviewers],
     completedReviewers: [...round.completedReviewers],
-    results: { ...round.results },
+    results: cloneRoundResults(round.results),
   };
 }
 
@@ -239,6 +278,35 @@ function cloneRecord(record: WorkItemRecord): WorkItemRecord {
     ...record,
     requiredReviewers: [...record.requiredReviewers],
     ...(record.currentRound ? { currentRound: cloneRound(record.currentRound) } : {}),
+    ...(record.resultExcerpt ? { resultExcerpt: cloneExcerpt(record.resultExcerpt) } : {}),
+  };
+}
+
+// START_CONTRACT: createWorkflowResultExcerpt
+//   PURPOSE: Create a deterministic bounded recovery excerpt from tracked result text.
+//   INPUTS: { text?: string - candidate text, source: WorkflowResultExcerptSource - origin of candidate text, maxLength?: number - optional deterministic cap for tests }
+//   OUTPUTS: { WorkflowResultExcerpt | undefined - bounded excerpt with truncation metadata, or undefined when text is empty }
+//   SIDE_EFFECTS: [none]
+//   LINKS: [M-WORKFLOW-STATE]
+// END_CONTRACT: createWorkflowResultExcerpt
+export function createWorkflowResultExcerpt(options: {
+  text?: string;
+  source: WorkflowResultExcerptSource;
+  maxLength?: number;
+}): WorkflowResultExcerpt | undefined {
+  const normalized = (options.text ?? "").replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const maxLength = Math.max(1, Math.floor(options.maxLength ?? RESULT_EXCERPT_MAX_CHARS));
+  const truncated = normalized.length > maxLength;
+  return {
+    source: options.source,
+    text: truncated ? normalized.slice(0, maxLength) : normalized,
+    truncated,
+    originalLength: normalized.length,
+    maxLength,
   };
 }
 
@@ -558,6 +626,7 @@ function applyImplementerResult(
   existing: WorkItemRecord,
   result: ParsedResultBlock,
   now: string,
+  resultExcerpt: WorkflowResultExcerpt | undefined,
 ): WorkItemRecord {
   if (result.status === "DONE" || result.status === "DONE_WITH_CONCERNS") {
     return {
@@ -575,12 +644,14 @@ function applyImplementerResult(
     return {
       ...existing,
       state: "needs_context",
+      ...(resultExcerpt ? { resultExcerpt } : {}),
       updatedAt: now,
     };
   }
   return {
     ...existing,
     state: "blocked",
+    ...(resultExcerpt ? { resultExcerpt } : {}),
     updatedAt: now,
   };
 }
@@ -592,6 +663,7 @@ function applyReviewerResult(
   role: ReviewerRole,
   result: ParsedResultBlock,
   now: string,
+  resultExcerpt: WorkflowResultExcerpt | undefined,
 ): ApplyTrackedResultFailure | WorkItemRecord {
   const round = existing.currentRound;
   if (existing.state !== "awaiting_reviews" || !round || round.status !== "active") {
@@ -629,6 +701,7 @@ function applyReviewerResult(
     agent: result.agent as ReviewerAgentName,
     status,
     completedAt: now,
+    ...(resultExcerpt ? { resultExcerpt } : {}),
   };
   let updatedRound: ReviewRound = {
     ...round,
@@ -667,7 +740,12 @@ function applyReviewerResult(
 
 function applyTrackedResultInStore(
   store: WorkItemStoreData,
-  input: { sessionId: string; workItemId: string; result: ParsedResultBlock },
+  input: {
+    sessionId: string;
+    workItemId: string;
+    result: ParsedResultBlock;
+    resultExcerpt?: WorkflowResultExcerpt;
+  },
 ): ApplyTrackedResultResult {
   const lookupKey = createRecordLookupKey(input.sessionId, input.workItemId);
   const existing = store.records.get(lookupKey);
@@ -701,9 +779,9 @@ function applyTrackedResultInStore(
         message: `INVALID_RESULT_AGENT: ${input.result.agent} cannot produce a result for ${existing.state}`,
       };
     }
-    updated = applyImplementerResult(existing, input.result, now);
+    updated = applyImplementerResult(existing, input.result, now, input.resultExcerpt);
   } else {
-    updated = applyReviewerResult(existing, role, input.result, now);
+    updated = applyReviewerResult(existing, role, input.result, now, input.resultExcerpt);
   }
 
   if ("ok" in updated && updated.ok === false) {
@@ -802,7 +880,12 @@ export function beginTrackedLaunch(
 // END_CONTRACT: applyTrackedResult
 export function applyTrackedResult(
   store: WorkItemStore,
-  input: { sessionId: string; workItemId: string; result: ParsedResultBlock },
+  input: {
+    sessionId: string;
+    workItemId: string;
+    result: ParsedResultBlock;
+    resultExcerpt?: WorkflowResultExcerpt;
+  },
 ): ApplyTrackedResultResult {
   return store.applyTrackedResult(input);
 }

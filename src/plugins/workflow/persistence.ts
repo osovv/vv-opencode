@@ -4,7 +4,8 @@
 //   PURPOSE: Hydrate and snapshot work-item workflow state from/to per-session JSON
 //     files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.
 //   SCOPE: Read/write WorkItemStoreData (nextId, records, keyIndexBySession) as
-//     serializable JSON, including explicit work-item mode and review-round fields.
+//     serializable JSON, including explicit work-item mode, review-round fields,
+//     and optional bounded result excerpts.
 //     Directory auto-creation on snapshot. Safe null return on missing, corrupt,
 //     or incomplete persisted files.
 //   DEPENDS: [node:fs, node:path, src/lib/vvoc-paths.ts, src/plugins/workflow/state.ts]
@@ -22,6 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.2.2 - Validated optional bounded result excerpts during workflow state hydrate and snapshot round-trips.]
 //   LAST_CHANGE: [v0.2.1 - Reworded persisted-state validation as corrupt/incomplete data handling while keeping fail-closed hydrate behavior.]
 //   LAST_CHANGE: [v0.2.0 - Validated explicit workflow intent and review-round fields during hydrate so incomplete records fail closed.]
 //   LAST_CHANGE: [v0.1.0 - Initial implementation of per-session hydrate/snapshot.]
@@ -34,6 +36,8 @@ import { getGlobalVvocDataDir } from "../../lib/vvoc-paths.js";
 import type {
   ReviewerRole,
   ReviewRound,
+  ReviewRoundResult,
+  WorkflowResultExcerpt,
   WorkItemMode,
   WorkItemRecord,
   WorkItemState,
@@ -75,6 +79,35 @@ function isReviewerRole(value: unknown): value is ReviewerRole {
   return value === "spec" || value === "code";
 }
 
+function isWorkflowResultExcerpt(value: unknown): value is WorkflowResultExcerpt {
+  if (!value || typeof value !== "object") return false;
+  const excerpt = value as WorkflowResultExcerpt;
+  const hasValidLengthMetadata = excerpt.truncated
+    ? excerpt.originalLength > excerpt.maxLength && excerpt.text.length === excerpt.maxLength
+    : excerpt.originalLength === excerpt.text.length && excerpt.text.length <= excerpt.maxLength;
+  return (
+    (excerpt.source === "parsed_body" || excerpt.source === "normalized_output") &&
+    typeof excerpt.text === "string" &&
+    typeof excerpt.truncated === "boolean" &&
+    Number.isInteger(excerpt.originalLength) &&
+    Number.isInteger(excerpt.maxLength) &&
+    excerpt.maxLength > 0 &&
+    hasValidLengthMetadata
+  );
+}
+
+function isReviewRoundResult(value: unknown): value is ReviewRoundResult {
+  if (!value || typeof value !== "object") return false;
+  const result = value as ReviewRoundResult;
+  return (
+    isReviewerRole(result.reviewer) &&
+    (result.agent === "vv-spec-reviewer" || result.agent === "vv-code-reviewer") &&
+    (result.status === "PASS" || result.status === "FAIL" || result.status === "NEEDS_CONTEXT") &&
+    typeof result.completedAt === "string" &&
+    (result.resultExcerpt === undefined || isWorkflowResultExcerpt(result.resultExcerpt))
+  );
+}
+
 function isReviewRound(value: unknown): value is ReviewRound {
   if (!value || typeof value !== "object") return false;
   const round = value as ReviewRound;
@@ -90,6 +123,8 @@ function isReviewRound(value: unknown): value is ReviewRound {
     round.completedReviewers.every(isReviewerRole) &&
     !!round.results &&
     typeof round.results === "object" &&
+    (round.results.spec === undefined || isReviewRoundResult(round.results.spec)) &&
+    (round.results.code === undefined || isReviewRoundResult(round.results.code)) &&
     (round.status === "active" || round.status === "completed") &&
     typeof round.createdAt === "string"
   );
@@ -111,6 +146,7 @@ function isWorkItemRecord(value: unknown, sessionId: string): value is WorkItemR
     Number.isInteger(record.completedReviewRoundCount) &&
     Number.isInteger(record.specReviewCount) &&
     Number.isInteger(record.codeReviewCount) &&
+    (record.resultExcerpt === undefined || isWorkflowResultExcerpt(record.resultExcerpt)) &&
     typeof record.createdAt === "string" &&
     typeof record.updatedAt === "string" &&
     (record.currentRound === undefined || isReviewRound(record.currentRound))

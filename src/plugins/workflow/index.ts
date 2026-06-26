@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/index.ts
 // VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, and primary-session workflow guidance injection.
-//   SCOPE: work_item_open/list/close tool registration, explicit tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/round aggregation, implementation-mode round-limit gating, and chat.message guidance injection with subagent filtering.
+//   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, recovery excerpt propagation, and primary-session workflow guidance injection.
+//   SCOPE: work_item_open/list/close tool registration, explicit tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/round aggregation with bounded excerpts, implementation-mode round-limit gating, and chat.message guidance injection with subagent filtering.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.1 - Propagated bounded tracked-result excerpts through protocol errors, state-application errors, hard stops, and persisted work-item state.]
 //   LAST_CHANGE: [v0.4.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
 //   LAST_CHANGE: [v0.3.0 - Integrated explicit work-item intent, reviewer in-flight tracking, and collect-all review-round result aggregation.]
 //   LAST_CHANGE: [v0.2.6 - Restricted work-item tools and workflow guidance injection to vv-controller sessions only.]
@@ -41,10 +42,12 @@ import {
 } from "./protocol.js";
 import {
   applyTrackedResult,
+  createWorkflowResultExcerpt,
   beginTrackedLaunch,
   createWorkItemStore,
   getReviewRound,
   getWorkItem,
+  type WorkflowResultExcerpt,
   type WorkItemRecord,
   type WorkItemStore,
 } from "./state.js";
@@ -146,6 +149,82 @@ function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number)
     `Work item ${record.workItemId} is in state ${record.state} at reviewRound=${getReviewRound(record)} and cannot start round ${attemptedRound}.`,
     "Next action: call work_item_list for this session, resolve concerns with explicit context, then open/continue a fresh work item instead of retrying the same loop.",
   ].join(" ");
+}
+
+function createResultExcerptForParsedOutput(options: {
+  body: string;
+  normalizedOutput: string;
+}): WorkflowResultExcerpt | undefined {
+  const bodyExcerpt = createWorkflowResultExcerpt({
+    text: options.body,
+    source: "parsed_body",
+  });
+  if (bodyExcerpt) {
+    return bodyExcerpt;
+  }
+
+  return createWorkflowResultExcerpt({
+    text: options.normalizedOutput,
+    source: "normalized_output",
+  });
+}
+
+function formatResultExcerptForError(excerpt: WorkflowResultExcerpt | undefined): string {
+  if (!excerpt) {
+    return "Result excerpt: <empty>";
+  }
+
+  const truncation = excerpt.truncated
+    ? `, truncated to ${excerpt.maxLength} of ${excerpt.originalLength} characters`
+    : "";
+  return `Result excerpt (${excerpt.source}${truncation}):\n${excerpt.text}`;
+}
+
+function findHardStopRecoveryContext(
+  record: WorkItemRecord,
+  fallback: { agent: TrackedAgentName; status: string; excerpt?: WorkflowResultExcerpt },
+): { agent: string; status: string; excerpt?: WorkflowResultExcerpt } {
+  if (record.state === "needs_context" && record.currentRound) {
+    const needsContextResult = Object.values(record.currentRound.results).find(
+      (result) => result?.status === "NEEDS_CONTEXT",
+    );
+    if (needsContextResult?.resultExcerpt) {
+      return {
+        agent: needsContextResult.agent,
+        status: needsContextResult.status,
+        excerpt: needsContextResult.resultExcerpt,
+      };
+    }
+  }
+
+  if (record.resultExcerpt) {
+    return {
+      agent: fallback.agent,
+      status: fallback.status,
+      excerpt: record.resultExcerpt,
+    };
+  }
+
+  return fallback;
+}
+
+function createHardStopMessage(options: {
+  record: WorkItemRecord;
+  triggeringAgent: TrackedAgentName;
+  triggeringStatus: string;
+  triggeringExcerpt?: WorkflowResultExcerpt;
+}): string {
+  const recovery = findHardStopRecoveryContext(options.record, {
+    agent: options.triggeringAgent,
+    status: options.triggeringStatus,
+    excerpt: options.triggeringExcerpt,
+  });
+  return [
+    `RESULT_HARD_STOP: ${options.record.state} requires explicit user action for ${options.record.workItemId}.`,
+    `Recovery context: agent=${recovery.agent}; status=${recovery.status}.`,
+    formatResultExcerptForError(recovery.excerpt),
+    "Inspect work_item_list before retrying.",
+  ].join("\n");
 }
 
 // START_BLOCK_PLUGIN_ENTRY
@@ -424,9 +503,10 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
       }
 
       const unwrapped = unwrapResumableTaskResult(output.output);
+      let effectiveNormalizedOutput = unwrapped.normalizedOutput;
       let parsed = parseResultBlock({
         agent: subagentType,
-        output: unwrapped.normalizedOutput,
+        output: effectiveNormalizedOutput,
         expectedWorkItemId: header.value,
       });
       if (!parsed.ok) {
@@ -454,13 +534,15 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             agent: subagentType,
             workItemId: header.value,
             malformedOutput: unwrapped.normalizedOutput,
+            parseErrorCode: parsed.error.code,
             parseErrorMessage: parsed.error.message,
           });
 
           if (repairedOutput) {
+            effectiveNormalizedOutput = repairedOutput;
             parsed = parseResultBlock({
               agent: subagentType,
-              output: repairedOutput,
+              output: effectiveNormalizedOutput,
               expectedWorkItemId: header.value,
             });
           }
@@ -468,6 +550,10 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
       }
 
       if (!parsed.ok) {
+        const protocolFailureExcerpt = createWorkflowResultExcerpt({
+          text: unwrapped.normalizedOutput,
+          source: "normalized_output",
+        });
         await client.app.log({
           body: {
             service: "workflow",
@@ -481,8 +567,18 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             },
           },
         });
-        throw new Error(`RESULT_PROTOCOL_ERROR: ${parsed.error.message}`);
+        throw new Error(
+          [
+            `RESULT_PROTOCOL_ERROR: ${parsed.error.message}`,
+            formatResultExcerptForError(protocolFailureExcerpt),
+          ].join("\n"),
+        );
       }
+
+      const resultExcerpt = createResultExcerptForParsedOutput({
+        body: parsed.value.body,
+        normalizedOutput: effectiveNormalizedOutput,
+      });
 
       await client.app.log({
         body: {
@@ -516,7 +612,10 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           },
         });
         throw new Error(
-          `RESULT_PROTOCOL_ERROR: no open work item ${parsed.value.workItemId} exists in this session`,
+          [
+            `RESULT_PROTOCOL_ERROR: no open work item ${parsed.value.workItemId} exists in this session`,
+            formatResultExcerptForError(resultExcerpt),
+          ].join("\n"),
         );
       }
 
@@ -524,6 +623,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         sessionId: input.sessionID,
         workItemId: parsed.value.workItemId,
         result: parsed.value,
+        resultExcerpt,
       });
       if (!applied.ok) {
         await client.app.log({
@@ -539,7 +639,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             },
           },
         });
-        throw new Error(`RESULT_PROTOCOL_ERROR: ${applied.message}`);
+        throw new Error(
+          [
+            `RESULT_PROTOCOL_ERROR: ${applied.message}`,
+            formatResultExcerptForError(resultExcerpt),
+          ].join("\n"),
+        );
       }
 
       await client.app.log({
@@ -565,7 +670,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
 
       if (applied.record.state === "needs_context" || applied.record.state === "blocked") {
         throw new Error(
-          `RESULT_HARD_STOP: ${applied.record.state} requires explicit user action. Inspect work_item_list before retrying.`,
+          createHardStopMessage({
+            record: applied.record,
+            triggeringAgent: subagentType,
+            triggeringStatus: parsed.value.status,
+            triggeringExcerpt: resultExcerpt,
+          }),
         );
       }
     },

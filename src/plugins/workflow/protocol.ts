@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/protocol.ts
 // VERSION: 0.1.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the tracked subagent result protocol, strict top-block parsing rules, and work-item header extraction.
-//   SCOPE: Tracked agent/status constants, status validation per agent, strict result-block parsing, protocol error reporting, and VVOC_WORK_ITEM_ID header parsing.
+//   PURPOSE: Define the tracked subagent result protocol, strict top-block parsing rules, body extraction, and work-item header extraction.
+//   SCOPE: Tracked agent/status constants, status validation per agent, strict result-block parsing with body separation, protocol error reporting, and VVOC_WORK_ITEM_ID header parsing.
 //   DEPENDS: [none]
 //   LINKS: [M-WORKFLOW-PROTOCOL]
 //   ROLE: RUNTIME
@@ -12,18 +12,19 @@
 // START_MODULE_MAP
 //   TrackedAgentName - Tracked subagent names used by workflow enforcement.
 //   VVocStatus - Union of all supported protocol statuses.
-//   ParsedResultBlock - Parsed strict top-block fields from tracked subagent output.
+//   ParsedResultBlock - Parsed strict top-block fields and separated body from tracked subagent output.
 //   ProtocolErrorCode - Stable machine-readable protocol error codes.
 //   ProtocolError - Structured protocol error payload.
 //   ProtocolResult - Deterministic success/failure wrapper for parsing and validation operations.
 //   TRACKED_SUBAGENT_NAMES - Ordered tracked subagent names.
 //   ALLOWED_STATUSES - Allowed VVOC_STATUS values per tracked subagent.
-//   parseResultBlock - Parses strict top-block protocol fields from tracked subagent output.
+//   parseResultBlock - Parses strict top-block protocol fields and separated body from tracked subagent output.
 //   validateStatusForAgent - Validates VVOC_STATUS against tracked agent allowances.
 //   parseWorkItemHeader - Extracts and validates the top-line VVOC_WORK_ITEM_ID prompt header.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.3 - Preserved separated result body text and added missing blank-line diagnostics for body text inside the strict top block.]
 //   LAST_CHANGE: [v0.1.2 - Rejected duplicate strict top-block protocol fields to keep parse outcomes deterministic.]
 //   LAST_CHANGE: [v0.1.1 - Enforced case-sensitive status validation and strict top-block line validation for protocol-only fields.]
 //   LAST_CHANGE: [v0.1.0 - Added workflow protocol grammar, strict top-block parser, per-agent status validation, and prompt-header extraction.]
@@ -56,6 +57,7 @@ export type ParsedResultBlock = {
   workItemId: string;
   status: VVocStatus;
   route?: string;
+  body: string;
 };
 
 export type ProtocolErrorCode =
@@ -65,6 +67,7 @@ export type ProtocolErrorCode =
   | "UNKNOWN_STATUS"
   | "STATUS_NOT_ALLOWED"
   | "UNEXPECTED_TOP_BLOCK_LINE"
+  | "MISSING_BODY_SEPARATOR"
   | "DUPLICATE_TOP_BLOCK_FIELD"
   | "WORK_ITEM_MISMATCH"
   | "MALFORMED_WORK_ITEM_HEADER"
@@ -97,21 +100,31 @@ function createProtocolError(code: ProtocolErrorCode, message: string): Protocol
   };
 }
 
-function splitTopBlock(text: string): string[] {
+type ResultSections = {
+  topBlockLines: string[];
+  body: string;
+};
+
+function splitResultSections(text: string): ResultSections {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const firstMeaningfulIndex = lines.findIndex((line) => line.trim().length > 0);
-  if (firstMeaningfulIndex < 0) return [];
+  if (firstMeaningfulIndex < 0) return { topBlockLines: [], body: "" };
 
-  const block: string[] = [];
+  const topBlockLines: string[] = [];
+  let bodyStartIndex: number | undefined;
   for (let index = firstMeaningfulIndex; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     if (line.trim().length === 0) {
+      bodyStartIndex = index + 1;
       break;
     }
-    block.push(line.trim());
+    topBlockLines.push(line.trim());
   }
 
-  return block;
+  return {
+    topBlockLines,
+    body: bodyStartIndex === undefined ? "" : lines.slice(bodyStartIndex).join("\n").trim(),
+  };
 }
 
 function readTopBlockField(topBlockLines: string[], field: string): string | undefined {
@@ -135,6 +148,13 @@ function validateTopBlockLines(topBlockLines: string[]): ProtocolResult<true> {
   for (const line of topBlockLines) {
     const match = /^([A-Z_]+)\s*:\s*(.+)$/.exec(line);
     if (!match) {
+      if (seenFields.has("VVOC_WORK_ITEM_ID") && seenFields.has("VVOC_STATUS")) {
+        return createProtocolError(
+          "MISSING_BODY_SEPARATOR",
+          createMissingBodySeparatorMessage(line, topBlockLines),
+        );
+      }
+
       return createProtocolError(
         "UNEXPECTED_TOP_BLOCK_LINE",
         `UNEXPECTED_TOP_BLOCK_LINE: strict top block contains a non-protocol line \`${line}\``,
@@ -143,6 +163,17 @@ function validateTopBlockLines(topBlockLines: string[]): ProtocolResult<true> {
 
     const field = match[1] ?? "";
     if (!allowedFields.has(field)) {
+      if (
+        seenFields.has("VVOC_WORK_ITEM_ID") &&
+        seenFields.has("VVOC_STATUS") &&
+        !field.startsWith("VVOC_")
+      ) {
+        return createProtocolError(
+          "MISSING_BODY_SEPARATOR",
+          createMissingBodySeparatorMessage(line, topBlockLines),
+        );
+      }
+
       return createProtocolError(
         "UNEXPECTED_TOP_BLOCK_LINE",
         `UNEXPECTED_TOP_BLOCK_LINE: strict top block field \`${field}\` is not recognized`,
@@ -159,6 +190,27 @@ function validateTopBlockLines(topBlockLines: string[]): ProtocolResult<true> {
   }
 
   return { ok: true, value: true };
+}
+
+function createMissingBodySeparatorMessage(offendingLine: string, topBlockLines: string[]): string {
+  const workItemId = readTopBlockField(topBlockLines, "VVOC_WORK_ITEM_ID") ?? "wi-<n>";
+  const status = readTopBlockField(topBlockLines, "VVOC_STATUS") ?? "<allowed status>";
+  const route = readTopBlockField(topBlockLines, "VVOC_ROUTE");
+  const correctedExample = [
+    `VVOC_WORK_ITEM_ID: ${workItemId}`,
+    `VVOC_STATUS: ${status}`,
+    route ? `VVOC_ROUTE: ${route}` : "VVOC_ROUTE: <route for vv-implementer only>",
+    "",
+    offendingLine,
+  ].join("\n");
+
+  return [
+    "MISSING_BODY_SEPARATOR: strict top block contains body text before the required blank line.",
+    `Offending line: \`${offendingLine}\``,
+    "Insert a blank line between the protocol header and result body.",
+    "Correct shape:",
+    correctedExample,
+  ].join("\n");
 }
 
 // START_CONTRACT: validateStatusForAgent
@@ -199,9 +251,9 @@ export function validateStatusForAgent(
 }
 
 // START_CONTRACT: parseResultBlock
-//   PURPOSE: Parse strict top-block workflow protocol fields from tracked subagent output.
+//   PURPOSE: Parse strict top-block workflow protocol fields and separated body from tracked subagent output.
 //   INPUTS: { agent: TrackedAgentName - tracked subagent source, output: string - subagent textual output, expectedWorkItemId?: string - optional ID to match against parsed output }
-//   OUTPUTS: { ProtocolResult<ParsedResultBlock> - parsed protocol fields or protocol error }
+//   OUTPUTS: { ProtocolResult<ParsedResultBlock> - parsed protocol fields plus body or protocol error }
 //   SIDE_EFFECTS: [none]
 //   LINKS: [M-WORKFLOW-PROTOCOL]
 // END_CONTRACT: parseResultBlock
@@ -211,7 +263,8 @@ export function parseResultBlock(options: {
   output: string;
   expectedWorkItemId?: string;
 }): ProtocolResult<ParsedResultBlock> {
-  const topBlockLines = splitTopBlock(options.output);
+  const sections = splitResultSections(options.output);
+  const topBlockLines = sections.topBlockLines;
   const topBlockValidation = validateTopBlockLines(topBlockLines);
   if (!topBlockValidation.ok) {
     return topBlockValidation;
@@ -267,6 +320,7 @@ export function parseResultBlock(options: {
       workItemId,
       status: statusValidation.value,
       ...(route ? { route } : {}),
+      body: sections.body,
     },
   };
 }

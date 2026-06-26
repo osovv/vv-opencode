@@ -2,7 +2,7 @@
 // VERSION: 0.1.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Recognize resumable OpenCode task envelopes and perform one bounded tracked-result repair attempt in the same child session.
-//   SCOPE: OpenCode task envelope parsing, repair prompt construction, repaired text extraction, and same-session repair calls for tracked workflow results.
+//   SCOPE: OpenCode task envelope parsing, protocol-error-aware repair prompt construction, repaired text extraction, and same-session repair calls for tracked workflow results.
 //   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-WORKFLOW-REPAIR, M-WORKFLOW-PROTOCOL, M-PLUGIN-WORKFLOW]
 //   ROLE: RUNTIME
@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.1.3 - Added missing-blank-line repair guidance while preserving fail-closed duplicate-field handling.]
 //   LAST_CHANGE: [v0.1.2 - Excluded duplicate strict top-block field errors from same-session repair so ambiguous tracked results fail closed.]
 //   LAST_CHANGE: [v0.1.1 - Restricted repair to safe format-only protocol errors and sent format-only prompt requests with tools disabled where supported.]
 //   LAST_CHANGE: [v0.1.0 - Added bounded same-session result repair helpers for malformed tracked workflow outputs in resumable OpenCode task envelopes.]
@@ -40,6 +41,7 @@ const SAFE_TRACKED_RESULT_REPAIR_CODES: ReadonlySet<ProtocolErrorCode> = new Set
   "MISSING_STATUS",
   "MISSING_ROUTE",
   "UNEXPECTED_TOP_BLOCK_LINE",
+  "MISSING_BODY_SEPARATOR",
 ]);
 
 const TASK_ELEMENT_OPEN_RE = /^<task\s+id="([^"]+)"\s+state="([^"]+)"\s*>$/;
@@ -185,6 +187,7 @@ export function buildTrackedResultRepairPrompt(options: {
   agent: TrackedAgentName;
   workItemId: string;
   malformedOutput: string;
+  parseErrorCode?: ProtocolErrorCode;
   parseErrorMessage: string;
 }): string {
   const statusGuidance =
@@ -203,14 +206,20 @@ export function buildTrackedResultRepairPrompt(options: {
     "",
     "<brief result handoff>",
   ].join("\n");
+  const missingBodySeparatorGuidance =
+    options.parseErrorCode === "MISSING_BODY_SEPARATOR" ||
+    options.parseErrorMessage.includes("MISSING_BODY_SEPARATOR")
+      ? "The body text was placed inside the strict protocol top block. Move all findings, questions, or result body text below a blank line after the protocol header."
+      : undefined;
 
   return [
     `Your previous final response for ${options.workItemId} was malformed for the workflow result protocol.`,
     `Protocol error: ${options.parseErrorMessage}`,
     "Repair only the response format. Do not do additional implementation or review work.",
-    "Keep the same underlying outcome and same work item.",
+    "Keep the same underlying outcome, same work item, same VVOC_STATUS, and same VVOC_ROUTE when a route applies.",
     statusGuidance,
     routeGuidance,
+    ...(missingBodySeparatorGuidance ? [missingBodySeparatorGuidance] : []),
     "Return only the corrected final response in this exact shape:",
     exactFormat,
     "Previous malformed response:",
@@ -239,6 +248,7 @@ export async function attemptTrackedResultRepair(options: {
   agent: TrackedAgentName;
   workItemId: string;
   malformedOutput: string;
+  parseErrorCode?: ProtocolErrorCode;
   parseErrorMessage: string;
 }): Promise<string | undefined> {
   try {
@@ -260,6 +270,7 @@ export async function attemptTrackedResultRepair(options: {
               agent: options.agent,
               workItemId: options.workItemId,
               malformedOutput: options.malformedOutput,
+              parseErrorCode: options.parseErrorCode,
               parseErrorMessage: options.parseErrorMessage,
             }),
           },

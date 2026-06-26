@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol parsing, resumable task wrapper unwrapping, explicit work-item open contract, mode-aware launch validation, collect-all review-round aggregation, tooling responses, plugin hooks, persistence round-trips, and primary-only guidance injection.
+//   SCOPE: Protocol parsing, result excerpts, repair guidance, resumable task wrapper unwrapping, explicit work-item open contract, mode-aware launch validation, collect-all review-round aggregation, tooling responses, plugin hooks, persistence round-trips, and primary-only guidance injection.
 //   DEPENDS: [bun:test, node:fs, node:path, src/lib/config-layers.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
@@ -10,16 +10,17 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   protocol tests - Verify strict top-block parsing, header parsing, and status validation.
-//   repair tests - Verify recognized OpenCode task envelopes unwrap before parsing.
-//   state tests - Verify explicit intent, launch tracking, collect-all aggregation, and close gating.
+//   protocol tests - Verify strict top-block parsing, body separation, header parsing, and status validation.
+//   repair tests - Verify recognized OpenCode task envelopes unwrap before parsing and repair prompts preserve outcomes.
+//   state tests - Verify explicit intent, launch tracking, bounded excerpts, collect-all aggregation, and close gating.
 //   transition tests - Verify mode-aware launch allowances and aggregate round resolution.
 //   tooling tests - Verify explicit work_item_open/list/close structured responses.
-//   workflow plugin tests - Verify task launch/result hooks, parallel reviewers, hard-stop timing, round limits, and primary-only guidance.
-//   persistence tests - Verify explicit state hydrate/snapshot behavior and corrupt/incomplete data rejection.
+//   workflow plugin tests - Verify task launch/result hooks, parallel reviewers, hard-stop excerpts, protocol-error excerpts, round limits, and primary-only guidance.
+//   persistence tests - Verify explicit state hydrate/snapshot behavior, optional excerpt round-trips, and corrupt/incomplete data rejection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.2 - Added result body, bounded excerpt, missing-blank-line diagnostic, repair guidance, hard-stop, and persistence coverage.]
 //   LAST_CHANGE: [v0.5.1 - Reworded workflow persisted-state rejection coverage as corrupt/incomplete data handling.]
 //   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between workflow plugin fixtures.]
 //   LAST_CHANGE: [v0.4.0 - Reworked workflow tests around explicit work-item intent, awaiting_reviews, and collect-all parallel reviewer rounds.]
@@ -40,7 +41,7 @@
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { WorkflowPlugin } from "./workflow/index.js";
@@ -56,11 +57,12 @@ import {
   validateStatusForAgent,
   type ParsedResultBlock,
 } from "./workflow/protocol.js";
-import { unwrapResumableTaskResult } from "./workflow/repair.js";
+import { buildTrackedResultRepairPrompt, unwrapResumableTaskResult } from "./workflow/repair.js";
 import {
   applyTrackedResult,
   beginTrackedLaunch,
   closeWorkItem,
+  createWorkflowResultExcerpt,
   createWorkItemStore,
   listWorkItems,
   openWorkItem,
@@ -113,6 +115,7 @@ function result(
     workItemId,
     status,
     ...(agent === "vv-implementer" ? { route: "change_with_review" } : {}),
+    body: "",
   };
 }
 
@@ -132,6 +135,7 @@ Implemented all requested changes.`,
     expect(parsed.value.workItemId).toBe("wi-1");
     expect(parsed.value.status).toBe("DONE");
     expect(parsed.value.route).toBe("change_with_review");
+    expect(parsed.value.body).toBe("Implemented all requested changes.");
   });
 
   test("validateStatusForAgent accepts configured statuses per tracked agent", () => {
@@ -156,6 +160,22 @@ Implemented all requested changes.`,
       expect(duplicate.error.code).toBe("DUPLICATE_TOP_BLOCK_FIELD");
     }
   });
+
+  test("strict parsing diagnoses missing blank line before body text", () => {
+    const parsed = parseResultBlock({
+      agent: "vv-spec-reviewer",
+      output: "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: FAIL\nFindings\n- Something failed",
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.code).toBe("MISSING_BODY_SEPARATOR");
+    expect(parsed.error.message).toContain("required blank line");
+    expect(parsed.error.message).toContain("Offending line: `Findings`");
+    expect(parsed.error.message).toContain("Correct shape:");
+    expect(parsed.error.message).toContain("VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: FAIL");
+    expect(parsed.error.message).not.toContain("non-protocol line");
+  });
 });
 
 describe("workflow repair", () => {
@@ -171,6 +191,25 @@ describe("workflow repair", () => {
     const foreign = unwrapResumableTaskResult("task_id: fake\n<task_result>\nPASS\n</task_result>");
     expect(foreign.envelope).toBeUndefined();
     expect(foreign.normalizedOutput).toBe("task_id: fake\n<task_result>\nPASS\n</task_result>");
+  });
+
+  test("repair prompt tells agents to move body text below a blank line", () => {
+    const prompt = buildTrackedResultRepairPrompt({
+      agent: "vv-spec-reviewer",
+      workItemId: "wi-1",
+      malformedOutput: "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: FAIL\nFindings",
+      parseErrorCode: "MISSING_BODY_SEPARATOR",
+      parseErrorMessage: "MISSING_BODY_SEPARATOR: strict top block contains body text",
+    });
+
+    expect(prompt).toContain(
+      "Move all findings, questions, or result body text below a blank line",
+    );
+    expect(prompt).toContain("same VVOC_STATUS");
+    expect(prompt).toContain("same VVOC_ROUTE");
+    expect(prompt).toContain(
+      "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: <allowed status>\n\n<brief result handoff>",
+    );
   });
 });
 
@@ -350,6 +389,58 @@ describe("workflow state", () => {
     expect(codePass.record.state).toBe("needs_context");
   });
 
+  test("result excerpts are bounded and stored on hard-stop and reviewer results", () => {
+    const excerpt = createWorkflowResultExcerpt({
+      text: "0123456789abcdef",
+      source: "parsed_body",
+      maxLength: 10,
+    });
+    expect(excerpt).toEqual({
+      source: "parsed_body",
+      text: "0123456789",
+      truncated: true,
+      originalLength: 16,
+      maxLength: 10,
+    });
+
+    const { store: implementationStore } = openItem({ mode: "implementation" });
+    expect(
+      beginTrackedLaunch(implementationStore, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-implementer",
+      }).ok,
+    ).toBe(true);
+    const blocked = applyTrackedResult(implementationStore, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-implementer", "BLOCKED"),
+      resultExcerpt: excerpt,
+    });
+    expect(blocked.ok).toBe(true);
+    if (!blocked.ok) return;
+    expect(blocked.record.state).toBe("blocked");
+    expect(blocked.record.resultExcerpt?.truncated).toBe(true);
+
+    const { store: reviewStore } = openItem({ mode: "review_only", requiredReviewers: ["spec"] });
+    expect(
+      beginTrackedLaunch(reviewStore, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    const needsContext = applyTrackedResult(reviewStore, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "NEEDS_CONTEXT"),
+      resultExcerpt: excerpt,
+    });
+    expect(needsContext.ok).toBe(true);
+    if (!needsContext.ok) return;
+    expect(needsContext.record.currentRound?.results.spec?.resultExcerpt?.text).toBe("0123456789");
+  });
+
   test("duplicate launches, duplicate results, and results without in-flight launch are rejected", () => {
     const { store } = openItem({ mode: "review_only" });
     const firstLaunch = beginTrackedLaunch(store, {
@@ -505,6 +596,75 @@ describe("workflow tooling", () => {
     expect(close.ok).toBe(false);
     expect(close.errorCode).toBe("READY_TO_CLOSE_REQUIRED");
   });
+
+  test("work_item_list exposes implementer and reviewer recovery excerpts", () => {
+    const excerpt = createWorkflowResultExcerpt({
+      text: "Need product decision before continuing.",
+      source: "parsed_body",
+    });
+    const implementationStore = createWorkItemStore();
+    const implementationListTool = createWorkItemListTool(implementationStore);
+    const opened = openWorkItem(implementationStore, {
+      sessionId: SESSION_ID,
+      key: "blocked",
+      title: "Blocked",
+      mode: "implementation",
+      requiredReviewers: ["spec"],
+    });
+    expect(opened.ok).toBe(true);
+    expect(
+      beginTrackedLaunch(implementationStore, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-implementer",
+      }).ok,
+    ).toBe(true);
+    applyTrackedResult(implementationStore, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-implementer", "NEEDS_CONTEXT"),
+      resultExcerpt: excerpt,
+    });
+    const implementationListed = implementationListTool.execute(
+      { includeClosed: false },
+      { sessionId: SESSION_ID },
+    ) as { items: Array<{ resultExcerpt?: { text: string } }> };
+    expect(implementationListed.items[0]?.resultExcerpt?.text).toBe(
+      "Need product decision before continuing.",
+    );
+
+    const reviewStore = createWorkItemStore();
+    const reviewListTool = createWorkItemListTool(reviewStore);
+    openWorkItem(reviewStore, {
+      sessionId: SESSION_ID,
+      key: "review-needs-context",
+      title: "Review needs context",
+      mode: "review_only",
+      requiredReviewers: ["spec"],
+    });
+    expect(
+      beginTrackedLaunch(reviewStore, {
+        sessionId: SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    applyTrackedResult(reviewStore, {
+      sessionId: SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "NEEDS_CONTEXT"),
+      resultExcerpt: excerpt,
+    });
+    const reviewListed = reviewListTool.execute(
+      { includeClosed: false },
+      { sessionId: SESSION_ID },
+    ) as {
+      items: Array<{ currentRound?: { results: { spec?: { resultExcerpt?: { text: string } } } } }>;
+    };
+    expect(reviewListed.items[0]?.currentRound?.results.spec?.resultExcerpt?.text).toBe(
+      "Need product decision before continuing.",
+    );
+  });
 });
 
 type WorkflowPluginHarness = {
@@ -543,6 +703,10 @@ describe("workflow plugin integration", () => {
       "session-review-only-double-fail",
       "session-needs-context-inflight",
       "session-round-limit",
+      "session-implementer-blocked-excerpt",
+      "session-protocol-error-excerpt",
+      "session-state-error-excerpt",
+      "session-reviewer-needs-context-excerpt",
       "session-guidance",
       "session-tool-denied",
     ]) {
@@ -563,6 +727,10 @@ describe("workflow plugin integration", () => {
       "session-review-only-double-fail",
       "session-needs-context-inflight",
       "session-round-limit",
+      "session-implementer-blocked-excerpt",
+      "session-protocol-error-excerpt",
+      "session-state-error-excerpt",
+      "session-reviewer-needs-context-excerpt",
       "session-guidance",
       "session-tool-denied",
     ]) {
@@ -614,6 +782,131 @@ describe("workflow plugin integration", () => {
     ).rejects.toThrow("RESULT_HARD_STOP: needs_context");
     listed = await listPluginItems(plugin, sessionID);
     expect(listed.items[0]?.state).toBe("needs_context");
+  });
+
+  test("implementer BLOCKED hard stop includes and lists result excerpt", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-implementer-blocked-excerpt";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
+
+    await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
+    await expect(
+      finishPluginTask(
+        plugin,
+        sessionID,
+        "impl",
+        "vv-implementer",
+        workItemId,
+        "BLOCKED",
+        "Blocked because the target API contract is missing.",
+      ),
+    ).rejects.toThrow("Blocked because the target API contract is missing.");
+
+    const listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("blocked");
+    expect(listed.items[0]?.resultExcerpt?.source).toBe("parsed_body");
+    expect(listed.items[0]?.resultExcerpt?.text).toBe(
+      "Blocked because the target API contract is missing.",
+    );
+  });
+
+  test("protocol errors include original normalized output excerpt", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-protocol-error-excerpt";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec"]);
+
+    await launchPluginTask(plugin, sessionID, "spec", "vv-spec-reviewer", workItemId);
+    await expect(
+      finishPluginTaskWithRawOutput(
+        plugin,
+        sessionID,
+        "spec",
+        "vv-spec-reviewer",
+        workItemId,
+        wrapTaskResult(
+          "ses_repair_missing_blank",
+          `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\nFindings from reviewer`,
+        ),
+      ),
+    ).rejects.toThrow("Findings from reviewer");
+    await expect(
+      finishPluginTaskWithRawOutput(
+        plugin,
+        sessionID,
+        "spec-second-attempt",
+        "vv-spec-reviewer",
+        workItemId,
+        wrapTaskResult(
+          "ses_repair_missing_blank",
+          `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\nFindings from reviewer`,
+        ),
+      ),
+    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+  });
+
+  test("state application errors include parsed result excerpt", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-state-error-excerpt";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec"]);
+
+    await expect(
+      finishPluginTask(
+        plugin,
+        sessionID,
+        "spec-without-launch",
+        "vv-spec-reviewer",
+        workItemId,
+        "PASS",
+        "Parsed body should survive state rejection.",
+      ),
+    ).rejects.toThrow("Parsed body should survive state rejection.");
+    await expect(
+      finishPluginTask(
+        plugin,
+        sessionID,
+        "spec-without-launch-again",
+        "vv-spec-reviewer",
+        workItemId,
+        "PASS",
+        "Parsed body should survive state rejection.",
+      ),
+    ).rejects.toThrow("REVIEWER_NOT_IN_FLIGHT");
+  });
+
+  test("reviewer NEEDS_CONTEXT hard stop uses needs-context reviewer excerpt", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-reviewer-needs-context-excerpt";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec", "code"]);
+
+    await launchPluginTask(plugin, sessionID, "spec", "vv-spec-reviewer", workItemId);
+    await launchPluginTask(plugin, sessionID, "code", "vv-code-reviewer", workItemId);
+    await finishPluginTask(
+      plugin,
+      sessionID,
+      "spec",
+      "vv-spec-reviewer",
+      workItemId,
+      "NEEDS_CONTEXT",
+      "Need schema ownership decision before review can pass.",
+    );
+
+    await expect(
+      finishPluginTask(
+        plugin,
+        sessionID,
+        "code",
+        "vv-code-reviewer",
+        workItemId,
+        "PASS",
+        "Code review has no additional concerns.",
+      ),
+    ).rejects.toThrow("Need schema ownership decision before review can pass.");
+
+    const listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("needs_context");
+    expect(listed.items[0]?.currentRound?.results.spec?.resultExcerpt?.text).toBe(
+      "Need schema ownership decision before review can pass.",
+    );
   });
 
   test("round limit applies to implementation retries only", async () => {
@@ -722,6 +1015,83 @@ describe("workflow persistence", () => {
     expect(records[0]?.currentRound?.inFlightReviewers).toEqual(["spec"]);
   });
 
+  test("snapshot and hydrate preserve optional result excerpts", () => {
+    const store = createWorkItemStore();
+    const opened = openWorkItem(store, {
+      sessionId: PERSIST_SESSION_ID,
+      key: "review-excerpt",
+      title: "Review Excerpt",
+      mode: "review_only",
+      requiredReviewers: ["spec"],
+    });
+    expect(opened.ok).toBe(true);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: PERSIST_SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-spec-reviewer",
+      }).ok,
+    ).toBe(true);
+    const excerpt = createWorkflowResultExcerpt({
+      text: "Need persisted recovery context.",
+      source: "parsed_body",
+    });
+    const applied = applyTrackedResult(store, {
+      sessionId: PERSIST_SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-spec-reviewer", "NEEDS_CONTEXT"),
+      resultExcerpt: excerpt,
+    });
+    expect(applied.ok).toBe(true);
+
+    snapshotWorkflowState(PERSIST_SESSION_ID, store.getStoreData());
+    const hydrated = hydrateWorkflowState(PERSIST_SESSION_ID);
+    expect(hydrated).not.toBeNull();
+    const hydratedStore = createWorkItemStore(hydrated);
+    const records = listWorkItems(hydratedStore, PERSIST_SESSION_ID);
+    expect(records[0]?.currentRound?.results.spec?.resultExcerpt?.text).toBe(
+      "Need persisted recovery context.",
+    );
+  });
+
+  test("hydrate rejects corrupt persisted excerpt metadata", () => {
+    const store = createWorkItemStore();
+    const opened = openWorkItem(store, {
+      sessionId: PERSIST_SESSION_ID,
+      key: "corrupt-excerpt",
+      title: "Corrupt Excerpt",
+      mode: "implementation",
+      requiredReviewers: ["spec"],
+    });
+    expect(opened.ok).toBe(true);
+    expect(
+      beginTrackedLaunch(store, {
+        sessionId: PERSIST_SESSION_ID,
+        workItemId: "wi-1",
+        agent: "vv-implementer",
+      }).ok,
+    ).toBe(true);
+    const excerpt = createWorkflowResultExcerpt({
+      text: "Valid before corruption.",
+      source: "parsed_body",
+    });
+    const applied = applyTrackedResult(store, {
+      sessionId: PERSIST_SESSION_ID,
+      workItemId: "wi-1",
+      result: result("vv-implementer", "BLOCKED"),
+      resultExcerpt: excerpt,
+    });
+    expect(applied.ok).toBe(true);
+
+    snapshotWorkflowState(PERSIST_SESSION_ID, store.getStoreData());
+    const statePath = join(getWorkflowSessionDir(PERSIST_SESSION_ID), "workflow-state.json");
+    const persisted = JSON.parse(readFileSync(statePath, "utf-8"));
+    persisted.records[0].resultExcerpt.originalLength = 999;
+    writeFileSync(statePath, JSON.stringify(persisted, null, 2), "utf-8");
+
+    expect(hydrateWorkflowState(PERSIST_SESSION_ID)).toBeNull();
+  });
+
   test("hydrate rejects incomplete records that omit explicit intent", () => {
     mkdirSync(getWorkflowSessionDir(PERSIST_SESSION_ID), { recursive: true });
     writeFileSync(
@@ -774,11 +1144,16 @@ describe("workflow persistence", () => {
 type ListedPluginItems = {
   items: Array<{
     state: string;
+    resultExcerpt?: {
+      source: string;
+      text: string;
+      truncated: boolean;
+    };
     currentRound?: {
       inFlightReviewers: string[];
       results: {
-        spec?: { status: string };
-        code?: { status: string };
+        spec?: { status: string; resultExcerpt?: { text: string } };
+        code?: { status: string; resultExcerpt?: { text: string } };
       };
     };
   }>;
@@ -825,8 +1200,27 @@ async function finishPluginTask(
   subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
   workItemId: string,
   status: ParsedResultBlock["status"],
+  body = "Done.",
 ): Promise<void> {
   const route = subagentType === "vv-implementer" ? "\nVVOC_ROUTE: change_with_review" : "";
+  await finishPluginTaskWithRawOutput(
+    plugin,
+    sessionID,
+    callPrefix,
+    subagentType,
+    workItemId,
+    `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: ${status}${route}\n\n${body}`,
+  );
+}
+
+async function finishPluginTaskWithRawOutput(
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  sessionID: string,
+  callPrefix: string,
+  subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
+  workItemId: string,
+  output: string,
+): Promise<void> {
   await plugin["tool.execute.after"]?.(
     {
       tool: "task",
@@ -839,7 +1233,7 @@ async function finishPluginTask(
     } as never,
     {
       title: "task",
-      output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: ${status}${route}\n\nDone.`,
+      output,
       metadata: {},
     } as never,
   );
