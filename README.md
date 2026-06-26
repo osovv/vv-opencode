@@ -408,12 +408,6 @@ The workflow uses npm provenance/trusted publishing (`id-token: write`) and does
 
 ---
 
-## Optional: RTK
-
-[RTK](https://github.com/rtk-ai/rtk) is a CLI proxy that reduces token usage for common developer commands. The interactive `vvoc init` flow recommends it after setup.
-
----
-
 ## License
 
 MIT — see [LICENSE](LICENSE).

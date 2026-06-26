@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.8.1 - Removed the harmful RTK token-saving recommendation from the init outro; RTK distorts proxied command output and confuses LLM sessions.]
 //   LAST_CHANGE: [v0.8.0 - Skipped global managed skill symlink creation for project-scope init.]
 //   LAST_CHANGE: [v0.7.1 - Added managed skill file scaffolding during vvoc init.]
 //   LAST_CHANGE: [v0.7.0 - Ensured the project-local managed planning artifact directory exists during project-scope init.]
@@ -165,11 +166,7 @@ export async function runInit(options: {
     p.log.info(symlinkResult.path + " - " + symlinkResult.action);
   }
 
-  p.outro(`vvoc initialized successfully
-
-💡 Highly recommended: Install RTK for 60-90% token savings on git/test/lint commands
-   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-   rtk init -g --opencode`);
+  p.outro(`vvoc initialized successfully`);
 }
 
 async function runInitNonInteractive(options: {

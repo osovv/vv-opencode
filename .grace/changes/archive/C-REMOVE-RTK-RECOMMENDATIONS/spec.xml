@@ -1,0 +1,40 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-REMOVE-RTK-RECOMMENDATIONS>
+    <Summary>Remove all RTK (rtk-ai/rtk CLI proxy) recommendations and mentions from the codebase and README.</Summary>
+    <Problem>RTK is currently recommended in the interactive vvoc init flow and documented in README as a token-saving helper. In practice RTK proxies and wraps common developer commands, which alters the shape of their output. LLM-driven sessions therefore receive responses they do not expect, get confused, and start trying to work around RTK instead of completing the intended work. This makes the recommendation net-negative and it should be removed.</Problem>
+    <Goals>
+      <Goal>Remove the RTK install recommendation from the interactive vvoc init outro in src/commands/init.ts, reducing the outro to a single success message.</Goal>
+      <Goal>Remove the entire Optional: RTK section from README.md, including the claim that the init flow recommends it.</Goal>
+      <Goal>Ensure no project-authored RTK references (links, install commands, recommendations) remain in source or documentation.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not replace RTK with an alternative token-saving tool recommendation.</NonGoal>
+      <NonGoal>Do not change any other vvoc init behavior or outro structure beyond removing the RTK block.</NonGoal>
+      <NonGoal>Do not add RTK-detection, RTK-blocking, or uninstall guidance logic.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>The interactive vvoc init outro no longer recommends RTK or shows RTK install commands; the outro is reduced to the single success message.</Criterion>
+      <Criterion>README.md no longer contains an Optional: RTK section or any rtk-ai/rtk link, install command, or recommendation.</Criterion>
+      <Criterion>A repository-wide search for RTK references yields no project-authored mentions, ignoring transitive dependencies recorded in bun.lock.</Criterion>
+      <Criterion>CHANGELOG.md records that the harmful RTK recommendation was removed.</Criterion>
+      <Criterion>typecheck, lint, format check, bun test, and GRACE lint all pass.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-INIT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test</ExpectedCommand>
+      <ExpectedCommand>bun run typecheck</ExpectedCommand>
+      <ExpectedCommand>bun run lint</ExpectedCommand>
+      <ExpectedCommand>bun run fmt:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedEvidence>A repo-wide search for RTK shows no project-authored references (bun.lock transitive deps excluded); the init outro is reduced to the success message; README has no RTK section; typecheck, lint, format, tests, and GRACE lint pass.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>RTK is removed outright and is not replaced by another recommendation.</Assumption>
+      <Assumption>The init outro after removal is the single line success message with no new guidance added.</Assumption>
+      <Assumption>No tests currently assert on the RTK outro text, so no test removal or rewrite is required.</Assumption>
+      <Assumption>README is project documentation and is not modeled as a separate graph module anchor; it is tracked through acceptance criteria, consistent with prior change bundles.</Assumption>
+    </Assumptions>
+  </C-REMOVE-RTK-RECOMMENDATIONS>
+</GraceChangeSpec>
