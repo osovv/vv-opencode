@@ -1,3 +1,11 @@
+## <small>0.35.33 (2026-06-26)</small>
+
+### Summary
+
+This release removes the harmful RTK (rtk-ai/rtk) recommendation from the interactive `vvoc init` outro and the README, because RTK proxies developer commands and distorts their output shape, causing automated sessions to receive unexpected responses and work around RTK instead of completing the intended work. Users will now see a clean init success message and no longer be directed to install a proxy that interferes with standard command output.
+
+* fix(init): drop harmful RTK recommendation that distorted command output ([cd5c12a](https://github.com/osovv/vv-opencode/commit/cd5c12a))
+
 ## <small>0.35.32 (2026-06-26)</small>
 
 ### Summary
