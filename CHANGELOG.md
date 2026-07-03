@@ -1,3 +1,11 @@
+## 1.0.0 (2026-07-03)
+
+### Summary
+
+vv-opencode reaches version 1.0, establishing a daily-driver baseline for the curated OpenCode workflow. The release formalizes a stability posture where setup commands, managed skill names, public package exports, schema v3, and the spec artifact layout are treated as compatibility surfaces, meaning breaking changes to these areas will be explicitly documented in future release notes. User-owned config is never silently clobbered, and invalid config continues to fail loudly. This marks the transition from iterative development to a practical, documented baseline for real project use.
+
+* docs: declare 1.0 stability posture ([8a3e590](https://github.com/osovv/vv-opencode/commit/8a3e590))
+
 ## <small>0.35.33 (2026-06-26)</small>
 
 ### Summary
