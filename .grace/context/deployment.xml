@@ -1,6 +1,7 @@
 <GraceDeployment graceVersion="4.0">
   <Applicability>applicable</Applicability>
   <Target>Public npm package @osovv/vv-opencode with Bun CLI binary vvoc and OpenCode plugin exports.</Target>
+  <StabilityPosture>Version 1.0.0 is the daily-driver baseline for the curated vvoc workflow. The release treats setup commands, public package exports, canonical vvoc schema v3, managed skill names, and spec artifact layout as compatibility surfaces unless future release notes explicitly document a breaking change.</StabilityPosture>
   <PackageFiles>
     <File>dist</File>
     <File>schemas</File>

@@ -35,6 +35,21 @@ Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` 
 
 ---
 
+## 1.0 Stability Posture
+
+`vv-opencode` 1.0 marks the workflow as a daily-driver baseline: a hand-picked, curated OpenCode setup that packages the agent routing, managed skills, model-role indirection, safer editing, review loops, and release discipline used in real projects.
+
+The stable user-facing surface is intentionally practical:
+
+- `vvoc install` / `vvoc sync` / `vvoc launch` remain the primary setup and refresh path.
+- `vv-spec`, `vv-plan`, and `vv-execute` remain the canonical spec-to-code path for larger work.
+- `vv-review`, `vv-reflect`, and `vv-handoff` remain the auxiliary review, durable-learning, and session-continuity workflows.
+- The published package exports, CLI command names, canonical vvoc schema v3, and date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout are treated as compatibility surfaces.
+
+The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is not silently clobbered, invalid current config fails loudly, and breaking workflow or config changes must be documented in release notes.
+
+---
+
 ## Spec-to-Code Pipeline
 
 vvoc keeps larger agentic work from jumping straight into edits. The process turns a request into explicit artifacts first, then executes the approved plan with bounded implementation and review loops.

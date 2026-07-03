@@ -15,6 +15,7 @@
     <Goal>Make multi-agent work explicit through work items, tracked subagent headers, reviewer result collection, hard stops, and bounded review rounds.</Goal>
     <Goal>Improve long-run safety with Guardian permission review, secrets redaction, hashline-backed edits, strict config validation, and clear recovery diagnostics.</Goal>
     <Goal>Provide one CLI, vvoc, for setup, sync, launch, status, diagnostics, roles, presets, plugin toggles, completions, and upgrades.</Goal>
+    <Goal>Maintain the 1.0 daily-driver baseline as a practical, curated OpenCode workflow whose setup commands, managed skill trajectory, public package exports, schema v3, and spec artifact layout remain stable compatibility surfaces unless a release explicitly documents a breaking change.</Goal>
   </Goals>
   <UseCases>
     <UC-001>
@@ -182,6 +183,7 @@
     <Constraint>Project-owned specs and plans produced by vvoc skills live under date-prefixed package directories .vvoc/specs/YYYY-MM-DD-&lt;slug&gt;/.</Constraint>
     <Constraint>Hashline-backed editing must fail safely on stale or malformed edit references instead of applying ambiguous line-based changes.</Constraint>
     <Constraint>Package exports are public API and must remain valid unless an explicit breaking change is approved.</Constraint>
+    <Constraint>After the 1.0 stabilization point, user-facing setup flow, managed skill names, canonical vvoc schema v3, public package exports, and spec package layout changes must be release-noted as compatibility-relevant changes.</Constraint>
   </Constraints>
   <Risks>
     <Risk>Shared workflows may reference custom roles not assigned on another machine, causing startup failures.</Risk>
