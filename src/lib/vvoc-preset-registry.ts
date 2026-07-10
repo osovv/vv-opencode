@@ -1,5 +1,5 @@
 // FILE: src/lib/vvoc-preset-registry.ts
-// VERSION: 0.1.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical built-in vvoc preset registry from a single internal source of truth.
 //   SCOPE: Built-in preset name ordering, preset definitions, and built-in preset-name detection.
@@ -19,6 +19,7 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.1.0 - Added a shared built-in vvoc preset registry so config sync and completions use one source of truth.]
 //   LAST_CHANGE: [v0.2.0 - vv-osovv: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-sol-xhigh; vv-osovv-cheap: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-terra-high.]
+//   LAST_CHANGE: [v0.3.0 - Replaced unavailable GPT-5.6 Luna Low with GPT-5.4 Mini Low for the fast role in both osovv presets.]
 // END_CHANGE_SUMMARY
 
 type BuiltinVvocPresetDefinition = {
@@ -71,7 +72,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv role assignments (deepseek + openai + minimax + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-gpt-5.6-luna-low",
+      fast: "openai/vv-gpt-5.4-mini-low",
       smart: "openai/vv-gpt-5.6-sol-xhigh",
       vision: "minimax-coding-plan/MiniMax-M2.7",
       reviewer: "zai-coding-plan/glm-5.1",
@@ -81,7 +82,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Cheap osovv role assignments (deepseek + openai + minimax).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-gpt-5.6-luna-low",
+      fast: "openai/vv-gpt-5.4-mini-low",
       smart: "openai/vv-gpt-5.6-terra-high",
       vision: "minimax-coding-plan/MiniMax-M2.7",
       reviewer: "deepseek/deepseek-v4-pro",

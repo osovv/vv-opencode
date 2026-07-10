@@ -1,5 +1,5 @@
 // FILE: src/commands/patch-provider.test.ts
-// VERSION: 0.4.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PATCH-PROVIDER - global OpenCode patch presets.
 //   SCOPE: Preset validation plus global OpenCode provider and provider-specific patch application without root model rewrites.
@@ -17,6 +17,7 @@
 //   LAST_CHANGE: [v0.6.0 - Added full-object assertions for vv-gpt-5.6-luna-low, vv-gpt-5.6-terra-high, vv-gpt-5.6-sol-xhigh in first-apply and reapply tests.]
 //   LAST_CHANGE: [v0.5.0 - Added project-scope OpenCode patch isolation coverage.]
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true expectation in openai patch test.]
+//   LAST_CHANGE: [v0.7.0 - Replaced GPT-5.6 Luna Low assertions with the GPT-5.4 Mini Low fixed-effort alias.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -189,12 +190,12 @@ describe("applyPatchProviderPreset", () => {
           include: ["reasoning.encrypted_content"],
         },
       });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toEqual({
-        name: "VV GPT-5.6 Luna Low",
-        id: "gpt-5.6-luna",
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-mini-low"]).toEqual({
+        name: "VV GPT-5.4 Mini Low",
+        id: "gpt-5.4-mini",
         variants: {},
         limit: {
-          context: 1050000,
+          context: 400000,
           output: 128000,
         },
         reasoning: true,
@@ -204,6 +205,7 @@ describe("applyPatchProviderPreset", () => {
           include: ["reasoning.encrypted_content"],
         },
       });
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]).toEqual({
         name: "VV GPT-5.6 Terra High",
         id: "gpt-5.6-terra",
@@ -292,9 +294,10 @@ describe("applyPatchProviderPreset", () => {
         "VV GPT-5.6 Sol XHigh",
       );
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]?.name).toBe("VV GPT-5.5-XHigh");
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]?.name).toBe(
-        "VV GPT-5.6 Luna Low",
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-mini-low"]?.name).toBe(
+        "VV GPT-5.4 Mini Low",
       );
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]?.name).toBe(
         "VV GPT-5.6 Terra High",
       );

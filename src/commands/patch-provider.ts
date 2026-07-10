@@ -1,5 +1,5 @@
 // FILE: src/commands/patch-provider.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
 //   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
@@ -20,6 +20,7 @@
 //   LAST_CHANGE: [v0.5.0 - Added --scope global|project provider patch writes.]
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true to vv-gpt-5.4-xhigh and vv-gpt-5.5-xhigh in openai patch preset.]
 //   LAST_CHANGE: [v0.6.0 - Added vv-gpt-5.6-luna-low, vv-gpt-5.6-terra-high, vv-gpt-5.6-sol-xhigh to openai patch preset.]
+//   LAST_CHANGE: [v0.7.0 - Replaced the unavailable vv-gpt-5.6-luna-low alias with vv-gpt-5.4-mini-low.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -112,12 +113,12 @@ const OPENAI_PATCH = {
         include: ["reasoning.encrypted_content"],
       },
     },
-    "vv-gpt-5.6-luna-low": {
-      name: "VV GPT-5.6 Luna Low",
-      id: "gpt-5.6-luna",
+    "vv-gpt-5.4-mini-low": {
+      name: "VV GPT-5.4 Mini Low",
+      id: "gpt-5.4-mini",
       variants: {},
       limit: {
-        context: 1050000,
+        context: 400000,
         output: 128000,
       },
       reasoning: true,

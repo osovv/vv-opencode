@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.5
+// VERSION: 0.4.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
@@ -20,6 +20,7 @@
 //   LAST_CHANGE: [v0.4.3 - Added vv-deepseek to preset list expectations and error message assertions.]
 //   LAST_CHANGE: [v0.4.4 - Updated vv-openai expectations so default is GPT-5.4 and smart remains vv-gpt-5.5-xhigh.]
 //   LAST_CHANGE: [v0.4.5 - Added regression coverage for the canonical built-in preset key set.]
+//   LAST_CHANGE: [v0.4.6 - Added osovv assignment coverage and switched their fast role expectation to vv-gpt-5.4-mini-low.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -74,7 +75,7 @@ describe("preset helpers", () => {
     const resolved = resolvePreset("vv-osovv", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
-    expect(output).toContain('"fast": "openai/vv-gpt-5.6-luna-low"');
+    expect(output).toContain('"fast": "openai/vv-gpt-5.4-mini-low"');
     expect(output).toContain('"smart": "openai/vv-gpt-5.6-sol-xhigh"');
     expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.1"');
@@ -84,7 +85,7 @@ describe("preset helpers", () => {
     const resolved = resolvePreset("vv-osovv-cheap", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
-    expect(output).toContain('"fast": "openai/vv-gpt-5.6-luna-low"');
+    expect(output).toContain('"fast": "openai/vv-gpt-5.4-mini-low"');
     expect(output).toContain('"smart": "openai/vv-gpt-5.6-terra-high"');
     expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
     expect(output).toContain('"reviewer": "deepseek/deepseek-v4-pro"');
