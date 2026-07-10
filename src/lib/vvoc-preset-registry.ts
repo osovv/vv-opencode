@@ -18,6 +18,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.1.0 - Added a shared built-in vvoc preset registry so config sync and completions use one source of truth.]
+//   LAST_CHANGE: [v0.2.0 - vv-osovv: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-sol-xhigh; vv-osovv-cheap: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-terra-high.]
 // END_CHANGE_SUMMARY
 
 type BuiltinVvocPresetDefinition = {
@@ -67,21 +68,21 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     },
   },
   "vv-osovv": {
-    description: "Personal osovv role assignments (deepseek + stepfun + minimax + gpt + zai).",
+    description: "Personal osovv role assignments (deepseek + openai + minimax + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "stepfun/step-3.7-flash",
-      smart: "openai/vv-gpt-5.5-xhigh",
+      fast: "openai/vv-gpt-5.6-luna-low",
+      smart: "openai/vv-gpt-5.6-sol-xhigh",
       vision: "minimax-coding-plan/MiniMax-M2.7",
       reviewer: "zai-coding-plan/glm-5.1",
     },
   },
   "vv-osovv-cheap": {
-    description: "Cheap osovv role assignments (deepseek + stepfun + minimax + zai).",
+    description: "Cheap osovv role assignments (deepseek + openai + minimax).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "stepfun/step-3.7-flash",
-      smart: "zai-coding-plan/glm-5.1",
+      fast: "openai/vv-gpt-5.6-luna-low",
+      smart: "openai/vv-gpt-5.6-terra-high",
       vision: "minimax-coding-plan/MiniMax-M2.7",
       reviewer: "deepseek/deepseek-v4-pro",
     },

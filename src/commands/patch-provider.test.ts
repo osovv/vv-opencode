@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Added full-object assertions for vv-gpt-5.6-luna-low, vv-gpt-5.6-terra-high, vv-gpt-5.6-sol-xhigh in first-apply and reapply tests.]
 //   LAST_CHANGE: [v0.5.0 - Added project-scope OpenCode patch isolation coverage.]
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true expectation in openai patch test.]
 // END_CHANGE_SUMMARY
@@ -51,7 +52,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(resolvePatchProviderPreset("openai")).toMatchObject({
       kind: "provider-object",
       providerID: "openai",
-      summary: "provider.openai.models.vv-gpt-5.5-xhigh patched",
+      summary: "provider.openai.models vv-gpt-5.4/5.5/5.6 aliases patched",
     });
   });
 
@@ -173,6 +174,66 @@ describe("applyPatchProviderPreset", () => {
           include: ["reasoning.encrypted_content"],
         },
       });
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]).toEqual({
+        name: "VV GPT-5.5-XHigh",
+        id: "gpt-5.5",
+        variants: {},
+        limit: {
+          context: 400000,
+          output: 128000,
+        },
+        reasoning: true,
+        options: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      });
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toEqual({
+        name: "VV GPT-5.6 Luna Low",
+        id: "gpt-5.6-luna",
+        variants: {},
+        limit: {
+          context: 1050000,
+          output: 128000,
+        },
+        reasoning: true,
+        options: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      });
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]).toEqual({
+        name: "VV GPT-5.6 Terra High",
+        id: "gpt-5.6-terra",
+        variants: {},
+        limit: {
+          context: 1050000,
+          output: 128000,
+        },
+        reasoning: true,
+        options: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      });
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toEqual({
+        name: "VV GPT-5.6 Sol XHigh",
+        id: "gpt-5.6-sol",
+        variants: {},
+        limit: {
+          context: 1050000,
+          output: 128000,
+        },
+        reasoning: true,
+        options: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      });
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -227,6 +288,16 @@ describe("applyPatchProviderPreset", () => {
       expect(parsed.small_model).toBe("vv-role:fast");
       expect(parsed.provider?.openai?.models?.existing).toEqual({ name: "Existing" });
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]?.name).toBe("VV GPT-5.4-XHigh");
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]?.name).toBe(
+        "VV GPT-5.6 Sol XHigh",
+      );
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]?.name).toBe("VV GPT-5.5-XHigh");
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]?.name).toBe(
+        "VV GPT-5.6 Luna Low",
+      );
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]?.name).toBe(
+        "VV GPT-5.6 Terra High",
+      );
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

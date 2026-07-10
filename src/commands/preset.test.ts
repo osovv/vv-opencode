@@ -69,6 +69,26 @@ describe("preset helpers", () => {
     expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
     expect(output).toContain('"vision": "openai/gpt-5.4"');
   });
+
+  test("formatPreset renders all five vv-osovv role assignments", () => {
+    const resolved = resolvePreset("vv-osovv", createDefaultVvocConfig().presets);
+    const output = formatPreset(resolved.name, resolved.preset);
+    expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
+    expect(output).toContain('"fast": "openai/vv-gpt-5.6-luna-low"');
+    expect(output).toContain('"smart": "openai/vv-gpt-5.6-sol-xhigh"');
+    expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.1"');
+  });
+
+  test("formatPreset renders all five vv-osovv-cheap role assignments", () => {
+    const resolved = resolvePreset("vv-osovv-cheap", createDefaultVvocConfig().presets);
+    const output = formatPreset(resolved.name, resolved.preset);
+    expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
+    expect(output).toContain('"fast": "openai/vv-gpt-5.6-luna-low"');
+    expect(output).toContain('"smart": "openai/vv-gpt-5.6-terra-high"');
+    expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
+    expect(output).toContain('"reviewer": "deepseek/deepseek-v4-pro"');
+  });
 });
 
 describe("applyPreset", () => {
