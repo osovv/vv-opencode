@@ -1,3 +1,11 @@
+## <small>1.0.2 (2026-07-10)</small>
+
+### Summary
+
+This release fixes the fast role alias in the built-in osovv presets by replacing the unavailable GPT-5.6 Luna Low model with GPT-5.4 Mini Low, restoring functionality for users relying on that role assignment without affecting the Terra and Sol models.
+
+* fix(models): use GPT-5.4 mini for fast role ([5068545](https://github.com/osovv/vv-opencode/commit/5068545))
+
 ## <small>1.0.1 (2026-07-10)</small>
 
 ### Summary
