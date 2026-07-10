@@ -1,3 +1,11 @@
+## <small>1.0.1 (2026-07-10)</small>
+
+### Summary
+
+The osovv presets in `vvoc patch-provider` now replace the deprecated StepFun model with GPT-5.6 aliases (Luna Low, Terra High, Sol XHigh), delivering consistently higher throughput for the explore subagent after StepFun performance degraded from over 150 TPS to approximately 25 TPS. The `vv-osovv` and `vv-osovv-cheap` preset role assignments are updated to use these new fast and smart models, and the `patch-provider openai` preset now includes all three GPT-5.6 variants alongside the existing GPT-5.4 and GPT-5.5 aliases, ensuring users get reliable performance without manual reconfiguration.
+
+* feat(models): adopt GPT-5.6 in osovv presets ([fd36444](https://github.com/osovv/vv-opencode/commit/fd36444))
+
 ## 1.0.0 (2026-07-03)
 
 ### Summary
