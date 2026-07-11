@@ -5,7 +5,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble and run the vvoc CLI entrypoint.
 //   SCOPE: Package version lookup, top-level command registration, and main command execution.
-//   DEPENDS: [citty, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
+//   DEPENDS: [citty, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -18,6 +18,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.2.11 - Aligned meta description with package.json, README, and GitHub repo; license and badge polish.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Registered the top-level orchestration command.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
@@ -28,6 +29,7 @@ import guardian from "./commands/guardian.js";
 import init from "./commands/init.js";
 import install from "./commands/install.js";
 import launch from "./commands/launch.js";
+import orchestration from "./commands/orchestration.js";
 import patchProvider from "./commands/patch-provider.js";
 import preset from "./commands/preset.js";
 import plugin from "./commands/plugin.js";
@@ -56,6 +58,7 @@ const main = defineCommand({
     init,
     install,
     launch,
+    orchestration,
     "patch-provider": patchProvider,
     preset,
     plugin,

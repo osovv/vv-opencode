@@ -2,7 +2,7 @@
 // VERSION: 0.4.13
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion script generation including patch-provider presets, top-level preset completions, and the `role set|unset <role-id>` flow.
+//   SCOPE: Bash, zsh, and fish completion generation including orchestration commands/profiles, patch-provider presets, preset names, and role flows.
 //   DEPENDS: [bun:test, src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -17,6 +17,7 @@
 //   LAST_CHANGE: [v0.4.13 - Added regression coverage for canonical built-in preset-name completion output across shells.]
 //   LAST_CHANGE: [v0.4.12 - Restricted unset-role completion assertions to avoid built-in role suggestions.]
 //   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated canonical patch-provider completion from openai to codex and preset names from vv-openai to vv-codex.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added top-level orchestration and nested show/set profile completion coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -32,6 +33,7 @@ test("generateBashCompletion - contains vvoc command", () => {
   expect(output).toContain("role");
   expect(output).toContain("completion");
   expect(output).toContain("config");
+  expect(output).toContain("orchestration");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
@@ -48,6 +50,7 @@ test("generateZshCompletion - contains vvoc command", () => {
   expect(output).toContain("vvoc");
   expect(output).toContain("role");
   expect(output).toContain("config");
+  expect(output).toContain("orchestration");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
@@ -66,6 +69,7 @@ test("generateFishCompletion - contains vvoc command", () => {
   expect(output).toContain("role");
   expect(output).toContain("completion");
   expect(output).toContain("config");
+  expect(output).toContain("orchestration");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
@@ -85,7 +89,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="completion config doctor guardian init install launch patch-provider preset plugin role status sync upgrade version"',
+    'local commands="completion config doctor guardian init install launch orchestration patch-provider preset plugin role status sync upgrade version"',
   );
 });
 
@@ -98,6 +102,7 @@ test("generateFishCompletion - handles nested subcommands", () => {
   const output = generateFishCompletion();
   expect(output).toContain("__fish_seen_subcommand_from role");
   expect(output).toContain("__fish_seen_subcommand_from config");
+  expect(output).toContain("__fish_seen_subcommand_from orchestration");
   expect(output).toContain("__fish_seen_subcommand_from patch-provider");
   expect(output).toContain("__fish_seen_subcommand_from preset");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
@@ -154,4 +159,24 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain(
     "echo vv-codex vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
   );
+});
+
+test("completion scripts - contain orchestration commands and profile values", () => {
+  const bash = generateBashCompletion();
+  const zsh = generateZshCompletion();
+  const fish = generateFishCompletion();
+
+  expect(bash).toContain("_vvoc_orchestration_commands");
+  expect(bash).toContain("orchestration:set");
+  expect(bash).toContain('local commands="show set"');
+  expect(bash).toContain('local commands="single-session balanced orchestrated"');
+
+  expect(zsh).toContain("_vvoc_orchestration_cmds");
+  expect(zsh).toContain("show set");
+  expect(zsh).toContain("single-session balanced orchestrated");
+
+  expect(fish).toContain("__vvoc_orchestration_cmds");
+  expect(fish).toContain("__vvoc_orchestration_profiles");
+  expect(fish).toContain("echo show set");
+  expect(fish).toContain("echo single-session balanced orchestrated");
 });

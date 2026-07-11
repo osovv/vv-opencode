@@ -22,6 +22,7 @@ import { describe, expect, test } from "bun:test";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolvePaths } from "../lib/opencode.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { setOrchestrationProfile, showOrchestrationProfile } from "./orchestration.js";
@@ -172,4 +173,74 @@ describe("orchestration set", () => {
       await rm(configHome, { recursive: true, force: true });
     }
   });
+
+  test("registered CLI set and show print profile, source, target, and restart guidance", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-orchestration-cli-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-orchestration-cli-project-"));
+    try {
+      const cliPath = fileURLToPath(new URL("../cli.ts", import.meta.url));
+      const setCommand = Bun.spawn({
+        cmd: [
+          process.execPath,
+          "run",
+          cliPath,
+          "orchestration",
+          "set",
+          "single-session",
+          "--scope",
+          "project",
+          "--config-dir",
+          configHome,
+        ],
+        cwd: projectDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [setStdout, setStderr, setExitCode] = await Promise.all([
+        new Response(setCommand.stdout).text(),
+        new Response(setCommand.stderr).text(),
+        setCommand.exited,
+      ]);
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+
+      expect(setExitCode).toBe(0);
+      expect(setStderr).toBe("");
+      expect(setStdout).toContain("updated: orchestration profile single-session");
+      expect(setStdout).toContain(`Target: ${paths.vvocConfigPath}`);
+      expect(setStdout).toContain("Restart OpenCode to apply the changed orchestration profile.");
+
+      const showCommand = Bun.spawn({
+        cmd: [
+          process.execPath,
+          "run",
+          cliPath,
+          "orchestration",
+          "show",
+          "--scope",
+          "project",
+          "--config-dir",
+          configHome,
+        ],
+        cwd: projectDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [showStdout, showStderr, showExitCode] = await Promise.all([
+        new Response(showCommand.stdout).text(),
+        new Response(showCommand.stderr).text(),
+        showCommand.exited,
+      ]);
+      expect(showExitCode).toBe(0);
+      expect(showStderr).toBe("");
+      expect(showStdout).toContain("Orchestration profile: single-session");
+      expect(showStdout).toContain(`Source: project ${paths.vvocConfigPath}`);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  }, 20_000);
 });
