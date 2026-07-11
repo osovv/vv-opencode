@@ -2,7 +2,7 @@
 // VERSION: 0.5.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
-//   SCOPE: Bundled template reads, primary/subagent template metadata checks, project-over-global prompt resolution, and missing prompt failures.
+//   SCOPE: Bundled template reads, profile-neutral controller invariants, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -22,6 +22,7 @@
 //   LAST_CHANGE: [v0.4.0 - Expanded prompt-template coverage for rerouting, working-state externalization, semantic continuity, assumptions, anti-drift, and project-overlay hooks.]
 //   LAST_CHANGE: [v0.3.0 - Expanded prompt-template coverage for stable enhancer schema, shared status outputs, and investigation/report protocols.]
 //   LAST_CHANGE: [v0.2.2 - Added coverage requiring the enhancer to emit the final XML prompt in English.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Replaced controller route/loop assertions with profile-neutral invariant and negative-policy coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -29,6 +30,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  MANAGED_PRIMARY_AGENT_NAMES,
   getManagedAgentPromptPath,
   loadManagedAgentPromptTemplate,
   loadManagedAgentPromptText,
@@ -64,25 +66,42 @@ describe("managed agent prompts", () => {
     );
   });
 
-  test("loads bundled vv-controller template with route and workflow guidance", async () => {
+  test("loads bundled vv-controller template with profile-neutral universal guidance", async () => {
     const template = await loadManagedAgentPromptTemplate("vv-controller");
     expect(template).toStartWith("---\n");
     expect(template).toContain("mode: primary");
     expect(template).toContain("You are the vv-controller primary agent.");
-    expect(template).toContain("direct_change");
-    expect(template).toContain("change_with_review");
-    expect(template).toContain("large_feature");
-    expect(template).toContain("VVOC_WORK_ITEM_ID: wi-N");
-    expect(template).toContain("Implement only after explicit approval");
+    expect(MANAGED_PRIMARY_AGENT_NAMES.filter((name) => name === "vv-controller")).toHaveLength(1);
+    expect(template).toContain("<core_principles>");
+    expect(template).toContain("<working_state>");
+    expect(template).toContain("<assumption_discipline>");
+    expect(template).toContain("<editing_workflow>");
+    expect(template).toContain("<reroute_on_evidence>");
+    expect(template).toContain("<skill_trigger_rule>");
+    expect(template).toContain("<large_feature_gate>");
+    expect(template).toContain("<hard_stop_handoff>");
+    expect(template).toContain("<plan_artifacts>");
+    expect(template).toContain("<final_response_format>");
     expect(template).toContain("Match the user's language");
-    expect(template).toContain("normalized finding packet");
-    expect(template).toContain("Finding`, `Type`, `Location`, `Symbol/Scope`");
-    expect(template).toContain("lightweight XML-like tags");
-    expect(template).toContain("<assignment>");
-    expect(template).toContain("<goal>");
-    expect(template).toContain("<reviewer_findings>");
-    expect(template).toContain("immediately after the required `VVOC_WORK_ITEM_ID` header");
-    expect(template).toContain("Pass through the best available reviewer location detail directly");
+    expect(template).toContain("concrete system work policy supplied for this session");
+    expect(template).toContain("`vv-review` performs findings-only independent review");
+    expect(template).toContain("`vv-execute` validates an approved plan");
+    expect(template).toContain("follows the mode selected by the user");
+
+    for (const inactivePolicyTerm of [
+      "direct_change",
+      "change_with_review",
+      "explore",
+      "investigator",
+      "vv-implementer",
+      "requiredReviewers",
+      "VVOC_WORK_ITEM_ID",
+      "work_item_open",
+      "tracked_implementation_loop",
+      "delegation_packet_convention",
+    ]) {
+      expect(template).not.toContain(inactivePolicyTerm);
+    }
   });
 
   test("loads bundled vv-implementer template with strict top-block protocol", async () => {
