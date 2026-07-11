@@ -1,3 +1,27 @@
+## 1.1.0 (2026-07-11)
+
+### Summary
+
+This release introduces orchestration profiles—single-session, balanced, and orchestrated—that let users control how vv-controller delegates work at runtime, with built-in presets automatically selecting a sensible default, a new `vvoc orchestration show|set` CLI command for explicit profile management, and status diagnostics that report the effective profile from the selected config source; alongside this, the managed OpenAI preset has been renamed to vv-codex with explicit Codex subscription-safe token limits to prevent compaction failures, the managed controller prompt and skill templates have been made profile-neutral to eliminate context pollution, and the repository agent guide has been rewritten for clarity.
+
+* chore: archive applied orchestration profiles change ([09228ac](https://github.com/osovv/vv-opencode/commit/09228ac))
+* chore(grace): archive applied Codex preset change ([5d7157c](https://github.com/osovv/vv-opencode/commit/5d7157c))
+* docs: document orchestration profiles ([01b5786](https://github.com/osovv/vv-opencode/commit/01b5786))
+* docs(grace): improve repository agent guide ([f5e9e3b](https://github.com/osovv/vv-opencode/commit/f5e9e3b))
+* docs(grace): project orchestration modules and flows ([e66875c](https://github.com/osovv/vv-opencode/commit/e66875c))
+* feat(cli): add scoped orchestration command ([c5bb612](https://github.com/osovv/vv-opencode/commit/c5bb612))
+* feat(cli): register orchestration completions ([ec26cfc](https://github.com/osovv/vv-opencode/commit/ec26cfc))
+* feat(config): add orchestration profiles to schema v3 ([6c920c3](https://github.com/osovv/vv-opencode/commit/6c920c3))
+* feat(context): inject concrete controller policy ([1941c34](https://github.com/osovv/vv-opencode/commit/1941c34))
+* feat(grace): plan preset orchestration profiles ([997a1ea](https://github.com/osovv/vv-opencode/commit/997a1ea))
+* feat(orchestration): add profile policy domain ([6de8219](https://github.com/osovv/vv-opencode/commit/6de8219))
+* feat(preset): apply orchestration profiles atomically ([161d7ff](https://github.com/osovv/vv-opencode/commit/161d7ff))
+* feat(status): report effective orchestration profile ([473d92e](https://github.com/osovv/vv-opencode/commit/473d92e))
+* feat(workflow): select profile-compatible guidance ([b664d4b](https://github.com/osovv/vv-opencode/commit/b664d4b))
+* test(skills): protect workflow discovery metadata ([be76244](https://github.com/osovv/vv-opencode/commit/be76244))
+* refactor(controller): keep managed prompt profile neutral ([092b995](https://github.com/osovv/vv-opencode/commit/092b995))
+* fix(codex): rename managed presets and set safe limits ([ae77c7c](https://github.com/osovv/vv-opencode/commit/ae77c7c))
+
 ## <small>1.0.2 (2026-07-10)</small>
 
 ### Summary
