@@ -34,6 +34,8 @@
         <M-CLI-COMPLETION />
         <M-CLI-INIT />
         <M-CLI-UPGRADE />
+        <M-ORCHESTRATION-PROFILES />
+        <M-CLI-ORCHESTRATION />
       </Owns>
     </GD-MAIN>
   </GraphDocuments>

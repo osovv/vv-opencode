@@ -34,6 +34,8 @@
         <V-M-WORKFLOW-TOOLING />
         <V-M-PLUGIN-WORKFLOW />
         <V-M-WORKFLOW-PERSISTENCE />
+        <V-M-ORCHESTRATION-PROFILES />
+        <V-M-CLI-ORCHESTRATION />
       </Owns>
     </VD-MAIN>
   </VerificationDocuments>
