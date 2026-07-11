@@ -1,10 +1,10 @@
 // FILE: src/plugins/system-context-injection/index.ts
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Inject reusable vvoc system context into primary chat sessions without polluting known subagent prompts.
-//   SCOPE: Main-session system instruction definitions, editing-workflow guidance, repository-memory lookup guidance, known subagent filtering, startup vvoc config snapshot use, config-aware custom subagent tracking, and chat.message system prompt injection.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
-//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-CLI-MANAGED-AGENTS]
+//   PURPOSE: Inject universal primary guidance and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
+//   SCOPE: Universal instructions, vv-controller policy selection, explore-worker guidance, known subagent filtering, startup vvoc snapshot use, custom subagent tracking, and chat.message injection.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts]
+//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -26,11 +26,16 @@
 //   LAST_CHANGE: [v0.3.0 - Added standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance for primary sessions.]
 //   LAST_CHANGE: [v0.2.0 - Expanded primary-session system guidance with task routing, execution stability, and loop-control rules while preserving subagent exclusion.]
 //   LAST_CHANGE: [v0.1.0 - Added a reusable main-session system context injector with default proactive explore guidance.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Separated universal primary guidance from one concrete startup-resolved vv-controller policy.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import { loadVvocConfig } from "../../lib/config-layers.js";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
+import {
+  resolveOrchestrationPolicy,
+  type ResolvedOrchestrationPolicy,
+} from "../../lib/orchestration.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { existsSync } from "node:fs";
 import {
@@ -44,22 +49,9 @@ const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
 const INTERNAL_PRIMARY_AGENTS = ["compaction", "title", "summary"] as const;
 const SELF_SUFFICIENT_PRIMARY_AGENTS = [] as const;
 const EXPLORE_SUBAGENT = "explore" as const;
+const VV_CONTROLLER_AGENT = "vv-controller" as const;
 
-const MAIN_SESSION_SYSTEM_CONTEXTS = [
-  [
-    "<proactive_context_gathering>",
-    "Before answering questions about the codebase or making changes, gather the context you need whenever the task depends on unfamiliar code, unclear scope, or multiple candidate implementation areas.",
-    "When delegation is available, proactively use the explore subagent for repository search and discovery.",
-    "Treat the explore subagent as a grep/glob/fuzzy-search worker: use it to find relevant files, symbols, call sites, tests, config entries, and useful line ranges.",
-    "Do not ask explore to return exact file contents, large pasted excerpts, or rewrite proposals. If full contents are needed, have explore return file paths plus the most relevant line ranges or anchors, then read the file directly in the parent session.",
-    "Keep explore handoffs compact: a short summary and a small set of relevant file references with brief explanations.",
-    "Use short quoted snippets only when needed to disambiguate a match or support a finding.",
-    "Skip explore when the target file is already known and one or two direct reads are enough.",
-    "Gather evidence before acting on unfamiliar code.",
-    "If the task is already localized and the required context is already in view, work directly.",
-    "If the current agent cannot delegate, work with the context already in view.",
-    "</proactive_context_gathering>",
-  ].join("\n"),
+const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
   [
     "<semantic_continuity>",
     "Reuse stable domain terms from the user request and the repository.",
@@ -75,21 +67,6 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
     "If a material assumption is necessary, state it explicitly.",
     "If a material assumption later becomes false, stop and reroute.",
     "</assumption_discipline>",
-  ].join("\n"),
-  [
-    "<standard_trajectories>",
-    "Prefer known trajectories over ad-hoc behavior.",
-    "Default trajectories: localized explicit change -> direct_change; bug, regression, or failure -> investigate_first; ambiguous or multi-file change -> change_with_review; explicit review request -> review directly; unclear request -> clarify or proceed with explicit assumptions, then route.",
-    "Prefer existing project patterns, existing libraries, and established repository structure over novel approaches.",
-    "</standard_trajectories>",
-  ].join("\n"),
-  [
-    "<task_routing>",
-    "Before acting on a non-trivial request, classify it as one of: direct_change, investigate_first, or change_with_review.",
-    "Use the lightest safe path.",
-    "Start subagents only after goal, acceptance criteria, and verification are stable.",
-    "If the current agent cannot delegate, reason through the routing mentally.",
-    "</task_routing>",
   ].join("\n"),
   [
     "<working_state>",
@@ -108,7 +85,7 @@ const MAIN_SESSION_SYSTEM_CONTEXTS = [
   [
     "<reroute_on_evidence>",
     "When new evidence invalidates the current route, stop and reroute.",
-    "Reroute triggers: direct_change -> investigate_first when root cause, failure path, or expected behavior is still unclear; direct_change -> change_with_review when the scope expands across multiple modules or architectural boundaries; investigate_first -> direct_change when the failure is bounded and the fix path is now clear; any route -> needs_context when requirement ambiguity blocks safe progress.",
+    "Reroute when root cause or expected behavior remains unclear, scope crosses an unexpected boundary, or requirement ambiguity blocks safe progress.",
     "When rerouting, state the current route, the trigger, the next route, and why the previous route is no longer safe.",
     "</reroute_on_evidence>",
   ].join("\n"),
@@ -188,12 +165,18 @@ function shouldInjectForAgent(agentName: string | undefined, knownSubagents: Set
   return true;
 }
 
-function getSystemContextsForAgent(agentName: string | undefined): readonly string[] {
+/** Returns universal primary guidance and, only for vv-controller, one concrete policy. */
+function getSystemContextsForAgent(
+  agentName: string | undefined,
+  policy: ResolvedOrchestrationPolicy,
+): readonly string[] {
   if (agentName === EXPLORE_SUBAGENT) {
     return EXPLORE_SYSTEM_CONTEXTS;
   }
-
-  return MAIN_SESSION_SYSTEM_CONTEXTS;
+  if (agentName === VV_CONTROLLER_AGENT) {
+    return [...UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS, policy.controllerSystemContext];
+  }
+  return UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS;
 }
 // END_BLOCK_AGENT_FILTERS
 
@@ -226,6 +209,7 @@ function appendSystemContexts(
 export const SystemContextInjectionPlugin: Plugin = async ({ directory }) => {
   const vvoc = await loadVvocConfig({ cwd: directory });
   if (!isVvocPluginEnabled(vvoc.config, "system-context-injection")) return {};
+  const policy = resolveOrchestrationPolicy(vvoc.config);
   const knownSubagents = createKnownSubagentSet();
   const projectRoot = vvoc.source.rootDir ?? directory;
 
@@ -265,7 +249,7 @@ export const SystemContextInjectionPlugin: Plugin = async ({ directory }) => {
 
       output.message.system = appendSystemContexts(
         output.message.system,
-        getSystemContextsForAgent(output.message.agent),
+        getSystemContextsForAgent(output.message.agent, policy),
       );
     },
   };

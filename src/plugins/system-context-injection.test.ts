@@ -1,10 +1,10 @@
 // FILE: src/plugins/system-context-injection.test.ts
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify primary-session system context injection behavior.
-//   SCOPE: Primary agent injection, repository-memory guidance, editing-workflow guidance, known subagent exclusion, custom configured subagent exclusion, and duplicate-prevention behavior.
-//   DEPENDS: [bun:test, src/lib/config-layers.ts, src/plugins/system-context-injection/index.ts]
-//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
+//   PURPOSE: Verify universal primary guidance and startup-selected concrete vv-controller orchestration policy injection.
+//   SCOPE: Per-profile controller context, primary isolation, explore guidance, known subagent exclusion, duplicate prevention, and startup snapshot stability.
+//   DEPENDS: [bun:test, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
+//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -25,10 +25,15 @@
 //   LAST_CHANGE: [v0.3.0 - Added coverage for standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance blocks.]
 //   LAST_CHANGE: [v0.2.0 - Added coverage for task routing, execution stability, and loop-control guidance blocks in primary-session system injection.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for primary-session-only system context injection.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added concrete profile selection, negative prompt isolation, and startup snapshot coverage.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
+import type { OrchestrationProfile } from "../lib/orchestration.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { SystemContextInjectionPlugin } from "./system-context-injection/index.js";
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
@@ -38,8 +43,12 @@ beforeEach(() => {
   process.env.XDG_CONFIG_HOME = `/tmp/vvoc-system-context-empty-config-${process.pid}`;
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetVvocConfigForTests();
+  await rm(`/tmp/vvoc-system-context-empty-config-${process.pid}`, {
+    recursive: true,
+    force: true,
+  });
   if (previousConfigHome === undefined) {
     delete process.env.XDG_CONFIG_HOME;
   } else {
@@ -68,6 +77,17 @@ function createOutput(agent: string, system?: string) {
   };
 }
 
+async function writeProfile(profile: OrchestrationProfile): Promise<string> {
+  const configHome = process.env.XDG_CONFIG_HOME;
+  if (!configHome) throw new Error("XDG_CONFIG_HOME required for system-context test");
+  const configPath = join(configHome, "vvoc", "vvoc.json");
+  const config = createDefaultVvocConfig();
+  config.orchestration = { profile };
+  await mkdir(join(configHome, "vvoc"), { recursive: true });
+  await writeFile(configPath, renderVvocConfig(config), "utf8");
+  return configPath;
+}
+
 describe("SystemContextInjectionPlugin", () => {
   test("injects primary-session system context for build", async () => {
     const plugin = await SystemContextInjectionPlugin(createPluginInput());
@@ -83,9 +103,6 @@ describe("SystemContextInjectionPlugin", () => {
 
     const systemText = output.message.system ?? "";
 
-    expect(systemText).toContain("<proactive_context_gathering>");
-    expect(systemText).toContain("<standard_trajectories>");
-    expect(systemText).toContain("<task_routing>");
     expect(systemText).toContain("<working_state>");
     expect(systemText).toContain("<reroute_on_evidence>");
     expect(systemText).toContain("<semantic_continuity>");
@@ -96,13 +113,10 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("<repository_memory>");
     expect(systemText).toContain(".vvoc/lessons/index.xml");
     expect(systemText).toContain(".vvoc/runbooks/index.xml");
-    expect(systemText).toContain("proactively use the explore subagent");
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Treat the explore subagent as a grep/glob/fuzzy-search worker",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do not ask explore to return exact file contents, large pasted excerpts, or rewrite proposals.",
-    );
+    expect(systemText).not.toContain("<proactive_context_gathering>");
+    expect(systemText).not.toContain("change_with_review");
+    expect(systemText).not.toContain("Work directly in the current session");
+    expect(systemText).not.toContain("Use the full tracked implementation and review workflow");
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "prefer the `edit` tool over shell-based rewrites when it is available.",
     );
@@ -117,28 +131,150 @@ describe("SystemContextInjectionPlugin", () => {
       output as never,
     );
 
-    expect(output.message.system).toContain("<proactive_context_gathering>");
-    expect(output.message.system).toContain("<task_routing>");
+    expect(output.message.system).toContain("<working_state>");
+    expect(output.message.system).toContain("selectively delegate bounded repository search");
+    expect(output.message.system).not.toContain("Work directly in the current session");
+    expect(output.message.system).not.toContain("Use the full tracked implementation");
   });
 
   test("preserves existing system text and avoids duplicate injection", async () => {
     const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("enhancer", "Existing system context.");
+    const output = createOutput("vv-controller", "Existing system context.");
 
     await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "enhancer" } as never,
+      { sessionID: "session-1", agent: "vv-controller" } as never,
       output as never,
     );
     await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "enhancer" } as never,
+      { sessionID: "session-1", agent: "vv-controller" } as never,
       output as never,
     );
 
     const systemText = output.message.system ?? "";
 
     expect(systemText).toContain("Existing system context.");
-    expect(systemText.match(/<proactive_context_gathering>/g)).toHaveLength(1);
+    expect(systemText.match(/<working_state>/g)).toHaveLength(1);
     expect(systemText.match(/<repository_memory>/g)).toHaveLength(1);
+    expect(systemText.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
+  });
+
+  test("injects only the concrete controller policy selected by each profile", async () => {
+    const cases: Array<{
+      profile: OrchestrationProfile;
+      expected: string;
+      absent: string[];
+    }> = [
+      {
+        profile: "single-session",
+        expected: "Work directly in the current session",
+        absent: [
+          "selectively delegate bounded repository search",
+          "Use the full tracked implementation and review workflow",
+        ],
+      },
+      {
+        profile: "balanced",
+        expected: "selectively delegate bounded repository search",
+        absent: [
+          "Work directly in the current session",
+          "Use the full tracked implementation and review workflow",
+        ],
+      },
+      {
+        profile: "orchestrated",
+        expected: "Use the full tracked implementation and review workflow",
+        absent: [
+          "Work directly in the current session",
+          "selectively delegate bounded repository search",
+        ],
+      },
+    ];
+
+    for (const { profile, expected, absent } of cases) {
+      resetVvocConfigForTests();
+      await writeProfile(profile);
+      const plugin = await SystemContextInjectionPlugin(createPluginInput());
+      const output = createOutput("vv-controller");
+      await plugin["chat.message"]?.(
+        { sessionID: `session-${profile}`, agent: "vv-controller" } as never,
+        output as never,
+      );
+      const systemText = output.message.system ?? "";
+
+      expect(systemText).toContain("<working_state>");
+      expect(systemText).toContain(expected);
+      for (const inactive of absent) expect(systemText).not.toContain(inactive);
+      for (const profileName of ["single-session", "balanced", "orchestrated"]) {
+        expect(systemText).not.toContain(profileName);
+      }
+    }
+  });
+
+  test("single-session excludes working-subagent routes and retains the reviewer exception", async () => {
+    await writeProfile("single-session");
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const output = createOutput("vv-controller");
+    await plugin["chat.message"]?.(
+      { sessionID: "session-single", agent: "vv-controller" } as never,
+      output as never,
+    );
+    const systemText = output.message.system ?? "";
+
+    for (const activity of [
+      "exploration",
+      "investigation",
+      "planning",
+      "implementation",
+      "verification",
+    ]) {
+      expect(systemText).toContain(activity);
+    }
+    for (const inactive of [
+      "proactively use the explore subagent",
+      "investigator",
+      "vv-implementer",
+      "change_with_review",
+      "tracked implementation-loop",
+    ]) {
+      expect(systemText).not.toContain(inactive);
+    }
+    expect(systemText).toContain("Do not delegate working context to subagents");
+    expect(systemText).toContain("Independent reviewer subagents remain permitted");
+  });
+
+  test("non-controller primary agents receive universal guidance without orchestration policy", async () => {
+    await writeProfile("orchestrated");
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+
+    for (const agent of ["build", "custom-primary"]) {
+      const output = createOutput(agent);
+      await plugin["chat.message"]?.(
+        { sessionID: `session-${agent}`, agent } as never,
+        output as never,
+      );
+      const systemText = output.message.system ?? "";
+      expect(systemText).toContain("<working_state>");
+      expect(systemText).not.toContain("Work directly in the current session");
+      expect(systemText).not.toContain("selectively delegate bounded repository search");
+      expect(systemText).not.toContain("Use the full tracked implementation and review workflow");
+    }
+  });
+
+  test("keeps the startup-selected policy after vvoc.json changes", async () => {
+    await writeProfile("single-session");
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    await writeProfile("orchestrated");
+    const output = createOutput("vv-controller");
+
+    await plugin["chat.message"]?.(
+      { sessionID: "session-snapshot", agent: "vv-controller" } as never,
+      output as never,
+    );
+
+    expect(output.message.system).toContain("Work directly in the current session");
+    expect(output.message.system).not.toContain(
+      "Use the full tracked implementation and review workflow",
+    );
   });
 
   test("injects explore-specific system context for built-in explore subagent", async () => {
@@ -162,6 +298,8 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "Default output: a short summary plus a compact, prioritized list of relevant paths with why they matter and line references or anchors when useful.",
     );
+    expect(systemText).not.toContain("<working_state>");
+    expect(systemText).not.toContain("Work directly in the current session");
   });
 
   test("skips plugin-managed subagents", async () => {
@@ -219,26 +357,8 @@ describe("SystemContextInjectionPlugin", () => {
 
     const systemText = output.message.system ?? "";
 
-    expect(systemText).toContain("Before answering questions about the codebase or making changes");
-    expect(systemText.replace(/\s+/g, " ")).toContain("proactively use the explore subagent");
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Treat the explore subagent as a grep/glob/fuzzy-search worker: use it to find relevant files, symbols, call sites, tests, config entries, and useful line ranges.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do not ask explore to return exact file contents, large pasted excerpts, or rewrite proposals. If full contents are needed, have explore return file paths plus the most relevant line ranges or anchors, then read the file directly in the parent session.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Skip explore when the target file is already known and one or two direct reads are enough.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Gather evidence before acting on unfamiliar code.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Prefer known trajectories over ad-hoc behavior.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "classify it as one of: direct_change, investigate_first, or change_with_review.",
-    );
+    expect(systemText).not.toContain("proactively use the explore subagent");
+    expect(systemText).not.toContain("change_with_review");
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
     );
