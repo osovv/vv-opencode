@@ -21,6 +21,7 @@
 //   LAST_CHANGE: [v0.4.4 - Updated vv-openai expectations so default is GPT-5.4 and smart remains vv-gpt-5.5-xhigh.]
 //   LAST_CHANGE: [v0.4.5 - Added regression coverage for the canonical built-in preset key set.]
 //   LAST_CHANGE: [v0.4.6 - Added osovv assignment coverage and switched their fast role expectation to vv-gpt-5.4-mini-low.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated all preset name expectations from vv-openai to vv-codex and model refs to openai/vv-codex-gpt-*.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -35,7 +36,7 @@ import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js
 describe("preset helpers", () => {
   test("createDefaultVvocConfig exposes the canonical built-in preset keys", () => {
     expect(Object.keys(createDefaultVvocConfig().presets)).toEqual([
-      "vv-openai",
+      "vv-codex",
       "vv-zai",
       "vv-minimax",
       "vv-deepseek",
@@ -44,14 +45,14 @@ describe("preset helpers", () => {
     ]);
   });
 
-  test("listConfiguredPresets shows the seeded vv-deepseek, vv-openai, vv-zai, and vv-minimax presets", () => {
+  test("listConfiguredPresets shows the seeded vv-codex, vv-deepseek, vv-zai, and vv-minimax presets", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
     expect(presets).toEqual([
+      "vv-codex",
       "vv-deepseek",
       "vv-minimax",
-      "vv-openai",
       "vv-osovv",
       "vv-osovv-cheap",
       "vv-zai",
@@ -59,14 +60,14 @@ describe("preset helpers", () => {
   });
 
   test("formatPreset renders the expected preset object", () => {
-    const resolved = resolvePreset("vv-openai", createDefaultVvocConfig().presets);
+    const resolved = resolvePreset("vv-codex", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
 
     expect(output).toContain(
-      '"description": "Starter OpenAI role assignments for built-in vvoc roles."',
+      '"description": "Starter Codex subscription role assignments for built-in vvoc roles."',
     );
     expect(output).toContain('"default": "openai/gpt-5.4"');
-    expect(output).toContain('"smart": "openai/vv-gpt-5.5-xhigh"');
+    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.5-xhigh"');
     expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
     expect(output).toContain('"vision": "openai/gpt-5.4"');
   });
@@ -75,8 +76,8 @@ describe("preset helpers", () => {
     const resolved = resolvePreset("vv-osovv", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
-    expect(output).toContain('"fast": "openai/vv-gpt-5.4-mini-low"');
-    expect(output).toContain('"smart": "openai/vv-gpt-5.6-sol-xhigh"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
+    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
     expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.1"');
   });
@@ -85,8 +86,8 @@ describe("preset helpers", () => {
     const resolved = resolvePreset("vv-osovv-cheap", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
-    expect(output).toContain('"fast": "openai/vv-gpt-5.4-mini-low"');
-    expect(output).toContain('"smart": "openai/vv-gpt-5.6-terra-high"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
+    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-terra-high"');
     expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
     expect(output).toContain('"reviewer": "deepseek/deepseek-v4-pro"');
   });
@@ -171,7 +172,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-deepseek, vv-minimax, vv-openai, vv-osovv, vv-osovv-cheap, vv-zai",
+        "unknown preset: missing. Available presets: vv-codex, vv-deepseek, vv-minimax, vv-osovv, vv-osovv-cheap, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -235,8 +236,8 @@ describe("applyPreset", () => {
         },
         presets: {
           ...defaultConfig.presets,
-          "vv-openai": {
-            ...defaultConfig.presets["vv-openai"],
+          "vv-codex": {
+            ...defaultConfig.presets["vv-codex"],
             description: "user-overridden managed preset description",
           },
           custom: {
@@ -262,7 +263,7 @@ describe("applyPreset", () => {
       expect(before.guardian).toEqual(after.guardian);
       expect(before.secretsRedaction).toEqual(after.secretsRedaction);
       expect(before.presets).toEqual(after.presets);
-      expect(after.presets["vv-openai"].description).toBe(
+      expect(after.presets["vv-codex"].description).toBe(
         "user-overridden managed preset description",
       );
     } finally {
@@ -283,7 +284,7 @@ describe("applyPreset", () => {
       });
 
       await rm(join(configHome, "vvoc"), { recursive: true, force: true });
-      await applyPreset("vv-openai", {
+      await applyPreset("vv-codex", {
         cwd: projectDir,
         configDir: configHome,
       });
@@ -291,9 +292,9 @@ describe("applyPreset", () => {
       const bootstrapped = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       expect(bootstrapped.version).toBe(3);
       expect(bootstrapped.roles.default).toBe("openai/gpt-5.4");
-      expect(bootstrapped.roles.smart).toBe("openai/vv-gpt-5.5-xhigh");
-      expect(bootstrapped.presets["vv-openai"]?.agents.default).toBe("openai/gpt-5.4");
-      expect(bootstrapped.presets["vv-openai"]?.agents.smart).toBe("openai/vv-gpt-5.5-xhigh");
+      expect(bootstrapped.roles.smart).toBe("openai/vv-codex-gpt-5.5-xhigh");
+      expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe("openai/gpt-5.4");
+      expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe("openai/vv-codex-gpt-5.5-xhigh");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
@@ -423,7 +424,7 @@ describe("applyPreset", () => {
           cliPath,
           "preset",
           "list",
-          "vv-openai",
+          "vv-codex",
           "--config-dir",
           configHome,
         ],
@@ -437,7 +438,7 @@ describe("applyPreset", () => {
           "run",
           cliPath,
           "preset",
-          "vv-openai",
+          "vv-codex",
           "extra",
           "--config-dir",
           configHome,
@@ -460,7 +461,7 @@ describe("applyPreset", () => {
       expect(showStderr).toContain("preset name required for `vvoc preset show <name>`");
 
       expect(listExit).toBe(1);
-      expect(listStderr).toContain("unexpected extra argument for `vvoc preset list`: vv-openai");
+      expect(listStderr).toContain("unexpected extra argument for `vvoc preset list`: vv-codex");
 
       expect(bareExit).toBe(1);
       expect(bareStderr).toContain("unexpected extra argument for `vvoc preset <name>`: extra");

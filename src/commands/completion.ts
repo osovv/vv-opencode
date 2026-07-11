@@ -21,6 +21,7 @@
 //   LAST_CHANGE: [v0.6.0 - Added launch to top-level completion output.]
 //   LAST_CHANGE: [v0.5.15 - Switched built-in preset completions to the shared internal preset registry so managed names stay in sync.]
 //   LAST_CHANGE: [v0.5.14 - Restricted unset-role completions so shell suggestions no longer imply built-in roles are unsettable.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Replaced the canonical openai patch-provider completion with codex while retaining openai as a resolver-only compatibility alias.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -49,7 +50,7 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 ];
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
-const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai", "openai"];
+const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "zai", "codex"];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_ROLE_COMMANDS = ["set", "unset", "list"];

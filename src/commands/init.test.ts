@@ -23,6 +23,7 @@
 //   LAST_CHANGE: [v0.9.0 - Removed vv-analyst and vv-architect init expectations. Agents removed from managed-agents list.
 //   LAST_CHANGE: [v0.6.2 - Updated init expectations for vv-* tracked subagent names and prompt filenames.]
 //   LAST_CHANGE: [v0.6.1 - Updated init expectations so only `agent.explore` is auto-seeded among built-in OpenCode agents.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated fresh-init preset expectations from vv-openai to vv-codex.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -130,7 +131,7 @@ describe("init scenarios", () => {
       expect(vvocConfig.roles.fast).toBeDefined();
       expect(vvocConfig.roles.vision).toBeDefined();
       expect(vvocConfig.roles.reviewer).toBeDefined();
-      expect(vvocConfig.presets["vv-openai"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-codex"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-minimax"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-osovv"]?.agents.default).toBeDefined();

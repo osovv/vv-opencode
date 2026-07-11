@@ -20,6 +20,7 @@
 //   LAST_CHANGE: [v0.1.0 - Added a shared built-in vvoc preset registry so config sync and completions use one source of truth.]
 //   LAST_CHANGE: [v0.2.0 - vv-osovv: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-sol-xhigh; vv-osovv-cheap: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-terra-high.]
 //   LAST_CHANGE: [v0.3.0 - Replaced unavailable GPT-5.6 Luna Low with GPT-5.4 Mini Low for the fast role in both osovv presets.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Renamed vv-openai to vv-codex and updated all model references to openai/vv-codex-gpt-* namespace.]
 // END_CHANGE_SUMMARY
 
 type BuiltinVvocPresetDefinition = {
@@ -28,11 +29,11 @@ type BuiltinVvocPresetDefinition = {
 };
 
 export const BUILTIN_VVOC_PRESET_REGISTRY = {
-  "vv-openai": {
-    description: "Starter OpenAI role assignments for built-in vvoc roles.",
+  "vv-codex": {
+    description: "Starter Codex subscription role assignments for built-in vvoc roles.",
     agents: {
       default: "openai/gpt-5.4",
-      smart: "openai/vv-gpt-5.5-xhigh",
+      smart: "openai/vv-codex-gpt-5.5-xhigh",
       fast: "openai/gpt-5.4-mini",
       vision: "openai/gpt-5.4",
       reviewer: "openai/gpt-5.4",
@@ -72,8 +73,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv role assignments (deepseek + openai + minimax + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-gpt-5.4-mini-low",
-      smart: "openai/vv-gpt-5.6-sol-xhigh",
+      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
       vision: "minimax-coding-plan/MiniMax-M2.7",
       reviewer: "zai-coding-plan/glm-5.1",
     },
@@ -82,8 +83,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Cheap osovv role assignments (deepseek + openai + minimax).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-gpt-5.4-mini-low",
-      smart: "openai/vv-gpt-5.6-terra-high",
+      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      smart: "openai/vv-codex-gpt-5.6-terra-high",
       vision: "minimax-coding-plan/MiniMax-M2.7",
       reviewer: "deepseek/deepseek-v4-pro",
     },

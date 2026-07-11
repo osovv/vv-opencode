@@ -36,7 +36,6 @@
 //   validateVvocConfigDocument - Validates parsed vvoc config against JSON Schema.
 // END_MODULE_MAP
 //
-//
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v3.0.0 - Removed lenient vvoc config parsing and made plugins a required canonical v3 section.]
 //   LAST_CHANGE: [v2.5.0 - Added reviewer and orchestrator role defaults to createDefaultRoleAssignments.]
@@ -45,7 +44,7 @@
 //   LAST_CHANGE: [v2.3.1 - Updated built-in vision preset targets to use OpenAI GPT-5.4 and ZAI GLM-4.6V.]
 //   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
 //   LAST_CHANGE: [v2.4.0 - Removed MemoryConfig, memory section, and all memory-related parsing. Memory v2 is a CLI command, not a config section.]
-//   LAST_CHANGE: [v2.4.0 - Removed MemoryConfig, memory section, and all memory-related parsing. Memory v2 is a CLI command, not a config section.
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated default role assignments to reference openai/vv-codex-gpt-5.5-xhigh for the smart role.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -301,7 +300,7 @@ export function createDefaultVvocPresets(): VvocPresets {
 function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Record<string, string> {
   const defaults: Record<BuiltInRoleName, string> = {
     default: "openai/gpt-5.4",
-    smart: "openai/vv-gpt-5.5-xhigh",
+    smart: "openai/vv-codex-gpt-5.5-xhigh",
     fast: "openai/gpt-5.4-mini",
     vision: "openai/gpt-5.4",
     reviewer: "openai/gpt-5.4",

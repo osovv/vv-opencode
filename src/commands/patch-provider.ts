@@ -21,6 +21,7 @@
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true to vv-gpt-5.4-xhigh and vv-gpt-5.5-xhigh in openai patch preset.]
 //   LAST_CHANGE: [v0.6.0 - Added vv-gpt-5.6-luna-low, vv-gpt-5.6-terra-high, vv-gpt-5.6-sol-xhigh to openai patch preset.]
 //   LAST_CHANGE: [v0.7.0 - Replaced the unavailable vv-gpt-5.6-luna-low alias with vv-gpt-5.4-mini-low.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Renamed managed aliases to vv-codex-gpt-* namespace with explicit Codex subscription limits and made codex the canonical patch-provider preset.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -83,42 +84,13 @@ const STEPFUN_PATCH = {
 
 const OPENAI_PATCH = {
   models: {
-    "vv-gpt-5.4-xhigh": {
-      name: "VV GPT-5.4-XHigh",
-      id: "gpt-5.4",
-      variants: {},
-      limit: {
-        context: 400000,
-        output: 128000,
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "xhigh",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
-    },
-    "vv-gpt-5.5-xhigh": {
-      name: "VV GPT-5.5-XHigh",
-      id: "gpt-5.5",
-      variants: {},
-      limit: {
-        context: 400000,
-        output: 128000,
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "xhigh",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
-    },
-    "vv-gpt-5.4-mini-low": {
-      name: "VV GPT-5.4 Mini Low",
+    "vv-codex-gpt-5.4-mini-low": {
+      name: "VV Codex GPT-5.4 Mini Low",
       id: "gpt-5.4-mini",
       variants: {},
       limit: {
         context: 400000,
+        input: 272000,
         output: 128000,
       },
       reasoning: true,
@@ -128,12 +100,29 @@ const OPENAI_PATCH = {
         include: ["reasoning.encrypted_content"],
       },
     },
-    "vv-gpt-5.6-terra-high": {
-      name: "VV GPT-5.6 Terra High",
+    "vv-codex-gpt-5.5-xhigh": {
+      name: "VV Codex GPT-5.5-XHigh",
+      id: "gpt-5.5",
+      variants: {},
+      limit: {
+        context: 400000,
+        input: 272000,
+        output: 128000,
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
+    "vv-codex-gpt-5.6-terra-high": {
+      name: "VV Codex GPT-5.6 Terra High",
       id: "gpt-5.6-terra",
       variants: {},
       limit: {
-        context: 1050000,
+        context: 500000,
+        input: 372000,
         output: 128000,
       },
       reasoning: true,
@@ -143,12 +132,13 @@ const OPENAI_PATCH = {
         include: ["reasoning.encrypted_content"],
       },
     },
-    "vv-gpt-5.6-sol-xhigh": {
-      name: "VV GPT-5.6 Sol XHigh",
+    "vv-codex-gpt-5.6-sol-xhigh": {
+      name: "VV Codex GPT-5.6 Sol XHigh",
       id: "gpt-5.6-sol",
       variants: {},
       limit: {
-        context: 1050000,
+        context: 500000,
+        input: 372000,
         output: 128000,
       },
       reasoning: true,
@@ -174,15 +164,19 @@ const PATCH_PROVIDER_PRESETS = {
     value: ZAI_CODING_PLAN_PATCH,
     summary: "provider.zai-coding-plan.models.glm-4.5-airx patched",
   },
-  openai: {
+  codex: {
     kind: "provider-object",
     providerID: "openai",
     value: OPENAI_PATCH,
-    summary: "provider.openai.models vv-gpt-5.4/5.5/5.6 aliases patched",
+    summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
   },
 } as const satisfies Record<string, PatchPreset>;
 
 export type PatchProviderPresetName = keyof typeof PATCH_PROVIDER_PRESETS;
+
+const PATCH_PROVIDER_PRESET_ALIASES = {
+  openai: "codex",
+} as const satisfies Record<string, PatchProviderPresetName>;
 
 const presetArg = {
   type: "positional" as const,
@@ -204,13 +198,20 @@ const writeScopeArg = {
 
 // START_BLOCK_PROVIDER_PRESET_RESOLUTION
 export function resolvePatchProviderPreset(name: string): PatchPreset {
-  const presetName = name.trim() as PatchProviderPresetName;
+  const requestedName = name.trim();
+  const presetName =
+    requestedName in PATCH_PROVIDER_PRESET_ALIASES
+      ? PATCH_PROVIDER_PRESET_ALIASES[requestedName as keyof typeof PATCH_PROVIDER_PRESET_ALIASES]
+      : (requestedName as PatchProviderPresetName);
   if (presetName in PATCH_PROVIDER_PRESETS) {
     return PATCH_PROVIDER_PRESETS[presetName];
   }
 
   const supported = Object.keys(PATCH_PROVIDER_PRESETS).join(", ");
-  throw new Error(`Unsupported OpenCode patch preset: ${name}. Supported presets: ${supported}`);
+  const aliases = Object.keys(PATCH_PROVIDER_PRESET_ALIASES).join(", ");
+  throw new Error(
+    `Unsupported OpenCode patch preset: ${name}. Supported presets: ${supported}. Compatibility aliases: ${aliases}`,
+  );
 }
 
 export async function applyPatchProviderPreset(

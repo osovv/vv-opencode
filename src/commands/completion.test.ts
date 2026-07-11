@@ -16,6 +16,7 @@
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.13 - Added regression coverage for canonical built-in preset-name completion output across shells.]
 //   LAST_CHANGE: [v0.4.12 - Restricted unset-role completion assertions to avoid built-in role suggestions.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated canonical patch-provider completion from openai to codex and preset names from vv-openai to vv-codex.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -133,9 +134,9 @@ test("completion scripts - contain patch-provider presets", () => {
   expect(generateBashCompletion()).toContain("_vvoc_patch_provider_presets");
   expect(generateZshCompletion()).toContain("_vvoc_patch_provider_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_patch_provider_cmds");
-  expect(generateBashCompletion()).toContain('local commands="stepfun-ai zai openai"');
-  expect(generateZshCompletion()).toContain("stepfun-ai zai openai");
-  expect(generateFishCompletion()).toContain("echo stepfun-ai zai openai");
+  expect(generateBashCompletion()).toContain('local commands="stepfun-ai zai codex"');
+  expect(generateZshCompletion()).toContain("stepfun-ai zai codex");
+  expect(generateFishCompletion()).toContain("echo stepfun-ai zai codex");
 });
 
 test("completion scripts - contain preset commands and default preset names", () => {
@@ -145,12 +146,12 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain(
-    "list show vv-openai vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
+    "list show vv-codex vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
   );
   expect(generateZshCompletion()).toContain(
-    "vv-openai vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
+    "vv-codex vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
   );
   expect(generateFishCompletion()).toContain(
-    "echo vv-openai vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
+    "echo vv-codex vv-zai vv-minimax vv-deepseek vv-osovv vv-osovv-cheap",
   );
 });

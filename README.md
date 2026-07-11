@@ -211,7 +211,7 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 | `vvoc guardian config` | Print or write guardian section |
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
-| `vvoc patch-provider stepfun-ai\|zai\|openai` | Patch an OpenCode provider preset in global or project scope |
+| `vvoc patch-provider stepfun-ai\|zai\|codex` | Patch an OpenCode provider; `codex` adds subscription-safe OpenAI aliases and also accepts `openai` for compatibility |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |
@@ -228,11 +228,11 @@ vvoc role list --scope effective
 # Assign models to roles
 vvoc role set default openai/gpt-5.4
 vvoc role set team-review anthropic/claude-sonnet-4-5 --scope project
-vvoc role set smart openai/vv-gpt-5.5-xhigh
+vvoc role set smart openai/vv-codex-gpt-5.5-xhigh
 vvoc role set fast openai/gpt-5.4-mini
 
 # Switch provider presets
-vvoc preset vv-openai
+vvoc preset vv-codex
 vvoc preset vv-zai
 vvoc preset vv-deepseek
 vvoc preset vv-minimax

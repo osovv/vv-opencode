@@ -1,0 +1,19 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-CODEX-PRESET-LIMITS</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Keeping provider.openai preserves OpenCode built-in OAuth and proxy compatibility. Codex-specific alias names make the smaller subscription contract explicit, while fully specified limits prevent models.dev API metadata from silently restoring a 922000-token input budget.</Rationale>
+  <Alternatives>
+    <Alternative>A custom openai-codex-subscription provider was rejected because it would not participate in OpenCode's built-in OpenAI OAuth integration and would require separate credentials and provider metadata.</Alternative>
+    <Alternative>Keeping generic vv-gpt-* names was rejected because those names conceal whether their limits represent direct API or Codex subscription behavior.</Alternative>
+    <Alternative>Changing built-in openai/gpt-* metadata was rejected because standard models.dev entries correctly represent direct API capabilities.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>A separately curated direct-API vv-openai-api preset can be introduced later if real demand appears.</Decision>
+    <Decision>Legacy alias cleanup may be added later as an explicit opt-in migration rather than an automatic destructive write.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A CLIProxyAPI user selects openai/vv-codex-gpt-5.6-sol-xhigh; OpenCode compacts near the 352000 usable threshold instead of waiting near 902000 tokens.</Scenario>
+    <Scenario>A native OpenCode OAuth user selects the same alias and receives the same conservative subscription limits under provider.openai.</Scenario>
+    <Scenario>A direct API user selects a built-in openai/gpt-* model and retains full models.dev API limits.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

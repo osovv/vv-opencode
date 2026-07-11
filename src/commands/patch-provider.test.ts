@@ -18,6 +18,7 @@
 //   LAST_CHANGE: [v0.5.0 - Added project-scope OpenCode patch isolation coverage.]
 //   LAST_CHANGE: [v0.4.3 - Added reasoning:true expectation in openai patch test.]
 //   LAST_CHANGE: [v0.7.0 - Replaced GPT-5.6 Luna Low assertions with the GPT-5.4 Mini Low fixed-effort alias.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated all alias names to vv-codex-gpt-*, added input limit assertions, added codex preset coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -49,17 +50,27 @@ describe("resolvePatchProviderPreset", () => {
     });
   });
 
-  test("returns the built-in openai alias patch", () => {
-    expect(resolvePatchProviderPreset("openai")).toMatchObject({
+  test("returns the built-in codex alias patch (canonical)", () => {
+    expect(resolvePatchProviderPreset("codex")).toMatchObject({
       kind: "provider-object",
       providerID: "openai",
-      summary: "provider.openai.models vv-gpt-5.4/5.5/5.6 aliases patched",
+      summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
+    });
+  });
+
+  test("returns the built-in openai alias patch (compatibility)", () => {
+    const compatibilityPreset = resolvePatchProviderPreset("openai");
+    expect(compatibilityPreset).toBe(resolvePatchProviderPreset("codex"));
+    expect(compatibilityPreset).toMatchObject({
+      kind: "provider-object",
+      providerID: "openai",
+      summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
     });
   });
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, zai, openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, zai, codex. Compatibility aliases: openai",
     );
   });
 });
@@ -120,11 +131,11 @@ describe("applyPatchProviderPreset", () => {
     }
   });
 
-  test("writes the global openai alias patch without mutating root model fields", async () => {
+  test("writes the global codex alias patch without mutating root model fields", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
-      const { result } = await applyPatchProviderPreset("openai", {
+      const { result } = await applyPatchProviderPreset("codex", {
         cwd: "/workspace/project",
         configDir: configHome,
       });
@@ -144,6 +155,7 @@ describe("applyPatchProviderPreset", () => {
                 variants?: Record<string, unknown>;
                 limit?: {
                   context?: number;
+                  input?: number;
                   output?: number;
                 };
                 options?: {
@@ -160,58 +172,45 @@ describe("applyPatchProviderPreset", () => {
       expect(result.action).toBe("created");
       expect(parsed.model).toBeUndefined();
       expect(parsed.small_model).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]).toEqual({
-        name: "VV GPT-5.4-XHigh",
-        id: "gpt-5.4",
-        reasoning: true,
-        variants: {},
-        limit: {
-          context: 400000,
-          output: 128000,
-        },
-        options: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
-      });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]).toEqual({
-        name: "VV GPT-5.5-XHigh",
-        id: "gpt-5.5",
-        variants: {},
-        limit: {
-          context: 400000,
-          output: 128000,
-        },
-        reasoning: true,
-        options: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
-      });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-mini-low"]).toEqual({
-        name: "VV GPT-5.4 Mini Low",
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.4-mini-low"]).toEqual({
+        name: "VV Codex GPT-5.4 Mini Low",
         id: "gpt-5.4-mini",
+        reasoning: true,
         variants: {},
         limit: {
           context: 400000,
+          input: 272000,
           output: 128000,
         },
-        reasoning: true,
         options: {
           reasoningEffort: "low",
           reasoningSummary: "auto",
           include: ["reasoning.encrypted_content"],
         },
       });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]).toEqual({
-        name: "VV GPT-5.6 Terra High",
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.5-xhigh"]).toEqual({
+        name: "VV Codex GPT-5.5-XHigh",
+        id: "gpt-5.5",
+        variants: {},
+        limit: {
+          context: 400000,
+          input: 272000,
+          output: 128000,
+        },
+        reasoning: true,
+        options: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      });
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-terra-high"]).toEqual({
+        name: "VV Codex GPT-5.6 Terra High",
         id: "gpt-5.6-terra",
         variants: {},
         limit: {
-          context: 1050000,
+          context: 500000,
+          input: 372000,
           output: 128000,
         },
         reasoning: true,
@@ -221,12 +220,13 @@ describe("applyPatchProviderPreset", () => {
           include: ["reasoning.encrypted_content"],
         },
       });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toEqual({
-        name: "VV GPT-5.6 Sol XHigh",
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-sol-xhigh"]).toEqual({
+        name: "VV Codex GPT-5.6 Sol XHigh",
         id: "gpt-5.6-sol",
         variants: {},
         limit: {
-          context: 1050000,
+          context: 500000,
+          input: 372000,
           output: 128000,
         },
         reasoning: true,
@@ -236,12 +236,19 @@ describe("applyPatchProviderPreset", () => {
           include: ["reasoning.encrypted_content"],
         },
       });
+
+      // Old vv-gpt-* aliases should not be written
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]).toBeUndefined();
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]).toBeUndefined();
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]).toBeUndefined();
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toBeUndefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("reapplying the openai patch keeps sibling models, preserves root role refs, and becomes idempotent", async () => {
+  test("reapplying the codex patch keeps sibling models, preserves root role refs, and becomes idempotent", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -257,6 +264,9 @@ describe("applyPatchProviderPreset", () => {
                   existing: {
                     name: "Existing",
                   },
+                  "vv-gpt-5.6-sol-xhigh": {
+                    name: "Legacy managed alias retained conservatively",
+                  },
                 },
               },
             },
@@ -269,11 +279,11 @@ describe("applyPatchProviderPreset", () => {
         "utf8",
       );
 
-      const first = await applyPatchProviderPreset("openai", {
+      const first = await applyPatchProviderPreset("codex", {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const second = await applyPatchProviderPreset("openai", {
+      const second = await applyPatchProviderPreset("codex", {
         cwd: "/workspace/project",
         configDir: configHome,
       });
@@ -289,17 +299,20 @@ describe("applyPatchProviderPreset", () => {
       expect(parsed.model).toBe("vv-role:default");
       expect(parsed.small_model).toBe("vv-role:fast");
       expect(parsed.provider?.openai?.models?.existing).toEqual({ name: "Existing" });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]?.name).toBe("VV GPT-5.4-XHigh");
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]?.name).toBe(
-        "VV GPT-5.6 Sol XHigh",
+      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toEqual({
+        name: "Legacy managed alias retained conservatively",
+      });
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.4-mini-low"]?.name).toBe(
+        "VV Codex GPT-5.4 Mini Low",
       );
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]?.name).toBe("VV GPT-5.5-XHigh");
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-mini-low"]?.name).toBe(
-        "VV GPT-5.4 Mini Low",
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.5-xhigh"]?.name).toBe(
+        "VV Codex GPT-5.5-XHigh",
       );
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]?.name).toBe(
-        "VV GPT-5.6 Terra High",
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-terra-high"]?.name).toBe(
+        "VV Codex GPT-5.6 Terra High",
+      );
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-sol-xhigh"]?.name).toBe(
+        "VV Codex GPT-5.6 Sol XHigh",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -311,7 +324,7 @@ describe("applyPatchProviderPreset", () => {
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-project-"));
 
     try {
-      const { result } = await applyPatchProviderPreset("openai", {
+      const { result } = await applyPatchProviderPreset("codex", {
         cwd: projectDir,
         configDir: configHome,
         scope: "project",

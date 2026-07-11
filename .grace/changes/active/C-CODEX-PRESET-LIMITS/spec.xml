@@ -1,0 +1,52 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-CODEX-PRESET-LIMITS>
+    <Summary>Rename the managed OpenAI preset and aliases to explicit Codex subscription terminology and apply subscription-safe token limits.</Summary>
+    <Problem>The current vv-gpt aliases inherit direct-API input limits from models.dev while they are used through Codex subscription routing, so OpenCode delays compaction beyond the server-enforced input budget and long GPT-5.6 sessions fail near 372000 input tokens.</Problem>
+    <Goals>
+      <Goal>Make vv-codex the canonical managed preset name instead of vv-openai.</Goal>
+      <Goal>Rename managed OpenAI aliases to the vv-codex-gpt-* namespace while retaining provider.openai as the target provider.</Goal>
+      <Goal>Set explicit context, input, and output limits for every managed Codex alias so no direct-API input limit is inherited.</Goal>
+      <Goal>Make codex the canonical patch-provider preset while preserving the old openai command spelling as a compatibility alias.</Goal>
+      <Goal>Update osovv presets, defaults, documentation, completions, and tests to use the canonical Codex names.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Create a separate OpenCode provider ID for Codex subscriptions.</NonGoal>
+      <NonGoal>Optimize managed aliases for directly billed OpenAI API users.</NonGoal>
+      <NonGoal>Delete legacy vv-gpt-* aliases from user-owned OpenCode configuration automatically.</NonGoal>
+      <NonGoal>Fix OpenCode or CLIProxyAPI transport-level GPT-5.6 Responses Lite behavior.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>Fresh managed vvoc configuration contains vv-codex and no canonical vv-openai preset entry.</Criterion>
+      <Criterion>vv-codex, vv-osovv, and vv-osovv-cheap reference openai/vv-codex-gpt-* models where managed Codex aliases are used.</Criterion>
+      <Criterion>The Codex patch writes vv-codex-gpt-5.4-mini-low with limits 400000 context, 272000 input, and 128000 output.</Criterion>
+      <Criterion>The Codex patch writes vv-codex-gpt-5.5-xhigh with limits 400000 context, 272000 input, and 128000 output.</Criterion>
+      <Criterion>The Codex patch writes vv-codex-gpt-5.6-terra-high and vv-codex-gpt-5.6-sol-xhigh with limits 500000 context, 372000 input, and 128000 output.</Criterion>
+      <Criterion>vvoc patch-provider codex is canonical and vvoc patch-provider openai resolves to the same conservative provider.openai patch for compatibility.</Criterion>
+      <Criterion>Existing unrelated provider.openai options, models, and user-owned configuration remain preserved.</Criterion>
+      <Criterion>README examples and command descriptions use vv-codex and the vv-codex-gpt-* namespace.</Criterion>
+      <Criterion>Targeted preset, completion, config, and patch-provider tests plus the repository check and build gates pass.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-PATCH-PROVIDER />
+      <M-VVOC-PRESET-REGISTRY />
+      <M-CLI-PRESET />
+      <M-CLI-COMPLETION />
+      <M-CLI-CONFIG />
+      <M-CLI-INIT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/commands/patch-provider.test.ts src/commands/preset.test.ts src/commands/completion.test.ts src/commands/config-validate.test.ts src/commands/launch.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh output proves canonical names, compatibility routing, explicit subscription-safe limits, conservative config merging, and valid GRACE state.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>Managed vv-codex aliases primarily serve ChatGPT Codex subscription users, including users routed through CLIProxyAPI.</Assumption>
+      <Assumption>Provider ID openai remains the interoperable namespace for built-in OpenCode OAuth, direct API authentication, and OpenAI-compatible proxy baseURL overrides.</Assumption>
+      <Assumption>Using lower Codex limits through a directly billed API remains functionally safe even though it compacts earlier than the API maximum.</Assumption>
+      <Assumption>The user explicitly approved this design and requested implementation without another approval round.</Assumption>
+    </Assumptions>
+  </C-CODEX-PRESET-LIMITS>
+</GraceChangeSpec>

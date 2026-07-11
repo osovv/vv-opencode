@@ -15,6 +15,7 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Added launch planning and subprocess behavior coverage.]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated smart role fixture to openai/vv-codex-gpt-5.5-xhigh.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -116,7 +117,7 @@ async function writeProjectLayer(projectDir: string): Promise<void> {
         version: 3,
         roles: {
           default: "openai/gpt-5.4",
-          smart: "openai/vv-gpt-5.5-xhigh",
+          smart: "openai/vv-codex-gpt-5.5-xhigh",
           fast: "openai/gpt-5.4-mini",
           vision: "openai/gpt-5.4",
         },

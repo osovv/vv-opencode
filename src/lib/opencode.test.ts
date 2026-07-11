@@ -33,6 +33,7 @@
 //   LAST_CHANGE: [v1.2.1 - Added regression coverage proving sync restores drifted vv-deepseek while preserving custom non-managed presets.]
 //   LAST_CHANGE: [v1.1.7 - Added regression coverage for managed `tools.apply_patch = false` writes and sibling `tools.*` preservation during OpenCode config sync.]
 //   LAST_CHANGE: [v1.1.6 - Added regression coverage ensuring legacy old-name cleanup is blocked when the legacy prompt file exists but is user-owned (missing vvoc managed marker).]
+//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated canonical fresh-config preset key coverage from vv-openai to vv-codex.]
 //   LAST_CHANGE: [v1.2.5 - Added managed skill distribution coverage for vv-reflect.]
 //   LAST_CHANGE: [v1.1.5 - Added coverage ensuring legacy cleanup preserves old-name agents that keep legacy prompt paths but diverge from managed model/permission/description/mode fields.]
 //   LAST_CHANGE: [v1.1.4 - Added coverage proving legacy cleanup is restricted to clearly vvoc-managed old tracked entries and preserves user-owned agents that reuse old names.]
@@ -627,7 +628,7 @@ describe("canonical vvoc config helpers", () => {
       expect(vvocConfig?.roles.vision).toBeDefined();
       expect(vvocConfig?.roles.reviewer).toBeDefined();
       expect(Object.keys(vvocConfig?.presets ?? {})).toEqual([
-        "vv-openai",
+        "vv-codex",
         "vv-zai",
         "vv-minimax",
         "vv-deepseek",

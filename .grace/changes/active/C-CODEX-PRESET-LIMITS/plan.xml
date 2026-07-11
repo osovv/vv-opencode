@@ -1,0 +1,152 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-CODEX-PRESET-LIMITS>
+    <IntentSummary>Replace ambiguous vv-openai and vv-gpt naming with canonical vv-codex and vv-codex-gpt names under provider.openai, apply explicit Codex subscription token budgets, preserve the old patch-provider spelling as a compatibility route, and synchronize public documentation, defaults, completions, tests, and governed artifacts.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-PATCH-PROVIDER</Value>
+        <Value>M-VVOC-PRESET-REGISTRY</Value>
+        <Value>M-CLI-PRESET</Value>
+        <Value>M-CLI-COMPLETION</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>src/commands/patch-provider.ts</Value>
+        <Value>src/lib/vvoc-preset-registry.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-PATCH-PROVIDER</Module>
+        <Module>M-VVOC-PRESET-REGISTRY</Module>
+        <Module>M-CLI-PRESET</Module>
+        <Module>M-CLI-COMPLETION</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-CLI-INIT</Module>
+      </MustVerify>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>Managed aliases currently use vv-gpt-* names under provider.openai and omit limit.input, allowing direct-API models.dev values to be inherited.</Note>
+        <Note>Resolved OpenCode metadata currently gives GPT-5.6 aliases input 922000, so proactive compaction waits near 902000 although Codex subscription input is limited to 372000.</Note>
+        <Note>The current canonical OpenAI preset is vv-openai, while vv-osovv and vv-osovv-cheap also reference vv-gpt-* aliases.</Note>
+        <Note>patch-provider openai currently targets provider.openai and conservatively merges managed aliases without deleting sibling models or options.</Note>
+      </Baseline>
+      <Target>
+        <Note>Canonical managed preset and alias names explicitly communicate Codex subscription semantics while retaining provider.openai interoperability.</Note>
+        <Note>Every managed Codex alias specifies context, input, and output so compaction behavior cannot depend on inherited API metadata.</Note>
+        <Note>Fresh configurations and documentation use vv-codex; legacy user-owned vv-openai or vv-gpt-* entries are not destructively removed.</Note>
+        <Note>patch-provider codex is canonical, with openai retained only as a compatibility spelling resolving to the same patch.</Note>
+      </Target>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-PATCH-PROVIDER />
+        <M-VVOC-PRESET-REGISTRY />
+        <M-CLI-PRESET />
+        <M-CLI-COMPLETION />
+        <M-CLI-CONFIG />
+        <M-CLI-INIT />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-PATCH-PROVIDER />
+        <V-M-VVOC-PRESET-REGISTRY />
+        <V-M-CLI-PRESET />
+        <V-M-CLI-COMPLETION />
+        <V-M-CLI-CONFIG-VALIDATE />
+        <V-M-CLI-INIT />
+      </VerificationAnchors>
+      <ContextArtifact>.grace/changes/active/C-CODEX-PRESET-LIMITS/spec.xml</ContextArtifact>
+      <ContextArtifact>.grace/changes/active/C-CODEX-PRESET-LIMITS/design-context.xml</ContextArtifact>
+      <GraphDocument>.grace/graph/main.xml</GraphDocument>
+      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/commands/patch-provider.ts</File>
+      <File>src/commands/patch-provider.test.ts</File>
+      <File>src/lib/vvoc-preset-registry.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/commands/preset.test.ts</File>
+      <File>src/commands/completion.test.ts</File>
+      <File>src/commands/config-validate.test.ts</File>
+      <File>src/commands/launch.test.ts</File>
+      <File>README.md</File>
+      <Glob>src/**/*.test.ts</Glob>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-CODEX-PRESET-LIMITS/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Rename and correct managed Codex model aliases in patch-provider.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>OPENAI_PATCH exposes only canonical vv-codex-gpt-* aliases for fresh patch application.</Criterion>
+          <Criterion>GPT-5.4 mini and GPT-5.5 aliases explicitly use 400000 context, 272000 input, and 128000 output.</Criterion>
+          <Criterion>GPT-5.6 Terra and Sol aliases explicitly use 500000 context, 372000 input, and 128000 output.</Criterion>
+          <Criterion>Reasoning effort, reasoning summary, encrypted reasoning content, underlying API model IDs, and conservative merge behavior remain intact.</Criterion>
+          <Criterion>codex is the canonical patch-provider name and openai remains a compatibility alias resolving to the same provider.openai object patch.</Criterion>
+          <Criterion>MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY remain truthful.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/patch-provider.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Rename the canonical preset and all managed role references to vv-codex terminology.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The built-in registry contains vv-codex instead of canonical vv-openai.</Criterion>
+          <Criterion>vv-codex, vv-osovv, and vv-osovv-cheap reference openai/vv-codex-gpt-* aliases where applicable.</Criterion>
+          <Criterion>Default vvoc configuration and bootstrap paths seed canonical vv-codex names and model references.</Criterion>
+          <Criterion>Preset ordering and completion output remain deterministic.</Criterion>
+          <Criterion>No unrelated provider presets or role assignments change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/preset.test.ts src/commands/completion.test.ts src/commands/config-validate.test.ts src/commands/launch.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Synchronize documentation and regression coverage for canonical Codex naming and compatibility behavior.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README examples use vv-codex, patch-provider codex, and openai/vv-codex-gpt-* identifiers.</Criterion>
+          <Criterion>Tests assert complete model objects including explicit input limits and canonical names.</Criterion>
+          <Criterion>Tests prove patch-provider openai compatibility without making it the canonical completion/list name.</Criterion>
+          <Criterion>Tests continue proving conservative first-apply and reapply behavior with unrelated provider fields preserved.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/patch-provider.test.ts src/commands/preset.test.ts src/commands/completion.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Keep GRACE graph and verification projections truthful for the changed public behavior.</Title>
+        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Inspect owning graph and verification entries and update them only if module purpose, paths, dependencies, or verification contracts changed materially.</Criterion>
+          <Criterion>No semantic anchors are renamed or removed.</Criterion>
+          <Criterion>The active change spec and plan remain valid GRACE 4 artifacts.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Run targeted and repository-wide verification.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Targeted patch-provider, preset, completion, config validation, and launch tests pass.</Criterion>
+          <Criterion>bun run check and bun run build pass with fresh output.</Criterion>
+          <Criterion>The final diff contains only approved source, test, documentation, and GRACE artifact changes.</Criterion>
+          <Criterion>Any external GRACE status tooling failure unrelated to repository content is reported explicitly.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/patch-provider.test.ts src/commands/preset.test.ts src/commands/completion.test.ts src/commands/config-validate.test.ts src/commands/launch.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-005>
+    </ImplementationPlan>
+  </C-CODEX-PRESET-LIMITS>
+</GraceChangePlan>
