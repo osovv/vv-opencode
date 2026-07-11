@@ -154,13 +154,14 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | Area | What you get |
 |---|---|
 | **Plugins** | A curated set of OpenCode plugins that make agentic work more structured, portable, and safer without hand-wiring each piece yourself |
-| **Agent System** | A default controller that picks the right path: direct changes for small work, investigation before unclear fixes, and implementer/reviewer loops for risky changes |
+| **Agent System** | A default controller (vv-controller) that follows the concrete work policy selected by the orchestration profile |
 | **Skills** | Guided workflows for turning ideas into specs, specs into plans, plans into execution, reviews into findings, and long sessions into reusable memory |
 | **Spec-to-Code Pipeline** | A repeatable path from request → spec → plan → implementation → review, so agents do not silently skip requirements or acceptance criteria |
 | **One-Click Setup** | Recreate the same opinionated workflow on a new machine or project with `vvoc install` / `vvoc sync` |
-| **CLI Tooling** | Operate and diagnose the setup from one CLI: install, sync, launch, status, doctor, roles, presets, plugin toggles, completion, and upgrade |
+| **CLI Tooling** | Operate and diagnose the setup from one CLI: install, sync, launch, status, doctor, roles, presets, orchestration profiles, plugin toggles, completion, and upgrade |
 | **Long-Run Safety** | Guardian keeps safe long/AFK runs moving by auto-approving routine low-risk permissions, while risky actions stay in OpenCode's manual approval flow; secrets redaction reduces accidental leakage |
 | **Model Roles** | Put roles like `vv-role:smart` or `vv-role:fast` in shared agents and skills instead of hardcoded model IDs, then choose provider/model mappings per environment |
+| **Orchestration Profiles** | Select a concrete work policy — single-session, balanced, or orchestrated — to control how vv-controller delegates. Built-in presets pick a sensible default and status reports the effective profile. |
 | **Workflow Tracking** | Replace free-form multi-agent chaos with explicit work items, bounded review rounds, reviewer result collection, and hard stops when more context is needed |
 
 ---
@@ -173,7 +174,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **ModelRolesPlugin** | Use semantic model roles instead of hardcoded model IDs in OpenCode agents, subagents, and command configs — e.g. `vv-role:smart`, `vv-role:fast` — then map those roles per machine or project. |
 | **GuardianPlugin** | Keep long or AFK agent runs moving by auto-approving routine low-risk permission requests. If something looks risky, Guardian does not auto-approve it and leaves the decision to OpenCode's normal manual approval flow. |
 | **HashlineEditPlugin** | Make agent edits safer by tying changes to fresh `read` output, reducing wrong-line and stale-context edits. |
-| **SystemContextInjectionPlugin** | Give primary agents the vvoc workflow rules and skill discovery automatically, while keeping subagents focused and avoiding prompt pollution. |
+| **SystemContextInjectionPlugin** | Inject universal primary guidance plus one startup-resolved orchestration policy into vv-controller, with skill discovery and subagent-only explore worker prompts. |
 | **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
@@ -211,12 +212,65 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 | `vvoc guardian config` | Print or write guardian section |
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
+| `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
 | `vvoc patch-provider stepfun-ai\|zai\|codex` | Patch an OpenCode provider; `codex` adds subscription-safe OpenAI aliases and also accepts `openai` for compatibility |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |
 
 ---
+---
+
+## Orchestration Profiles
+
+Three concrete policies control how vv-controller delegates work at runtime:
+
+- `single-session`: vv-controller performs exploration, investigation, planning, implementation,
+  and verification directly. Independent reviewer subagents remain available when the user
+  explicitly requests review or when a materially risky completed change benefits from independent
+  cross-model evaluation.
+- `balanced`: vv-controller keeps architecture, critical reading, and final synthesis in the
+  primary session and may selectively delegate bounded search, investigation, mechanical
+  implementation, or review when that is the lightest safe route. Delegation is optional, not
+  mechanically mandatory.
+- `orchestrated`: vv-controller uses the full tracked implementer/reviewer workflow with
+  explicit work items, required reviewers, bounded rounds, and hard stops.
+
+Pick a profile explicitly or let a built-in preset select one:
+
+```bash
+vvoc orchestration show --scope effective
+vvoc orchestration set single-session --scope project
+```
+
+Built-in presets declare an orchestration mapping:
+
+| Preset | Profile |
+|---|---|
+| `vv-codex` | single-session |
+| `vv-osovv` | single-session |
+| `vv-osovv-cheap` | single-session |
+| `vv-zai` | balanced |
+| `vv-minimax` | balanced |
+| `vv-deepseek` | balanced |
+
+Applying a built-in preset changes both model roles and the root orchestration profile
+atomically. A custom user-defined preset without an orchestration section preserves the current
+root profile. `vvoc status` reports the profile resolved from the selected vvoc source; effective
+status with no config files reports `balanced`.
+
+### Prompt-only first version
+
+Profiles are enforced through the concrete policy injected into vv-controller at startup —
+the model only receives its active work instructions and does not see inactive profile alternatives.
+The first version does not disable tools, change permissions, or block subagent types; the policy
+is prompt-driven and asynchronous vv-execute classic mode remains available through that skill's
+explicit inline/classic selection.
+
+### Restart requirement
+
+Config changes to the orchestration profile take effect after an OpenCode restart. Runtime plugins
+resolve the profile once from the startup vvoc config snapshot and do not live-reload.
 
 ## Model Roles & Presets
 
@@ -315,7 +369,7 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 | Agent | When it helps |
 |---|---|
-| `vv-controller` | Default primary agent that routes small changes, investigations, reviews, and larger feature work through the right workflow |
+| `vv-controller` | Primary agent that follows the concrete work policy selected for the session by the orchestration profile |
 | `enhancer` | Improves rough requests before execution when a clearer prompt would help |
 | `vv-implementer` | Applies a focused approved change and verifies it before reporting completion |
 | `vv-spec-reviewer` | Checks whether implementation matches the requested spec and acceptance criteria |
@@ -333,7 +387,7 @@ Six workflow skills are scaffolded alongside agents:
 |---|---|---|
 | `vv-spec` | You have a feature or creative request and no agreed contract yet | A guided interview, recommended options, and a saved spec in `.vvoc/specs/YYYY-MM-DD-<slug>/spec.xml` |
 | `vv-plan` | A spec is approved and ready to implement | A task-level implementation plan with file targets, contracts, dependencies, and acceptance criteria |
-| `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification and applied spec/plan archival |
+| `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification, explicit inline-or-classic mode choice, and applied spec/plan archival |
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
 | `vv-reflect` | A long development, debugging, ops, or investigation session produced reusable knowledge | Durable notes in existing docs or `.vvoc/lessons` / `.vvoc/runbooks` for future agents |
 | `vv-handoff` | You are ending a session and want the visible context preserved for a future session | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, without running new checks or collecting fresh context |
