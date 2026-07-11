@@ -1,0 +1,289 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-PRESET-ORCHESTRATION-PROFILES>
+    <IntentSummary>Add a shared orchestration profile domain, extend canonical schema v3 and presets without breaking old documents, resolve one startup policy for vv-controller prompt plugins, neutralize the managed base prompt, expose scoped CLI and status diagnostics, document the behavior, and synchronize durable graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-VVOC-PRESET-REGISTRY</Value>
+        <Value>M-CLI-PRESET</Value>
+        <Value>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value>
+        <Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>M-CLI-MANAGED-AGENTS</Value>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>M-CLI-COMMANDS</Value>
+        <Value>M-CLI-COMPLETION</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>src/lib/vvoc-preset-registry.ts</Value>
+        <Value>src/plugins/system-context-injection/index.ts</Value>
+        <Value>src/plugins/workflow/index.ts</Value>
+        <Value>templates/agents/vv-controller.md</Value>
+        <Value>templates/skills/vv-execute/SKILL.md</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>README.md</Value>
+      </MustExist>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-ORCHESTRATION-PROFILES</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-VVOC-PRESET-REGISTRY</Module>
+        <Module>M-CLI-PRESET</Module>
+        <Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module>
+        <Module>M-PLUGIN-WORKFLOW</Module>
+        <Module>M-CLI-MANAGED-AGENTS</Module>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+        <Module>M-CLI-ORCHESTRATION</Module>
+        <Module>M-CLI-COMMANDS</Module>
+        <Module>M-CLI-COMPLETION</Module>
+      </MustVerify>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>Canonical vvoc schema v3 has no orchestration section, built-in presets only control model roles, and missing configuration resolves through existing global, project, environment, and default layers.</Note>
+        <Note>SystemContextInjectionPlugin and WorkflowPlugin currently inject broad guidance that is not selected by a preset-configured concrete work policy.</Note>
+        <Note>The current graph and verification projections do not contain M-ORCHESTRATION-PROFILES, M-CLI-ORCHESTRATION, or matching verification anchors.</Note>
+      </Baseline>
+      <Target>
+        <Note>One internal resolver owns stable profile names, backward-compatible balanced fallback, strict parsing, capabilities, and exact concrete policy strings without depending on VvocConfig.</Note>
+        <Note>Prompt-producing plugins resolve the selected profile once from the startup snapshot and inject only compatible vv-controller guidance without changing tools, permissions, workflow state, or persistence.</Note>
+        <Note>Public CLI, schema, presets, status, completions, README, graph, and verification artifacts remain synchronized.</Note>
+      </Target>
+      <Warnings>
+        <Warning>The active C-CODEX-PRESET-LIMITS bundle overlaps src/lib/vvoc-config.ts, preset behavior and tests, completion tests, README.md, .grace/graph/main.xml, and .grace/verification/main.xml. Reconcile or archive that approved change before executing this plan so baseline and observed write scopes are not stale.</Warning>
+      </Warnings>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-ORCHESTRATION-PROFILES />
+        <M-CLI-CONFIG />
+        <M-VVOC-PRESET-REGISTRY />
+        <M-CLI-PRESET />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-PLUGIN-WORKFLOW />
+        <M-CLI-MANAGED-AGENTS />
+        <M-CLI-MANAGED-SKILLS />
+        <M-CLI-ORCHESTRATION />
+        <M-CLI-COMMANDS />
+        <M-CLI-COMPLETION />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-ORCHESTRATION-PROFILES />
+        <V-M-CLI-CONFIG />
+        <V-M-VVOC-PRESET-REGISTRY />
+        <V-M-CLI-PRESET />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-PLUGIN-WORKFLOW />
+        <V-M-CLI-MANAGED-AGENTS />
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-CLI-ORCHESTRATION />
+        <V-M-CLI-COMMANDS />
+        <V-M-CLI-COMPLETION />
+      </VerificationAnchors>
+      <ContextArtifact>.grace/changes/active/C-PRESET-ORCHESTRATION-PROFILES/spec.xml</ContextArtifact>
+      <ContextArtifact>.grace/changes/active/C-PRESET-ORCHESTRATION-PROFILES/design-context.xml</ContextArtifact>
+      <GraphDocument>.grace/graph/index.xml</GraphDocument>
+      <GraphDocument>.grace/graph/main.xml</GraphDocument>
+      <VerificationDocument>.grace/verification/index.xml</VerificationDocument>
+      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/orchestration.ts</File>
+      <File>src/lib/orchestration.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>src/lib/vvoc-preset-registry.ts</File>
+      <File>src/commands/preset.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/commands/config-validate.test.ts</File>
+      <File>src/commands/preset.test.ts</File>
+      <File>src/plugins/system-context-injection/index.ts</File>
+      <File>src/plugins/system-context-injection.test.ts</File>
+      <File>src/plugins/workflow/index.ts</File>
+      <File>src/plugins/workflow/system-instruction.md</File>
+      <File>src/plugins/workflow.test.ts</File>
+      <File>templates/agents/vv-controller.md</File>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>src/lib/managed-agents.test.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/commands/orchestration.ts</File>
+      <File>src/commands/orchestration.test.ts</File>
+      <File>src/cli.ts</File>
+      <File>src/commands/completion.ts</File>
+      <File>src/commands/completion.test.ts</File>
+      <File>src/commands/status.ts</File>
+      <File>src/commands/status.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-PRESET-ORCHESTRATION-PROFILES/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Create the orchestration profile domain model and focused tests.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Stable names are exactly single-session, balanced, and orchestrated in that order.</Criterion>
+          <Criterion>Missing orchestration resolves to balanced, while blank and unknown explicit values fail with all allowed choices.</Criterion>
+          <Criterion>Each resolved controller policy contains only active-profile instructions; single-session permits only the documented reviewer exception, balanced is selective, and orchestrated is tracked.</Criterion>
+          <Criterion>MODULE_CONTRACT, MODULE_MAP, CHANGE_SUMMARY, and focused contracts are present and truthful.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/orchestration.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Extend strict schema v3 and canonical configuration with backward-compatible orchestration fields.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Root and preset orchestration.profile accept only supported values and remain optional in schema v3.</Criterion>
+          <Criterion>Old valid v3 documents resolve to balanced, fresh rendering writes balanced, and built-in presets render declared profiles.</Criterion>
+          <Criterion>Invalid root and preset values report precise JSON paths; sync preserves the selected root and custom preset fields while refreshing managed preset profiles.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts src/commands/config-validate.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Apply preset role and orchestration changes atomically.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Every built-in preset has the approved profile mapping.</Criterion>
+          <Criterion>Applying a preset validates all roles and profile data before one vvoc.json write and never rewrites OpenCode config.</Criterion>
+          <Criterion>Custom presets without orchestration preserve the current profile, profile-only changes still write, invalid data leaves original bytes unchanged, and output reports actions and restart guidance.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/preset.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Inject one concrete vv-controller system context from the startup snapshot.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-controller receives universal guidance plus exactly one selected controller policy; build and custom primaries receive universal guidance only.</Criterion>
+          <Criterion>single-session excludes proactive working-subagent and tracked-loop instructions while retaining the concise no-working-subagent rule and reviewer exception.</Criterion>
+          <Criterion>Explore guidance and known-subagent exclusion remain intact, repeated hooks do not duplicate contexts, and post-construction config changes do not change policy.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/system-context-injection.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Select profile-compatible WorkflowPlugin guidance without changing enforcement.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>single-session receives concise tracked review-only mechanics, balanced receives optional bounded delegation guidance, and orchestrated retains the full tracked protocol.</Criterion>
+          <Criterion>Review-only failures remain findings and never route to implementers.</Criterion>
+          <Criterion>Tool registration, access control, result parsing, repair, persistence, transitions, hard stops, and round limits remain behaviorally unchanged and restricted to vv-controller.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Make the managed vv-controller prompt profile-neutral.</Title>
+        <DependsOn>T-004, T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The template preserves universal findings-first, working-state, assumption, reroute, editing, skill, large-feature gate, hard-stop, artifact, and reporting guidance.</Criterion>
+          <Criterion>The template defers concrete work behavior to the selected system policy and does not prescribe ordinary explore, investigator, implementer, change_with_review, implementation work-item, or reviewer-loop routes.</Criterion>
+          <Criterion>vv-review stays findings-only, vv-execute stays specialized, and managed prompt loading remains valid.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Add managed skill visibility regression coverage.</Title>
+        <DependsOn>T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-execute discovery metadata hides inline, classic, subagent-driven, and current-session alternatives.</Criterion>
+          <Criterion>The loaded vv-execute body still requires explicit inline or classic choice before mutation.</Criterion>
+          <Criterion>The loaded vv-review body still opens review_only work items, launches only reviewers, treats FAIL as findings, and stops before fixes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Add scoped orchestration show and set commands.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>show defaults to effective scope, reports profile and source, resolves missing orchestration to balanced, and never writes.</Criterion>
+          <Criterion>set accepts only supported values and global or project scope, preserves unrelated config, rejects invalid existing files without byte changes, and bootstraps canonical v3 when absent.</Criterion>
+          <Criterion>Unchanged explicit profiles are kept without rewrite and changed output reports path and restart guidance.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/orchestration.test.ts</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Register the orchestration command and shell completions.</Title>
+        <DependsOn>T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vvoc orchestration is a top-level command.</Criterion>
+          <Criterion>Bash, zsh, and fish suggest show and set, then all three profile values after orchestration set.</Criterion>
+          <Criterion>Top-level completion expectations remain synchronized with src/cli.ts.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/completion.test.ts src/commands/orchestration.test.ts</Command>
+        </Verification>
+      </T-009>
+      <T-010>
+        <Title>Report the resolved orchestration profile in installation status.</Title>
+        <DependsOn>T-001, T-002, T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Global, project, and default status reports print the profile from the selected source.</Criterion>
+          <Criterion>No-file effective status reports balanced and default source.</Criterion>
+          <Criterion>Invalid explicit profiles remain parse problems without mutation, and all existing diagnostic output remains intact.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/status.test.ts src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-010>
+      <T-011>
+        <Title>Document public orchestration behavior.</Title>
+        <DependsOn>T-003, T-004, T-005, T-007, T-008, T-010</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents commands, profile values, built-in mapping, partial custom preset behavior, source display, and restart requirements exactly as implemented.</Criterion>
+          <Criterion>README states that profiles are prompt-driven and do not disable tools, distinguishes reviewer subagents from delegated working context, preserves vv-review findings-only behavior, and explains vv-execute explicit choice.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run build</Command>
+        </Verification>
+      </T-011>
+      <T-012>
+        <Title>Synchronize GRACE module ownership and orchestration data flows.</Title>
+        <DependsOn>T-003, T-004, T-005, T-006, T-007, T-009, T-010</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-ORCHESTRATION-PROFILES and M-CLI-ORCHESTRATION appear in index ownership, routed direct anchors, module anchors, and modules.</Criterion>
+          <Criterion>Every changed source and template file has accurate ownership and dependencies include M-ORCHESTRATION-PROFILES where required.</Criterion>
+          <Criterion>Preset switch, system context, workflow guidance, and new orchestration profile data flows describe current behavior truthfully.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+        </Verification>
+      </T-012>
+      <T-013>
+        <Title>Synchronize GRACE verification and run final release-grade gates.</Title>
+        <DependsOn>T-002, T-003, T-004, T-005, T-006, T-007, T-008, T-009, T-010, T-011, T-012</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>New verification anchors appear in index ownership, routed direct anchors, verification anchors, and module verification.</Criterion>
+          <Criterion>Critical flow verification covers backward compatibility, atomic writes, source resolution, prompt isolation, and fail-closed explicit values.</Criterion>
+          <Criterion>All targeted tests, GRACE lint and status, release consistency, repository check, build, and package checks pass with fresh output.</Criterion>
+          <Criterion>The final diff remains within DurableScope and ObservedWriteScope after overlap reconciliation.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/orchestration.test.ts src/lib/opencode.test.ts src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/commands/config-validate.test.ts src/commands/preset.test.ts src/commands/orchestration.test.ts src/commands/completion.test.ts src/commands/status.test.ts src/plugins/system-context-injection.test.ts src/plugins/workflow.test.ts</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+          <Command>bun run release:check</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+        </Verification>
+      </T-013>
+    </ImplementationPlan>
+  </C-PRESET-ORCHESTRATION-PROFILES>
+</GraceChangePlan>

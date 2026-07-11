@@ -1,0 +1,24 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-PRESET-ORCHESTRATION-PROFILES</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Preset model choices and coordination strategy are related deployment decisions, but runtime model inference would be brittle. One managed vv-controller should therefore receive one concrete work policy resolved from the startup configuration snapshot, while its durable base prompt retains only universal invariants. This minimizes context pollution and preserves backward-compatible configuration behavior.</Rationale>
+  <Alternatives>
+    <Alternative>Hard-coded model or provider matching was rejected because aliases and capability assumptions change and would make behavior difficult to predict.</Alternative>
+    <Alternative>Separate profile-specific primary agents were rejected because they duplicate prompts, registration state, and workflow access rules.</Alternative>
+    <Alternative>Describing every profile and naming the active one was rejected because inactive alternatives still consume context and invite reinterpretation.</Alternative>
+    <Alternative>Tool disabling, permissions, task filtering, and session override state were rejected for the first version because explicit vv-execute classic mode must remain available and prompt behavior should be evaluated first.</Alternative>
+    <Alternative>A required schema v4 section was rejected because optional schema v3 fields provide the needed behavior without forced migration.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether observed policy violations justify tool or task enforcement in a future version.</Decision>
+    <Decision>Whether profile-specific cost, latency, token, or cache telemetry is useful for preset tuning.</Decision>
+    <Decision>Whether built-in profile mappings should change as managed model behavior evolves.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A high-capability single-session preset causes vv-controller to explore, investigate, plan, implement, and verify directly without receiving inactive implementation-loop instructions.</Scenario>
+    <Scenario>An explicit or materially valuable review launches independent reviewers, after which vv-controller validates findings and either fixes them directly during active implementation or reports findings only for review-only requests.</Scenario>
+    <Scenario>An explicit vv-execute invocation still presents inline and classic choices, and the selected skill mode governs that plan execution without persistent runtime override state.</Scenario>
+    <Scenario>An existing valid schema v3 configuration without orchestration remains valid and resolves to balanced until a preset or scoped set command writes an explicit profile.</Scenario>
+    <Scenario>A custom preset that changes model roles but omits orchestration preserves the current root profile and reports that result.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

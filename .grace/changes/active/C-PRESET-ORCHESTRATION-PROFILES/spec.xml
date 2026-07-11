@@ -1,0 +1,65 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-PRESET-ORCHESTRATION-PROFILES>
+    <Summary>Add backward-compatible preset orchestration profiles that resolve one concrete vv-controller work policy from the startup vvoc configuration snapshot.</Summary>
+    <Problem>The managed vv-controller currently receives broad orchestration guidance regardless of the selected model preset. This exposes inactive delegation strategies in ordinary context, prevents presets from expressing an intended operating profile, and provides no scoped CLI or status diagnostics for the effective policy.</Problem>
+    <Goals>
+      <Goal>Add single-session, balanced, and orchestrated profile values to optional root and preset orchestration sections in strict schema v3.</Goal>
+      <Goal>Resolve a missing root orchestration section to balanced while rejecting invalid explicit values without fallback.</Goal>
+      <Goal>Make built-in presets declare the approved profile mapping and apply declared role and profile changes atomically.</Goal>
+      <Goal>Resolve the effective profile once from the startup configuration snapshot and inject only the selected concrete vv-controller and workflow guidance.</Goal>
+      <Goal>Keep the managed vv-controller base prompt profile-neutral while preserving explicit vv-review and vv-execute semantics.</Goal>
+      <Goal>Add scoped orchestration show and set commands, shell completions, status diagnostics, public documentation, and truthful GRACE projections.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Infer orchestration from provider, model ID, model metadata, reasoning effort, context size, or the active TUI model.</NonGoal>
+      <NonGoal>Live-reload orchestration configuration or add session-scoped override state.</NonGoal>
+      <NonGoal>Disable tools, change permissions, filter subagent types, or enforce profiles outside model-visible prompts.</NonGoal>
+      <NonGoal>Add profile-specific primary agents, a public orchestration plugin, granular delegation flags, or schema v4.</NonGoal>
+      <NonGoal>Modify Guardian permission behavior or redesign the tracked workflow result protocol.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>ORCHESTRATION_PROFILE_NAMES contains exactly single-session, balanced, and orchestrated in stable order, and the shared resolver returns balanced only when orchestration is absent.</Criterion>
+      <Criterion>Runtime and published schema v3 accept optional root and preset orchestration.profile fields with only the three supported values while preserving old valid v3 documents.</Criterion>
+      <Criterion>Fresh canonical configuration writes balanced and every built-in preset declares the approved mapping: vv-openai, vv-osovv, and vv-osovv-cheap use single-session; vv-zai, vv-minimax, and vv-deepseek use balanced.</Criterion>
+      <Criterion>Preset application validates all declared roles and orchestration before one conservative write, applies declared fields atomically, and preserves the current root profile when a custom preset omits orchestration.</Criterion>
+      <Criterion>vv-controller receives universal guidance plus exactly one concrete policy selected from the startup snapshot; other primary agents receive no orchestration policy and known subagents remain excluded.</Criterion>
+      <Criterion>single-session keeps exploration, investigation, planning, implementation, and verification in the current session while retaining the documented independent reviewer exception.</Criterion>
+      <Criterion>balanced permits bounded selective delegation without mandatory routes or automatic loops, and orchestrated preserves the full tracked workflow protocol.</Criterion>
+      <Criterion>The managed controller prompt contains only universal invariants and does not enumerate inactive profile routes or implementation loops.</Criterion>
+      <Criterion>vv-review remains reviewer-based and findings-only, while vv-execute retains explicit inline and classic selection after skill loading without exposing those alternatives in discovery metadata.</Criterion>
+      <Criterion>vvoc orchestration show and set follow existing read and write scope rules, preserve unrelated configuration, report source and restart guidance, and shell completions expose all commands and values.</Criterion>
+      <Criterion>Status reports the profile resolved from the selected vvoc source, including balanced for the effective default, without mutating invalid configuration.</Criterion>
+      <Criterion>README and GRACE graph and verification projections describe the implemented public behavior, module ownership, dependencies, data flows, tests, and release gates truthfully.</Criterion>
+      <Criterion>All targeted tests, GRACE lint and status, release consistency, repository check, build, and package surface checks pass with fresh output.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-ORCHESTRATION-PROFILES />
+      <M-CLI-CONFIG />
+      <M-VVOC-PRESET-REGISTRY />
+      <M-CLI-PRESET />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-PLUGIN-WORKFLOW />
+      <M-CLI-MANAGED-AGENTS />
+      <M-CLI-MANAGED-SKILLS />
+      <M-CLI-ORCHESTRATION />
+      <M-CLI-COMMANDS />
+      <M-CLI-COMPLETION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/orchestration.test.ts src/lib/opencode.test.ts src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/commands/config-validate.test.ts src/commands/preset.test.ts src/commands/orchestration.test.ts src/commands/completion.test.ts src/commands/status.test.ts src/plugins/system-context-injection.test.ts src/plugins/workflow.test.ts</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedEvidence>Fresh output proves backward-compatible schema behavior, fail-closed explicit values, atomic preset writes, source-aware profile resolution, concrete prompt isolation, preserved tracked workflow mechanics, public CLI behavior, and valid package and GRACE state.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The approved vvoc spec and plan in .vvoc/specs/2026-07-11-preset-orchestration-profiles accurately capture the requested normative behavior and implementation ordering used to prepare this GRACE draft.</Assumption>
+      <Assumption>Prompt-only orchestration is sufficient for the first version; harness enforcement remains deferred until behavior provides contrary evidence.</Assumption>
+      <Assumption>The existing startup vvoc configuration snapshot is the correct lifecycle boundary, so changed profiles require an OpenCode restart.</Assumption>
+      <Assumption>Independent reviewer subagents remain valuable in single-session mode under explicit or materially risky review conditions.</Assumption>
+    </Assumptions>
+  </C-PRESET-ORCHESTRATION-PROFILES>
+</GraceChangeSpec>
