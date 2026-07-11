@@ -1,10 +1,10 @@
 // FILE: src/plugins/workflow/index.ts
 // VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Register workflow work-item tools, tracked task launch/result hooks, recovery excerpt propagation, and primary-session workflow guidance injection.
-//   SCOPE: work_item_open/list/close tool registration, explicit tracked launch validation on task tool, OpenCode task-result wrapper normalization, one-shot resumable result repair, tracked result parsing/round aggregation with bounded excerpts, implementation-mode round-limit gating, and chat.message guidance injection with subagent filtering.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
-//   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
+//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance.
+//   SCOPE: work_item_open/list/close registration, tracked launch validation, result normalization and repair, round aggregation with bounded excerpts, implementation round limits, persistence, and profile-selected chat.message guidance.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
+//   LINKS: [M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -26,6 +26,7 @@
 //   LAST_CHANGE: [v0.2.0 - Used transition-policy checks so fresh work items can start with reviewer subagents for review-only workflows.]
 //   LAST_CHANGE: [v0.1.1 - Excluded helper primary agents like enhancer from workflow guidance injection because they cannot participate in tracked workflow tooling.]
 //   LAST_CHANGE: [v0.1.0 - Added workflow plugin integration with tool wiring, tracked launch/result hooks, loop-gate enforcement, and primary-session guidance injection.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Selected reviewer-only, selective, or full tracked guidance from the startup orchestration policy.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -63,6 +64,10 @@ import {
 } from "./tooling.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
 import { loadVvocConfig } from "../../lib/config-layers.js";
+import {
+  resolveOrchestrationPolicy,
+  type ResolvedOrchestrationPolicy,
+} from "../../lib/orchestration.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import {
   deleteWorkflowSessionDir,
@@ -77,7 +82,42 @@ const WORK_ITEM_MISSING_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_a6f582092f05__
 const INVALID_NEXT_AGENT_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_513fa2de603d__";
 const WORKFLOW_CONTROLLER_AGENT = "vv-controller";
 
-const WORKFLOW_SYSTEM_INSTRUCTION = workflowSystemInstructionTemplate.trim();
+const REVIEW_ONLY_WORKFLOW_SYSTEM_INSTRUCTION = `
+<workflow_protocol>
+Tracked review-only mechanics are available when independent evaluation is explicitly requested or
+materially useful. Open one work item with mode "review_only" and the required reviewer roles,
+launch only reviewers with the returned VVOC_WORK_ITEM_ID, and collect the complete review round.
+Use one review round by default and personally validate every finding. Reviewer FAIL is a completed
+finding result, not a route to vv-implementer. For an explicit review-only request, report findings
+and stop before fixes; during active implementation, apply confirmed fixes directly and run fresh
+verification. Treat BLOCKED and NEEDS_CONTEXT as hard stops and close the work item when ready.
+</workflow_protocol>
+`.trim();
+
+const SELECTIVE_WORKFLOW_SYSTEM_INSTRUCTION = `
+<workflow_protocol>
+Selective delegation is available but never mandatory. Keep critical reasoning and final synthesis
+in vv-controller; use bounded explore for search, investigator for an isolated failure, a mechanical
+vv-implementer for a settled task, or reviewers for independent evaluation only when useful. Open
+the matching work item with work_item_open, explicit mode, and requiredReviewers before tracked
+implementer or reviewer launches, then preserve its VVOC_WORK_ITEM_ID. Do not create automatic
+implementation or reviewer loops. Review-only FAIL
+results are findings and do not route to an implementer. Treat BLOCKED and NEEDS_CONTEXT as hard
+stops, validate delegated results yourself, run fresh verification, and close completed work items.
+</workflow_protocol>
+`.trim();
+
+/** Returns the exact workflow instruction compatible with one resolved policy. */
+function getWorkflowSystemInstruction(policy: ResolvedOrchestrationPolicy): string {
+  switch (policy.workflowGuidance) {
+    case "review-only":
+      return REVIEW_ONLY_WORKFLOW_SYSTEM_INSTRUCTION;
+    case "selective":
+      return SELECTIVE_WORKFLOW_SYSTEM_INSTRUCTION;
+    case "tracked":
+      return workflowSystemInstructionTemplate.trim();
+  }
+}
 
 function isTrackedSubagent(value: unknown): value is TrackedAgentName {
   return typeof value === "string" && TRACKED_SUBAGENT_SET.has(value);
@@ -231,6 +271,9 @@ function createHardStopMessage(options: {
 export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   const vvoc = await loadVvocConfig({ cwd: directory });
   if (!isVvocPluginEnabled(vvoc.config, "workflow")) return {};
+  const workflowSystemInstruction = getWorkflowSystemInstruction(
+    resolveOrchestrationPolicy(vvoc.config),
+  );
 
   // START_BLOCK_PERSISTENCE_SETUP
   // Each session (main or subagent) gets its own isolated store.
@@ -686,7 +729,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
 
       output.message.system = appendSystemInstruction(
         output.message.system,
-        WORKFLOW_SYSTEM_INSTRUCTION,
+        workflowSystemInstruction,
       );
     },
     event: async (input) => {

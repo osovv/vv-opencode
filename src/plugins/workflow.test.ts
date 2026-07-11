@@ -2,9 +2,9 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol parsing, result excerpts, repair guidance, resumable task wrapper unwrapping, explicit work-item open contract, mode-aware launch validation, collect-all review-round aggregation, tooling responses, plugin hooks, persistence round-trips, and primary-only guidance injection.
-//   DEPENDS: [bun:test, node:fs, node:path, src/lib/config-layers.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
-//   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-WORKFLOW-PERSISTENCE]
+//   SCOPE: Protocol parsing, result excerpts, repair guidance, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
+//   DEPENDS: [bun:test, node:fs, node:path, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
+//   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -38,12 +38,15 @@
 //   LAST_CHANGE: [v0.1.2 - Added coverage for duplicate top-block field rejection and missing transition actor rejection.]
 //   LAST_CHANGE: [v0.1.1 - Added strict top-block, case-sensitive status, deterministic transition guard, sticky hard-stop, and includeClosed coverage.]
 //   LAST_CHANGE: [v0.1.0 - Added shared workflow core coverage for protocol, state, transitions, and tooling modules.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added reviewer-only, selective, and tracked guidance selection coverage without changing enforcement tests.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
+import type { OrchestrationProfile } from "../lib/orchestration.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { WorkflowPlugin } from "./workflow/index.js";
 import {
   deleteWorkflowSessionDir,
@@ -672,7 +675,20 @@ type WorkflowPluginHarness = {
   logs: string[];
 };
 
-function createWorkflowPluginHarness(): Promise<WorkflowPluginHarness> {
+function writeWorkflowProfile(profile: OrchestrationProfile): void {
+  const configHome = process.env.XDG_CONFIG_HOME;
+  if (!configHome) throw new Error("XDG_CONFIG_HOME required for workflow test");
+  const config = createDefaultVvocConfig();
+  config.orchestration = { profile };
+  const configDir = join(configHome, "vvoc");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "vvoc.json"), renderVvocConfig(config), "utf8");
+}
+
+function createWorkflowPluginHarness(
+  profile?: OrchestrationProfile,
+): Promise<WorkflowPluginHarness> {
+  if (profile) writeWorkflowProfile(profile);
   const logs: string[] = [];
   return WorkflowPlugin({
     client: {
@@ -698,6 +714,7 @@ describe("workflow plugin integration", () => {
   beforeEach(async () => {
     resetVvocConfigForTests();
     process.env.XDG_CONFIG_HOME = `/tmp/vvoc-workflow-empty-config-${process.pid}`;
+    rmSync(process.env.XDG_CONFIG_HOME, { recursive: true, force: true });
 
     for (const sessionID of [
       "session-review-only-double-fail",
@@ -716,6 +733,7 @@ describe("workflow plugin integration", () => {
 
   afterEach(async () => {
     resetVvocConfigForTests();
+    rmSync(`/tmp/vvoc-workflow-empty-config-${process.pid}`, { recursive: true, force: true });
 
     if (previousConfigHome === undefined) {
       delete process.env.XDG_CONFIG_HOME;
@@ -962,8 +980,54 @@ describe("workflow plugin integration", () => {
       message: { agent: string; system?: string };
     };
     await plugin["chat.message"]?.({} as never, output as never);
-    expect(output.message.system).toContain("work_item_open");
-    expect(output.message.system).toContain("requiredReviewers");
+    const normalized = (output.message.system ?? "").replace(/\s+/g, " ");
+    expect(normalized).toContain("work_item_open");
+    expect(normalized).toContain("Selective delegation is available but never mandatory");
+    expect(normalized).toContain("bounded explore");
+    expect(normalized).toContain("mechanical vv-implementer");
+    expect(normalized).not.toContain("Implementation loop:");
+
+    const deniedOutput = { message: { agent: "build", system: "base" } } as {
+      message: { agent: string; system?: string };
+    };
+    await plugin["chat.message"]?.({} as never, deniedOutput as never);
+    expect(deniedOutput.message.system).toBe("base");
+  });
+
+  test("single-session guidance exposes review-only mechanics without implementation loops", async () => {
+    const { plugin } = await createWorkflowPluginHarness("single-session");
+    const output = { message: { agent: "vv-controller", system: "base" } } as {
+      message: { agent: string; system?: string };
+    };
+
+    await plugin["chat.message"]?.({} as never, output as never);
+    const systemText = output.message.system ?? "";
+    const normalized = systemText.replace(/\s+/g, " ");
+
+    expect(normalized).toContain('mode "review_only"');
+    expect(normalized).toContain("Use one review round by default");
+    expect(normalized).toContain("personally validate every finding");
+    expect(normalized).toContain("Reviewer FAIL is a completed finding result");
+    expect(normalized).toContain("not a route to vv-implementer");
+    expect(normalized).toContain("report findings and stop before fixes");
+    expect(systemText).not.toContain("Implementation loop:");
+    expect(systemText).not.toContain("Selective delegation");
+  });
+
+  test("orchestrated guidance preserves the full tracked protocol source", async () => {
+    const { plugin } = await createWorkflowPluginHarness("orchestrated");
+    const output = { message: { agent: "vv-controller", system: "base" } } as {
+      message: { agent: string; system?: string };
+    };
+
+    await plugin["chat.message"]?.({} as never, output as never);
+    const systemText = output.message.system ?? "";
+
+    expect(systemText).toContain("For tracked subagents");
+    expect(systemText).toContain("Implementation loop:");
+    expect(systemText).toContain("requiredReviewers");
+    expect(systemText).toContain("do not route review-only failures to `vv-implementer`");
+    expect(systemText).not.toContain("Selective delegation is available");
   });
 });
 
