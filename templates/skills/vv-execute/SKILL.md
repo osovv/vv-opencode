@@ -1,6 +1,6 @@
 ---
 name: vv-execute
-description: Use when given a path to a plan.xml — validates the plan, assesses execution complexity, asks the user to choose classic subagent-driven or inline current-session execution, then walks tasks in dependency order with verification and commits
+description: Use when given an approved plan.xml to validate it, choose an execution mode with the user, and execute tasks with verification and commits
 ---
 
 <skill>
