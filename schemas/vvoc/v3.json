@@ -28,6 +28,17 @@
         "minLength": 1
       }
     },
+    "orchestration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile"],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["single-session", "balanced", "orchestrated"]
+        }
+      }
+    },
     "guardian": {
       "type": "object",
       "additionalProperties": false,
@@ -106,6 +117,17 @@
             },
             "minProperties": 1,
             "additionalProperties": { "type": "string", "minLength": 1 }
+          },
+          "orchestration": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["profile"],
+            "properties": {
+              "profile": {
+                "type": "string",
+                "enum": ["single-session", "balanced", "orchestrated"]
+              }
+            }
           }
         }
       }

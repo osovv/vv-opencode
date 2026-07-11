@@ -20,7 +20,7 @@
     <AcceptanceCriteria>
       <Criterion>ORCHESTRATION_PROFILE_NAMES contains exactly single-session, balanced, and orchestrated in stable order, and the shared resolver returns balanced only when orchestration is absent.</Criterion>
       <Criterion>Runtime and published schema v3 accept optional root and preset orchestration.profile fields with only the three supported values while preserving old valid v3 documents.</Criterion>
-      <Criterion>Fresh canonical configuration writes balanced and every built-in preset declares the approved mapping: vv-openai, vv-osovv, and vv-osovv-cheap use single-session; vv-zai, vv-minimax, and vv-deepseek use balanced.</Criterion>
+      <Criterion>Fresh canonical configuration writes balanced and every built-in preset declares the approved mapping: vv-codex, vv-osovv, and vv-osovv-cheap use single-session; vv-zai, vv-minimax, and vv-deepseek use balanced.</Criterion>
       <Criterion>Preset application validates all declared roles and orchestration before one conservative write, applies declared fields atomically, and preserves the current root profile when a custom preset omits orchestration.</Criterion>
       <Criterion>vv-controller receives universal guidance plus exactly one concrete policy selected from the startup snapshot; other primary agents receive no orchestration policy and known subagents remain excluded.</Criterion>
       <Criterion>single-session keeps exploration, investigation, planning, implementation, and verification in the current session while retaining the documented independent reviewer exception.</Criterion>

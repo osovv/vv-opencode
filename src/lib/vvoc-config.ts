@@ -1,10 +1,10 @@
 // FILE: src/lib/vvoc-config.ts
 // VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the canonical vvoc.json document shape, schema versions, normalization rules, and validation helpers.
-//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict current config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
-//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
-//   LINKS: [M-CLI-CONFIG, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
+//   PURPOSE: Define the canonical vvoc.json document shape, schema versions, orchestration normalization, and validation helpers.
+//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in profiles, strict current config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
+//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
+//   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -45,10 +45,16 @@
 //   LAST_CHANGE: [v2.3.3 - Split OpenAI defaults so the default role uses GPT-5.4 while smart keeps the vv-gpt-5.5-xhigh alias.]
 //   LAST_CHANGE: [v2.4.0 - Removed MemoryConfig, memory section, and all memory-related parsing. Memory v2 is a CLI command, not a config section.]
 //   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated default role assignments to reference openai/vv-codex-gpt-5.5-xhigh for the smart role.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added optional schema-v3 orchestration sections with balanced normalization and managed preset profiles.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { BUILTIN_ROLE_NAMES, parseModelSelection, type BuiltInRoleName } from "./model-roles.js";
+import {
+  ORCHESTRATION_PROFILE_NAMES,
+  createOrchestrationConfig,
+  type OrchestrationConfig,
+} from "./orchestration.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
 import {
   BUILTIN_VVOC_PRESET_REGISTRY,
@@ -91,6 +97,7 @@ export type VvocPresetAgents = VvocRoleAssignments;
 export type VvocPreset = {
   description?: string;
   agents: VvocPresetAgents;
+  orchestration?: OrchestrationConfig;
 };
 
 export type VvocPresets = Record<string, VvocPreset>;
@@ -131,6 +138,7 @@ export type VvocConfig = {
   $schema: string;
   version: number;
   roles: Record<string, string>;
+  orchestration?: OrchestrationConfig;
   guardian: GuardianConfig;
   secretsRedaction: SecretsRedactionConfig;
   presets: VvocPresets;
@@ -213,6 +221,15 @@ const ROLE_ASSIGNMENTS_SCHEMA = {
   additionalProperties: { type: "string", minLength: 1 },
 };
 
+const ORCHESTRATION_CONFIG_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["profile"],
+  properties: {
+    profile: { type: "string", enum: [...ORCHESTRATION_PROFILE_NAMES] },
+  },
+};
+
 const VVOC_PRESET_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -220,6 +237,7 @@ const VVOC_PRESET_SCHEMA = {
   properties: {
     description: { type: "string", minLength: 1 },
     agents: ROLE_ASSIGNMENTS_SCHEMA,
+    orchestration: ORCHESTRATION_CONFIG_SCHEMA,
   },
 };
 
@@ -247,6 +265,7 @@ export const VVOC_CONFIG_SCHEMA = {
       minProperties: BUILTIN_ROLE_NAMES.length,
       additionalProperties: { type: "string", minLength: 1 },
     },
+    orchestration: ORCHESTRATION_CONFIG_SCHEMA,
     guardian: GUARDIAN_CONFIG_SCHEMA,
     secretsRedaction: SECRETS_REDACTION_CONFIG_SCHEMA,
     presets: {
@@ -335,6 +354,7 @@ export function createDefaultVvocConfig(): VvocConfig {
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
     roles: createDefaultRoleAssignments(),
+    orchestration: createOrchestrationConfig(),
     guardian: createGuardianConfig(),
     secretsRedaction: createDefaultSecretsRedactionConfig(),
     presets: createDefaultVvocPresets(),
@@ -407,6 +427,7 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
     roles: createDefaultRoleAssignments(config.roles),
+    orchestration: createOrchestrationConfig(config.orchestration),
     guardian: createGuardianConfig(config.guardian),
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
     presets: createVvocPresets(config.presets),
@@ -438,6 +459,9 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
       $schema: VVOC_CONFIG_SCHEMA_URL,
       version: VVOC_CONFIG_VERSION,
       roles: createDefaultRoleAssignments(value.roles as VvocRoleAssignments),
+      orchestration: createOrchestrationConfig(
+        value.orchestration as OrchestrationConfig | undefined,
+      ),
       guardian: createGuardianConfig(value.guardian as GuardianConfig),
       secretsRedaction: createSecretsRedactionConfig(
         value.secretsRedaction as SecretsRedactionConfig,
@@ -505,6 +529,10 @@ function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {
   return compactObject({
     description: normalizeOptionalString(overrides.description),
     agents: createVvocPresetAgents(overrides.agents),
+    orchestration:
+      overrides.orchestration === undefined
+        ? undefined
+        : createOrchestrationConfig(overrides.orchestration),
   });
 }
 

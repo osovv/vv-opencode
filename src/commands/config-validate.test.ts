@@ -2,9 +2,9 @@
 // VERSION: 0.9.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
-//   SCOPE: Strict JSON parse error reporting, canonical schema v3 validation, role/preset semantic validation, and pass/fail terminal output.
+//   SCOPE: Strict JSON parse error reporting, canonical schema v3 validation, orchestration and role/preset validation, and pass/fail terminal output.
 //   DEPENDS: [src/commands/config-validate.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-CONFIG-VALIDATE]
+//   LINKS: [M-CLI-CONFIG-VALIDATE, M-ORCHESTRATION-PROFILES]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -19,6 +19,7 @@
 //   LAST_CHANGE: [v0.9.0 - Replaced legacy v1/v2 acceptance checks with canonical v3 role-based failure coverage including unsupported-version and preset role-path errors.]
 //   LAST_CHANGE: [v0.9.1 - Aligned OpenAI default-role fixtures with GPT-5.4 while smart remains vv-gpt-5.5-xhigh.]
 //   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated smart role fixture reference to openai/vv-codex-gpt-5.5-xhigh.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added root and preset orchestration profile path validation coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -99,6 +100,41 @@ test("validateVvocConfigContent - role-based custom preset assignments pass", ()
 
   expect(result.valid).toBe(true);
   expect(result.errors).toHaveLength(0);
+});
+
+test("validateVvocConfigContent - invalid root orchestration profile reports exact path", () => {
+  const result = validateVvocConfigContent(
+    JSON.stringify({
+      ...createDefaultVvocConfig(),
+      orchestration: { profile: "automatic" },
+    }),
+    FP,
+  );
+
+  expect(result.valid).toBe(false);
+  expect(result.errors.some((error) => error.includes("/orchestration/profile"))).toBe(true);
+});
+
+test("validateVvocConfigContent - invalid preset orchestration profile reports exact path", () => {
+  const config = createDefaultVvocConfig();
+  const result = validateVvocConfigContent(
+    JSON.stringify({
+      ...config,
+      presets: {
+        ...config.presets,
+        custom: {
+          agents: { default: "openai/gpt-5.4" },
+          orchestration: { profile: "automatic" },
+        },
+      },
+    }),
+    FP,
+  );
+
+  expect(result.valid).toBe(false);
+  expect(
+    result.errors.some((error) => error.includes("/presets/custom/orchestration/profile")),
+  ).toBe(true);
 });
 
 test("validateVvocConfigContent - missing required built-in role ids fails with role path", () => {
