@@ -1,10 +1,10 @@
 // FILE: src/commands/status.ts
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Show the current vv-opencode installation status.
-//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable status output for OpenCode and vvoc config.
+//   PURPOSE: Show current vv-opencode installation status including the effective orchestration profile.
+//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable OpenCode, vvoc, orchestration, role, and plugin diagnostics.
 //   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/opencode.ts]
-//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
+//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,6 +17,7 @@
 //   LAST_CHANGE: [v0.6.0 - Printed vvoc config parse diagnostics during status without mutating invalid config files.]
 //   LAST_CHANGE: [v0.5.0 - Added global/project/effective status scopes with selected source reporting.]
 //   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output and unresolved role-reference reporting sourced from installation inspection.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Printed the profile resolved from the selected vvoc source.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -53,6 +54,7 @@ export default defineCommand({
     console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
+    console.log(`Orchestration profile: ${inspection.orchestration.profile ?? "unknown"}`);
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(`OpenCode config exists: ${inspection.opencode.exists ? "yes" : "no"}`);
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);

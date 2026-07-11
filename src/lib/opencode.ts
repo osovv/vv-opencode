@@ -2,9 +2,9 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode config mutation, provider patching, and scoped vvoc.json config files.
-//   SCOPE: Layer-aware path resolution, pinned plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict current vvoc config rendering, and installation inspection.
-//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
-//   LINKS: [M-CLI-CONFIG]
+//   SCOPE: Layer-aware path resolution, pinned plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict vvoc rendering, and source-aware installation inspection including orchestration.
+//   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
+//   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -71,6 +71,7 @@
 //   LAST_CHANGE: [v0.9.2 - Added conservative cleanup of legacy tracked managed agent registrations so sync removes pre-rename implementer/spec-reviewer/code-reviewer entries.]
 //   LAST_CHANGE: [v0.9.1 - Narrowed built-in OpenCode auto-seeding to `agent.explore` so install/init/sync stop rewriting other built-in agent model refs.]
 //   LAST_CHANGE: [v0.9.0 - Added OpenCode agent variant read/write helpers so vvoc can translate provider/model:variant into native agent config fields.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added resolved orchestration profile inspection for selected and default vvoc sources.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -98,6 +99,7 @@ import {
   getBuiltInRoleBindings,
   ROLE_REFERENCE_PREFIX,
 } from "./model-roles.js";
+import { resolveOrchestrationPolicy, type OrchestrationProfile } from "./orchestration.js";
 import {
   createDefaultVvocConfig,
   createGuardianConfig,
@@ -189,6 +191,9 @@ export type InstallationInspection = {
   };
   secretsRedaction: {
     config?: SecretsRedactionConfig;
+  };
+  orchestration: {
+    profile?: OrchestrationProfile;
   };
   roles: {
     assignments: Array<{ roleId: string; model: string; builtIn: boolean }>;
@@ -1009,6 +1014,9 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     secretsRedaction: {
       config: vvocConfig?.secretsRedaction,
     },
+    orchestration: {
+      profile: vvocConfig ? resolveOrchestrationPolicy(vvocConfig).profile : undefined,
+    },
     roles: {
       assignments: roleAssignments,
       unresolvedReferences: unresolvedRoleReferences,
@@ -1067,6 +1075,13 @@ export async function inspectInstallationForScope(options: {
   const inspection = await inspectInstallation(scopedPaths);
   return {
     ...inspection,
+    orchestration: {
+      profile:
+        inspection.orchestration.profile ??
+        (vvocSource.kind === "default"
+          ? resolveOrchestrationPolicy(createDefaultVvocConfig()).profile
+          : undefined),
+    },
     scope: options.scope,
     opencodeSource,
     vvocSource,

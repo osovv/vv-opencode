@@ -1,10 +1,10 @@
 // FILE: src/commands/status.test.ts
 // VERSION: 0.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify status command role-aware installation reporting and invalid config diagnostics.
-//   SCOPE: Canonical role inventory rendering, deterministic built-in role ordering, and diagnostic-only invalid vvoc config reporting.
+//   PURPOSE: Verify status command source-aware orchestration, role inventory, and invalid config diagnostics.
+//   SCOPE: Selected/default profile reporting, role ordering, source precedence, and diagnostic-only invalid vvoc config handling.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/status.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-COMMANDS, V-M-CLI-COMMANDS]
+//   LINKS: [M-CLI-COMMANDS, M-ORCHESTRATION-PROFILES, V-M-CLI-COMMANDS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -17,12 +17,13 @@
 //   LAST_CHANGE: [v0.2.0 - Added invalid vvoc config status diagnostics without mutation coverage.]
 //   LAST_CHANGE: [v0.1.1 - Added selected source reporting assertions for project status.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added selected/default profile and invalid explicit profile reporting coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import statusCommand from "./status.js";
 import {
   ensurePackageInstalled,
@@ -30,7 +31,7 @@ import {
   resolvePaths,
   syncManagedAgentRegistrations,
 } from "../lib/opencode.js";
-import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 test("status prints built-in role inventory after init-style seeding", async () => {
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-status-config-"));
@@ -63,6 +64,7 @@ test("status prints built-in role inventory after init-style seeding", async () 
     expect(stdout).toContain("Roles:");
     expect(stdout).toContain("OpenCode source: project");
     expect(stdout).toContain("vvoc source: project");
+    expect(stdout).toContain("Orchestration profile: balanced");
     const defaultIndex = stdout.indexOf("  default:");
     const smartIndex = stdout.indexOf("  smart:");
     const fastIndex = stdout.indexOf("  fast:");
@@ -79,7 +81,7 @@ test("status prints built-in role inventory after init-style seeding", async () 
   }
 });
 
-test("status reports invalid vvoc config without mutating the selected file", async () => {
+test("status reports invalid explicit profile without mutating the selected file", async () => {
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-status-invalid-config-"));
   const projectDir = await mkdtemp(join(tmpdir(), "vvoc-status-invalid-project-"));
   const initialCwd = process.cwd();
@@ -94,7 +96,11 @@ test("status reports invalid vvoc config without mutating the selected file", as
     await ensurePackageInstalled(paths);
     await installVvocConfig(paths);
     const invalidText =
-      JSON.stringify({ ...createDefaultVvocConfig(), version: 2 }, null, 2) + "\n";
+      JSON.stringify(
+        { ...createDefaultVvocConfig(), orchestration: { profile: "automatic" } },
+        null,
+        2,
+      ) + "\n";
     await writeFile(paths.vvocConfigPath, invalidText, "utf8");
 
     process.chdir(projectDir);
@@ -111,9 +117,74 @@ test("status reports invalid vvoc config without mutating the selected file", as
 
     expect(stdout).toContain(`vvoc config: ${paths.vvocConfigPath}`);
     expect(stdout).toContain("vvoc config parse:");
-    expect(stdout).toContain("version");
+    expect(stdout).toContain("/orchestration/profile");
+    expect(stdout).toContain("Orchestration profile: unknown");
     expect(stdout).toContain("Problems:");
     expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(invalidText);
+  } finally {
+    process.chdir(initialCwd);
+    await rm(configHome, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("effective status with no vvoc file reports balanced and default source", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-status-default-config-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-status-default-project-"));
+  const initialCwd = process.cwd();
+
+  try {
+    process.chdir(projectDir);
+    const stdout = await captureStdout(async () => {
+      await (
+        statusCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
+      ).run({ args: { scope: "effective", "config-dir": configHome } });
+    });
+
+    expect(stdout).toContain("vvoc source: default");
+    expect(stdout).toContain("Orchestration profile: balanced");
+  } finally {
+    process.chdir(initialCwd);
+    await rm(configHome, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("effective status reports the profile from the selected project source", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-status-layered-config-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-status-layered-project-"));
+  const initialCwd = process.cwd();
+
+  try {
+    const globalPaths = await resolvePaths({
+      scope: "global",
+      cwd: projectDir,
+      configDir: configHome,
+    });
+    const projectPaths = await resolvePaths({
+      scope: "project",
+      cwd: projectDir,
+      configDir: configHome,
+    });
+    const globalConfig = createDefaultVvocConfig();
+    globalConfig.orchestration = { profile: "orchestrated" };
+    const projectConfig = createDefaultVvocConfig();
+    projectConfig.orchestration = { profile: "single-session" };
+    await mkdir(dirname(globalPaths.vvocConfigPath), { recursive: true });
+    await mkdir(dirname(projectPaths.vvocConfigPath), { recursive: true });
+    await writeFile(globalPaths.vvocConfigPath, renderVvocConfig(globalConfig), "utf8");
+    await writeFile(projectPaths.vvocConfigPath, renderVvocConfig(projectConfig), "utf8");
+
+    process.chdir(projectDir);
+    const stdout = await captureStdout(async () => {
+      await (
+        statusCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
+      ).run({ args: { scope: "effective", "config-dir": configHome } });
+    });
+
+    expect(stdout).toContain(`vvoc source: project ${projectPaths.vvocConfigPath}`);
+    expect(stdout).toContain("Orchestration profile: single-session");
+    expect(stdout).not.toContain("Orchestration profile: orchestrated");
   } finally {
     process.chdir(initialCwd);
     await rm(configHome, { recursive: true, force: true });

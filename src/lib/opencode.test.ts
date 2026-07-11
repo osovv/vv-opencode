@@ -1337,6 +1337,7 @@ describe("inspectInstallation", () => {
 
       const inspection = await inspectInstallation(paths);
 
+      expect(inspection.orchestration.profile).toBe("balanced");
       expect(inspection.roles.assignments.map((entry) => entry.roleId)).toEqual([
         "default",
         "smart",
