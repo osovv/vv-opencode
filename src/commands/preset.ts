@@ -1,10 +1,10 @@
 // FILE: src/commands/preset.ts
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
-//   PURPOSE: List, show, and apply declarative named role presets from scoped vvoc.json layers.
-//   SCOPE: Effective/global/project preset lookup, preset rendering, and role-only preset application against selected vvoc.json writes.
-//   DEPENDS: [citty, node:fs/promises, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-PRESET, M-CLI-CONFIG, M-CLI-COMMANDS]
+//   PURPOSE: List, show, and atomically apply declarative role and orchestration presets from scoped vvoc.json layers.
+//   SCOPE: Effective/global/project preset lookup, preset rendering, and conservative role plus optional orchestration writes.
+//   DEPENDS: [citty, node:fs/promises, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts]
+//   LINKS: [M-CLI-PRESET, M-CLI-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -14,7 +14,8 @@
 //   listConfiguredPresets - Returns configured presets in deterministic name order.
 //   resolvePreset - Validates a preset name and returns the matching preset.
 //   formatPreset - Renders a preset object as JSON for CLI output.
-//   applyPreset - Applies a preset by updating only listed canonical role assignments.
+//   AppliedPresetOrchestrationChange - Reports whether a preset changed, kept, or omitted orchestration.
+//   applyPreset - Validates and atomically applies listed roles plus an optional orchestration profile.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -22,6 +23,7 @@
 //   LAST_CHANGE: [v0.4.0 - Switched preset application to canonical role-only writes and removed legacy scope/OpenCode target mutation behavior.]
 //   LAST_CHANGE: [v0.4.1 - Stopped preset flows from running sync rewrites; now bootstrap vvoc.json only when missing and keep existing config sections untouched unless listed roles change.]
 //   LAST_CHANGE: [v0.4.2 - Switched existing-file preset flows to strict raw vvoc.json validation and role-only document mutation without preset reseeding side effects.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added validated atomic role/profile application, profile reporting, target paths, and restart guidance.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -35,8 +37,12 @@ import {
 import { parseModelSelection } from "../lib/model-roles.js";
 import { resolvePaths } from "../lib/opencode.js";
 import {
+  createOrchestrationConfig,
+  parseOrchestrationProfile,
+  type OrchestrationProfile,
+} from "../lib/orchestration.js";
+import {
   createDefaultVvocConfig,
-  renderVvocConfig,
   validateVvocConfigDocument,
   type VvocConfig,
   type VvocPreset,
@@ -48,10 +54,16 @@ type ListedPreset = {
   preset: VvocPreset;
 };
 
-type AppliedPresetChange = {
+export type AppliedPresetChange = {
   roleId: string;
   model: string;
   action: "updated" | "kept";
+};
+
+/** Result of applying the optional orchestration part of a preset. */
+export type AppliedPresetOrchestrationChange = {
+  profile: OrchestrationProfile;
+  action: "updated" | "kept" | "unchanged";
 };
 
 const commandArg = {
@@ -127,32 +139,69 @@ export function formatPreset(_name: string, preset: VvocPreset): string {
 export async function applyPreset(
   presetName: string,
   options: { cwd?: string; configDir?: string; scope?: ConfigWriteScope } = {},
-): Promise<{ name: string; preset: VvocPreset; changes: AppliedPresetChange[]; path: string }> {
-  const { config, paths } = await loadScopedVvocConfigForWrite(options);
+): Promise<{
+  name: string;
+  preset: VvocPreset;
+  changes: AppliedPresetChange[];
+  orchestration: AppliedPresetOrchestrationChange;
+  path: string;
+}> {
+  const { config, paths, currentText } = await loadScopedVvocConfigForWrite(options);
   const resolved = resolvePreset(presetName, config.presets);
-  const entries = Object.entries(resolved.preset.agents);
+  const validatedRoles = Object.entries(resolved.preset.agents).map(
+    ([rawRoleId, rawModelSelection]) => {
+      const roleId = normalizeRoleId(rawRoleId, `preset ${resolved.name}`);
+      const model = parseModelSelection(
+        normalizePresetModelSelection(rawModelSelection, `preset ${resolved.name} role ${roleId}`),
+      ).normalized;
+      return { roleId, model };
+    },
+  );
+  const currentProfile = createOrchestrationConfig(config.orchestration).profile;
+  const declaredProfile =
+    resolved.preset.orchestration === undefined
+      ? undefined
+      : parseOrchestrationProfile(
+          resolved.preset.orchestration.profile,
+          `preset ${resolved.name} orchestration`,
+        );
   const nextRoles: Record<string, string> = { ...config.roles };
   const changes: AppliedPresetChange[] = [];
 
-  for (const [rawRoleId, rawModelSelection] of entries) {
-    const roleId = normalizeRoleId(rawRoleId, `preset ${resolved.name}`);
-    const model = parseModelSelection(
-      normalizePresetModelSelection(rawModelSelection, `preset ${resolved.name} role ${roleId}`),
-    ).normalized;
+  for (const { roleId, model } of validatedRoles) {
     const action: "updated" | "kept" = nextRoles[roleId] === model ? "kept" : "updated";
     nextRoles[roleId] = model;
     changes.push({ roleId, model, action });
   }
 
-  if (changes.some((change) => change.action === "updated")) {
-    const nextConfig = {
+  const orchestration: AppliedPresetOrchestrationChange = declaredProfile
+    ? {
+        profile: declaredProfile,
+        action: declaredProfile === currentProfile ? "kept" : "updated",
+      }
+    : { profile: currentProfile, action: "unchanged" };
+  const changed =
+    currentText === undefined ||
+    changes.some((change) => change.action === "updated") ||
+    orchestration.action === "updated";
+
+  if (changed) {
+    const nextConfig: VvocConfig = {
       ...config,
       roles: nextRoles,
+      ...(declaredProfile ? { orchestration: { profile: declaredProfile } } : {}),
     };
+    await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
     await writeFile(paths.vvocConfigPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
   }
 
-  return { name: resolved.name, preset: resolved.preset, changes, path: paths.vvocConfigPath };
+  return {
+    name: resolved.name,
+    preset: resolved.preset,
+    changes,
+    orchestration,
+    path: paths.vvocConfigPath,
+  };
 }
 
 async function listPresets(
@@ -183,7 +232,10 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
     for (const { name, preset } of presets) {
       const description = preset.description ? ` - ${preset.description}` : "";
       const roleCount = Object.keys(preset.agents).length;
-      console.log(`  ${name}${description} (${roleCount} role${roleCount === 1 ? "" : "s"})`);
+      const profile = preset.orchestration?.profile ?? "unchanged";
+      console.log(
+        `  ${name}${description} (${roleCount} role${roleCount === 1 ? "" : "s"}, profile ${profile})`,
+      );
     }
     return;
   }
@@ -217,6 +269,16 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
   for (const change of applied.changes) {
     console.log(`  ${change.roleId}: ${change.action} (${change.model})`);
   }
+  console.log(
+    `  orchestration: ${applied.orchestration.action} (${applied.orchestration.profile})`,
+  );
+  console.log(`Target: ${applied.path}`);
+  if (
+    applied.changes.some((change) => change.action === "updated") ||
+    applied.orchestration.action === "updated"
+  ) {
+    console.log("Restart OpenCode to apply the changed roles or orchestration profile.");
+  }
 }
 
 async function readConfiguredPresets(
@@ -247,6 +309,7 @@ async function loadScopedVvocConfigForWrite(options: {
     return {
       config: parseRawVvocConfigText(text, paths.vvocConfigPath),
       paths,
+      currentText: text,
     };
   } catch (error) {
     if (!isMissingFileError(error)) {
@@ -254,10 +317,7 @@ async function loadScopedVvocConfigForWrite(options: {
     }
   }
 
-  const defaultConfig = createDefaultVvocConfig();
-  await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
-  await writeFile(paths.vvocConfigPath, renderVvocConfig(defaultConfig), "utf8");
-  return { config: defaultConfig, paths };
+  return { config: createDefaultVvocConfig(), paths, currentText: undefined };
 }
 
 function parseRawVvocConfigText(text: string, label: string): VvocConfig {

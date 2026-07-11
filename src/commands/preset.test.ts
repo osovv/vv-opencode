@@ -2,9 +2,9 @@
 // VERSION: 0.4.6
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
-//   SCOPE: Default preset listing, preset rendering, role-only preset application, no-opencode rewrite guarantees, non-role section preservation, unknown preset failures, and CLI argument validation paths.
+//   SCOPE: Built-in profile mappings, preset rendering, atomic role/profile application, no-opencode rewrite guarantees, section preservation, invalid-write safety, and CLI output paths.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-PRESET, V-M-CLI-PRESET]
+//   LINKS: [M-CLI-PRESET, M-ORCHESTRATION-PROFILES, V-M-CLI-PRESET]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -22,6 +22,7 @@
 //   LAST_CHANGE: [v0.4.5 - Added regression coverage for the canonical built-in preset key set.]
 //   LAST_CHANGE: [v0.4.6 - Added osovv assignment coverage and switched their fast role expectation to vv-gpt-5.4-mini-low.]
 //   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated all preset name expectations from vv-openai to vv-codex and model refs to openai/vv-codex-gpt-*.]
+//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added built-in mapping, atomic role/profile writes, preservation, failure, and CLI reporting coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -43,6 +44,22 @@ describe("preset helpers", () => {
       "vv-osovv",
       "vv-osovv-cheap",
     ]);
+  });
+
+  test("built-in presets expose the approved orchestration mapping", () => {
+    const presets = createDefaultVvocConfig().presets;
+    expect(
+      Object.fromEntries(
+        Object.entries(presets).map(([name, preset]) => [name, preset.orchestration?.profile]),
+      ),
+    ).toEqual({
+      "vv-codex": "single-session",
+      "vv-zai": "balanced",
+      "vv-minimax": "balanced",
+      "vv-deepseek": "balanced",
+      "vv-osovv": "single-session",
+      "vv-osovv-cheap": "single-session",
+    });
   });
 
   test("listConfiguredPresets shows the seeded vv-codex, vv-deepseek, vv-zai, and vv-minimax presets", () => {
@@ -70,6 +87,7 @@ describe("preset helpers", () => {
     expect(output).toContain('"smart": "openai/vv-codex-gpt-5.5-xhigh"');
     expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
     expect(output).toContain('"vision": "openai/gpt-5.4"');
+    expect(output).toContain('"profile": "single-session"');
   });
 
   test("formatPreset renders all five vv-osovv role assignments", () => {
@@ -137,6 +155,7 @@ describe("applyPreset", () => {
       });
 
       expect(applied.changes.map((change) => change.roleId)).toEqual(["default", "smart"]);
+      expect(applied.orchestration).toEqual({ profile: "balanced", action: "unchanged" });
 
       const vvocConfig = await readVvocConfig(paths);
       expect(vvocConfig?.roles.default).toBe("openai/gpt-5.4");
@@ -144,6 +163,7 @@ describe("applyPreset", () => {
       expect(vvocConfig?.roles.fast).toBe(defaultConfig.roles.fast);
       expect(vvocConfig?.roles.vision).toBe(defaultConfig.roles.vision);
       expect(vvocConfig?.roles["team-review"]).toBe("anthropic/claude-sonnet-4-5:high");
+      expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
 
       await expect(access(paths.opencodeConfigPath)).rejects.toBeDefined();
     } finally {
@@ -253,7 +273,7 @@ describe("applyPreset", () => {
       await writeFile(paths.vvocConfigPath, `${JSON.stringify(seededConfig, null, 2)}\n`, "utf8");
 
       const before = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
-      await applyPreset("custom", {
+      const applied = await applyPreset("custom", {
         cwd: projectDir,
         configDir: configHome,
         scope: "project",
@@ -263,6 +283,8 @@ describe("applyPreset", () => {
       expect(before.guardian).toEqual(after.guardian);
       expect(before.secretsRedaction).toEqual(after.secretsRedaction);
       expect(before.presets).toEqual(after.presets);
+      expect(before.orchestration).toEqual(after.orchestration);
+      expect(applied.orchestration).toEqual({ profile: "balanced", action: "unchanged" });
       expect(after.presets["vv-codex"].description).toBe(
         "user-overridden managed preset description",
       );
@@ -284,7 +306,7 @@ describe("applyPreset", () => {
       });
 
       await rm(join(configHome, "vvoc"), { recursive: true, force: true });
-      await applyPreset("vv-codex", {
+      const applied = await applyPreset("vv-codex", {
         cwd: projectDir,
         configDir: configHome,
       });
@@ -293,6 +315,8 @@ describe("applyPreset", () => {
       expect(bootstrapped.version).toBe(3);
       expect(bootstrapped.roles.default).toBe("openai/gpt-5.4");
       expect(bootstrapped.roles.smart).toBe("openai/vv-codex-gpt-5.5-xhigh");
+      expect(bootstrapped.orchestration).toEqual({ profile: "single-session" });
+      expect(applied.orchestration).toEqual({ profile: "single-session", action: "updated" });
       expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe("openai/gpt-5.4");
       expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe("openai/vv-codex-gpt-5.5-xhigh");
     } finally {
@@ -332,12 +356,73 @@ describe("applyPreset", () => {
         "utf8",
       );
 
+      const originalText = await readFile(paths.vvocConfigPath, "utf8");
       await expect(
         applyPreset("invalid", {
           cwd: "/workspace/project",
           configDir: configHome,
         }),
       ).rejects.toThrow("INVALID_MODEL_SELECTION: modelSelection expected provider/model");
+      expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(originalText);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("profile-only preset changes write orchestration when all roles are kept", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-profile-only-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const config = createDefaultVvocConfig();
+      config.presets.custom = {
+        agents: { default: config.roles.default },
+        orchestration: { profile: "orchestrated" },
+      };
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
+      await writeFile(paths.vvocConfigPath, renderVvocConfig(config), "utf8");
+
+      const applied = await applyPreset("custom", { configDir: configHome });
+      const updated = await readVvocConfig(paths);
+
+      expect(applied.changes).toEqual([
+        { roleId: "default", model: config.roles.default, action: "kept" },
+      ]);
+      expect(applied.orchestration).toEqual({ profile: "orchestrated", action: "updated" });
+      expect(updated?.orchestration).toEqual({ profile: "orchestrated" });
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("invalid preset orchestration leaves the original vvoc bytes unchanged", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-invalid-profile-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const invalidConfig = createDefaultVvocConfig() as unknown as Record<string, unknown>;
+      invalidConfig.presets = {
+        invalid: {
+          agents: { default: "openai/gpt-5.4" },
+          orchestration: { profile: "automatic" },
+        },
+      };
+      const originalText = `${JSON.stringify(invalidConfig, null, 2)}\n`;
+      await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
+      await writeFile(paths.vvocConfigPath, originalText, "utf8");
+
+      await expect(applyPreset("invalid", { configDir: configHome })).rejects.toThrow(
+        "/presets/invalid/orchestration/profile",
+      );
+      expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(originalText);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -384,11 +469,17 @@ describe("applyPreset", () => {
       expect(exitCode).toBe(0);
       expect(stderr).toBe("");
       expect(stdout).toContain("Applied preset vv-zai:");
+      expect(stdout).toContain("orchestration: kept (balanced)");
+      expect(stdout).toContain(`Target: ${paths.vvocConfigPath}`);
+      expect(stdout).toContain(
+        "Restart OpenCode to apply the changed roles or orchestration profile.",
+      );
       const vvocConfig = await readVvocConfig(paths);
       expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5-turbo");
       expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.1");
       expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.5-airx");
       expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.6v");
+      expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
