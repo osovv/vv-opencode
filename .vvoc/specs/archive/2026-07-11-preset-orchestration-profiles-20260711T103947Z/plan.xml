@@ -1,0 +1,728 @@
+<plan>
+  <spec>.vvoc/specs/2026-07-11-preset-orchestration-profiles/spec.xml</spec>
+  <design-context>.vvoc/specs/2026-07-11-preset-orchestration-profiles/design-context.xml</design-context>
+  <created>2026-07-11</created>
+  <status>applied</status>
+
+  <meta>
+    <summary>Add backward-compatible preset orchestration profiles, resolve one concrete vv-controller policy from the startup config snapshot, preserve prompt-only execution semantics, and expose profile management through the CLI and diagnostics.</summary>
+    <waves>4</waves>
+    <affected_modules>M-ORCHESTRATION-PROFILES, M-CLI-CONFIG, M-VVOC-PRESET-REGISTRY, M-CLI-PRESET, M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-PLUGIN-WORKFLOW, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS, M-CLI-ORCHESTRATION, M-CLI-COMMANDS, M-CLI-COMPLETION</affected_modules>
+    <complexity>High: the change is backward-compatible but crosses canonical config/schema, preset mutation, runtime prompt injection, managed prompts and skills, CLI/status/completions, public documentation, and durable GRACE graph and verification projections.</complexity>
+  </meta>
+
+  <architecture>
+    <module>
+      <name>OrchestrationProfiles</name>
+      <purpose>Own profile names, default resolution, validation, profile capabilities, and the exact concrete controller policies consumed by runtime plugins.</purpose>
+      <file>
+        <path>src/lib/orchestration.ts</path>
+        <role>Create</role>
+      </file>
+      <file>
+        <path>src/lib/orchestration.test.ts</path>
+        <role>Test</role>
+      </file>
+      <contract>Remain independent of VvocConfig to avoid dependency cycles. Accept structurally compatible config input, resolve missing orchestration to balanced, reject explicit invalid profile values, and expose only the selected policy to callers.</contract>
+      <depends_on>
+        <module>none</module>
+      </depends_on>
+    </module>
+    <module>
+      <name>CanonicalConfigAndPresets</name>
+      <purpose>Extend strict schema v3 with optional root and preset orchestration fields, seed balanced defaults, preserve old valid v3 documents, and atomically apply preset roles plus declared profile.</purpose>
+      <file>
+        <path>src/lib/vvoc-config.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>schemas/vvoc/v3.json</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/lib/vvoc-preset-registry.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/commands/preset.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/lib/opencode.test.ts</path>
+        <role>Test</role>
+      </file>
+      <file>
+        <path>src/commands/config-validate.test.ts</path>
+        <role>Test</role>
+      </file>
+      <file>
+        <path>src/commands/preset.test.ts</path>
+        <role>Test</role>
+      </file>
+      <contract>Keep schema version 3 and the current required-section list. A missing root section resolves to balanced. Built-in presets always declare a profile. User presets may omit it, in which case applyPreset preserves the current root profile. Validate the entire selected preset before a single write.</contract>
+      <depends_on>
+        <module>OrchestrationProfiles</module>
+      </depends_on>
+    </module>
+    <module>
+      <name>ProfileAwareRuntimeGuidance</name>
+      <purpose>Inject universal primary guidance plus one concrete vv-controller orchestration policy and one compatible workflow protocol without changing tool permissions or tracked workflow enforcement.</purpose>
+      <file>
+        <path>src/plugins/system-context-injection/index.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/plugins/system-context-injection.test.ts</path>
+        <role>Test</role>
+      </file>
+      <file>
+        <path>src/plugins/workflow/index.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/plugins/workflow/system-instruction.md</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/plugins/workflow.test.ts</path>
+        <role>Test</role>
+      </file>
+      <contract>Only vv-controller receives orchestration policy. Other eligible primaries receive universal guidance only. Single-session receives direct-work plus reviewer-only mechanics, balanced receives selective delegation guidance, and orchestrated receives the full tracked workflow. All existing work-item tools and task hooks remain behaviorally unchanged.</contract>
+      <depends_on>
+        <module>OrchestrationProfiles</module>
+        <module>CanonicalConfigAndPresets</module>
+      </depends_on>
+    </module>
+    <module>
+      <name>ManagedPromptSurface</name>
+      <purpose>Remove inactive orchestration branches from the always-loaded controller prompt while preserving universal safety, spec/plan gates, skill routing, and explicit vv-review and vv-execute semantics.</purpose>
+      <file>
+        <path>templates/agents/vv-controller.md</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>templates/skills/vv-execute/SKILL.md</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/lib/managed-agents.test.ts</path>
+        <role>Test</role>
+      </file>
+      <file>
+        <path>src/lib/managed-skills.test.ts</path>
+        <role>Create</role>
+      </file>
+      <contract>The controller template must not enumerate profile-specific agent routes or tracked loops. The vv-execute frontmatter description must not expose inline/classic alternatives before the skill is loaded, while the skill body must retain its explicit user choice. vv-review remains unchanged and findings-only.</contract>
+      <depends_on>
+        <module>ProfileAwareRuntimeGuidance</module>
+      </depends_on>
+    </module>
+    <module>
+      <name>OrchestrationCLI</name>
+      <purpose>Provide scoped show/set operations, register the command, add shell completions, and make effective profile and source visible in status.</purpose>
+      <file>
+        <path>src/commands/orchestration.ts</path>
+        <role>Create</role>
+      </file>
+      <file>
+        <path>src/commands/orchestration.test.ts</path>
+        <role>Test</role>
+      </file>
+      <file>
+        <path>src/cli.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/commands/completion.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/commands/completion.test.ts</path>
+        <role>Test</role>
+      </file>
+      <file>
+        <path>src/lib/opencode.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/commands/status.ts</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>src/commands/status.test.ts</path>
+        <role>Test</role>
+      </file>
+      <contract>show follows global/project/effective read semantics and reports source. set accepts only global/project writes, validates one of the three profile values, preserves unrelated config, and prints restart guidance. status reports the resolved profile alongside the selected vvoc source without mutating invalid config.</contract>
+      <depends_on>
+        <module>OrchestrationProfiles</module>
+        <module>CanonicalConfigAndPresets</module>
+      </depends_on>
+    </module>
+    <module>
+      <name>PublicDocumentation</name>
+      <purpose>Document profile semantics, built-in preset mappings, CLI usage, prompt-only limitations, restart requirements, reviewer exception, and vv-execute behavior.</purpose>
+      <file>
+        <path>README.md</path>
+        <role>Modify</role>
+      </file>
+      <contract>README remains the source of truth for public CLI, setup, config, and workflow behavior.</contract>
+      <depends_on>
+        <module>CanonicalConfigAndPresets</module>
+        <module>ProfileAwareRuntimeGuidance</module>
+        <module>OrchestrationCLI</module>
+      </depends_on>
+    </module>
+    <module>
+      <name>GraceArchitectureState</name>
+      <purpose>Keep module ownership, dependencies, data flows, critical flows, and verification commands truthful after adding orchestration profiles and the new CLI command.</purpose>
+      <file>
+        <path>.grace/graph/index.xml</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>.grace/graph/main.xml</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>.grace/verification/index.xml</path>
+        <role>Modify</role>
+      </file>
+      <file>
+        <path>.grace/verification/main.xml</path>
+        <role>Modify</role>
+      </file>
+      <contract>Add deterministic M-ORCHESTRATION-PROFILES and M-CLI-ORCHESTRATION ownership plus matching V-M anchors, update existing config/preset/system-context/workflow/commands/completion dependencies, and record profile resolution and prompt isolation as a critical flow.</contract>
+      <depends_on>
+        <module>OrchestrationProfiles</module>
+        <module>CanonicalConfigAndPresets</module>
+        <module>ProfileAwareRuntimeGuidance</module>
+        <module>OrchestrationCLI</module>
+      </depends_on>
+    </module>
+  </architecture>
+
+  <tasks>
+    <wave>
+      <num>1</num>
+      <goal>Establish the orchestration profile contract and backward-compatible config and preset behavior.</goal>
+      <task>
+        <id>T-001</id>
+        <title>Orchestration profile domain model</title>
+        <file>src/lib/orchestration.ts</file>
+        <status>pending</status>
+        <description>Create the internal profile module and its colocated test file. Define stable profile names, balanced fallback, strict parsing, resolved capabilities, and exact concrete controller policy strings. Keep the module independent of VvocConfig and update MODULE_CONTRACT, MODULE_MAP, CHANGE_SUMMARY, and focused block/function contracts.</description>
+        <snippet><![CDATA[
+/** Supported orchestration profiles in stable CLI/schema order. */
+export const ORCHESTRATION_PROFILE_NAMES = [
+  "single-session",
+  "balanced",
+  "orchestrated",
+] as const;
+
+/** One supported preset-controlled orchestration profile. */
+export type OrchestrationProfile = (typeof ORCHESTRATION_PROFILE_NAMES)[number];
+
+/** Optional canonical vvoc configuration section. */
+export type OrchestrationConfig = {
+  profile: OrchestrationProfile;
+};
+
+/** Capabilities consumed by prompt-producing plugins without model inference. */
+export type ResolvedOrchestrationPolicy = {
+  profile: OrchestrationProfile;
+  controllerSystemContext: string;
+  workflowGuidance: "review-only" | "selective" | "tracked";
+};
+
+/** Backward-compatible profile used when an old valid v3 document omits orchestration. */
+export const DEFAULT_ORCHESTRATION_PROFILE: OrchestrationProfile = "balanced";
+
+/** Builds a normalized section, defaulting only when the section is absent. */
+export function createOrchestrationConfig(
+  value?: Partial<OrchestrationConfig>,
+): OrchestrationConfig;
+
+/** Validates a CLI or config profile string and throws with allowed choices on failure. */
+export function parseOrchestrationProfile(value: unknown, operation: string): OrchestrationProfile;
+
+/** Resolves one immutable concrete policy from structurally compatible config input. */
+export function resolveOrchestrationPolicy(config: {
+  orchestration?: Partial<OrchestrationConfig>;
+}): ResolvedOrchestrationPolicy;
+]]></snippet>
+        <acceptance>
+          <criterion>ORCHESTRATION_PROFILE_NAMES contains exactly single-session, balanced, and orchestrated in that order</criterion>
+          <criterion>resolveOrchestrationPolicy returns balanced when orchestration is absent</criterion>
+          <criterion>parseOrchestrationProfile rejects blank and unknown values with all allowed choices in the error</criterion>
+          <criterion>Each resolved controllerSystemContext contains only its active profile instructions and does not enumerate the other profile names</criterion>
+          <criterion>single-session instructs direct exploration, investigation, planning, implementation, and verification while permitting independent reviewer subagents under the approved conditions</criterion>
+          <criterion>balanced assigns selective workflow guidance and orchestrated assigns tracked workflow guidance without inspecting model data</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/lib/orchestration.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-002</id>
+        <title>Backward-compatible v3 config schema</title>
+        <file>src/lib/vvoc-config.ts</file>
+        <status>pending</status>
+        <description>Integrate orchestration into VvocConfig and VvocPreset, seed explicit balanced root defaults, preserve optional raw-v3 compatibility during parse, render normalized sections, and extend both runtime and published schemas. Strengthen opencode and config-validate tests for old documents, round trips, exact JSON paths, and managed preset refresh.</description>
+        <depends_on>
+          <task_id>T-001</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+/** A named preset may optionally change the active orchestration profile. */
+export type VvocPreset = {
+  description?: string;
+  agents: VvocPresetAgents;
+  orchestration?: OrchestrationConfig;
+};
+
+/** Canonical normalized config; raw valid v3 input may omit orchestration. */
+export type VvocConfig = {
+  $schema: string;
+  version: number;
+  roles: Record<string, string>;
+  orchestration?: OrchestrationConfig;
+  guardian: GuardianConfig;
+  secretsRedaction: SecretsRedactionConfig;
+  presets: VvocPresets;
+  plugins: VvocPluginToggleConfig;
+};
+
+/** Fresh canonical config writes an explicit balanced profile. */
+export function createDefaultVvocConfig(): VvocConfig;
+
+/** Render preserves a valid explicit profile and normalizes an omitted profile to balanced. */
+export function renderVvocConfig(config?: VvocConfig): string;
+]]></snippet>
+        <acceptance>
+          <criterion>The runtime and published v3 schemas accept root orchestration.profile and preset orchestration.profile with only the three supported values</criterion>
+          <criterion>orchestration remains absent from the schema required list so an existing valid v3 document without it still validates</criterion>
+          <criterion>Parsing a valid old v3 document without orchestration produces effective balanced behavior</criterion>
+          <criterion>Fresh config rendering includes root orchestration.profile balanced and every built-in preset includes its declared profile</criterion>
+          <criterion>Unknown root and preset profiles fail with /orchestration/profile or /presets/&lt;name&gt;/orchestration/profile in validation output</criterion>
+          <criterion>syncVvocConfig preserves the selected root profile, refreshes managed preset profiles, and preserves custom preset orchestration</criterion>
+          <criterion>The schema $id and config version remain unchanged except for the normal package-versioned schema URL behavior</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/lib/opencode.test.ts src/commands/config-validate.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-003</id>
+        <title>Preset operating-profile application</title>
+        <file>src/commands/preset.ts</file>
+        <status>pending</status>
+        <description>Extend the built-in registry and preset command so managed presets declare the approved mapping, selected preset roles and profile are validated before mutation, and one write applies all declared changes. Preserve the current root profile for model-only custom presets. Update preset formatting, list/apply output, restart guidance, and tests.</description>
+        <depends_on>
+          <task_id>T-001</task_id>
+          <task_id>T-002</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+/** Result of applying the optional orchestration part of a preset. */
+export type AppliedPresetOrchestrationChange = {
+  profile: OrchestrationProfile;
+  action: "updated" | "kept" | "unchanged";
+};
+
+/** Applies all declared preset fields atomically to one scoped vvoc.json document. */
+export async function applyPreset(
+  presetName: string,
+  options?: { cwd?: string; configDir?: string; scope?: ConfigWriteScope },
+): Promise<{
+  name: string;
+  preset: VvocPreset;
+  changes: AppliedPresetChange[];
+  orchestration: AppliedPresetOrchestrationChange;
+  path: string;
+}>;
+
+// Built-in mapping contract:
+// vv-openai, vv-osovv, vv-osovv-cheap -> single-session
+// vv-zai, vv-minimax, vv-deepseek -> balanced
+]]></snippet>
+        <acceptance>
+          <criterion>Each built-in preset exposes exactly the approved orchestration mapping</criterion>
+          <criterion>Applying a built-in preset updates roles and root profile in one file write and never rewrites OpenCode config</criterion>
+          <criterion>Applying a custom preset without orchestration reports unchanged and preserves the current root profile</criterion>
+          <criterion>Applying a preset whose roles are kept but profile changes still writes the new profile</criterion>
+          <criterion>Any invalid role or profile leaves the original vvoc.json byte content unchanged</criterion>
+          <criterion>CLI output reports each role action, orchestration updated/kept/unchanged state, target path, and restart guidance when config changed</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/commands/preset.test.ts</command>
+        </verification>
+      </task>
+    </wave>
+    <wave>
+      <num>2</num>
+      <goal>Make the runtime and managed prompt surface profile-aware without harness-level enforcement.</goal>
+      <task>
+        <id>T-004</id>
+        <title>Concrete controller system-context injection</title>
+        <file>src/plugins/system-context-injection/index.ts</file>
+        <status>pending</status>
+        <description>Separate universal primary guidance from vv-controller orchestration policy. Remove proactive explore and all-profile route language from universal contexts, resolve the startup policy once, append only the active controller context to vv-controller, preserve explore-specific worker guidance and subagent exclusion, and update positive/negative tests for all profiles.</description>
+        <depends_on>
+          <task_id>T-001</task_id>
+          <task_id>T-002</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+const VV_CONTROLLER_AGENT = "vv-controller" as const;
+
+/** Returns universal primary guidance and, only for vv-controller, one concrete policy. */
+function getSystemContextsForAgent(
+  agentName: string | undefined,
+  policy: ResolvedOrchestrationPolicy,
+): readonly string[];
+
+export const SystemContextInjectionPlugin: Plugin = async ({ directory }) => {
+  const vvoc = await loadVvocConfig({ cwd: directory });
+  const policy = resolveOrchestrationPolicy(vvoc.config);
+  // Existing skill-path registration and known-subagent filtering remain intact.
+  return {} as Awaited<ReturnType<Plugin>>;
+};
+]]></snippet>
+        <acceptance>
+          <criterion>vv-controller receives universal guidance plus exactly one controllerSystemContext selected from the startup snapshot</criterion>
+          <criterion>single-session output does not contain proactive explore, investigator, vv-implementer, change_with_review, or tracked implementation-loop instructions</criterion>
+          <criterion>single-session output contains the short explicit no-working-subagent rule and the reviewer exception</criterion>
+          <criterion>build and custom primary agents receive universal guidance without any orchestration policy</criterion>
+          <criterion>explore continues receiving only its compact search-worker guidance and known subagents receive no primary context</criterion>
+          <criterion>Repeated hook invocation does not duplicate universal or orchestration contexts</criterion>
+          <criterion>Changing vvoc.json after plugin construction does not change the selected policy</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/plugins/system-context-injection.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-005</id>
+        <title>Profile-compatible workflow guidance</title>
+        <file>src/plugins/workflow/index.ts</file>
+        <status>pending</status>
+        <description>Resolve the same startup profile in WorkflowPlugin and select reviewer-only, selective, or full tracked guidance for vv-controller. Keep system-instruction.md as the orchestrated protocol source, add concise single-session and balanced guidance without inactive loops, and leave tool registration, access control, task interception, state, persistence, repair, and transition behavior unchanged.</description>
+        <depends_on>
+          <task_id>T-001</task_id>
+          <task_id>T-002</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+/** Returns the exact workflow instruction compatible with one resolved policy. */
+function getWorkflowSystemInstruction(
+  policy: ResolvedOrchestrationPolicy,
+): string {
+  switch (policy.workflowGuidance) {
+    case "review-only":
+      return REVIEW_ONLY_WORKFLOW_SYSTEM_INSTRUCTION;
+    case "selective":
+      return SELECTIVE_WORKFLOW_SYSTEM_INSTRUCTION;
+    case "tracked":
+      return workflowSystemInstructionTemplate.trim();
+  }
+}
+]]></snippet>
+        <acceptance>
+          <criterion>single-session guidance explains only tracked review-only mechanics, one-round default, findings validation, and no implementer use for findings</criterion>
+          <criterion>balanced guidance permits bounded explore, investigator, mechanical implementer, and reviewer use without making any route mandatory or creating automatic loops</criterion>
+          <criterion>orchestrated guidance preserves the existing full work-item implementation and review protocol</criterion>
+          <criterion>review-only requests remain findings-only and do not route reviewer FAIL results to vv-implementer</criterion>
+          <criterion>All existing tracked launch, result parsing, repair, persistence, hard-stop, and round-limit tests continue to pass unchanged in behavior</criterion>
+          <criterion>Workflow tools and guidance remain restricted to vv-controller</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/plugins/workflow.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-006</id>
+        <title>Profile-neutral managed controller prompt</title>
+        <file>templates/agents/vv-controller.md</file>
+        <status>pending</status>
+        <description>Rewrite the always-loaded controller template around universal invariants only. Preserve findings-first behavior, language matching, assumptions, fresh verification, rerouting, direct editing rules, skill triggers, approved spec/plan gates, hard-stop handoffs, and final reporting. Remove route tables and packet/loop instructions that belong only to balanced or orchestrated policies. Update managed agent prompt assertions.</description>
+        <depends_on>
+          <task_id>T-004</task_id>
+          <task_id>T-005</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+<core_principles>
+- Own the user-facing task end to end and present analysis, plans, investigations, and reviews before implementation.
+- Match the user's language, preserve repository terminology, state material assumptions, and require fresh verification.
+- Follow the concrete system work policy supplied for this session; do not invent alternative orchestration rules.
+</core_principles>
+
+<skill_trigger_rule>
+- vv-spec creates and approves a specification.
+- vv-plan creates an implementation plan and does not implement.
+- vv-review performs findings-only independent review and does not fix without user confirmation.
+- vv-execute follows its own explicit user-selected execution mode.
+</skill_trigger_rule>
+]]></snippet>
+        <acceptance>
+          <criterion>The controller template contains universal core, working-state, assumption, reroute, editing, skill, large-feature gate, hard-stop, plan artifact, and final-response guidance</criterion>
+          <criterion>The template does not prescribe explore, investigator, vv-implementer, required reviewer loops, implementation work items, or change_with_review as ordinary routes</criterion>
+          <criterion>The template explicitly defers concrete working behavior to the selected system work policy without describing inactive profiles</criterion>
+          <criterion>vv-review remains findings-only and vv-execute remains an explicit specialized workflow</criterion>
+          <criterion>Managed prompt sync and template loading tests continue to recognize vv-controller as one primary agent</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/lib/managed-agents.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-007</id>
+        <title>Managed skill visibility regression coverage</title>
+        <file>src/lib/managed-skills.test.ts</file>
+        <status>pending</status>
+        <description>Create focused tests for vv-review and vv-execute and make the vv-execute frontmatter description neutral before skill loading. Preserve the full inline/classic choice and workflows inside the skill body. Do not change vv-review behavior.</description>
+        <depends_on>
+          <task_id>T-006</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+// templates/skills/vv-execute/SKILL.md frontmatter contract:
+// description: Use when given an approved plan.xml to validate it, choose an execution mode with the user, and execute tasks with verification and commits
+
+describe("managed workflow skill prompts", () => {
+  test("vv-execute hides mode names in discovery metadata but retains explicit choice after load", async () => {});
+  test("vv-review remains reviewer-based, findings-only, and never delegates to implementers", async () => {});
+});
+]]></snippet>
+        <acceptance>
+          <criterion>The vv-execute YAML description does not contain inline, classic, subagent-driven, or current-session alternatives</criterion>
+          <criterion>The loaded vv-execute body still defines inline and classic, requires explicit user choice, and performs no mutation before choice</criterion>
+          <criterion>The loaded vv-review body still opens review_only work items, dispatches only reviewers, treats FAIL as findings, and stops before fixes</criterion>
+          <criterion>Managed skill template loading remains project/global compatible</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</command>
+        </verification>
+      </task>
+    </wave>
+    <wave>
+      <num>3</num>
+      <goal>Expose profile management and effective diagnostics through the public CLI.</goal>
+      <task>
+        <id>T-008</id>
+        <title>Scoped orchestration command</title>
+        <file>src/commands/orchestration.ts</file>
+        <status>pending</status>
+        <description>Create show/set commands and tests using existing config read/write scope conventions. show resolves effective fallback and source without mutation. set strict-validates an existing document or bootstraps a fresh canonical config, updates only root orchestration logically, preserves unrelated sections and custom presets, rejects effective writes, and prints restart guidance.</description>
+        <depends_on>
+          <task_id>T-001</task_id>
+          <task_id>T-002</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+/** Result returned by a scoped orchestration profile write. */
+export type OrchestrationWriteResult = {
+  action: "updated" | "kept";
+  profile: OrchestrationProfile;
+  path: string;
+};
+
+/** Reads one resolved profile and selected source without mutation. */
+export async function showOrchestrationProfile(options?: {
+  cwd?: string;
+  configDir?: string;
+  scope?: ConfigReadScope;
+}): Promise<{ profile: OrchestrationProfile; source: ConfigSource }>;
+
+/** Writes one explicit profile to global or project vvoc.json. */
+export async function setOrchestrationProfile(
+  profile: OrchestrationProfile,
+  options?: { cwd?: string; configDir?: string; scope?: ConfigWriteScope },
+): Promise<OrchestrationWriteResult>;
+]]></snippet>
+        <acceptance>
+          <criterion>show defaults to effective scope and prints profile plus env/project/global/default source</criterion>
+          <criterion>show resolves a missing root section as balanced without writing the file</criterion>
+          <criterion>set accepts exactly the three profile values and supports only global or project writes</criterion>
+          <criterion>set returns kept without rewriting when the explicit profile already matches</criterion>
+          <criterion>set updates only orchestration logically while preserving roles, guardian, secretsRedaction, presets, and plugins</criterion>
+          <criterion>set rejects an invalid existing vvoc.json without changing its byte content</criterion>
+          <criterion>set bootstraps a canonical v3 config when the selected path is absent</criterion>
+          <criterion>Successful CLI set output includes the target path and restart OpenCode guidance</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/commands/orchestration.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-009</id>
+        <title>CLI registration and shell completion</title>
+        <file>src/cli.ts</file>
+        <status>pending</status>
+        <description>Register the orchestration command and extend bash, zsh, and fish completions with show/set and the three profile values. Update completion tests and command metadata/contracts without changing unrelated commands.</description>
+        <depends_on>
+          <task_id>T-008</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+import orchestration from "./commands/orchestration.js";
+
+const main = defineCommand({
+  subCommands: {
+    orchestration,
+  },
+});
+
+const VVOC_ORCHESTRATION_COMMANDS = ["show", "set"] as const;
+const VVOC_ORCHESTRATION_PROFILES = [...ORCHESTRATION_PROFILE_NAMES];
+]]></snippet>
+        <acceptance>
+          <criterion>vvoc orchestration is registered as a top-level command</criterion>
+          <criterion>Bash, zsh, and fish suggest show and set after orchestration</criterion>
+          <criterion>Bash, zsh, and fish suggest all three profile values after orchestration set</criterion>
+          <criterion>Top-level command completion expectations remain synchronized with src/cli.ts</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/commands/completion.test.ts src/commands/orchestration.test.ts</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-010</id>
+        <title>Effective profile status reporting</title>
+        <file>src/lib/opencode.ts</file>
+        <status>pending</status>
+        <description>Extend InstallationInspection with resolved orchestration information and print it in status beside the selected vvoc source. Preserve diagnostic-only behavior for invalid configs and show balanced for the effective default source. Update status and inspection tests.</description>
+        <depends_on>
+          <task_id>T-001</task_id>
+          <task_id>T-002</task_id>
+          <task_id>T-008</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+export type InstallationInspection = {
+  orchestration: {
+    profile?: OrchestrationProfile;
+  };
+  // Existing opencode, vvoc, guardian, secretsRedaction, roles, warnings, problems remain.
+};
+
+// status output contract:
+// Orchestration profile: single-session
+// vvoc source: project /path/to/.vvoc/vvoc.json
+]]></snippet>
+        <acceptance>
+          <criterion>Valid global and project status reports print the resolved orchestration profile</criterion>
+          <criterion>Effective status with no vvoc file reports balanced and source default</criterion>
+          <criterion>Status reports the profile from the selected source rather than another layer</criterion>
+          <criterion>Invalid explicit profile is reported as a parse problem and the selected file remains unchanged</criterion>
+          <criterion>Existing role, Guardian, secrets-redaction, source, warning, and problem output remains intact</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/commands/status.test.ts src/lib/opencode.test.ts</command>
+        </verification>
+      </task>
+    </wave>
+    <wave>
+      <num>4</num>
+      <goal>Synchronize public documentation and durable GRACE architecture and verification state, then run release-grade gates.</goal>
+      <task>
+        <id>T-011</id>
+        <title>Public orchestration documentation</title>
+        <file>README.md</file>
+        <status>pending</status>
+        <description>Update feature, plugin, CLI, model-role/preset, config, managed-agent, and managed-skill documentation. Explain concrete profile semantics, mapping table, partial preset behavior, prompt-only enforcement, reviewer exception, vv-execute explicit choice, effective source display, and restart requirement.</description>
+        <depends_on>
+          <task_id>T-003</task_id>
+          <task_id>T-004</task_id>
+          <task_id>T-005</task_id>
+          <task_id>T-007</task_id>
+          <task_id>T-008</task_id>
+          <task_id>T-010</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+## Orchestration Profiles
+
+- `single-session`: vv-controller performs exploration, investigation, planning, implementation, and verification directly; independent reviewer subagents remain available under the documented review conditions.
+- `balanced`: vv-controller owns critical reasoning and may selectively delegate bounded search, investigation, mechanical implementation, or review.
+- `orchestrated`: vv-controller uses the full tracked implementer/reviewer workflow.
+
+```bash
+vvoc orchestration show --scope effective
+vvoc orchestration set single-session --scope project
+```
+]]></snippet>
+        <acceptance>
+          <criterion>README documents every new command and profile value exactly as implemented</criterion>
+          <criterion>README includes the approved built-in preset mapping and states that user presets without orchestration preserve the current profile</criterion>
+          <criterion>README states that profiles are prompt-driven in the first version and do not disable task or workflow tools</criterion>
+          <criterion>README distinguishes reviewer subagents from delegated working context and preserves vv-review findings-only semantics</criterion>
+          <criterion>README states that vv-execute still asks for inline/classic and that config changes require an OpenCode restart</criterion>
+        </acceptance>
+        <verification>
+          <command>bun run build</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-012</id>
+        <title>GRACE module and data-flow projection</title>
+        <file>.grace/graph/main.xml</file>
+        <status>pending</status>
+        <description>Update graph/index.xml and graph/main.xml with direct anchors, module entries, dependencies, paths, and data flow. Add M-ORCHESTRATION-PROFILES and M-CLI-ORCHESTRATION; update existing config, preset, system-context, workflow, commands, managed prompts/skills, and completion descriptions and dependencies.</description>
+        <depends_on>
+          <task_id>T-003</task_id>
+          <task_id>T-004</task_id>
+          <task_id>T-005</task_id>
+          <task_id>T-006</task_id>
+          <task_id>T-007</task_id>
+          <task_id>T-009</task_id>
+          <task_id>T-010</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+<M-ORCHESTRATION-PROFILES><Name>OrchestrationProfiles</Name><Type>CORE_LOGIC</Type><Status>implemented</Status><Purpose>Resolve preset-configured orchestration profiles into one concrete vv-controller policy and workflow capability set.</Purpose><Paths>src/lib/orchestration.ts</Paths><Depends>none</Depends><Verification>V-M-ORCHESTRATION-PROFILES</Verification></M-ORCHESTRATION-PROFILES>
+
+<M-CLI-ORCHESTRATION><Name>OrchestrationCommand</Name><Type>ENTRY_POINT</Type><Status>implemented</Status><Purpose>Show and set scoped orchestration profiles with source and restart diagnostics.</Purpose><Paths>src/commands/orchestration.ts</Paths><Depends>M-CONFIG-LAYERS, M-CLI-CONFIG, M-ORCHESTRATION-PROFILES</Depends><Verification>V-M-CLI-ORCHESTRATION</Verification></M-CLI-ORCHESTRATION>
+
+<DF-ORCHESTRATION-PROFILE>Preset or CLI writes a profile, startup config resolves it once, and prompt plugins inject only the concrete vv-controller and workflow guidance for that profile.</DF-ORCHESTRATION-PROFILE>
+]]></snippet>
+        <acceptance>
+          <criterion>Both new M anchors appear in graph/index.xml ownership, routed-document direct anchors, ModuleAnchors, and Modules</criterion>
+          <criterion>Every changed source and template file is owned by an accurate graph module</criterion>
+          <criterion>Existing module dependencies include M-ORCHESTRATION-PROFILES where runtime/config behavior now depends on it</criterion>
+          <criterion>DF-PRESET-SWITCH, DF-SYSTEM-CONTEXT, DF-WORKFLOW-GUIDANCE, and the new DF-ORCHESTRATION-PROFILE describe current behavior truthfully</criterion>
+        </acceptance>
+        <verification>
+          <command>bunx @osovv/grace-cli@rc lint --path .</command>
+        </verification>
+      </task>
+      <task>
+        <id>T-013</id>
+        <title>GRACE verification projection and final gates</title>
+        <file>.grace/verification/main.xml</file>
+        <status>pending</status>
+        <description>Update verification/index.xml and verification/main.xml with matching direct anchors, module verification entries, critical flow expectations, test files, and release-grade commands. Run all targeted suites followed by GRACE lint/status and repository checks.</description>
+        <depends_on>
+          <task_id>T-002</task_id>
+          <task_id>T-003</task_id>
+          <task_id>T-004</task_id>
+          <task_id>T-005</task_id>
+          <task_id>T-006</task_id>
+          <task_id>T-007</task_id>
+          <task_id>T-008</task_id>
+          <task_id>T-009</task_id>
+          <task_id>T-010</task_id>
+          <task_id>T-011</task_id>
+          <task_id>T-012</task_id>
+        </depends_on>
+        <snippet><![CDATA[
+<VF-ORCHESTRATION-PROFILE><Flow>DF-ORCHESTRATION-PROFILE, DF-PRESET-SWITCH, DF-SYSTEM-CONTEXT, DF-WORKFLOW-GUIDANCE</Flow><Priority>high</Priority><Expected>Effective startup config resolves one profile; vv-controller receives only its concrete policy; old v3 config defaults to balanced; preset writes are atomic; invalid explicit values fail without fallback.</Expected></VF-ORCHESTRATION-PROFILE>
+
+<V-M-ORCHESTRATION-PROFILES><TestFiles><File>src/lib/orchestration.test.ts</File></TestFiles><Checks><Command>bun test src/lib/orchestration.test.ts</Command><Command>bun run typecheck</Command></Checks></V-M-ORCHESTRATION-PROFILES>
+
+<V-M-CLI-ORCHESTRATION><TestFiles><File>src/commands/orchestration.test.ts</File></TestFiles><Checks><Command>bun test src/commands/orchestration.test.ts</Command><Command>bun run build</Command></Checks></V-M-CLI-ORCHESTRATION>
+]]></snippet>
+        <acceptance>
+          <criterion>New V anchors appear in verification/index.xml ownership, routed-document direct anchors, VerificationAnchors, and ModuleVerification</criterion>
+          <criterion>VF-ORCHESTRATION-PROFILE verifies backward compatibility, atomic writes, source resolution, prompt isolation, and fail-closed explicit values</criterion>
+          <criterion>Existing preset, system-context, workflow, config, commands, managed agents/skills, completion, and release verification entries include the new test ownership and expectations</criterion>
+          <criterion>All targeted tests for orchestration, config validation, presets, system context, workflow, managed prompts/skills, CLI, completion, status, and config inspection pass</criterion>
+          <criterion>bunx @osovv/grace-cli@rc lint --path . and bunx @osovv/grace-cli@rc status --path . pass</criterion>
+          <criterion>bun run release:check, bun run check, bun run build, and bun run pack:check pass with fresh output</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/lib/orchestration.test.ts src/lib/opencode.test.ts src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/commands/config-validate.test.ts src/commands/preset.test.ts src/commands/orchestration.test.ts src/commands/completion.test.ts src/commands/status.test.ts src/plugins/system-context-injection.test.ts src/plugins/workflow.test.ts &amp;&amp; bunx @osovv/grace-cli@rc lint --path . &amp;&amp; bunx @osovv/grace-cli@rc status --path . &amp;&amp; bun run release:check &amp;&amp; bun run check &amp;&amp; bun run build &amp;&amp; bun run pack:check</command>
+        </verification>
+      </task>
+    </wave>
+  </tasks>
+</plan>

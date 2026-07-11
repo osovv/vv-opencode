@@ -1,0 +1,172 @@
+<design-context>
+  <decisions>
+    <decision>
+      <topic>Preset scope</topic>
+      <choice>Expand presets from model-role mappings into partial operating profiles that may also declare orchestration.profile.</choice>
+      <rationale>Model choice and preferred coordination strategy are related deployment decisions. Built-in presets can make the intended behavior explicit without brittle runtime intelligence heuristics.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Hard-coded model ID matching</name>
+          <reason_rejected>Model aliases and capability assumptions change frequently, and hidden matching would make behavior difficult to predict.</reason_rejected>
+        </alternative>
+        <alternative>
+          <name>Model roles only</name>
+          <reason_rejected>Roles select models but cannot express whether the controller should work directly or orchestrate subagents.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+    <decision>
+      <topic>Primary agent architecture</topic>
+      <choice>Keep one vv-controller and resolve one concrete system policy at runtime from the startup config snapshot.</choice>
+      <rationale>A single controller avoids duplicated prompts, managed-agent proliferation, workflow tool identity changes, and drift. Runtime resolution supports existing config layers while exposing only the selected instruction to the model.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Separate single-session, balanced, and orchestrated primary agents</name>
+          <reason_rejected>Multiple agents would duplicate prompts, expand registration state, complicate default-agent switching, and require WorkflowPlugin access changes.</reason_rejected>
+        </alternative>
+        <alternative>
+          <name>Generate profile-specific prompt files during sync</name>
+          <reason_rejected>Sync-time generation complicates global/project scope alignment and can leave prompt files stale relative to effective config.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+    <decision>
+      <topic>Context isolation</topic>
+      <choice>Inject only one concrete policy and remove inactive orchestration branches from ordinary vv-controller context.</choice>
+      <rationale>The feature exists to prevent context pollution and avoid making a high-capability model reason about optional coordination mechanisms that are not active.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Describe all profiles and identify the active one</name>
+          <reason_rejected>The inactive alternatives still consume context and invite the model to reinterpret or bypass the configured policy.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+    <decision>
+      <topic>Single-session review exception</topic>
+      <choice>Keep exploration, investigation, planning, implementation, and verification in the primary session while permitting reviewer subagents for explicit or materially valuable independent evaluation.</choice>
+      <rationale>Delegated understanding creates lossy handoffs, but independent review benefits from a fresh context and a different model. The primary remains responsible for validating findings. It fixes confirmed findings directly when review belongs to active implementation, while explicit review-only requests remain findings-only until the user asks for fixes.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Prohibit every subagent including reviewers</name>
+          <reason_rejected>It removes useful cross-model and independent evaluation.</reason_rejected>
+        </alternative>
+        <alternative>
+          <name>Mandatory reviewers after every non-trivial change</name>
+          <reason_rejected>It recreates the latency and cost problem for routine work.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+    <decision>
+      <topic>Enforcement strength</topic>
+      <choice>Use prompt-only orchestration behavior in the first version.</choice>
+      <rationale>This is the smallest design that tests whether concrete profile prompts deliver the intended behavior without adding tool-state machinery or conflicting with explicit vv-execute classic mode.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Disable or filter task and workflow tools</name>
+          <reason_rejected>Hard gating would require exceptions and runtime state for vv-execute classic, increasing complexity before prompt behavior is measured.</reason_rejected>
+        </alternative>
+        <alternative>
+          <name>Session-scoped runtime overrides</name>
+          <reason_rejected>The user explicitly preferred prompt semantics over a second state machine.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+    <decision>
+      <topic>vv-execute relationship</topic>
+      <choice>Retain explicit inline/classic choice inside vv-execute and let that specialized skill prompt override ordinary preset behavior for the selected plan execution.</choice>
+      <rationale>The user intentionally added inline mode but still wants classic available as a deliberate workflow choice. Optionality is acceptable after explicit skill invocation, not in ordinary controller context.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Derive vv-execute mode automatically from orchestration profile</name>
+          <reason_rejected>It removes an intentional user decision and makes classic execution inaccessible from single-session presets.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+    <decision>
+      <topic>Backward compatibility</topic>
+      <choice>Add optional orchestration fields to schema v3 and resolve missing root configuration to balanced.</choice>
+      <rationale>The addition can be backward compatible. Existing valid configs should continue operating without a forced schema migration, while explicit invalid values still fail closed.</rationale>
+      <alternatives_considered>
+        <alternative>
+          <name>Required schema v4 section</name>
+          <reason_rejected>It would impose migration cost without adding necessary expressiveness or safety.</reason_rejected>
+        </alternative>
+      </alternatives_considered>
+    </decision>
+  </decisions>
+  <assumptions>
+    <assumption>
+      <statement>Concrete prompt instructions are sufficient to evaluate the value of orchestration profiles before adding harness enforcement.</statement>
+      <confidence>medium</confidence>
+      <fragile_if>Configured models repeatedly ignore single-session instructions and invoke working subagents despite clear prompts.</fragile_if>
+    </assumption>
+    <assumption>
+      <statement>Independent cross-model review provides enough value to remain available in single-session mode.</statement>
+      <confidence>high</confidence>
+      <fragile_if>Measured reviewer findings are consistently lower quality than direct primary review or produce excessive false positives and rework.</fragile_if>
+    </assumption>
+    <assumption>
+      <statement>The existing startup config snapshot is the correct lifecycle boundary for orchestration policy.</statement>
+      <confidence>high</confidence>
+      <fragile_if>OpenCode introduces a supported config hot-reload lifecycle that guarantees stable per-session policies.</fragile_if>
+    </assumption>
+  </assumptions>
+  <deferred>
+    <item>
+      <decision>Whether to enforce profiles by disabling tools, restricting task targets, or adding permissions.</decision>
+      <why_deferred>Prompt-only behavior should be observed before adding state and enforcement complexity.</why_deferred>
+      <revisit_trigger>Repeated policy violations or material context/tool-schema overhead caused by unused task capabilities.</revisit_trigger>
+    </item>
+    <item>
+      <decision>Whether to add cost, latency, token, and cache effectiveness telemetry by profile.</decision>
+      <why_deferred>The initial feature is behavioral and configuration-focused.</why_deferred>
+      <revisit_trigger>Need for quantitative preset tuning or disagreement about profile effectiveness.</revisit_trigger>
+    </item>
+    <item>
+      <decision>Whether built-in preset profile mappings should change as model capabilities evolve.</decision>
+      <why_deferred>The initial mapping reflects current intended usage and can be updated declaratively later.</why_deferred>
+      <revisit_trigger>A preset changes its primary smart model or observed behavior no longer matches its assigned profile.</revisit_trigger>
+    </item>
+  </deferred>
+  <scenarios>
+    <scenario>
+      <name>High-capability ordinary implementation</name>
+      <context>vv-osovv sets single-session and vv-controller receives a multi-file implementation request.</context>
+      <implications>The controller reads, reasons, edits, and verifies directly. It does not receive inactive implementation-loop instructions and does not delegate working context.</implications>
+    </scenario>
+    <scenario>
+      <name>Risk-driven independent review</name>
+      <context>A single-session implementation materially affects public config or another risky surface.</context>
+      <implications>The controller may launch reviewer subagents for one independent round, validates findings itself, applies confirmed fixes directly, and verifies without dispatching an implementer.</implications>
+    </scenario>
+    <scenario>
+      <name>Explicit classic plan execution</name>
+      <context>The active preset is single-session, but the user invokes vv-execute and selects classic.</context>
+      <implications>The loaded skill prompt authorizes classic tracked execution for that plan without modifying runtime orchestration state.</implications>
+    </scenario>
+    <scenario>
+      <name>Existing schema v3 installation</name>
+      <context>An existing valid config has no orchestration section.</context>
+      <implications>The config remains valid and resolves to balanced until a built-in preset or orchestration set command writes an explicit profile.</implications>
+    </scenario>
+    <scenario>
+      <name>Partial custom preset</name>
+      <context>A user-defined preset changes model roles but omits orchestration.</context>
+      <implications>The current root profile remains unchanged and CLI output makes that fact visible.</implications>
+    </scenario>
+  </scenarios>
+  <external_constraints>
+    <constraint>
+      <source>OpenCode plugin lifecycle</source>
+      <impact>Profile resolution and concrete system injection occur from the startup config snapshot; config changes require restart.</impact>
+    </constraint>
+    <constraint>
+      <source>Canonical vvoc config safety</source>
+      <impact>Existing invalid configs fail loudly, writes remain conservative and atomic, and valid v3 documents are not silently migrated to a new version.</impact>
+    </constraint>
+    <constraint>
+      <source>Managed workflow protocol</source>
+      <impact>Reviewer launches continue using existing work-item identity, strict result parsing, aggregation, persistence, and hard-stop semantics.</impact>
+    </constraint>
+  </external_constraints>
+</design-context>

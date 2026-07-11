@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-PRESET-ORCHESTRATION-PROFILES>
     <Summary>Add backward-compatible preset orchestration profiles that resolve one concrete vv-controller work policy from the startup vvoc configuration snapshot.</Summary>
     <Problem>The managed vv-controller currently receives broad orchestration guidance regardless of the selected model preset. This exposes inactive delegation strategies in ordinary context, prevents presets from expressing an intended operating profile, and provides no scoped CLI or status diagnostics for the effective policy.</Problem>

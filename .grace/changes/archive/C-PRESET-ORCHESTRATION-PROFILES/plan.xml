@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-PRESET-ORCHESTRATION-PROFILES>
     <IntentSummary>Add a shared orchestration profile domain, extend canonical schema v3 and presets without breaking old documents, resolve one startup policy for vv-controller prompt plugins, neutralize the managed base prompt, expose scoped CLI and status diagnostics, document the behavior, and synchronize durable graph and verification projections.</IntentSummary>
     <BaselineAssertions>

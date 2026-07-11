@@ -1,0 +1,82 @@
+<spec>
+  <status>applied</status>
+  <goal>Add preset-configured orchestration profiles that control the concrete model-visible working instructions for the managed vv-controller. The feature must make high-capability presets operate primary-first without exposing alternative orchestration strategies in ordinary session context, while preserving deliberate cross-model review and the explicit inline/classic choice inside vv-execute.</goal>
+  <architecture>Keep one managed vv-controller with a profile-neutral base prompt containing only universal workflow invariants. Extend canonical vvoc v3 configuration with an optional root orchestration object and an optional orchestration object inside each preset; each object contains one profile value: single-session, balanced, or orchestrated. A missing root orchestration section resolves to balanced for backward compatibility. Applying a preset changes the root profile only when that preset explicitly declares orchestration, preserving partial preset semantics.
+
+Resolve the effective profile from the existing startup vvoc config snapshot. Do not infer it from provider, model ID, model capabilities, reasoning effort, or the active TUI model. Use a shared internal resolver as the single source of profile semantics. SystemContextInjectionPlugin uses the resolved value to inject exactly one concrete work policy into vv-controller. The model must not receive a list of profiles, profile selection logic, model matching rules, or instructions belonging to inactive profiles. Other primary agents continue receiving only the existing universal context applicable to them.
+
+The single-session policy instructs vv-controller to perform repository exploration, investigation, planning, implementation, and verification directly in the current session and not delegate that work to subagents. Reviewer subagents remain permitted when the user explicitly requests review or when a materially risky completed change benefits from independent cross-model evaluation. One review round is the default; vv-controller must personally validate every finding. When review is part of an active implementation, vv-controller performs confirmed fixes itself and runs fresh verification. When the user requested review-only behavior or explicitly invoked vv-review, findings remain the final output and no fixes occur without subsequent user confirmation. A second review occurs only on explicit user request or when fixes materially change architecture or risk surface. Guardian is outside orchestration profiles and remains an independent permission-flow mechanism.
+
+The balanced policy keeps architecture, critical code reading, and final synthesis in vv-controller while permitting bounded use of explore as a search worker, investigator for isolated investigation, implementer for isolated mechanical work, and reviewer agents for independent evaluation. Delegation is available but not mechanically mandatory, and automatic reviewer loops are not used.
+
+The orchestrated policy preserves the existing tracked implementation and review workflow, including work items, implementer dispatch, required reviewers, bounded rounds, and hard stops.
+
+The first version is prompt-driven only. It does not disable tools, modify permissions, filter subagent types, or store session-scoped orchestration state. WorkflowPlugin must avoid injecting inactive implementation-loop instructions into single-session context, but existing task and tracked workflow enforcement remain available when invoked. vv-review remains an explicit cross-model reviewer workflow in every profile. vv-execute remains a specialized workflow that explicitly offers inline and classic modes; the user's selected vv-execute mode overrides the preset policy through skill instructions only, without runtime override state.</architecture>
+  <tech-stack>TypeScript and ESM on Bun; existing @opencode-ai/plugin chat.message and config hooks; existing vvoc startup config snapshot and global/project layering; canonical JSON Schema v3; citty CLI commands; managed Markdown agent and skill templates; existing WorkflowPlugin tracked reviewer protocol; Bun tests, TypeScript, oxlint, oxfmt, build, and release consistency gates.</tech-stack>
+  <components>
+    <component>
+      <name>Orchestration configuration model</name>
+      <responsibility>Define OrchestrationProfile as single-session, balanced, or orchestrated; add optional root and preset orchestration.profile fields; resolve a missing root section to balanced; parse, validate, normalize, render, and preserve the fields without changing config version 3.</responsibility>
+      <depends-on>src/lib/vvoc-config.ts, schemas/vvoc/v3.json, existing strict config validation and layer resolution.</depends-on>
+    </component>
+    <component>
+      <name>Built-in preset registry and preset application</name>
+      <responsibility>Add explicit profiles to every built-in preset and atomically apply declared role and orchestration changes in one vvoc.json write. Use single-session for vv-osovv, vv-osovv-cheap, and vv-openai; use balanced for vv-zai, vv-minimax, and vv-deepseek. Preserve the current profile when a user-defined preset omits orchestration.</responsibility>
+      <depends-on>src/lib/vvoc-preset-registry.ts, src/commands/preset.ts, canonical config validation.</depends-on>
+    </component>
+    <component>
+      <name>Internal orchestration resolver</name>
+      <responsibility>Resolve one immutable effective profile and its concrete capabilities from the startup config snapshot. Remain internal and reusable by prompt-producing plugins; do not add a seventh public plugin.</responsibility>
+      <depends-on>src/lib/config-layers.ts and the orchestration configuration model.</depends-on>
+    </component>
+    <component>
+      <name>SystemContextInjectionPlugin</name>
+      <responsibility>Inject one resolved concrete work policy into vv-controller only, prevent duplicate injection, and remove generic proactive delegation language that contradicts single-session operation. Continue providing universal non-orchestration guidance to eligible primary agents.</responsibility>
+      <depends-on>The internal orchestration resolver and existing known-subagent filtering.</depends-on>
+    </component>
+    <component>
+      <name>WorkflowPlugin guidance</name>
+      <responsibility>Inject only profile-compatible workflow guidance: compact reviewer-only mechanics for single-session, selective delegation mechanics for balanced, and the full tracked implementation-loop protocol for orchestrated. Preserve existing task launch validation, result parsing, reviewer aggregation, persistence, and hard stops. Do not add profile-based harness restrictions in the first version.</responsibility>
+      <depends-on>The internal orchestration resolver and existing WorkflowPlugin protocol/state modules.</depends-on>
+    </component>
+    <component>
+      <name>Managed vv-controller prompt</name>
+      <responsibility>Retain only universal controller invariants and remove branches that describe all orchestration strategies. Defer concrete delegation behavior to the single resolved system policy.</responsibility>
+      <depends-on>templates/agents/vv-controller.md and managed prompt synchronization.</depends-on>
+    </component>
+    <component>
+      <name>Managed workflow skills</name>
+      <responsibility>Keep vv-review as an explicit reviewer-subagent, review-only workflow in every profile; findings are final until the user separately requests fixes. Keep vv-execute's explicit inline/classic assessment and user choice; its selected mode controls that plan execution through skill prompts without persisted runtime override state.</responsibility>
+      <depends-on>templates/skills/vv-review/SKILL.md, templates/skills/vv-execute/SKILL.md, and the concrete controller policy.</depends-on>
+    </component>
+    <component>
+      <name>Orchestration CLI and diagnostics</name>
+      <responsibility>Add orchestration show and set commands with existing global/project/effective scope conventions, report changed or unchanged profile state during preset application, show the effective profile and source in status output, and state that OpenCode must be restarted before a changed profile applies.</responsibility>
+      <depends-on>src/cli.ts, command modules, config write targets, status inspection, and shell completion generation.</depends-on>
+    </component>
+  </components>
+  <data-flow>A built-in or user-defined preset is loaded from the selected vvoc config layer. Preset application validates every declared role assignment and orchestration value before mutation, constructs one next config document, and writes roles plus profile atomically. If orchestration is absent from the preset, the current root profile is retained. Direct orchestration set writes only the selected root profile using existing scope rules.
+
+At the next OpenCode start, loadVvocConfig resolves the effective env, project, global, or default vvoc source and creates the shared startup snapshot. The internal resolver reads config.orchestration.profile or returns balanced when the section is absent. It does not inspect the active model. For vv-controller messages, SystemContextInjectionPlugin appends only the concrete instruction associated with that profile. WorkflowPlugin adds only compatible workflow guidance. The chosen strings remain stable for the lifetime of the OpenCode process; config edits do not live-reload.
+
+During ordinary single-session work, vv-controller performs the task itself and may invoke reviewers only under the defined review conditions. During an explicit vv-review invocation, the reviewer workflow operates normally. During vv-execute, the skill presents inline and classic choices; the user's selection governs that plan execution through the loaded skill instructions even when the preset's ordinary policy is single-session.</data-flow>
+  <error-handling>Reject explicit unknown or malformed orchestration profiles during schema/config validation and runtime startup; do not silently fall back from an invalid explicit value. Treat only a missing root orchestration section as balanced. Report validation errors with the precise root or preset JSON path and the allowed values. Validate all preset roles, models, and orchestration fields before writing; on any failure, leave vvoc.json unchanged. Preserve strict existing-config behavior and never silently migrate, repair, or partially apply an invalid document. CLI set must reject unsupported profiles and effective write scope. Successful config-changing commands must report that a restart is required for runtime application.</error-handling>
+  <testing>
+    <strategy>Use focused unit and command tests for config, preset, resolver, prompt, skill, and CLI behavior, then run the repository gates required for a public schema and CLI/config change. Prefer exact positive and negative prompt assertions that prove inactive orchestration instructions are absent, not only that active text is present.</strategy>
+    <coverage>Verify old schema v3 documents without orchestration remain valid and resolve to balanced; valid root and preset profiles round-trip; invalid values fail with precise paths. Verify built-in preset mappings, managed preset refresh, custom preset preservation, atomic preset writes, and unchanged profile behavior for model-only presets. Verify single-session prompt contains direct-work and reviewer-exception instructions while excluding explore, investigator, implementer, and tracked-loop routing; verify balanced and orchestrated receive only their concrete policies; verify duplicate injection is prevented and non-vv-controller primaries do not receive orchestration policy. Verify WorkflowPlugin guidance is profile-compatible without changing existing tracked protocol enforcement. Verify vv-review remains reviewer-based and vv-execute retains explicit inline/classic selection. Verify orchestration show/set, scope handling, completions, preset output, status source reporting, and restart messaging. Run targeted Bun tests, bun run check, bun run build, and bun run release:check.</coverage>
+  </testing>
+  <non-goals>
+    <non-goal>Do not infer orchestration from model ID, provider, model metadata, context size, reasoning effort, or current TUI model selection.</non-goal>
+    <non-goal>Do not live-reload orchestration config or change policy inside an already running OpenCode process.</non-goal>
+    <non-goal>Do not add runtime or session-scoped orchestration override state.</non-goal>
+    <non-goal>Do not enforce profiles through tool disabling, permissions, task filtering, or subagent-type blocking in the first version.</non-goal>
+    <non-goal>Do not add multiple profile-specific primary agents or a new public orchestration plugin.</non-goal>
+    <non-goal>Do not add a dedicated review tool.</non-goal>
+    <non-goal>Do not add granular delegation flags, per-model profiles, per-agent profiles, or natural-language matching.</non-goal>
+    <non-goal>Do not add automatic cost, latency, token, or cache-hit telemetry.</non-goal>
+    <non-goal>Do not modify Guardian or its permission-flow behavior.</non-goal>
+    <non-goal>Do not replace or redesign the tracked reviewer result protocol.</non-goal>
+    <non-goal>Do not create schema v4 or require migration of existing valid v3 configs.</non-goal>
+    <non-goal>Do not guarantee that every model obeys prompt-only profile instructions; harness enforcement may be reconsidered from evidence later.</non-goal>
+  </non-goals>
+</spec>
