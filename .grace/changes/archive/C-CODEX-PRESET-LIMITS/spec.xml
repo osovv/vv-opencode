@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-CODEX-PRESET-LIMITS>
     <Summary>Rename the managed OpenAI preset and aliases to explicit Codex subscription terminology and apply subscription-safe token limits.</Summary>
     <Problem>The current vv-gpt aliases inherit direct-API input limits from models.dev while they are used through Codex subscription routing, so OpenCode delays compaction beyond the server-enforced input budget and long GPT-5.6 sessions fail near 372000 input tokens.</Problem>

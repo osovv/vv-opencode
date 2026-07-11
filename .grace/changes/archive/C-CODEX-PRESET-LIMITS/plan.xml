@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-CODEX-PRESET-LIMITS>
     <IntentSummary>Replace ambiguous vv-openai and vv-gpt naming with canonical vv-codex and vv-codex-gpt names under provider.openai, apply explicit Codex subscription token budgets, preserve the old patch-provider spelling as a compatibility route, and synchronize public documentation, defaults, completions, tests, and governed artifacts.</IntentSummary>
     <BaselineAssertions>
