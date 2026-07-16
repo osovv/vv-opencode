@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [DIRECT-FIX - Required a repository-local GitHub Actions bot identity before annotated tag creation.]
 //   LAST_CHANGE: [DIRECT-FIX - Added regression coverage preventing pre-verification tag pushes and tag-triggered publishing.]
 // END_CHANGE_SUMMARY
 
@@ -96,9 +97,13 @@ describe("publish workflow ordering", () => {
     const testStep = workflow.indexOf("- name: Test");
     const publishStep = workflow.indexOf("- name: Publish to npm");
     const tagStep = workflow.indexOf("- name: Create and push release tag");
+    const tagIdentity = workflow.indexOf('git config user.name "github-actions[bot]"');
+    const annotatedTag = workflow.indexOf('git tag -a "${TAG}" -m "${TAG}"');
 
     expect(testStep).toBeGreaterThan(-1);
     expect(publishStep).toBeGreaterThan(testStep);
     expect(tagStep).toBeGreaterThan(publishStep);
+    expect(tagIdentity).toBeGreaterThan(tagStep);
+    expect(annotatedTag).toBeGreaterThan(tagIdentity);
   });
 });

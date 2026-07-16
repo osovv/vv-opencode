@@ -134,6 +134,8 @@ jobs:
             fi
             echo "Tag ${TAG} already points to ${CURRENT_SHA}; skipping tag push"
           else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -a "${TAG}" -m "${TAG}"
             git push origin "${TAG}"
           fi
