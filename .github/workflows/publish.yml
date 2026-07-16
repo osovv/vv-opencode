@@ -1,16 +1,23 @@
 name: publish
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to verify and publish"
+        required: true
+        type: string
+      commit_sha:
+        description: "Exact release commit SHA to verify and publish"
+        required: true
+        type: string
 
 permissions:
   id-token: write
   contents: write
 
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish-${{ inputs.version }}
   cancel-in-progress: false
 
 jobs:
@@ -18,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,15 +40,39 @@ jobs:
         with:
           bun-version: 1.3.8
 
-      - name: Verify tag matches package version
+      - name: Verify release request
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          set -euo pipefail
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "v${PKG_VERSION}" != "${TAG}" ]; then
-            echo "Tag ${TAG} does not match package.json version v${PKG_VERSION}"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          TAG="v${PKG_VERSION}"
+
+          if [ "${PKG_VERSION}" != "${REQUESTED_VERSION}" ]; then
+            echo "Requested version ${REQUESTED_VERSION} does not match package.json version ${PKG_VERSION}"
             exit 1
           fi
-          echo "Tag ${TAG} matches package.json version v${PKG_VERSION}"
+          if [ "${CURRENT_SHA}" != "${REQUESTED_SHA}" ]; then
+            echo "Checked out SHA ${CURRENT_SHA} does not match requested SHA ${REQUESTED_SHA}"
+            exit 1
+          fi
+
+          git fetch --force --tags origin
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "${TAG}")"
+            if [ "${TAG_SHA}" != "${CURRENT_SHA}" ]; then
+              echo "Existing tag ${TAG} points to ${TAG_SHA}, expected ${CURRENT_SHA}"
+              exit 1
+            fi
+            echo "Existing tag ${TAG} already points to the requested release commit"
+          fi
+
+          echo "version=${PKG_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "Release request verified for ${TAG} at ${CURRENT_SHA}"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -62,12 +96,53 @@ jobs:
         run: bun run pack:check
 
       - name: Publish to npm
-        run: npm publish --access public
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="@osovv/vv-opencode"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+
+          if PUBLISHED_SHA="$(npm view "${PACKAGE_NAME}@${RELEASE_VERSION}" gitHead 2>/dev/null)"; then
+            PUBLISHED_SHA="$(printf '%s' "${PUBLISHED_SHA}" | tr -d '[:space:]')"
+            if [ -z "${PUBLISHED_SHA}" ]; then
+              echo "${PACKAGE_NAME}@${RELEASE_VERSION} already exists but has no gitHead metadata"
+              exit 1
+            fi
+            if [ "${PUBLISHED_SHA}" != "${CURRENT_SHA}" ]; then
+              echo "${PACKAGE_NAME}@${RELEASE_VERSION} was published from ${PUBLISHED_SHA}, expected ${CURRENT_SHA}"
+              exit 1
+            fi
+            echo "${PACKAGE_NAME}@${RELEASE_VERSION} is already published from the requested commit; continuing"
+          else
+            npm publish --access public --provenance
+          fi
+
+      - name: Create and push release tag
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          git fetch --force --tags origin
+
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "${TAG}")"
+            if [ "${TAG_SHA}" != "${CURRENT_SHA}" ]; then
+              echo "Existing tag ${TAG} points to ${TAG_SHA}, expected ${CURRENT_SHA}"
+              exit 1
+            fi
+            echo "Tag ${TAG} already points to ${CURRENT_SHA}; skipping tag push"
+          else
+            git tag -a "${TAG}" -m "${TAG}"
+            git push origin "${TAG}"
+          fi
 
       - name: Extract changelog entry for release
         id: changelog
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           awk -v ver="$VERSION" '
             $0 ~ "^## " && $0 ~ ver { found=1; print; next }
             found && /^## / { exit }
@@ -77,7 +152,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.release.outputs.tag }}
           body_path: /tmp/release-body.md
           fail_on_unmatched_files: false
         env:

@@ -363,7 +363,9 @@ Session handoff notes   → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xm
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`. The current config contract is strict: `vvoc.json` must be canonical version 3 and include required sections such as `plugins`. Existing v1/v2/pre-role, incomplete, malformed, or otherwise invalid config files fail instead of being migrated or repaired. `vvoc install` and `vvoc sync` may create a fresh canonical config when no config exists, but they refuse to rewrite an invalid existing `vvoc.json`; fix the file manually and rerun `vvoc sync`.
 
-`vvoc install`, `vvoc init`, and `vvoc sync` conservatively add the pinned base package specifier (for example `@osovv/vv-opencode@1.1.2`) to dedicated `tui.json(c)`; OpenCode then selects the package's public `./tui` export. Sync migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
+OpenCode intentionally keeps server/runtime plugins and native terminal UI plugins in separate configuration surfaces. `opencode.json(c)` is loaded by the core/server plugin runtime and activates vvoc features such as model roles, Guardian, workflow, hashline edit, and redaction. `tui.json(c)` is loaded by the terminal UI process and activates the package's `./tui` module, currently the `/context` inspector. The same pinned package version appears in both files, but OpenCode selects a different public export for each process; headless/server launches therefore do not need to load the Solid/OpenTUI UI module.
+
+`vvoc install`, `vvoc init`, and `vvoc sync` conservatively add the pinned base package specifier (for example `@osovv/vv-opencode@X.Y.Z`) to dedicated `tui.json(c)`; OpenCode then selects the package's public `./tui` export. Sync migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
 
 `vvoc status` and `vvoc doctor` are diagnostic exceptions: they report the installed OpenCode version, the `1.18.2` TUI minimum, selected runtime/TUI/vvoc config paths, and validation problems without normalizing or rewriting the files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; in that case it reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config manually before rerunning `vvoc sync`.
 
@@ -466,7 +468,7 @@ bun run pack:check
 ---
 ## Publishing
 
-The release flow is automated via a local wrapper and a tag-gated GitHub Actions workflow.
+The release flow is automated via a local wrapper and an exact-commit, CI-gated GitHub Actions workflow.
 
 ### Local bump
 
@@ -481,19 +483,25 @@ This will:
 4. Prepend a `### Summary` section plus conventional commit details to `CHANGELOG.md`
 5. Update `schemas/vvoc/v3.json` `$id` to the new version
 6. Run `release:check` for consistency
-7. Create a release commit and annotated tag `vX.Y.Z`
-8. Push the current branch and the created tag to `origin`
+7. Create a release commit without creating a tag
+8. Push only the current branch to `origin`
+9. Dispatch `publish.yml` through `gh` with the exact package version and release commit SHA
 
 Required local release prerequisite:
 - `opencode` must be available from `PATH`.
+- `gh` must be installed and authenticated with permission to dispatch workflows in the repository.
 - The summary model defaults to `deepseek/deepseek-v4-flash`.
 - Override with `VVOC_RELEASE_SUMMARY_MODEL=provider/model`.
 - Override the per-attempt timeout with `VVOC_RELEASE_SUMMARY_TIMEOUT_MS=120000`.
-Run `release:bump` from a checked-out branch with push access to `origin`. The tag push is what triggers the publish workflow.
+Run `release:bump` from a checked-out branch with push access to `origin`. A normal branch push never publishes by itself; the wrapper explicitly dispatches the workflow for the exact pushed commit.
 
-The GitHub Actions workflow triggers on `v*` tag pushes, verifies the tag matches
-`package.json`, runs full validation (typecheck, lint, fmt check, tests, build, pack
-check, `release:check`), and publishes to npm with `--provenance`.
+The GitHub Actions workflow checks out the requested commit SHA, verifies that its
+`package.json` version matches the dispatch input, and runs full validation
+(typecheck, lint, fmt check, tests, build, pack check, and `release:check`). Only
+after every gate passes does it publish to npm with provenance, create and push the
+annotated `vX.Y.Z` tag, and create the GitHub Release. A safe rerun accepts an
+already-published version only when its npm `gitHead` matches the exact requested
+commit, allowing tag or GitHub Release recovery without publishing different bytes.
 
 ### Checking consistency manually
 
@@ -506,7 +514,7 @@ config format version are all consistent. Run it independently anytime.
 
 ### CI publish workflow
 
-The workflow uses npm provenance/trusted publishing (`id-token: write`) and does not publish on normal branch pushes. Configure npm trusted publishing for this GitHub repository/package, or adapt the publish step to use an `NPM_TOKEN` secret if token-based publishing is required.
+The workflow uses npm provenance/trusted publishing (`id-token: write`) and can only publish through an explicit `workflow_dispatch` request. Normal branch and tag pushes do not publish. Configure npm trusted publishing for this GitHub repository/package, or adapt the publish step to use an `NPM_TOKEN` secret if token-based publishing is required.
 
 ---
 

@@ -62,7 +62,7 @@
     <Script name="check">Runs typecheck, lint, fmt:check, and tests.</Script>
     <Script name="pack:check">Builds dist, verifies root, server plugin, and default TUI subpath exports by importing generated files, then runs npm pack --dry-run.</Script>
     <Script name="release:check">Runs scripts/release-check.ts to validate package identity, package version, hosted schema id, schema config const, changelog presence, and latest changelog summary.</Script>
-    <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, commit, tag, and push.</Script>
+    <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, create and push the release commit, then dispatch publish.yml with exact version/SHA inputs without creating a local tag.</Script>
     <Script name="prepare">Installs lefthook hooks.</Script>
   </Scripts>
   <TestingStack>
@@ -100,7 +100,7 @@
     <Constraint>Do not edit generated dist output manually.</Constraint>
     <Constraint>Root package exports and plugin subpath exports must stay valid unless an explicit breaking change is approved.</Constraint>
     <Constraint>OpenCode TUI integration requires OpenCode 1.18.2 or newer and a default TuiPluginModule export selected from the pinned base package registered in tui.json(c).</Constraint>
-    <Constraint>Publishing remains manual from terminal with npm publish; normal branch pushes must not publish the package.</Constraint>
+    <Constraint>Publishing requires an explicit exact-SHA GitHub Actions workflow dispatch; normal branch and tag pushes must not publish the package, and the release tag is created only after CI gates and npm publication succeed.</Constraint>
     <Constraint>README, .grace/graph, and .grace/verification must be updated with behavior, public API, setup, command, flow, or verification changes as applicable.</Constraint>
   </OperationalConstraints>
 </GraceTechnology>

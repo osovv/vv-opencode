@@ -16,23 +16,21 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [DIRECT-FIX - Preloaded the OpenTUI Solid transform before all test discovery so reactive rendering is deterministic in CI.]
 //   LAST_CHANGE: [DIRECT-FIX - Covered connected MCP schema catalogs rendered as unavailable rather than zero.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
-import type { ContextAnalysis, ContextMcpUsage, ContextToolUsage } from "./types.js";
-
-const solidPreload: string = "@opentui/solid/preload";
-await import(solidPreload);
-const { createComponent, testRender } = await import("@opentui/solid");
-const {
+import { createComponent, testRender } from "@opentui/solid";
+import {
   ContextDialogContent,
   calculateContextBodyHeight,
   openContextDialog,
   renderMetricBar,
   selectContextTabForKey,
-} = await import("./view.js");
+} from "./view.js";
+import type { ContextAnalysis, ContextMcpUsage, ContextToolUsage } from "./types.js";
 
 const THEME = {
   text: "#ffffff",

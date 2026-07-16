@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
-// VERSION: 1.1.0
+// VERSION: 1.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Wrapper around npm version --no-git-tag-version that generates changelog, generates a required AI summary, patches schema $id, runs release checks, then commits, tags, and pushes the release.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, tags, and pushes the current branch plus the created tag.
-//   DEPENDS: [node:fs, node:child_process, scripts/release-summary.ts]
+//   PURPOSE: Prepare and push an exact-SHA release commit, then dispatch the CI workflow that gates npm publication and tag creation behind successful verification.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, pushes the current branch, and dispatches publish.yml with the release version and commit SHA without creating a local tag.
+//   DEPENDS: [node:fs, node:child_process, gh CLI, scripts/release-summary.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -23,10 +23,12 @@
 //   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, and CHANGELOG changes before commit.
 //   assertTagDoesNotExist - Verifies the release tag does not already exist.
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
-//   main - Runs the guarded release bump, changelog generation, mandatory AI summary generation, consistency check, commit, tag, and push flow.
+//   dispatchVerifiedPublishWorkflow - Pushes only the release commit branch and dispatches publish.yml with exact version/SHA inputs.
+//   main - Runs the guarded release bump, changelog generation, mandatory AI summary generation, consistency check, commit, branch push, and CI dispatch flow.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [DIRECT-FIX - Moved tag creation and npm publication behind exact-SHA CI verification instead of pushing a tag before tests.]
 //   LAST_CHANGE: [v1.1.0 - Updated for full per-commit diff context in release summaries plus mandatory summary generation.]
 // END_CHANGE_SUMMARY
 
@@ -69,6 +71,18 @@ interface PackageJson {
 
 interface SchemaJson {
   $id?: string;
+}
+
+export type ReleaseCommandRunner = (
+  command: string,
+  args: string[],
+  failureMessage: string,
+) => string;
+
+export interface ReleaseWorkflowDispatchInput {
+  branchName: string;
+  version: string;
+  commitSha: string;
 }
 
 function gitStatus(): string {
@@ -251,7 +265,7 @@ function assertOnlyReleaseFilesChanged(): void {
     for (const path of unexpectedFiles) {
       console.error(`  ${path}`);
     }
-    console.error("Commit or handle these files manually before creating a release tag.");
+    console.error("Commit or handle these files manually before preparing the release commit.");
     process.exit(1);
   }
 }
@@ -281,6 +295,32 @@ function getCurrentBranchName(): string {
   }
 
   return branchName;
+}
+
+export function dispatchVerifiedPublishWorkflow(
+  input: ReleaseWorkflowDispatchInput,
+  execute: ReleaseCommandRunner = run,
+): void {
+  execute(
+    "git",
+    ["push", "origin", input.branchName],
+    `git push origin ${input.branchName} failed. The release commit exists locally but CI was not dispatched.`,
+  );
+  execute(
+    "gh",
+    [
+      "workflow",
+      "run",
+      "publish.yml",
+      "--ref",
+      input.branchName,
+      "-f",
+      `version=${input.version}`,
+      "-f",
+      `commit_sha=${input.commitSha}`,
+    ],
+    `Failed to dispatch publish.yml. Retry with: gh workflow run publish.yml --ref ${input.branchName} -f version=${input.version} -f commit_sha=${input.commitSha}`,
+  );
 }
 
 function main(): void {
@@ -350,41 +390,39 @@ function main(): void {
   run("bun", ["run", "release:check"], "release:check failed after bump. Release aborted.");
   // END_BLOCK_RUN_RELEASE_CHECK
 
-  // START_BLOCK_GIT_COMMIT_AND_TAG
+  // START_BLOCK_GIT_COMMIT
   assertOnlyReleaseFilesChanged();
 
   const branchName = getCurrentBranchName();
   const tagName = `v${newVersion}`;
   assertTagDoesNotExist(tagName);
 
-  console.log("\nCreating release commit and tag...\n");
+  console.log("\nCreating release commit...\n");
   run("git", ["add", "package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"], "git add failed.");
   run(
     "git",
     ["commit", "-m", `chore: bump version from ${currentVersion} to ${newVersion} with changelog`],
     "git commit failed. package.json and schema have been updated but may not be committed.",
   );
-  run("git", ["tag", "-a", tagName, "-m", tagName], "git tag failed. Release commit was created without a tag.");
-  // END_BLOCK_GIT_COMMIT_AND_TAG
+  const releaseCommitSha = runCapture("git", ["rev-parse", "HEAD"], "git rev-parse failed.").trim();
+  // END_BLOCK_GIT_COMMIT
 
-  // START_BLOCK_GIT_PUSH
-  console.log("\nPushing release commit and tag...\n");
-  run(
-    "git",
-    ["push", "origin", branchName],
-    `git push origin ${branchName} failed. Release commit and tag were created locally but not pushed.`,
-  );
-  run(
-    "git",
-    ["push", "origin", tagName],
-    `git push origin ${tagName} failed. Release tag exists locally but was not pushed.`,
-  );
-  // END_BLOCK_GIT_PUSH
+  // START_BLOCK_PUSH_AND_DISPATCH
+  console.log("\nPushing release commit and dispatching verified publish workflow...\n");
+  dispatchVerifiedPublishWorkflow({
+    branchName,
+    version: newVersion,
+    commitSha: releaseCommitSha,
+  });
+  // END_BLOCK_PUSH_AND_DISPATCH
 
-  console.log(`\n✓ Release ${tagName} committed, tagged, and pushed.\n`);
-  console.log(`  Git SHA: ${runCapture("git", ["rev-parse", "HEAD"], "git rev-parse failed.").trim()}`);
+  console.log(`\n✓ Release candidate ${tagName} committed, pushed, and dispatched to CI.\n`);
+  console.log(`  Git SHA: ${releaseCommitSha}`);
   console.log(`  Branch: ${branchName}`);
-  console.log(`  Tag: ${tagName}\n`);
+  console.log(`  Pending tag: ${tagName}`);
+  console.log(
+    "  npm publication and tag creation will occur only after publish.yml passes all gates.\n",
+  );
 }
 
-main();
+if (import.meta.main) main();
