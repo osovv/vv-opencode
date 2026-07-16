@@ -1,3 +1,11 @@
+## <small>1.1.5 (2026-07-16)</small>
+
+### Summary
+
+Release automation was hardened to require explicit GitHub Actions dispatch with an exact version and commit SHA, replacing the previous tag-push trigger so that all CI gates—typecheck, lint, format, tests, build, pack validation, and release consistency checks—complete successfully before npm publication, remote tag creation, and GitHub Release creation, preventing accidental or premature publishing and enabling safe reruns for tag recovery.
+
+* fix(release): gate publishing and tags behind CI ([55908c5](https://github.com/osovv/vv-opencode/commit/55908c5))
+
 ## <small>1.1.4 (2026-07-16)</small>
 
 ### Summary
