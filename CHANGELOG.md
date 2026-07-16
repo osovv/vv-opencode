@@ -1,3 +1,13 @@
+## <small>1.1.4 (2026-07-16)</small>
+
+### Summary
+
+This release delivers a major upgrade to the `/context` TUI dialog, transforming it from a single aggregate view into a detailed three-tabbed inspector with Overview, Tools, and MCP panels that show per-tool schema and active-history estimates, context-window percentages derived only from the model's positive context limit, and deterministic MCP server attribution through longest-prefix naming. Connected MCP schema catalogs unavailable through OpenCode's public APIs are now explicitly marked as such rather than incorrectly shown as zero, and the dialog content is vertically centered within the host window. A new `tui:local` script enables pre-release smoke testing by building and launching the local TUI export through an isolated temporary config without modifying the user's selected OpenCode, TUI, or vvoc configuration files.
+
+* fix(tui): mark unavailable MCP schemas ([b5b7dd6](https://github.com/osovv/vv-opencode/commit/b5b7dd6))
+* feat(tui): add detailed context attribution ([c7bc1c8](https://github.com/osovv/vv-opencode/commit/c7bc1c8))
+* feat(tui): add local testing and center context dialog ([0d9f587](https://github.com/osovv/vv-opencode/commit/0d9f587))
+
 ## <small>1.1.3 (2026-07-16)</small>
 
 ### Summary
