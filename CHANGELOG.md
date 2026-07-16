@@ -1,3 +1,11 @@
+## <small>1.1.3 (2026-07-16)</small>
+
+### Summary
+
+Release 1.1.3 fixes a layout issue in the `/context` dialog where a duplicate dialog wrapper caused incorrect rendering. The fix moves dialog container ownership to the host and applies "xlarge" sizing after the content is replaced, ensuring the context breakdown displays with the intended dimensions and no nested modals. This improves the reliability of the context inspection interface for all users.
+
+* fix(tui): correct context dialog layout ([0e22c00](https://github.com/osovv/vv-opencode/commit/0e22c00))
+
 ## <small>1.1.2 (2026-07-16)</small>
 
 ### Summary
