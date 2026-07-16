@@ -42,6 +42,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "import": "./dist/tui.js"
+    },
     "./plugins/guardian": {
       "types": "./dist/plugins/guardian/index.d.ts",
       "import": "./dist/plugins/guardian/index.js"
@@ -76,21 +80,24 @@
     "fmt:check": "oxfmt --check src",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test",
-    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js')\" && npm pack --dry-run",
+    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); const tui = await import('./dist/tui.js'); if (!tui.default || typeof tui.default.tui !== 'function') throw new Error('dist TUI export missing default tui module'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js')\" && npm pack --dry-run",
     "release:check": "bun scripts/release-check.ts",
     "release:bump": "bun scripts/release-bump.ts",
     "prepare": "lefthook install --force"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",
-    "@opencode-ai/plugin": "1.3.17",
-    "@opencode-ai/sdk": "1.3.17",
+    "@opencode-ai/plugin": "1.18.2",
+    "@opencode-ai/sdk": "1.18.2",
     "ajv": "^8.17.1",
     "citty": "0.2.2",
     "jsonc-parser": "3.3.1"
   },
   "devDependencies": {
     "@types/node": "22.13.9",
+    "@opentui/core": "0.4.3",
+    "@opentui/keymap": "0.4.3",
+    "@opentui/solid": "0.4.3",
     "bun-types": "1.3.11",
     "lefthook": "2.1.5",
     "oxfmt": "0.43.0",
@@ -99,6 +106,11 @@
     "conventional-changelog-cli": "^5.0.0",
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.4.3",
+    "@opentui/keymap": ">=0.4.3",
+    "@opentui/solid": ">=0.4.3"
   },
   "engines": {
     "bun": ">=1.3.8"

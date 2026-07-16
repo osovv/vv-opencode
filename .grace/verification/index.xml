@@ -17,6 +17,7 @@
         <V-M-PLUGIN-HASHLINE-EDIT />
         <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
         <V-M-PLUGIN-SECRETS-REDACTION />
+        <V-M-PLUGIN-CONTEXT-TUI />
         <V-M-CLI-ROLE />
         <V-M-CLI-CONFIG-VALIDATE />
         <V-M-CLI-PRESET />

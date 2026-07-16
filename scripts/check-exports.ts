@@ -1,4 +1,23 @@
 #!/usr/bin/env bun
+// FILE: scripts/check-exports.ts
+// VERSION: 1.0.0
+// START_MODULE_CONTRACT
+//   PURPOSE: Validate package export source files and ensure discovered server/TUI plugin declarations have public export paths.
+//   SCOPE: package.json subpath parsing, TypeScript/TSX source lookup, plugin declaration discovery, and pre-commit failure reporting.
+//   DEPENDS: [node:fs, node:path, package.json]
+//   LINKS: [M-RELEASE-AUTOMATION, V-M-RELEASE-AUTOMATION]
+//   ROLE: SCRIPT
+//   MAP_MODE: SUMMARY
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   check-exports script - Verify root, server plugin, and TUI package subpaths before commit.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TSX source lookup and TUI plugin export recognition.]
+// END_CHANGE_SUMMARY
+
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -46,13 +65,21 @@ function getExportPaths(exports: PackageExports): Map<string, ExportEntry> {
 function resolveDistPath(importPath: string): string | null {
   const match = importPath.match(/^\.\/dist\/(.+)\.js$/);
   if (!match) return null;
-  return "src/" + match[1] + ".ts";
+  const basePath = "src/" + match[1];
+  for (const extension of [".ts", ".tsx"]) {
+    const candidate = basePath + extension;
+    if (checkExportExists(candidate).exists) return candidate;
+  }
+  return basePath + ".ts";
 }
 
 function findPluginDeclarations(): PluginDeclaration[] {
   const { globSync } = require("node:fs");
 
-  const tsFiles = globSync("**/*.ts", { cwd: SRC_DIR, ignore: ["**/*.test.ts", "**/*.d.ts", "**/node_modules/**"] });
+  const tsFiles = globSync("**/*.ts", {
+    cwd: SRC_DIR,
+    ignore: ["**/*.test.ts", "**/*.d.ts", "**/node_modules/**"],
+  });
 
   const plugins: PluginDeclaration[] = [];
 
@@ -79,8 +106,9 @@ function findPluginDeclarations(): PluginDeclaration[] {
 
 function getPluginExportPath(pluginFilePath: string): string | null {
   const match = pluginFilePath.match(/^plugins\/(.+)\/index\.ts$/);
-  if (!match) return null;
-  return `./plugins/${match[1]}`;
+  if (match) return `./plugins/${match[1]}`;
+  if (pluginFilePath.startsWith("tui/")) return "./tui";
+  return null;
 }
 
 function checkExportExists(filePath: string): { exists: boolean; reason?: string } {
@@ -136,7 +164,9 @@ function main() {
 
     if (exportPath) {
       const hasPluginPathExport = exportPaths.has(exportPath);
-      const rootExportMatch = new RegExp(`export\\s+{\\s*${plugin.name}\\s*}`).test(rootIndexContent);
+      const rootExportMatch = new RegExp(`export\\s+{\\s*${plugin.name}\\s*}`).test(
+        rootIndexContent,
+      );
 
       if (hasPluginPathExport) {
         console.log(`  ✓ ${plugin.name}: exported via ${exportPath}`);
@@ -146,7 +176,9 @@ function main() {
         errors.push(`  ✗ ${plugin.name}: not exported anywhere`);
       }
     } else {
-      const rootExportMatch = new RegExp(`export\\s+{\\s*${plugin.name}\\s*}`).test(rootIndexContent);
+      const rootExportMatch = new RegExp(`export\\s+{\\s*${plugin.name}\\s*}`).test(
+        rootIndexContent,
+      );
       if (rootExportMatch) {
         console.log(`  ✓ ${plugin.name}: exported via root (index.ts)`);
       } else {

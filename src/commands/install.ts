@@ -1,8 +1,8 @@
 // FILE: src/commands/install.ts
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Install vv-opencode into OpenCode config and bootstrap the canonical vvoc.json config plus managed prompts.
-//   SCOPE: Scope parsing, path resolution, pinned plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, and canonical vvoc config creation.
+//   PURPOSE: Install vv-opencode into OpenCode runtime/TUI config and bootstrap the canonical vvoc.json config plus managed prompts.
+//   SCOPE: Scope parsing, path resolution, pinned runtime/TUI plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, and canonical vvoc config creation.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Registered the managed TUI subpath during installation.]
 //   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink creation for project-scope installs.]
 //   LAST_CHANGE: [v0.5.0 - Added managed skill file install during vvoc install.]
 //   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope install.]
@@ -25,6 +26,7 @@ import {
   describeWriteResult,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
+  ensureTuiPackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
@@ -64,9 +66,11 @@ export default defineCommand({
       configDir,
     });
     const opencode = await ensurePackageInstalled(paths);
+    const tui = await ensureTuiPackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
+    console.log(describeWriteResult(tui));
     console.log(
       `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
     );

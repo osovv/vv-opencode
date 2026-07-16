@@ -1,8 +1,8 @@
 // FILE: src/commands/launch.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Launch OpenCode with deterministic vvoc and OpenCode config layer environment variables.
-//   SCOPE: Scope parsing, config source selection, subprocess env construction, arg forwarding, stdio forwarding, and exit-code preservation.
+//   PURPOSE: Launch OpenCode with deterministic vvoc, OpenCode runtime, and managed TUI config layer environment variables.
+//   SCOPE: Scope parsing, runtime/TUI config source selection, subprocess env construction, arg forwarding, stdio forwarding, and exit-code preservation.
 //   DEPENDS: [citty, src/lib/config-layers.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,14 +18,17 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conditional OPENCODE_TUI_CONFIG selection for existing managed TUI files.]
 //   LAST_CHANGE: [v1.0.0 - Added deterministic OpenCode launch planning and subprocess execution.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
   OPENCODE_CONFIG_ENV,
+  OPENCODE_TUI_CONFIG_ENV,
   VVOC_CONFIG_ENV,
   resolveOpenCodeConfigSource,
+  resolveOpenCodeTuiConfigSource,
   resolveVvocConfigSource,
   type ConfigSource,
 } from "../lib/config-layers.js";
@@ -36,6 +39,7 @@ export type LaunchPlan = {
   command: string[];
   env: Record<string, string>;
   opencodeSource: ConfigSource;
+  opencodeTuiSource: ConfigSource;
   vvocSource: ConfigSource;
 };
 
@@ -53,8 +57,14 @@ export async function buildLaunchPlan(options: {
   passthroughArgs: string[];
   env?: NodeJS.ProcessEnv;
 }): Promise<LaunchPlan> {
-  const [opencodeSource, vvocSource] = await Promise.all([
+  const [opencodeSource, opencodeTuiSource, vvocSource] = await Promise.all([
     resolveOpenCodeConfigSource({
+      scope: options.scope,
+      cwd: options.cwd,
+      configDir: options.configDir,
+      env: options.env,
+    }),
+    resolveOpenCodeTuiConfigSource({
       scope: options.scope,
       cwd: options.cwd,
       configDir: options.configDir,
@@ -87,13 +97,19 @@ export async function buildLaunchPlan(options: {
     );
   }
 
+  const env: Record<string, string> = {
+    [OPENCODE_CONFIG_ENV]: opencodeSource.path,
+    [VVOC_CONFIG_ENV]: vvocSource.path,
+  };
+  if (opencodeTuiSource.kind !== "missing" && opencodeTuiSource.path) {
+    env[OPENCODE_TUI_CONFIG_ENV] = opencodeTuiSource.path;
+  }
+
   return {
     command: ["opencode", ...options.passthroughArgs],
-    env: {
-      [OPENCODE_CONFIG_ENV]: opencodeSource.path,
-      [VVOC_CONFIG_ENV]: vvocSource.path,
-    },
+    env,
     opencodeSource,
+    opencodeTuiSource,
     vvocSource,
   };
 }

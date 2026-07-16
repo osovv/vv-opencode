@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical default-enabled context toggle coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched plugin toggle tests to pure config-object assertions.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle config.]
 // END_CHANGE_SUMMARY
@@ -33,7 +34,7 @@ import {
 
 // START_BLOCK_CONSTANTS_TEST
 describe("PLUGIN_TOGGLE_NAMES", () => {
-  test("contains exactly the 6 vvoc-managed plugins", () => {
+  test("contains exactly the 7 vvoc-managed plugins", () => {
     expect(PLUGIN_TOGGLE_NAMES).toEqual([
       "guardian",
       "hashline-edit",
@@ -41,12 +42,13 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "system-context-injection",
       "workflow",
       "secrets-redaction",
+      "context",
     ]);
   });
 
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(6);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(7);
   });
 });
 // END_BLOCK_CONSTANTS_TEST

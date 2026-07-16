@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.test.ts
 // VERSION: 1.4.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify OpenCode config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, and scope-aware path resolution behavior.
+//   PURPOSE: Verify OpenCode runtime/TUI config mutation and canonical vvoc config path/helpers.
+//   SCOPE: Runtime/TUI plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, inspection, and scope-aware path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
+//   ensureTuiPackageConfigText tests - Verify dedicated TUI schema insertion, tuple preservation, and idempotent subpath registration.
 //   ensureManagedAgentRegistrationsConfigText tests - Verify role-reference defaults, managed tool rewrites, and managed agent rewrites while preserving comments.
 //   canonical vvoc config tests - Verify schema v3 seeding, managed preset refresh, and strict pre-role rejection.
 //   provider helper tests - Verify conservative provider patch helpers remain comment-safe.
@@ -19,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added dedicated tui.json(c) mutation, path, idempotence, and inspection coverage.]
 //   LAST_CHANGE: [v1.4.1 - Added managed skill distribution and behavioral coverage for vv-handoff.]
 //   LAST_CHANGE: [v1.3.0 - Added strict current-only vvoc config rejection and no-rewrite mutation coverage.]
 //   LAST_CHANGE: [v1.4.0 - Updated managed registration coverage so old-name agents and old command entries remain untouched.]
@@ -51,10 +53,14 @@ import { dirname, join } from "node:path";
 import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
+  OPENCODE_TUI_SCHEMA_URL,
   PACKAGE_NAME,
+  TUI_PACKAGE_SPECIFIER,
   ensureManagedAgentRegistrationsConfigText,
   ensurePackageConfigText,
   ensurePackageInstalled,
+  ensureTuiPackageConfigText,
+  ensureTuiPackageInstalled,
   ensureProviderBaseUrlConfigText,
   installManagedAgentPrompts,
   installManagedSkillFiles,
@@ -107,6 +113,44 @@ describe("ensurePackageConfigText", () => {
     const parsed = parse(output) as { plugin?: string[] };
 
     expect(parsed.plugin).toEqual(["foo", `${PACKAGE_NAME}@0.2.3`]);
+  });
+});
+
+describe("ensureTuiPackageConfigText", () => {
+  test("creates a dedicated TUI config when none exists", () => {
+    const output = ensureTuiPackageConfigText(undefined);
+    const parsed = parse(output) as { $schema?: string; plugin?: unknown[] };
+
+    expect(parsed.$schema).toBe(OPENCODE_TUI_SCHEMA_URL);
+    expect(parsed.plugin).toEqual([TUI_PACKAGE_SPECIFIER]);
+  });
+
+  test("preserves comments, unrelated entries, and existing tuple options", () => {
+    const input = `{
+  // preserve theme
+  "theme": "catppuccin",
+  "plugin": [
+    ["other-tui-plugin", { "sidebar": true }],
+    ["${PACKAGE_NAME}@0.9.0/tui", { "mode": "compact" }],
+    "${TUI_PACKAGE_SPECIFIER}"
+  ]
+}\n`;
+    const output = ensureTuiPackageConfigText(input);
+    const parsed = parse(output) as { theme?: string; plugin?: unknown[] };
+
+    expect(output).toContain("// preserve theme");
+    expect(parsed.theme).toBe("catppuccin");
+    expect(parsed.plugin).toEqual([
+      ["other-tui-plugin", { sidebar: true }],
+      [TUI_PACKAGE_SPECIFIER, { mode: "compact" }],
+    ]);
+    expect(ensureTuiPackageConfigText(output)).toBe(output);
+  });
+
+  test("rejects malformed plugin tuples instead of rewriting user config", () => {
+    expect(() => ensureTuiPackageConfigText('{ "plugin": [["broken"]] }\n')).toThrow(
+      'expected "plugin[0]"',
+    );
   });
 });
 
@@ -1265,6 +1309,7 @@ describe("resolvePaths", () => {
     expect(paths.vvocConfigPath).toBe("/tmp/vvoc-config-home/vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/tmp/vvoc-config-home/vvoc/agents");
     expect(paths.opencodeConfigPath).toBe("/tmp/vvoc-config-home/opencode/opencode.json");
+    expect(paths.opencodeTuiConfigPath).toBe("/tmp/vvoc-config-home/opencode/tui.json");
   });
 
   test("keeps project config, prompts, and skills in canonical local layers", async () => {
@@ -1276,6 +1321,7 @@ describe("resolvePaths", () => {
 
     expect(paths.opencodeBaseDir).toBe("/workspace/project/.opencode");
     expect(paths.opencodeConfigPath).toBe("/workspace/project/.opencode/opencode.json");
+    expect(paths.opencodeTuiConfigPath).toBe("/workspace/project/.opencode/tui.json");
     expect(paths.vvocBaseDir).toBe("/workspace/project/.vvoc");
     expect(paths.vvocConfigPath).toBe("/workspace/project/.vvoc/vvoc.json");
     expect(paths.managedAgentsDirPath).toBe("/workspace/project/.vvoc/agents");
@@ -1284,6 +1330,32 @@ describe("resolvePaths", () => {
 });
 
 describe("inspectInstallation", () => {
+  test("reports managed TUI registration and preserves tuple entries", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-tui-inspect-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await ensurePackageInstalled(paths);
+      await ensureTuiPackageInstalled(paths);
+      await installVvocConfig(paths);
+
+      const first = await ensureTuiPackageInstalled(paths);
+      const inspection = await inspectInstallation(paths);
+
+      expect(first.action).toBe("kept");
+      expect(inspection.tui.exists).toBe(true);
+      expect(inspection.tui.parseError).toBeUndefined();
+      expect(inspection.tui.pluginConfigured).toBe(true);
+      expect(inspection.tui.plugins).toEqual([TUI_PACKAGE_SPECIFIER]);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
   test("reports canonical role inventory and unresolved vv-role references", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-install-inspect-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-install-inspect-project-"));

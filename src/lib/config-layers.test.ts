@@ -1,8 +1,8 @@
 // FILE: src/lib/config-layers.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify layered vvoc and OpenCode config source resolution.
-//   SCOPE: Temp-dir coverage for project-root discovery, env/global/default/missing source kinds, write target selection, and singleton runtime config loading.
+//   PURPOSE: Verify layered vvoc, OpenCode runtime, and OpenCode TUI config source resolution.
+//   SCOPE: Temp-dir coverage for project-root discovery, env/global/default/missing source kinds, dedicated TUI paths, write target selection, and singleton runtime config loading.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added dedicated global/project/effective TUI config resolution coverage.]
 //   LAST_CHANGE: [v1.1.0 - Added runtime loadVvocConfig singleton-promise coverage.]
 //   LAST_CHANGE: [v1.0.0 - Added deterministic temp-dir tests for layered config resolution.]
 // END_CHANGE_SUMMARY
@@ -24,11 +25,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   OPENCODE_CONFIG_ENV,
+  OPENCODE_TUI_CONFIG_ENV,
   VVOC_CONFIG_ENV,
   findNearestProjectConfigRoot,
   loadVvocConfig,
   resolveConfigWriteTargets,
   resolveOpenCodeConfigSource,
+  resolveOpenCodeTuiConfigSource,
   resolveProjectWriteRoot,
   resolveVvocConfigSource,
   resetVvocConfigForTests,
@@ -88,6 +91,18 @@ describe("config layer resolution", () => {
 
     expect(root?.rootDir).toBe(projectDir);
     expect(root?.opencodeConfigPath).toBe(join(projectDir, ".opencode", "opencode.json"));
+  });
+
+  test("findNearestProjectConfigRoot returns a root discovered by .opencode/tui.jsonc", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-tui-root-");
+    const child = join(projectDir, "packages", "app");
+    await mkdir(child, { recursive: true });
+    await touch(join(projectDir, ".opencode", "tui.jsonc"));
+
+    const root = await findNearestProjectConfigRoot(child);
+
+    expect(root?.rootDir).toBe(projectDir);
+    expect(root?.opencodeTuiConfigPath).toBe(join(projectDir, ".opencode", "tui.jsonc"));
   });
 
   test("project OpenCode config uses .opencode and ignores root opencode.json", async () => {
@@ -151,6 +166,26 @@ describe("config layer resolution", () => {
       cwd: projectDir,
       configDir: configHome,
       env: { [OPENCODE_CONFIG_ENV]: envConfig },
+    });
+
+    expect(source.kind).toBe("env");
+    expect(source.path).toBe(envConfig);
+  });
+
+  test("effective TUI source honors OPENCODE_TUI_CONFIG before project and global", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-tui-env-project-");
+    const configHome = await createTempRoot("vvoc-layer-tui-env-global-");
+    const envConfig = join(await createTempRoot("vvoc-layer-tui-env-selected-"), "tui.json");
+    await touch(join(projectDir, ".opencode", "opencode.json"));
+    await touch(join(projectDir, ".opencode", "tui.json"));
+    await touch(join(configHome, "opencode", "tui.json"));
+    await touch(envConfig);
+
+    const source = await resolveOpenCodeTuiConfigSource({
+      scope: "effective",
+      cwd: projectDir,
+      configDir: configHome,
+      env: { [OPENCODE_TUI_CONFIG_ENV]: envConfig },
     });
 
     expect(source.kind).toBe("env");
@@ -225,7 +260,22 @@ describe("config layer resolution", () => {
     expect(targets.projectRoot).toBe(projectDir);
     expect(targets.opencodeBaseDir).toBe(getProjectOpencodeDir(projectDir));
     expect(targets.opencodeConfigPath).toBe(join(projectDir, ".opencode", "opencode.json"));
+    expect(targets.opencodeTuiConfigPath).toBe(join(projectDir, ".opencode", "tui.json"));
     expect(targets.vvocConfigPath).toBe(join(projectDir, ".vvoc", "vvoc.json"));
+  });
+
+  test("global write targets preserve an existing tui.jsonc selection", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-tui-global-cwd-");
+    const configHome = await createTempRoot("vvoc-layer-tui-global-home-");
+    await touch(join(configHome, "opencode", "tui.jsonc"));
+
+    const targets = await resolveConfigWriteTargets({
+      scope: "global",
+      cwd: projectDir,
+      configDir: configHome,
+    });
+
+    expect(targets.opencodeTuiConfigPath).toBe(join(configHome, "opencode", "tui.jsonc"));
   });
 
   test("loadVvocConfig returns the same startup promise for repeated runtime calls", async () => {

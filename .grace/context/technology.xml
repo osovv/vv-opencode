@@ -15,6 +15,8 @@
   <RuntimeDependencies>
     <Dependency>@opencode-ai/plugin for typed OpenCode plugin factories, hooks, config mutation, and custom tool helpers.</Dependency>
     <Dependency>@opencode-ai/sdk for OpenCode client types and runtime interactions used by Guardian and plugin logging.</Dependency>
+    <Dependency>@opencode-ai/plugin and @opencode-ai/sdk version 1.18.2 provide the modern TUI plugin API and SDK v2 context catalogs used by /context.</Dependency>
+    <Dependency>@opentui/core, @opentui/keymap, and @opentui/solid version 0.4.3 provide native TUI rendering, keymap types, and Solid JSX integration.</Dependency>
     <Dependency>citty for CLI command definitions.</Dependency>
     <Dependency>jsonc-parser for comment-tolerant config parsing and edits.</Dependency>
     <Dependency>@clack/prompts for interactive init prompts and abort handling.</Dependency>
@@ -33,6 +35,8 @@
     <OpenCode>
       <Global>OpenCode global config stays in OpenCode-managed configuration paths.</Global>
       <Project>Project-scoped OpenCode config is managed under .opencode/ inside the selected project root.</Project>
+      <GlobalTui>$XDG_CONFIG_HOME/opencode/tui.json(c) stores dedicated OpenCode TUI settings and explicit TUI plugin entries.</GlobalTui>
+      <ProjectTui>.opencode/tui.json(c) stores project-scoped TUI settings and explicit TUI plugin entries.</ProjectTui>
       <ModelFields>Supported OpenCode model-bearing fields may store vv-role:* references and are resolved by ModelRolesPlugin at runtime.</ModelFields>
     </OpenCode>
     <Vvoc>
@@ -55,7 +59,7 @@
     <Script name="fmt:check">Runs oxfmt --check src.</Script>
     <Script name="test">Runs bun test.</Script>
     <Script name="check">Runs typecheck, lint, fmt:check, and tests.</Script>
-    <Script name="pack:check">Builds dist, verifies root and plugin subpath exports by importing generated files, then runs npm pack --dry-run.</Script>
+    <Script name="pack:check">Builds dist, verifies root, server plugin, and default TUI subpath exports by importing generated files, then runs npm pack --dry-run.</Script>
     <Script name="release:check">Runs scripts/release-check.ts to validate package identity, package version, hosted schema id, schema config const, changelog presence, and latest changelog summary.</Script>
     <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, commit, tag, and push.</Script>
     <Script name="prepare">Installs lefthook hooks.</Script>
@@ -80,18 +84,21 @@
     <PluginExport>@osovv/vv-opencode/plugins/system-context-injection</PluginExport>
     <PluginExport>@osovv/vv-opencode/plugins/workflow</PluginExport>
     <PluginExport>@osovv/vv-opencode/plugins/secrets-redaction</PluginExport>
+    <TuiExport>@osovv/vv-opencode/tui</TuiExport>
     <PluginFactory>GuardianPlugin</PluginFactory>
     <PluginFactory>HashlineEditPlugin</PluginFactory>
     <PluginFactory>ModelRolesPlugin</PluginFactory>
     <PluginFactory>SystemContextInjectionPlugin</PluginFactory>
     <PluginFactory>WorkflowPlugin</PluginFactory>
     <PluginFactory>SecretsRedactionPlugin</PluginFactory>
+    <TuiPluginModule>ContextTuiPlugin</TuiPluginModule>
   </PublicApi>
   <OperationalConstraints>
     <Constraint>Prefer existing project libraries and established repository patterns.</Constraint>
     <Constraint>Use Bun commands for local project checks and bunx for grace-cli.</Constraint>
     <Constraint>Do not edit generated dist output manually.</Constraint>
     <Constraint>Root package exports and plugin subpath exports must stay valid unless an explicit breaking change is approved.</Constraint>
+    <Constraint>OpenCode TUI integration requires OpenCode 1.18.2 or newer and must use a default TuiPluginModule export registered in tui.json(c).</Constraint>
     <Constraint>Publishing remains manual from terminal with npm publish; normal branch pushes must not publish the package.</Constraint>
     <Constraint>README, .grace/graph, and .grace/verification must be updated with behavior, public API, setup, command, flow, or verification changes as applicable.</Constraint>
   </OperationalConstraints>

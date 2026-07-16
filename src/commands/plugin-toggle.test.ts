@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical context toggle inventory coverage.]
 //   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle isolation coverage.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle CLI.]
 // END_CHANGE_SUMMARY
@@ -34,7 +35,8 @@ describe("plugin toggle", () => {
     expect(names.includes("guardian")).toBe(true);
     expect(names.includes("secrets-redaction")).toBe(true);
     expect(names.includes("hashline-edit")).toBe(true);
-    expect(names.length).toBe(6);
+    expect(names.includes("context")).toBe(true);
+    expect(names.length).toBe(7);
   });
 
   test("vvoc.json toggle write round-trips", async () => {

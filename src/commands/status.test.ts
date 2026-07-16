@@ -1,8 +1,8 @@
 // FILE: src/commands/status.test.ts
 // VERSION: 0.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify status command source-aware orchestration, role inventory, and invalid config diagnostics.
-//   SCOPE: Selected/default profile reporting, role ordering, source precedence, and diagnostic-only invalid vvoc config handling.
+//   PURPOSE: Verify status command source-aware TUI registration, orchestration, role inventory, and invalid config diagnostics.
+//   SCOPE: Selected/default profile reporting, TUI source/parse state, role ordering, source precedence, and diagnostic-only invalid config handling.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/status.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS, M-ORCHESTRATION-PROFILES, V-M-CLI-COMMANDS]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added selected TUI source and managed package status coverage.]
 //   LAST_CHANGE: [v0.2.0 - Added invalid vvoc config status diagnostics without mutation coverage.]
 //   LAST_CHANGE: [v0.1.1 - Added selected source reporting assertions for project status.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
@@ -27,6 +28,7 @@ import { dirname, join } from "node:path";
 import statusCommand from "./status.js";
 import {
   ensurePackageInstalled,
+  ensureTuiPackageInstalled,
   installVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
@@ -46,6 +48,7 @@ test("status prints built-in role inventory after init-style seeding", async () 
     });
 
     await ensurePackageInstalled(paths);
+    await ensureTuiPackageInstalled(paths);
     await syncManagedAgentRegistrations(paths);
     await installVvocConfig(paths);
 
@@ -63,6 +66,9 @@ test("status prints built-in role inventory after init-style seeding", async () 
 
     expect(stdout).toContain("Roles:");
     expect(stdout).toContain("OpenCode source: project");
+    expect(stdout).toContain(`OpenCode TUI source: project ${paths.opencodeTuiConfigPath}`);
+    expect(stdout).toContain("OpenCode TUI config parse: ok");
+    expect(stdout).toContain("TUI package configured: yes");
     expect(stdout).toContain("vvoc source: project");
     expect(stdout).toContain("Orchestration profile: balanced");
     const defaultIndex = stdout.indexOf("  default:");
@@ -94,6 +100,7 @@ test("status reports invalid explicit profile without mutating the selected file
     });
 
     await ensurePackageInstalled(paths);
+    await ensureTuiPackageInstalled(paths);
     await installVvocConfig(paths);
     const invalidText =
       JSON.stringify(

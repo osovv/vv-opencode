@@ -1,8 +1,8 @@
 // FILE: src/commands/init.ts
 // VERSION: 0.7.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode in OpenCode plugin array and scaffolds the canonical vvoc.json config plus managed prompts/plans. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
-//   SCOPE: Scope selection, plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, canonical config scaffolding, and idempotent re-run handling.
+//   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode runtime/TUI entries and scaffolds the canonical vvoc.json config plus managed prompts/plans. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
+//   SCOPE: Scope selection, runtime/TUI plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, canonical config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
 //   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Registered and inspected the dedicated TUI plugin config during init.]
 //   LAST_CHANGE: [v0.8.1 - Removed the harmful RTK token-saving recommendation from the init outro; RTK distorts proxied command output and confuses LLM sessions.]
 //   LAST_CHANGE: [v0.8.0 - Skipped global managed skill symlink creation for project-scope init.]
 //   LAST_CHANGE: [v0.7.1 - Added managed skill file scaffolding during vvoc init.]
@@ -27,6 +28,7 @@ import * as p from "@clack/prompts";
 import {
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
+  ensureTuiPackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
@@ -119,7 +121,11 @@ export async function runInit(options: {
   const reloadedPaths = await resolvePaths({ scope: selectedScope, cwd, configDir });
   const inspection = await inspectInstallation(reloadedPaths);
 
-  if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
+  if (
+    inspection.opencode.pluginConfigured &&
+    inspection.tui.pluginConfigured &&
+    inspection.vvoc.exists
+  ) {
     const overwrite = await p.confirm({
       message: `@osovv/vv-opencode is already configured. Overwrite?`,
       initialValue: false,
@@ -139,6 +145,10 @@ export async function runInit(options: {
   p.log.step("Registering plugin in OpenCode config...");
   const pkgResult = await ensurePackageInstalled(finalPaths);
   p.log.info(pkgResult.path + " - " + (pkgResult.changed ? "updated" : "already up to date"));
+
+  p.log.step("Registering TUI plugin...");
+  const tuiResult = await ensureTuiPackageInstalled(finalPaths);
+  p.log.info(tuiResult.path + " - " + tuiResult.action);
 
   p.log.step("Registering managed agents...");
   const agentRegistration = await syncManagedAgentRegistrations(finalPaths);
@@ -178,12 +188,17 @@ async function runInitNonInteractive(options: {
   const paths = await resolvePaths({ scope, cwd, configDir });
 
   const inspection = await inspectInstallation(paths);
-  if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
+  if (
+    inspection.opencode.pluginConfigured &&
+    inspection.tui.pluginConfigured &&
+    inspection.vvoc.exists
+  ) {
     console.log("Already configured. Run `vvoc sync` to update configs.");
     return;
   }
 
   await ensurePackageInstalled(paths);
+  await ensureTuiPackageInstalled(paths);
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
   await installManagedSkillFiles(paths, { force: true });

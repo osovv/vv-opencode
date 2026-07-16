@@ -1,38 +1,5 @@
 <GraceVerificationDocument graceVersion="4.0">
   <VD-MAIN>
-    <V-M-MODEL-ROLES />
-    <V-M-CONFIG-LAYERS />
-    <V-M-CLI-CONFIG />
-    <V-M-RELEASE-AUTOMATION />
-    <V-M-CLI-MANAGED-AGENTS />
-    <V-M-CLI-MANAGED-SKILLS />
-    <V-M-CLI-AGENT-MODELS />
-    <V-M-PLUGIN-TOGGLE-CONFIG />
-    <V-M-CLI-COMMANDS />
-    <V-M-PLUGIN-MODEL-ROLES />
-    <V-M-PLUGIN-GUARDIAN />
-    <V-M-PLUGIN-HASHLINE-EDIT />
-    <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
-    <V-M-PLUGIN-SECRETS-REDACTION />
-    <V-M-CLI-ROLE />
-    <V-M-CLI-CONFIG-VALIDATE />
-    <V-M-CLI-PRESET />
-    <V-M-VVOC-PRESET-REGISTRY />
-    <V-M-CLI-PLUGIN-LIST />
-    <V-M-CLI-PLUGIN-TOGGLE />
-    <V-M-CLI-PATCH-PROVIDER />
-    <V-M-CLI-COMPLETION />
-    <V-M-CLI-INIT />
-    <V-M-CLI-UPGRADE />
-    <V-M-WORKFLOW-PROTOCOL />
-    <V-M-WORKFLOW-REPAIR />
-    <V-M-WORKFLOW-STATE />
-    <V-M-WORKFLOW-TRANSITIONS />
-    <V-M-WORKFLOW-TOOLING />
-    <V-M-PLUGIN-WORKFLOW />
-    <V-M-WORKFLOW-PERSISTENCE />
-    <V-M-ORCHESTRATION-PROFILES />
-    <V-M-CLI-ORCHESTRATION />
     <GlobalPolicy>
       <DeterministicFirst>true</DeterministicFirst>
       <LogFormat>[service][function][block] message</LogFormat>
@@ -40,47 +7,13 @@
       <Redaction>Never log secrets, credentials, raw tokens, or high-risk payloads beyond bounded existing policies.</Redaction>
       <FreshEvidence>Completion claims require fresh command output or documented blockers.</FreshEvidence>
     </GlobalPolicy>
-    <VerificationAnchors>
-      <V-M-MODEL-ROLES />
-      <V-M-CONFIG-LAYERS />
-      <V-M-CLI-CONFIG />
-      <V-M-RELEASE-AUTOMATION />
-      <V-M-CLI-MANAGED-AGENTS />
-      <V-M-CLI-MANAGED-SKILLS />
-      <V-M-CLI-AGENT-MODELS />
-      <V-M-PLUGIN-TOGGLE-CONFIG />
-      <V-M-CLI-COMMANDS />
-      <V-M-PLUGIN-MODEL-ROLES />
-      <V-M-PLUGIN-GUARDIAN />
-      <V-M-PLUGIN-HASHLINE-EDIT />
-      <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
-      <V-M-PLUGIN-SECRETS-REDACTION />
-      <V-M-CLI-ROLE />
-      <V-M-CLI-CONFIG-VALIDATE />
-      <V-M-CLI-PRESET />
-      <V-M-VVOC-PRESET-REGISTRY />
-      <V-M-CLI-PLUGIN-LIST />
-      <V-M-CLI-PLUGIN-TOGGLE />
-      <V-M-CLI-PATCH-PROVIDER />
-      <V-M-CLI-COMPLETION />
-      <V-M-CLI-INIT />
-      <V-M-CLI-UPGRADE />
-      <V-M-WORKFLOW-PROTOCOL />
-      <V-M-WORKFLOW-REPAIR />
-      <V-M-WORKFLOW-STATE />
-      <V-M-WORKFLOW-TRANSITIONS />
-      <V-M-WORKFLOW-TOOLING />
-      <V-M-PLUGIN-WORKFLOW />
-      <V-M-WORKFLOW-PERSISTENCE />
-      <V-M-ORCHESTRATION-PROFILES />
-      <V-M-CLI-ORCHESTRATION />
-    </VerificationAnchors>
     <CriticalFlows>
-      <VF-PLUGIN-INSTALL><Flow>DF-PLUGIN-INSTALL</Flow><Priority>high</Priority><Expected>Pinned plugin specifier, vv-controller default agent, managed agents/skills, tools.apply_patch false, role-reference model fields, and seeded vvoc schema v3.</Expected></VF-PLUGIN-INSTALL>
-      <VF-CONFIG-SYNC><Flow>DF-CONFIG-SYNC</Flow><Priority>high</Priority><Expected>Canonical vvoc schema v3 is refreshed while role assignments and plugin toggles survive; invalid or old configs fail before rewrite.</Expected></VF-CONFIG-SYNC>
+      <VF-PLUGIN-INSTALL><Flow>DF-PLUGIN-INSTALL</Flow><Priority>high</Priority><Expected>Pinned runtime plugin specifier, dedicated TUI subpath registration, vv-controller default agent, managed agents/skills, tools.apply_patch false, role-reference model fields, and seeded vvoc schema v3.</Expected></VF-PLUGIN-INSTALL>
+      <VF-CONFIG-SYNC><Flow>DF-CONFIG-SYNC</Flow><Priority>high</Priority><Expected>Canonical vvoc schema v3 and managed runtime/TUI registrations are refreshed while role assignments, plugin toggles, unrelated TUI settings, and tuple options survive; invalid current configs fail before rewrite.</Expected></VF-CONFIG-SYNC>
       <VF-STRICT-CURRENT-CUTOVER><Flow>DF-CONFIG-SYNC, DF-UPGRADE, DF-GUARDIAN-REVIEW, DF-HASHLINE-EDIT</Flow><Priority>high</Priority><Expected>Old configs, SDK paths, and hash algorithms fail loudly or are ignored rather than repaired or used as compatibility fallbacks.</Expected></VF-STRICT-CURRENT-CUTOVER>
-      <VF-LAYERED-CONFIG><Flow>DF-LAYERED-CONFIG</Flow><Priority>high</Priority><Expected>Reads choose env, nearest project, global, then defaults where allowed; project writes stay inside selected project root.</Expected></VF-LAYERED-CONFIG>
-      <VF-VVOC-LAUNCH><Flow>DF-VVOC-LAUNCH</Flow><Priority>high</Priority><Expected>Launch plan sets OPENCODE_CONFIG and VVOC_CONFIG, forwards args, preserves child exit code, and reports missing project layer with install hint.</Expected></VF-VVOC-LAUNCH>
+      <VF-LAYERED-CONFIG><Flow>DF-LAYERED-CONFIG</Flow><Priority>high</Priority><Expected>vvoc, runtime, and TUI reads choose env, nearest project, global, then defaults where allowed; project writes stay inside selected project root.</Expected></VF-LAYERED-CONFIG>
+      <VF-VVOC-LAUNCH><Flow>DF-VVOC-LAUNCH</Flow><Priority>high</Priority><Expected>Launch plan sets OPENCODE_CONFIG and VVOC_CONFIG, conditionally sets OPENCODE_TUI_CONFIG for an existing selected file, forwards args, preserves child exit code, and reports missing project runtime layer with install hint.</Expected></VF-VVOC-LAUNCH>
+      <VF-CONTEXT-INSPECTION><Flow>DF-CONTEXT-INSPECTION</Flow><Priority>high</Priority><Expected>/context registers only when enabled, requires an active session, uses latest provider usage as measured truth, reports approximate post-compaction categories and drift, shows MCP status, and handles missing state without crashing.</Expected></VF-CONTEXT-INSPECTION>
       <VF-RELEASE-AUTOMATION><Flow>DF-RELEASE</Flow><Priority>high</Priority><Expected>release:bump and tag publish flow validate package version, schema id, changelog summary, quality checks, build, pack, and npm publish gating.</Expected></VF-RELEASE-AUTOMATION>
       <VF-ROLE-MANAGEMENT><Flow>DF-ROLE-MANAGEMENT</Flow><Priority>high</Priority><Expected>Built-in roles are visible, custom roles round-trip, concrete assignments normalize, and built-in role deletion is blocked.</Expected></VF-ROLE-MANAGEMENT>
       <VF-ROLE-RESOLUTION><Flow>DF-ROLE-RESOLUTION</Flow><Priority>high</Priority><Expected>Supported vv-role:* fields resolve to concrete model selections and unknown roles fail without fallback.</Expected></VF-ROLE-RESOLUTION>
@@ -97,11 +30,10 @@
       <VF-PLUGIN-TOGGLE><Flow>DF-PLUGIN-TOGGLE, DF-PLUGIN-TOGGLE-CHECK</Flow><Priority>medium</Priority><Expected>Known plugins can be enabled or disabled, sync preserves values, list reports status, and disabled plugins return empty hooks.</Expected></VF-PLUGIN-TOGGLE>
     </CriticalFlows>
       <VF-ORCHESTRATION-PROFILE><Flow>DF-ORCHESTRATION-PROFILE, DF-PRESET-SWITCH, DF-SYSTEM-CONTEXT, DF-WORKFLOW-GUIDANCE</Flow><Priority>high</Priority><Expected>Effective startup config resolves one profile; vv-controller receives only its concrete policy; old v3 config defaults to balanced; preset writes are atomic; invalid explicit values fail without fallback.</Expected></VF-ORCHESTRATION-PROFILE>
-    <ModuleVerification>
       <V-M-MODEL-ROLES><TestFiles><File>src/lib/model-roles.test.ts</File></TestFiles><Checks><Command>bun test src/lib/model-roles.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-MODEL-ROLES>
-      <V-M-CONFIG-LAYERS><TestFiles><File>src/lib/config-layers.test.ts</File></TestFiles><Checks><Command>bun test src/lib/config-layers.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-CONFIG-LAYERS>
-      <V-M-CLI-CONFIG><TestFiles><File>src/lib/opencode.test.ts</File><File>src/lib/managed-agents.test.ts</File><File>src/commands/sync.test.ts</File></TestFiles><Checks><Command>bun test src/lib/opencode.test.ts</Command><Command>bun test src/lib/managed-agents.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-CONFIG>
-      <V-M-RELEASE-AUTOMATION><TestFiles><File>scripts/release-check.test.ts</File><File>scripts/release-summary.test.ts</File></TestFiles><Checks><Command>bun run release:check</Command><Command>bun run typecheck</Command><Command>bun run fmt:check</Command><Command>bun run pack:check</Command></Checks></V-M-RELEASE-AUTOMATION>
+      <V-M-CONFIG-LAYERS><TestFiles><File>src/lib/config-layers.test.ts</File></TestFiles><Checks><Command>bun test src/lib/config-layers.test.ts</Command><Command>bun run typecheck</Command></Checks><Expected>Global/project/effective runtime and TUI sources honor env precedence, json/jsonc selection, and project-local write boundaries.</Expected></V-M-CONFIG-LAYERS>
+      <V-M-CLI-CONFIG><TestFiles><File>src/lib/opencode.test.ts</File><File>src/lib/managed-agents.test.ts</File><File>src/commands/sync.test.ts</File></TestFiles><Checks><Command>bun test src/lib/opencode.test.ts src/commands/sync.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks><Expected>Dedicated tui.json(c) mutation preserves comments, unrelated entries, and tuple options; install/sync is idempotent and inspection reports parse and registration state.</Expected></V-M-CLI-CONFIG>
+      <V-M-RELEASE-AUTOMATION><TestFiles><File>scripts/release-check.test.ts</File><File>scripts/release-summary.test.ts</File></TestFiles><Checks><Command>bun run scripts/check-exports.ts</Command><Command>bun run release:check</Command><Command>bun run typecheck</Command><Command>bun run fmt:check</Command><Command>bun run pack:check</Command></Checks></V-M-RELEASE-AUTOMATION>
       <V-M-CLI-MANAGED-AGENTS><TestFiles><File>src/lib/managed-agents.test.ts</File></TestFiles><Checks><Command>bun test src/lib/managed-agents.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-CLI-MANAGED-AGENTS>
       <V-M-CLI-MANAGED-SKILLS><TestFiles><File>src/lib/opencode.test.ts</File><File>src/lib/managed-skills.test.ts</File></TestFiles><Checks><Command>bun test src/lib/opencode.test.ts</Command><Command>bun test src/lib/managed-skills.test.ts</Command><Command>bun x tsc --noEmit</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-MANAGED-SKILLS>
       <V-M-CLI-AGENT-MODELS><TestFiles><File>src/lib/agent-models.test.ts</File></TestFiles><Checks><Command>bun x tsc --noEmit</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run build</Command></Checks></V-M-CLI-AGENT-MODELS>
@@ -112,6 +44,7 @@
       <V-M-PLUGIN-HASHLINE-EDIT><TestFiles><File>src/plugins/hashline-edit*.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/hashline-edit*.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-PLUGIN-HASHLINE-EDIT>
       <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION><TestFiles><File>src/plugins/system-context-injection.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/system-context-injection.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks></V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION>
       <V-M-PLUGIN-SECRETS-REDACTION><TestFiles><File>src/plugins/secrets-redaction/*.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/secrets-redaction/*.test.ts</Command><Command>bun run typecheck</Command><Command>bun run lint</Command></Checks></V-M-PLUGIN-SECRETS-REDACTION>
+      <V-M-PLUGIN-CONTEXT-TUI><TestFiles><File>src/tui/context/analyze.test.ts</File><File>src/tui/context/plugin.test.ts</File></TestFiles><Checks><Command>bun test src/tui/context/analyze.test.ts src/tui/context/plugin.test.ts</Command><Command>bun run typecheck</Command><Command>bun run build</Command><Command>bun run pack:check</Command></Checks><Expected>Measured provider usage, compaction cutoff, estimated categories, drift, MCP status, command registration, active-session gating, toggle behavior, and bounded failures remain deterministic.</Expected></V-M-PLUGIN-CONTEXT-TUI>
       <V-M-CLI-ROLE><TestFiles><File>src/commands/role.test.ts</File></TestFiles><Checks><Command>bun test src/commands/role.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-ROLE>
       <V-M-CLI-CONFIG-VALIDATE><TestFiles><File>src/commands/config-validate.test.ts</File></TestFiles><Checks><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run build</Command></Checks></V-M-CLI-CONFIG-VALIDATE>
       <V-M-CLI-PRESET><TestFiles><File>src/commands/preset.test.ts</File></TestFiles><Checks><Command>bun test src/commands/preset.test.ts</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command></Checks></V-M-CLI-PRESET>
@@ -129,7 +62,6 @@
       <V-M-PLUGIN-WORKFLOW><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command><Command>bun run build</Command></Checks><Expected>Protocol errors, state-application errors, and blocked or needs_context hard stops include bounded result excerpts while preserving fail-closed behavior.</Expected></V-M-PLUGIN-WORKFLOW>
       <V-M-WORKFLOW-PERSISTENCE><TestFiles><File>src/plugins/workflow.test.ts</File></TestFiles><Checks><Command>bun test src/plugins/workflow.test.ts</Command><Command>bun x tsc --noEmit</Command></Checks><Expected>Optional bounded excerpt fields round-trip through snapshot/hydrate and corrupt excerpt shapes are rejected with the existing safe-null behavior.</Expected></V-M-WORKFLOW-PERSISTENCE>
       <V-M-VVOC-PRESET-REGISTRY><TestFiles><File>src/lib/opencode.test.ts</File><File>src/commands/preset.test.ts</File><File>src/commands/completion.test.ts</File></TestFiles><Checks><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run build</Command></Checks></V-M-VVOC-PRESET-REGISTRY>
-    </ModuleVerification>
       <V-M-ORCHESTRATION-PROFILES><TestFiles><File>src/lib/orchestration.test.ts</File></TestFiles><Checks><Command>bun test src/lib/orchestration.test.ts</Command><Command>bun run typecheck</Command></Checks></V-M-ORCHESTRATION-PROFILES>
       <V-M-CLI-ORCHESTRATION><TestFiles><File>src/commands/orchestration.test.ts</File></TestFiles><Checks><Command>bun test src/commands/orchestration.test.ts</Command><Command>bun run build</Command></Checks></V-M-CLI-ORCHESTRATION>
     <PhaseGates>

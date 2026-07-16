@@ -1,6 +1,6 @@
 <GraceDeployment graceVersion="4.0">
   <Applicability>applicable</Applicability>
-  <Target>Public npm package @osovv/vv-opencode with Bun CLI binary vvoc and OpenCode plugin exports.</Target>
+  <Target>Public npm package @osovv/vv-opencode with Bun CLI binary vvoc plus OpenCode server and TUI plugin exports.</Target>
   <StabilityPosture>Version 1.0.0 is the daily-driver baseline for the curated vvoc workflow. The release treats setup commands, public package exports, canonical vvoc schema v3, managed skill names, and spec artifact layout as compatibility surfaces unless future release notes explicitly document a breaking change.</StabilityPosture>
   <PackageFiles>
     <File>dist</File>
@@ -17,11 +17,12 @@
     <Export>@osovv/vv-opencode/plugins/system-context-injection</Export>
     <Export>@osovv/vv-opencode/plugins/workflow</Export>
     <Export>@osovv/vv-opencode/plugins/secrets-redaction</Export>
+    <Export>@osovv/vv-opencode/tui</Export>
   </Exports>
   <InstallAndSync>
-    <Global>vvoc install and vvoc sync may write OpenCode config under $XDG_CONFIG_HOME/opencode and vvoc config under $XDG_CONFIG_HOME/vvoc.</Global>
-    <Project>Project scope writes only .opencode and .vvoc under the selected project root.</Project>
-    <Launch>vvoc launch pins OPENCODE_CONFIG and VVOC_CONFIG for deterministic sandboxed OpenCode startup.</Launch>
+    <Global>vvoc install and vvoc sync may write OpenCode runtime and TUI config under $XDG_CONFIG_HOME/opencode and vvoc config under $XDG_CONFIG_HOME/vvoc.</Global>
+    <Project>Project scope writes OpenCode runtime/TUI files only inside .opencode and vvoc files only inside .vvoc under the selected project root.</Project>
+    <Launch>vvoc launch pins OPENCODE_CONFIG and VVOC_CONFIG and conditionally pins an existing selected tui.json(c) through OPENCODE_TUI_CONFIG for deterministic sandboxed OpenCode startup.</Launch>
   </InstallAndSync>
   <ReleaseGates>
     <Command>bun run typecheck</Command>

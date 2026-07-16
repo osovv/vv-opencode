@@ -1,8 +1,8 @@
 // FILE: src/commands/sync.ts
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep the OpenCode plugin specifier current.
-//   SCOPE: Scope parsing, path resolution, pinned plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
+//   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep OpenCode runtime/TUI plugin specifiers current.
+//   SCOPE: Scope parsing, path resolution, pinned runtime/TUI plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Synchronized the managed TUI subpath in dedicated tui.json(c).]
 //   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink sync for project-scope sync.]
 //   LAST_CHANGE: [v0.5.0 - Added managed skill file sync during vvoc sync.]
 //   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope sync.]
@@ -25,6 +26,7 @@ import {
   describeWriteResult,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
+  ensureTuiPackageInstalled,
   resolvePaths,
   syncManagedAgentPrompts,
   syncManagedAgentRegistrations,
@@ -64,12 +66,14 @@ export default defineCommand({
       configDir,
     });
     const opencode = await ensurePackageInstalled(paths);
+    const tui = await ensureTuiPackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);
     const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
     const managedSkills = await syncManagedSkillFiles(paths, { force: Boolean(args.force) });
     const vvocConfig = await syncVvocConfig(paths);
 
     console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
+    console.log(describeWriteResult(tui));
     console.log(
       `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
     );

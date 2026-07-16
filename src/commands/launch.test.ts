@@ -1,8 +1,8 @@
 // FILE: src/commands/launch.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify deterministic vvoc launch planning and subprocess exit behavior.
-//   SCOPE: Effective/project/global source selection, env construction, passthrough argument forwarding, and exit-code preservation.
+//   PURPOSE: Verify deterministic vvoc launch planning, managed TUI selection, and subprocess exit behavior.
+//   SCOPE: Effective/project/global runtime/TUI source selection, env construction, passthrough argument forwarding, and exit-code preservation.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/launch.ts]
 //   LINKS: [M-CLI-COMMANDS, V-M-CLI-COMMANDS]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conditional OPENCODE_TUI_CONFIG launch coverage.]
 //   LAST_CHANGE: [v1.0.0 - Added launch planning and subprocess behavior coverage.]
 //   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated smart role fixture to openai/vv-codex-gpt-5.5-xhigh.]
 // END_CHANGE_SUMMARY
@@ -41,6 +42,7 @@ describe("launch planning", () => {
 
       expect(plan.command).toEqual(["opencode", "run", "hello"]);
       expect(plan.env.OPENCODE_CONFIG).toBe(join(projectDir, ".opencode", "opencode.json"));
+      expect(plan.env.OPENCODE_TUI_CONFIG).toBe(join(projectDir, ".opencode", "tui.json"));
       expect(plan.env.VVOC_CONFIG).toBe(join(projectDir, ".vvoc", "vvoc.json"));
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -74,6 +76,7 @@ describe("launch planning", () => {
       });
 
       expect(plan.env.OPENCODE_CONFIG).toBe(join(configHome, "opencode", "opencode.json"));
+      expect(plan.env.OPENCODE_TUI_CONFIG).toBeUndefined();
       expect(plan.env.VVOC_CONFIG).toBe(join(configHome, "vvoc", "vvoc.json"));
     } finally {
       await rm(projectDir, { recursive: true, force: true });
@@ -93,6 +96,7 @@ describe("launch planning", () => {
         spawn: async (plan) => {
           expect(plan.command).toEqual(["opencode", "run", "hello"]);
           expect(plan.env.OPENCODE_CONFIG).toContain(".opencode/opencode.json");
+          expect(plan.env.OPENCODE_TUI_CONFIG).toContain(".opencode/tui.json");
           expect(plan.env.VVOC_CONFIG).toContain(".vvoc/vvoc.json");
           return 7;
         },
@@ -109,6 +113,11 @@ async function writeProjectLayer(projectDir: string): Promise<void> {
   await mkdir(join(projectDir, ".opencode"), { recursive: true });
   await mkdir(join(projectDir, ".vvoc"), { recursive: true });
   await writeFile(join(projectDir, ".opencode", "opencode.json"), "{}\n", "utf8");
+  await writeFile(
+    join(projectDir, ".opencode", "tui.json"),
+    '{ "$schema": "https://opencode.ai/tui.json", "plugin": ["@osovv/vv-opencode/tui"] }\n',
+    "utf8",
+  );
   await writeFile(
     join(projectDir, ".vvoc", "vvoc.json"),
     JSON.stringify(

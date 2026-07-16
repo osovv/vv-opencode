@@ -1,8 +1,8 @@
 // FILE: src/lib/config-layers.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Resolve vvoc and OpenCode config layers for global, project, and effective scopes.
-//   SCOPE: Env override handling, ancestor project-root discovery, project write-root selection, global fallback paths, singleton runtime vvoc loading, and source metadata.
+//   PURPOSE: Resolve vvoc, OpenCode runtime, and OpenCode TUI config layers for global, project, and effective scopes.
+//   SCOPE: Env override handling, ancestor project-root discovery, project write-root selection, global fallback paths, dedicated TUI config selection, singleton runtime vvoc loading, and source metadata.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CONFIG-LAYERS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -12,6 +12,7 @@
 // START_MODULE_MAP
 //   VVOC_CONFIG_ENV - Environment variable name for explicit vvoc config selection.
 //   OPENCODE_CONFIG_ENV - Environment variable name for explicit OpenCode config selection.
+//   OPENCODE_TUI_CONFIG_ENV - Environment variable name for explicit OpenCode TUI config selection.
 //   ConfigWriteScope - Supported write scopes for mutating commands.
 //   ConfigReadScope - Supported read scopes for list/show/diagnostic commands.
 //   ConfigSourceKind - Source kind labels for selected config sources.
@@ -25,6 +26,7 @@
 //   resolveProjectOpenCodeConfigPath - Selects the canonical project .opencode/opencode.json(c) path.
 //   resolveVvocConfigSource - Resolves vvoc source metadata for global, project, or effective reads.
 //   resolveOpenCodeConfigSource - Resolves OpenCode source metadata for global, project, or effective reads.
+//   resolveOpenCodeTuiConfigSource - Resolves OpenCode TUI source metadata for global, project, or effective reads.
 //   resolveConfigWriteTargets - Returns canonical global or project write paths.
 //   loadVvocConfigForRead - Loads vvoc config for CLI read/list/show commands without creating files.
 //   VvocConfigSnapshot - Immutable runtime vvoc config snapshot plus source metadata.
@@ -34,6 +36,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added layered dedicated tui.json(c) source and write-target resolution.]
 //   LAST_CHANGE: [v1.1.0 - Replaced keyed runtime memoization with a single loadVvocConfig startup promise shared by all plugins.]
 //   LAST_CHANGE: [v1.0.1 - Memoized loadEffectiveVvocConfigForRuntime to eliminate redundant ancestor discovery across multiple plugins during startup.]
 //   LAST_CHANGE: [v1.0.0 - Added layered config source discovery, write target resolution, and runtime vvoc loading.]
@@ -52,6 +55,7 @@ import {
 
 export const VVOC_CONFIG_ENV = "VVOC_CONFIG";
 export const OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG";
+export const OPENCODE_TUI_CONFIG_ENV = "OPENCODE_TUI_CONFIG";
 
 export type ConfigWriteScope = "global" | "project";
 export type ConfigReadScope = ConfigWriteScope | "effective";
@@ -87,6 +91,7 @@ export type ProjectConfigRoot = {
   rootDir: string;
   vvocConfigPath?: string;
   opencodeConfigPath?: string;
+  opencodeTuiConfigPath?: string;
 };
 
 export type ConfigLayerOptions = {
@@ -101,10 +106,12 @@ export type ConfigWriteTargets = {
   opencodeBaseDir: string;
   vvocBaseDir: string;
   opencodeConfigPath: string;
+  opencodeTuiConfigPath: string;
   vvocConfigPath: string;
 };
 
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
+const OPENCODE_TUI_CONFIG_FILE_NAMES = ["tui.json", "tui.jsonc"] as const;
 
 // START_BLOCK_PROJECT_LAYER_DISCOVERY
 export async function findNearestProjectConfigRoot(
@@ -115,13 +122,15 @@ export async function findNearestProjectConfigRoot(
   while (true) {
     const vvocConfigPath = getProjectVvocConfigPath(currentDir);
     const opencodeConfigPath = await findExistingProjectOpenCodeConfigPath(currentDir);
+    const opencodeTuiConfigPath = await findExistingProjectOpenCodeTuiConfigPath(currentDir);
     const hasVvocConfig = await pathExists(vvocConfigPath);
 
-    if (hasVvocConfig || opencodeConfigPath) {
+    if (hasVvocConfig || opencodeConfigPath || opencodeTuiConfigPath) {
       return {
         rootDir: currentDir,
         vvocConfigPath: hasVvocConfig ? vvocConfigPath : undefined,
         opencodeConfigPath,
+        opencodeTuiConfigPath,
       };
     }
 
@@ -203,6 +212,30 @@ export async function resolveOpenCodeConfigSource(
   return resolveGlobalOpenCodeSource(options.configDir);
 }
 
+export async function resolveOpenCodeTuiConfigSource(
+  options: ConfigLayerOptions & { scope: ConfigReadScope },
+): Promise<ConfigSource> {
+  if (options.scope === "global") {
+    return resolveGlobalOpenCodeTuiSource(options.configDir);
+  }
+
+  if (options.scope === "project") {
+    return resolveProjectOpenCodeTuiSource(options.cwd);
+  }
+
+  const envSource = readEnvConfigSource(options.env, OPENCODE_TUI_CONFIG_ENV);
+  if (envSource) {
+    return envSource;
+  }
+
+  const projectSource = await resolveProjectOpenCodeTuiSource(options.cwd);
+  if (projectSource.kind === "project") {
+    return projectSource;
+  }
+
+  return resolveGlobalOpenCodeTuiSource(options.configDir);
+}
+
 export async function resolveConfigWriteTargets(
   options: ConfigLayerOptions & { scope: ConfigWriteScope },
 ): Promise<ConfigWriteTargets> {
@@ -216,6 +249,9 @@ export async function resolveConfigWriteTargets(
       opencodeBaseDir,
       vvocBaseDir: getGlobalVvocDir(options.configDir),
       opencodeConfigPath,
+      opencodeTuiConfigPath: await selectExistingPath(
+        OPENCODE_TUI_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
+      ),
       vvocConfigPath: getGlobalVvocConfigPath(options.configDir),
     };
   }
@@ -228,6 +264,9 @@ export async function resolveConfigWriteTargets(
     opencodeBaseDir,
     vvocBaseDir: dirname(getProjectVvocConfigPath(projectRoot)),
     opencodeConfigPath: await resolveProjectOpenCodeConfigPath(projectRoot),
+    opencodeTuiConfigPath:
+      (await findExistingProjectOpenCodeTuiConfigPath(projectRoot)) ??
+      join(opencodeBaseDir, "tui.json"),
     vvocConfigPath: getProjectVvocConfigPath(projectRoot),
   };
 }
@@ -419,6 +458,20 @@ async function resolveProjectOpenCodeSource(cwd: string): Promise<ConfigSource> 
   };
 }
 
+async function resolveProjectOpenCodeTuiSource(cwd: string): Promise<ConfigSource> {
+  const root = await findNearestProjectConfigRoot(cwd);
+  if (root?.opencodeTuiConfigPath) {
+    return { kind: "project", path: root.opencodeTuiConfigPath, rootDir: root.rootDir };
+  }
+
+  return {
+    kind: "missing",
+    path: root ? join(getProjectOpencodeDir(root.rootDir), "tui.json") : undefined,
+    rootDir: root?.rootDir,
+    reason: "project OpenCode TUI config missing; run vvoc install --scope project",
+  };
+}
+
 async function resolveGlobalVvocSource(configDir?: string): Promise<ConfigSource> {
   const path = getGlobalVvocConfigPath(configDir);
   return (await pathExists(path))
@@ -435,6 +488,18 @@ async function resolveGlobalOpenCodeSource(configDir?: string): Promise<ConfigSo
         kind: "missing",
         path: join(baseDir, "opencode.json"),
         reason: "global OpenCode config missing",
+      };
+}
+
+async function resolveGlobalOpenCodeTuiSource(configDir?: string): Promise<ConfigSource> {
+  const baseDir = getGlobalOpencodeDir(configDir);
+  const path = await findExistingOpenCodeTuiConfigPath(baseDir);
+  return path
+    ? { kind: "global", path }
+    : {
+        kind: "missing",
+        path: join(baseDir, "tui.json"),
+        reason: "global OpenCode TUI config missing",
       };
 }
 
@@ -455,8 +520,24 @@ async function findExistingProjectOpenCodeConfigPath(
   return findExistingOpenCodeConfigPath(getProjectOpencodeDir(projectRoot));
 }
 
+async function findExistingProjectOpenCodeTuiConfigPath(
+  projectRoot: string,
+): Promise<string | undefined> {
+  return findExistingOpenCodeTuiConfigPath(getProjectOpencodeDir(projectRoot));
+}
+
 async function findExistingOpenCodeConfigPath(baseDir: string): Promise<string | undefined> {
   for (const name of OPENCODE_CONFIG_FILE_NAMES) {
+    const candidate = join(baseDir, name);
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+async function findExistingOpenCodeTuiConfigPath(baseDir: string): Promise<string | undefined> {
+  for (const name of OPENCODE_TUI_CONFIG_FILE_NAMES) {
     const candidate = join(baseDir, name);
     if (await pathExists(candidate)) {
       return candidate;

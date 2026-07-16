@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput fixtures for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v0.4.0 - Added coverage proving Guardian ignores the old permission API and keeps current HTTP reply fallback.]
 //   LAST_CHANGE: [v0.3.1 - Updated invalid fast-role expectation for strict shared vvoc config loading.]
 //   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated Guardian fixtures.]
@@ -137,6 +138,7 @@ test("GuardianPlugin registers guardian as a hidden subagent with explicit two-s
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });
@@ -179,6 +181,7 @@ test("GuardianPlugin ignores stale guardian model fields in vvoc.json and keeps 
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });
@@ -215,6 +218,7 @@ test("GuardianPlugin still allows env model override over the roles.fast default
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });
@@ -241,6 +245,7 @@ test("GuardianPlugin fails loudly when built-in fast role is invalid in vvoc con
       project: {} as never,
       directory: projectDir,
       worktree: projectDir,
+      experimental_workspace: { register: () => undefined },
       serverUrl: new URL("http://localhost"),
       $: {} as never,
     }),
@@ -269,6 +274,7 @@ test("Guardian disabled-mode deny replies through permission.reply and ignores t
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });
@@ -321,6 +327,7 @@ test("Guardian disabled-mode deny uses current HTTP reply fallback when permissi
       project: {} as never,
       directory: projectDir,
       worktree: projectDir,
+      experimental_workspace: { register: () => undefined },
       serverUrl: new URL("http://localhost"),
       $: {} as never,
     });
@@ -381,6 +388,7 @@ test("Guardian review failures fall back to manual approval without auto-allow",
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });

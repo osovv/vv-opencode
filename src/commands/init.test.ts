@@ -2,7 +2,7 @@
 // VERSION: 0.10.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
-//   SCOPE: Non-interactive init path, local project config layers, managed agent/skill/plan scaffolding, canonical config scaffolding, global side-effect guards, and idempotent re-run handling.
+//   SCOPE: Non-interactive init path, local project runtime/TUI config layers, managed agent/skill/plan scaffolding, canonical config scaffolding, global side-effect guards, and idempotent re-run handling.
 //   DEPENDS: [src/commands/init.ts]
 //   LINKS: [M-CLI-INIT]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added project-local TUI registration and idempotence expectations.]
 //   LAST_CHANGE: [v0.10.1 - Added init scaffolding expectation for vv-handoff managed skill.]
 //   LAST_CHANGE: [v0.9.0 - Added project-local .opencode/.vvoc assertions and global side-effect guards for scoped init.]
 //   LAST_CHANGE: [v0.10.0 - Updated init expectations for reviewer and orchestrator role bindings.]
@@ -32,7 +33,7 @@ import {
   VVOC_CONFIG_SCHEMA_URL,
   VVOC_CONFIG_VERSION,
 } from "../lib/vvoc-config.js";
-import { resolvePaths } from "../lib/opencode.js";
+import { resolvePaths, TUI_PACKAGE_SPECIFIER } from "../lib/opencode.js";
 
 test("resolvePaths - global scope resolves correctly", async () => {
   const result = await resolvePaths({ scope: "global", cwd: "/tmp/test" });
@@ -69,8 +70,10 @@ describe("init scenarios", () => {
       const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
 
       expect(paths.opencodeConfigPath).toBe(join(tmpDir, ".opencode", "opencode.json"));
+      expect(paths.opencodeTuiConfigPath).toBe(join(tmpDir, ".opencode", "tui.json"));
       expect(paths.vvocConfigPath).toBe(join(tmpDir, ".vvoc", "vvoc.json"));
       expect(existsSync(paths.opencodeConfigPath)).toBe(true);
+      expect(existsSync(paths.opencodeTuiConfigPath)).toBe(true);
       expect(existsSync(paths.vvocConfigPath)).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-controller.md")).toBe(true);
@@ -91,6 +94,7 @@ describe("init scenarios", () => {
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
+      const tuiContent = readFileSync(paths.opencodeTuiConfigPath, "utf8");
       const vvocContent = readFileSync(paths.vvocConfigPath, "utf8");
       const opencodeConfig = JSON.parse(opencodeContent) as {
         model: string;
@@ -101,8 +105,10 @@ describe("init scenarios", () => {
         skills?: { paths?: string[] };
       };
       const vvocConfig = parseVvocConfigText(vvocContent, paths.vvocConfigPath);
+      const tuiConfig = JSON.parse(tuiContent) as { plugin?: string[] };
 
       expect(opencodeContent).toContain("@osovv/vv-opencode");
+      expect(tuiConfig.plugin).toContain(TUI_PACKAGE_SPECIFIER);
       expect(opencodeConfig.model).toBe("vv-role:default");
       expect(opencodeConfig.small_model).toBe("vv-role:fast");
       expect(opencodeConfig.default_agent).toBe("vv-controller");
@@ -161,6 +167,7 @@ describe("init scenarios", () => {
       const { readFileSync } = await import("node:fs");
       const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
       const beforeOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
+      const beforeTui = readFileSync(paths.opencodeTuiConfigPath, "utf8");
       const beforeVvoc = readFileSync(paths.vvocConfigPath, "utf8");
 
       await runInit({
@@ -171,8 +178,10 @@ describe("init scenarios", () => {
       });
 
       const afterOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
+      const afterTui = readFileSync(paths.opencodeTuiConfigPath, "utf8");
       const afterVvoc = readFileSync(paths.vvocConfigPath, "utf8");
       expect(afterOpenCode).toBe(beforeOpenCode);
+      expect(afterTui).toBe(beforeTui);
       expect(afterVvoc).toBe(beforeVvoc);
     } finally {
       rmSync(configHome, { recursive: true, force: true });

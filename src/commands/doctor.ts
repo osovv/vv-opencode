@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Diagnose vv-opencode installation problems and surface actionable failures.
-//   SCOPE: Read-scope parsing, layered source-aware installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode plus vvoc config.
+//   SCOPE: Read-scope parsing, layered source-aware installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode runtime/TUI plus vvoc config.
 //   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TUI source, parse, plugin inventory, and registration diagnostics.]
 //   LAST_CHANGE: [v0.5.0 - Added global/project/effective diagnostic scopes with selected source reporting.]
 //   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output while keeping unresolved role-reference failures in Problems diagnostics.]
 // END_CHANGE_SUMMARY
@@ -50,6 +51,9 @@ export default defineCommand({
       `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
     );
     console.log(
+      `OpenCode TUI source: ${inspection.opencodeTuiSource.kind}${inspection.opencodeTuiSource.path ? ` ${inspection.opencodeTuiSource.path}` : ""}`,
+    );
+    console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
     console.log(`OpenCode config: ${inspection.opencode.path}`);
@@ -59,6 +63,14 @@ export default defineCommand({
     console.log(
       `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.join(", ") : "<none>"}`,
     );
+    console.log(`OpenCode TUI config: ${inspection.tui.path}`);
+    console.log(
+      `OpenCode TUI config parse: ${inspection.tui.parseError ? inspection.tui.parseError : inspection.tui.exists ? "ok" : "missing"}`,
+    );
+    console.log(
+      `Configured TUI plugins: ${inspection.tui.plugins.length > 0 ? inspection.tui.plugins.map((entry) => (typeof entry === "string" ? entry : entry[0])).join(", ") : "<none>"}`,
+    );
+    console.log(`TUI package configured: ${inspection.tui.pluginConfigured ? "yes" : "no"}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(
       `vvoc config parse: ${inspection.vvoc.parseError ? inspection.vvoc.parseError : inspection.vvoc.exists ? "ok" : "missing"}`,
