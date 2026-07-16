@@ -1,8 +1,8 @@
 // FILE: src/tui/context/types.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define bounded input and output shapes for the context TUI collector, analyzer, and view.
-//   SCOPE: Context categories, model metadata, MCP status summaries, warnings, and analysis input/output types.
+//   PURPOSE: Define bounded input and output shapes for the context TUI collector, detailed analyzer, and tabbed view.
+//   SCOPE: Context categories, reusable token metrics, per-tool and per-MCP attribution, model metadata, warnings, and analysis input/output types.
 //   DEPENDS: [@opencode-ai/sdk/v2]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: TYPES
@@ -11,15 +11,24 @@
 //
 // START_MODULE_MAP
 //   ContextSkill - Observable skill catalog entry.
+//   ContextMcpStatus - Canonical MCP status values exposed by OpenCode.
 //   ContextMcpServer - MCP name/status snapshot exposed by the TUI state.
 //   ContextModel - Current provider/model metadata and limits.
 //   ContextAnalysisInput - Raw bounded data accepted by the pure analyzer.
+//   ContextCategoryId - Stable overview category identifiers.
+//   ContextTokenMetric - Estimated token count and optional model-context percentage.
 //   ContextCategory - One estimated context category row.
-//   ContextAnalysis - Measured usage, estimated categories, warnings, and metadata rendered by the dialog.
+//   ContextToolSource - Deterministic built-in, vvoc, MCP, or other tool ownership.
+//   ContextToolUsage - Per-tool current schema and active-history attribution.
+//   ContextMcpUsage - Per-server aggregate with nested attributed tools.
+//   ContextToolReconciliation - Detailed schema and history subtotals aligned with overview categories.
+//   ContextToolAttribution - Sorted detailed tool, MCP, other, and reconciliation model.
+//   ContextMeasuredUsage - Latest provider-reported usage and model-capacity values.
+//   ContextAnalysis - Measured usage, estimated categories, detailed attribution, warnings, and metadata rendered by the dialog.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added shared context-inspection domain types.]
+//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added reusable metrics and detailed tool/MCP attribution shapes.]
 // END_CHANGE_SUMMARY
 
 import type { Agent, Message, Part, ToolListItem } from "@opencode-ai/sdk/v2";
@@ -31,9 +40,16 @@ export type ContextSkill = {
   content: string;
 };
 
+export type ContextMcpStatus =
+  | "connected"
+  | "disabled"
+  | "failed"
+  | "needs_auth"
+  | "needs_client_registration";
+
 export type ContextMcpServer = {
   name: string;
-  status: string;
+  status: ContextMcpStatus;
   error?: string;
 };
 
@@ -71,12 +87,60 @@ export type ContextCategoryId =
   | "compacted-summary"
   | "provider-only";
 
-export type ContextCategory = {
+export type ContextTokenMetric = {
+  estimatedTokens: number;
+  percent?: number;
+};
+
+export type ContextCategory = ContextTokenMetric & {
   id: ContextCategoryId;
   label: string;
-  estimatedTokens: number;
   detail?: string;
   source: "estimated" | "provider-residual";
+};
+
+export type ContextToolSource =
+  | { kind: "builtin" }
+  | { kind: "vvoc" }
+  | { kind: "mcp"; server: string }
+  | { kind: "other" };
+
+export type ContextToolUsage = {
+  id: string;
+  source: ContextToolSource;
+  calls: number;
+  schema: ContextTokenMetric;
+  history: ContextTokenMetric;
+  total: ContextTokenMetric;
+};
+
+export type ContextMcpUsage = ContextMcpServer & {
+  toolCount: number;
+  schema: ContextTokenMetric;
+  history: ContextTokenMetric;
+  total: ContextTokenMetric;
+  tools: ContextToolUsage[];
+};
+
+export type ContextToolReconciliation = {
+  schema: {
+    builtin: ContextTokenMetric;
+    vvoc: ContextTokenMetric;
+    external: ContextTokenMetric;
+    total: ContextTokenMetric;
+  };
+  history: {
+    toolResults: ContextTokenMetric;
+    loadedSkills: ContextTokenMetric;
+    total: ContextTokenMetric;
+  };
+};
+
+export type ContextToolAttribution = {
+  tools: ContextToolUsage[];
+  mcpServers: ContextMcpUsage[];
+  otherTools: ContextToolUsage[];
+  reconciliation: ContextToolReconciliation;
 };
 
 export type ContextMeasuredUsage = {
@@ -101,5 +165,6 @@ export type ContextAnalysis = {
   compacted: boolean;
   activeMessageCount: number;
   mcpServers: ContextMcpServer[];
+  toolAttribution?: ContextToolAttribution;
   warnings: string[];
 };

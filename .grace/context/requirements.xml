@@ -165,7 +165,7 @@
       <Name>ContextInspection</Name>
       <Action>User runs /context inside an active OpenCode TUI session.</Action>
       <Goal>Understand current context pressure and major observable contributors without pretending to reconstruct the exact provider request.</Goal>
-      <Acceptance>The native dialog reports provider/model and measured usage when available, labels category values as estimates, starts at the latest compaction summary, shows provider-only unknown or estimation drift, displays MCP server statuses, and degrades to bounded diagnostics on missing state.</Acceptance>
+      <Acceptance>The host-owned bounded dialog keeps provider/model and measured usage visible across Overview, Tools, and MCP tabs; derives percentages only from a positive current model context limit; separates current schemas from active post-compaction tool history; attributes MCP usage only through unique longest sanitized server prefixes; leaves ambiguous tools under Other external/plugin with bounded diagnostics; and degrades safely on missing state.</Acceptance>
       <RelatedFlow>DF-CONTEXT-INSPECTION</RelatedFlow>
     </UC-021>
   </UseCases>
@@ -177,7 +177,7 @@
     <NonGoal>Do not manage enable or disable state for arbitrary user-defined OpenCode plugins; plugin toggles apply only to vvoc-managed plugins.</NonGoal>
     <NonGoal>Do not publish packages automatically from normal branch pushes.</NonGoal>
     <NonGoal>Do not edit generated dist output manually.</NonGoal>
-    <NonGoal>Do not present estimated context categories as exact provider payload attribution or guess per-MCP tool ownership without source metadata.</NonGoal>
+    <NonGoal>Do not present estimated context categories as exact provider payload attribution or infer MCP ownership beyond OpenCode's unique longest sanitized server-prefix contract; collisions and other uncertainty remain unattributed.</NonGoal>
   </NonGoals>
   <Constraints>
     <Constraint>OpenCode config remains in OpenCode-managed paths; vvoc must not invent unrelated config locations.</Constraint>

@@ -17,6 +17,7 @@
     <Dependency>@opencode-ai/sdk for OpenCode client types and runtime interactions used by Guardian and plugin logging.</Dependency>
     <Dependency>@opencode-ai/plugin and @opencode-ai/sdk version 1.18.2 provide the modern TUI plugin API and SDK v2 context catalogs used by /context.</Dependency>
     <Dependency>@opentui/core, @opentui/keymap, and @opentui/solid version 0.4.3 provide native TUI rendering, keymap types, and Solid JSX integration.</Dependency>
+    <Dependency>solid-js version 1.9.12 is the direct peer and development contract for component-local reactive /context tab state used through @opentui/solid.</Dependency>
     <Dependency>citty for CLI command definitions.</Dependency>
     <Dependency>jsonc-parser for comment-tolerant config parsing and edits.</Dependency>
     <Dependency>@clack/prompts for interactive init prompts and abort handling.</Dependency>

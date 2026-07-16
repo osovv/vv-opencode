@@ -1,0 +1,214 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-CONTEXT-TUI-DETAILED-ATTRIBUTION>
+    <IntentSummary>Extend the existing pure /context analysis into reconciled per-tool and per-MCP attribution, derive context-window percentages only from the current model limit, render the results through a responsive host-owned three-tab dialog, preserve active post-compaction and measured-versus-estimated semantics, document the public behavior, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>DF-CONTEXT-INSPECTION</Value>
+        <Value>V-M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>src/tui/context/types.ts</Value>
+        <Value>src/tui/context/estimate.ts</Value>
+        <Value>src/tui/context/analyze.ts</Value>
+        <Value>src/tui/context/analyze.test.ts</Value>
+        <Value>src/tui/context/collect.ts</Value>
+        <Value>src/tui/context/view.tsx</Value>
+        <Value>src/tui/context/view.test.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-CONTEXT-TUI</Module>
+      </MustVerify>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>The analyzer currently estimates aggregate built-in, vvoc, and external tool-schema categories and one combined Tool calls and results category, but it does not retain per-tool schema, call count, or history usage.</Note>
+        <Note>The analyzer already limits message and part accounting to the latest compaction summary and subsequent active turns, and skill tool history is separately owned by Loaded skill results.</Note>
+        <Note>The public OpenCode 1.18.2 tool catalog exposes tool id, description, and parameters, while active tool parts expose tool id, input, output or error, and state.</Note>
+        <Note>OpenCode 1.18.2 names MCP tools as sanitize(serverName) + "_" + sanitize(toolName); current MCP state exposes server names and statuses but ToolListItem has no direct source metadata.</Note>
+        <Note>The current host-owned xlarge dialog renders one static report and applies setSize after replace; view regression coverage protects this ordering and the absence of a nested Dialog wrapper.</Note>
+        <Note>README and GRACE projections describe aggregate estimates, status-only MCP visibility, and the current uncertainty boundary that forbids guessed ownership.</Note>
+      </Baseline>
+      <Target>
+        <Note>One pure detailed analysis model owns category percentages, per-tool schema and active-history metrics, deterministic source classification, reconciled subtotals, and per-server MCP aggregates.</Note>
+        <Note>Unique longest-prefix MCP matching is treated as the supported current OpenCode naming contract; sanitized collisions remain unattributed and produce bounded warnings.</Note>
+        <Note>The dialog keeps provider-measured usage visible while exposing Overview, Tools, and MCP tabs with responsive scrolling and stable keyboard navigation.</Note>
+        <Note>Direct Solid reactive state used by the TUI view is declared through package metadata compatible with the existing OpenTUI 0.4.3 peer surface.</Note>
+        <Note>Public documentation and GRACE current-state artifacts explain active scope, percentages, disconnected-server schema behavior, retained active history, and non-exact estimates.</Note>
+      </Target>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-CONTEXT-TUI />
+        <DF-CONTEXT-INSPECTION />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-CONTEXT-TUI />
+        <VF-CONTEXT-INSPECTION />
+      </VerificationAnchors>
+      <ContextArtifact>.grace/changes/active/C-CONTEXT-TUI-DETAILED-ATTRIBUTION/spec.xml</ContextArtifact>
+      <ContextArtifact>.grace/changes/active/C-CONTEXT-TUI-DETAILED-ATTRIBUTION/design-context.xml</ContextArtifact>
+      <ContextArtifact>.grace/context/requirements.xml</ContextArtifact>
+      <ContextArtifact>.grace/context/technology.xml</ContextArtifact>
+      <GraphDocument>.grace/graph/main.xml</GraphDocument>
+      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-CONTEXT-TUI-DETAILED-ATTRIBUTION/plan.xml</File>
+      <File>package.json</File>
+      <File>bun.lock</File>
+      <File>src/tui/context/types.ts</File>
+      <File>src/tui/context/analyze.ts</File>
+      <File>src/tui/context/analyze.test.ts</File>
+      <File>src/tui/context/view.tsx</File>
+      <File>src/tui/context/view.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Define detailed context attribution types and deterministic calculation helpers.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update types.ts contracts and exports with reusable token metric, tool source, per-tool usage, and per-MCP aggregate shapes without exposing provider-exact claims.</Criterion>
+          <Criterion>Every estimated metric carries tokens and an optional percentage derived only from a positive model contextLimit; missing or invalid limits produce undefined percentage data for em-dash rendering.</Criterion>
+          <Criterion>Tool source classification distinguishes known built-in IDs, known vvoc IDs, uniquely matched MCP servers, and Other external/plugin.</Criterion>
+          <Criterion>MCP name sanitization matches OpenCode's non-alphanumeric replacement rule, candidates use longest-prefix selection, and equal longest sanitized matches are explicitly ambiguous.</Criterion>
+          <Criterion>Stable sorting orders tool and server detail by combined total descending with a deterministic name tie-breaker.</Criterion>
+          <Criterion>MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY remain accurate for changed type and analyzer responsibilities.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui/context/analyze.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Aggregate active per-tool schema and history usage with reconciled MCP server totals.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Initialize tool detail from the current tool catalog so unused schemas remain visible with zero calls and zero history.</Criterion>
+          <Criterion>Merge active post-compaction tool parts by exact tool ID, count each observable call once, and estimate history from tool ID, input, completed output, or error using the existing provider-neutral estimator.</Criterion>
+          <Criterion>Pending and running calls contribute their currently observable input, while completed attachments continue to be owned by Files and attachments as before.</Criterion>
+          <Criterion>The skill tool is present in tool detail, but its history remains in Loaded skill results and is not added a second time to Tool calls and results.</Criterion>
+          <Criterion>Detailed schema subtotals exactly reconcile with the three existing schema categories, and detailed history reconciles with Tool calls and results plus the separately reported skill history.</Criterion>
+          <Criterion>Connected servers aggregate uniquely attributed current schemas and active history; non-connected statuses receive zero current schema but retain matching active history.</Criterion>
+          <Criterion>Ambiguous MCP ownership leaves the tool in Other external/plugin and appends one bounded warning rather than assigning it speculatively.</Criterion>
+          <Criterion>No new client or MCP request is added; analyzeContext continues to consume the existing tool catalog, active messages and parts, model metadata, and MCP status snapshot.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui/context/analyze.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Strengthen pure analyzer regression coverage for percentages, tools, MCP attribution, and compaction.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Tests cover percentages against a positive context limit and undefined percentages when the limit is absent or non-positive.</Criterion>
+          <Criterion>Tests cover an unused schema, repeated calls, completed outputs, errors, pending inputs, stable sorting, and schema plus history total calculation.</Criterion>
+          <Criterion>Tests prove pre-compaction calls are excluded and post-compaction calls remain counted.</Criterion>
+          <Criterion>Tests prove skill detail does not double-count overview history and all schema and history reconciliation invariants hold.</Criterion>
+          <Criterion>Tests cover connected, disabled, failed, needs_auth, and needs_client_registration MCP status behavior, including retained active history with zero disconnected schema.</Criterion>
+          <Criterion>Tests cover longest-prefix server selection, sanitized-name collisions, bounded ambiguity warnings, and Other external/plugin fallback.</Criterion>
+          <Criterion>Update analyze.test.ts MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY for the expanded deterministic scenarios.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui/context/analyze.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Implement the responsive Overview, Tools, and MCP dialog views with keyboard navigation and scrolling.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Preserve the direct host dialog composition and replace-before-setSize ordering while keeping the measured usage header visible across all tabs.</Criterion>
+          <Criterion>Add component-local tab state with Overview as the initial tab; left and right cycle tabs and keys 1, 2, and 3 select them directly only while the context dialog is active.</Criterion>
+          <Criterion>Use a focused vertical scrollbox with terminal-relative bounded height so long tool and MCP lists remain navigable without extending beyond normal or narrow terminal viewports.</Criterion>
+          <Criterion>Overview shows each category's estimate, percentage or em dash, and a bounded bar whose fill clamps at 100 percent without clamping the numeric percentage.</Criterion>
+          <Criterion>Tools shows source, active calls, schema, history, total, and percentages for every detailed tool in analyzer order.</Criterion>
+          <Criterion>MCP shows canonical statuses, tool counts, aggregate metrics, nested tool detail, and an explicit Other external/plugin section.</Criterion>
+          <Criterion>Long names and unavailable values wrap or align predictably without clipping the dialog horizontally.</Criterion>
+          <Criterion>Declare SolidJS 1.9.12 as a compatible direct development and peer requirement for reactive view state, update bun.lock, and preserve existing OpenTUI peer versions.</Criterion>
+          <Criterion>Dialog cleanup removes any dialog-local keymap registration, while host Escape dismissal and subsequent /context openings do not leak bindings or stale tab state.</Criterion>
+          <Criterion>Update view.tsx MODULE_CONTRACT, MODULE_MAP, block anchors, and CHANGE_SUMMARY to describe the tabbed host-owned view.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun install</Command>
+          <Command>bun test src/tui/context/view.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Expand view regression coverage for tab transitions, rendering, scrolling, and dialog lifecycle.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Preserve regression checks for no nested Dialog wrapper and replace-before-xlarge sizing.</Criterion>
+          <Criterion>Tests exercise deterministic tab transition helpers and dialog-local binding cleanup without requiring a running OpenCode process.</Criterion>
+          <Criterion>OpenTUI test rendering or an equivalently deterministic rendering boundary captures Overview, Tools, and MCP labels and representative metrics.</Criterion>
+          <Criterion>A bounded-height test with enough rows to overflow proves the scrollable body remains within the rendered frame and responds to vertical navigation.</Criterion>
+          <Criterion>Tests cover percentages, em dashes, above-100 numeric values with clamped bars, disconnected MCP schema zero, retained history, and Other external/plugin output.</Criterion>
+          <Criterion>Update view.test.ts MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY for the expanded presentation verification surface.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui/context/view.test.ts</Command>
+          <Command>bun test src/tui/context/analyze.test.ts src/tui/context/plugin.test.ts src/tui/context/view.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Document detailed /context semantics and synchronize source contracts.</Title>
+        <DependsOn>T-002, T-004, T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README describes all three tabs, context-limit percentage semantics, active post-compaction scope, schema versus history, disabled-server schema zero, retained active history, and Other external/plugin uncertainty.</Criterion>
+          <Criterion>README continues to distinguish provider-measured usage from provider-neutral estimates and does not promise exact provider payload reconstruction.</Criterion>
+          <Criterion>Technology context records the direct SolidJS reactive-state peer/development contract if introduced by the implementation.</Criterion>
+          <Criterion>All edited source and test MODULE_CONTRACT, MODULE_MAP, CHANGE_SUMMARY, and block anchors are accurate and paired.</Criterion>
+          <Criterion>No setup command, config schema, plugin toggle, package export, or generated dist behavior changes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Synchronize GRACE requirements, context-inspection flow, module ownership, and verification.</Title>
+        <DependsOn>T-002, T-003, T-004, T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>UC-021 and the current attribution non-goal describe tabbed detail, context-limit percentages, active scope, deterministic MCP naming, and fail-closed ambiguity without weakening estimate honesty.</Criterion>
+          <Criterion>M-PLUGIN-CONTEXT-TUI describes detailed tool and MCP analysis, tabbed rendering, and any new Solid/keymap dependency while retaining the existing owned paths.</Criterion>
+          <Criterion>DF-CONTEXT-INSPECTION describes reuse of existing catalogs and active parts through detailed analysis into the bounded tabbed dialog.</Criterion>
+          <Criterion>VF-CONTEXT-INSPECTION and V-M-PLUGIN-CONTEXT-TUI require percentage, reconciliation, MCP attribution, tab, scrolling, and failure scenarios with the actual focused test files and gates.</Criterion>
+          <Criterion>No new graph or verification anchor is introduced unless fresh implementation evidence proves the existing module boundary is insufficient.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Run final repository gates and live normal-width and narrow-width TUI verification.</Title>
+        <DependsOn>T-003, T-005, T-006, T-007</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Focused context tests and the full repository check pass with fresh output.</Criterion>
+          <Criterion>Build and pack checks pass with the declared Solid/OpenTUI package surface and all public exports remain importable.</Criterion>
+          <Criterion>GRACE lint reports zero errors and warnings, status recognizes the approved change and plan, and the final diff stays inside DurableScope and ObservedWriteScope.</Criterion>
+          <Criterion>An isolated OpenCode 1.18.2 smoke test with the locally built TUI opens /context, switches among all three tabs through both navigation forms, scrolls overflowing rows, closes through Escape, and reopens without stale state.</Criterion>
+          <Criterion>Normal and narrow terminal screenshots or equivalent captured frames show no horizontal clipping, bottom overflow, nested dialog, or unreadable value wrapping.</Criterion>
+          <Criterion>Any skipped or blocked command is reported explicitly; generated dist remains unedited manually.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui/context/analyze.test.ts src/tui/context/plugin.test.ts src/tui/context/view.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-008>
+    </ImplementationPlan>
+  </C-CONTEXT-TUI-DETAILED-ATTRIBUTION>
+</GraceChangePlan>

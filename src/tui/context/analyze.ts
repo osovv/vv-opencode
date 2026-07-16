@@ -1,8 +1,8 @@
 // FILE: src/tui/context/analyze.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Derive a measured-versus-estimated active context breakdown from observable OpenCode session data.
-//   SCOPE: Compaction cutoff, provider usage baseline, model capacity, skill/tool/message categorization, residual unknown context, and MCP summary preservation.
+//   PURPOSE: Derive measured usage plus reconciled category, per-tool, and per-MCP active context attribution from observable OpenCode session data.
+//   SCOPE: Compaction cutoff, provider usage baseline, context-limit percentages, skill/tool/message categorization, deterministic MCP ownership, residual unknown context, and sorted detail aggregates.
 //   DEPENDS: [@opencode-ai/sdk/v2, src/tui/context/estimate.ts, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: CORE_LOGIC
@@ -10,27 +10,32 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   analyzeContext - Produce the complete context analysis rendered by the TUI plugin.
+//   analyzeContext - Produce the complete overview and detailed context analysis rendered by the TUI plugin.
 //   selectActiveMessages - Keep only the latest compaction summary and subsequent turns.
+//   createTokenMetric - Pair estimated tokens with a percentage only when a positive context limit exists.
+//   sanitizeMcpName - Mirror OpenCode's MCP name sanitization contract.
+//   classifyToolSource - Classify known tools and uniquely matched MCP prefixes without guessing.
+//   ContextToolClassification - Source result plus explicit ambiguous MCP candidates.
+//   compareToolUsage - Sort tool detail by combined total descending and ID ascending.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added honest active-context categorization and provider residual accounting.]
+//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added percentages, per-tool history, deterministic MCP attribution, and reconciled detail totals.]
 // END_CHANGE_SUMMARY
 
-import type {
-  AssistantMessage,
-  Message,
-  Part,
-  ToolListItem,
-  UserMessage,
-} from "@opencode-ai/sdk/v2";
+import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2";
 import { estimateTextTokens, estimateValueTokens } from "./estimate.js";
 import type {
   ContextAnalysis,
   ContextAnalysisInput,
   ContextCategory,
   ContextCategoryId,
+  ContextMcpServer,
+  ContextMcpUsage,
+  ContextTokenMetric,
+  ContextToolAttribution,
+  ContextToolSource,
+  ContextToolUsage,
 } from "./types.js";
 
 const BUILTIN_TOOL_IDS = new Set([
@@ -49,6 +54,8 @@ const BUILTIN_TOOL_IDS = new Set([
 
 const VVOC_TOOL_IDS = new Set(["edit", "work_item_open", "work_item_list", "work_item_close"]);
 
+const MAX_ATTRIBUTION_WARNINGS = 3;
+
 const CATEGORY_LABELS: Record<ContextCategoryId, string> = {
   system: "Agent/system instructions",
   "skill-catalog": "Skill catalog",
@@ -65,6 +72,18 @@ const CATEGORY_LABELS: Record<ContextCategoryId, string> = {
 };
 
 type CategoryCounter = Record<Exclude<ContextCategoryId, "provider-only">, number>;
+
+type ToolUsageDraft = {
+  id: string;
+  schemaTokens: number;
+  historyTokens: number;
+  calls: number;
+};
+
+export type ContextToolClassification = {
+  source: ContextToolSource;
+  ambiguousServers?: string[];
+};
 
 // START_BLOCK_CONTEXT_ANALYSIS
 export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
@@ -88,8 +107,10 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
     });
   }
 
+  const toolDrafts = new Map<string, ToolUsageDraft>();
   for (const tool of input.tools) {
-    counters[classifyToolSchema(tool)] += estimateValueTokens({
+    const draft = getToolDraft(toolDrafts, tool.id);
+    draft.schemaTokens = estimateValueTokens({
       id: tool.id,
       description: tool.description,
       parameters: tool.parameters,
@@ -97,11 +118,34 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
   }
 
   const messageByID = new Map(activeMessages.map((message) => [message.id, message] as const));
+  const toolPartsByCall = new Map<string, Extract<Part, { type: "tool" }>>();
   for (const part of activeParts) {
+    if (part.type === "tool") {
+      toolPartsByCall.set(`${part.tool}\u0000${part.callID}`, part);
+      continue;
+    }
     countPart(part, messageByID.get(part.messageID), counters);
   }
 
-  const categories = buildKnownCategories(counters);
+  for (const part of toolPartsByCall.values()) {
+    const historyTokens = countToolPart(part, counters);
+    const draft = getToolDraft(toolDrafts, part.tool);
+    draft.calls += 1;
+    draft.historyTokens += historyTokens;
+  }
+
+  const contextLimit = normalizeContextLimit(input.model?.contextLimit);
+  const detail = buildToolAttribution(toolDrafts, input.mcpServers, contextLimit);
+  counters["builtin-tool-schemas"] =
+    detail.attribution.reconciliation.schema.builtin.estimatedTokens;
+  counters["vvoc-tool-schemas"] = detail.attribution.reconciliation.schema.vvoc.estimatedTokens;
+  counters["external-tool-schemas"] =
+    detail.attribution.reconciliation.schema.external.estimatedTokens;
+  counters["tool-results"] = detail.attribution.reconciliation.history.toolResults.estimatedTokens;
+  counters["loaded-skills"] =
+    detail.attribution.reconciliation.history.loadedSkills.estimatedTokens;
+
+  const categories = buildKnownCategories(counters, contextLimit);
   const estimatedKnownTokens = categories.reduce(
     (total, category) => total + category.estimatedTokens,
     0,
@@ -118,7 +162,7 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
     categories.push({
       id: "provider-only",
       label: CATEGORY_LABELS["provider-only"],
-      estimatedTokens: providerOnlyTokens,
+      ...createTokenMetric(providerOnlyTokens, contextLimit),
       detail: "Measured provider usage not attributable through public TUI/SDK data",
       source: "provider-residual",
     });
@@ -136,7 +180,8 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
     compacted: activeMessages.length < input.messages.length,
     activeMessageCount: activeMessages.length,
     mcpServers: [...input.mcpServers],
-    warnings: [...(input.warnings ?? [])],
+    toolAttribution: detail.attribution,
+    warnings: [...(input.warnings ?? []), ...detail.warnings],
   };
 }
 
@@ -153,6 +198,192 @@ export function selectActiveMessages(messages: readonly Message[]): readonly Mes
 }
 // END_BLOCK_CONTEXT_ANALYSIS
 
+// START_BLOCK_DETAILED_ATTRIBUTION
+export function createTokenMetric(
+  estimatedTokens: number,
+  contextLimit: number | undefined,
+): ContextTokenMetric {
+  const tokens = Number.isFinite(estimatedTokens) ? Math.max(0, estimatedTokens) : 0;
+  const limit = normalizeContextLimit(contextLimit);
+  if (limit === undefined) return { estimatedTokens: tokens };
+  return { estimatedTokens: tokens, percent: (tokens / limit) * 100 };
+}
+
+export function sanitizeMcpName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+export function classifyToolSource(
+  toolID: string,
+  mcpServers: readonly ContextMcpServer[],
+): ContextToolClassification {
+  if (VVOC_TOOL_IDS.has(toolID)) return { source: { kind: "vvoc" } };
+  if (BUILTIN_TOOL_IDS.has(toolID)) return { source: { kind: "builtin" } };
+
+  const uniqueServers = new Map(mcpServers.map((server) => [server.name, server] as const));
+  const candidates = [...uniqueServers.values()]
+    .map((server) => ({ name: server.name, prefix: `${sanitizeMcpName(server.name)}_` }))
+    .filter((candidate) => toolID.startsWith(candidate.prefix));
+
+  if (candidates.length === 0) return { source: { kind: "other" } };
+
+  const longestLength = Math.max(...candidates.map((candidate) => candidate.prefix.length));
+  const longest = candidates
+    .filter((candidate) => candidate.prefix.length === longestLength)
+    .sort((left, right) => compareText(left.name, right.name));
+
+  if (longest.length !== 1) {
+    return {
+      source: { kind: "other" },
+      ambiguousServers: longest.map((candidate) => candidate.name),
+    };
+  }
+
+  return { source: { kind: "mcp", server: longest[0]!.name } };
+}
+
+export function compareToolUsage(left: ContextToolUsage, right: ContextToolUsage): number {
+  const totalDelta = right.total.estimatedTokens - left.total.estimatedTokens;
+  return totalDelta || compareText(left.id, right.id);
+}
+
+function buildToolAttribution(
+  drafts: ReadonlyMap<string, ToolUsageDraft>,
+  mcpServers: readonly ContextMcpServer[],
+  contextLimit: number | undefined,
+): { attribution: ContextToolAttribution; warnings: string[] } {
+  const serverByName = new Map(mcpServers.map((server) => [server.name, server] as const));
+  const ambiguities = new Map<string, string[]>();
+  const tools = [...drafts.values()]
+    .map((draft): ContextToolUsage => {
+      const classification = classifyToolSource(draft.id, mcpServers);
+      if (classification.ambiguousServers) {
+        ambiguities.set(draft.id, classification.ambiguousServers);
+      }
+      const server =
+        classification.source.kind === "mcp"
+          ? serverByName.get(classification.source.server)
+          : undefined;
+      const schemaTokens = server && server.status !== "connected" ? 0 : draft.schemaTokens;
+      return {
+        id: draft.id,
+        source: classification.source,
+        calls: draft.calls,
+        schema: createTokenMetric(schemaTokens, contextLimit),
+        history: createTokenMetric(draft.historyTokens, contextLimit),
+        total: createTokenMetric(schemaTokens + draft.historyTokens, contextLimit),
+      };
+    })
+    .sort(compareToolUsage);
+
+  const schemaBuiltin = sumTools(tools, (tool) => tool.source.kind === "builtin", "schema");
+  const schemaVvoc = sumTools(tools, (tool) => tool.source.kind === "vvoc", "schema");
+  const schemaExternal = sumTools(
+    tools,
+    (tool) => tool.source.kind === "mcp" || tool.source.kind === "other",
+    "schema",
+  );
+  const historyToolResults = sumTools(tools, (tool) => tool.id !== "skill", "history");
+  const historyLoadedSkills = sumTools(tools, (tool) => tool.id === "skill", "history");
+
+  const uniqueServers = [...serverByName.values()];
+  const mcpUsage = uniqueServers
+    .map((server): ContextMcpUsage => {
+      const serverTools = tools.filter(
+        (tool) => tool.source.kind === "mcp" && tool.source.server === server.name,
+      );
+      const schemaTokens =
+        server.status === "connected" ? sumTools(serverTools, () => true, "schema") : 0;
+      const historyTokens = sumTools(serverTools, () => true, "history");
+      return {
+        ...server,
+        toolCount:
+          server.status === "connected"
+            ? serverTools.filter((tool) => tool.schema.estimatedTokens > 0).length
+            : 0,
+        schema: createTokenMetric(schemaTokens, contextLimit),
+        history: createTokenMetric(historyTokens, contextLimit),
+        total: createTokenMetric(schemaTokens + historyTokens, contextLimit),
+        tools: serverTools,
+      };
+    })
+    .sort(compareMcpUsage);
+
+  return {
+    attribution: {
+      tools,
+      mcpServers: mcpUsage,
+      otherTools: tools.filter((tool) => tool.source.kind === "other"),
+      reconciliation: {
+        schema: {
+          builtin: createTokenMetric(schemaBuiltin, contextLimit),
+          vvoc: createTokenMetric(schemaVvoc, contextLimit),
+          external: createTokenMetric(schemaExternal, contextLimit),
+          total: createTokenMetric(schemaBuiltin + schemaVvoc + schemaExternal, contextLimit),
+        },
+        history: {
+          toolResults: createTokenMetric(historyToolResults, contextLimit),
+          loadedSkills: createTokenMetric(historyLoadedSkills, contextLimit),
+          total: createTokenMetric(historyToolResults + historyLoadedSkills, contextLimit),
+        },
+      },
+    },
+    warnings: buildAmbiguityWarnings(ambiguities),
+  };
+}
+
+function getToolDraft(drafts: Map<string, ToolUsageDraft>, id: string): ToolUsageDraft {
+  const current = drafts.get(id);
+  if (current) return current;
+  const created = { id, schemaTokens: 0, historyTokens: 0, calls: 0 };
+  drafts.set(id, created);
+  return created;
+}
+
+function sumTools(
+  tools: readonly ContextToolUsage[],
+  include: (tool: ContextToolUsage) => boolean,
+  metric: "schema" | "history",
+): number {
+  return tools.reduce(
+    (total, tool) => total + (include(tool) ? tool[metric].estimatedTokens : 0),
+    0,
+  );
+}
+
+function compareMcpUsage(left: ContextMcpUsage, right: ContextMcpUsage): number {
+  const totalDelta = right.total.estimatedTokens - left.total.estimatedTokens;
+  return totalDelta || compareText(left.name, right.name);
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function buildAmbiguityWarnings(ambiguities: ReadonlyMap<string, readonly string[]>): string[] {
+  const entries = [...ambiguities.entries()].sort(([left], [right]) => compareText(left, right));
+  const visible =
+    entries.length > MAX_ATTRIBUTION_WARNINGS
+      ? entries.slice(0, MAX_ATTRIBUTION_WARNINGS - 1)
+      : entries;
+  const warnings = visible.map(([toolID, servers]) =>
+    boundWarning(
+      `MCP attribution ambiguous for "${toolID}": matches ${servers.join(", ")}; grouped under Other external/plugin.`,
+    ),
+  );
+  if (entries.length > MAX_ATTRIBUTION_WARNINGS) {
+    warnings.push(
+      `MCP attribution ambiguous for ${entries.length - visible.length} additional tool IDs; grouped under Other external/plugin.`,
+    );
+  }
+  return warnings;
+}
+
+function boundWarning(value: string): string {
+  return value.length > 180 ? `${value.slice(0, 177)}...` : value;
+}
+// END_BLOCK_DETAILED_ATTRIBUTION
+
 // START_BLOCK_CATEGORY_COUNTING
 function createCategoryCounter(): CategoryCounter {
   return {
@@ -168,14 +399,6 @@ function createCategoryCounter(): CategoryCounter {
     files: 0,
     "compacted-summary": 0,
   };
-}
-
-function classifyToolSchema(
-  tool: ToolListItem,
-): "builtin-tool-schemas" | "vvoc-tool-schemas" | "external-tool-schemas" {
-  if (VVOC_TOOL_IDS.has(tool.id)) return "vvoc-tool-schemas";
-  if (BUILTIN_TOOL_IDS.has(tool.id)) return "builtin-tool-schemas";
-  return "external-tool-schemas";
 }
 
 function countPart(part: Part, message: Message | undefined, counters: CategoryCounter): void {
@@ -215,15 +438,12 @@ function countPart(part: Part, message: Message | undefined, counters: CategoryC
         url: part.url.startsWith("data:") ? undefined : part.url,
       });
       return;
-    case "tool":
-      countToolPart(part, counters);
-      return;
     default:
       return;
   }
 }
 
-function countToolPart(part: Extract<Part, { type: "tool" }>, counters: CategoryCounter): void {
+function countToolPart(part: Extract<Part, { type: "tool" }>, counters: CategoryCounter): number {
   const state = part.state;
   const payload = {
     tool: part.tool,
@@ -232,7 +452,8 @@ function countToolPart(part: Extract<Part, { type: "tool" }>, counters: Category
     error: state.status === "error" ? state.error : undefined,
   };
   const target = part.tool === "skill" ? "loaded-skills" : "tool-results";
-  counters[target] += estimateValueTokens(payload);
+  const historyTokens = estimateValueTokens(payload);
+  counters[target] += historyTokens;
 
   if (state.status === "completed") {
     for (const attachment of state.attachments ?? []) {
@@ -243,15 +464,19 @@ function countToolPart(part: Extract<Part, { type: "tool" }>, counters: Category
       });
     }
   }
+  return historyTokens;
 }
 
-function buildKnownCategories(counters: CategoryCounter): ContextCategory[] {
+function buildKnownCategories(
+  counters: CategoryCounter,
+  contextLimit: number | undefined,
+): ContextCategory[] {
   return (Object.entries(counters) as Array<[keyof CategoryCounter, number]>)
     .filter(([, estimatedTokens]) => estimatedTokens > 0)
     .map(([id, estimatedTokens]) => ({
       id,
       label: CATEGORY_LABELS[id],
-      estimatedTokens,
+      ...createTokenMetric(estimatedTokens, contextLimit),
       source: "estimated" as const,
     }));
 }
@@ -260,7 +485,7 @@ function buildKnownCategories(counters: CategoryCounter): ContextCategory[] {
 // START_BLOCK_MEASURED_USAGE
 function createMeasuredUsage(message: AssistantMessage, contextLimit: number | undefined) {
   const usedTokens = message.tokens.input + message.tokens.cache.read + message.tokens.output;
-  const normalizedLimit = contextLimit && contextLimit > 0 ? contextLimit : undefined;
+  const normalizedLimit = normalizeContextLimit(contextLimit);
   return {
     usedTokens,
     contextLimit: normalizedLimit,
@@ -271,6 +496,12 @@ function createMeasuredUsage(message: AssistantMessage, contextLimit: number | u
     cacheReadTokens: message.tokens.cache.read,
     outputTokens: message.tokens.output,
   };
+}
+
+function normalizeContextLimit(contextLimit: number | undefined): number | undefined {
+  return contextLimit !== undefined && Number.isFinite(contextLimit) && contextLimit > 0
+    ? contextLimit
+    : undefined;
 }
 
 function findLatestAssistant(messages: readonly Message[]): AssistantMessage | undefined {

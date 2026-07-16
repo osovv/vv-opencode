@@ -1,0 +1,65 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-CONTEXT-TUI-DETAILED-ATTRIBUTION>
+    <Summary>Extend the OpenCode-native /context inspector with tabbed overview, per-tool, and per-MCP attribution, including context-window percentages and honest active-history accounting.</Summary>
+    <Problem>The current /context dialog reports useful aggregate categories, but it combines all tool calls and results into one total and groups external, plugin, and MCP schemas together. Users can see that tools consume a large part of the active context without identifying which tools, MCP servers, schemas, inputs, outputs, or errors are responsible. Category rows also show only absolute token estimates, making their pressure relative to the selected model context window difficult to assess.</Problem>
+    <Goals>
+      <Goal>Render /context as a bounded tabbed dialog with Overview, Tools, and MCP views, keyboard tab navigation, and scrolling for long lists.</Goal>
+      <Goal>Show estimated token counts and percentages of the selected model context limit for overview categories, tool metrics, and MCP aggregates while preserving clear approximate labeling.</Goal>
+      <Goal>Aggregate each tool's active post-compaction call count, schema estimate, history estimate, combined total, and corresponding context-window percentages.</Goal>
+      <Goal>Separate persistent tool schema overhead from active tool-call history so users can distinguish catalog cost from accumulated inputs, outputs, and errors.</Goal>
+      <Goal>Attribute MCP tools to a server only through the deterministic OpenCode MCP tool-name contract, aggregate server and nested tool usage, and fail closed to Other external/plugin when ownership is ambiguous.</Goal>
+      <Goal>Preserve provider-measured usage, provider-only residuals, estimation drift, compaction semantics, bounded diagnostics, and the existing no-extra-MCP-request collection model.</Goal>
+      <Goal>Keep README, GRACE requirements, graph, verification, and focused tests synchronized with the expanded public /context behavior.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not claim provider-exact tokenization or exact reconstruction of the final provider request.</NonGoal>
+      <NonGoal>Do not include tool calls or results that precede the latest active compaction summary.</NonGoal>
+      <NonGoal>Do not infer external plugin ownership beyond known built-in and vvoc IDs or unique deterministic MCP name matching.</NonGoal>
+      <NonGoal>Do not mutate MCP configuration, connect or disconnect servers, change compaction behavior, or issue additional MCP catalog requests from /context.</NonGoal>
+      <NonGoal>Do not persist historical context analytics, trends, or per-session usage snapshots outside existing OpenCode state.</NonGoal>
+      <NonGoal>Do not use estimated known usage as a substitute percentage denominator when the model context limit is unavailable.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>The host-owned xlarge /context dialog exposes Overview, Tools, and MCP tabs without a nested Dialog wrapper; left and right arrows or keys 1, 2, and 3 switch tabs, long content is scrollable, and Escape retains host-managed dismissal.</Criterion>
+      <Criterion>Overview preserves the measured usage header and existing category semantics while each category row shows estimated tokens, percentage of model contextLimit, and a bounded visual bar.</Criterion>
+      <Criterion>All percentages use tokens divided by the positive current model contextLimit multiplied by 100; when no positive contextLimit is available the UI shows an em dash and does not derive a fallback percentage.</Criterion>
+      <Criterion>Visual bars clamp at 100 percent for rendering only while numeric percentages and estimation-drift warnings preserve values above 100 percent.</Criterion>
+      <Criterion>The Tools tab includes every current tool schema and every tool with active post-compaction history, sorted deterministically by combined total descending with a stable name tie-breaker.</Criterion>
+      <Criterion>Each tool row shows source classification, active call count, schema tokens, history tokens, total tokens, and context-window percentages for schema, history, and total.</Criterion>
+      <Criterion>Tool history estimates use only active tool parts and include the tool ID, input, completed output, or error payload using the existing provider-neutral estimator; pending and running calls include their currently observable inputs.</Criterion>
+      <Criterion>The skill tool appears in tool detail, but its history remains owned by the Loaded skill results overview category so detail and overview totals reconcile without double counting.</Criterion>
+      <Criterion>The MCP tab shows every reported server name and canonical status, current tool count, schema, active history, total, percentages, and nested tools sorted by combined total descending.</Criterion>
+      <Criterion>A connected MCP server receives schema attribution for uniquely matched current tool IDs; disabled, failed, needs_auth, and needs_client_registration servers have zero current schema overhead while any matching active call history remains visible until compaction removes it.</Criterion>
+      <Criterion>MCP ownership follows OpenCode's sanitized &lt;server&gt;_&lt;tool&gt; naming contract using unique longest-prefix matching; sanitized collisions or otherwise ambiguous matches are not assigned to a server and produce bounded uncertainty diagnostics.</Criterion>
+      <Criterion>Tools not classified as built-in, vvoc, or uniquely attributable to an MCP server appear under Other external/plugin with their individual schema, history, total, call count, and percentages.</Criterion>
+      <Criterion>Detailed schema subtotals reconcile with Built-in tool schemas, vvoc tool schemas, and External/plugin/MCP schemas; detailed active history reconciles with Tool calls and results plus separately identified Loaded skill results.</Criterion>
+      <Criterion>Collection reuses the existing TUI state, tool.list response, active messages and parts, model metadata, and MCP status snapshot without additional MCP network calls.</Criterion>
+      <Criterion>Missing provider usage, model limits, tool catalogs, MCP catalogs, or partial state degrades to bounded warnings and available data rather than crashing or inventing attribution.</Criterion>
+      <Criterion>README /context accuracy documentation and GRACE requirements, graph, data flow, and verification projections describe percentages, active scope, tool detail, deterministic MCP attribution, and uncertainty boundaries truthfully.</Criterion>
+      <Criterion>Focused analyzer and view tests, bun run check, bun run build, bun run pack:check, GRACE lint/status, and live OpenCode TUI smoke tests on normal and narrow terminal sizes complete with fresh evidence or a reported blocker.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-CONTEXT-TUI />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/tui/context/analyze.test.ts src/tui/context/plugin.test.ts src/tui/context/view.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run typecheck</ExpectedCommand>
+      <ExpectedCommand>bun run lint</ExpectedCommand>
+      <ExpectedCommand>bun run fmt:check</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic tests prove percentage behavior with and without context limits, active post-compaction tool aggregation, schema-versus-history separation, skill non-duplication, connected and disconnected MCP accounting, unique and ambiguous source attribution, stable sorting, tab navigation, scrolling, bounded failure behavior, and package and GRACE integrity. Live TUI evidence shows all three tabs remain readable and unclipped at normal and narrow terminal sizes.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>For the supported OpenCode 1.18.2 current-only integration, MCP tool IDs use sanitize(serverName) + "_" + sanitize(toolName), and unique longest-prefix matching is a deterministic ownership signal rather than semantic guessing.</Assumption>
+      <Assumption>The public tool catalog continues to expose tool ID, description, and parameters, while active tool parts continue to expose tool ID, input, completed output or error, and call state.</Assumption>
+      <Assumption>The current model contextLimit is the only accepted denominator for percentages; provider measured usedTokens remains the source of truth for top-line current usage.</Assumption>
+      <Assumption>Tool schemas unavailable from disconnected MCP servers are not part of the current model tool catalog and therefore contribute zero current schema overhead.</Assumption>
+      <Assumption>Previously emitted MCP tool inputs and results can remain in active history after a server becomes unavailable and continue consuming context until compaction or session changes remove them.</Assumption>
+      <Assumption>OpenTUI 0.4.3 and the modern TUI plugin API provide the component-local key binding and scrolling primitives required for a bounded tabbed dialog.</Assumption>
+    </Assumptions>
+  </C-CONTEXT-TUI-DETAILED-ATTRIBUTION>
+</GraceChangeSpec>

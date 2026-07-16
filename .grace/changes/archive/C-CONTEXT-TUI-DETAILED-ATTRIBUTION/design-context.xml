@@ -1,0 +1,26 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-CONTEXT-TUI-DETAILED-ATTRIBUTION</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The existing aggregate view is useful for detecting context pressure but not for finding the responsible tool or MCP source. Three focused tabs keep the primary overview readable while allowing complete active-context diagnostics. Separating schema from history distinguishes tool definitions that are sent repeatedly from accumulated call inputs and results. Percentages use the model context limit because percentages of estimated known usage would be circular and misleading.</Rationale>
+  <Alternatives>
+    <Alternative>A single long report was rejected because real projects can expose many tools and MCP servers, causing the dialog to overflow and making the largest contributors difficult to find.</Alternative>
+    <Alternative>A single combined per-tool total was rejected because users need to distinguish persistent schema overhead from removable call-result history.</Alternative>
+    <Alternative>Lifetime session call accounting was rejected because it would not reconcile with the active provider context after compaction.</Alternative>
+    <Alternative>Estimating percentages from estimatedTotalTokens when contextLimit is missing was rejected because it would change the denominator's meaning and imply unsupported precision.</Alternative>
+    <Alternative>Querying each MCP server directly for ownership or disabled schemas was rejected because /context must remain observational, bounded, and free of additional MCP network activity.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Provider-specific tokenizer integration remains deferred until OpenCode exposes a stable provider-aware token-counting contract.</Decision>
+    <Decision>Persisted historical trends, exports, filters, and comparison across sessions remain outside this change.</Decision>
+    <Decision>Direct source metadata from a future OpenCode tool catalog may replace name-based MCP attribution later without changing the user-visible grouping contract.</Decision>
+    <Decision>Interactive MCP enable, disable, reconnect, or authentication controls remain outside the read-only /context inspector.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A 500k model context shows Tool calls and results at approximately 202k and 40.4 percent; the Tools tab identifies individual tools, call counts, schema cost, history cost, and total cost sorted by largest contributor.</Scenario>
+    <Scenario>A connected brave-search server shows aggregate schema and active-history usage plus nested brave-search tools; unrelated plugin tools remain under Other external/plugin.</Scenario>
+    <Scenario>An MCP server becomes disabled after earlier calls; its current schema cost becomes zero while active historical call payloads remain visible until compaction.</Scenario>
+    <Scenario>The selected model exposes no positive context limit; token counts remain visible, all percentages render as an em dash, and no fallback denominator is invented.</Scenario>
+    <Scenario>Two MCP server names sanitize to an ambiguous prefix; affected tools remain unattributed under Other external/plugin and a bounded warning explains the uncertainty.</Scenario>
+    <Scenario>A compaction summary replaces older turns; per-tool calls and history immediately reflect only the summary and subsequent active turns while schema overhead remains based on the current tool catalog.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

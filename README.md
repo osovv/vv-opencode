@@ -164,7 +164,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **Model Roles** | Put roles like `vv-role:smart` or `vv-role:fast` in shared agents and skills instead of hardcoded model IDs, then choose provider/model mappings per environment |
 | **Orchestration Profiles** | Select a concrete work policy — single-session, balanced, or orchestrated — to control how vv-controller delegates. Built-in presets pick a sensible default and status reports the effective profile. |
 | **Workflow Tracking** | Replace free-form multi-agent chaos with explicit work items, bounded review rounds, reviewer result collection, and hard stops when more context is needed |
-| **Context Inspector** | Run `/context` in an active OpenCode TUI session to see provider-reported usage, remaining capacity, approximate observable categories, compaction state, and MCP statuses |
+| **Context Inspector** | Run `/context` in an active OpenCode TUI session for Overview, Tools, and MCP tabs with provider-reported usage, approximate context-window percentages, active post-compaction tool history, and deterministic source attribution |
 
 ---
 
@@ -178,7 +178,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **HashlineEditPlugin** | Make agent edits safer by tying changes to fresh `read` output, reducing wrong-line and stale-context edits. |
 | **SystemContextInjectionPlugin** | Inject universal primary guidance plus one startup-resolved orchestration policy into vv-controller, with skill discovery and subagent-only explore worker prompts. |
 | **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
-| **ContextTuiPlugin** | Add a native `/context` dialog that reports measured provider usage and a clearly labeled approximate breakdown of observable context contributors. |
+| **ContextTuiPlugin** | Add a native scrollable `/context` dialog with measured usage plus detailed per-tool and per-MCP schema/history estimates. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
 
@@ -199,9 +199,15 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 
 ### `/context` accuracy
 
-Run `/context` inside an active session. The top-line used/remaining values come from the latest assistant turn's provider-reported input, cache-read, and output token counts when OpenCode exposes them. Category rows are estimates derived from observable TUI/SDK state: system instructions, skill catalog, loaded skills, tool schemas, user and assistant messages, tool results, files, and the latest compaction summary.
+Run `/context` inside an active session. Its bounded host-owned dialog has three tabs: **Overview**, **Tools**, and **MCP**. Use left/right arrows or `1`, `2`, and `3` to switch tabs and up/down to scroll long detail. The measured header remains visible on every tab. Top-line used/remaining values come from the latest assistant turn's provider-reported input, cache-read, and output token counts when OpenCode exposes them.
 
-The plugin does **not** claim to reconstruct the exact final provider request. Hidden provider transformations, plugin-added data, or otherwise unattributable content appears as `Unknown/provider-only`; when visible estimates exceed provider usage, the dialog reports estimation drift instead of forcing the totals to match. MCP servers are shown by name and status, while schemas without source metadata are grouped as external/plugin/MCP rather than guessed per server.
+Overview category rows remain provider-neutral estimates derived from observable TUI/SDK state: system instructions, skill catalog, loaded skills, tool schemas, user and assistant messages, tool calls and results, files, and the latest compaction summary. Percentages are always `estimated tokens / current model contextLimit`; if OpenCode does not expose a positive current limit, the percentage is shown as an em dash rather than using another denominator. Numeric percentages may exceed 100% when estimates drift, while visual bars clamp only their fill at 100%.
+
+The Tools tab separates each current tool's persistent **schema** estimate from its active **history** estimate, call count, combined total, source, and percentages. History includes only tool parts in the active context: the latest compaction summary and subsequent turns. Pending and running calls include observable input; completed calls include output and failed calls include errors. The `skill` tool remains visible in detail, but its history continues to belong to Overview's `Loaded skill results` category so it is not double-counted as `Tool calls and results`.
+
+The MCP tab aggregates current schema and retained active history by server and nests the attributed tools. Connected servers can receive current schema overhead. `disabled`, `failed`, `needs_auth`, and `needs_client_registration` servers show zero current schema, while matching call history can remain visible until compaction removes it. Attribution follows OpenCode's sanitized `<server>_<tool>` naming contract with unique longest-prefix matching. Sanitized collisions or other ambiguous ownership fail closed under **Other external/plugin** with a bounded warning instead of being guessed.
+
+The plugin does **not** claim to reconstruct the exact final provider request or provide provider-exact tokenization. Hidden provider transformations, plugin-added data, or otherwise unattributable content appears as `Unknown/provider-only`; when visible estimates exceed provider usage, the dialog reports estimation drift instead of forcing totals to match. Collection reuses OpenCode's existing tool catalog, active parts, model metadata, and MCP status snapshot without issuing extra MCP requests.
 
 The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plugin disable context`, then restart OpenCode.
 
