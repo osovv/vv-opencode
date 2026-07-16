@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Derive measured usage plus reconciled category, per-tool, and per-MCP active context attribution from observable OpenCode session data.
-//   SCOPE: Compaction cutoff, provider usage baseline, context-limit percentages, skill/tool/message categorization, deterministic MCP ownership, residual unknown context, and sorted detail aggregates.
+//   SCOPE: Compaction cutoff, provider usage baseline, context-limit percentages, skill/tool/message categorization, deterministic MCP ownership, explicit schema observability, residual unknown context, and sorted detail aggregates.
 //   DEPENDS: [@opencode-ai/sdk/v2, src/tui/context/estimate.ts, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: CORE_LOGIC
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added percentages, per-tool history, deterministic MCP attribution, and reconciled detail totals.]
+//   LAST_CHANGE: [DIRECT-FIX - Preserved unknown connected MCP schemas as unavailable rather than estimating them as zero.]
 // END_CHANGE_SUMMARY
 
 import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2";
@@ -75,6 +75,7 @@ type CategoryCounter = Record<Exclude<ContextCategoryId, "provider-only">, numbe
 
 type ToolUsageDraft = {
   id: string;
+  schemaListed: boolean;
   schemaTokens: number;
   historyTokens: number;
   calls: number;
@@ -110,6 +111,7 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
   const toolDrafts = new Map<string, ToolUsageDraft>();
   for (const tool of input.tools) {
     const draft = getToolDraft(toolDrafts, tool.id);
+    draft.schemaListed = true;
     draft.schemaTokens = estimateValueTokens({
       id: tool.id,
       description: tool.description,
@@ -135,7 +137,12 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
   }
 
   const contextLimit = normalizeContextLimit(input.model?.contextLimit);
-  const detail = buildToolAttribution(toolDrafts, input.mcpServers, contextLimit);
+  const detail = buildToolAttribution(
+    toolDrafts,
+    input.mcpServers,
+    contextLimit,
+    input.mcpSchemaCatalogAvailable ?? false,
+  );
   counters["builtin-tool-schemas"] =
     detail.attribution.reconciliation.schema.builtin.estimatedTokens;
   counters["vvoc-tool-schemas"] = detail.attribution.reconciliation.schema.vvoc.estimatedTokens;
@@ -251,6 +258,7 @@ function buildToolAttribution(
   drafts: ReadonlyMap<string, ToolUsageDraft>,
   mcpServers: readonly ContextMcpServer[],
   contextLimit: number | undefined,
+  mcpSchemaCatalogAvailable: boolean,
 ): { attribution: ContextToolAttribution; warnings: string[] } {
   const serverByName = new Map(mcpServers.map((server) => [server.name, server] as const));
   const ambiguities = new Map<string, string[]>();
@@ -264,14 +272,20 @@ function buildToolAttribution(
         classification.source.kind === "mcp"
           ? serverByName.get(classification.source.server)
           : undefined;
-      const schemaTokens = server && server.status !== "connected" ? 0 : draft.schemaTokens;
+      const schema = resolveToolSchema(
+        draft,
+        classification.source,
+        server,
+        mcpSchemaCatalogAvailable,
+      );
       return {
         id: draft.id,
         source: classification.source,
         calls: draft.calls,
-        schema: createTokenMetric(schemaTokens, contextLimit),
+        schemaKnown: schema.known,
+        schema: createTokenMetric(schema.tokens, contextLimit),
         history: createTokenMetric(draft.historyTokens, contextLimit),
-        total: createTokenMetric(schemaTokens + draft.historyTokens, contextLimit),
+        total: createTokenMetric(schema.tokens + draft.historyTokens, contextLimit),
       };
     })
     .sort(compareToolUsage);
@@ -292,15 +306,15 @@ function buildToolAttribution(
       const serverTools = tools.filter(
         (tool) => tool.source.kind === "mcp" && tool.source.server === server.name,
       );
-      const schemaTokens =
-        server.status === "connected" ? sumTools(serverTools, () => true, "schema") : 0;
+      const schemaKnown = server.status !== "connected" || mcpSchemaCatalogAvailable;
+      const schemaTokens = schemaKnown ? sumTools(serverTools, () => true, "schema") : 0;
       const historyTokens = sumTools(serverTools, () => true, "history");
       return {
         ...server,
-        toolCount:
-          server.status === "connected"
-            ? serverTools.filter((tool) => tool.schema.estimatedTokens > 0).length
-            : 0,
+        toolCount: schemaKnown
+          ? serverTools.filter((tool) => tool.schema.estimatedTokens > 0).length
+          : undefined,
+        schemaKnown,
         schema: createTokenMetric(schemaTokens, contextLimit),
         history: createTokenMetric(historyTokens, contextLimit),
         total: createTokenMetric(schemaTokens + historyTokens, contextLimit),
@@ -335,9 +349,24 @@ function buildToolAttribution(
 function getToolDraft(drafts: Map<string, ToolUsageDraft>, id: string): ToolUsageDraft {
   const current = drafts.get(id);
   if (current) return current;
-  const created = { id, schemaTokens: 0, historyTokens: 0, calls: 0 };
+  const created = { id, schemaListed: false, schemaTokens: 0, historyTokens: 0, calls: 0 };
   drafts.set(id, created);
   return created;
+}
+
+function resolveToolSchema(
+  draft: ToolUsageDraft,
+  source: ContextToolSource,
+  server: ContextMcpServer | undefined,
+  mcpSchemaCatalogAvailable: boolean,
+): { known: boolean; tokens: number } {
+  if (source.kind !== "mcp") {
+    return { known: draft.schemaListed, tokens: draft.schemaTokens };
+  }
+  if (!server) return { known: false, tokens: 0 };
+  if (server.status !== "connected") return { known: true, tokens: 0 };
+  if (!mcpSchemaCatalogAvailable) return { known: false, tokens: 0 };
+  return { known: true, tokens: draft.schemaListed ? draft.schemaTokens : 0 };
 }
 
 function sumTools(

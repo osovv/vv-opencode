@@ -1,8 +1,8 @@
 // FILE: src/tui/context/analyze.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify measured context usage, compaction cutoff, percentages, detailed tool/MCP attribution, reconciliation, and drift reporting.
-//   SCOPE: Pure deterministic analyzer and attribution-helper scenarios without a running OpenCode TUI.
+//   PURPOSE: Verify measured context usage, compaction cutoff, percentages, detailed tool/MCP attribution, schema observability, reconciliation, and drift reporting.
+//   SCOPE: Pure deterministic analyzer and attribution-helper scenarios, including unavailable connected MCP catalogs, without a running OpenCode TUI.
 //   DEPENDS: [bun:test, @opencode-ai/sdk/v2, src/tui/context/analyze.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added deterministic metric, source-classification, and sorting coverage.]
+//   LAST_CHANGE: [DIRECT-FIX - Covered unavailable connected MCP catalogs separately from known-zero disconnected schemas.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -195,7 +195,7 @@ describe("context analysis", () => {
     expect(analysis.mcpServers).toEqual([{ name: "docs", status: "connected" }]);
   });
 
-  test("aggregates current schemas and active tool history into reconciled tool and MCP detail", () => {
+  test("aggregates observable schemas and active tool history into reconciled tool and MCP detail", () => {
     const messages = [userMessage("u1"), assistantMessage("a1", "u1")];
     const attachment = filePart("a1", "result.txt", "attachment payload");
     const analysis = analyzeContext({
@@ -219,7 +219,6 @@ describe("context analysis", () => {
         { id: "read", description: "Read files", parameters: { type: "object" } },
         { id: "skill", description: "Load skills", parameters: { type: "object" } },
         { id: "unused", description: "Unused plugin", parameters: { type: "object" } },
-        { id: "docs_search", description: "Search docs", parameters: { type: "object" } },
         { id: "offline_fetch", description: "Fetch offline", parameters: { type: "object" } },
       ],
       mcpServers: [
@@ -245,10 +244,13 @@ describe("context analysis", () => {
     expect(unused).toMatchObject({ calls: 0, history: { estimatedTokens: 0 } });
     expect(unused.schema.estimatedTokens).toBeGreaterThan(0);
     expect(skill.history.estimatedTokens).toBeGreaterThan(0);
-    expect(docs.toolCount).toBe(1);
-    expect(docs.schema.estimatedTokens).toBeGreaterThan(0);
+    expect(docs.toolCount).toBeUndefined();
+    expect(docs.schemaKnown).toBe(false);
+    expect(docs.schema.estimatedTokens).toBe(0);
     expect(docs.history.estimatedTokens).toBeGreaterThan(0);
+    expect(docs.tools[0]?.schemaKnown).toBe(false);
     expect(offline.toolCount).toBe(0);
+    expect(offline.schemaKnown).toBe(true);
     expect(offline.schema.estimatedTokens).toBe(0);
     expect(offline.history.estimatedTokens).toBeGreaterThan(0);
     expect(offline.tools[0]?.schema.estimatedTokens).toBe(0);
@@ -385,6 +387,7 @@ describe("context analysis", () => {
         })),
         { id: "connected_run", description: "current schema", parameters: { type: "object" } },
       ],
+      mcpSchemaCatalogAvailable: true,
       mcpServers: [
         { name: "connected", status: "connected" },
         ...statuses,
@@ -397,16 +400,49 @@ describe("context analysis", () => {
     for (const status of statuses) {
       const server = servers.find((candidate) => candidate.name === status.name)!;
       expect(server.toolCount).toBe(0);
+      expect(server.schemaKnown).toBe(true);
       expect(server.schema.estimatedTokens).toBe(0);
       expect(server.history.estimatedTokens).toBeGreaterThan(0);
       expect(server.tools[0]?.history.estimatedTokens).toBeGreaterThan(0);
     }
     const connected = servers.find((server) => server.name === "connected")!;
     expect(connected.toolCount).toBe(1);
+    expect(connected.schemaKnown).toBe(true);
     expect(connected.schema.estimatedTokens).toBeGreaterThan(0);
     expect(
       servers.filter((server) => server.total.estimatedTokens === 0).map((server) => server.name),
     ).toEqual(["alpha", "zeta"]);
+  });
+
+  test("marks connected MCP schema catalogs unavailable when the public API omits them", () => {
+    const analysis = analyzeContext({
+      sessionID: "session-1",
+      messages: [userMessage("u1"), assistantMessage("a1", "u1")],
+      parts: [
+        completedToolPart(
+          "a1",
+          "brave-search_brave_web_search",
+          "search-call",
+          { query: "OpenCode MCP schemas" },
+          "result",
+        ),
+      ],
+      agents: [],
+      skills: [],
+      tools: [],
+      mcpServers: [{ name: "brave-search", status: "connected" }],
+    });
+
+    const server = analysis.toolAttribution!.mcpServers[0]!;
+    const tool = server.tools[0]!;
+    expect(server.toolCount).toBeUndefined();
+    expect(server.schemaKnown).toBe(false);
+    expect(server.schema.estimatedTokens).toBe(0);
+    expect(server.history.estimatedTokens).toBeGreaterThan(0);
+    expect(server.total.estimatedTokens).toBe(server.history.estimatedTokens);
+    expect(tool.schemaKnown).toBe(false);
+    expect(tool.schema.estimatedTokens).toBe(0);
+    expect(tool.history.estimatedTokens).toBeGreaterThan(0);
   });
 
   test("uses longest MCP prefixes and bounds collision warnings while falling back to Other", () => {
@@ -478,6 +514,7 @@ function toolUsage(id: string, total: number): ContextToolUsage {
     id,
     source: { kind: "other" },
     calls: 0,
+    schemaKnown: true,
     schema: { estimatedTokens: total },
     history: { estimatedTokens: 0 },
     total: { estimatedTokens: total },

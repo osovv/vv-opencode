@@ -1,7 +1,7 @@
 // FILE: src/tui/context/view.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify host-owned /context composition, responsive tab rendering, keyboard navigation, bounded scrolling, and dialog-local cleanup.
+//   PURPOSE: Verify host-owned /context composition, responsive tab rendering, unavailable MCP schema disclosure, keyboard navigation, bounded scrolling, and dialog-local cleanup.
 //   SCOPE: Pure helpers plus deterministic OpenTUI test-renderer frames; no running OpenCode process.
 //   DEPENDS: [bun:test, @opencode-ai/plugin/tui, @opentui/solid, src/tui/context/view.tsx]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Added middle-half host geometry coverage for vertically centered context content.]
+//   LAST_CHANGE: [DIRECT-FIX - Covered connected MCP schema catalogs rendered as unavailable rather than zero.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -125,9 +125,13 @@ describe("context dialog rendering", () => {
     const mcp = setup.captureCharFrame();
     expect(mcp).toContain("[3 MCP]");
     expect(mcp).toContain("docs server");
-    expect(mcp).toContain("disabled");
-    expect(mcp).toContain("schema 0 · 0.0%");
+    expect(mcp).toContain("connected");
+    expect(mcp).toContain("current tools unavailable");
+    expect(mcp).toContain("schema unavailable");
+    expect(mcp).not.toContain("schema 0 · 0.0%");
     expect(mcp).toContain("history 500 · 5.0%");
+    expect(mcp).toContain("known total 500 · 5.0%");
+    expect(mcp).toContain("OpenCode API does not expose this MCP schema catalog.");
     expect(mcp).toContain("Other external/plugin");
 
     setup.mockInput.pressKey("1");
@@ -271,6 +275,7 @@ function detailedAnalysis(): ContextAnalysis {
   const docsTool = toolUsage("docs_search", 500, {
     source: { kind: "mcp", server: "docs server" },
     calls: 1,
+    schemaKnown: false,
     schema: { estimatedTokens: 0, percent: 0 },
     history: { estimatedTokens: 500, percent: 5 },
   });
@@ -281,8 +286,9 @@ function detailedAnalysis(): ContextAnalysis {
   });
   const mcp: ContextMcpUsage = {
     name: "docs server",
-    status: "disabled",
-    toolCount: 0,
+    status: "connected",
+    toolCount: undefined,
+    schemaKnown: false,
     schema: { estimatedTokens: 0, percent: 0 },
     history: { estimatedTokens: 500, percent: 5 },
     total: { estimatedTokens: 500, percent: 5 },
@@ -332,7 +338,7 @@ function detailedAnalysis(): ContextAnalysis {
     estimationDriftTokens: 12_000,
     compacted: true,
     activeMessageCount: 6,
-    mcpServers: [{ name: "docs server", status: "disabled" }],
+    mcpServers: [{ name: "docs server", status: "connected" }],
     toolAttribution: {
       tools: [read, docsTool, other],
       mcpServers: [mcp],
@@ -366,6 +372,7 @@ function toolUsage(
     id,
     source: { kind: "other" },
     calls: 0,
+    schemaKnown: true,
     schema,
     history,
     total: overrides.total ?? {

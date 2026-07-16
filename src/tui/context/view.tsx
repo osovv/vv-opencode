@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Render measured usage and detailed context attribution as a responsive host-owned tabbed dialog.
-//   SCOPE: Overview, Tools, and MCP tabs; modal-scoped navigation; bounded scrolling; metric formatting; warnings; and host dialog sizing.
+//   SCOPE: Overview, Tools, and MCP tabs; unavailable-schema disclosure; modal-scoped navigation; bounded scrolling; metric formatting; warnings; and host dialog sizing.
 //   DEPENDS: [solid-js, @opencode-ai/plugin/tui, @opentui/core, @opentui/keymap, @opentui/solid, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: RUNTIME
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Sized context content to OpenCode's middle-half dialog region for visual vertical centering.]
+//   LAST_CHANGE: [DIRECT-FIX - Rendered unexposed connected MCP schema catalogs as unavailable instead of zero.]
 // END_CHANGE_SUMMARY
 
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
@@ -317,9 +317,12 @@ function ToolCard(props: {
       </box>
       <text fg={props.theme.textMuted}>active calls {props.tool.calls}</text>
       <text fg={props.theme.textMuted} wrapMode="word">
-        schema {formatMetric(props.tool.schema)} · history {formatMetric(props.tool.history)}
+        schema {formatKnownMetric(props.tool.schema, props.tool.schemaKnown)} · history{" "}
+        {formatMetric(props.tool.history)}
       </text>
-      <text fg={props.theme.primary}>total {formatMetric(props.tool.total)}</text>
+      <text fg={props.theme.primary}>
+        {props.tool.schemaKnown ? "total" : "known total"} {formatMetric(props.tool.total)}
+      </text>
     </box>
   );
 }
@@ -343,7 +346,7 @@ function McpTab(props: { analysis: ContextAnalysis; theme: ContextTheme; narrow:
 
   return (
     <box flexDirection="column" gap={1}>
-      <text fg={props.theme.text}>MCP servers · current schemas + retained active history</text>
+      <text fg={props.theme.text}>MCP servers · observable schemas + retained active history</text>
       {attribution.mcpServers.length === 0 ? (
         <text fg={props.theme.textMuted}>No MCP servers reported.</text>
       ) : (
@@ -378,18 +381,32 @@ function McpServerCard(props: { server: ContextMcpUsage; theme: ContextTheme; na
           {props.server.status}
         </text>
       </box>
-      <text fg={props.theme.textMuted}>current tools {props.server.toolCount}</text>
-      <text fg={props.theme.textMuted} wrapMode="word">
-        schema {formatMetric(props.server.schema)} · history {formatMetric(props.server.history)}
+      <text fg={props.theme.textMuted}>
+        current tools {props.server.toolCount ?? "unavailable"}
       </text>
-      <text fg={props.theme.primary}>total {formatMetric(props.server.total)}</text>
+      <text fg={props.theme.textMuted} wrapMode="word">
+        schema {formatKnownMetric(props.server.schema, props.server.schemaKnown)} · history{" "}
+        {formatMetric(props.server.history)}
+      </text>
+      <text fg={props.theme.primary}>
+        {props.server.schemaKnown ? "total" : "known total"} {formatMetric(props.server.total)}
+      </text>
+      {!props.server.schemaKnown && props.server.status === "connected" ? (
+        <text fg={props.theme.textMuted} wrapMode="word">
+          OpenCode API does not expose this MCP schema catalog.
+        </text>
+      ) : null}
       {props.server.error ? (
         <text fg={props.theme.warning} wrapMode="word">
           {props.server.error}
         </text>
       ) : null}
       {props.server.tools.length === 0 ? (
-        <text fg={props.theme.textMuted}>No attributed current schemas or active history.</text>
+        <text fg={props.theme.textMuted} wrapMode="word">
+          {props.server.schemaKnown
+            ? "No attributed current schemas or active history."
+            : "No attributed active history; current schemas are unavailable."}
+        </text>
       ) : (
         props.server.tools.map((tool) => (
           <ToolCard tool={tool} theme={props.theme} narrow={props.narrow} nested={true} />
@@ -460,6 +477,10 @@ function formatToolSource(source: ContextToolSource): string {
 
 function formatMetric(metric: ContextTokenMetric): string {
   return `${formatTokens(metric.estimatedTokens)} · ${formatPercent(metric.percent)}`;
+}
+
+function formatKnownMetric(metric: ContextTokenMetric, known: boolean): string {
+  return known ? formatMetric(metric) : "unavailable";
 }
 
 function formatPercent(percent: number | undefined): string {

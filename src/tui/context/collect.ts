@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Collect bounded observable session, skill, agent, tool, model, and MCP data from the OpenCode TUI API.
-//   SCOPE: Active session snapshots, safe SDK lookups, provider/model limit resolution, and bounded warning capture.
+//   SCOPE: Active session snapshots, safe SDK lookups, provider/model limit resolution, explicit MCP schema-catalog availability, and bounded warning capture.
 //   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk/v2, src/tui/context/analyze.ts, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: INTEGRATION
@@ -10,17 +10,24 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   collectContextAnalysis - Read current TUI state and SDK catalogs, then invoke the pure analyzer.
+//   collectContextAnalysis - Read current TUI state and supported SDK catalogs, mark unavailable MCP schema data, then invoke the pure analyzer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added fail-soft OpenCode TUI context collection.]
+//   LAST_CHANGE: [DIRECT-FIX - Marked the unsupported public MCP schema catalog as unavailable instead of zero.]
 // END_CHANGE_SUMMARY
 
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import type { Agent, ToolListItem } from "@opencode-ai/sdk/v2";
 import { analyzeContext } from "./analyze.js";
 import type { ContextAnalysis, ContextSkill } from "./types.js";
+
+// KNOWN LIMITATION (related upstream request: https://github.com/anomalyco/opencode/issues/1142):
+// OpenCode 1.18.x serves /experimental/tool from ToolRegistry, then appends MCP tools later
+// while constructing a session. Public TUI/SDK state exposes MCP status but no MCP schema
+// catalog. Keep this false until OpenCode exposes a supported catalog; absence is unavailable,
+// not a zero-token schema. Reconnecting to MCP servers here would duplicate host processes/auth.
+const OPENCODE_MCP_SCHEMA_CATALOG_AVAILABLE = false;
 
 // START_BLOCK_CONTEXT_COLLECTION
 export async function collectContextAnalysis(
@@ -63,6 +70,7 @@ export async function collectContextAnalysis(
     agents,
     skills,
     tools,
+    mcpSchemaCatalogAvailable: OPENCODE_MCP_SCHEMA_CATALOG_AVAILABLE,
     mcpServers: api.state.mcp().map((server) => ({
       name: server.name,
       status: server.status,

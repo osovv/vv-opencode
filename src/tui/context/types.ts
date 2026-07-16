@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define bounded input and output shapes for the context TUI collector, detailed analyzer, and tabbed view.
-//   SCOPE: Context categories, reusable token metrics, per-tool and per-MCP attribution, model metadata, warnings, and analysis input/output types.
+//   SCOPE: Context categories, reusable token metrics, schema observability, per-tool and per-MCP attribution, model metadata, warnings, and analysis input/output types.
 //   DEPENDS: [@opencode-ai/sdk/v2]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: TYPES
@@ -19,8 +19,8 @@
 //   ContextTokenMetric - Estimated token count and optional model-context percentage.
 //   ContextCategory - One estimated context category row.
 //   ContextToolSource - Deterministic built-in, vvoc, MCP, or other tool ownership.
-//   ContextToolUsage - Per-tool current schema and active-history attribution.
-//   ContextMcpUsage - Per-server aggregate with nested attributed tools.
+//   ContextToolUsage - Per-tool observable schema and active-history attribution, including whether schema data is known.
+//   ContextMcpUsage - Per-server aggregate with nested attributed tools and explicit schema-catalog availability.
 //   ContextToolReconciliation - Detailed schema and history subtotals aligned with overview categories.
 //   ContextToolAttribution - Sorted detailed tool, MCP, other, and reconciliation model.
 //   ContextMeasuredUsage - Latest provider-reported usage and model-capacity values.
@@ -28,7 +28,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added reusable metrics and detailed tool/MCP attribution shapes.]
+//   LAST_CHANGE: [DIRECT-FIX - Distinguished unavailable MCP schema catalogs from measured zero-token schemas.]
 // END_CHANGE_SUMMARY
 
 import type { Agent, Message, Part, ToolListItem } from "@opencode-ai/sdk/v2";
@@ -68,6 +68,8 @@ export type ContextAnalysisInput = {
   agents: readonly Agent[];
   skills: readonly ContextSkill[];
   tools: readonly ToolListItem[];
+  /** Whether tools contains the complete connected MCP schema catalog. Defaults to false. */
+  mcpSchemaCatalogAvailable?: boolean;
   mcpServers: readonly ContextMcpServer[];
   model?: ContextModel;
   warnings?: readonly string[];
@@ -109,13 +111,15 @@ export type ContextToolUsage = {
   id: string;
   source: ContextToolSource;
   calls: number;
+  schemaKnown: boolean;
   schema: ContextTokenMetric;
   history: ContextTokenMetric;
   total: ContextTokenMetric;
 };
 
 export type ContextMcpUsage = ContextMcpServer & {
-  toolCount: number;
+  toolCount?: number;
+  schemaKnown: boolean;
   schema: ContextTokenMetric;
   history: ContextTokenMetric;
   total: ContextTokenMetric;
