@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v0.6.0 - Reset the runtime vvoc config singleton between plugin fixture directories.]
 //   LAST_CHANGE: [v0.5.0 - Added regression coverage preventing post-read source snapshots from being mixed into stale visible rows.]
 //   LAST_CHANGE: [v0.4.0 - Added regression coverage for full-snapshot context anchors on partial and truncated read output.]
@@ -57,6 +58,7 @@ function createPluginInput(directory: string) {
     project: {} as never,
     directory,
     worktree: directory,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   };

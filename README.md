@@ -20,7 +20,7 @@ bun add -g @osovv/vv-opencode
 vvoc install
 ```
 
-That's it. `vvoc install` pins the package, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, review, reflection, and handoff skills.
+That's it. `vvoc install` pins the server plugin, registers the `/context` TUI plugin, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, review, reflection, and handoff skills. The TUI integration requires OpenCode `1.18.2` or newer.
 
 To scope everything to the current project instead of the global OpenCode config:
 
@@ -29,7 +29,7 @@ vvoc install --scope project
 vvoc launch --scope project
 ```
 
-Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` launch may still apply OpenCode's native config discovery and merge behavior; `vvoc launch --scope project` is the hard sandbox path and starts OpenCode with `OPENCODE_CONFIG` and `VVOC_CONFIG` pinned to those local files, so you can smoke-test vv-opencode in one repository without mutating your primary global setup.
+Project scope writes only to `./.opencode/` and `./.vvoc/`. A normal `opencode` launch may still apply OpenCode's native config discovery and merge behavior; `vvoc launch --scope project` is the hard sandbox path and starts OpenCode with `OPENCODE_CONFIG`, `OPENCODE_TUI_CONFIG`, and `VVOC_CONFIG` pinned to the selected local files, so you can smoke-test vv-opencode in one repository without mutating your primary global setup.
 
 > **Already installed?** Run `vvoc sync` anytime to refresh plugins, prompts, skills, and presets.
 
@@ -163,10 +163,11 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **Model Roles** | Put roles like `vv-role:smart` or `vv-role:fast` in shared agents and skills instead of hardcoded model IDs, then choose provider/model mappings per environment |
 | **Orchestration Profiles** | Select a concrete work policy — single-session, balanced, or orchestrated — to control how vv-controller delegates. Built-in presets pick a sensible default and status reports the effective profile. |
 | **Workflow Tracking** | Replace free-form multi-agent chaos with explicit work items, bounded review rounds, reviewer result collection, and hard stops when more context is needed |
+| **Context Inspector** | Run `/context` in an active OpenCode TUI session to see provider-reported usage, remaining capacity, approximate observable categories, compaction state, and MCP statuses |
 
 ---
 
-## The Six Plugins
+## The Seven Plugins
 
 | Plugin | What it helps you do |
 |---|---|
@@ -176,6 +177,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **HashlineEditPlugin** | Make agent edits safer by tying changes to fresh `read` output, reducing wrong-line and stale-context edits. |
 | **SystemContextInjectionPlugin** | Inject universal primary guidance plus one startup-resolved orchestration policy into vv-controller, with skill discovery and subagent-only explore worker prompts. |
 | **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
+| **ContextTuiPlugin** | Add a native `/context` dialog that reports measured provider usage and a clearly labeled approximate breakdown of observable context contributors. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
 
@@ -194,6 +196,14 @@ Workflow work items are opened with explicit intent. For implementation loops, c
 
 For review-only reports, use `"mode": "review_only"`. In review-only mode, reviewer `FAIL` is a completed finding result: required reviewers are collected independently, parallel `spec` and `code` reviewers may both return `FAIL`, and the item does not route to `vv-implementer` unless the user explicitly requests fixes.
 
+### `/context` accuracy
+
+Run `/context` inside an active session. The top-line used/remaining values come from the latest assistant turn's provider-reported input, cache-read, and output token counts when OpenCode exposes them. Category rows are estimates derived from observable TUI/SDK state: system instructions, skill catalog, loaded skills, tool schemas, user and assistant messages, tool results, files, and the latest compaction summary.
+
+The plugin does **not** claim to reconstruct the exact final provider request. Hidden provider transformations, plugin-added data, or otherwise unattributable content appears as `Unknown/provider-only`; when visible estimates exceed provider usage, the dialog reports estimation drift instead of forcing the totals to match. MCP servers are shown by name and status, while schemas without source metadata are grouped as external/plugin/MCP rather than guessed per server.
+
+The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plugin disable context`, then restart OpenCode.
+
 ---
 
 ## CLI at a Glance
@@ -202,10 +212,10 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 |---|---|
 | `vvoc init` | Interactive bootstrap flow |
 | `vvoc install` | Non-interactive setup and scaffolding |
-| `vvoc sync` | Refresh plugin entry, agents, prompts, skills, config |
-| `vvoc launch` | Launch OpenCode with deterministic `OPENCODE_CONFIG` and `VVOC_CONFIG` sources |
-| `vvoc status` | Show current installation state |
-| `vvoc doctor` | Diagnose setup problems (exits non-zero on issues) |
+| `vvoc sync` | Refresh runtime/TUI plugin entries, agents, prompts, skills, config |
+| `vvoc launch` | Launch OpenCode with deterministic runtime, TUI, and vvoc config sources |
+| `vvoc status` | Show current installation state, including TUI config registration |
+| `vvoc doctor` | Diagnose runtime/TUI/vvoc setup problems (exits non-zero on issues) |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
 | `vvoc role list\|set\|unset` | Manage model role assignments |
 | `vvoc preset list\|show\|<name>` | Inspect or apply named presets |
@@ -304,7 +314,7 @@ Presets are partial — applying one only changes the roles it defines. Managed 
 
 Mutating commands default to global for backward compatibility. Add `--scope project` to write a project-local layer. Read/diagnostic commands accept `--scope global|project|effective`, where `effective` resolves in this order:
 
-1. explicit env override (`VVOC_CONFIG` / `OPENCODE_CONFIG`)
+1. explicit env override (`VVOC_CONFIG` / `OPENCODE_CONFIG` / `OPENCODE_TUI_CONFIG`)
 2. nearest project layer
 3. global layer
 4. built-in defaults when the command/runtime permits defaults
@@ -313,6 +323,7 @@ Canonical project-local paths:
 
 ```text
 OpenCode config          → ./.opencode/opencode.json(c)
+OpenCode TUI config      → ./.opencode/tui.json(c)
 vvoc config              → ./.vvoc/vvoc.json
 Managed agent prompts    → ./.vvoc/agents/*.md
 Managed skills           → ./.vvoc/skills/*/SKILL.md
@@ -328,6 +339,7 @@ Legacy root-level `./opencode.json` and `./opencode.jsonc` are intentionally not
 
 ```
 Global OpenCode config   → $XDG_CONFIG_HOME/opencode/opencode.json
+Global OpenCode TUI      → $XDG_CONFIG_HOME/opencode/tui.json(c)
 Global vvoc config       → $XDG_CONFIG_HOME/vvoc/vvoc.json
 Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md  (global)
                            ./.vvoc/agents/*.md                 (project)
@@ -344,11 +356,13 @@ Session handoff notes   → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xm
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`. The current config contract is strict: `vvoc.json` must be canonical version 3 and include required sections such as `plugins`. Existing v1/v2/pre-role, incomplete, malformed, or otherwise invalid config files fail instead of being migrated or repaired. `vvoc install` and `vvoc sync` may create a fresh canonical config when no config exists, but they refuse to rewrite an invalid existing `vvoc.json`; fix the file manually and rerun `vvoc sync`.
 
-`vvoc status` and `vvoc doctor` are diagnostic exceptions: they report the selected config path and validation problem without normalizing or rewriting the file. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; in that case it reports a partial upgrade, leaves config unchanged, and tells you to fix `vvoc.json` manually before rerunning `vvoc sync`.
+`vvoc install`, `vvoc init`, and `vvoc sync` conservatively add `@osovv/vv-opencode/tui` to dedicated `tui.json(c)`. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
+
+`vvoc status` and `vvoc doctor` are diagnostic exceptions: they report the selected runtime, TUI, and vvoc config paths and validation problems without normalizing or rewriting the files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; in that case it reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config manually before rerunning `vvoc sync`.
 
 Runtime compatibility is current-only. Guardian permission replies use the current OpenCode permission reply path (with the current HTTP reply fallback), Hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
 
-Runtime plugins load the effective `vvoc.json` once during OpenCode startup and share the same immutable config snapshot for the lifetime of the process. There is no live reload; restart OpenCode after changing `vvoc.json`.
+Runtime plugins load the effective `vvoc.json` once during OpenCode startup and share the same immutable config snapshot for the lifetime of the process. There is no live reload; restart OpenCode after changing `vvoc.json` or `tui.json(c)`.
 
 ### Deterministic local launch
 
@@ -359,7 +373,7 @@ vvoc install --scope project
 vvoc launch --scope project -- run "hello"
 ```
 
-`vvoc launch --scope project` is strict and non-mutating: if `.opencode/opencode.json` or `.vvoc/vvoc.json` is missing, it fails with a hint to run `vvoc install --scope project`. `--scope effective` follows the layered lookup order, and `--scope global` uses the global config paths.
+`vvoc launch --scope project` is strict and non-mutating: if `.opencode/opencode.json` or `.vvoc/vvoc.json` is missing, it fails with a hint to run `vvoc install --scope project`. When the selected `.opencode/tui.json(c)` exists, launch also sets `OPENCODE_TUI_CONFIG`; a missing TUI file is not synthesized during launch. `--scope effective` follows the layered lookup order, and `--scope global` uses the global config paths.
 
 ---
 

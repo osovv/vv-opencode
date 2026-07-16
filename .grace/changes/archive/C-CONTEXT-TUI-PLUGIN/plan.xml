@@ -1,0 +1,122 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-CONTEXT-TUI-PLUGIN>
+    <IntentSummary>Implement the approved context TUI plugin as a modern OpenCode 1.18.2 TUI module, keep analysis mostly pure and testable, register it through conservative tui.json mutation, and synchronize public and GRACE contracts.</IntentSummary>
+    <BaselineAssertions>
+      <MustNotExist>src/tui.tsx</MustNotExist>
+      <MustNotExist>src/tui/context/analyze.ts</MustNotExist>
+      <MustNotExist>M-PLUGIN-CONTEXT-TUI</MustNotExist>
+      <MustContain><File>package.json</File><Text>"@opencode-ai/plugin": "1.3.17"</Text></MustContain>
+      <MustContain><File>src/lib/plugin-toggle-config.ts</File><Text>"secrets-redaction"</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustExist>src/tui.tsx</MustExist>
+      <MustExist>src/tui/context/analyze.ts</MustExist>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>M-PLUGIN-CONTEXT-TUI</Anchor></MustOwn>
+      <MustVerify>M-PLUGIN-CONTEXT-TUI</MustVerify>
+      <MustContain><File>package.json</File><Text>"./tui"</Text></MustContain>
+      <MustContain><File>README.md</File><Text>/context</Text></MustContain>
+      <MustPassCommand>bun test src/tui/context/analyze.test.ts src/tui/context/plugin.test.ts src/lib/opencode.test.ts src/lib/plugin-toggle-config.test.ts src/commands/launch.test.ts</MustPassCommand>
+      <MustPassCommand>bun run check</MustPassCommand>
+      <MustPassCommand>bun run build</MustPassCommand>
+      <MustPassCommand>bun run pack:check</MustPassCommand>
+      <MustPassCommand>bunx @osovv/grace-cli@rc lint --path .</MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GD-MAIN />
+      <M-PLUGIN-CONTEXT-TUI />
+      <M-CONFIG-LAYERS />
+      <M-CLI-CONFIG />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-CLI-COMMANDS />
+      <DF-CONTEXT-INSPECTION />
+      <DF-PLUGIN-INSTALL />
+      <DF-CONFIG-SYNC />
+      <DF-VVOC-LAUNCH />
+      <VD-MAIN />
+      <V-M-PLUGIN-CONTEXT-TUI />
+      <V-M-CONFIG-LAYERS />
+      <V-M-CLI-CONFIG />
+      <V-M-PLUGIN-TOGGLE-CONFIG />
+      <V-M-CLI-COMMANDS />
+      <ContextArtifact>.grace/context/requirements.xml</ContextArtifact>
+      <ContextArtifact>.grace/context/technology.xml</ContextArtifact>
+      <ContextArtifact>.grace/context/deployment.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-CONTEXT-TUI-PLUGIN/spec.xml</File>
+      <File>.grace/changes/active/C-CONTEXT-TUI-PLUGIN/plan.xml</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/context/deployment.xml</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>AGENTS.md</File>
+      <File>README.md</File>
+      <File>package.json</File>
+      <File>bun.lock</File>
+      <File>tsconfig.json</File>
+      <File>tsconfig.build.json</File>
+      <File>src/index.ts</File>
+      <File>src/lib/config-layers.ts</File>
+      <File>src/lib/config-layers.test.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>src/commands/init.ts</File>
+      <File>src/commands/install.ts</File>
+      <File>src/commands/sync.ts</File>
+      <File>src/commands/status.ts</File>
+      <File>src/commands/doctor.ts</File>
+      <File>src/commands/launch.ts</File>
+      <File>src/commands/launch.test.ts</File>
+      <File>src/commands/status.test.ts</File>
+      <File>src/commands/doctor.test.ts</File>
+      <File>src/commands/sync.test.ts</File>
+      <File>src/commands/init.test.ts</File>
+      <File>src/commands/plugin-toggle.test.ts</File>
+      <File>src/tui.tsx</File>
+      <File>src/plugins/guardian.test.ts</File>
+      <File>src/plugins/hashline-edit.test.ts</File>
+      <File>src/plugins/model-roles.test.ts</File>
+      <File>src/plugins/secrets-redaction/index.test.ts</File>
+      <File>src/plugins/system-context-injection.test.ts</File>
+      <File>src/plugins/workflow.test.ts</File>
+      <Glob>src/tui/**</Glob>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Upgrade and configure the TUI build surface</Title>
+        <AcceptanceCriteria>OpenCode plugin/SDK dependencies target 1.18.2, OpenTUI compile-time dependencies and peer contracts are present, TSX compiles, and package exports expose ./tui without breaking existing exports.</AcceptanceCriteria>
+        <Verification>bun install; bun run typecheck; bun run build</Verification>
+      </T-001>
+      <T-002>
+        <Title>Implement pure context analysis</Title>
+        <AcceptanceCriteria>Pure functions derive measured usage, active post-compaction messages, approximate categories, unknown context, drift, model metadata, and MCP summary from bounded inputs.</AcceptanceCriteria>
+        <Verification>bun test src/tui/context/analyze.test.ts</Verification>
+      </T-002>
+      <T-003>
+        <Title>Implement and register the context TUI dialog</Title>
+        <AcceptanceCriteria>The modern keymap command registers slashName context, collects SDK/state data safely, respects the context toggle, and renders an xlarge measured-versus-estimated dialog with warnings and MCP status.</AcceptanceCriteria>
+        <Verification>bun test src/tui/context/plugin.test.ts; bun run typecheck</Verification>
+      </T-003>
+      <T-004>
+        <Title>Manage TUI configuration conservatively</Title>
+        <AcceptanceCriteria>Path resolution includes dedicated tui.json(c), mutation preserves unrelated JSONC settings and tuple options, install/sync/init register the subpath idempotently, inspection reports failures, and launch pins an existing project-managed TUI config.</AcceptanceCriteria>
+        <Verification>bun test src/lib/opencode.test.ts src/lib/config-layers.test.ts src/commands/sync.test.ts src/commands/launch.test.ts src/commands/status.test.ts src/commands/doctor.test.ts</Verification>
+      </T-004>
+      <T-005>
+        <Title>Synchronize plugin toggles, docs, graph, and verification</Title>
+        <AcceptanceCriteria>The context toggle defaults on, public docs explain /context accuracy and setup, and GRACE requirements/technology/deployment/graph/verification own the new behavior and tests.</AcceptanceCriteria>
+        <Verification>bun test src/lib/plugin-toggle-config.test.ts; bunx @osovv/grace-cli@rc lint --path .</Verification>
+      </T-005>
+      <T-006>
+        <Title>Run package and repository gates</Title>
+        <AcceptanceCriteria>Targeted tests and the repository/package gates pass freshly; the final diff contains only approved scope and generated dist remains unedited.</AcceptanceCriteria>
+        <Verification>bun run check; bun run build; bun run pack:check; bunx @osovv/grace-cli@rc status --path .; git diff --check</Verification>
+      </T-006>
+    </ImplementationPlan>
+  </C-CONTEXT-TUI-PLUGIN>
+</GraceChangePlan>

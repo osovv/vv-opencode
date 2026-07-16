@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage OpenCode config mutation, provider patching, and scoped vvoc.json config files.
-//   SCOPE: Layer-aware path resolution, pinned plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict vvoc rendering, and source-aware installation inspection including orchestration.
+//   PURPOSE: Manage OpenCode runtime/TUI config mutation, provider patching, and scoped vvoc.json config files.
+//   SCOPE: Layer-aware path resolution, pinned runtime and TUI plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict vvoc rendering, and source-aware installation inspection including orchestration.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -13,13 +13,17 @@
 //   CLI_NAME - Canonical vvoc CLI binary name.
 //   PACKAGE_NAME - Canonical vvoc npm package name.
 //   OPENCODE_SCHEMA_URL - OpenCode config schema URL.
+//   OPENCODE_TUI_SCHEMA_URL - OpenCode TUI config schema URL.
+//   TUI_PACKAGE_SPECIFIER - Stable package subpath registered in tui.json(c).
 //   OpenCodeDefaultModelKey - Supported top-level OpenCode default model fields.
 //   Scope - Supported installation scopes for vvoc config writes.
-//   ResolvedPaths - Scope-aware path bundle for OpenCode and vvoc config locations.
+//   ResolvedPaths - Scope-aware path bundle for OpenCode runtime/TUI and vvoc config locations.
 //   WriteResult - Result shape returned by managed config write operations.
-//   InstallationInspection - Current OpenCode and vvoc installation status snapshot.
-//   resolvePaths - Resolves OpenCode and vvoc config paths for global/project scopes.
+//   TuiPluginEntry - Supported TUI plugin string or tuple entry.
+//   InstallationInspection - Current OpenCode runtime/TUI and vvoc installation status snapshot.
+//   resolvePaths - Resolves OpenCode runtime/TUI and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
+//   ensureTuiPackageConfigText - Ensures TUI config contains the vvoc TUI package subpath while preserving tuple options.
 //   readOpenCodeDefaultModel - Reads a top-level OpenCode model or small_model override.
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
@@ -27,6 +31,7 @@
 //   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, agent registrations, and tool gating.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
+//   ensureTuiPackageInstalled - Writes the vvoc TUI package subpath into dedicated tui.json(c).
 //   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
 //   syncVvocConfig - Rewrites the canonical vvoc.json document while preserving valid current values.
 //   writeProviderBaseUrl - Writes a provider options.baseURL override into OpenCode config.
@@ -53,9 +58,9 @@
 //   renderGuardianConfig - Render guardian section JSON.
 //   GuardianConfigOverrides - Guardian config override type.
 // END_MODULE_MAP
-// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conservative dedicated TUI config mutation, path resolution, and installation inspection.]
 //   LAST_CHANGE: [v1.3.0 - Removed old-name managed-agent and managed-command cleanup from syncManagedAgentRegistrations.]
 //   LAST_CHANGE: [v1.2.0 - Switched vvoc config mutation paths to strict current-only parsing for existing vvoc.json files.]
 //   LAST_CHANGE: [v1.1.1 - Fixed syncManagedSkillFiles to not sync references when parent skill is skipped (user-owned/custom). Added regression coverage.]
@@ -115,6 +120,7 @@ import { getPinnedPackageSpecifier, PACKAGE_NAME } from "./package.js";
 import {
   resolveConfigWriteTargets,
   resolveOpenCodeConfigSource,
+  resolveOpenCodeTuiConfigSource,
   resolveVvocConfigSource,
   type ConfigReadScope,
   type ConfigSource,
@@ -130,8 +136,11 @@ import {
 export const CLI_NAME = "vvoc";
 export { PACKAGE_NAME };
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
+export const OPENCODE_TUI_SCHEMA_URL = "https://opencode.ai/tui.json";
+export const TUI_PACKAGE_SPECIFIER = `${PACKAGE_NAME}/tui`;
 const MANAGED_MARKER = "Managed by vvoc";
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
+const OPENCODE_TUI_CONFIG_FILE_NAMES = ["tui.json", "tui.jsonc"] as const;
 const MANAGED_DEFAULT_AGENT = "vv-controller";
 
 const JSON_FORMAT = {
@@ -141,6 +150,7 @@ const JSON_FORMAT = {
 } as const;
 
 type JsonObject = Record<string, unknown>;
+export type TuiPluginEntry = string | [string, JsonObject];
 export type OpenCodeDefaultModelKey = "model" | "small_model";
 
 export type Scope = "global" | "project";
@@ -157,6 +167,8 @@ export type ResolvedPaths = {
   managedSkillsDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
+  opencodeTuiConfigPath: string;
+  opencodeTuiAlternatePaths: string[];
 };
 
 export type WriteResult = {
@@ -178,6 +190,14 @@ export type InstallationInspection = {
     parseError?: string;
     pluginConfigured: boolean;
     plugins: string[];
+  };
+  tui: {
+    path: string;
+    exists: boolean;
+    alternates: string[];
+    parseError?: string;
+    pluginConfigured: boolean;
+    plugins: TuiPluginEntry[];
   };
   vvoc: {
     path: string;
@@ -229,6 +249,12 @@ export async function resolvePaths(options: {
       targets.opencodeBaseDir,
       targets.opencodeConfigPath,
     ),
+    opencodeTuiConfigPath: targets.opencodeTuiConfigPath,
+    opencodeTuiAlternatePaths: await resolveConfigAlternates(
+      targets.opencodeBaseDir,
+      targets.opencodeTuiConfigPath,
+      OPENCODE_TUI_CONFIG_FILE_NAMES,
+    ),
   };
 }
 // END_BLOCK_RESOLVE_CONFIG_PATHS
@@ -272,6 +298,62 @@ export function ensurePackageConfigText(
   return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
 }
 // END_BLOCK_ENSURE_OPENCODE_PLUGIN_CONFIG
+
+// START_BLOCK_ENSURE_TUI_PLUGIN_CONFIG
+export function ensureTuiPackageConfigText(
+  text: string | undefined,
+  packageSpecifier = TUI_PACKAGE_SPECIFIER,
+): string {
+  if (!text?.trim()) {
+    return renderJson({
+      $schema: OPENCODE_TUI_SCHEMA_URL,
+      plugin: [packageSpecifier],
+    });
+  }
+
+  const document = parseObjectDocument(text, "OpenCode TUI config");
+  const currentPlugins = readTuiPluginList(document, "OpenCode TUI config");
+  let nextText = text;
+
+  if (!Object.hasOwn(document, "$schema")) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["$schema"], OPENCODE_TUI_SCHEMA_URL, {
+        formattingOptions: JSON_FORMAT,
+        getInsertionIndex: () => 0,
+      }),
+    );
+  }
+
+  const nextPlugins = normalizeTuiPluginList(currentPlugins, packageSpecifier);
+  if (JSON.stringify(nextPlugins) !== JSON.stringify(currentPlugins)) {
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ["plugin"], nextPlugins, {
+        formattingOptions: JSON_FORMAT,
+      }),
+    );
+  }
+
+  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
+}
+
+export async function ensureTuiPackageInstalled(
+  paths: Pick<ResolvedPaths, "opencodeTuiConfigPath">,
+): Promise<WriteResult> {
+  const currentText = await readOptionalText(paths.opencodeTuiConfigPath);
+  const nextText = ensureTuiPackageConfigText(currentText);
+  if ((currentText ?? "") === nextText) {
+    return { action: "kept", path: paths.opencodeTuiConfigPath };
+  }
+
+  await writeText(paths.opencodeTuiConfigPath, nextText);
+  return {
+    action: currentText ? "updated" : "created",
+    path: paths.opencodeTuiConfigPath,
+  };
+}
+// END_BLOCK_ENSURE_TUI_PLUGIN_CONFIG
 
 // START_BLOCK_ENSURE_MANAGED_AGENT_CONFIG
 export function ensureManagedAgentRegistrationsConfigText(
@@ -933,6 +1015,12 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     );
   }
 
+  if (paths.opencodeTuiAlternatePaths.length > 0) {
+    warnings.push(
+      `multiple OpenCode TUI config files exist: ${[paths.opencodeTuiConfigPath, ...paths.opencodeTuiAlternatePaths].join(", ")}`,
+    );
+  }
+
   const opencodeText = await readOptionalText(paths.opencodeConfigPath);
   let opencodeParseError: string | undefined;
   let plugins: string[] = [];
@@ -946,6 +1034,24 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
     } catch (error) {
       opencodeParseError = error instanceof Error ? error.message : String(error);
       problems.push(opencodeParseError);
+    }
+  }
+
+  const tuiText = await readOptionalText(paths.opencodeTuiConfigPath);
+  let tuiParseError: string | undefined;
+  let tuiPlugins: TuiPluginEntry[] = [];
+  let tuiPluginConfigured = false;
+
+  if (tuiText) {
+    try {
+      const document = parseObjectDocument(tuiText, paths.opencodeTuiConfigPath);
+      tuiPlugins = readTuiPluginList(document, paths.opencodeTuiConfigPath);
+      tuiPluginConfigured = tuiPlugins.some((entry) =>
+        isTuiPackageSpecifier(readTuiPluginName(entry)),
+      );
+    } catch (error) {
+      tuiParseError = error instanceof Error ? error.message : String(error);
+      problems.push(tuiParseError);
     }
   }
 
@@ -987,6 +1093,9 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
   if (!pluginConfigured) {
     problems.push(`${PACKAGE_NAME} is not configured in ${paths.opencodeConfigPath}`);
   }
+  if (!tuiPluginConfigured) {
+    problems.push(`${TUI_PACKAGE_SPECIFIER} is not configured in ${paths.opencodeTuiConfigPath}`);
+  }
   if (!vvocText) {
     problems.push(`vvoc config is missing at ${paths.vvocConfigPath}`);
   }
@@ -1000,6 +1109,14 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
       parseError: opencodeParseError,
       pluginConfigured,
       plugins,
+    },
+    tui: {
+      path: paths.opencodeTuiConfigPath,
+      exists: Boolean(tuiText),
+      alternates: paths.opencodeTuiAlternatePaths,
+      parseError: tuiParseError,
+      pluginConfigured: tuiPluginConfigured,
+      plugins: tuiPlugins,
     },
     vvoc: {
       path: paths.vvocConfigPath,
@@ -1030,9 +1147,20 @@ export async function inspectInstallationForScope(options: {
   scope: ConfigReadScope;
   cwd: string;
   configDir?: string;
-}): Promise<InstallationInspection & { opencodeSource: ConfigSource; vvocSource: ConfigSource }> {
-  const [opencodeSource, vvocSource] = await Promise.all([
+}): Promise<
+  InstallationInspection & {
+    opencodeSource: ConfigSource;
+    opencodeTuiSource: ConfigSource;
+    vvocSource: ConfigSource;
+  }
+> {
+  const [opencodeSource, opencodeTuiSource, vvocSource] = await Promise.all([
     resolveOpenCodeConfigSource({
+      scope: options.scope,
+      cwd: options.cwd,
+      configDir: options.configDir,
+    }),
+    resolveOpenCodeTuiConfigSource({
       scope: options.scope,
       cwd: options.cwd,
       configDir: options.configDir,
@@ -1060,14 +1188,17 @@ export async function inspectInstallationForScope(options: {
     configDir: options.configDir,
   });
   const opencodeConfigPath = opencodeSource.path ?? fallbackPaths.opencodeConfigPath;
+  const opencodeTuiConfigPath = opencodeTuiSource.path ?? fallbackPaths.opencodeTuiConfigPath;
   const vvocConfigPath = vvocSource.path ?? fallbackPaths.vvocConfigPath;
   const scopedPaths: ResolvedPaths = {
     ...fallbackPaths,
     opencodeBaseDir: dirname(opencodeConfigPath),
     vvocBaseDir: dirname(vvocConfigPath),
     opencodeConfigPath,
+    opencodeTuiConfigPath,
     vvocConfigPath,
     opencodeAlternatePaths: [],
+    opencodeTuiAlternatePaths: [],
     managedAgentsDirPath: getVvocAgentsDir(dirname(vvocConfigPath)),
     managedSkillsDirPath: getVvocSkillsDir(dirname(vvocConfigPath)),
   };
@@ -1084,6 +1215,7 @@ export async function inspectInstallationForScope(options: {
     },
     scope: options.scope,
     opencodeSource,
+    opencodeTuiSource,
     vvocSource,
   };
 }
@@ -1138,6 +1270,31 @@ function readPluginList(document: JsonObject, label: string): string[] {
   return raw.slice();
 }
 
+function readTuiPluginList(document: JsonObject, label: string): TuiPluginEntry[] {
+  const raw = document.plugin;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${label}: expected "plugin" to be an array`);
+  }
+
+  return raw.map((entry, index) => {
+    if (typeof entry === "string") {
+      return entry;
+    }
+    if (
+      Array.isArray(entry) &&
+      entry.length === 2 &&
+      typeof entry[0] === "string" &&
+      isJsonObject(entry[1])
+    ) {
+      return [entry[0], entry[1]];
+    }
+    throw new Error(
+      `${label}: expected "plugin[${index}]" to be a string or [string, options] tuple`,
+    );
+  });
+}
+
 function readStringArray(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
     throw new Error(`${label}: expected an array of strings`);
@@ -1176,8 +1333,46 @@ function normalizePluginList(currentPlugins: string[], packageSpecifier: string)
   return nextPlugins;
 }
 
+function normalizeTuiPluginList(
+  currentPlugins: TuiPluginEntry[],
+  packageSpecifier: string,
+): TuiPluginEntry[] {
+  const nextPlugins: TuiPluginEntry[] = [];
+  let insertedPackage = false;
+
+  for (const entry of currentPlugins) {
+    if (!isTuiPackageSpecifier(readTuiPluginName(entry))) {
+      nextPlugins.push(entry);
+      continue;
+    }
+
+    if (insertedPackage) {
+      continue;
+    }
+    nextPlugins.push(typeof entry === "string" ? packageSpecifier : [packageSpecifier, entry[1]]);
+    insertedPackage = true;
+  }
+
+  if (!insertedPackage) {
+    nextPlugins.push(packageSpecifier);
+  }
+
+  return nextPlugins;
+}
+
 function isPackagePluginSpecifier(value: string): boolean {
   return value === PACKAGE_NAME || value.startsWith(`${PACKAGE_NAME}@`);
+}
+
+function readTuiPluginName(entry: TuiPluginEntry): string {
+  return typeof entry === "string" ? entry : entry[0];
+}
+
+function isTuiPackageSpecifier(value: string): boolean {
+  return (
+    value === TUI_PACKAGE_SPECIFIER ||
+    (value.startsWith(`${PACKAGE_NAME}@`) && value.endsWith("/tui"))
+  );
 }
 
 // START_BLOCK_MANAGED_AGENT_HELPERS
@@ -1681,9 +1876,17 @@ async function resolveOpenCodeAlternates(
   opencodeBaseDir: string,
   selectedPath: string,
 ): Promise<string[]> {
+  return resolveConfigAlternates(opencodeBaseDir, selectedPath, OPENCODE_CONFIG_FILE_NAMES);
+}
+
+async function resolveConfigAlternates(
+  baseDir: string,
+  selectedPath: string,
+  fileNames: readonly string[],
+): Promise<string[]> {
   const alternates: string[] = [];
 
-  for (const candidate of OPENCODE_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name))) {
+  for (const candidate of fileNames.map((name) => join(baseDir, name))) {
     if (candidate !== selectedPath && (await readOptionalText(candidate)) !== undefined) {
       alternates.push(candidate);
     }

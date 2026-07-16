@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between plugin fixtures.]
 //   LAST_CHANGE: [v0.4.2 - Added coverage for scoped repository-memory guidance.]
 //   LAST_CHANGE: [v0.4.1 - Added coverage for explore-specific compact search/discovery system guidance.]
@@ -62,6 +63,7 @@ function createPluginInput() {
     project: {} as never,
     directory: "/tmp/project",
     worktree: "/tmp/project",
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   };

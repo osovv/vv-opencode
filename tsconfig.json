@@ -9,10 +9,12 @@
     "declaration": true,
     "sourceMap": true,
     "strict": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/solid",
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "types": ["node", "bun-types"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

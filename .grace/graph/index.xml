@@ -20,6 +20,7 @@
         <M-PLUGIN-HASHLINE-EDIT />
         <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
         <M-PLUGIN-SECRETS-REDACTION />
+        <M-PLUGIN-CONTEXT-TUI />
         <M-WORKFLOW-PROTOCOL />
         <M-WORKFLOW-REPAIR />
         <M-WORKFLOW-STATE />
@@ -36,6 +37,34 @@
         <M-CLI-UPGRADE />
         <M-ORCHESTRATION-PROFILES />
         <M-CLI-ORCHESTRATION />
+        <DF-PLUGIN-INSTALL />
+        <DF-CONFIG-SYNC />
+        <DF-LAYERED-CONFIG />
+        <DF-VVOC-LAUNCH />
+        <DF-RELEASE />
+        <DF-ROLE-MANAGEMENT />
+        <DF-ROLE-RESOLUTION />
+        <DF-PRESET-SWITCH />
+        <DF-HASHLINE-EDIT />
+        <DF-GUARDIAN-REVIEW />
+        <DF-SYSTEM-CONTEXT />
+        <DF-SECRETS-REDACTION />
+        <DF-PLUGIN-LIST />
+        <DF-CONFIG-VALIDATE />
+        <DF-COMPLETION />
+        <DF-PLUGIN-TOGGLE />
+        <DF-PLUGIN-TOGGLE-CHECK />
+        <DF-INIT />
+        <DF-UPGRADE />
+        <DF-RENAME-AGENTS />
+        <DF-WORKFLOW-TOOLS />
+        <DF-LAUNCH-ENFORCEMENT />
+        <DF-RESULT-PARSING />
+        <DF-LOOP-GATE />
+        <DF-WORKFLOW-GUIDANCE />
+        <DF-WORKFLOW-PERSISTENCE />
+        <DF-CONTEXT-INSPECTION />
+        <DF-ORCHESTRATION-PROFILE />
       </Owns>
     </GD-MAIN>
   </GraphDocuments>

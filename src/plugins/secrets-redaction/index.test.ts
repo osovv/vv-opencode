@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v1.2.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
 //   LAST_CHANGE: [v1.1.0 - Switched test fixtures to the canonical vvoc.json config file and ignored legacy local config files.]
 // END_CHANGE_SUMMARY
@@ -92,6 +93,7 @@ async function createPlugin() {
     project: {} as never,
     directory,
     worktree: directory,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });

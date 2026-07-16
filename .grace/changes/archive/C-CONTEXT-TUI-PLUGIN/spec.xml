@@ -1,0 +1,50 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-CONTEXT-TUI-PLUGIN>
+    <Summary>Add a managed OpenCode TUI plugin that exposes a Claude-like /context command with measured context usage, an honest approximate category breakdown, MCP visibility, and conservative install/sync registration.</Summary>
+    <Goals>
+      <Goal>Register a /context TUI command for active OpenCode sessions.</Goal>
+      <Goal>Show provider-reported context usage against the selected model context limit.</Goal>
+      <Goal>Estimate observable context categories without presenting estimates as exact provider payload attribution.</Goal>
+      <Goal>Display skill, tool-schema, conversation, tool-result, file, compaction, and MCP status information in an OpenCode-native dialog.</Goal>
+      <Goal>Install, sync, inspect, and launch the TUI plugin conservatively for global and project scopes.</Goal>
+      <Goal>Publish a stable @osovv/vv-opencode/tui package subpath compatible with OpenCode 1.18.2.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not intercept or reconstruct the exact final provider request.</NonGoal>
+      <NonGoal>Do not claim exact token attribution for individual categories.</NonGoal>
+      <NonGoal>Do not guess per-MCP-server tool ownership when OpenCode exposes no source metadata.</NonGoal>
+      <NonGoal>Do not add a desktop/web context inspector or change OpenCode compaction behavior.</NonGoal>
+      <NonGoal>Do not edit generated dist output manually.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>The published TUI entry registers a palette command with slash name context and opens only for an active session.</Criterion>
+      <Criterion>The dialog reports the current provider/model, model context limit, measured usage from the latest assistant turn, percentage used, and remaining capacity when available.</Criterion>
+      <Criterion>The dialog labels category values as estimates and reports estimation drift or provider-only unknown context instead of forcing estimates to equal the measured total.</Criterion>
+      <Criterion>The analyzer starts at the latest compaction summary, excludes older compacted turns, and categorizes system instructions, skill catalog, loaded skills, tool schemas, user messages, assistant messages, tool results, files, and compacted summaries.</Criterion>
+      <Criterion>MCP servers are shown by name and status while unattributable tool schemas are grouped as external/plugin/MCP.</Criterion>
+      <Criterion>Missing session state, missing provider metrics, and SDK lookup failures produce bounded diagnostic UI rather than crashing the TUI.</Criterion>
+      <Criterion>The context plugin is a default-enabled canonical vvoc plugin toggle and respects a disabled context toggle after restart.</Criterion>
+      <Criterion>vvoc init, install, and sync conservatively add @osovv/vv-opencode/tui to a dedicated tui.json(c) without removing unrelated settings or plugin entries.</Criterion>
+      <Criterion>Project-scope TUI config remains inside .opencode and vvoc launch sets OPENCODE_TUI_CONFIG when that managed file exists.</Criterion>
+      <Criterion>Status and doctor report the selected TUI config path, parse state, and managed TUI package registration.</Criterion>
+      <Criterion>Package exports, README, GRACE graph, GRACE verification, and dependency metadata describe the new TUI surface and OpenCode 1.18.2 minimum.</Criterion>
+      <Criterion>Targeted tests, bun run check, bun run build, bun run pack:check, and GRACE lint/status complete with fresh evidence or a reported blocker.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <Area>TUI plugin entry, context collection, token estimation, analysis, and dialog rendering under src/tui*.</Area>
+      <Area>OpenCode and TUI config path resolution, conservative mutation, inspection, and launch environment construction.</Area>
+      <Area>Plugin toggle defaults and tests.</Area>
+      <Area>Package exports, OpenCode SDK/plugin dependencies, OpenTUI peer/development dependencies, and TypeScript JSX compilation.</Area>
+      <Area>Install, sync, init, status, doctor, and launch command behavior.</Area>
+      <Area>README, AGENTS guide, and GRACE requirements, technology, deployment, graph, and verification projections.</Area>
+    </AffectedAreas>
+    <VerificationIntent>
+      <Check>Pure analyzer tests cover measured usage, compaction cutoff, category accounting, loaded skills, schema grouping, files, and estimation drift.</Check>
+      <Check>TUI registration tests cover the context slash command, disabled toggle behavior, active-session requirement, and bounded failure handling.</Check>
+      <Check>OpenCode config tests cover new/existing/commented tui.json mutation, unrelated tuple preservation, idempotence, and project/global paths.</Check>
+      <Check>Command tests cover install/sync/init registration, status/doctor visibility, and OPENCODE_TUI_CONFIG launch behavior.</Check>
+      <Check>Package checks import the generated TUI subpath in addition to existing public exports.</Check>
+      <Check>GRACE lint and status validate the change bundle and synchronized durable projections.</Check>
+    </VerificationIntent>
+  </C-CONTEXT-TUI-PLUGIN>
+</GraceChangeSpec>

@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput fixtures for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
 //   LAST_CHANGE: [v0.2.0 - Added effective runtime source precedence coverage for env and project-local vvoc config.]
 //   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for ModelRolesPlugin role resolution and failure semantics.]
@@ -91,6 +92,7 @@ async function createPluginWithRoles(overrides: Record<string, string>) {
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });
@@ -137,6 +139,7 @@ async function createPluginInProject(projectDir: string) {
     project: {} as never,
     directory: projectDir,
     worktree: projectDir,
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   });

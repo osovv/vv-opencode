@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput and structured ToolResult fixtures for OpenCode 1.18.2.]
 //   LAST_CHANGE: [v0.5.2 - Added result body, bounded excerpt, missing-blank-line diagnostic, repair guidance, hard-stop, and persistence coverage.]
 //   LAST_CHANGE: [v0.5.1 - Reworded workflow persisted-state rejection coverage as corrupt/incomplete data handling.]
 //   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between workflow plugin fixtures.]
@@ -705,6 +706,7 @@ function createWorkflowPluginHarness(
     project: {} as never,
     directory: "/tmp/project",
     worktree: "/tmp/project",
+    experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
   }).then((plugin) => ({ plugin, logs }));
@@ -1327,8 +1329,16 @@ function createToolContext(sessionID: string, agent = "vv-controller") {
   };
 }
 
-function parseToolJson<T>(value: string): T {
-  return JSON.parse(value) as T;
+function parseToolJson<T>(value: unknown): T {
+  const text =
+    typeof value === "string"
+      ? value
+      : value &&
+          typeof value === "object" &&
+          typeof (value as { output?: unknown }).output === "string"
+        ? (value as { output: string }).output
+        : "{}";
+  return JSON.parse(text) as T;
 }
 
 function wrapTaskResult(taskId: string, innerResult: string): string {

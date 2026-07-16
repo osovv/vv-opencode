@@ -1,8 +1,8 @@
 // FILE: src/commands/status.ts
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Show current vv-opencode installation status including the effective orchestration profile.
-//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable OpenCode, vvoc, orchestration, role, and plugin diagnostics.
+//   PURPOSE: Show current vv-opencode installation status including TUI registration and the effective orchestration profile.
+//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable OpenCode runtime/TUI, vvoc, orchestration, role, and plugin diagnostics.
 //   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Reported selected TUI config source, parse state, and managed registration.]
 //   LAST_CHANGE: [v0.6.0 - Printed vvoc config parse diagnostics during status without mutating invalid config files.]
 //   LAST_CHANGE: [v0.5.0 - Added global/project/effective status scopes with selected source reporting.]
 //   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output and unresolved role-reference reporting sourced from installation inspection.]
@@ -52,12 +53,21 @@ export default defineCommand({
       `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
     );
     console.log(
+      `OpenCode TUI source: ${inspection.opencodeTuiSource.kind}${inspection.opencodeTuiSource.path ? ` ${inspection.opencodeTuiSource.path}` : ""}`,
+    );
+    console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
     console.log(`Orchestration profile: ${inspection.orchestration.profile ?? "unknown"}`);
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(`OpenCode config exists: ${inspection.opencode.exists ? "yes" : "no"}`);
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
+    console.log(`OpenCode TUI config: ${inspection.tui.path}`);
+    console.log(`OpenCode TUI config exists: ${inspection.tui.exists ? "yes" : "no"}`);
+    console.log(
+      `OpenCode TUI config parse: ${inspection.tui.parseError ? inspection.tui.parseError : inspection.tui.exists ? "ok" : "missing"}`,
+    );
+    console.log(`TUI package configured: ${inspection.tui.pluginConfigured ? "yes" : "no"}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(`vvoc config exists: ${inspection.vvoc.exists ? "yes" : "no"}`);
     console.log(
