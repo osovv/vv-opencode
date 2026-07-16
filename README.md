@@ -382,6 +382,18 @@ vvoc launch --scope project -- run "hello"
 
 `vvoc launch --scope project` is strict and non-mutating: if `.opencode/opencode.json` or `.vvoc/vvoc.json` is missing, it fails with a hint to run `vvoc install --scope project`. When the selected `.opencode/tui.json(c)` exists, launch also sets `OPENCODE_TUI_CONFIG`; a missing TUI file is not synthesized during launch. `--scope effective` follows the layered lookup order, and `--scope global` uses the global config paths.
 
+### Test the local TUI before release
+
+From this repository, launch OpenCode against the freshly built local `dist/tui.js` without publishing or rewriting your selected configs:
+
+```bash
+bun run tui:local
+bun run tui:local -- -s <session-id>
+bun run tui:local -- --scope project
+```
+
+The command defaults to `effective` config resolution. It builds the package, copies the selected `tui.json(c)` into a temporary isolated config home, replaces only the managed vv-opencode TUI entry with a local `file://` URL, preserves unrelated TUI settings and tuple options, and forwards remaining arguments to OpenCode. The original OpenCode, TUI, and vvoc config files are not modified, and the temporary config is removed after OpenCode exits. Restart the command after source changes because runtime plugins do not live reload.
+
 ---
 
 ## Managed Agents

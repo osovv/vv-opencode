@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added responsive tabbed detail, modal-scoped keyboard navigation, and bounded scrolling while retaining host dialog ownership.]
+//   LAST_CHANGE: [DIRECT-FIX - Sized context content to OpenCode's middle-half dialog region for visual vertical centering.]
 // END_CHANGE_SUMMARY
 
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
@@ -44,6 +44,8 @@ type ContextTheme = {
 };
 
 const CONTEXT_TABS = ["overview", "tools", "mcp"] as const;
+const CONTEXT_DIALOG_MAX_BODY_HEIGHT = 16;
+const CONTEXT_DIALOG_RESERVED_ROWS = 13;
 export type ContextTab = (typeof CONTEXT_TABS)[number];
 
 // START_BLOCK_CONTEXT_DIALOG
@@ -187,7 +189,10 @@ export function registerContextDialogKeymap(
 
 export function calculateContextBodyHeight(terminalHeight: number): number {
   const normalized = Number.isFinite(terminalHeight) ? Math.floor(terminalHeight) : 34;
-  return Math.max(1, Math.min(24, normalized - 12));
+  const hostTopOffset = Math.floor(normalized / 4);
+  const centeredPanelHeight = normalized - hostTopOffset * 2;
+  const available = centeredPanelHeight - CONTEXT_DIALOG_RESERVED_ROWS;
+  return Math.max(1, Math.min(CONTEXT_DIALOG_MAX_BODY_HEIGHT, available));
 }
 
 function calculateMetricBarWidth(terminalWidth: number): number {

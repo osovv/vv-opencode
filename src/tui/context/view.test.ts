@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-DETAILED-ATTRIBUTION - Added deterministic tab, rendering, scroll, responsive-frame, and lifecycle coverage.]
+//   LAST_CHANGE: [DIRECT-FIX - Added middle-half host geometry coverage for vertically centered context content.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -90,9 +90,11 @@ describe("context tab helpers", () => {
     expect(selectContextTabForKey("overview", "escape")).toBeUndefined();
   });
 
-  test("bounds body height and clamps bars without clamping numeric percentages", () => {
-    expect(calculateContextBodyHeight(60)).toBe(24);
-    expect(calculateContextBodyHeight(18)).toBe(6);
+  test("fits the body into the host middle half and clamps bars without clamping numeric percentages", () => {
+    expect(calculateContextBodyHeight(60)).toBe(16);
+    expect(calculateContextBodyHeight(40)).toBe(7);
+    expect(calculateContextBodyHeight(28)).toBe(1);
+    expect(calculateContextBodyHeight(18)).toBe(1);
     expect(calculateContextBodyHeight(5)).toBe(1);
     expect(renderMetricBar(150, 10)).toBe("[██████████]");
     expect(renderMetricBar(undefined, 10)).toBe("[░░░░░░░░░░]");
@@ -101,7 +103,7 @@ describe("context tab helpers", () => {
 
 describe("context dialog rendering", () => {
   test("renders representative Overview, Tools, and MCP metrics and switches through both navigation forms", async () => {
-    const setup = await renderDialog(detailedAnalysis(), 90, 28);
+    const setup = await renderDialog(detailedAnalysis(), 90, 60);
 
     const overview = setup.captureCharFrame();
     expect(overview).toContain("[1 Overview]");
@@ -139,12 +141,12 @@ describe("context dialog rendering", () => {
     analysis.toolAttribution!.tools = Array.from({ length: 30 }, (_, index) =>
       toolUsage(`tool-${String(index).padStart(2, "0")}`, index + 1),
     );
-    const setup = await renderDialog(analysis, 64, 18);
+    const setup = await renderDialog(analysis, 64, 40);
     setup.mockInput.pressKey("2");
     await setup.flush();
 
     const before = setup.captureCharFrame();
-    expect(before.split("\n")).toHaveLength(19);
+    expect(before.split("\n")).toHaveLength(41);
     expect(before).toContain("tool-00");
     expect(before).toContain("Measured = latest provider usage");
 
@@ -158,15 +160,20 @@ describe("context dialog rendering", () => {
   });
 
   test("renders essential values at narrow width without horizontal frame overflow", async () => {
-    const setup = await renderDialog(detailedAnalysis(), 50, 20);
+    const setup = await renderDialog(detailedAnalysis(), 50, 36);
     setup.mockInput.pressKey("3");
     await setup.flush();
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("[3 MCP]");
     expect(frame).toContain("docs server");
-    expect(frame).toContain("history 500 · 5.0%");
     expect(frame.split("\n").every((line) => line.length <= 50)).toBe(true);
+
+    for (let index = 0; index < 3; index += 1) setup.mockInput.pressArrow("down");
+    await setup.flush();
+    const scrolled = setup.captureCharFrame();
+    expect(scrolled).toContain("history 500 · 5.0%");
+    expect(scrolled.split("\n").every((line) => line.length <= 50)).toBe(true);
     setup.renderer.destroy();
   });
 

@@ -81,6 +81,7 @@
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun test",
     "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); const tui = await import('./dist/tui.js'); if (!tui.default || typeof tui.default.tui !== 'function') throw new Error('dist TUI export missing default tui module'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js')\" && npm pack --dry-run",
+    "tui:local": "bun scripts/tui-local.ts",
     "release:check": "bun scripts/release-check.ts",
     "release:bump": "bun scripts/release-bump.ts",
     "prepare": "lefthook install --force"
