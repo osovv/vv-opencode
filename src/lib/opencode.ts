@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage OpenCode runtime/TUI config mutation, provider patching, and scoped vvoc.json config files.
-//   SCOPE: Layer-aware path resolution, pinned runtime and TUI plugin writes, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict vvoc rendering, and source-aware installation inspection including orchestration.
+//   PURPOSE: Manage OpenCode runtime/TUI config mutation, host compatibility diagnostics, provider patching, and scoped vvoc.json config files.
+//   SCOPE: Layer-aware path resolution, pinned runtime and TUI package writes, OpenCode version inspection, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict vvoc rendering, and source-aware installation inspection including orchestration.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -14,16 +14,18 @@
 //   PACKAGE_NAME - Canonical vvoc npm package name.
 //   OPENCODE_SCHEMA_URL - OpenCode config schema URL.
 //   OPENCODE_TUI_SCHEMA_URL - OpenCode TUI config schema URL.
-//   TUI_PACKAGE_SPECIFIER - Stable package subpath registered in tui.json(c).
+//   TUI_PACKAGE_SPECIFIER - Pinned base package specifier registered in tui.json(c) so OpenCode selects its ./tui export.
+//   MINIMUM_TUI_OPENCODE_VERSION - Minimum OpenCode host version supported by the managed TUI plugin.
 //   OpenCodeDefaultModelKey - Supported top-level OpenCode default model fields.
 //   Scope - Supported installation scopes for vvoc config writes.
 //   ResolvedPaths - Scope-aware path bundle for OpenCode runtime/TUI and vvoc config locations.
 //   WriteResult - Result shape returned by managed config write operations.
 //   TuiPluginEntry - Supported TUI plugin string or tuple entry.
+//   OpenCodeRuntimeInspection - Installed OpenCode version and TUI compatibility snapshot.
 //   InstallationInspection - Current OpenCode runtime/TUI and vvoc installation status snapshot.
 //   resolvePaths - Resolves OpenCode runtime/TUI and vvoc config paths for global/project scopes.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
-//   ensureTuiPackageConfigText - Ensures TUI config contains the vvoc TUI package subpath while preserving tuple options.
+//   ensureTuiPackageConfigText - Ensures TUI config contains the pinned vvoc base package while preserving tuple options.
 //   readOpenCodeDefaultModel - Reads a top-level OpenCode model or small_model override.
 //   writeOpenCodeDefaultModel - Writes or removes a top-level OpenCode model or small_model override.
 //   writeOpenCodeProviderObject - Writes or merges a provider.<id> object override.
@@ -31,7 +33,7 @@
 //   ensureManagedAgentRegistrationsConfigText - Ensures OpenCode config contains the vvoc-managed default agent, agent registrations, and tool gating.
 //   readVvocConfig - Loads the canonical vvoc.json document when present.
 //   ensurePackageInstalled - Writes the pinned vvoc plugin specifier into OpenCode config.
-//   ensureTuiPackageInstalled - Writes the vvoc TUI package subpath into dedicated tui.json(c).
+//   ensureTuiPackageInstalled - Writes the pinned vvoc base package into dedicated tui.json(c).
 //   installVvocConfig - Creates or refreshes the canonical vvoc.json document.
 //   syncVvocConfig - Rewrites the canonical vvoc.json document while preserving valid current values.
 //   writeProviderBaseUrl - Writes a provider options.baseURL override into OpenCode config.
@@ -48,6 +50,8 @@
 //   readManagedAgentOverrides - Reads model overrides for the bundled vvoc-managed OpenCode agents.
 //   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model override in OpenCode config.
 //   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
+//   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates TUI compatibility.
+//   isTuiOpenCodeVersionCompatible - Compares an OpenCode version with the managed TUI minimum.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
 //   inspectInstallationForScope - Reads installation state using strict/effective layered source resolution.
 //   describeWriteResult - Formats config write outcomes for CLI output.
@@ -60,6 +64,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.2 - Registered the pinned base package for TUI loading, migrated legacy subpath entries, and diagnosed incompatible OpenCode hosts.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conservative dedicated TUI config mutation, path resolution, and installation inspection.]
 //   LAST_CHANGE: [v1.3.0 - Removed old-name managed-agent and managed-command cleanup from syncManagedAgentRegistrations.]
 //   LAST_CHANGE: [v1.2.0 - Switched vvoc config mutation paths to strict current-only parsing for existing vvoc.json files.]
@@ -116,7 +121,7 @@ import {
   type SecretsRedactionConfig,
   type VvocConfig,
 } from "./vvoc-config.js";
-import { getPinnedPackageSpecifier, PACKAGE_NAME } from "./package.js";
+import { getPinnedPackageSpecifier, PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
 import {
   resolveConfigWriteTargets,
   resolveOpenCodeConfigSource,
@@ -137,7 +142,8 @@ export const CLI_NAME = "vvoc";
 export { PACKAGE_NAME };
 export const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
 export const OPENCODE_TUI_SCHEMA_URL = "https://opencode.ai/tui.json";
-export const TUI_PACKAGE_SPECIFIER = `${PACKAGE_NAME}/tui`;
+export const TUI_PACKAGE_SPECIFIER = `${PACKAGE_NAME}@${PACKAGE_VERSION}`;
+export const MINIMUM_TUI_OPENCODE_VERSION = "1.18.2";
 const MANAGED_MARKER = "Managed by vvoc";
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
 const OPENCODE_TUI_CONFIG_FILE_NAMES = ["tui.json", "tui.jsonc"] as const;
@@ -181,8 +187,16 @@ export type ManagedAgentModelMap = Record<ManagedOpenCodeAgentName, string | und
 export type OpenCodeAgentOverride = { model?: string };
 export type ManagedAgentOverrideMap = Record<ManagedOpenCodeAgentName, OpenCodeAgentOverride>;
 
+export type OpenCodeRuntimeInspection = {
+  version?: string;
+  minimumTuiVersion: string;
+  tuiCompatible?: boolean;
+  error?: string;
+};
+
 export type InstallationInspection = {
   scope: ConfigReadScope;
+  runtime: OpenCodeRuntimeInspection;
   opencode: {
     path: string;
     exists: boolean;
@@ -1004,10 +1018,117 @@ export async function writeGuardianConfig(
 }
 // END_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 
+// START_BLOCK_INSPECT_OPENCODE_RUNTIME
+export async function inspectOpenCodeRuntime(
+  run: () => Promise<{
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+  }> = runOpenCodeVersionCommand,
+): Promise<OpenCodeRuntimeInspection> {
+  try {
+    const result = await run();
+    if (result.exitCode !== 0) {
+      const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
+      return {
+        minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+        error: `opencode --version failed: ${detail}`,
+      };
+    }
+
+    const version = extractOpenCodeVersion(`${result.stdout}\n${result.stderr}`);
+    if (!version) {
+      return {
+        minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+        error: "opencode --version did not return a semantic version",
+      };
+    }
+
+    return {
+      version,
+      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+      tuiCompatible: isTuiOpenCodeVersionCompatible(version),
+    };
+  } catch (error) {
+    return {
+      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export function isTuiOpenCodeVersionCompatible(version: string): boolean {
+  const current = parseSemanticVersion(version);
+  const minimum = parseSemanticVersion(MINIMUM_TUI_OPENCODE_VERSION);
+  if (!current || !minimum) return false;
+
+  for (let index = 0; index < 3; index += 1) {
+    const currentPart = current.parts[index] ?? 0;
+    const minimumPart = minimum.parts[index] ?? 0;
+    if (currentPart > minimumPart) return true;
+    if (currentPart < minimumPart) return false;
+  }
+
+  return !current.prerelease || Boolean(minimum.prerelease);
+}
+
+async function runOpenCodeVersionCommand(): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}> {
+  const subprocess = Bun.spawn({
+    cmd: ["opencode", "--version"],
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text(),
+    subprocess.exited,
+  ]);
+  return { exitCode, stdout, stderr };
+}
+
+function extractOpenCodeVersion(output: string): string | undefined {
+  const match = output.match(
+    /(?:^|\s)v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?=\s|$)/,
+  );
+  return match?.[1];
+}
+
+function parseSemanticVersion(
+  value: string,
+): { parts: [number, number, number]; prerelease?: string } | undefined {
+  const match = value
+    .trim()
+    .match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
+  if (!match) return undefined;
+  return {
+    parts: [Number(match[1]), Number(match[2]), Number(match[3])],
+    prerelease: match[4],
+  };
+}
+// END_BLOCK_INSPECT_OPENCODE_RUNTIME
+
 // START_BLOCK_INSPECT_INSTALLATION_STATE
-export async function inspectInstallation(paths: ResolvedPaths): Promise<InstallationInspection> {
+export async function inspectInstallation(
+  paths: ResolvedPaths,
+  options: { runtime?: OpenCodeRuntimeInspection } = {},
+): Promise<InstallationInspection> {
   const warnings: string[] = [];
   const problems: string[] = [];
+  const runtime = options.runtime ?? {
+    minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+  };
+
+  if (runtime.error) {
+    problems.push(`OpenCode version unavailable: ${runtime.error}`);
+  } else if (runtime.tuiCompatible === false) {
+    problems.push(
+      `OpenCode ${runtime.version ?? "unknown"} is incompatible with /context; ${runtime.minimumTuiVersion} or newer is required`,
+    );
+  }
 
   if (paths.opencodeAlternatePaths.length > 0) {
     warnings.push(
@@ -1102,6 +1223,7 @@ export async function inspectInstallation(paths: ResolvedPaths): Promise<Install
 
   return {
     scope: paths.scope,
+    runtime,
     opencode: {
       path: paths.opencodeConfigPath,
       exists: Boolean(opencodeText),
@@ -1147,6 +1269,7 @@ export async function inspectInstallationForScope(options: {
   scope: ConfigReadScope;
   cwd: string;
   configDir?: string;
+  inspectRuntime?: () => Promise<OpenCodeRuntimeInspection>;
 }): Promise<
   InstallationInspection & {
     opencodeSource: ConfigSource;
@@ -1154,7 +1277,7 @@ export async function inspectInstallationForScope(options: {
     vvocSource: ConfigSource;
   }
 > {
-  const [opencodeSource, opencodeTuiSource, vvocSource] = await Promise.all([
+  const [opencodeSource, opencodeTuiSource, vvocSource, runtime] = await Promise.all([
     resolveOpenCodeConfigSource({
       scope: options.scope,
       cwd: options.cwd,
@@ -1171,6 +1294,7 @@ export async function inspectInstallationForScope(options: {
       configDir: options.configDir,
       allowDefault: options.scope === "effective",
     }),
+    (options.inspectRuntime ?? inspectOpenCodeRuntime)(),
   ]);
 
   if (options.scope === "project") {
@@ -1203,7 +1327,7 @@ export async function inspectInstallationForScope(options: {
     managedSkillsDirPath: getVvocSkillsDir(dirname(vvocConfigPath)),
   };
 
-  const inspection = await inspectInstallation(scopedPaths);
+  const inspection = await inspectInstallation(scopedPaths, { runtime });
   return {
     ...inspection,
     orchestration: {
@@ -1341,7 +1465,7 @@ function normalizeTuiPluginList(
   let insertedPackage = false;
 
   for (const entry of currentPlugins) {
-    if (!isTuiPackageSpecifier(readTuiPluginName(entry))) {
+    if (!isManagedTuiPackageSpecifier(readTuiPluginName(entry))) {
       nextPlugins.push(entry);
       continue;
     }
@@ -1368,11 +1492,22 @@ function readTuiPluginName(entry: TuiPluginEntry): string {
   return typeof entry === "string" ? entry : entry[0];
 }
 
-function isTuiPackageSpecifier(value: string): boolean {
+function isManagedTuiPackageSpecifier(value: string): boolean {
   return (
-    value === TUI_PACKAGE_SPECIFIER ||
+    isBasePackageSpecifier(value) ||
+    value === `${PACKAGE_NAME}/tui` ||
     (value.startsWith(`${PACKAGE_NAME}@`) && value.endsWith("/tui"))
   );
+}
+
+function isTuiPackageSpecifier(value: string): boolean {
+  return value === TUI_PACKAGE_SPECIFIER;
+}
+
+function isBasePackageSpecifier(value: string): boolean {
+  if (value === PACKAGE_NAME) return true;
+  const prefix = `${PACKAGE_NAME}@`;
+  return value.startsWith(prefix) && !value.slice(prefix.length).includes("/");
 }
 
 // START_BLOCK_MANAGED_AGENT_HELPERS

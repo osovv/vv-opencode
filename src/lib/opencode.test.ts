@@ -2,7 +2,7 @@
 // VERSION: 1.4.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode runtime/TUI config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Runtime/TUI plugin specifier writes, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, inspection, and scope-aware path resolution behavior.
+//   SCOPE: Runtime/TUI plugin specifier writes and legacy migration, OpenCode host compatibility, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, inspection, and scope-aware path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -11,7 +11,8 @@
 //
 // START_MODULE_MAP
 //   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
-//   ensureTuiPackageConfigText tests - Verify dedicated TUI schema insertion, tuple preservation, and idempotent subpath registration.
+//   ensureTuiPackageConfigText tests - Verify dedicated TUI schema insertion, tuple preservation, legacy migration, and idempotent pinned package registration.
+//   OpenCode runtime tests - Verify version parsing and minimum TUI compatibility diagnostics.
 //   ensureManagedAgentRegistrationsConfigText tests - Verify role-reference defaults, managed tool rewrites, and managed agent rewrites while preserving comments.
 //   canonical vvoc config tests - Verify schema v3 seeding, managed preset refresh, and strict pre-role rejection.
 //   provider helper tests - Verify conservative provider patch helpers remain comment-safe.
@@ -20,6 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.2 - Added pinned base-package migration and OpenCode host compatibility coverage.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added dedicated tui.json(c) mutation, path, idempotence, and inspection coverage.]
 //   LAST_CHANGE: [v1.4.1 - Added managed skill distribution and behavioral coverage for vv-handoff.]
 //   LAST_CHANGE: [v1.3.0 - Added strict current-only vvoc config rejection and no-rewrite mutation coverage.]
@@ -54,6 +56,7 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   OPENCODE_TUI_SCHEMA_URL,
+  MINIMUM_TUI_OPENCODE_VERSION,
   PACKAGE_NAME,
   TUI_PACKAGE_SPECIFIER,
   ensureManagedAgentRegistrationsConfigText,
@@ -66,6 +69,8 @@ import {
   installManagedSkillFiles,
   installVvocConfig,
   inspectInstallation,
+  inspectOpenCodeRuntime,
+  isTuiOpenCodeVersionCompatible,
   parseGuardianConfigText,
   readVvocConfig,
   renderGuardianConfig,
@@ -132,6 +137,8 @@ describe("ensureTuiPackageConfigText", () => {
   "plugin": [
     ["other-tui-plugin", { "sidebar": true }],
     ["${PACKAGE_NAME}@0.9.0/tui", { "mode": "compact" }],
+    "${PACKAGE_NAME}/tui",
+    "${PACKAGE_NAME}@1.1.0",
     "${TUI_PACKAGE_SPECIFIER}"
   ]
 }\n`;
@@ -151,6 +158,40 @@ describe("ensureTuiPackageConfigText", () => {
     expect(() => ensureTuiPackageConfigText('{ "plugin": [["broken"]] }\n')).toThrow(
       'expected "plugin[0]"',
     );
+  });
+});
+
+describe("OpenCode runtime compatibility", () => {
+  test("accepts the minimum stable OpenCode version and newer releases", () => {
+    expect(isTuiOpenCodeVersionCompatible(MINIMUM_TUI_OPENCODE_VERSION)).toBe(true);
+    expect(isTuiOpenCodeVersionCompatible("1.19.0")).toBe(true);
+    expect(isTuiOpenCodeVersionCompatible("2.0.0")).toBe(true);
+  });
+
+  test("rejects old, prerelease-minimum, and malformed versions", () => {
+    expect(isTuiOpenCodeVersionCompatible("1.17.20")).toBe(false);
+    expect(isTuiOpenCodeVersionCompatible("1.18.2-beta.1")).toBe(false);
+    expect(isTuiOpenCodeVersionCompatible("latest")).toBe(false);
+  });
+
+  test("inspects compatible and incompatible command output deterministically", async () => {
+    const compatible = await inspectOpenCodeRuntime(async () => ({
+      exitCode: 0,
+      stdout: "v1.18.2\n",
+      stderr: "",
+    }));
+    const incompatible = await inspectOpenCodeRuntime(async () => ({
+      exitCode: 0,
+      stdout: "1.17.20\n",
+      stderr: "",
+    }));
+
+    expect(compatible).toEqual({
+      version: "1.18.2",
+      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+      tuiCompatible: true,
+    });
+    expect(incompatible.tuiCompatible).toBe(false);
   });
 });
 
@@ -1351,6 +1392,51 @@ describe("inspectInstallation", () => {
       expect(inspection.tui.parseError).toBeUndefined();
       expect(inspection.tui.pluginConfigured).toBe(true);
       expect(inspection.tui.plugins).toEqual([TUI_PACKAGE_SPECIFIER]);
+
+      const incompatible = await inspectInstallation(paths, {
+        runtime: {
+          version: "1.17.20",
+          minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+          tuiCompatible: false,
+        },
+      });
+      expect(incompatible.problems).toContain(
+        "OpenCode 1.17.20 is incompatible with /context; 1.18.2 or newer is required",
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects the legacy TUI subpath until sync migrates it", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-tui-legacy-inspect-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await ensurePackageInstalled(paths);
+      await installVvocConfig(paths);
+      await mkdir(dirname(paths.opencodeTuiConfigPath), { recursive: true });
+      await writeFile(
+        paths.opencodeTuiConfigPath,
+        JSON.stringify(
+          { $schema: OPENCODE_TUI_SCHEMA_URL, plugin: [`${PACKAGE_NAME}/tui`] },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const before = await inspectInstallation(paths);
+      expect(before.tui.pluginConfigured).toBe(false);
+
+      await ensureTuiPackageInstalled(paths);
+      const after = await inspectInstallation(paths);
+      expect(after.tui.pluginConfigured).toBe(true);
+      expect(after.tui.plugins).toEqual([TUI_PACKAGE_SPECIFIER]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

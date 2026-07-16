@@ -16,11 +16,12 @@
 ## Quick Start
 
 ```bash
+bun add -g opencode-ai@1.18.2
 bun add -g @osovv/vv-opencode
 vvoc install
 ```
 
-That's it. `vvoc install` pins the server plugin, registers the `/context` TUI plugin, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, review, reflection, and handoff skills. The TUI integration requires OpenCode `1.18.2` or newer.
+That's it. `vvoc install` pins the server plugin, registers the same pinned package for OpenCode to load its `/context` TUI export, scaffolds managed agents and skills, writes canonical config, and sets `vv-controller` as your default OpenCode agent with auto-triggered spec, planning, review, reflection, and handoff skills. The TUI integration requires OpenCode `1.18.2` or newer; `vvoc status` and `vvoc doctor` report the installed host version and fail compatibility checks for older releases.
 
 To scope everything to the current project instead of the global OpenCode config:
 
@@ -214,8 +215,8 @@ The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plug
 | `vvoc install` | Non-interactive setup and scaffolding |
 | `vvoc sync` | Refresh runtime/TUI plugin entries, agents, prompts, skills, config |
 | `vvoc launch` | Launch OpenCode with deterministic runtime, TUI, and vvoc config sources |
-| `vvoc status` | Show current installation state, including TUI config registration |
-| `vvoc doctor` | Diagnose runtime/TUI/vvoc setup problems (exits non-zero on issues) |
+| `vvoc status` | Show current installation state, including OpenCode version compatibility and TUI registration |
+| `vvoc doctor` | Diagnose OpenCode version/runtime/TUI/vvoc setup problems (exits non-zero on issues) |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
 | `vvoc role list\|set\|unset` | Manage model role assignments |
 | `vvoc preset list\|show\|<name>` | Inspect or apply named presets |
@@ -356,9 +357,9 @@ Session handoff notes   → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xm
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`. The current config contract is strict: `vvoc.json` must be canonical version 3 and include required sections such as `plugins`. Existing v1/v2/pre-role, incomplete, malformed, or otherwise invalid config files fail instead of being migrated or repaired. `vvoc install` and `vvoc sync` may create a fresh canonical config when no config exists, but they refuse to rewrite an invalid existing `vvoc.json`; fix the file manually and rerun `vvoc sync`.
 
-`vvoc install`, `vvoc init`, and `vvoc sync` conservatively add `@osovv/vv-opencode/tui` to dedicated `tui.json(c)`. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
+`vvoc install`, `vvoc init`, and `vvoc sync` conservatively add the pinned base package specifier (for example `@osovv/vv-opencode@1.1.2`) to dedicated `tui.json(c)`; OpenCode then selects the package's public `./tui` export. Sync migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
 
-`vvoc status` and `vvoc doctor` are diagnostic exceptions: they report the selected runtime, TUI, and vvoc config paths and validation problems without normalizing or rewriting the files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; in that case it reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config manually before rerunning `vvoc sync`.
+`vvoc status` and `vvoc doctor` are diagnostic exceptions: they report the installed OpenCode version, the `1.18.2` TUI minimum, selected runtime/TUI/vvoc config paths, and validation problems without normalizing or rewriting the files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; in that case it reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config manually before rerunning `vvoc sync`.
 
 Runtime compatibility is current-only. Guardian permission replies use the current OpenCode permission reply path (with the current HTTP reply fallback), Hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
 

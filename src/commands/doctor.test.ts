@@ -1,8 +1,8 @@
 // FILE: src/commands/doctor.test.ts
 // VERSION: 0.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify doctor command TUI-aware, role-aware diagnostics, invalid config reporting, and failure signaling.
-//   SCOPE: TUI source/registration reporting, canonical role inventory output, unresolved role-reference problem reporting, invalid config diagnostics, and non-zero exit behavior.
+//   PURPOSE: Verify doctor command TUI-aware, OpenCode-compatible, role-aware diagnostics, invalid config reporting, and failure signaling.
+//   SCOPE: OpenCode version compatibility, TUI source/registration reporting, canonical role inventory output, unresolved role-reference problem reporting, invalid config diagnostics, and non-zero exit behavior.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/doctor.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS, V-M-CLI-COMMANDS]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.2 - Added OpenCode host compatibility diagnostic coverage.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added managed TUI source, parse, and registration diagnostic coverage.]
 //   LAST_CHANGE: [v0.2.0 - Added invalid vvoc config doctor diagnostics without mutation coverage.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
@@ -78,6 +79,8 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     expect(stdout).toContain("Roles:");
     expect(stdout).toContain(`OpenCode TUI source: project ${paths.opencodeTuiConfigPath}`);
     expect(stdout).toContain("OpenCode TUI config parse: ok");
+    expect(stdout).toContain("OpenCode version:");
+    expect(stdout).toContain("OpenCode TUI minimum: 1.18.2");
     expect(stdout).toContain("TUI package configured: yes");
     expect(stderr).toContain("Problems:");
     expect(stderr).toContain(

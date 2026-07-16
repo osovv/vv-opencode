@@ -184,7 +184,7 @@
     <Constraint>vvoc-managed config may be global under $XDG_CONFIG_HOME/vvoc/ or project-local under .vvoc/, depending on selected scope and command semantics.</Constraint>
     <Constraint>Project-scope writes must stay inside project-local .opencode/ and .vvoc/ paths.</Constraint>
     <Constraint>Dedicated OpenCode TUI config uses tui.json(c); project scope stores it inside .opencode and conservative mutation preserves unrelated settings and plugin tuple options.</Constraint>
-    <Constraint>The public TUI entry targets OpenCode 1.18.2 or newer and is registered explicitly through tui.json(c).</Constraint>
+    <Constraint>The public TUI entry targets OpenCode 1.18.2 or newer; tui.json(c) registers the pinned base package specifier and OpenCode selects its ./tui export.</Constraint>
     <Constraint>Persisted vvoc data must live under $XDG_DATA_HOME/vvoc/.</Constraint>
     <Constraint>Config writes must be conservative, idempotent, and strict about current schema validity before mutation.</Constraint>
     <Constraint>Role resolution must fail loudly for unknown or invalid semantic role references.</Constraint>

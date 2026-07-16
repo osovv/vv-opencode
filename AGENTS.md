@@ -218,8 +218,9 @@ File-local reference:
 - Canonical `vvoc.json` is strict schema v3. Invalid or old existing config must fail
   loudly instead of being silently migrated or repaired.
 - `vvoc install` must keep a pinned package specifier in the OpenCode plugin array.
-- `vvoc install`, `init`, and `sync` must keep `@osovv/vv-opencode/tui` in the TUI plugin
-  array without removing comments, unrelated settings, plugin entries, or tuple options.
+- `vvoc install`, `init`, and `sync` must keep the current pinned base package specifier in
+  the TUI plugin array so OpenCode selects its `./tui` export, migrating legacy `/tui` specs
+  without removing comments, unrelated settings, plugin entries, or tuple options.
 - Runtime plugins share the startup config snapshot; config changes require an OpenCode
   restart rather than live reload behavior.
 

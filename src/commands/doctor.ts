@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Diagnose vv-opencode installation problems and surface actionable failures.
-//   SCOPE: Read-scope parsing, layered source-aware installation inspection, warning/problem reporting, and non-zero exit signaling for OpenCode runtime/TUI plus vvoc config.
+//   SCOPE: Read-scope parsing, layered source-aware installation inspection, OpenCode host compatibility, warning/problem reporting, and non-zero exit signaling for OpenCode runtime/TUI plus vvoc config.
 //   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.1.2 - Added installed OpenCode version and managed TUI compatibility diagnostics.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TUI source, parse, plugin inventory, and registration diagnostics.]
 //   LAST_CHANGE: [v0.5.0 - Added global/project/effective diagnostic scopes with selected source reporting.]
 //   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output while keeping unresolved role-reference failures in Problems diagnostics.]
@@ -55,6 +56,11 @@ export default defineCommand({
     );
     console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
+    );
+    console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
+    console.log(`OpenCode TUI minimum: ${inspection.runtime.minimumTuiVersion}`);
+    console.log(
+      `OpenCode TUI compatible: ${inspection.runtime.tuiCompatible === undefined ? "unknown" : inspection.runtime.tuiCompatible ? "yes" : "no"}`,
     );
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(

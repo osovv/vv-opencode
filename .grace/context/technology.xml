@@ -98,7 +98,7 @@
     <Constraint>Use Bun commands for local project checks and bunx for grace-cli.</Constraint>
     <Constraint>Do not edit generated dist output manually.</Constraint>
     <Constraint>Root package exports and plugin subpath exports must stay valid unless an explicit breaking change is approved.</Constraint>
-    <Constraint>OpenCode TUI integration requires OpenCode 1.18.2 or newer and must use a default TuiPluginModule export registered in tui.json(c).</Constraint>
+    <Constraint>OpenCode TUI integration requires OpenCode 1.18.2 or newer and a default TuiPluginModule export selected from the pinned base package registered in tui.json(c).</Constraint>
     <Constraint>Publishing remains manual from terminal with npm publish; normal branch pushes must not publish the package.</Constraint>
     <Constraint>README, .grace/graph, and .grace/verification must be updated with behavior, public API, setup, command, flow, or verification changes as applicable.</Constraint>
   </OperationalConstraints>
