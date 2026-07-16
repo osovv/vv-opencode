@@ -1,3 +1,11 @@
+## <small>1.1.1 (2026-07-16)</small>
+
+### Summary
+
+This release introduces a new `/context` TUI command that gives users real-time visibility into their OpenCode session's context usage directly within the editor interface. The feature displays the latest provider-reported token consumption alongside a clearly labeled, approximate breakdown of observable context contributors—such as system instructions, loaded skills, tool schemas, conversation messages, files, and compaction summaries—without claiming exact provider attribution. It also surfaces MCP server statuses and reports estimation drift when visible estimates exceed measured usage. The plugin is enabled by default and can be toggled via `vvoc plugin`. The installation, sync, launch, status, and doctor commands now also manage a dedicated TUI configuration file (`tui.json` / `tui.jsonc`) conservatively, preserving unrelated settings and existing plugin entries. Package dependencies have been updated to OpenCode 1.18.2 and OpenTUI 0.4.3 to support the modern TUI plugin API, and a new `@osovv/vv-opencode/tui` package subpath is published for consumers.
+
+* feat(tui): add context usage inspector ([328ed9f](https://github.com/osovv/vv-opencode/commit/328ed9f))
+
 ## 1.1.0 (2026-07-11)
 
 ### Summary

@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A curated, opinionated set of OpenCode plugins for spec-first, review-driven, safer agentic development.",
   "type": "module",
   "main": "./dist/index.js",
