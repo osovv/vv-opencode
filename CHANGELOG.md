@@ -1,3 +1,11 @@
+## <small>1.1.2 (2026-07-16)</small>
+
+### Summary
+
+This release fixes the TUI plugin registration to use the pinned base package specifier instead of the legacy `/tui` subpath, ensuring OpenCode correctly selects the managed `./tui` export. Existing installations with the old subpath are automatically migrated during sync. Additionally, `vvoc status` and `vvoc doctor` now report the installed OpenCode version and check whether it meets the minimum 1.18.2 requirement for TUI compatibility, making it easier to diagnose host version issues.
+
+* fix(tui): register pinned package entry ([55920a2](https://github.com/osovv/vv-opencode/commit/55920a2))
+
 ## <small>1.1.1 (2026-07-16)</small>
 
 ### Summary
