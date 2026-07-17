@@ -14,7 +14,7 @@ on:
 
 permissions:
   id-token: write
-  contents: write
+  contents: read
 
 concurrency:
   group: publish-${{ inputs.version }}
@@ -71,7 +71,6 @@ jobs:
           fi
 
           echo "version=${PKG_VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "Release request verified for ${TAG} at ${CURRENT_SHA}"
 
       - name: Install dependencies
@@ -117,45 +116,3 @@ jobs:
           else
             npm publish --access public --provenance
           fi
-
-      - name: Create and push release tag
-        env:
-          TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          CURRENT_SHA="$(git rev-parse HEAD)"
-          git fetch --force --tags origin
-
-          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
-            TAG_SHA="$(git rev-list -n 1 "${TAG}")"
-            if [ "${TAG_SHA}" != "${CURRENT_SHA}" ]; then
-              echo "Existing tag ${TAG} points to ${TAG_SHA}, expected ${CURRENT_SHA}"
-              exit 1
-            fi
-            echo "Tag ${TAG} already points to ${CURRENT_SHA}; skipping tag push"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "${TAG}" -m "${TAG}"
-            git push origin "${TAG}"
-          fi
-
-      - name: Extract changelog entry for release
-        id: changelog
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          awk -v ver="$VERSION" '
-            $0 ~ "^## " && $0 ~ ver { found=1; print; next }
-            found && /^## / { exit }
-            found { print }
-          ' CHANGELOG.md > /tmp/release-body.md
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          body_path: /tmp/release-body.md
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

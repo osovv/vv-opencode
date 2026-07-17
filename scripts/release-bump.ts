@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
-// VERSION: 1.2.0
+// VERSION: 1.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Prepare and push an exact-SHA release commit, then dispatch the CI workflow that gates npm publication and tag creation behind successful verification.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, pushes the current branch, and dispatches publish.yml with the release version and commit SHA without creating a local tag.
+//   PURPOSE: Prepare and push an exact-SHA release commit, wait for CI-gated npm publication, then create the annotated tag and GitHub Release with the authenticated local user.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, pushes the current branch, dispatches publish.yml with the release version and commit SHA, waits for CI success, retries npm metadata and verifies gitHead, then creates and pushes the annotated tag plus GitHub Release locally.
 //   DEPENDS: [node:fs, node:child_process, gh CLI, scripts/release-summary.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
@@ -15,6 +15,7 @@
 //   readPackageVersion - Reads the package version from package.json.
 //   run - Runs a command via execFileSync with inherited stdio and exits on failure.
 //   runCapture - Runs a command and captures stdout as a string.
+//   runCaptureRetryable - Captures stdout while surfacing command failures to bounded retry logic.
 //   runOpencodeSummary - Invokes opencode --pure run with stdin prompt for one summary attempt.
 //   sleepMs - Blocks synchronously for the given milliseconds between retry attempts.
 //   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
@@ -23,11 +24,17 @@
 //   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, and CHANGELOG changes before commit.
 //   assertTagDoesNotExist - Verifies the release tag does not already exist.
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
-//   dispatchVerifiedPublishWorkflow - Pushes only the release commit branch and dispatches publish.yml with exact version/SHA inputs.
-//   main - Runs the guarded release bump, changelog generation, mandatory AI summary generation, consistency check, commit, branch push, and CI dispatch flow.
+//   dispatchVerifiedPublishWorkflow - Pushes only the release commit branch and returns the exact-SHA publish workflow run URL.
+//   parseWorkflowRunId - Extracts a GitHub Actions run ID from gh workflow run output.
+//   waitForPublishWorkflow - Waits for the exact workflow run and fails closed unless it succeeds.
+//   extractReleaseChangelogEntry - Extracts one version block for GitHub Release notes.
+//   finalizePublishedRelease - Retries npm gitHead propagation, then creates and pushes the local annotated tag and GitHub Release.
+//   main - Runs the guarded release bump through CI publication and authenticated local release finalization.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [DIRECT-FIX - Added bounded npm metadata retry before post-CI tag finalization.]
+//   LAST_CHANGE: [DIRECT-FIX - Finalized tags and GitHub Releases locally after CI because GITHUB_TOKEN cannot tag commits containing workflow changes.]
 //   LAST_CHANGE: [DIRECT-FIX - Moved tag creation and npm publication behind exact-SHA CI verification instead of pushing a tag before tests.]
 //   LAST_CHANGE: [v1.1.0 - Updated for full per-commit diff context in release summaries plus mandatory summary generation.]
 // END_CHANGE_SUMMARY
@@ -53,6 +60,7 @@ const CHANGELOG_PATH = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url)
 const PACKAGE_NAME = "@osovv/vv-opencode";
 const ALLOWED_RELEASE_FILES = new Set(["package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"]);
 const CAPTURE_MAX_BUFFER = 128 * 1024 * 1024;
+const PUBLISHED_METADATA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
 const RELEASE_TYPES = new Set([
   "major",
   "minor",
@@ -79,10 +87,19 @@ export type ReleaseCommandRunner = (
   failureMessage: string,
 ) => string;
 
+export type ReleaseSleeper = (milliseconds: number) => void;
+
 export interface ReleaseWorkflowDispatchInput {
   branchName: string;
   version: string;
   commitSha: string;
+}
+
+export interface PublishedReleaseFinalizationInput {
+  version: string;
+  commitSha: string;
+  tagName: string;
+  changelogText: string;
 }
 
 function gitStatus(): string {
@@ -156,6 +173,15 @@ function runCapture(command: string, args: string[], failureMessage: string): st
     process.exit(1);
   }
 }
+
+function runCaptureRetryable(command: string, args: string[], failureMessage: string): string {
+  try {
+    return execFileSync(command, args, { encoding: "utf8", maxBuffer: CAPTURE_MAX_BUFFER });
+  } catch (err) {
+    throw new Error(`${failureMessage} ${String(err)}`);
+  }
+}
+
 /** Runs opencode for one release summary attempt using stdin and JSONL output. */
 function runOpencodeSummary(request: OpencodeRunRequest): OpencodeRunResult {
   const result = spawnSync(
@@ -300,13 +326,14 @@ function getCurrentBranchName(): string {
 export function dispatchVerifiedPublishWorkflow(
   input: ReleaseWorkflowDispatchInput,
   execute: ReleaseCommandRunner = run,
-): void {
+  capture: ReleaseCommandRunner = runCapture,
+): string {
   execute(
     "git",
     ["push", "origin", input.branchName],
     `git push origin ${input.branchName} failed. The release commit exists locally but CI was not dispatched.`,
   );
-  execute(
+  const workflowOutput = capture(
     "gh",
     [
       "workflow",
@@ -320,6 +347,99 @@ export function dispatchVerifiedPublishWorkflow(
       `commit_sha=${input.commitSha}`,
     ],
     `Failed to dispatch publish.yml. Retry with: gh workflow run publish.yml --ref ${input.branchName} -f version=${input.version} -f commit_sha=${input.commitSha}`,
+  );
+  const normalized = workflowOutput.trim();
+  if (normalized) console.log(normalized);
+  return normalized;
+}
+
+export function parseWorkflowRunId(workflowOutput: string): string {
+  const match = workflowOutput.match(/\/actions\/runs\/(\d+)(?:\b|\/|$)/);
+  if (!match?.[1]) {
+    throw new Error(`Could not determine GitHub Actions run ID from: ${workflowOutput || "<empty output>"}`);
+  }
+  return match[1];
+}
+
+export function waitForPublishWorkflow(
+  workflowRunId: string,
+  execute: ReleaseCommandRunner = run,
+): void {
+  execute(
+    "gh",
+    ["run", "watch", workflowRunId, "--exit-status"],
+    `Failed to watch publish.yml run ${workflowRunId}. CI may have failed or the local gh authentication may not support run watch; inspect it with: gh run view ${workflowRunId}. No release tag was created.`,
+  );
+}
+
+export function extractReleaseChangelogEntry(changelogText: string, version: string): string {
+  const lines = changelogText.split(/\r?\n/);
+  const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const releaseHeader = new RegExp(
+    `^##\\s+(?:<small>)?\\[?${escapedVersion}\\]?(?=\\s|\\(|<|$)`,
+  );
+  const start = lines.findIndex((line) => releaseHeader.test(line));
+  if (start < 0) throw new Error(`CHANGELOG.md has no release entry for ${version}.`);
+
+  const nextHeaderOffset = lines.slice(start + 1).findIndex((line) => line.startsWith("## "));
+  const end = nextHeaderOffset < 0 ? lines.length : start + 1 + nextHeaderOffset;
+  return lines.slice(start, end).join("\n").trim();
+}
+
+export function finalizePublishedRelease(
+  input: PublishedReleaseFinalizationInput,
+  execute: ReleaseCommandRunner = run,
+  capture: ReleaseCommandRunner = runCaptureRetryable,
+  sleep: ReleaseSleeper = sleepMs,
+): void {
+  let publishedSha = "";
+  let lastCaptureError: unknown;
+  for (let attempt = 0; attempt <= PUBLISHED_METADATA_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      publishedSha = capture(
+        "npm",
+        ["view", `${PACKAGE_NAME}@${input.version}`, "gitHead"],
+        `Failed to verify ${PACKAGE_NAME}@${input.version} after CI publication.`,
+      ).trim();
+      lastCaptureError = undefined;
+    } catch (error) {
+      publishedSha = "";
+      lastCaptureError = error;
+    }
+
+    if (publishedSha) break;
+    const retryDelayMs = PUBLISHED_METADATA_RETRY_DELAYS_MS[attempt];
+    if (retryDelayMs === undefined) {
+      const detail = lastCaptureError ? ` Last error: ${String(lastCaptureError)}` : "";
+      throw new Error(
+        `${PACKAGE_NAME}@${input.version} did not expose gitHead after ${attempt + 1} attempts.${detail}`,
+      );
+    }
+    console.log(`npm metadata is not available yet; retrying in ${retryDelayMs / 1_000}s...`);
+    sleep(retryDelayMs);
+  }
+
+  if (publishedSha !== input.commitSha) {
+    throw new Error(
+      `${PACKAGE_NAME}@${input.version} gitHead is ${publishedSha || "missing"}, expected ${input.commitSha}.`,
+    );
+  }
+
+  const releaseNotes = extractReleaseChangelogEntry(input.changelogText, input.version);
+  execute(
+    "git",
+    ["tag", "-a", "-m", input.tagName, input.tagName, input.commitSha],
+    `Failed to create local annotated tag ${input.tagName} after successful publication.`,
+  );
+  execute(
+    "git",
+    ["push", "origin", input.tagName],
+    `Failed to push ${input.tagName}. The package is published and the tag exists locally.`,
+  );
+  execute(
+    "gh",
+    ["release", "create", input.tagName, "--verify-tag", "--title", input.tagName, "--notes", releaseNotes],
+    `Failed to create GitHub Release ${input.tagName}. The package and tag already exist.`,
   );
 }
 
@@ -409,20 +529,43 @@ function main(): void {
 
   // START_BLOCK_PUSH_AND_DISPATCH
   console.log("\nPushing release commit and dispatching verified publish workflow...\n");
-  dispatchVerifiedPublishWorkflow({
+  const workflowOutput = dispatchVerifiedPublishWorkflow({
     branchName,
     version: newVersion,
     commitSha: releaseCommitSha,
   });
+  let workflowRunId: string;
+  try {
+    workflowRunId = parseWorkflowRunId(workflowOutput);
+  } catch (error) {
+    console.error(`\n✗ ${String(error)}`);
+    console.error("  The release commit was pushed, but automatic CI monitoring could not start.");
+    process.exit(1);
+  }
+
+  console.log(`\nWaiting for publish workflow run ${workflowRunId}...\n`);
+  waitForPublishWorkflow(workflowRunId);
   // END_BLOCK_PUSH_AND_DISPATCH
 
-  console.log(`\n✓ Release candidate ${tagName} committed, pushed, and dispatched to CI.\n`);
+  // START_BLOCK_FINALIZE_RELEASE
+  console.log("\nCI publication succeeded. Creating tag and GitHub Release locally...\n");
+  try {
+    finalizePublishedRelease({
+      version: newVersion,
+      commitSha: releaseCommitSha,
+      tagName,
+      changelogText: readFileSync(CHANGELOG_PATH, "utf8"),
+    });
+  } catch (error) {
+    console.error(`\n✗ Release finalization failed: ${String(error)}`);
+    process.exit(1);
+  }
+  // END_BLOCK_FINALIZE_RELEASE
+
+  console.log(`\n✓ Release ${tagName} published, tagged, and released.\n`);
   console.log(`  Git SHA: ${releaseCommitSha}`);
   console.log(`  Branch: ${branchName}`);
-  console.log(`  Pending tag: ${tagName}`);
-  console.log(
-    "  npm publication and tag creation will occur only after publish.yml passes all gates.\n",
-  );
+  console.log(`  Tag: ${tagName}\n`);
 }
 
 if (import.meta.main) main();

@@ -486,22 +486,28 @@ This will:
 7. Create a release commit without creating a tag
 8. Push only the current branch to `origin`
 9. Dispatch `publish.yml` through `gh` with the exact package version and release commit SHA
+10. Wait for the dispatched CI run to finish successfully
+11. Retry npm metadata propagation, then verify that npm reports the exact release commit as the published `gitHead`
+12. Create and push the annotated tag locally, then create the GitHub Release through `gh`
 
 Required local release prerequisite:
 - `opencode` must be available from `PATH`.
-- `gh` must be installed and authenticated with permission to dispatch workflows in the repository.
+- `gh` must be installed and authenticated with permission to dispatch/watch workflows and create releases in the repository.
+- `gh run watch` does not support fine-grained PAT authentication; use a supported `gh` login such as OAuth or a classic token.
 - The summary model defaults to `deepseek/deepseek-v4-flash`.
 - Override with `VVOC_RELEASE_SUMMARY_MODEL=provider/model`.
 - Override the per-attempt timeout with `VVOC_RELEASE_SUMMARY_TIMEOUT_MS=120000`.
-Run `release:bump` from a checked-out branch with push access to `origin`. A normal branch push never publishes by itself; the wrapper explicitly dispatches the workflow for the exact pushed commit.
+Run `release:bump` from a checked-out branch with branch and tag push access to `origin`. A normal branch push never publishes by itself; the wrapper explicitly dispatches the workflow for the exact pushed commit.
 
 The GitHub Actions workflow checks out the requested commit SHA, verifies that its
 `package.json` version matches the dispatch input, and runs full validation
 (typecheck, lint, fmt check, tests, build, pack check, and `release:check`). Only
-after every gate passes does it publish to npm with provenance, create and push the
-annotated `vX.Y.Z` tag, and create the GitHub Release. A safe rerun accepts an
-already-published version only when its npm `gitHead` matches the exact requested
-commit, allowing tag or GitHub Release recovery without publishing different bytes.
+after every gate passes does it publish to npm with provenance. The local wrapper
+waits for that CI result, retries registry metadata propagation, verifies npm
+`gitHead`, and only then uses the maintainer's authenticated `git` and `gh` clients
+to create the annotated `vX.Y.Z` tag and GitHub Release. This avoids GitHub App
+token restrictions on tagging commits that contain workflow changes while preserving
+verification-before-tagging.
 
 ### Checking consistency manually
 
@@ -514,7 +520,7 @@ config format version are all consistent. Run it independently anytime.
 
 ### CI publish workflow
 
-The workflow uses npm provenance/trusted publishing (`id-token: write`) and can only publish through an explicit `workflow_dispatch` request. Normal branch and tag pushes do not publish. Configure npm trusted publishing for this GitHub repository/package, or adapt the publish step to use an `NPM_TOKEN` secret if token-based publishing is required.
+The workflow uses npm provenance/trusted publishing (`id-token: write`) and read-only repository contents access. It can only publish through an explicit `workflow_dispatch` request; normal branch and tag pushes do not publish. Tag and GitHub Release creation happen locally only after the workflow succeeds. Configure npm trusted publishing for this GitHub repository/package, or adapt the publish step to use an `NPM_TOKEN` secret if token-based publishing is required.
 
 ---
 

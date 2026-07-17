@@ -62,7 +62,7 @@
     <Script name="check">Runs typecheck, lint, fmt:check, and tests.</Script>
     <Script name="pack:check">Builds dist, verifies root, server plugin, and default TUI subpath exports by importing generated files, then runs npm pack --dry-run.</Script>
     <Script name="release:check">Runs scripts/release-check.ts to validate package identity, package version, hosted schema id, schema config const, changelog presence, and latest changelog summary.</Script>
-    <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, create and push the release commit, then dispatch publish.yml with exact version/SHA inputs without creating a local tag.</Script>
+    <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, create and push the release commit, dispatch and wait for exact-SHA CI publication, retry npm metadata and verify gitHead, then create the annotated tag and GitHub Release locally.</Script>
     <Script name="prepare">Installs lefthook hooks.</Script>
   </Scripts>
   <TestingStack>

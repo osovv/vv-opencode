@@ -35,11 +35,11 @@
   </ReleaseGates>
   <Publishing>
     <Policy>Publishing is exact-commit and CI-gated through an explicit publish.yml workflow dispatch; normal branch and tag pushes never publish.</Policy>
-    <Workflow>.github/workflows/publish.yml checks out the requested release SHA, verifies version and existing tag/package identity, runs release consistency, typecheck, lint, format, tests, and pack checks, publishes to npm, then creates the annotated tag and GitHub Release.</Workflow>
-    <LocalBump>bun run release:bump wraps npm version, AI changelog summary generation, schema id patching, release checks, release commit creation, branch-only push, and publish.yml dispatch with exact version/SHA inputs; it never creates or pushes the release tag locally.</LocalBump>
+    <Workflow>.github/workflows/publish.yml checks out the requested release SHA, verifies version and existing tag/package identity, runs release consistency, typecheck, lint, format, tests, and pack checks, then publishes to npm with read-only repository contents access.</Workflow>
+    <LocalBump>bun run release:bump wraps npm version, AI changelog summary generation, schema id patching, release checks, release commit creation, branch-only push, publish.yml dispatch with exact version/SHA inputs, CI waiting, bounded npm metadata retry and gitHead verification, then authenticated local annotated-tag push and GitHub Release creation.</LocalBump>
     <TrustedPublishing>The workflow uses npm provenance/trusted publishing through id-token permissions.</TrustedPublishing>
     <NormalPushes>Normal branch pushes must not publish the package.</NormalPushes>
-    <Recovery>A rerun may skip npm publication only when the existing package version gitHead matches the exact requested release SHA, then safely recover tag or GitHub Release creation.</Recovery>
+    <Recovery>A rerun may skip npm publication only when the existing package version gitHead matches the exact requested release SHA; missing tag or GitHub Release finalization is recovered with the maintainer's authenticated local git and gh clients.</Recovery>
   </Publishing>
   <Rollback>
     <Expectation>Package rollback is managed by npm version selection and by rerunning vvoc sync or fixing vvoc.json manually when strict config validation blocks mutation.</Expectation>
