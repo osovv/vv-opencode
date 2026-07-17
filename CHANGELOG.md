@@ -1,3 +1,12 @@
+## <small>1.1.6 (2026-07-17)</small>
+
+### Summary
+
+This release hardens the release automation pipeline by fixing tag identity configuration in CI and moving tag and GitHub Release finalization to the authenticated local process after successful npm publication. Previously, the CI workflow attempted to create release tags using the GITHUB_TOKEN, which cannot tag commits containing workflow changes; now the local release wrapper waits for CI to publish the package, retries npm metadata propagation to verify the published gitHead matches the exact release commit, and only then creates the annotated tag and GitHub Release using the maintainer's authenticated git and gh clients. This ensures verification-before-tagging while avoiding GitHub App token restrictions, and uses bounded retries with exponential backoff to handle delayed npm metadata propagation.
+
+* fix(release): configure CI tag identity ([cae54af](https://github.com/osovv/vv-opencode/commit/cae54af))
+* fix(release): finalize tags after CI publication ([707170e](https://github.com/osovv/vv-opencode/commit/707170e))
+
 ## <small>1.1.5 (2026-07-16)</small>
 
 ### Summary
