@@ -1,5 +1,5 @@
 // FILE: src/commands/sync.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep OpenCode runtime/TUI plugin specifiers current.
 //   SCOPE: Scope parsing, path resolution, pinned runtime/TUI plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added a preflight readVvocConfig validation so an invalid existing vvoc.json fails loudly before any sync mutation instead of after a partial write.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Synchronized the managed TUI subpath in dedicated tui.json(c).]
 //   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink sync for project-scope sync.]
 //   LAST_CHANGE: [v0.5.0 - Added managed skill file sync during vvoc sync.]
@@ -28,6 +29,7 @@ import {
   ensurePackageInstalled,
   ensureTuiPackageInstalled,
   resolvePaths,
+  readVvocConfig,
   syncManagedAgentPrompts,
   syncManagedAgentRegistrations,
   syncVvocConfig,
@@ -65,6 +67,10 @@ export default defineCommand({
       cwd: process.cwd(),
       configDir,
     });
+    // Preflight: strictly validate any existing vvoc.json before mutating
+    // anything, so an invalid config fails loudly up front instead of after a
+    // partial sync.
+    await readVvocConfig(paths);
     const opencode = await ensurePackageInstalled(paths);
     const tui = await ensureTuiPackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);

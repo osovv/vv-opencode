@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow/state.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, and collect-all review rounds.
 //   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, close gating, and review-round helpers.
@@ -35,6 +35,7 @@
 //   createWorkItemStore - Creates a new scoped in-memory work-item store.
 //   openWorkItem - Creates or returns an existing work item by idempotency key.
 //   beginTrackedLaunch - Validates tracked launch and marks reviewers in flight.
+//   revertReviewerLaunch - Reverts an in-flight reviewer launch back to pending after a failed tracked result.
 //   applyTrackedResult - Applies parsed tracked output and aggregates review rounds.
 //   getWorkItem - Retrieves a work item by ID.
 //   listWorkItems - Lists session work items with optional closed inclusion.
@@ -43,6 +44,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Added revertReviewerLaunch so a failed tracked result returns an in-flight reviewer to pending instead of stranding the work item in REVIEWER_ALREADY_IN_FLIGHT.]
 //   LAST_CHANGE: [v0.3.1 - Added bounded result excerpts to implementer hard-stop state and reviewer round results.]
 //   LAST_CHANGE: [v0.3.0 - Replaced inferred sequential reviewer states with explicit work-item mode, reviewer intent, in-flight tracking, and collect-all review-round aggregation.]
 //   LAST_CHANGE: [v0.2.0 - Allowed fresh review-only work items to transition directly from reviewer outcomes.]
@@ -236,6 +238,11 @@ export type WorkItemStore = {
   ) => number;
   /** Expose internal store data for persistence snapshotting. */
   getStoreData: () => WorkItemStoreData;
+  revertReviewerLaunch: (input: {
+    sessionId: string;
+    workItemId: string;
+    agent: TrackedAgentName;
+  }) => { ok: boolean };
 };
 
 function createRecordLookupKey(sessionId: string, workItemId: string): string {
@@ -622,6 +629,34 @@ function beginTrackedLaunchInStore(
   };
 }
 
+function revertReviewerLaunchInStore(
+  store: WorkItemStoreData,
+  input: { sessionId: string; workItemId: string; agent: TrackedAgentName },
+): { ok: boolean } {
+  const lookupKey = createRecordLookupKey(input.sessionId, input.workItemId);
+  const existing = store.records.get(lookupKey);
+  if (!existing) return { ok: false };
+  const role = getReviewerRoleForAgent(input.agent);
+  if (!role) return { ok: false };
+  const round = existing.currentRound;
+  if (!round || round.status !== "active") return { ok: false };
+  if (!round.inFlightReviewers.includes(role)) return { ok: false };
+  const updatedRound: ReviewRound = {
+    ...round,
+    inFlightReviewers: round.inFlightReviewers.filter((reviewer) => reviewer !== role),
+    pendingReviewers: [...round.pendingReviewers, role].sort((left, right) => {
+      if (left === right) return 0;
+      return left === "spec" ? -1 : 1;
+    }),
+  };
+  store.records.set(lookupKey, {
+    ...existing,
+    currentRound: updatedRound,
+    updatedAt: toIsoNow(),
+  });
+  return { ok: true };
+}
+
 function applyImplementerResult(
   existing: WorkItemRecord,
   result: ParsedResultBlock,
@@ -843,6 +878,7 @@ export function createWorkItemStore(hydrateData?: WorkItemStoreData | null): Wor
     closeWorkItem: (sessionId, workItemId) => closeWorkItemInStore(data, sessionId, workItemId),
     getReviewRound,
     getStoreData: () => data,
+    revertReviewerLaunch: (input) => revertReviewerLaunchInStore(data, input),
   };
 }
 
@@ -869,6 +905,20 @@ export function beginTrackedLaunch(
   input: { sessionId: string; workItemId: string; agent: TrackedAgentName },
 ): BeginTrackedLaunchResult {
   return store.beginTrackedLaunch(input);
+}
+
+// START_CONTRACT: revertReviewerLaunch
+//   PURPOSE: Revert an in-flight reviewer launch back to pending after a failed tracked result.
+//   INPUTS: { store: WorkItemStore - backing store, input: { sessionId, workItemId, agent } - launch to revert }
+//   OUTPUTS: { { ok: boolean } - whether an in-flight reviewer launch was reverted }
+//   SIDE_EFFECTS: [Mutates in-memory work-item store for reviewer launches]
+//   LINKS: [M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS]
+// END_CONTRACT: revertReviewerLaunch
+export function revertReviewerLaunch(
+  store: WorkItemStore,
+  input: { sessionId: string; workItemId: string; agent: TrackedAgentName },
+): { ok: boolean } {
+  return store.revertReviewerLaunch(input);
 }
 
 // START_CONTRACT: applyTrackedResult

@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.4.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output with context-anchored hash references.
 //   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, file mutation execution, and success metadata emission.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Hardened rename: path-equivalent source/target are detected via resolve() to avoid write-then-delete data loss, and an existing rename target is refused instead of being silently clobbered.]
 //   LAST_CHANGE: [v0.5.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
 //   LAST_CHANGE: [v0.4.0 - Read source snapshots are loaded only for eligible read output and only trusted when visible rows still match the file.]
 //   LAST_CHANGE: [v0.3.0 - Read output now uses the full file snapshot when available so partial and truncated reads emit edit-valid context anchors.]
@@ -21,6 +22,7 @@
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
+import { resolve } from "node:path";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
 import { computeAnchorHash, computeLineHash } from "./hash-computation.js";
@@ -403,14 +405,26 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
     }
 
     const writeContent = restoreFileText(canonicalNewContent, oldEnvelope);
+
+    // Resolve the rename target up front so path-equivalent strings (e.g.
+    // /tmp/a and /tmp/./a) are detected as the same file and never cause a
+    // write-then-delete data loss.
+    const sourcePath = resolve(filePath);
+    const targetPath = rename ? resolve(rename) : undefined;
+    const isMove = targetPath !== undefined && targetPath !== sourcePath;
+
+    if (isMove && (await Bun.file(targetPath!).exists())) {
+      return `Error: rename target already exists: ${rename}. Refusing to overwrite an existing file.`;
+    }
+
     await Bun.write(filePath, writeContent);
 
-    if (rename && rename !== filePath) {
-      await Bun.write(rename, writeContent);
+    if (isMove) {
+      await Bun.write(targetPath!, writeContent);
       await Bun.file(filePath).delete();
     }
 
-    const effectivePath = rename && rename !== filePath ? rename : filePath;
+    const effectivePath = isMove ? targetPath! : filePath;
     publishSuccessMetadata({
       context,
       filePath: effectivePath,
@@ -420,9 +434,7 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
       deduplicatedEdits: applyResult.deduplicatedEdits,
     });
 
-    return rename && rename !== filePath
-      ? `Moved ${filePath} to ${rename}`
-      : `Updated ${effectivePath}`;
+    return isMove ? `Moved ${filePath} to ${rename}` : `Updated ${effectivePath}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof HashlineMismatchError) {

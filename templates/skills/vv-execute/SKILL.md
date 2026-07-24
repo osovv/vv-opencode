@@ -182,22 +182,17 @@ The implementer writes code, runs tests, and returns a status. This controller v
 <step name="handle-status">
   <case name="done">
     Implementer returned DONE. Use task-file to verify files exist. Run the test command from the plan (if specified). Verify each acceptance criterion.
-    Optionally dispatch vv-spec-reviewer to confirm contract compliance.
-    If verification fails: re-dispatch implementer with failure details.
-    If verification passes: proceed to close.
+    If verification fails: re-dispatch implementer with failure details (the work item is still awaiting implementation).
+    If verification passes: proceed to the review step.
   </case>
   <case name="done-with-concerns">
-    Read the concerns before proceeding. If concerns are about correctness or scope, address them by updating the packet and re-dispatching. If they are observations (e.g. "file is getting large"), note them and proceed with verification as DONE.
+    Read the concerns before proceeding. If concerns are about correctness or scope, address them by updating the packet and re-dispatching the implementer. If they are observations (e.g. "file is getting large"), note them and proceed with verification as DONE, then to the review step.
   </case>
   <case name="needs-context">
-    The implementer lacked context. Provide the missing information in a revised packet and re-dispatch the SAME implementer type. Do not force them to proceed without the missing context.
+    NEEDS_CONTEXT is a hard stop. The runtime will not allow another tracked launch for this work item, so do NOT re-dispatch the implementer. Surface the preserved context (work_item_list shows the captured excerpt) to the user and require an explicit recovery decision — typically open a fresh work item with the missing context supplied.
   </case>
   <case name="blocked">
-    The implementer cannot complete the task. Assess:
-    1. Context problem → provide more context, re-dispatch
-    2. Task too complex for chosen model → re-dispatch with smarter model
-    3. Plan is wrong → escalate to the user
-    Never force the same model to retry without changes. If the implementer said it is stuck, something needs to change.
+    BLOCKED is a hard stop. The runtime will not allow another tracked launch for this work item, so do NOT re-dispatch the implementer. Escalate to the user with the captured blocker context and ask for a decision (a different approach, a different model via a fresh work item, or a plan change).
   </case>
 </step>
 
@@ -207,8 +202,18 @@ Run the acceptance criteria. For each criterion:
 - Does the test pass?
 - Did the implementer miss any edge cases?
 
-If all criteria pass → proceed to commit.
+If all criteria pass → proceed to review.
 If criteria fail → re-dispatch implementer with specific failure details.
+</step>
+
+<step name="review">
+A DONE implementer moves the work item to awaiting_reviews with a review round that requires EVERY role in requiredReviewers (spec and code). Dispatch and collect ALL required reviewers before closing:
+- Dispatch vv-spec-reviewer with the VVOC_WORK_ITEM_ID header and a spec-compliance packet.
+- Dispatch vv-code-reviewer with the VVOC_WORK_ITEM_ID header and the changed code/diff.
+Collect both results.
+- Both PASS → the work item becomes ready_to_close → proceed to commit.
+- Any FAIL → the work item returns to awaiting_implementer. Re-dispatch the implementer with the normalized reviewer findings, then repeat handle-status → verify → review (bounded by the runtime review-round limit).
+A reviewer returning NEEDS_CONTEXT is a hard stop: surface it to the user instead of re-dispatching.
 </step>
 
 <step name="commit">
@@ -236,7 +241,7 @@ If the commit fails (e.g. nothing to commit, hook rejection), report the failure
 </step>
 
 <step name="close">
-The task's changes are already committed. Mark the task complete in TodoWrite. Close the work item with work_item_close.
+The task's changes are committed and all required reviewers passed, so the work item is ready_to_close. Mark the task complete in TodoWrite. Close the work item with work_item_close.
 If all tasks are done → proceed to completion.
 Otherwise → move to the next task in dependency order.
 </step>

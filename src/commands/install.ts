@@ -1,5 +1,5 @@
 // FILE: src/commands/install.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Install vv-opencode into OpenCode runtime/TUI config and bootstrap the canonical vvoc.json config plus managed prompts.
 //   SCOPE: Scope parsing, path resolution, pinned runtime/TUI plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, and canonical vvoc config creation.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.0 - Added a preflight readVvocConfig validation so an invalid existing vvoc.json fails loudly before any install mutation instead of after a partial write.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Registered the managed TUI subpath during installation.]
 //   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink creation for project-scope installs.]
 //   LAST_CHANGE: [v0.5.0 - Added managed skill file install during vvoc install.]
@@ -30,6 +31,7 @@ import {
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
+  readVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
   type Scope,
@@ -65,6 +67,10 @@ export default defineCommand({
       cwd: process.cwd(),
       configDir,
     });
+    // Preflight: strictly validate any existing vvoc.json before mutating
+    // anything, so an invalid config fails loudly up front instead of after a
+    // partial install.
+    await readVvocConfig(paths);
     const opencode = await ensurePackageInstalled(paths);
     const tui = await ensureTuiPackageInstalled(paths);
     const managedAgents = await syncManagedAgentRegistrations(paths);

@@ -17,7 +17,6 @@
 //   PlaceholderEntry - Individual placeholder mapping entry.
 //   generateFallbackSecret - Generate fallback secret string.
 // END_MODULE_MAP
-// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]

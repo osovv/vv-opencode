@@ -2,7 +2,7 @@
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
-//   SCOPE: chat message redaction, assistant state redaction, text completion restore, and tool arg restore.
+//   SCOPE: chat message redaction, tool-part state redaction, text completion restore, and tool arg restore.
 //   DEPENDS: bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, index
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.3.0 - Replaced the invalid info.state fixture with a real ToolPart.state fixture so the regression test proves tool inputs/outputs/errors are redacted.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v1.2.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
 //   LAST_CHANGE: [v1.1.0 - Switched test fixtures to the canonical vvoc.json config file and ignored legacy local config files.]
@@ -125,33 +126,52 @@ describe("SecretsRedactionPlugin", () => {
     expect(reasoningPart.text).toMatch(PLACEHOLDER_PATTERN);
   });
 
-  test("redacts assistant state payloads before the LLM request", async () => {
+  test("redacts tool-part state payloads (inputs/outputs/errors) before the LLM request", async () => {
     const plugin = await createPlugin();
     const output = {
       messages: [
         {
-          info: {
-            role: "assistant",
-            state: {
-              input: { prompt: `input ${EMAIL}` },
-              output: { text: `output ${EMAIL}` },
-              error: { message: `error ${EMAIL}` },
-              raw: { payload: `raw ${EMAIL}` },
+          info: { role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "bash",
+              state: {
+                status: "completed",
+                input: { command: `echo ${EMAIL}` },
+                output: `result ${EMAIL}`,
+                title: "run",
+                metadata: { note: `meta ${EMAIL}` },
+              },
             },
-          },
-          parts: [],
+            {
+              type: "tool",
+              tool: "read",
+              state: {
+                status: "error",
+                input: { filePath: "/x" },
+                error: `failed ${EMAIL}`,
+              },
+            },
+          ],
         },
       ],
     };
 
     await plugin["experimental.chat.messages.transform"]?.({} as never, output as never);
 
-    const state = output.messages[0]!.info.state as Record<string, Record<string, string>>;
+    const completed = output.messages[0]!.parts[0] as {
+      state: { input: { command: string }; output: string; metadata: { note: string } };
+    };
+    const errored = output.messages[0]!.parts[1] as { state: { error: string } };
 
-    expect(state.input.prompt).toMatch(PLACEHOLDER_PATTERN);
-    expect(state.output.text).toMatch(PLACEHOLDER_PATTERN);
-    expect(state.error.message).toMatch(PLACEHOLDER_PATTERN);
-    expect(state.raw.payload).toMatch(PLACEHOLDER_PATTERN);
+    expect(completed.state.input.command).not.toContain(EMAIL);
+    expect(completed.state.input.command).toMatch(PLACEHOLDER_PATTERN);
+    expect(completed.state.output).not.toContain(EMAIL);
+    expect(completed.state.output).toMatch(PLACEHOLDER_PATTERN);
+    expect(completed.state.metadata.note).toMatch(PLACEHOLDER_PATTERN);
+    expect(errored.state.error).not.toContain(EMAIL);
+    expect(errored.state.error).toMatch(PLACEHOLDER_PATTERN);
   });
 
   test("restores placeholders in assistant text completion output", async () => {

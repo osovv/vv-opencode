@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.ts
-// VERSION: 1.0.0
+// VERSION: 1.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage OpenCode runtime/TUI config mutation, host compatibility diagnostics, provider patching, and scoped vvoc.json config files.
 //   SCOPE: Layer-aware path resolution, pinned runtime and TUI package writes, OpenCode version inspection, managed OpenCode defaults, local skills path registration, provider patching, managed prompts/skills, strict vvoc rendering, and source-aware installation inspection including orchestration.
@@ -64,6 +64,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.4.0 - Hardened ensureManagedSkillSymlink: a non-symlink at the managed path is treated as user-owned and skipped instead of unlinked, and an already-correct vvoc link is kept rather than recreated.]
 //   LAST_CHANGE: [v1.1.2 - Registered the pinned base package for TUI loading, migrated legacy subpath entries, and diagnosed incompatible OpenCode hosts.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conservative dedicated TUI config mutation, path resolution, and installation inspection.]
 //   LAST_CHANGE: [v1.3.0 - Removed old-name managed-agent and managed-command cleanup from syncManagedAgentRegistrations.]
@@ -85,8 +86,8 @@
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
-import { mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { lstat, mkdir, readFile, readlink, symlink, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 import {
   MANAGED_AGENT_PROMPT_NAMES,
   MANAGED_OPENCODE_AGENTS,
@@ -651,13 +652,23 @@ export async function ensureManagedSkillSymlink(configDir?: string): Promise<Wri
   // Create the OpenCode skills parent directory
   await mkdir(opencodeSkillsDir, { recursive: true });
 
-  // Track whether this is an update or first creation
+  // Never destroy a non-symlink at this path: a regular file or directory here
+  // is user-owned content, not a vvoc-managed link, and must not be clobbered.
   let wasStale = false;
   try {
+    const stats = await lstat(symlinkPath);
+    if (!stats.isSymbolicLink()) {
+      return { action: "skipped", path: symlinkPath };
+    }
+    if (resolve(await readlink(symlinkPath)) === resolve(globalSkillsDir)) {
+      // Already the current vvoc-managed link — nothing to do.
+      return { action: "kept", path: symlinkPath };
+    }
+    // A stale or foreign symlink: replace it with the current vvoc link.
     await unlink(symlinkPath);
     wasStale = true;
   } catch {
-    // Symlink did not exist — will be created fresh
+    // Path does not exist — will be created fresh.
   }
 
   // Create symlink: opencode/skills/vvoc -> vvoc/skills

@@ -1,10 +1,10 @@
 // FILE: src/plugins/secrets-redaction/engine.ts
-// VERSION: 1.1.0
+// VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Core redaction engine — performs find/replace of secrets with placeholders in text.
-//   SCOPE: text scanning, overlap resolution, match sorting, and replacement
+//   SCOPE: text scanning, overlap resolution, match sorting, zero-width match guard, and replacement
 //   DEPENDS: session, patterns
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -14,9 +14,9 @@
 //   Match - Regex match result.
 //   RedactResult - Overall redaction operation result.
 // END_MODULE_MAP
-// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.2.0 - Guarded the scan loop against zero-width regex matches (lookahead/anchor patterns) to prevent an infinite loop on user-configured patterns.]
 //   LAST_CHANGE: [v1.1.0 - Fixed overlap handling so first and wider earlier matches redact correctly instead of being skipped entirely.]
 // END_CHANGE_SUMMARY
 
@@ -49,6 +49,12 @@ function sortByPositionAsc(
     );
     let match: RegExpExecArray | null;
     while ((match = re.exec(text)) !== null) {
+      if (match[0].length === 0) {
+        // Zero-width match: advance manually to avoid an infinite loop; an
+        // empty match has nothing to redact, so skip it.
+        re.lastIndex += 1;
+        continue;
+      }
       allMatches.push({ rule, match: match as RegExpMatchArray });
     }
   }

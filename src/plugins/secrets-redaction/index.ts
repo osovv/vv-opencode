@@ -2,9 +2,9 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: OpenCode plugin that redacts secrets from messages before LLM requests and restores them after.
-//   SCOPE: Startup vvoc config snapshot use plus 3 hook handlers — chat.messages.transform, text.complete, tool.execute.before
+//   SCOPE: Startup vvoc config snapshot use plus 3 hook handlers — chat.messages.transform (text, reasoning, and tool-part state redaction), text.complete, tool.execute.before
 //   DEPENDS: src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, session, engine, patterns, restore, deep, config
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.3.0 - Fixed a redaction bypass: tool-part payloads (ToolPart.state input/output/error/metadata) are now deep-redacted in chat.messages.transform; removed the dead msg.info.state path that never matched the SDK message shape.]
 //   LAST_CHANGE: [v1.2.0 - Used the shared startup vvoc config snapshot for plugin toggles and redaction settings.]
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
@@ -27,7 +28,7 @@ import { PlaceholderSession } from "./session.js";
 import { loadVvocConfig } from "../../lib/config-layers.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { Plugin } from "@opencode-ai/plugin";
-import type { Part, TextPart, ReasoningPart } from "@opencode-ai/sdk/client";
+import type { Part, TextPart, ReasoningPart, ToolPart } from "@opencode-ai/sdk/client";
 
 const PLACEHOLDER_PREFIX = "__VVOC_SECRET_";
 
@@ -37,6 +38,10 @@ function isTextPart(part: Part): part is TextPart {
 
 function isReasoningPart(part: Part): part is ReasoningPart {
   return part.type === "reasoning";
+}
+
+function isToolPart(part: Part): part is ToolPart {
+  return part.type === "tool";
 }
 
 function redactMessageParts(
@@ -53,27 +58,14 @@ function redactMessageParts(
       const result = redactText(part.text, patternSet, session);
       part.text = result.text;
     }
-  }
-}
-
-function redactAssistantState(
-  msg: unknown,
-  patternSet: ReturnType<typeof buildPatternSet>,
-  session: PlaceholderSession,
-): void {
-  const state = (msg as { state?: Record<string, unknown> }).state;
-  if (state) {
-    if (state.input) {
-      redactDeep(state.input, patternSet, session);
-    }
-    if (state.output) {
-      redactDeep(state.output, patternSet, session);
-    }
-    if (state.error) {
-      redactDeep(state.error, patternSet, session);
-    }
-    if (state.raw) {
-      redactDeep(state.raw, patternSet, session);
+    if (isToolPart(part)) {
+      // Tool inputs/outputs/errors/metadata are the primary secret vector
+      // (file contents from `read`, command output from `bash`, env vars).
+      // They live in part.state per the SDK ToolPart shape, not msg.info.state.
+      redactDeep(part.state, patternSet, session);
+      if (part.metadata) {
+        redactDeep(part.metadata, patternSet, session);
+      }
     }
   }
 }
@@ -141,9 +133,6 @@ export const SecretsRedactionPlugin: Plugin = async (ctx) => {
     },
     "experimental.chat.messages.transform": async (_input, output) => {
       for (const msg of output.messages) {
-        if (msg.info.role === "assistant") {
-          redactAssistantState(msg.info, patternSet, session);
-        }
         redactMessageParts(msg.parts, patternSet, session);
       }
     },

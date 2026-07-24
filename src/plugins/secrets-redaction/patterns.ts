@@ -1,5 +1,5 @@
 // FILE: src/plugins/secrets-redaction/patterns.ts
-// VERSION: 1.0.0
+// VERSION: 1.0.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Builds the internal pattern set from config — keywords, regex rules, and builtin patterns.
 //   SCOPE: pattern parsing, normalization, deduplication
@@ -16,9 +16,9 @@
 //   PatternSet - Group of related pattern rules.
 //   PatternsConfig - Patterns configuration schema.
 // END_MODULE_MAP
-// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v1.0.2 - Deduplicated combined regex flags so an inline (?i) pattern no longer produces an invalid duplicate flag set at startup.]
 //   LAST_CHANGE: [v1.0.1 - Tightened bearer_token lookahead to exclude . _ - after match, preventing false positives on long filenames with extension.]
 // END_CHANGE_SUMMARY
 
@@ -89,7 +89,7 @@ function peelFlags(pattern: string): { pattern: string; flags: string } {
 
 function buildRegex(pattern: string, defaultFlags = "gi"): RegExp {
   const { pattern: raw, flags: peeled } = peelFlags(pattern);
-  const flags = peeled ? `${defaultFlags}${peeled}` : defaultFlags;
+  const flags = [...new Set(`${defaultFlags}${peeled}`)].join("");
   return new RegExp(raw, flags);
 }
 

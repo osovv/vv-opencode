@@ -1,5 +1,5 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.3.0
+// VERSION: 0.5.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance.
 //   SCOPE: work_item_open/list/close registration, tracked launch validation, result normalization and repair, round aggregation with bounded excerpts, implementation round limits, persistence, and profile-selected chat.message guidance.
@@ -14,6 +14,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.5.1 - Fixed session.deleted cleanup to read the session id from properties.info.id (per the SDK event shape), drop the in-memory store, and remove a duplicate directory deletion.]
+//   LAST_CHANGE: [v0.5.0 - Reverted in-flight reviewer launches on failed tracked results (invalid output, parse/repair failure, missing work item, apply failure) so work items are no longer stranded in REVIEWER_ALREADY_IN_FLIGHT.]
 //   LAST_CHANGE: [v0.4.1 - Propagated bounded tracked-result excerpts through protocol errors, state-application errors, hard stops, and persisted work-item state.]
 //   LAST_CHANGE: [v0.4.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
 //   LAST_CHANGE: [v0.3.0 - Integrated explicit work-item intent, reviewer in-flight tracking, and collect-all review-round result aggregation.]
@@ -48,6 +50,7 @@ import {
   createWorkItemStore,
   getReviewRound,
   getWorkItem,
+  revertReviewerLaunch,
   type WorkflowResultExcerpt,
   type WorkItemRecord,
   type WorkItemStore,
@@ -529,6 +532,19 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
         throw new Error(`RESULT_PROTOCOL_ERROR: ${header.error.message}`);
       }
 
+      // Revert an in-flight reviewer launch on any failure below so the work
+      // item is not permanently stranded in REVIEWER_ALREADY_IN_FLIGHT. No-op
+      // for implementer launches (they carry no in-flight reviewer slot).
+      const revertLaunch = () => {
+        const store = getOrCreateStore(input.sessionID);
+        revertReviewerLaunch(store, {
+          sessionId: input.sessionID,
+          workItemId: header.value,
+          agent: subagentType,
+        });
+        snapshotSession(input.sessionID);
+      };
+
       if (typeof output.output !== "string") {
         await client.app.log({
           body: {
@@ -542,6 +558,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             },
           },
         });
+        revertLaunch();
         throw new Error("RESULT_PROTOCOL_ERROR: tracked task output must be a string");
       }
 
@@ -610,6 +627,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             },
           },
         });
+        revertLaunch();
         throw new Error(
           [
             `RESULT_PROTOCOL_ERROR: ${parsed.error.message}`,
@@ -654,6 +672,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             },
           },
         });
+        revertLaunch();
         throw new Error(
           [
             `RESULT_PROTOCOL_ERROR: no open work item ${parsed.value.workItemId} exists in this session`,
@@ -682,6 +701,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
             },
           },
         });
+        revertLaunch();
         throw new Error(
           [
             `RESULT_PROTOCOL_ERROR: ${applied.message}`,
@@ -735,7 +755,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
     event: async (input) => {
       const eventType = (input.event as { type?: string }).type;
       const properties = (input.event as { properties?: Record<string, unknown> }).properties ?? {};
-      const eventSessionId = properties.sessionID as string | undefined;
+      const info = properties.info as { id?: string } | undefined;
+      const eventSessionId = (properties.sessionID as string | undefined) ?? info?.id;
 
       if (!eventSessionId) return;
 
@@ -747,7 +768,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
       }
 
       if (eventType === "session.deleted") {
-        await deleteWorkflowSessionDir(eventSessionId);
+        stores.delete(eventSessionId);
         await deleteWorkflowSessionDir(eventSessionId);
         await client.app.log({
           body: {
