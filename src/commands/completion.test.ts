@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion generation including orchestration commands/profiles, patch-provider presets, preset names, and role flows.
 //   DEPENDS: [bun:test, src/commands/completion.ts]
-//   LINKS: [M-CLI-COMPLETION]
+//   LINKS: [M-CLI-COMPLETION, V-M-CLI-COMPLETION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

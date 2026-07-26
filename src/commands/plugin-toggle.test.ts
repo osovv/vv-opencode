@@ -4,7 +4,7 @@
 //   PURPOSE: Verify plugin enable/disable CLI toggles.
 //   SCOPE: Deterministic assertions for plugin name validation and toggle value.
 //   DEPENDS: [bun:test, src/commands/plugin-toggle.js]
-//   LINKS: [M-CLI-PLUGIN-TOGGLE]
+//   LINKS: [M-CLI-PLUGIN-TOGGLE, V-M-CLI-PLUGIN-TOGGLE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Updated CLI toggle inventory coverage for the eighth default-enabled plugin.]
+//   LAST_CHANGE: [v1.2.0 - Updated CLI toggle inventory coverage for the eighth default-enabled plugin.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical context toggle inventory coverage.]
 //   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle isolation coverage.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle CLI.]

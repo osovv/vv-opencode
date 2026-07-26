@@ -4,7 +4,7 @@
 //   PURPOSE: Verify sync command behavior for strict current-only vvoc config handling and managed TUI registration.
 //   SCOPE: Command-level invalid existing config rejection without rewrite, preservation of valid current plugin toggles, and conservative dedicated tui.json(c) sync.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/sync.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
+//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, V-M-CLI-COMMANDS, V-M-CLI-CONFIG]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

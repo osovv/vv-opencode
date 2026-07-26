@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Added WebToolsPlugin to the package-root exports.]
+//   LAST_CHANGE: [v1.2.0 - Added WebToolsPlugin to the package-root exports.]
 //   LAST_CHANGE: [v0.9.0 - Removed MemoryPlugin, memory-store, and memory-reviewer. Memory is no longer a plugin.]
 //   LAST_CHANGE: [v0.8.0 - Added WorkflowPlugin to the package-root plugin exports.]
 //   LAST_CHANGE: [v0.7.0 - Added HashlineEditPlugin to the package-root plugin exports.]

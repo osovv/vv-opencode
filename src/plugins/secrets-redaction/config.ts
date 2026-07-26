@@ -4,7 +4,7 @@
 //   PURPOSE: Resolve secrets-redaction settings from the shared startup vvoc config snapshot with environment variable substitution.
 //   SCOPE: startup vvoc config snapshot consumption, env substitution, fallback defaults, and exact-value web apiKey keyword rules
 //   DEPENDS: src/lib/config-layers.ts, src/lib/vvoc-config.ts
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Added exact-value redaction rules for configured web apiKey fields.]
+//   LAST_CHANGE: [v1.2.0 - Added exact-value redaction rules for configured web apiKey fields.]
 //   LAST_CHANGE: [v1.3.0 - Resolved secrets-redaction settings from the shared startup vvoc config snapshot.]
 //   LAST_CHANGE: [v1.2.0 - Loaded secrets-redaction config from the effective vvoc source.]
 //   LAST_CHANGE: [v1.1.0 - Switched secrets-redaction config loading to the canonical vvoc.json file.]

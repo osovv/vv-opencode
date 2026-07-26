@@ -4,7 +4,7 @@
 //   PURPOSE: Verify runtime web config and credential resolution plus the git-tracked apiKey warning helper.
 //   SCOPE: Provider defaults, explicit Z.AI region handling, environment-over-config precedence, credential source reporting, native credential freedom, and git-tracked warning behavior with an injected command runner.
 //   DEPENDS: [bun:test, src/plugins/web-tools/config.ts, src/lib/vvoc-config.ts, src/lib/config-layers.ts]
-//   LINKS: [M-WEB-CONFIG]
+//   LINKS: [M-WEB-CONFIG, V-M-WEB-CONFIG]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

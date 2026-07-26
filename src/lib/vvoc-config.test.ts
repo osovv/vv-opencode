@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the optional strict web section of canonical vvoc schema v3: parsing, rejection, normalization, rendering, and schema-file parity.
 //   SCOPE: web section parse/render round-trips, strict provider and Z.AI region validation, rejection of unknown keys and empty apiKey, default omission, createWebConfig behavior, and embedded schema versus schemas/vvoc/v3.json equivalence.
 //   DEPENDS: [src/lib/vvoc-config.ts, schemas/vvoc/v3.json]
-//   LINKS: [M-CLI-CONFIG, M-PLUGIN-WEB-TOOLS]
+//   LINKS: [M-CLI-CONFIG, M-WEB-CONFIG, M-PLUGIN-WEB-TOOLS, V-M-CLI-CONFIG, V-M-WEB-CONFIG]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

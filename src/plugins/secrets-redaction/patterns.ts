@@ -4,7 +4,7 @@
 //   PURPOSE: Builds the internal pattern set from config — keywords, regex rules, and builtin patterns.
 //   SCOPE: pattern parsing, normalization, deduplication
 //   DEPENDS: node:crypto (for hashing)
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

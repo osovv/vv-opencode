@@ -4,7 +4,7 @@
 //   PURPOSE: Verify WebToolsPlugin toggle behavior, canonical tool registration, runtime built-in suppression, diagnostics, and tracked-config warnings.
 //   SCOPE: Plugin-level tests using isolated vvoc project configs and stubbed OpenCode logging.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/web-tools/index.ts]
-//   LINKS: [M-PLUGIN-WEB-TOOLS]
+//   LINKS: [M-PLUGIN-WEB-TOOLS, V-M-PLUGIN-WEB-TOOLS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

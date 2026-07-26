@@ -4,7 +4,7 @@
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
 //   SCOPE: chat message redaction including configured web apiKey values, tool-part state redaction, text completion restore, and tool arg restore.
 //   DEPENDS: bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, index
-//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Covered exact-value redaction and deduplication for configured web apiKey fields.]
+//   LAST_CHANGE: [v1.2.0 - Covered exact-value redaction and deduplication for configured web apiKey fields.]
 //   LAST_CHANGE: [v1.3.0 - Replaced the invalid info.state fixture with a real ToolPart.state fixture so the regression test proves tool inputs/outputs/errors are redacted.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v1.2.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]

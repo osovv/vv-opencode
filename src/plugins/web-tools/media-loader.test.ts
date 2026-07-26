@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the direct media attachment loader: per-format attachments, signature sniffing, filename derivation, and unsupported and oversized rejection.
 //   SCOPE: Deterministic tests using fixed byte fixtures and an injected fetch implementation.
 //   DEPENDS: [bun:test, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/http.ts]
-//   LINKS: [M-WEB-MEDIA-LOADER]
+//   LINKS: [M-WEB-MEDIA-LOADER, V-M-WEB-MEDIA-LOADER]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

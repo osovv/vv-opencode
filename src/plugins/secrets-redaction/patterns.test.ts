@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for buildPatternSet and builtin patterns
 //   SCOPE: pattern building, regex normalization
 //   DEPENDS: patterns
-//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

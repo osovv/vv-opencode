@@ -73,7 +73,7 @@
   </TestingStack>
   <Observability>
     <Logger>OpenCode app log through client.app.log plus bounded plugin-specific diagnostics where applicable.</Logger>
-    <LogFormat>[service][function][block] message.</LogFormat>
+    <LogFormat>Structured OpenCode app log bodies use service, level, and message; trace-bearing messages use [service][function][BLOCK_NAME] message.</LogFormat>
     <RequiredFields>service, level, message, requestID, and sessionID when runtime context provides them.</RequiredFields>
     <Redaction>Never log secrets, credentials, raw tokens, or high-risk payloads outside bounded truncation policies.</Redaction>
   </Observability>
@@ -85,6 +85,7 @@
     <PluginExport>@osovv/vv-opencode/plugins/system-context-injection</PluginExport>
     <PluginExport>@osovv/vv-opencode/plugins/workflow</PluginExport>
     <PluginExport>@osovv/vv-opencode/plugins/secrets-redaction</PluginExport>
+    <PluginExport>@osovv/vv-opencode/plugins/web-tools</PluginExport>
     <TuiExport>@osovv/vv-opencode/tui</TuiExport>
     <PluginFactory>GuardianPlugin</PluginFactory>
     <PluginFactory>HashlineEditPlugin</PluginFactory>
@@ -92,6 +93,7 @@
     <PluginFactory>SystemContextInjectionPlugin</PluginFactory>
     <PluginFactory>WorkflowPlugin</PluginFactory>
     <PluginFactory>SecretsRedactionPlugin</PluginFactory>
+    <PluginFactory>WebToolsPlugin</PluginFactory>
     <TuiPluginModule>ContextTuiPlugin</TuiPluginModule>
   </PublicApi>
   <OperationalConstraints>

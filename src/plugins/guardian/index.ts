@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Denied and disabled canonical web_search and web_fetch access for the constrained guardian agent.]
+//   LAST_CHANGE: [v1.2.0 - Denied and disabled canonical web_search and web_fetch access for the constrained guardian agent.]
 //   LAST_CHANGE: [v0.5.0 - Guardian hardening: auto-approval now requires an explicit low risk_level (not just a score below threshold); the review subprocess runs as the constrained guardian agent; the planned action is protected from prompt truncation by trimming the transcript instead; debug file logging is opt-in via OPENCODE_GUARDIAN_DEBUG and the structured log no longer embeds raw planned-action payloads.]
 //   LAST_CHANGE: [v0.7.0 - Removed old SDK permission reply fallback; Guardian now uses current permission.reply or HTTP reply only.]
 //   LAST_CHANGE: [v0.6.0 - Used the shared startup vvoc config snapshot for plugin toggles and Guardian runtime config resolution.]

@@ -4,7 +4,7 @@
 //   PURPOSE: Deep traversal helpers for restoring/redacting placeholders in nested objects and arrays.
 //   SCOPE: in-place object/array traversal, cycle-safe with WeakSet
 //   DEPENDS: session, restore, engine
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

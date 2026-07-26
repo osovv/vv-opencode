@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-PLUGIN-LIST - OpenCode plugin listing.
 //   SCOPE: Plugin specifier parsing, table rendering, and empty state handling.
 //   DEPENDS: [src/commands/plugin-list.ts]
-//   LINKS: [M-CLI-PLUGIN-LIST]
+//   LINKS: [M-CLI-PLUGIN-LIST, V-M-CLI-PLUGIN-LIST]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

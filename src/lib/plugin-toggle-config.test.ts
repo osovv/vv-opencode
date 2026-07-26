@@ -4,7 +4,7 @@
 //   PURPOSE: Verify PLUGIN_TOGGLE_NAMES, createDefaultPluginToggleConfig, and pure isPluginEnabled behavior.
 //   SCOPE: Deterministic assertions for the utility module.
 //   DEPENDS: [bun:test, src/lib/plugin-toggle-config.js]
-//   LINKS: [M-PLUGIN-TOGGLE-CONFIG]
+//   LINKS: [M-PLUGIN-TOGGLE-CONFIG, V-M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Added web-tools toggle coverage and updated the canonical plugin count to eight.]
+//   LAST_CHANGE: [v1.2.0 - Added web-tools toggle coverage and updated the canonical plugin count to eight.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical default-enabled context toggle coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched plugin toggle tests to pure config-object assertions.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle config.]

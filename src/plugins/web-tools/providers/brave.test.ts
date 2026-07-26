@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the Brave Web Search adapter request shape, freshness mapping, normalization, and error mapping.
 //   SCOPE: Deterministic tests using injected fetch implementations; no real network I/O and no credential leakage.
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/brave.ts]
-//   LINKS: [M-WEB-BRAVE]
+//   LINKS: [M-WEB-BRAVE, V-M-WEB-BRAVE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the provider-neutral web_fetch tool schema, URL validation, permission flow, provider dispatch, attachments, metadata, and credential errors.
 //   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
 //   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/fetch-service.ts]
-//   LINKS: [M-WEB-FETCH-SERVICE]
+//   LINKS: [M-WEB-FETCH-SERVICE, V-M-WEB-FETCH-SERVICE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

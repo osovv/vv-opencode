@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-CONFIG-VALIDATE - canonical vvoc.json validation.
 //   SCOPE: Strict JSON parse error reporting, canonical schema v3 validation, orchestration and role/preset validation, and pass/fail terminal output.
 //   DEPENDS: [src/commands/config-validate.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-CONFIG-VALIDATE, M-ORCHESTRATION-PROFILES]
+//   LINKS: [M-CLI-CONFIG-VALIDATE, M-ORCHESTRATION-PROFILES, V-M-CLI-CONFIG-VALIDATE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

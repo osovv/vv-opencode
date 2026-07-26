@@ -5,7 +5,7 @@
 //            maintains forward/reverse mappings, handles TTL eviction and max-mappings limits.
 //   SCOPE: placeholder creation, lookup, cleanup
 //   DEPENDS: node:crypto
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

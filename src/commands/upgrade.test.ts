@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-UPGRADE - global-only Bun upgrade, fresh subprocess sync, and partial-upgrade warnings.
 //   SCOPE: Already-latest handling, registry failures, Bun install execution, post-install sync behavior, partial sync-warning messaging, jsDelivr changelog output, multi-version changelog display, graceful degradation, and prerelease version resolution.
 //   DEPENDS: [src/commands/upgrade.ts]
-//   LINKS: [M-CLI-UPGRADE]
+//   LINKS: [M-CLI-UPGRADE, V-M-CLI-UPGRADE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

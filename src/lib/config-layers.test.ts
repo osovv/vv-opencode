@@ -4,7 +4,7 @@
 //   PURPOSE: Verify layered vvoc, OpenCode runtime, and OpenCode TUI config source resolution.
 //   SCOPE: Temp-dir coverage for project-root discovery, env/global/default/missing source kinds, dedicated TUI paths, write target selection, and singleton runtime config loading.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
+//   LINKS: [M-CONFIG-LAYERS, V-M-CONFIG-LAYERS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

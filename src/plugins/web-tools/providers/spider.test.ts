@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the Spider Scrape adapter: Bearer auth, return_format mapping, envelope validation, metadata, provider errors, media-first dispatch, and credential safety.
 //   SCOPE: Deterministic tests using injected fetch implementations that route by URL between the media probe and the Spider endpoint.
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/spider.ts]
-//   LINKS: [M-WEB-SPIDER]
+//   LINKS: [M-WEB-SPIDER, V-M-WEB-SPIDER]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

@@ -2,9 +2,9 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and canonical project-local conventions.
-//   SCOPE: XDG config/data home lookup, canonical global and project config path derivation, managed agent/plan/skills directory resolution, and deterministic project data directory naming.
+//   SCOPE: XDG config/data home lookup, canonical global and project config path derivation, managed agent/skills directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
-//   LINKS: [M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
+//   LINKS: [M-CONFIG-LAYERS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,7 +17,6 @@
 //   VVOC_CONFIG_FILE_NAME - Canonical vvoc config file name.
 //   getGlobalVvocDir - Resolves the global vvoc config directory.
 //   getGlobalVvocConfigPath - Resolves the canonical global vvoc config file path.
-//   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getVvocAgentsDir - Resolves the managed vvoc subagent prompt directory for a vvoc config root.
 //   getVvocSkillsDir - Resolves the managed vvoc skills directory for a vvoc config root.
 //   getGlobalOpencodeSkillsDir - Resolves the global OpenCode skills directory for skill discovery via symlink.

@@ -4,7 +4,7 @@
 //   PURPOSE: Verify agent-models constants, type guards, model parsing, and formatting helpers.
 //   SCOPE: Deterministic assertions for SPECIAL_AGENT_NAMES, OPENCODE_DEFAULT_MODEL_TARGETS, CONFIGURABLE_OPENCODE_AGENTS, SUPPORTED_MODEL_TARGET_NAMES, type guards, parseModelTargetName, parseModelArg, normalizeModelTargetOverride, and formatAgentModel.
 //   DEPENDS: [src/lib/agent-models.ts, bun:test]
-//   LINKS: [M-CLI-AGENT-MODELS]
+//   LINKS: [M-CLI-AGENT-MODELS, V-M-CLI-AGENT-MODELS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

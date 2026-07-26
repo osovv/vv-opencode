@@ -4,7 +4,7 @@
 //   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
 //   SCOPE: Bundled template reads, profile-neutral controller invariants, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
-//   LINKS: [M-CLI-MANAGED-AGENTS, V-M-CLI-CONFIG]
+//   LINKS: [M-CLI-MANAGED-AGENTS, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

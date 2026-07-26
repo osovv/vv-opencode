@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the provider-neutral web_search tool schema, permission flow, dispatch, rendering, metadata, and credential-safe errors.
 //   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
 //   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/search-service.ts]
-//   LINKS: [M-WEB-SEARCH-SERVICE]
+//   LINKS: [M-WEB-SEARCH-SERVICE, V-M-WEB-SEARCH-SERVICE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

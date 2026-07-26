@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, local project runtime/TUI config layers, managed agent/skill/plan scaffolding, canonical config scaffolding, global side-effect guards, and idempotent re-run handling.
 //   DEPENDS: [src/commands/init.ts]
-//   LINKS: [M-CLI-INIT]
+//   LINKS: [M-CLI-INIT, V-M-CLI-INIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

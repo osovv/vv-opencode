@@ -4,7 +4,7 @@
 //   PURPOSE: Verify direct Z.AI and Zhipu Tool API endpoint routing, request mapping, normalization, reader extraction, media bypass, bounded failures, and credential safety.
 //   SCOPE: Deterministic injected-fetch coverage for both regions with no live provider calls.
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/zai.ts]
-//   LINKS: [M-WEB-ZAI]
+//   LINKS: [M-WEB-ZAI, V-M-WEB-ZAI]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the bounded HTTP transport: success path, timeout, caller abort, size cap, HTTP errors, network errors, and fetch injection.
 //   SCOPE: Deterministic tests using injected fetch implementations; no real network I/O.
 //   DEPENDS: [bun:test, src/plugins/web-tools/http.ts]
-//   LINKS: [M-WEB-HTTP]
+//   LINKS: [M-WEB-HTTP, V-M-WEB-HTTP]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

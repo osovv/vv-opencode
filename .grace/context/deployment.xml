@@ -17,6 +17,7 @@
     <Export>@osovv/vv-opencode/plugins/system-context-injection</Export>
     <Export>@osovv/vv-opencode/plugins/workflow</Export>
     <Export>@osovv/vv-opencode/plugins/secrets-redaction</Export>
+    <Export>@osovv/vv-opencode/plugins/web-tools</Export>
     <Export>@osovv/vv-opencode/tui</Export>
   </Exports>
   <InstallAndSync>

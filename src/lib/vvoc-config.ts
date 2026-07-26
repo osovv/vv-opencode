@@ -4,7 +4,7 @@
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, orchestration normalization, and validation helpers.
 //   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in profiles, strict current config parsing including direct Z.AI provider regions, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
 //   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
-//   LINKS: [M-CLI-CONFIG, M-WEB-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
+//   LINKS: [M-CLI-CONFIG, M-WEB-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

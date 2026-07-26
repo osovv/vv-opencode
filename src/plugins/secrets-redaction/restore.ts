@@ -4,7 +4,7 @@
 //   PURPOSE: Restores placeholders in a single string back to original secret values.
 //   SCOPE: single-string placeholder → original lookup
 //   DEPENDS: session
-//   LINKS: knowledge-graph://plugins/secrets-redaction
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

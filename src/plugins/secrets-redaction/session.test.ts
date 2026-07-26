@@ -4,7 +4,7 @@
 //   PURPOSE: Tests for PlaceholderSession
 //   SCOPE: placeholder creation, lookup, TTL eviction, maxMappings eviction
 //   DEPENDS: session
-//   LINKS: [M-PLUGIN-SECRETS-REDACTION]
+//   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

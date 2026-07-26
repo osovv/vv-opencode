@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the Exa Search API adapter request shape, freshness mapping, normalization, and error mapping.
 //   SCOPE: Deterministic tests using injected fetch implementations; no real network I/O and no credential leakage.
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/exa.ts]
-//   LINKS: [M-WEB-EXA]
+//   LINKS: [M-WEB-EXA, V-M-WEB-EXA]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

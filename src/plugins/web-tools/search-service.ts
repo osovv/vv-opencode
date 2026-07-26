@@ -4,7 +4,7 @@
 //   PURPOSE: Build the provider-neutral web_search tool: input validation, permission request, provider dispatch, and ranked Markdown rendering.
 //   SCOPE: web_search ToolDefinition factory and Markdown rendering; delegates transport to the Exa, Brave, and direct Z.AI adapters.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts, src/plugins/web-tools/providers/brave.ts, src/plugins/web-tools/providers/zai.ts]
-//   LINKS: [M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-WEB-ZAI, M-PLUGIN-WEB-TOOLS]
+//   LINKS: [M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-WEB-ZAI, M-WEB-HTTP, M-PLUGIN-WEB-TOOLS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

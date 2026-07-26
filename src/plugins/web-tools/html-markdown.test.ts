@@ -4,7 +4,7 @@
 //   PURPOSE: Verify local HTML to Markdown and text conversion.
 //   SCOPE: Script and style stripping, link and heading and list conversion, code block preservation, entity decoding, whitespace collapse, and empty input handling.
 //   DEPENDS: [bun:test, src/plugins/web-tools/html-markdown.ts]
-//   LINKS: [M-WEB-HTML-MARKDOWN]
+//   LINKS: [M-WEB-HTML-MARKDOWN, V-M-WEB-HTML-MARKDOWN]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

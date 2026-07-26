@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the native fetch provider dispatch: HTML conversion per format, plain text passthrough, media attachments, unsupported rejection, HTTP errors, redirects, and size limits.
 //   SCOPE: Deterministic tests using injected fetch implementations plus one local Bun.serve redirect case.
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/native-fetch.ts]
-//   LINKS: [M-WEB-NATIVE-FETCH]
+//   LINKS: [M-WEB-NATIVE-FETCH, V-M-WEB-NATIVE-FETCH]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
