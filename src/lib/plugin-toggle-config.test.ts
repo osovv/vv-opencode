@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Added web-tools toggle coverage and updated the canonical plugin count to eight.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical default-enabled context toggle coverage.]
 //   LAST_CHANGE: [v1.1.0 - Switched plugin toggle tests to pure config-object assertions.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle config.]
@@ -34,7 +35,7 @@ import {
 
 // START_BLOCK_CONSTANTS_TEST
 describe("PLUGIN_TOGGLE_NAMES", () => {
-  test("contains exactly the 7 vvoc-managed plugins", () => {
+  test("contains exactly the 8 vvoc-managed plugins", () => {
     expect(PLUGIN_TOGGLE_NAMES).toEqual([
       "guardian",
       "hashline-edit",
@@ -43,12 +44,13 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "workflow",
       "secrets-redaction",
       "context",
+      "web-tools",
     ]);
   });
 
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(7);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(8);
   });
 });
 // END_BLOCK_CONSTANTS_TEST
@@ -100,3 +102,19 @@ describe("isPluginEnabled", () => {
   });
 });
 // END_BLOCK_IS_PLUGIN_ENABLED_TESTS
+
+// START_BLOCK_WEB_TOOLS_TOGGLE_TESTS
+describe("web-tools toggle", () => {
+  test("createDefaultPluginToggleConfig sets web-tools to true", () => {
+    expect(createDefaultPluginToggleConfig()["web-tools"]).toBe(true);
+  });
+
+  test("isPluginEnabled returns true for web-tools when the plugins section is absent", () => {
+    expect(isPluginEnabled({}, "web-tools")).toBe(true);
+  });
+
+  test("isPluginEnabled returns false when web-tools is explicitly false", () => {
+    expect(isPluginEnabled({ plugins: { "web-tools": false } }, "web-tools")).toBe(false);
+  });
+});
+// END_BLOCK_WEB_TOOLS_TOGGLE_TESTS

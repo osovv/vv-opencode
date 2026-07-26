@@ -34,10 +34,15 @@
 //   parseVvocConfigText - Strictly parses the canonical vvoc config document.
 //   renderVvocConfig - Renders canonical vvoc.json.
 //   validateVvocConfigDocument - Validates parsed vvoc config against JSON Schema.
+//   VvocWebSearchConfig - Optional web search provider section type.
+//   VvocWebFetchConfig - Optional web fetch provider section type.
+//   VvocWebConfig - Optional canonical web tools section type.
+//   createWebConfig - Normalizes an optional web section, returning undefined when empty.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v3.0.0 - Removed lenient vvoc config parsing and made plugins a required canonical v3 section.]
+//   LAST_CHANGE: [v3.1.0 - Added optional strict web section (search/fetch provider enums and apiKey fields) with createWebConfig normalization and conditional rendering.]
 //   LAST_CHANGE: [v2.5.0 - Added reviewer and orchestrator role defaults to createDefaultRoleAssignments.]
 //   LAST_CHANGE: [v2.4.1 - Preserved strict-parsed plugin toggle values instead of resetting them to defaults.]
 //   LAST_CHANGE: [v2.3.4 - Moved built-in vvoc preset definitions and managed-name detection to a shared internal preset registry.]
@@ -134,6 +139,21 @@ export type SecretsRedactionConfig = {
   debug: boolean;
 };
 
+export type VvocWebSearchConfig = {
+  provider?: "exa" | "brave";
+  apiKey?: string;
+};
+
+export type VvocWebFetchConfig = {
+  provider?: "native" | "spider";
+  apiKey?: string;
+};
+
+export type VvocWebConfig = {
+  search?: VvocWebSearchConfig;
+  fetch?: VvocWebFetchConfig;
+};
+
 export type VvocConfig = {
   $schema: string;
   version: number;
@@ -143,6 +163,7 @@ export type VvocConfig = {
   secretsRedaction: SecretsRedactionConfig;
   presets: VvocPresets;
   plugins: VvocPluginToggleConfig;
+  web?: VvocWebConfig;
 };
 
 export type ParsedVvocConfig = {
@@ -241,6 +262,32 @@ const VVOC_PRESET_SCHEMA = {
   },
 };
 
+const WEB_SEARCH_PROVIDERS = ["exa", "brave"] as const;
+const WEB_FETCH_PROVIDERS = ["native", "spider"] as const;
+
+const WEB_CONFIG_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    search: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        provider: { type: "string", enum: [...WEB_SEARCH_PROVIDERS] },
+        apiKey: { type: "string", minLength: 1 },
+      },
+    },
+    fetch: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        provider: { type: "string", enum: [...WEB_FETCH_PROVIDERS] },
+        apiKey: { type: "string", minLength: 1 },
+      },
+    },
+  },
+};
+
 export const VVOC_CONFIG_SCHEMA = {
   $schema: JSON_SCHEMA_DRAFT_2020_12,
   $id: VVOC_CONFIG_SCHEMA_URL,
@@ -278,6 +325,7 @@ export const VVOC_CONFIG_SCHEMA = {
       propertyNames: { minLength: 1 },
       additionalProperties: { type: "boolean" },
     },
+    web: WEB_CONFIG_SCHEMA,
   },
 };
 
@@ -423,6 +471,7 @@ export function parseVvocConfigText(text: string, label: string): VvocConfig {
 }
 
 export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig()): string {
+  const web = createWebConfig(config.web);
   return renderJson({
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
@@ -432,6 +481,7 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
     presets: createVvocPresets(config.presets),
     plugins: config.plugins,
+    ...(web ? { web } : {}),
   });
 }
 // END_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
@@ -468,8 +518,48 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
       ),
       presets: createVvocPresets(value.presets as VvocPresets),
       plugins: createPluginToggleConfig(value.plugins),
+      web: createWebConfig(value.web),
     },
   };
+}
+
+function normalizeWebProviderSection(
+  value: unknown,
+  providers: readonly string[],
+): { provider?: string; apiKey?: string } | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  const provider =
+    typeof value.provider === "string" && providers.includes(value.provider)
+      ? value.provider
+      : undefined;
+  const apiKey = normalizeOptionalString(
+    typeof value.apiKey === "string" ? value.apiKey : undefined,
+  );
+  if (provider === undefined && apiKey === undefined) {
+    return undefined;
+  }
+  return compactObject({ provider, apiKey });
+}
+
+// START_CONTRACT: createWebConfig
+//   PURPOSE: Normalize an optional web section from a validated document or in-memory config.
+//   INPUTS: { value: unknown - candidate web section }
+//   OUTPUTS: { VvocWebConfig | undefined - normalized section, or undefined when empty }
+//   SIDE_EFFECTS: none; apiKey values are preserved exactly and never logged
+//   LINKS: M-PLUGIN-WEB-TOOLS
+// END_CONTRACT: createWebConfig
+export function createWebConfig(value: unknown): VvocWebConfig | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  const search = normalizeWebProviderSection(value.search, WEB_SEARCH_PROVIDERS);
+  const fetch = normalizeWebProviderSection(value.fetch, WEB_FETCH_PROVIDERS);
+  if (!search && !fetch) {
+    return undefined;
+  }
+  return compactObject({ search, fetch }) as VvocWebConfig;
 }
 
 function createSecretsRedactionConfig(

@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Added the default-enabled web-tools plugin toggle.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added the default-enabled context TUI plugin toggle.]
 //   LAST_CHANGE: [v1.2.0 - Made plugin toggle checks pure over the already-loaded vvoc config snapshot.]
 //   LAST_CHANGE: [v1.1.0 - Loaded plugin toggles from the effective vvoc config source.]
@@ -33,6 +34,7 @@ export const PLUGIN_TOGGLE_NAMES = [
   "workflow",
   "secrets-redaction",
   "context",
+  "web-tools",
 ] as const;
 
 export type VvocPluginToggleConfig = Record<string, boolean>;

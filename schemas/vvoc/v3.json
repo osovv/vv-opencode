@@ -138,6 +138,28 @@
       "additionalProperties": {
         "type": "boolean"
       }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": "string", "enum": ["exa", "brave"] },
+            "apiKey": { "type": "string", "minLength": 1 }
+          }
+        },
+        "fetch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": "string", "enum": ["native", "spider"] },
+            "apiKey": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
     }
   }
 }
