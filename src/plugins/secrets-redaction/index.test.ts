@@ -1,8 +1,8 @@
 // FILE: src/plugins/secrets-redaction/index.test.ts
-// VERSION: 1.1.0
+// VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
-//   SCOPE: chat message redaction, tool-part state redaction, text completion restore, and tool arg restore.
+//   SCOPE: chat message redaction including configured web apiKey values, tool-part state redaction, text completion restore, and tool arg restore.
 //   DEPENDS: bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, index
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Covered exact-value redaction and deduplication for configured web apiKey fields.]
 //   LAST_CHANGE: [v1.3.0 - Replaced the invalid info.state fixture with a real ToolPart.state fixture so the regression test proves tool inputs/outputs/errors are redacted.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v1.2.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
@@ -25,7 +26,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetVvocConfigForTests } from "../../lib/config-layers.js";
-import { createDefaultVvocConfig } from "../../lib/vvoc-config.js";
+import { createDefaultVvocConfig, type VvocConfig } from "../../lib/vvoc-config.js";
+import { webApiKeyKeywordRules } from "./config.js";
 import { SecretsRedactionPlugin } from "./index.js";
 
 const EMAIL = "qa-redaction-check-884271@example.invalid";
@@ -51,7 +53,7 @@ afterEach(async () => {
   }
 });
 
-async function createPlugin() {
+async function createPlugin(web?: VvocConfig["web"]) {
   resetVvocConfigForTests();
   const directory = await mkdtemp(join(tmpdir(), "vvoc-secrets-redaction-"));
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-secrets-config-"));
@@ -67,6 +69,7 @@ async function createPlugin() {
     JSON.stringify(
       {
         ...createDefaultVvocConfig(),
+        ...(web ? { web } : {}),
         secretsRedaction: {
           secret: "test-secret-for-redaction",
           ttlMs: 0,
@@ -172,6 +175,47 @@ describe("SecretsRedactionPlugin", () => {
     expect(completed.state.metadata.note).toMatch(PLACEHOLDER_PATTERN);
     expect(errored.state.error).not.toContain(EMAIL);
     expect(errored.state.error).toMatch(PLACEHOLDER_PATTERN);
+  });
+
+  test("redacts configured web search and fetch apiKey values from message text", async () => {
+    const searchKey = "configured-exa-key-123";
+    const fetchKey = "configured-spider-key-456";
+    const plugin = await createPlugin({
+      search: { provider: "exa", apiKey: searchKey },
+      fetch: { provider: "spider", apiKey: fetchKey },
+    });
+    const output = {
+      messages: [
+        {
+          info: { role: "user" },
+          parts: [{ type: "text", text: `search=${searchKey} fetch=${fetchKey}` }],
+        },
+      ],
+    };
+
+    await plugin["experimental.chat.messages.transform"]?.({} as never, output as never);
+    const text = (output.messages[0]!.parts[0] as { text: string }).text;
+    expect(text).not.toContain(searchKey);
+    expect(text).not.toContain(fetchKey);
+    expect(text.match(/__VVOC_SECRET_WEB_API_KEY_[0-9a-f]{12}__/g)).toHaveLength(2);
+  });
+
+  test("web apiKey rules skip absent and empty fields and deduplicate equal values", () => {
+    const absent = createDefaultVvocConfig();
+    expect(webApiKeyKeywordRules(absent)).toEqual([]);
+
+    const duplicate = createDefaultVvocConfig();
+    duplicate.web = {
+      search: { apiKey: "same-key" },
+      fetch: { apiKey: "same-key" },
+    };
+    expect(webApiKeyKeywordRules(duplicate)).toEqual([
+      { value: "same-key", category: "WEB_API_KEY" },
+    ]);
+
+    const empty = createDefaultVvocConfig();
+    empty.web = { search: { apiKey: "" }, fetch: {} };
+    expect(webApiKeyKeywordRules(empty)).toEqual([]);
   });
 
   test("restores placeholders in assistant text completion output", async () => {
