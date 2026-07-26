@@ -4,7 +4,7 @@
 //   PURPOSE: Build the provider-neutral web_fetch tool: input validation, permission request, provider dispatch, and structured text or attachment results.
 //   SCOPE: web_fetch ToolDefinition factory; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
-//   LINKS: [M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-PLUGIN-WEB-TOOLS]
+//   LINKS: M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-PLUGIN-WEB-TOOLS
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

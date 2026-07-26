@@ -93,7 +93,6 @@ const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestra
   });
 // END_BLOCK_CONCRETE_POLICIES
 
-// START_BLOCK_PROFILE_PARSING
 // START_CONTRACT: parseOrchestrationProfile
 //   PURPOSE: Validate a CLI or config profile string without silently falling back from explicit invalid input.
 //   INPUTS: { value: unknown - candidate profile value; operation: string - caller context for diagnostics }
@@ -101,6 +100,7 @@ const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestra
 //   SIDE_EFFECTS: Throws Error for blank, non-string, or unknown values.
 //   LINKS: [ORCHESTRATION_PROFILE_NAMES]
 // END_CONTRACT: parseOrchestrationProfile
+// START_BLOCK_PARSE_PROFILE
 export function parseOrchestrationProfile(value: unknown, operation: string): OrchestrationProfile {
   const normalized = typeof value === "string" ? value.trim() : "";
   if ((ORCHESTRATION_PROFILE_NAMES as readonly string[]).includes(normalized)) {
@@ -112,6 +112,7 @@ export function parseOrchestrationProfile(value: unknown, operation: string): Or
     `${operation}: invalid orchestration profile ${rendered}; expected one of: ${ORCHESTRATION_PROFILE_NAMES.join(", ")}`,
   );
 }
+// END_BLOCK_PARSE_PROFILE
 
 // START_CONTRACT: createOrchestrationConfig
 //   PURPOSE: Build a normalized orchestration section, defaulting only when the entire section is absent.
@@ -120,6 +121,7 @@ export function parseOrchestrationProfile(value: unknown, operation: string): Or
 //   SIDE_EFFECTS: Throws when an explicit section lacks a valid profile.
 //   LINKS: [parseOrchestrationProfile]
 // END_CONTRACT: createOrchestrationConfig
+// START_BLOCK_PROFILE_PARSING
 export function createOrchestrationConfig(
   value?: Partial<OrchestrationConfig>,
 ): OrchestrationConfig {
@@ -133,7 +135,6 @@ export function createOrchestrationConfig(
 }
 // END_BLOCK_PROFILE_PARSING
 
-// START_BLOCK_POLICY_RESOLUTION
 // START_CONTRACT: resolveOrchestrationPolicy
 //   PURPOSE: Resolve one immutable concrete policy from structurally compatible startup config input.
 //   INPUTS: { config: object - loaded config with an optional orchestration section }
@@ -141,6 +142,7 @@ export function createOrchestrationConfig(
 //   SIDE_EFFECTS: Throws when an explicit profile is invalid; never inspects provider or model data.
 //   LINKS: [createOrchestrationConfig, RESOLVED_POLICIES]
 // END_CONTRACT: resolveOrchestrationPolicy
+// START_BLOCK_POLICY_RESOLUTION
 export function resolveOrchestrationPolicy(config: {
   orchestration?: Partial<OrchestrationConfig>;
 }): ResolvedOrchestrationPolicy {

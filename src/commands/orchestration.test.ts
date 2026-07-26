@@ -10,8 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   orchestration show tests - Verify effective fallback and source precedence without writes.
-//   orchestration set tests - Verify scoped conservative writes, bootstrap, validation, and CLI diagnostics.
+//   [test scenarios] - Orchestration show/set coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

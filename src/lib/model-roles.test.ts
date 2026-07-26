@@ -10,10 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   built-in role tests - Verify deterministic built-in role IDs and hard-coded role bindings.
-//   role reference tests - Verify vv-role parsing, round-trip resolution, and unknown-role handling.
-//   model selection tests - Verify provider/model normalization and malformed input failures.
-//   chaining guard tests - Verify role-to-role chaining is rejected in wave 1.
+//   assertModelRolesError - Asserts stable model-role error codes and messages.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

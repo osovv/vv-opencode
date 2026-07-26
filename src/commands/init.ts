@@ -4,7 +4,7 @@
 //   PURPOSE: Interactive project initialization: registers @osovv/vv-opencode runtime/TUI entries and scaffolds the canonical vvoc.json config plus managed prompts/plans. Uses @clack/prompts for TTY prompts. Interactive mode is the default; --non-interactive flag enables batch mode.
 //   SCOPE: Scope selection, runtime/TUI plugin registration, managed OpenCode agent registration, managed agent prompt and plan directory scaffolding, canonical config scaffolding, and idempotent re-run handling.
 //   DEPENDS: [citty, @clack/prompts, src/lib/opencode.js]
-//   LINKS: [M-CLI-INIT, M-CLI-CONFIG]
+//   LINKS: M-CLI-INIT, M-CLI-CONFIG
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

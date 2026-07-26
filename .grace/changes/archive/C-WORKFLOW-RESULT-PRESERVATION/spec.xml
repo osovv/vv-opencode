@@ -15,6 +15,10 @@
       <NonGoal>Do not change tracked agent names, allowed VVOC_STATUS values, work-item lifecycle states, or review-round transition semantics except where needed to attach bounded result context.</NonGoal>
       <NonGoal>Do not change OpenCode task execution semantics outside the vvoc workflow plugin hooks.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Keep tracked result parsing fail-closed and preserve existing workflow lifecycle and reviewer semantics.</Constraint>
+      <Constraint>Persist only deterministic bounded excerpts and never unbounded raw subagent output.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>When a tracked subagent returns a valid BLOCKED or NEEDS_CONTEXT result with body text, the resulting hard-stop error includes a capped excerpt of the original result body or normalized result output with work item, agent, and status context.</Criterion>
       <Criterion>When a work item enters blocked or needs_context, work_item_list exposes a bounded result excerpt sufficient for controller recovery, including implementer hard-stop context and reviewer NEEDS_CONTEXT context.</Criterion>

@@ -16,6 +16,10 @@
       <NonGoal>Do not add a desktop/web context inspector or change OpenCode compaction behavior.</NonGoal>
       <NonGoal>Do not edit generated dist output manually.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Use the supported OpenCode TUI plugin surface and keep context estimates explicitly approximate.</Constraint>
+      <Constraint>Preserve user-owned configuration through conservative, idempotent TUI registration.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>The published TUI entry registers a palette command with slash name context and opens only for an active session.</Criterion>
       <Criterion>The dialog reports the current provider/model, model context limit, measured usage from the latest assistant turn, percentage used, and remaining capacity when available.</Criterion>

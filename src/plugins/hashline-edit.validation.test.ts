@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   hashline validation tests - Verify parsing, context-anchor preservation, and mismatch diagnostics for hashline anchors.
+//   [test scenarios] - Hashline validation coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

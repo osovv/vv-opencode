@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   config layer resolution tests - Verify source precedence, strict project lookup, global/project root isolation, and runtime singleton behavior.
+//   createTempRoot - Creates an isolated temporary project root.
+//   tempDirs - Tracks temporary roots for cleanup.
+//   touch - Creates a fixture file and parent directories.
+//   writeValidVvocConfig - Writes a canonical valid vvoc fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

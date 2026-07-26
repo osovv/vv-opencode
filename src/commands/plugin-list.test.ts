@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   Test suite for plugin list command.
+//   captureStdout - Captures plugin-list output for assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

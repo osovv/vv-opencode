@@ -10,9 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   local TUI argument tests - Verify scope parsing and OpenCode argument forwarding.
-//   local TUI config tests - Verify managed package replacement and unrelated JSONC preservation.
-//   local TUI environment test - Verify XDG/TUI isolation while preserving runtime and vvoc sources.
+//   [test scenarios] - Local TUI launcher coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

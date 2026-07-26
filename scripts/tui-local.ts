@@ -7,7 +7,7 @@
 //   DEPENDS: [node:fs/promises, node:os, node:path, node:url, src/commands/launch.ts, src/lib/config-layers.ts, src/lib/opencode.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
@@ -17,6 +17,9 @@
 //   renderLocalTuiConfig - Replaces the managed package entry with the local dist/tui.js file URL.
 //   createLocalTuiEnvironment - Combines selected config paths with an isolated XDG config home and temporary TUI config.
 //   prepareLocalTuiLaunch - Resolves normal launch sources and writes the temporary local TUI config.
+//   parseScope - Validates the local launch scope option.
+//   runBuild - Builds the local package before launch.
+//   main - Runs the isolated local TUI launch workflow.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

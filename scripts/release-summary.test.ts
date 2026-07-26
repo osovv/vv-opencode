@@ -12,23 +12,17 @@
 // START_MODULE_MAP
 //   makeTextEvent - Builds a JSONL text event fixture.
 //   makeRunner - Builds an injected OpenCode runner fixture.
-//   option parsing tests - Validate defaults and env overrides.
-//   output parsing tests - Validate JSONL success and failure classes.
-//   summary validation tests - Validate XML-like envelope and prose rules.
-//   retry tests - Validate retry exhaustion and non-retryable ENOENT behavior.
+//   enoentRunResult - Reusable missing-executable run result fixture.
+//   failRunResult - Reusable failed run result fixture.
+//   samplePromptInput - Reusable release-summary prompt input fixture.
+//   successRunResult - Reusable successful run result fixture.
+//   timeoutRunResult - Reusable timeout run result fixture.
+//   validSummaryXml - Reusable valid summary envelope fixture.
 // END_MODULE_MAP
 
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial test coverage for release summary helper behavior.]
 // END_CHANGE_SUMMARY
-// START_MODULE_MAP
-//   makeTextEvent - Builds a JSONL text event fixture.
-//   makeRunner - Builds an injected OpenCode runner fixture.
-//   option parsing tests - Validate defaults and env overrides.
-//   output parsing tests - Validate JSONL success and failure classes.
-//   summary validation tests - Validate XML-like envelope and prose rules.
-//   retry tests - Validate retry exhaustion and non-retryable ENOENT behavior.
-// END_MODULE_MAP
 
 import { describe, expect, test } from "bun:test";
 import {

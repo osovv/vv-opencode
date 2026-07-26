@@ -15,6 +15,7 @@
 //   resolvePreset - Validates a preset name and returns the matching preset.
 //   formatPreset - Renders a preset object as JSON for CLI output.
 //   AppliedPresetOrchestrationChange - Reports whether a preset changed, kept, or omitted orchestration.
+//   AppliedPresetChange - Summarizes role and orchestration changes made by one preset application.
 //   applyPreset - Validates and atomically applies listed roles plus an optional orchestration profile.
 // END_MODULE_MAP
 //

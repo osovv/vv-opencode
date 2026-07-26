@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SystemContextInjectionPlugin tests - Verify main-session system guidance is injected only for eligible agents.
+//   createOutput - Builds a system-context hook output fixture.
+//   createPluginInput - Builds an isolated plugin input fixture.
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   writeProfile - Writes a vvoc orchestration profile fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -5,13 +5,25 @@
 //   PURPOSE: Validate package export source files and ensure discovered server/TUI plugin declarations have public export paths.
 //   SCOPE: package.json subpath parsing, TypeScript/TSX source lookup, plugin declaration discovery, and pre-commit failure reporting.
 //   DEPENDS: [node:fs, node:path, package.json]
-//   LINKS: [M-RELEASE-AUTOMATION, V-M-RELEASE-AUTOMATION]
+//   LINKS: M-RELEASE-AUTOMATION, V-M-RELEASE-AUTOMATION
 //   ROLE: SCRIPT
-//   MAP_MODE: SUMMARY
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   check-exports script - Verify root, server plugin, and TUI package subpaths before commit.
+//   SRC_DIR - Source directory inspected for public export targets.
+//   PKG_PATH - Package manifest path.
+//   ExportEntry - Package export entry shape.
+//   PackageExports - Package exports map shape.
+//   PackageJson - Package manifest fields consumed by the script.
+//   PluginDeclaration - Discovered plugin declaration metadata.
+//   readPackageJson - Reads the package manifest.
+//   getExportPaths - Extracts package export source paths.
+//   resolveDistPath - Resolves the generated path corresponding to one source export.
+//   checkExportExists - Verifies one public export source and generated target.
+//   findPluginDeclarations - Discovers server and TUI plugin declarations.
+//   getPluginExportPath - Maps one plugin declaration to its package export path.
+//   main - Runs package export validation and reports failures.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

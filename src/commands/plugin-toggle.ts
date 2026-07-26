@@ -4,7 +4,7 @@
 //   PURPOSE: Provide `vvoc plugin enable <name>` and `vvoc plugin disable <name>` subcommands that mutate the `plugins` section in scoped vvoc.json layers.
 //   SCOPE: Plugin name validation, global/project vvoc.json bootstrap, read/write, and CLI output.
 //   DEPENDS: [citty, node:fs/promises, src/lib/opencode.js, src/lib/plugin-toggle-config.js]
-//   LINKS: [M-CLI-PLUGIN-TOGGLE, M-CLI-CONFIG, M-PLUGIN-TOGGLE-CONFIG]
+//   LINKS: M-CLI-PLUGIN-TOGGLE, M-CLI-CONFIG, M-PLUGIN-TOGGLE-CONFIG
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

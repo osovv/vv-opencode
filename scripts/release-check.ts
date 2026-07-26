@@ -11,7 +11,19 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   PKG_PATH - Package manifest path.
+//   SCHEMA_PATH - Canonical vvoc schema path.
+//   CHANGELOG_PATH - Changelog path.
+//   EXPECTED_PACKAGE_NAME - Required npm package name.
+//   EXPECTED_SCHEMA_CONST - Required canonical config version.
+//   SEMVER_PATTERN - Accepted semantic-version pattern.
+//   CHANGELOG_VERSION_HEADER - Latest changelog release-heading pattern.
+//   PackageJson - Package manifest fields consumed by validation.
+//   SchemaJson - Schema fields consumed by validation.
+//   ReleaseConsistencyInputs - Injectable release metadata used by validation and tests.
+//   readJson - Reads and parses one JSON release artifact.
 //   collectReleaseConsistencyErrors - Returns all package, schema, and changelog summary consistency errors for tests and main.
+//   exitWithErrors - Prints release consistency errors and terminates nonzero.
 //   main - Reads release files, prints consistency errors, and exits nonzero on failure.
 // END_MODULE_MAP
 

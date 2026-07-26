@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   launch command tests - Verify buildLaunchPlan and runLaunch contracts.
+//   writeProjectLayer - Writes project-scoped launch fixtures.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -10,13 +10,22 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   protocol tests - Verify strict top-block parsing, body separation, header parsing, and status validation.
-//   repair tests - Verify recognized OpenCode task envelopes unwrap before parsing and repair prompts preserve outcomes.
-//   state tests - Verify explicit intent, launch tracking, bounded excerpts, collect-all aggregation, and close gating.
-//   transition tests - Verify mode-aware launch allowances and aggregate round resolution.
-//   tooling tests - Verify explicit work_item_open/list/close structured responses.
-//   workflow plugin tests - Verify task launch/result hooks, parallel reviewers, hard-stop excerpts, protocol-error excerpts, round limits, and primary-only guidance.
-//   persistence tests - Verify explicit state hydrate/snapshot behavior, optional excerpt round-trips, and corrupt/incomplete data rejection.
+//   ListedPluginItems - Parsed work_item_list payload used by plugin integration tests.
+//   SESSION_ID - Stable session identifier shared by workflow fixtures.
+//   WorkflowPluginHarness - Captured workflow plugin hooks and logs for one fixture.
+//   createToolContext - Builds a workflow tool execution context.
+//   createWorkflowPluginHarness - Creates an isolated workflow plugin harness.
+//   finishPluginTask - Completes a tracked plugin task with a strict result block.
+//   finishPluginTaskWithRawOutput - Completes a tracked plugin task with raw output.
+//   launchPluginTask - Launches one tracked task through plugin hooks.
+//   listPluginItems - Lists and parses plugin work items.
+//   openItem - Opens one work item against an in-memory store.
+//   openPluginWorkItem - Opens one work item through the plugin tool.
+//   parseToolJson - Parses structured workflow tool output.
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   result - Builds a strict tracked result block.
+//   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
+//   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

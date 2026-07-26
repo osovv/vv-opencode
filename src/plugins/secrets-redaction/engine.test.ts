@@ -10,7 +10,9 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   redactText tests - Verify direct engine behavior for real secrets, overlap handling, and round-trips.
+//   EMAIL - Reusable email secret fixture.
+//   SECRET - Reusable token secret fixture.
+//   createSession - Creates a placeholder session for redaction round-trips.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

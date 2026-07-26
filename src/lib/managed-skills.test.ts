@@ -10,8 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   managed workflow skill prompt tests - Verify discovery metadata and loaded workflow contracts.
-//   managed skill lookup test - Verify project-over-global compatibility.
+//   splitFrontmatter - Separates managed skill discovery metadata from loaded instructions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

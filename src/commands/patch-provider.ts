@@ -4,7 +4,7 @@
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
 //   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
 //   DEPENDS: [citty, src/lib/opencode.ts]
-//   LINKS: [M-CLI-PATCH-PROVIDER, M-CLI-CONFIG]
+//   LINKS: M-CLI-PATCH-PROVIDER, M-CLI-CONFIG
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

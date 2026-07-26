@@ -10,9 +10,13 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   context dialog composition tests - Protect host ownership and replace-before-size ordering.
-//   context tab helper tests - Verify deterministic cycling, direct selection, body bounds, and visual bar clamping.
-//   context dialog rendering tests - Capture Overview, Tools, MCP, narrow, scrolling, cleanup, and reopen behavior.
+//   CapturedKeymapLayer - Captured dialog-local keymap registration.
+//   THEME - Stable test theme used by deterministic frames.
+//   createKeymapHarness - Builds a keymap-aware TUI harness.
+//   detailedAnalysis - Reusable populated context analysis fixture.
+//   emptyAnalysis - Reusable empty context analysis fixture.
+//   renderDialog - Renders one context dialog frame for assertions.
+//   toolUsage - Builds reusable per-tool usage fixtures.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

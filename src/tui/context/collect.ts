@@ -5,7 +5,7 @@
 //   SCOPE: Active session snapshots, safe SDK lookups, provider/model limit resolution, explicit MCP schema-catalog availability, and bounded warning capture.
 //   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk/v2, src/tui/context/analyze.ts, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
-//   ROLE: INTEGRATION
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

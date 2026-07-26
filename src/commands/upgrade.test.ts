@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   runUpgradeFlow tests - Verify the automatic install and sync upgrade flow without real global package mutations.
+//   createLoggerCapture - Captures upgrade flow messages for assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

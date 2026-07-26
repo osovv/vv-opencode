@@ -4,7 +4,7 @@
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
 //   SCOPE: Shell detection, completion file writing, nested orchestration/config/plugin/patch-provider/preset and role flow generation, and rc file patching.
 //   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/vvoc-preset-registry.ts]
-//   LINKS: [M-CLI-COMPLETION, M-CLI-COMMANDS, M-CLI-ORCHESTRATION, M-ORCHESTRATION-PROFILES]
+//   LINKS: M-CLI-COMPLETION, M-CLI-COMMANDS, M-CLI-ORCHESTRATION, M-ORCHESTRATION-PROFILES
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

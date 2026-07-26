@@ -15,6 +15,10 @@
       <NonGoal>Delete legacy vv-gpt-* aliases from user-owned OpenCode configuration automatically.</NonGoal>
       <NonGoal>Fix OpenCode or CLIProxyAPI transport-level GPT-5.6 Responses Lite behavior.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Preserve provider.openai interoperability and conservative handling of user-owned OpenCode configuration.</Constraint>
+      <Constraint>Keep canonical preset names, compatibility aliases, documentation, tests, and GRACE projections synchronized.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>Fresh managed vvoc configuration contains vv-codex and no canonical vv-openai preset entry.</Criterion>
       <Criterion>vv-codex, vv-osovv, and vv-osovv-cheap reference openai/vv-codex-gpt-* models where managed Codex aliases are used.</Criterion>

@@ -4,7 +4,7 @@
 //   PURPOSE: Manage canonical vvoc model role assignments in scoped vvoc.json layers.
 //   SCOPE: Effective/global/project role listing, scoped set/unset writes, built-in role protection, and normalized model parsing.
 //   DEPENDS: [citty, node:fs/promises, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
-//   LINKS: [M-CLI-ROLE, M-CLI-COMMANDS]
+//   LINKS: M-CLI-ROLE, M-CLI-COMMANDS
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

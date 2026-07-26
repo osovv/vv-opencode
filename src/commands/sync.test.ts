@@ -10,7 +10,8 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   sync command tests - Verify strict current-only command behavior and plugin toggle preservation.
+//   captureConsoleLog - Captures sync command diagnostics.
+//   runSyncCommand - Runs the sync command against isolated fixtures.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

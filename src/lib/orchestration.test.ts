@@ -10,8 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   profile domain tests - Stable names, absent-section fallback, and strict explicit parsing.
-//   concrete policy tests - Active-only controller text, reviewer exception, and workflow capability mapping.
+//   [test scenarios] - Orchestration profile coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

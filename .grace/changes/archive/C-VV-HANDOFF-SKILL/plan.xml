@@ -56,11 +56,9 @@
         <V-M-CLI-CONFIG />
         <V-M-CLI-INIT />
       </VerificationAnchors>
-      <ContextArtifact>.grace/context/requirements.xml</ContextArtifact>
-      <GraphDocument>.grace/graph/main.xml</GraphDocument>
-      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
-      <ChangeArtifact>.grace/changes/active/C-VV-HANDOFF-SKILL/spec.xml</ChangeArtifact>
-      <ChangeArtifact>.grace/changes/active/C-VV-HANDOFF-SKILL/plan.xml</ChangeArtifact>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <GD-MAIN />
+      <VD-MAIN />
     </DurableScope>
     <ObservedWriteScope>
       <File>templates/skills/vv-handoff/SKILL.md</File>
@@ -112,7 +110,10 @@
       </T-002>
       <T-003>
         <Title>Update managed-skill tests for distribution and prompt contracts.</Title>
-        <DependsOn>T-001,T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Update src/lib/opencode.test.ts managed-skill count assertions from five managed SKILL.md files plus three references to six managed SKILL.md files plus three references.</Criterion>
           <Criterion>Add assertions that installManagedSkillFiles, syncManagedSkillFiles, kept sync, and force sync include vv-handoff/SKILL.md.</Criterion>
@@ -128,7 +129,11 @@
       </T-003>
       <T-004>
         <Title>Update README and GRACE durable metadata.</Title>
-        <DependsOn>T-001,T-002,T-003</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Update README managed-skill overview from five to six workflow skills and add a vv-handoff table row.</Criterion>
           <Criterion>Document .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml in the project-local data layout without implying validation or automatic command execution.</Criterion>
@@ -144,7 +149,12 @@
       </T-004>
       <T-005>
         <Title>Run final focused and project-level verification.</Title>
-        <DependsOn>T-001,T-002,T-003,T-004</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Focused tests for managed skills and init pass.</Criterion>
           <Criterion>Typecheck, lint, format check, and GRACE lint pass.</Criterion>

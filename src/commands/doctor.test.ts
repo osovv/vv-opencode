@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   doctor command tests - Verify unresolved vv-role references and invalid vvoc config diagnostics surface in Problems with exitCode=1.
+//   captureOutput - Captures doctor command output and exit behavior for assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

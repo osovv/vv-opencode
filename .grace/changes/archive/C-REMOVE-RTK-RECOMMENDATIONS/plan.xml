@@ -42,8 +42,6 @@
       <VerificationAnchors>
         <V-M-CLI-INIT />
       </VerificationAnchors>
-      <ChangeArtifact>.grace/changes/active/C-REMOVE-RTK-RECOMMENDATIONS/spec.xml</ChangeArtifact>
-      <ChangeArtifact>.grace/changes/active/C-REMOVE-RTK-RECOMMENDATIONS/plan.xml</ChangeArtifact>
     </DurableScope>
     <ObservedWriteScope>
       <File>src/commands/init.ts</File>
@@ -85,7 +83,10 @@
       </T-002>
       <T-003>
         <Title>Final verification and RTK-absence search.</Title>
-        <DependsOn>T-001,T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>A repository-wide search for "rtk" returns no project-authored references, excluding transitive dependencies recorded in bun.lock.</Criterion>
           <Criterion>typecheck, lint, format check, and bun test all pass.</Criterion>

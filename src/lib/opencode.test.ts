@@ -10,14 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   ensurePackageConfigText tests - Verify schema insertion and pinned plugin writes.
-//   ensureTuiPackageConfigText tests - Verify dedicated TUI schema insertion, tuple preservation, legacy migration, and idempotent pinned package registration.
-//   OpenCode runtime tests - Verify version parsing and minimum TUI compatibility diagnostics.
-//   ensureManagedAgentRegistrationsConfigText tests - Verify role-reference defaults, managed tool rewrites, and managed agent rewrites while preserving comments.
-//   canonical vvoc config tests - Verify schema v3 seeding, managed preset refresh, and strict pre-role rejection.
-//   provider helper tests - Verify conservative provider patch helpers remain comment-safe.
-//   resolvePaths tests - Verify vvoc/OpenCode root separation by scope.
-//   managed skill files tests - Verify managed skill/reference install, sync, and custom-skill reference safety.
+//   exists - Checks whether a fixture path exists.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

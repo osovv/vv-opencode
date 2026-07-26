@@ -17,6 +17,7 @@
 //   ReviewerAgentName - Tracked reviewer subagent names mapped from reviewer roles.
 //   ReviewerResultStatus - Reviewer result statuses that participate in round aggregation.
 //   RESULT_EXCERPT_MAX_CHARS - Single deterministic maximum for bounded result excerpts.
+//   WorkflowResultExcerptSource - Source discriminator for bounded recovery excerpts.
 //   WorkflowResultExcerpt - Bounded recovery excerpt captured from parsed body or normalized output.
 //   createWorkflowResultExcerpt - Creates deterministic bounded result excerpts.
 //   ReviewRoundResult - Stored result payload for one reviewer in a review round.

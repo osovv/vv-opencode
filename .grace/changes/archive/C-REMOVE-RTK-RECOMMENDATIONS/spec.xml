@@ -12,6 +12,10 @@
       <NonGoal>Do not change any other vvoc init behavior or outro structure beyond removing the RTK block.</NonGoal>
       <NonGoal>Do not add RTK-detection, RTK-blocking, or uninstall guidance logic.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Limit the change to removing project-authored RTK recommendations without adding replacement tooling or detection logic.</Constraint>
+      <Constraint>Preserve all unrelated init behavior and documentation structure.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>The interactive vvoc init outro no longer recommends RTK or shows RTK install commands; the outro is reduced to the single success message.</Criterion>
       <Criterion>README.md no longer contains an Optional: RTK section or any rtk-ai/rtk link, install command, or recommendation.</Criterion>

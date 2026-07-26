@@ -4,7 +4,7 @@
 //   PURPOSE: Display installed OpenCode plugins with their status (enabled/disabled) and selected source paths.
 //   SCOPE: Read-scope parsing, plugin array inspection, effective vvoc plugin toggle loading, table rendering, and graceful handling of missing config.
 //   DEPENDS: [citty, src/lib/config-layers.ts]
-//   LINKS: [M-CLI-PLUGIN-LIST, M-CLI-CONFIG]
+//   LINKS: M-CLI-PLUGIN-LIST, M-CLI-CONFIG
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

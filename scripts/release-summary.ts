@@ -6,10 +6,16 @@
 //   DEPENDS: [node:child_process]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   SUMMARY_ENVELOPE_RE - Extracts the required XML-like summary envelope.
+//   MARKDOWN_HEADING_PATTERN - Rejects Markdown headings in generated prose.
+//   FENCED_CODE_PATTERN - Rejects fenced code blocks in generated prose.
+//   AI_GENERATION_PATTERN - Rejects meta commentary about AI generation.
+//   MAX_SUMMARY_LENGTH - Maximum accepted summary length.
+//   OpencodeJsonEvent - Minimal OpenCode JSONL event shape consumed by parsing.
 //   DEFAULT_RELEASE_SUMMARY_MODEL - Default provider/model for release summary generation.
 //   DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS - Default per-attempt OpenCode timeout.
 //   RELEASE_SUMMARY_MAX_ATTEMPTS - Total attempts before release:bump aborts.

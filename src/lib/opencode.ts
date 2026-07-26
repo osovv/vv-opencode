@@ -916,6 +916,7 @@ export async function ensurePackageInstalled(paths: ResolvedPaths): Promise<{
   await writeText(paths.opencodeConfigPath, nextText);
   return { path: paths.opencodeConfigPath, changed: true };
 }
+// END_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
 
 // START_BLOCK_ENSURE_PROVIDER_BASE_URL_CONFIG
 export function ensureProviderBaseUrlConfigText(
@@ -986,6 +987,7 @@ export async function writeProviderBaseUrl(
 }
 // END_BLOCK_ENSURE_PROVIDER_BASE_URL_CONFIG
 
+// START_BLOCK_VVOC_CONFIG_IO
 export async function readVvocConfig(
   paths: Pick<ResolvedPaths, "vvocConfigPath">,
 ): Promise<VvocConfig | undefined> {
@@ -1027,7 +1029,7 @@ export async function writeGuardianConfig(
 
   return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
-// END_BLOCK_INSTALL_PACKAGE_AND_GUARDIAN_CONFIG
+// END_BLOCK_VVOC_CONFIG_IO
 
 // START_BLOCK_INSPECT_OPENCODE_RUNTIME
 export async function inspectOpenCodeRuntime(
@@ -1520,6 +1522,7 @@ function isBasePackageSpecifier(value: string): boolean {
   const prefix = `${PACKAGE_NAME}@`;
   return value.startsWith(prefix) && !value.slice(prefix.length).includes("/");
 }
+// END_BLOCK_PARSE_AND_NORMALIZE_CONFIG_VALUES
 
 // START_BLOCK_MANAGED_AGENT_HELPERS
 function readAgentMap(document: JsonObject, label: string): Record<string, JsonObject> {
@@ -1921,6 +1924,7 @@ function createRoleReference(roleId: string): string {
 }
 // END_BLOCK_MANAGED_AGENT_HELPERS
 
+// START_BLOCK_JSON_VALUE_HELPERS
 function readNonEmptyString(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${label}: expected a non-empty string`);
@@ -1960,7 +1964,7 @@ function readOptionalObject(
   }
   return value as JsonObject;
 }
-// END_BLOCK_PARSE_AND_NORMALIZE_CONFIG_VALUES
+// END_BLOCK_JSON_VALUE_HELPERS
 
 // START_BLOCK_FILESYSTEM_HELPERS
 function isManagedFile(text: string): boolean {

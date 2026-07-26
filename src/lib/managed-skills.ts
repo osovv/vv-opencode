@@ -4,7 +4,7 @@
 //   PURPOSE: Describe vvoc-managed OpenCode skills and load them from bundled templates or scoped vvoc config roots.
 //   SCOPE: Managed skill names, skill file path resolution, bundled template loading, reference file discovery, and project/global skill lookup.
 //   DEPENDS: [node:fs/promises, node:path, node:url, src/lib/vvoc-paths.ts]
-//   LINKS: [M-CLI-MANAGED-SKILLS]
+//   LINKS: M-CLI-MANAGED-SKILLS
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

@@ -4,7 +4,7 @@
 //   PURPOSE: Define built-in role IDs, role-reference parsing, concrete model-selection parsing, and deterministic built-in role bindings.
 //   SCOPE: Role ID validation, vv-role reference detection/resolution, provider/model parsing, and hard-coded built-in role binding lookup.
 //   DEPENDS: [none]
-//   LINKS: [M-MODEL-ROLES]
+//   LINKS: M-MODEL-ROLES
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

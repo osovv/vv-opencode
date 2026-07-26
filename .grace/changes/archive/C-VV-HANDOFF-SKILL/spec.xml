@@ -14,6 +14,10 @@
       <NonGoal>Do not validate handoff.xml or introduce a formal schema for it.</NonGoal>
       <NonGoal>Do not make vv-handoff run tests, lint, build, git status, git diff, or any other command for additional context collection.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Use only already-visible session context and never run commands to collect additional handoff evidence.</Constraint>
+      <Constraint>Write only project-local XML handoff notes and redact secrets before persistence.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>vv-handoff appears in the managed skill set and is installed/synced through existing managed skill delivery alongside vv-spec, vv-plan, vv-review, vv-execute, and vv-reflect.</Criterion>
       <Criterion>The packaged skill instructions require writing only .vvoc/handoff/YYYY-MM-DD-&lt;session-slug&gt;/handoff.xml in the current project, with session-slug generated from the main session goal and collision handling by suffixing -2, -3, and later integers.</Criterion>

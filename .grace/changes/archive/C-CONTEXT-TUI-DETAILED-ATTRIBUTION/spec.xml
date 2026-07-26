@@ -19,6 +19,10 @@
       <NonGoal>Do not persist historical context analytics, trends, or per-session usage snapshots outside existing OpenCode state.</NonGoal>
       <NonGoal>Do not use estimated known usage as a substitute percentage denominator when the model context limit is unavailable.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Preserve provider-measured top-line usage, active post-compaction scope, and explicitly approximate attribution.</Constraint>
+      <Constraint>Reuse existing OpenCode state and catalogs without adding MCP network requests or mutating MCP configuration.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>The host-owned xlarge /context dialog exposes Overview, Tools, and MCP tabs without a nested Dialog wrapper; left and right arrows or keys 1, 2, and 3 switch tabs, long content is scrollable, and Escape retains host-managed dismissal.</Criterion>
       <Criterion>Overview preserves the measured usage header and existing category semantics while each category row shows estimated tokens, percentage of model contextLimit, and a bounded visual bar.</Criterion>

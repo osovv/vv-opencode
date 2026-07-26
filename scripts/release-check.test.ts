@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 
 // START_MODULE_MAP
-//   collectReleaseConsistencyErrors - Returns all package, schema, and changelog summary consistency errors for tests and main.
+//   fixture - Builds a valid release consistency fixture with optional overrides.
 // END_MODULE_MAP
 
 // START_CHANGE_SUMMARY

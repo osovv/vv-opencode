@@ -17,6 +17,10 @@
       <NonGoal>Add profile-specific primary agents, a public orchestration plugin, granular delegation flags, or schema v4.</NonGoal>
       <NonGoal>Modify Guardian permission behavior or redesign the tracked workflow result protocol.</NonGoal>
     </NonGoals>
+    <Constraints>
+      <Constraint>Remain backward compatible with strict vvoc schema v3 documents that omit orchestration configuration.</Constraint>
+      <Constraint>Resolve orchestration from the startup configuration snapshot without changing tools, permissions, or workflow persistence.</Constraint>
+    </Constraints>
     <AcceptanceCriteria>
       <Criterion>ORCHESTRATION_PROFILE_NAMES contains exactly single-session, balanced, and orchestrated in stable order, and the shared resolver returns balanced only when orchestration is absent.</Criterion>
       <Criterion>Runtime and published schema v3 accept optional root and preset orchestration.profile fields with only the three supported values while preserving old valid v3 documents.</Criterion>

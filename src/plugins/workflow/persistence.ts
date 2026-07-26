@@ -9,7 +9,7 @@
 //     Directory auto-creation on snapshot. Safe null return on missing, corrupt,
 //     or incomplete persisted files.
 //   DEPENDS: [node:fs, node:path, src/lib/vvoc-paths.ts, src/plugins/workflow/state.ts]
-//   LINKS: [M-WORKFLOW-PERSISTENCE]
+//   LINKS: M-WORKFLOW-PERSISTENCE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

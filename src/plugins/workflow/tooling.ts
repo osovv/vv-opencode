@@ -4,7 +4,7 @@
 //   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses.
 //   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions, explicit open-contract validation, round metadata and bounded recovery excerpt serialization, and deterministic execution responses.
 //   DEPENDS: [src/plugins/workflow/state.ts]
-//   LINKS: [M-WORKFLOW-TOOLING]
+//   LINKS: M-WORKFLOW-TOOLING
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

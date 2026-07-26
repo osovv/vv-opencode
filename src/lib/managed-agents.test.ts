@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   managed prompt lookup tests - Verify bundled template loading plus project/global runtime prompt resolution.
+//   [test scenarios] - Managed prompt behavior is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   Test suite for config validation - canonical vvoc.json schema validation.
+//   FP - Fixture path aliases used by canonical vvoc.json validation tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

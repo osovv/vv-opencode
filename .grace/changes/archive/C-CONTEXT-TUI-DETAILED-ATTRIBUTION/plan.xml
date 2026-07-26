@@ -47,12 +47,10 @@
         <V-M-PLUGIN-CONTEXT-TUI />
         <VF-CONTEXT-INSPECTION />
       </VerificationAnchors>
-      <ContextArtifact>.grace/changes/active/C-CONTEXT-TUI-DETAILED-ATTRIBUTION/spec.xml</ContextArtifact>
-      <ContextArtifact>.grace/changes/active/C-CONTEXT-TUI-DETAILED-ATTRIBUTION/design-context.xml</ContextArtifact>
-      <ContextArtifact>.grace/context/requirements.xml</ContextArtifact>
-      <ContextArtifact>.grace/context/technology.xml</ContextArtifact>
-      <GraphDocument>.grace/graph/main.xml</GraphDocument>
-      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+      <GD-MAIN />
+      <VD-MAIN />
     </DurableScope>
     <ObservedWriteScope>
       <File>.grace/changes/active/C-CONTEXT-TUI-DETAILED-ATTRIBUTION/plan.xml</File>
@@ -106,7 +104,10 @@
       </T-002>
       <T-003>
         <Title>Strengthen pure analyzer regression coverage for percentages, tools, MCP attribution, and compaction.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Tests cover percentages against a positive context limit and undefined percentages when the limit is absent or non-positive.</Criterion>
           <Criterion>Tests cover an unused schema, repeated calls, completed outputs, errors, pending inputs, stable sorting, and schema plus history total calculation.</Criterion>
@@ -122,7 +123,10 @@
       </T-003>
       <T-004>
         <Title>Implement the responsive Overview, Tools, and MCP dialog views with keyboard navigation and scrolling.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Preserve the direct host dialog composition and replace-before-setSize ordering while keeping the measured usage header visible across all tabs.</Criterion>
           <Criterion>Add component-local tab state with Overview as the initial tab; left and right cycle tabs and keys 1, 2, and 3 select them directly only while the context dialog is active.</Criterion>
@@ -143,7 +147,10 @@
       </T-004>
       <T-005>
         <Title>Expand view regression coverage for tab transitions, rendering, scrolling, and dialog lifecycle.</Title>
-        <DependsOn>T-003, T-004</DependsOn>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Preserve regression checks for no nested Dialog wrapper and replace-before-xlarge sizing.</Criterion>
           <Criterion>Tests exercise deterministic tab transition helpers and dialog-local binding cleanup without requiring a running OpenCode process.</Criterion>
@@ -159,7 +166,11 @@
       </T-005>
       <T-006>
         <Title>Document detailed /context semantics and synchronize source contracts.</Title>
-        <DependsOn>T-002, T-004, T-005</DependsOn>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>README describes all three tabs, context-limit percentage semantics, active post-compaction scope, schema versus history, disabled-server schema zero, retained active history, and Other external/plugin uncertainty.</Criterion>
           <Criterion>README continues to distinguish provider-measured usage from provider-neutral estimates and does not promise exact provider payload reconstruction.</Criterion>
@@ -175,7 +186,13 @@
       </T-006>
       <T-007>
         <Title>Synchronize GRACE requirements, context-inspection flow, module ownership, and verification.</Title>
-        <DependsOn>T-002, T-003, T-004, T-005, T-006</DependsOn>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>UC-021 and the current attribution non-goal describe tabbed detail, context-limit percentages, active scope, deterministic MCP naming, and fail-closed ambiguity without weakening estimate honesty.</Criterion>
           <Criterion>M-PLUGIN-CONTEXT-TUI describes detailed tool and MCP analysis, tabbed rendering, and any new Solid/keymap dependency while retaining the existing owned paths.</Criterion>
@@ -190,7 +207,12 @@
       </T-007>
       <T-008>
         <Title>Run final repository gates and live normal-width and narrow-width TUI verification.</Title>
-        <DependsOn>T-003, T-005, T-006, T-007</DependsOn>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+          <Task>T-007</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Focused context tests and the full repository check pass with fresh output.</Criterion>
           <Criterion>Build and pack checks pass with the declared Solid/OpenTUI package surface and all public exports remain importable.</Criterion>

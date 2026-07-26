@@ -10,11 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   dispatch regression tests - Protect branch-only push and exact-SHA workflow dispatch semantics.
-//   workflow run parsing tests - Protect deterministic gh run watch targeting.
-//   workflow wait tests - Protect exact run watching with failure propagation.
-//   finalization tests - Protect npm gitHead verification before local tag and GitHub Release creation.
-//   workflow ordering tests - Protect verification-before-publish while keeping tag/release mutation out of CI.
+//   CapturedCommand - One captured command invocation used by release workflow tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

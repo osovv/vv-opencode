@@ -6,7 +6,7 @@
 //   DEPENDS: [@opencode-ai/plugin/tui, src/tui/context/plugin.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: BARREL
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: SUMMARY
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP

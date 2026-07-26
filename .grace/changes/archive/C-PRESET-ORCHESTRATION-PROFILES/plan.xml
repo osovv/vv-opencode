@@ -79,12 +79,8 @@
         <V-M-CLI-COMMANDS />
         <V-M-CLI-COMPLETION />
       </VerificationAnchors>
-      <ContextArtifact>.grace/changes/active/C-PRESET-ORCHESTRATION-PROFILES/spec.xml</ContextArtifact>
-      <ContextArtifact>.grace/changes/active/C-PRESET-ORCHESTRATION-PROFILES/design-context.xml</ContextArtifact>
-      <GraphDocument>.grace/graph/index.xml</GraphDocument>
-      <GraphDocument>.grace/graph/main.xml</GraphDocument>
-      <VerificationDocument>.grace/verification/index.xml</VerificationDocument>
-      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+      <GD-MAIN />
+      <VD-MAIN />
     </DurableScope>
     <ObservedWriteScope>
       <File>src/lib/orchestration.ts</File>
@@ -148,7 +144,10 @@
       </T-002>
       <T-003>
         <Title>Apply preset role and orchestration changes atomically.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Every built-in preset has the approved profile mapping.</Criterion>
           <Criterion>Applying a preset validates all roles and profile data before one vvoc.json write and never rewrites OpenCode config.</Criterion>
@@ -160,7 +159,10 @@
       </T-003>
       <T-004>
         <Title>Inject one concrete vv-controller system context from the startup snapshot.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>vv-controller receives universal guidance plus exactly one selected controller policy; build and custom primaries receive universal guidance only.</Criterion>
           <Criterion>single-session excludes proactive working-subagent and tracked-loop instructions while retaining the concise no-working-subagent rule and reviewer exception.</Criterion>
@@ -172,7 +174,10 @@
       </T-004>
       <T-005>
         <Title>Select profile-compatible WorkflowPlugin guidance without changing enforcement.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>single-session receives concise tracked review-only mechanics, balanced receives optional bounded delegation guidance, and orchestrated retains the full tracked protocol.</Criterion>
           <Criterion>Review-only failures remain findings and never route to implementers.</Criterion>
@@ -184,7 +189,10 @@
       </T-005>
       <T-006>
         <Title>Make the managed vv-controller prompt profile-neutral.</Title>
-        <DependsOn>T-004, T-005</DependsOn>
+        <DependsOn>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>The template preserves universal findings-first, working-state, assumption, reroute, editing, skill, large-feature gate, hard-stop, artifact, and reporting guidance.</Criterion>
           <Criterion>The template defers concrete work behavior to the selected system policy and does not prescribe ordinary explore, investigator, implementer, change_with_review, implementation work-item, or reviewer-loop routes.</Criterion>
@@ -208,7 +216,10 @@
       </T-007>
       <T-008>
         <Title>Add scoped orchestration show and set commands.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>show defaults to effective scope, reports profile and source, resolves missing orchestration to balanced, and never writes.</Criterion>
           <Criterion>set accepts only supported values and global or project scope, preserves unrelated config, rejects invalid existing files without byte changes, and bootstraps canonical v3 when absent.</Criterion>
@@ -232,7 +243,11 @@
       </T-009>
       <T-010>
         <Title>Report the resolved orchestration profile in installation status.</Title>
-        <DependsOn>T-001, T-002, T-008</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-008</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Global, project, and default status reports print the profile from the selected source.</Criterion>
           <Criterion>No-file effective status reports balanced and default source.</Criterion>
@@ -244,7 +259,14 @@
       </T-010>
       <T-011>
         <Title>Document public orchestration behavior.</Title>
-        <DependsOn>T-003, T-004, T-005, T-007, T-008, T-010</DependsOn>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-007</Task>
+          <Task>T-008</Task>
+          <Task>T-010</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>README documents commands, profile values, built-in mapping, partial custom preset behavior, source display, and restart requirements exactly as implemented.</Criterion>
           <Criterion>README states that profiles are prompt-driven and do not disable tools, distinguishes reviewer subagents from delegated working context, preserves vv-review findings-only behavior, and explains vv-execute explicit choice.</Criterion>
@@ -255,7 +277,15 @@
       </T-011>
       <T-012>
         <Title>Synchronize GRACE module ownership and orchestration data flows.</Title>
-        <DependsOn>T-003, T-004, T-005, T-006, T-007, T-009, T-010</DependsOn>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+          <Task>T-007</Task>
+          <Task>T-009</Task>
+          <Task>T-010</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>M-ORCHESTRATION-PROFILES and M-CLI-ORCHESTRATION appear in index ownership, routed direct anchors, module anchors, and modules.</Criterion>
           <Criterion>Every changed source and template file has accurate ownership and dependencies include M-ORCHESTRATION-PROFILES where required.</Criterion>
@@ -267,7 +297,19 @@
       </T-012>
       <T-013>
         <Title>Synchronize GRACE verification and run final release-grade gates.</Title>
-        <DependsOn>T-002, T-003, T-004, T-005, T-006, T-007, T-008, T-009, T-010, T-011, T-012</DependsOn>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+          <Task>T-007</Task>
+          <Task>T-008</Task>
+          <Task>T-009</Task>
+          <Task>T-010</Task>
+          <Task>T-011</Task>
+          <Task>T-012</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>New verification anchors appear in index ownership, routed direct anchors, verification anchors, and module verification.</Criterion>
           <Criterion>Critical flow verification covers backward compatibility, atomic writes, source resolution, prompt isolation, and fail-closed explicit values.</Criterion>

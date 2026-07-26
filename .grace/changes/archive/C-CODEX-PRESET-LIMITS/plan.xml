@@ -54,10 +54,8 @@
         <V-M-CLI-CONFIG-VALIDATE />
         <V-M-CLI-INIT />
       </VerificationAnchors>
-      <ContextArtifact>.grace/changes/active/C-CODEX-PRESET-LIMITS/spec.xml</ContextArtifact>
-      <ContextArtifact>.grace/changes/active/C-CODEX-PRESET-LIMITS/design-context.xml</ContextArtifact>
-      <GraphDocument>.grace/graph/main.xml</GraphDocument>
-      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+      <GD-MAIN />
+      <VD-MAIN />
     </DurableScope>
     <ObservedWriteScope>
       <File>src/commands/patch-provider.ts</File>
@@ -106,7 +104,10 @@
       </T-002>
       <T-003>
         <Title>Synchronize documentation and regression coverage for canonical Codex naming and compatibility behavior.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>README examples use vv-codex, patch-provider codex, and openai/vv-codex-gpt-* identifiers.</Criterion>
           <Criterion>Tests assert complete model objects including explicit input limits and canonical names.</Criterion>
@@ -119,7 +120,11 @@
       </T-003>
       <T-004>
         <Title>Keep GRACE graph and verification projections truthful for the changed public behavior.</Title>
-        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Inspect owning graph and verification entries and update them only if module purpose, paths, dependencies, or verification contracts changed materially.</Criterion>
           <Criterion>No semantic anchors are renamed or removed.</Criterion>
@@ -132,7 +137,10 @@
       </T-004>
       <T-005>
         <Title>Run targeted and repository-wide verification.</Title>
-        <DependsOn>T-003, T-004</DependsOn>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Targeted patch-provider, preset, completion, config validation, and launch tests pass.</Criterion>
           <Criterion>bun run check and bun run build pass with fresh output.</Criterion>

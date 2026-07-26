@@ -4,12 +4,13 @@
 //   PURPOSE: Register the modern OpenCode /context TUI command and connect config toggles, collection, and rendering.
 //   SCOPE: Plugin enablement, active-session gating, keymap command registration, lifecycle cleanup, and bounded error toasts.
 //   DEPENDS: [@opencode-ai/plugin/tui, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/tui/context/collect.ts, src/tui/context/view.tsx]
-//   LINKS: [M-PLUGIN-CONTEXT-TUI, M-CONFIG-LAYERS, M-PLUGIN-TOGGLE-CONFIG, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
-//   ROLE: INTEGRATION
+//   LINKS: M-PLUGIN-CONTEXT-TUI, M-CONFIG-LAYERS, M-PLUGIN-TOGGLE-CONFIG, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   ContextTuiDependencies - Injectable enablement, collection, and rendering dependencies for focused tests.
 //   registerContextTuiPlugin - Register /context with injectable dependencies for focused tests.
 //   ContextTuiPlugin - Default production TUI plugin factory.
 // END_MODULE_MAP

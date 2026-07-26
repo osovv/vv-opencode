@@ -56,10 +56,8 @@
         <V-M-WORKFLOW-PERSISTENCE />
         <V-M-PLUGIN-WORKFLOW />
       </VerificationAnchors>
-      <ContextArtifact>.grace/changes/active/C-WORKFLOW-RESULT-PRESERVATION/spec.xml</ContextArtifact>
-      <ContextArtifact>.grace/changes/active/C-WORKFLOW-RESULT-PRESERVATION/design-context.xml</ContextArtifact>
-      <GraphDocument>.grace/graph/main.xml</GraphDocument>
-      <VerificationDocument>.grace/verification/main.xml</VerificationDocument>
+      <GD-MAIN />
+      <VD-MAIN />
     </DurableScope>
     <ObservedWriteScope>
       <File>src/plugins/workflow/protocol.ts</File>
@@ -104,7 +102,10 @@
       </T-002>
       <T-003>
         <Title>Persist and expose bounded recovery excerpts in workflow state and work_item_list.</Title>
-        <DependsOn>T-001, T-002</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>WorkItemRecord can carry the latest relevant implementer result excerpt for blocked or needs_context recovery.</Criterion>
           <Criterion>ReviewRoundResult can carry the reviewer result excerpt, especially for reviewer NEEDS_CONTEXT recovery.</Criterion>
@@ -119,7 +120,11 @@
       </T-003>
       <T-004>
         <Title>Propagate result excerpts through workflow plugin protocol errors and hard stops.</Title>
-        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>When parsing fails after optional repair, RESULT_PROTOCOL_ERROR includes the protocol error plus a capped excerpt of the original normalized tracked task output.</Criterion>
           <Criterion>When state application rejects a parsed result, RESULT_PROTOCOL_ERROR includes the state error plus a capped excerpt of the parsed body or normalized output.</Criterion>
@@ -148,7 +153,13 @@
       </T-005>
       <T-006>
         <Title>Strengthen workflow regression tests for excerpts, diagnostics, repair guidance, and persistence.</Title>
-        <DependsOn>T-001, T-002, T-003, T-004, T-005</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Tests cover valid BLOCKED and NEEDS_CONTEXT results whose thrown hard-stop errors include original result excerpts.</Criterion>
           <Criterion>Tests cover work_item_list exposing implementer and reviewer recovery excerpts after blocked or needs_context states.</Criterion>
@@ -165,7 +176,13 @@
       </T-006>
       <T-007>
         <Title>Update GRACE graph and verification artifacts for changed workflow module scope.</Title>
-        <DependsOn>T-001, T-003, T-004, T-005, T-006</DependsOn>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>.grace/graph/main.xml reflects any changed workflow module purposes, dependencies, paths, or data-flow descriptions introduced by result body/excerpt handling.</Criterion>
           <Criterion>.grace/verification/main.xml reflects strengthened verification intent for result parsing, hard stops, work_item_list recovery excerpts, and repair diagnostics.</Criterion>
@@ -178,7 +195,10 @@
       </T-007>
       <T-008>
         <Title>Run final workflow-focused and repository quality verification.</Title>
-        <DependsOn>T-006, T-007</DependsOn>
+        <DependsOn>
+          <Task>T-006</Task>
+          <Task>T-007</Task>
+        </DependsOn>
         <AcceptanceCriteria>
           <Criterion>Workflow tests pass with the new result preservation coverage.</Criterion>
           <Criterion>Type checking, lint, format check, build, and GRACE validation pass or any skipped check is explicitly reported with reason.</Criterion>

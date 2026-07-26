@@ -11,6 +11,22 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   PACKAGE_NAME - Canonical npm package name.
+//   PKG_PATH - Package manifest path.
+//   SCHEMA_PATH - Canonical vvoc schema path.
+//   CHANGELOG_PATH - Changelog path.
+//   RELEASE_TYPES - Supported npm release target keywords.
+//   SEMVER_PATTERN - Explicit semantic-version validation pattern.
+//   SCHEMA_ID_PATTERN - Hosted schema identifier replacement pattern.
+//   ALLOWED_RELEASE_FILES - Files permitted to change during release preparation.
+//   CAPTURE_MAX_BUFFER - Maximum captured subprocess output size.
+//   PUBLISHED_METADATA_RETRY_DELAYS_MS - Bounded npm metadata retry delays.
+//   PackageJson - Package manifest fields consumed by release preparation.
+//   SchemaJson - Schema fields consumed by release preparation.
+//   ReleaseCommandRunner - Injected command runner contract.
+//   ReleaseSleeper - Injected retry sleep contract.
+//   ReleaseWorkflowDispatchInput - Inputs required to dispatch verified publication.
+//   PublishedReleaseFinalizationInput - Inputs required for authenticated release finalization.
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
 //   readPackageVersion - Reads the package version from package.json.
 //   run - Runs a command via execFileSync with inherited stdio and exits on failure.
@@ -29,6 +45,7 @@
 //   waitForPublishWorkflow - Waits for the exact workflow run and fails closed unless it succeeds.
 //   extractReleaseChangelogEntry - Extracts one version block for GitHub Release notes.
 //   finalizePublishedRelease - Retries npm gitHead propagation, then creates and pushes the local annotated tag and GitHub Release.
+//   gitStatus - Captures the current porcelain worktree status.
 //   main - Runs the guarded release bump through CI publication and authenticated local release finalization.
 // END_MODULE_MAP
 //
@@ -483,6 +500,7 @@ function main(): void {
     const today = new Date().toISOString().slice(0, 10);
     changelogEntry = `## [${newVersion}] - ${today}\n\n_No user-facing changes._`;
   }
+  // END_BLOCK_GENERATE_CHANGELOG
 
   // START_BLOCK_GENERATE_SUMMARY
   console.log("\nGenerating release summary with OpenCode...\n");
@@ -498,9 +516,10 @@ function main(): void {
   console.log("Release summary generated and injected into changelog entry.");
   // END_BLOCK_GENERATE_SUMMARY
 
+  // START_BLOCK_PREPEND_CHANGELOG
   prependToChangelog(changelogEntry);
   console.log("Changelog entry prepended to CHANGELOG.md");
-  // END_BLOCK_GENERATE_CHANGELOG
+  // END_BLOCK_PREPEND_CHANGELOG
   // START_BLOCK_UPDATE_SCHEMA_ID
   updateSchemaId(newVersion);
   // END_BLOCK_UPDATE_SCHEMA_ID

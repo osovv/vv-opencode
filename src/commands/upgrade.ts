@@ -4,7 +4,7 @@
 //   PURPOSE: Upgrade the global vvoc package by checking npm, installing the latest release with Bun, triggering a fresh sync subprocess, and reinstalling shell completions.
 //   SCOPE: npm registry query, version comparison, jsDelivr changelog fetching with version-range parsing, optional pre-release version resolution, global Bun install, post-install sync execution, and post-upgrade shell completion installation.
 //   DEPENDS: [src/lib/package.ts, citty]
-//   LINKS: [M-CLI-UPGRADE, V-M-CLI-UPGRADE]
+//   LINKS: M-CLI-UPGRADE, V-M-CLI-UPGRADE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

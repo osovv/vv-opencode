@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineEditPlugin tests - Verify read hashing, edit execution, partial-read anchor stability, normalization heuristics, mismatch handling, and text-envelope preservation.
+//   anchorFor - Builds a visible hashline anchor for fixture content.
+//   createPluginInput - Builds an isolated OpenCode plugin input fixture.
+//   createToolContext - Builds a tool execution context fixture.
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

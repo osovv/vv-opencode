@@ -270,7 +270,6 @@ function createHardStopMessage(options: {
   ].join("\n");
 }
 
-// START_BLOCK_PLUGIN_ENTRY
 export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   const vvoc = await loadVvocConfig({ cwd: directory });
   if (!isVvocPluginEnabled(vvoc.config, "workflow")) return {};
@@ -305,6 +304,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   }
   // END_BLOCK_PERSISTENCE_SETUP
 
+  // START_BLOCK_PLUGIN_ENTRY
   // Tool wrappers still need a store reference for description/args shape
   // but execute handlers resolve the right store per-call
   const dummyStore = createWorkItemStore();

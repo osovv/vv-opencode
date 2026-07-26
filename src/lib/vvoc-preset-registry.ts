@@ -4,7 +4,7 @@
 //   PURPOSE: Define the canonical built-in vvoc preset registry from a single internal source of truth.
 //   SCOPE: Built-in preset name ordering, role and orchestration definitions, and built-in preset-name detection.
 //   DEPENDS: [src/lib/orchestration.ts]
-//   LINKS: [M-VVOC-PRESET-REGISTRY, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG, M-CLI-PRESET, M-CLI-COMPLETION]
+//   LINKS: M-VVOC-PRESET-REGISTRY, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG, M-CLI-PRESET, M-CLI-COMPLETION
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT

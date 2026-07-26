@@ -10,7 +10,8 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   setupPlaceholderSession - Creates a test placeholder session.
+//   PREFIX - Expected placeholder prefix fixture.
+//   SECRET - HMAC secret fixture used by placeholder session tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

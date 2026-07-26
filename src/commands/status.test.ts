@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   status command tests - Verify role inventory output and invalid vvoc config diagnostics from installation inspection.
+//   captureStdout - Captures status output for source and diagnostic assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

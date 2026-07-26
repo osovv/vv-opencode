@@ -10,7 +10,13 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   ModelRolesPlugin tests - Verify startup-time vv-role resolution for supported config targets and explicit failure surfaces.
+//   createPluginInProject - Creates a plugin fixture rooted in an isolated project.
+//   createPluginWithRoles - Creates a plugin fixture with explicit role bindings.
+//   getLogMessages - Extracts captured plugin log messages.
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   previousVvocConfig - Preserves the caller's vvoc config override for cleanup.
+//   tempDirs - Tracks temporary plugin fixture roots.
+//   writeVvocConfig - Writes a role-aware vvoc fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

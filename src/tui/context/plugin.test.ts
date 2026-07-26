@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   context TUI plugin tests - Exercise command metadata and fail-soft control flow.
+//   CommandShape - Minimal registered command shape captured by the test harness.
+//   createDependencies - Builds injectable /context dependencies.
+//   createHarness - Builds a modern TUI plugin API harness.
+//   emptyAnalysis - Reusable empty context analysis fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
