@@ -1,5 +1,5 @@
 // FILE: src/tui/context/analyze.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Derive measured usage plus reconciled category, per-tool, and per-MCP active context attribution from observable OpenCode session data.
 //   SCOPE: Compaction cutoff, provider usage baseline, context-limit percentages, skill/tool/message categorization, deterministic MCP ownership, explicit schema observability, residual unknown context, and sorted detail aggregates.
@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Classified web_search and web_fetch as vvoc-managed tools.]
 //   LAST_CHANGE: [DIRECT-FIX - Preserved unknown connected MCP schemas as unavailable rather than estimating them as zero.]
 // END_CHANGE_SUMMARY
 
@@ -52,7 +53,14 @@ const BUILTIN_TOOL_IDS = new Set([
   "write",
 ]);
 
-const VVOC_TOOL_IDS = new Set(["edit", "work_item_open", "work_item_list", "work_item_close"]);
+const VVOC_TOOL_IDS = new Set([
+  "edit",
+  "work_item_open",
+  "work_item_list",
+  "work_item_close",
+  "web_search",
+  "web_fetch",
+]);
 
 const MAX_ATTRIBUTION_WARNINGS = 3;
 

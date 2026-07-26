@@ -1,5 +1,5 @@
 // FILE: src/tui/context/analyze.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify measured context usage, compaction cutoff, percentages, detailed tool/MCP attribution, schema observability, reconciliation, and drift reporting.
 //   SCOPE: Pure deterministic analyzer and attribution-helper scenarios, including unavailable connected MCP catalogs, without a running OpenCode TUI.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Covered vvoc attribution for web_search and web_fetch.]
 //   LAST_CHANGE: [DIRECT-FIX - Covered unavailable connected MCP catalogs separately from known-zero disconnected schemas.]
 // END_CHANGE_SUMMARY
 
@@ -41,6 +42,8 @@ describe("context analysis", () => {
     expect(sanitizeMcpName("docs.api/v1-beta")).toBe("docs_api_v1-beta");
     expect(classifyToolSource("read", [])).toEqual({ source: { kind: "builtin" } });
     expect(classifyToolSource("edit", [])).toEqual({ source: { kind: "vvoc" } });
+    expect(classifyToolSource("web_search", [])).toEqual({ source: { kind: "vvoc" } });
+    expect(classifyToolSource("web_fetch", [])).toEqual({ source: { kind: "vvoc" } });
     expect(
       classifyToolSource("docs_api_lookup", [
         { name: "docs", status: "connected" },

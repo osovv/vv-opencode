@@ -152,6 +152,14 @@ test("GuardianPlugin registers guardian as a hidden subagent with explicit two-s
   expect(guardian?.steps).toBe(2);
   expect(guardian?.prompt).toBe("Custom guardian prompt.");
   expect(guardian?.model).toBe("openai/test-fast-model");
+  expect(guardian?.permission as Record<string, unknown>).toMatchObject({
+    web_search: "deny",
+    web_fetch: "deny",
+  });
+  expect(guardian?.tools as Record<string, unknown>).toMatchObject({
+    web_search: false,
+    web_fetch: false,
+  });
   expect(logs).toContain(
     "[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded",
   );
