@@ -164,11 +164,12 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **Model Roles** | Put roles like `vv-role:smart` or `vv-role:fast` in shared agents and skills instead of hardcoded model IDs, then choose provider/model mappings per environment |
 | **Orchestration Profiles** | Select a concrete work policy — single-session, balanced, or orchestrated — to control how vv-controller delegates. Built-in presets pick a sensible default and status reports the effective profile. |
 | **Workflow Tracking** | Replace free-form multi-agent chaos with explicit work items, bounded review rounds, reviewer result collection, and hard stops when more context is needed |
+| **Unified Web Tools** | Replace provider-specific search and reader schemas with the canonical `web_search` and `web_fetch` tools, configurable for Exa, Brave, native retrieval, or Spider extraction |
 | **Context Inspector** | Run `/context` in an active OpenCode TUI session for Overview, Tools, and MCP tabs with provider-reported usage, approximate context-window percentages, active post-compaction tool history, and deterministic source attribution |
 
 ---
 
-## The Seven Plugins
+## The Eight Plugins
 
 | Plugin | What it helps you do |
 |---|---|
@@ -178,6 +179,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **HashlineEditPlugin** | Make agent edits safer by tying changes to fresh `read` output, reducing wrong-line and stale-context edits. |
 | **SystemContextInjectionPlugin** | Inject universal primary guidance plus one startup-resolved orchestration policy into vv-controller, with skill discovery and subagent-only explore worker prompts. |
 | **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
+| **WebToolsPlugin** | Register the provider-neutral `web_search` and `web_fetch` tools, return direct image/PDF attachments, and hide OpenCode's built-in web tools at runtime unless the user explicitly configured their permissions. |
 | **ContextTuiPlugin** | Add a native scrollable `/context` dialog with measured usage plus detailed observable per-tool and per-MCP schema/history estimates, explicitly marking data that OpenCode does not expose. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
@@ -196,6 +198,39 @@ Workflow work items are opened with explicit intent. For implementation loops, c
 ```
 
 For review-only reports, use `"mode": "review_only"`. In review-only mode, reviewer `FAIL` is a completed finding result: required reviewers are collected independently, parallel `spec` and `code` reviewers may both return `FAIL`, and the item does not route to `vv-implementer` unless the user explicitly requests fixes.
+
+### Web Tools
+
+`WebToolsPlugin` exposes exactly two canonical model-facing tools:
+
+- `web_search` requests the `web_search` permission and returns ranked titles, URLs, snippets, and publication dates. Search uses Exa by default or Brave when configured.
+- `web_fetch` requests the `web_fetch` permission and retrieves a known HTTP or HTTPS URL as Markdown, text, raw HTML, or a direct JPEG, PNG, GIF, WebP, or PDF attachment. Fetch uses local native retrieval by default or Spider for configured textual extraction.
+
+The `web-tools` vvoc plugin toggle is enabled by default.
+
+Provider selection belongs to `vvoc.json`, not to individual model calls. Add this optional property fragment to an otherwise valid canonical schema-v3 config:
+
+```json
+"web": {
+  "search": { "provider": "brave", "apiKey": "replace-with-brave-key" },
+  "fetch": { "provider": "spider", "apiKey": "replace-with-spider-key" }
+}
+```
+
+Supported search providers are `exa` (default) and `brave`. Supported fetch providers are `native` (default, no credential required) and `spider`. Credentials resolve in this order:
+
+1. `EXA_API_KEY`, `BRAVE_API_KEY`, or `SPIDER_API_KEY` for the selected provider
+2. `web.search.apiKey` or `web.fetch.apiKey` in the effective `vvoc.json`
+
+Environment variables win when both sources exist. Config changes take effect after restarting OpenCode. Configured `apiKey` values become exact-match SecretsRedactionPlugin rules for provider-bound message flows, and WebToolsPlugin diagnostics report only the credential source (`env` or `config`), never the value. If a project-layer `.vvoc/vvoc.json` containing an `apiKey` is tracked by Git, startup logs warn with the file name only. Prefer environment variables or the global vvoc layer; do not commit credentials.
+
+While `web-tools` is enabled, its runtime config hook denies the built-in `webfetch` and `websearch` permission ids in memory, leaving only `web_fetch` and `web_search` in the normal tool surface. It does not rewrite OpenCode files or remove MCP servers. An explicit user permission entry for `webfetch` or `websearch` is respected and may intentionally keep that built-in visible. Disable the plugin and restart to restore stock behavior:
+
+```bash
+vvoc plugin disable web-tools
+```
+
+Unrelated MCP search or reader tools are not removed automatically; disable those separately if you want only the two canonical tools visible.
 
 ### `/context` accuracy
 
@@ -363,7 +398,18 @@ Session handoff notes   → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xm
 
 Schema is versioned and published with the package — source of truth at `schemas/vvoc/v3.json`. The current config contract is strict: `vvoc.json` must be canonical version 3 and include required sections such as `plugins`. Existing v1/v2/pre-role, incomplete, malformed, or otherwise invalid config files fail instead of being migrated or repaired. `vvoc install` and `vvoc sync` may create a fresh canonical config when no config exists, but they refuse to rewrite an invalid existing `vvoc.json`; fix the file manually and rerun `vvoc sync`.
 
-OpenCode intentionally keeps server/runtime plugins and native terminal UI plugins in separate configuration surfaces. `opencode.json(c)` is loaded by the core/server plugin runtime and activates vvoc features such as model roles, Guardian, workflow, hashline edit, and redaction. `tui.json(c)` is loaded by the terminal UI process and activates the package's `./tui` module, currently the `/context` inspector. The same pinned package version appears in both files, but OpenCode selects a different public export for each process; headless/server launches therefore do not need to load the Solid/OpenTUI UI module.
+The optional schema-v3 `web` section follows the same layer precedence as the rest of `vvoc.json` and is omitted from generated defaults:
+
+```json
+"web": {
+  "search": { "provider": "exa", "apiKey": "optional-exa-key" },
+  "fetch": { "provider": "native" }
+}
+```
+
+Use `brave` instead of `exa` for Brave Web Search, or `spider` instead of `native` for Spider textual extraction. The matching environment variable takes precedence over `apiKey` fields.
+
+OpenCode intentionally keeps server/runtime plugins and native terminal UI plugins in separate configuration surfaces. `opencode.json(c)` is loaded by the core/server plugin runtime and activates vvoc features such as model roles, Guardian, workflow, hashline edit, redaction, and web tools. `tui.json(c)` is loaded by the terminal UI process and activates the package's `./tui` module, currently the `/context` inspector. The same pinned package version appears in both files, but OpenCode selects a different public export for each process; headless/server launches therefore do not need to load the Solid/OpenTUI UI module.
 
 `vvoc install`, `vvoc init`, and `vvoc sync` conservatively add the pinned base package specifier (for example `@osovv/vv-opencode@X.Y.Z`) to dedicated `tui.json(c)`; OpenCode then selects the package's public `./tui` export. Sync migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
 
