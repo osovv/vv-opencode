@@ -10,12 +10,11 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   plugin toggle describe block - Integration tests for plugin enable/disable CLI commands.
-//   PLUGIN_TOGGLE_NAMES test - Verify PLUGIN_TOGGLE_NAMES contains expected plugin names.
-//   vvoc.json toggle write round-trips test - Verify config write and read-back consistency.
+//   WEB_TOOLS_PLUGIN_NAME - Canonical web-tools toggle key used by inventory assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-UNIFIED-WEB-TOOLS - Updated CLI toggle inventory coverage for the eighth default-enabled plugin.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical context toggle inventory coverage.]
 //   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle isolation coverage.]
 //   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle CLI.]
@@ -28,6 +27,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { disableCommand } from "./plugin-toggle.js";
 
+const WEB_TOOLS_PLUGIN_NAME = "web-tools";
+
 describe("plugin toggle", () => {
   test("PLUGIN_TOGGLE_NAMES contains expected names", async () => {
     const { PLUGIN_TOGGLE_NAMES } = await import("../lib/plugin-toggle-config.js");
@@ -36,7 +37,8 @@ describe("plugin toggle", () => {
     expect(names.includes("secrets-redaction")).toBe(true);
     expect(names.includes("hashline-edit")).toBe(true);
     expect(names.includes("context")).toBe(true);
-    expect(names.length).toBe(7);
+    expect(names.includes(WEB_TOOLS_PLUGIN_NAME)).toBe(true);
+    expect(names.length).toBe(8);
   });
 
   test("vvoc.json toggle write round-trips", async () => {
