@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
-// VERSION: 0.4.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit override.
 //   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, operation choice, and stale-anchor recovery.
@@ -13,6 +13,7 @@
 //   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `edit` tool.
 // END_MODULE_MAP
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.6.0 - Clarified that automatic range-boundary echo stripping applies only to exact adjacent-line duplicates.]
 //   LAST_CHANGE: [v0.5.0 - Split replace into replace (single line) and replace_range (range) to prevent accidental end-boundary errors.]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
@@ -86,7 +87,7 @@ Built-in autocorrect (you do NOT need to handle these):
   Indentation is auto-restored from original lines.
   BOM and CRLF line endings are preserved automatically.
   Hashline prefixes and diff markers in text are auto-stripped.
-  Boundary echo lines (duplicating adjacent surviving lines) are auto-stripped.
+  Boundary echo lines exactly duplicating adjacent surviving lines are auto-stripped.
 </auto>
 
 Recovery:

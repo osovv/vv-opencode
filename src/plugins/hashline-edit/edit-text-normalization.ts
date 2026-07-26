@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/edit-text-normalization.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Normalize edit payload text so copied hashline rows and accidental diff markers do not corrupt replacements.
-//   SCOPE: Prefix stripping, line splitting, indentation restoration, and echo-line trimming for insert/replace payloads.
+//   SCOPE: Prefix stripping, line splitting, indentation restoration, whitespace-tolerant insert echo trimming, and exact range-boundary echo trimming.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -15,10 +15,11 @@
 //   restoreLeadingIndent - Reapply the template line indentation for obvious unindented replacements.
 //   stripInsertAnchorEcho - Remove duplicated anchor echoes from append payloads.
 //   stripInsertBeforeEcho - Remove duplicated anchor echoes from prepend payloads.
-//   stripRangeBoundaryEcho - Remove duplicated surrounding lines accidentally included in replace payloads.
+//   stripRangeBoundaryEcho - Remove exact copies of surrounding lines accidentally included in replace payloads.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Restricted range-boundary echo stripping to exact line matches so differently indented nested syntax is preserved.]
 //   LAST_CHANGE: [v0.3.0 - Hashline payload prefix stripping now recognizes context-anchored `line#hash#anchor|content` rows.]
 //   LAST_CHANGE: [v0.2.0 - Made prepend echo stripping symmetric with append so single-line anchor echoes are removed instead of duplicating the anchor line.]
 // END_CHANGE_SUMMARY
@@ -134,7 +135,7 @@ export function stripRangeBoundaryEcho(
 
   let output = newLines;
   const beforeIndex = startLine - 2;
-  if (beforeIndex >= 0 && equalsIgnoringWhitespace(output[0] ?? "", lines[beforeIndex] ?? "")) {
+  if (beforeIndex >= 0 && output[0] === lines[beforeIndex]) {
     output = output.slice(1);
   }
 
@@ -142,7 +143,7 @@ export function stripRangeBoundaryEcho(
   if (
     afterIndex < lines.length &&
     output.length > 0 &&
-    equalsIgnoringWhitespace(output[output.length - 1] ?? "", lines[afterIndex] ?? "")
+    output[output.length - 1] === lines[afterIndex]
   ) {
     output = output.slice(0, -1);
   }

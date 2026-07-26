@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit.test.ts
-// VERSION: 0.5.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
 //   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, normalization heuristics, and BOM/CRLF preservation.
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Added regression coverage preserving intentionally nested range-boundary lines that differ only by indentation.]
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
 //   LAST_CHANGE: [v0.6.0 - Reset the runtime vvoc config singleton between plugin fixture directories.]
 //   LAST_CHANGE: [v0.5.0 - Added regression coverage preventing post-read source snapshots from being mixed into stale visible rows.]
@@ -601,6 +602,18 @@ describe("HashlineEditPlugin", () => {
         "after",
       ]),
     ).toEqual(["before", "new 1", "new 2", "after"]);
+  });
+
+  test("preserves range boundary lines that differ only by indentation", () => {
+    const lines = ["if (outer) {", "  old();", "}"];
+
+    expect(
+      applyReplaceLines(lines, anchorFor(lines, 2), anchorFor(lines, 2), [
+        "  if (inner) {",
+        "    work();",
+        "  }",
+      ]),
+    ).toEqual(["if (outer) {", "  if (inner) {", "    work();", "  }", "}"]);
   });
 
   test("strips copied anchor echoes for anchored inserts", () => {
