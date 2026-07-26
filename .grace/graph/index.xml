@@ -21,6 +21,17 @@
         <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
         <M-PLUGIN-SECRETS-REDACTION />
         <M-PLUGIN-CONTEXT-TUI />
+        <M-PLUGIN-WEB-TOOLS />
+        <M-WEB-CONFIG />
+        <M-WEB-HTTP />
+        <M-WEB-SEARCH-SERVICE />
+        <M-WEB-EXA />
+        <M-WEB-BRAVE />
+        <M-WEB-FETCH-SERVICE />
+        <M-WEB-NATIVE-FETCH />
+        <M-WEB-HTML-MARKDOWN />
+        <M-WEB-SPIDER />
+        <M-WEB-MEDIA-LOADER />
         <M-WORKFLOW-PROTOCOL />
         <M-WORKFLOW-REPAIR />
         <M-WORKFLOW-STATE />

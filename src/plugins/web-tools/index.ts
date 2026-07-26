@@ -5,7 +5,7 @@
 //   SCOPE: Startup vvoc snapshot use, plugin toggle handling, runtime permission suppression, tool registration, and credential-safe diagnostics.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts]
 //   LINKS: [M-PLUGIN-WEB-TOOLS, M-WEB-CONFIG, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE]
-//   ROLE: INTEGRATION
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

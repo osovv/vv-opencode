@@ -10,7 +10,17 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   context analyzer tests - Exercise provider baseline, metric helpers, and observable category/detail accounting.
+//   toolUsage - Build a minimal tool usage fixture.
+//   categoryTokens - Read one category's estimated token count.
+//   userMessage - Build a user message fixture.
+//   assistantMessage - Build an assistant message fixture with provider usage.
+//   textPart - Build a text part fixture.
+//   filePart - Build a file part fixture.
+//   skillToolPart - Build a completed skill tool part fixture.
+//   pendingToolPart - Build a pending tool part fixture.
+//   runningToolPart - Build a running tool part fixture.
+//   completedToolPart - Build a completed tool part fixture.
+//   errorToolPart - Build an errored tool part fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

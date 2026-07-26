@@ -6,8 +6,16 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/http.ts]
 //   LINKS: [M-WEB-MEDIA-LOADER]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   PNG_BYTES - Minimal PNG signature fixture.
+//   JPEG_BYTES - Minimal JPEG signature fixture.
+//   GIF_BYTES - Minimal GIF signature fixture.
+//   WEBP_BYTES - Minimal WebP signature fixture.
+//   PDF_BYTES - Minimal PDF signature fixture.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the direct media attachment loader.]

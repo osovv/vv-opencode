@@ -6,8 +6,14 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-EXA]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   CREDENTIAL - Synthetic Exa credential fixture.
+//   input - Build provider-neutral Exa search input.
+//   jsonResponse - Build a JSON Response fixture.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the Exa Search API adapter.]

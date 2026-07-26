@@ -6,8 +6,13 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/http.ts]
 //   LINKS: [M-WEB-HTTP]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   URL - Stable request URL used by transport tests.
+//   signalAwareFetch - Hanging fetch fixture that rejects when aborted.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the bounded HTTP transport.]

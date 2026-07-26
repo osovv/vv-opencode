@@ -6,8 +6,12 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/html-markdown.ts]
 //   LINKS: [M-WEB-HTML-MARKDOWN]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   HIDDEN_CONTENT_HTML - HTML fixture containing visible, script, and style content.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the local HTML converter.]
@@ -16,11 +20,11 @@
 import { describe, expect, test } from "bun:test";
 import { convertHtmlToMarkdown, convertHtmlToText } from "./html-markdown.js";
 
+const HIDDEN_CONTENT_HTML = "<p>ok</p><script>evil()</script><style>.x{color:red}</style>";
+
 describe("convertHtmlToMarkdown", () => {
   test("removes script and style content", () => {
-    const markdown = convertHtmlToMarkdown(
-      "<p>ok</p><script>evil()</script><style>.x{color:red}</style>",
-    );
+    const markdown = convertHtmlToMarkdown(HIDDEN_CONTENT_HTML);
     expect(markdown).toContain("ok");
     expect(markdown).not.toContain("evil");
     expect(markdown).not.toContain("color:red");

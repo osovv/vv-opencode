@@ -10,7 +10,11 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SecretsRedactionPlugin hook tests - Verify redaction and restore behavior across the actual plugin hooks.
+//   EMAIL - Stable email secret fixture.
+//   PLACEHOLDER_PATTERN - Expected redacted email placeholder shape.
+//   tempDirs - Temporary plugin/config directories scheduled for cleanup.
+//   previousConfigHome - Original XDG config home restored after tests.
+//   createPlugin - Instantiate SecretsRedactionPlugin with isolated canonical config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

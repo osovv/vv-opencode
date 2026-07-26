@@ -18,6 +18,17 @@
         <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
         <V-M-PLUGIN-SECRETS-REDACTION />
         <V-M-PLUGIN-CONTEXT-TUI />
+        <V-M-PLUGIN-WEB-TOOLS />
+        <V-M-WEB-CONFIG />
+        <V-M-WEB-HTTP />
+        <V-M-WEB-SEARCH-SERVICE />
+        <V-M-WEB-EXA />
+        <V-M-WEB-BRAVE />
+        <V-M-WEB-FETCH-SERVICE />
+        <V-M-WEB-NATIVE-FETCH />
+        <V-M-WEB-HTML-MARKDOWN />
+        <V-M-WEB-SPIDER />
+        <V-M-WEB-MEDIA-LOADER />
         <V-M-CLI-ROLE />
         <V-M-CLI-CONFIG-VALIDATE />
         <V-M-CLI-PRESET />

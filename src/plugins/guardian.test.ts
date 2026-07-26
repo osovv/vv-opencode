@@ -10,8 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   GuardianPlugin config tests - Verify hidden subagent registration and fast-role model resolution.
-//   GuardianPlugin failure tests - Verify strict fast-role config failures, current permission reply handling, and manual fallback behavior.
+//   tempDirs - Temporary Guardian workspaces scheduled for cleanup.
+//   previousConfigHome - Original XDG config home restored after tests.
+//   previousPath - Original process PATH restored after tests.
+//   previousGuardianModelEnv - Original Guardian model override restored after tests.
+//   previousGuardianDisabledEnv - Original Guardian disabled override restored after tests.
+//   setupGuardianWorkspace - Create an isolated managed Guardian prompt and vvoc config fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

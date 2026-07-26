@@ -5,7 +5,7 @@
 //   SCOPE: Bearer auth, mapped return_format, array envelope validation, status and duration metadata, provider error mapping, and media-first dispatch.
 //   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts, @opencode-ai/plugin]
 //   LINKS: [M-WEB-SPIDER, M-WEB-HTTP, M-WEB-MEDIA-LOADER, M-WEB-FETCH-SERVICE]
-//   ROLE: INTEGRATION
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

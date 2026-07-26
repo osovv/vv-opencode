@@ -6,8 +6,13 @@
 //   DEPENDS: [src/lib/vvoc-config.ts, schemas/vvoc/v3.json]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-WEB-TOOLS]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   SCHEMA_PATH - Published schema-v3 file used for parity checks.
+//   docWithWeb - Render a valid canonical document carrying an arbitrary web value.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the optional web section added in vvoc config v3.1.0.]

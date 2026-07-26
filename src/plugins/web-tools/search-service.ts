@@ -5,7 +5,7 @@
 //   SCOPE: web_search ToolDefinition factory and Markdown rendering; delegates transport to the Exa and Brave adapters.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts, src/plugins/web-tools/providers/brave.ts]
 //   LINKS: [M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-PLUGIN-WEB-TOOLS]
-//   ROLE: CORE_LOGIC
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

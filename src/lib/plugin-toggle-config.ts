@@ -50,7 +50,6 @@ export function createDefaultPluginToggleConfig(): VvocPluginToggleConfig {
 }
 // END_BLOCK_DEFAULT_CONFIG
 
-// START_BLOCK_IS_PLUGIN_ENABLED
 // START_CONTRACT: isPluginEnabled
 //   PURPOSE: Return whether the named plugin is enabled in an already-loaded vvoc config.
 //   INPUTS: { config: { plugins?: VvocPluginToggleConfig } - loaded vvoc config or compatible plugin toggle holder; pluginName: string - one of PLUGIN_TOGGLE_NAMES }
@@ -58,12 +57,13 @@ export function createDefaultPluginToggleConfig(): VvocPluginToggleConfig {
 //   SIDE_EFFECTS: none
 //   LINKS: loadVvocConfig
 // END_CONTRACT: isPluginEnabled
+// START_BLOCK_VALIDATE_INPUT
 export function isPluginEnabled(
   config: { plugins?: VvocPluginToggleConfig },
   pluginName: string,
 ): boolean {
-  // START_BLOCK_VALIDATE_INPUT
   // END_BLOCK_VALIDATE_INPUT
+  // START_BLOCK_IS_PLUGIN_ENABLED
 
   const pluginValue = config.plugins?.[pluginName];
   // If the specific plugin is not listed, default to enabled

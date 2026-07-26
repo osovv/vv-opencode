@@ -5,7 +5,7 @@
 //   SCOPE: Exa request construction with x-api-key auth, count and freshness mapping, result normalization, and provider error mapping. Also owns the shared provider search types and WebProviderError used by sibling adapters.
 //   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/config.ts]
 //   LINKS: [M-WEB-EXA, M-WEB-HTTP, M-WEB-SEARCH-SERVICE]
-//   ROLE: INTEGRATION
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
@@ -15,6 +15,7 @@
 //   WebProviderError - Provider error carrying provider, code, and optional status.
 //   WebSearchResult - Normalized ranked search result.
 //   WebSearchInput - Provider-neutral search input.
+//   mapHttpErrorToProviderError - Map bounded HTTP status failures into credential-safe provider errors.
 //   searchExa - Execute one Exa search.
 // END_MODULE_MAP
 //

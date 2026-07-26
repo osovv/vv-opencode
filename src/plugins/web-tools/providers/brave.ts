@@ -5,7 +5,7 @@
 //   SCOPE: Brave request construction with X-Subscription-Token auth, count and freshness mapping, moderate safe search, and web result normalization.
 //   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-BRAVE, M-WEB-HTTP, M-WEB-SEARCH-SERVICE]
-//   ROLE: INTEGRATION
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

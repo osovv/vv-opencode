@@ -10,9 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   PLUGIN_TOGGLE_NAMES test
-//   createDefaultPluginToggleConfig test
-//   isPluginEnabled tests
+//   WEB_TOOLS_PLUGIN_NAME - Canonical web-tools toggle key used by focused assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -33,6 +31,8 @@ import {
 } from "./plugin-toggle-config.js";
 // END_BLOCK_IMPORT_HELPERS
 
+const WEB_TOOLS_PLUGIN_NAME = "web-tools";
+
 // START_BLOCK_CONSTANTS_TEST
 describe("PLUGIN_TOGGLE_NAMES", () => {
   test("contains exactly the 8 vvoc-managed plugins", () => {
@@ -44,7 +44,7 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "workflow",
       "secrets-redaction",
       "context",
-      "web-tools",
+      WEB_TOOLS_PLUGIN_NAME,
     ]);
   });
 
@@ -106,15 +106,17 @@ describe("isPluginEnabled", () => {
 // START_BLOCK_WEB_TOOLS_TOGGLE_TESTS
 describe("web-tools toggle", () => {
   test("createDefaultPluginToggleConfig sets web-tools to true", () => {
-    expect(createDefaultPluginToggleConfig()["web-tools"]).toBe(true);
+    expect(createDefaultPluginToggleConfig()[WEB_TOOLS_PLUGIN_NAME]).toBe(true);
   });
 
   test("isPluginEnabled returns true for web-tools when the plugins section is absent", () => {
-    expect(isPluginEnabled({}, "web-tools")).toBe(true);
+    expect(isPluginEnabled({}, WEB_TOOLS_PLUGIN_NAME)).toBe(true);
   });
 
   test("isPluginEnabled returns false when web-tools is explicitly false", () => {
-    expect(isPluginEnabled({ plugins: { "web-tools": false } }, "web-tools")).toBe(false);
+    expect(
+      isPluginEnabled({ plugins: { [WEB_TOOLS_PLUGIN_NAME]: false } }, WEB_TOOLS_PLUGIN_NAME),
+    ).toBe(false);
   });
 });
 // END_BLOCK_WEB_TOOLS_TOGGLE_TESTS

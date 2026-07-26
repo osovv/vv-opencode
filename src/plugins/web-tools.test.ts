@@ -6,8 +6,16 @@
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/web-tools/index.ts]
 //   LINKS: [M-PLUGIN-WEB-TOOLS]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   tempDirs - Isolated project directories scheduled for cleanup.
+//   ORIGINAL_ENV - Credential environment values restored after each test.
+//   createProject - Write an isolated project-layer vvoc config.
+//   createPluginInput - Build a stubbed OpenCode PluginInput.
+//   createPlugin - Instantiate WebToolsPlugin with isolated config and log capture.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for WebToolsPlugin registration, suppression, and credential-safe diagnostics.]

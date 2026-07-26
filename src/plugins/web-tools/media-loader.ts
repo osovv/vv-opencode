@@ -5,7 +5,7 @@
 //   SCOPE: MIME and magic-byte identification, base64 data-URL attachment construction, filename derivation, and rejection of unsupported or oversized payloads.
 //   DEPENDS: [src/plugins/web-tools/http.ts, @opencode-ai/plugin]
 //   LINKS: [M-WEB-MEDIA-LOADER, M-WEB-HTTP, M-WEB-NATIVE-FETCH, M-WEB-SPIDER]
-//   ROLE: CORE_LOGIC
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

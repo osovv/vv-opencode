@@ -6,8 +6,15 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/native-fetch.ts]
 //   LINKS: [M-WEB-NATIVE-FETCH]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   PNG_BYTES - Minimal PNG fixture.
+//   PDF_BYTES - Minimal PDF fixture.
+//   args - Build native fetch input.
+//   htmlResponse - Build an HTML response fixture.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the native fetch provider.]

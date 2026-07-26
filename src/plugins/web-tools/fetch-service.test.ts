@@ -6,8 +6,15 @@
 //   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/fetch-service.ts]
 //   LINKS: [M-WEB-FETCH-SERVICE]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   PNG_BYTES - Minimal PNG fixture.
+//   createContext - Build a tool execution context fixture.
+//   withFetch - Temporarily install a deterministic global fetch fixture.
+//   structuredResult - Narrow a ToolResult to its structured form.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the web_fetch tool service.]

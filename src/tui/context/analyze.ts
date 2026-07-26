@@ -5,7 +5,7 @@
 //   SCOPE: Compaction cutoff, provider usage baseline, context-limit percentages, skill/tool/message categorization, deterministic MCP ownership, explicit schema observability, residual unknown context, and sorted detail aggregates.
 //   DEPENDS: [@opencode-ai/sdk/v2, src/tui/context/estimate.ts, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
-//   ROLE: CORE_LOGIC
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

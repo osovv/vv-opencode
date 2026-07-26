@@ -5,7 +5,7 @@
 //   SCOPE: Turndown-based Markdown conversion and htmlparser2-based text extraction, both stripping script and style content.
 //   DEPENDS: [turndown, htmlparser2]
 //   LINKS: [M-WEB-HTML-MARKDOWN, M-WEB-NATIVE-FETCH]
-//   ROLE: UTILITY
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

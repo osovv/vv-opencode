@@ -5,7 +5,7 @@
 //   SCOPE: web_fetch ToolDefinition factory; delegates retrieval and conversion to the native and Spider adapters.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-MEDIA-LOADER, M-PLUGIN-WEB-TOOLS]
-//   ROLE: CORE_LOGIC
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

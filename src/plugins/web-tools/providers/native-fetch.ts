@@ -5,7 +5,7 @@
 //   SCOPE: Redirect following and size limits via the bounded transport, MIME and signature sniffing, local HTML conversion, and rejection of unsupported binaries.
 //   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/html-markdown.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts, @opencode-ai/plugin]
 //   LINKS: [M-WEB-NATIVE-FETCH, M-WEB-HTTP, M-WEB-HTML-MARKDOWN, M-WEB-MEDIA-LOADER]
-//   ROLE: INTEGRATION
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

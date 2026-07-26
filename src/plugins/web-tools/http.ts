@@ -5,7 +5,7 @@
 //   SCOPE: Timeout enforcement, caller abort propagation, a hard response-size cap, redirect following, and a transport error taxonomy.
 //   DEPENDS: [none]
 //   LINKS: [M-WEB-HTTP, M-WEB-EXA, M-WEB-BRAVE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-MEDIA-LOADER]
-//   ROLE: UTILITY
+//   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //

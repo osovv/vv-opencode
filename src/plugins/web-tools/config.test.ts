@@ -6,8 +6,12 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/config.ts, src/lib/vvoc-config.ts, src/lib/config-layers.ts]
 //   LINKS: [M-WEB-CONFIG]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   snapshot - Build a minimal runtime vvoc snapshot for resolver tests.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the runtime web config and credential resolver.]

@@ -6,8 +6,17 @@
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/spider.ts]
 //   LINKS: [M-WEB-SPIDER]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   CREDENTIAL - Synthetic Spider credential fixture.
+//   PNG_BYTES - Minimal PNG fixture.
+//   args - Build Spider scrape input.
+//   probeText - Build a textual media-probe response.
+//   envelopeResponse - Build a valid Spider array response.
+//   isSpiderUrl - Identify Spider endpoint requests in fetch fixtures.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the Spider Scrape adapter.]
