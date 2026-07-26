@@ -1,3 +1,27 @@
+## 1.2.0 (2026-07-26)
+
+### Summary
+
+This release introduces the unified WebToolsPlugin, which replaces provider-specific search and fetch schemas with two canonical tools—web_search and web_fetch—supporting Exa, Brave, native retrieval, Spider extraction, and direct Z.AI/Zhipu Tool API providers with explicit region selection and secure credential handling. Secrets redaction now covers configured web API keys and tool-part state payloads, closing a bypass where tool inputs, outputs, and errors could reach the provider unredacted. The Guardian plugin hardens auto-approval by requiring an explicit low risk level, runs review as the constrained guardian agent, and makes debug logging opt-in. Hashline edit rename operations prevent data loss by detecting path-equivalent source and target and refusing to overwrite existing files. Workflow tracking no longer strands work items in an in-flight state when a tracked result fails, and session cleanup correctly reads the SDK event shape. GPT-5.6 patch-provider limits are corrected to the post-PR#33972 Codex metadata, keeping sessions out of premium pricing. Across the board, runtime hardening, documentation, and GRACE governance updates make the package more reliable and secure for disciplined agentic development.
+
+* chore(grace): add verification trace assertions ([826e4d1](https://github.com/osovv/vv-opencode/commit/826e4d1))
+* chore(grace): repair artifacts and semantic markup ([a8c308d](https://github.com/osovv/vv-opencode/commit/a8c308d))
+* chore(web-tools): sync GRACE governance and contracts ([0c5b1a9](https://github.com/osovv/vv-opencode/commit/0c5b1a9))
+* docs(web-tools): document providers and runtime behavior ([b390202](https://github.com/osovv/vv-opencode/commit/b390202))
+* docs(web-tools): record multiprovider search idea ([5763c31](https://github.com/osovv/vv-opencode/commit/5763c31))
+* feat(secrets-redaction): redact configured web api keys ([16964bf](https://github.com/osovv/vv-opencode/commit/16964bf))
+* feat(web-tools): add direct Z.AI providers ([e0b8467](https://github.com/osovv/vv-opencode/commit/e0b8467))
+* feat(web-tools): add HTTP transport, HTML conversion, media loader, and providers ([94d211e](https://github.com/osovv/vv-opencode/commit/94d211e))
+* feat(web-tools): add vvoc web config schema, plugin toggle, and runtime resolver ([303ab96](https://github.com/osovv/vv-opencode/commit/303ab96))
+* feat(web-tools): add web fetch tool service ([df959e9](https://github.com/osovv/vv-opencode/commit/df959e9))
+* feat(web-tools): add web search tool service ([f5dec5a](https://github.com/osovv/vv-opencode/commit/f5dec5a))
+* feat(web-tools): register plugin and package exports ([ba8d724](https://github.com/osovv/vv-opencode/commit/ba8d724))
+* feat(web-tools): sync guardian and context attribution ([62613a7](https://github.com/osovv/vv-opencode/commit/62613a7))
+* fix: harden redaction, guardian, hashline, and workflow runtime ([726d330](https://github.com/osovv/vv-opencode/commit/726d330))
+* fix(edit): preserve indented range boundaries ([84366de](https://github.com/osovv/vv-opencode/commit/84366de))
+* fix(patch-provider): correct GPT-5.6 context limits to post-PR#33972 Codex metadata ([bceb41f](https://github.com/osovv/vv-opencode/commit/bceb41f)), closes [post-PR#33972](https://github.com/post-PR/issues/33972) [#33972](https://github.com/osovv/vv-opencode/issues/33972)
+* test(web-tools): cover CLI toggle inventory ([05ecf18](https://github.com/osovv/vv-opencode/commit/05ecf18))
+
 ## <small>1.1.6 (2026-07-17)</small>
 
 ### Summary
