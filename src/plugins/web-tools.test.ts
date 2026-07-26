@@ -18,6 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered regional Z.AI startup diagnostics without credential leakage.]
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for WebToolsPlugin registration, suppression, and credential-safe diagnostics.]
 // END_CHANGE_SUMMARY
 
@@ -35,6 +36,7 @@ const ORIGINAL_ENV = {
   EXA_API_KEY: process.env.EXA_API_KEY,
   BRAVE_API_KEY: process.env.BRAVE_API_KEY,
   SPIDER_API_KEY: process.env.SPIDER_API_KEY,
+  ZAI_API_KEY: process.env.ZAI_API_KEY,
 };
 
 afterEach(async () => {
@@ -153,6 +155,33 @@ describe("WebToolsPlugin", () => {
     expect(serialized).not.toContain("environment-brave-secret");
     expect(serialized).not.toContain("config-brave-secret");
     expect(serialized).not.toContain("config-spider-secret");
+  });
+
+  test("logs direct Z.AI regions and credential sources without values", async () => {
+    process.env.ZAI_API_KEY = "environment-zai-secret";
+    const config = createDefaultVvocConfig();
+    config.web = {
+      search: { provider: "zai", region: "international", apiKey: "search-config-secret" },
+      fetch: { provider: "zai", region: "china", apiKey: "fetch-config-secret" },
+    };
+    const { logs } = await createPlugin(config);
+    const serialized = JSON.stringify(logs);
+
+    expect(logs[0]).toMatchObject({
+      service: "web-tools",
+      level: "info",
+      extra: {
+        searchProvider: "zai",
+        searchRegion: "international",
+        searchCredentialSource: "env",
+        fetchProvider: "zai",
+        fetchRegion: "china",
+        fetchCredentialSource: "env",
+      },
+    });
+    expect(serialized).not.toContain("environment-zai-secret");
+    expect(serialized).not.toContain("search-config-secret");
+    expect(serialized).not.toContain("fetch-config-secret");
   });
 
   test("warns when a project apiKey config is tracked without logging its value", async () => {

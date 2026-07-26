@@ -147,17 +147,37 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "provider": { "type": "string", "enum": ["exa", "brave"] },
+            "provider": { "type": "string", "enum": ["exa", "brave", "zai"] },
+            "region": { "type": "string", "enum": ["international", "china"] },
             "apiKey": { "type": "string", "minLength": 1 }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "provider": { "const": "zai" } },
+                "required": ["provider"]
+              },
+              "then": { "required": ["region"] }
+            }
+          ]
         },
         "fetch": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "provider": { "type": "string", "enum": ["native", "spider"] },
+            "provider": { "type": "string", "enum": ["native", "spider", "zai"] },
+            "region": { "type": "string", "enum": ["international", "china"] },
             "apiKey": { "type": "string", "minLength": 1 }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "provider": { "const": "zai" } },
+                "required": ["provider"]
+              },
+              "then": { "required": ["region"] }
+            }
+          ]
         }
       }
     }

@@ -203,8 +203,8 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 
 `WebToolsPlugin` exposes exactly two canonical model-facing tools:
 
-- `web_search` requests the `web_search` permission and returns ranked titles, URLs, snippets, and publication dates. Search uses Exa by default or Brave when configured.
-- `web_fetch` requests the `web_fetch` permission and retrieves a known HTTP or HTTPS URL as Markdown, text, raw HTML, or a direct JPEG, PNG, GIF, WebP, or PDF attachment. Fetch uses local native retrieval by default or Spider for configured textual extraction.
+- `web_search` requests the `web_search` permission and returns ranked titles, URLs, snippets, and publication dates. Search uses Exa by default, Brave when configured, or the direct Z.AI/Zhipu Tool API for an explicitly selected region.
+- `web_fetch` requests the `web_fetch` permission and retrieves a known HTTP or HTTPS URL as Markdown, text, raw HTML, or a direct JPEG, PNG, GIF, WebP, or PDF attachment. Fetch uses local native retrieval by default, Spider for configured textual extraction, or the direct Z.AI/Zhipu Reader Tool API.
 
 The `web-tools` vvoc plugin toggle is enabled by default.
 
@@ -212,14 +212,25 @@ Provider selection belongs to `vvoc.json`, not to individual model calls. Add th
 
 ```json
 "web": {
-  "search": { "provider": "brave", "apiKey": "replace-with-brave-key" },
-  "fetch": { "provider": "spider", "apiKey": "replace-with-spider-key" }
+  "search": { "provider": "zai", "region": "international" },
+  "fetch": { "provider": "zai", "region": "china" }
 }
 ```
 
-Supported search providers are `exa` (default) and `brave`. Supported fetch providers are `native` (default, no credential required) and `spider`. Credentials resolve in this order:
+Supported search providers are `exa` (default), `brave`, and `zai`. Supported fetch providers are `native` (default, no credential required), `spider`, and `zai`. A `zai` section must set `region` to either `international` or `china`; the plugin never guesses or falls back to another region.
 
-1. `EXA_API_KEY`, `BRAVE_API_KEY`, or `SPIDER_API_KEY` for the selected provider
+Direct Z.AI endpoint routing is:
+
+| Region | Search | Reader | Search engine |
+|---|---|---|---|
+| `international` | `https://api.z.ai/api/paas/v4/web_search` | `https://api.z.ai/api/paas/v4/reader` | `search-prime` |
+| `china` | `https://open.bigmodel.cn/api/paas/v4/web_search` | `https://open.bigmodel.cn/api/paas/v4/reader` | `search_pro` |
+
+The `zai` provider calls these documented REST Tool APIs directly. It does not use MCP, install or manage Z.AI MCP servers, or consume GLM Coding Plan MCP quota. Direct requests require ordinary Z.AI/Zhipu API entitlement and may use paid API balance. For fetch, supported image and PDF URLs still return direct attachments; textual targets are sent to the selected regional Reader endpoint.
+
+Credentials resolve in this order:
+
+1. `EXA_API_KEY`, `BRAVE_API_KEY`, `SPIDER_API_KEY`, or `ZAI_API_KEY` for the selected provider
 2. `web.search.apiKey` or `web.fetch.apiKey` in the effective `vvoc.json`
 
 Environment variables win when both sources exist. Config changes take effect after restarting OpenCode. Configured `apiKey` values become exact-match SecretsRedactionPlugin rules for provider-bound message flows, and WebToolsPlugin diagnostics report only the credential source (`env` or `config`), never the value. If a project-layer `.vvoc/vvoc.json` containing an `apiKey` is tracked by Git, startup logs warn with the file name only. Prefer environment variables or the global vvoc layer; do not commit credentials.

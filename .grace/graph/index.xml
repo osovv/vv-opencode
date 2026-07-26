@@ -27,6 +27,7 @@
         <M-WEB-SEARCH-SERVICE />
         <M-WEB-EXA />
         <M-WEB-BRAVE />
+        <M-WEB-ZAI />
         <M-WEB-FETCH-SERVICE />
         <M-WEB-NATIVE-FETCH />
         <M-WEB-HTML-MARKDOWN />

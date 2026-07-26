@@ -24,6 +24,7 @@
         <V-M-WEB-SEARCH-SERVICE />
         <V-M-WEB-EXA />
         <V-M-WEB-BRAVE />
+        <V-M-WEB-ZAI />
         <V-M-WEB-FETCH-SERVICE />
         <V-M-WEB-NATIVE-FETCH />
         <V-M-WEB-HTML-MARKDOWN />

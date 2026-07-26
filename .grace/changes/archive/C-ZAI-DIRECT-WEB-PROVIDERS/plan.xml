@@ -1,0 +1,191 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-ZAI-DIRECT-WEB-PROVIDERS>
+    <IntentSummary>Extend the strict vvoc web configuration with an explicit-region zai provider, implement one direct Z.AI and Zhipu Tool API adapter for normalized search and reader results, route the existing canonical web_search and web_fetch services through that adapter without changing their model-facing schemas, preserve direct media attachments and bounded credential-safe transport, document ordinary API billing, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-PLUGIN-WEB-TOOLS</Value>
+        <Value>M-WEB-CONFIG</Value>
+        <Value>M-WEB-HTTP</Value>
+        <Value>M-WEB-SEARCH-SERVICE</Value>
+        <Value>M-WEB-FETCH-SERVICE</Value>
+        <Value>M-WEB-MEDIA-LOADER</Value>
+        <Value>V-M-CLI-CONFIG</Value>
+        <Value>V-M-PLUGIN-WEB-TOOLS</Value>
+        <Value>V-M-WEB-CONFIG</Value>
+        <Value>V-M-WEB-SEARCH-SERVICE</Value>
+        <Value>V-M-WEB-FETCH-SERVICE</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>src/plugins/web-tools/config.ts</Value>
+        <Value>src/plugins/web-tools/search-service.ts</Value>
+        <Value>src/plugins/web-tools/fetch-service.ts</Value>
+        <Value>src/plugins/web-tools/http.ts</Value>
+        <Value>src/plugins/web-tools/media-loader.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-PLUGIN-WEB-TOOLS</Module>
+        <Module>M-WEB-CONFIG</Module>
+        <Module>M-WEB-ZAI</Module>
+        <Module>M-WEB-SEARCH-SERVICE</Module>
+        <Module>M-WEB-FETCH-SERVICE</Module>
+      </MustVerify>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-CONFIG />
+        <M-PLUGIN-WEB-TOOLS />
+        <M-WEB-CONFIG />
+        <M-WEB-HTTP />
+        <M-WEB-ZAI />
+        <M-WEB-SEARCH-SERVICE />
+        <M-WEB-FETCH-SERVICE />
+        <M-WEB-MEDIA-LOADER />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-CONFIG />
+        <V-M-PLUGIN-WEB-TOOLS />
+        <V-M-WEB-CONFIG />
+        <V-M-WEB-ZAI />
+        <V-M-WEB-SEARCH-SERVICE />
+        <V-M-WEB-FETCH-SERVICE />
+        <V-M-WEB-MEDIA-LOADER />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-ZAI-DIRECT-WEB-PROVIDERS/plan.xml</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>src/plugins/web-tools/config.ts</File>
+      <File>src/plugins/web-tools/config.test.ts</File>
+      <File>src/plugins/web-tools/index.ts</File>
+      <File>src/plugins/web-tools.test.ts</File>
+      <File>src/plugins/web-tools/search-service.ts</File>
+      <File>src/plugins/web-tools/search-service.test.ts</File>
+      <File>src/plugins/web-tools/fetch-service.ts</File>
+      <File>src/plugins/web-tools/fetch-service.test.ts</File>
+      <File>src/plugins/web-tools/providers/exa.ts</File>
+      <File>src/plugins/web-tools/providers/zai.ts</File>
+      <File>src/plugins/web-tools/providers/zai.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Extend strict vvoc web configuration with the explicit-region zai provider.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update vvoc-config.ts module contracts, exported web config types, embedded schema, normalization, and rendering so search and fetch accept provider zai and preserve region international or china.</Criterion>
+          <Criterion>Use schema conditions so selecting provider zai requires a valid explicit region while existing provider documents remain valid without region.</Criterion>
+          <Criterion>Keep schemas/vvoc/v3.json exactly equivalent to the embedded web schema and preserve strict rejection of unknown providers, regions, and properties.</Criterion>
+          <Criterion>Extend config.ts resolved search and fetch unions with zai, region, ZAI_API_KEY, endpoint-safe credential metadata, and environment-over-config precedence without logging values.</Criterion>
+          <Criterion>Focused tests cover both regions, missing-region rejection, invalid-region rejection, normalization and render round trips, existing-provider compatibility, native credential freedom, and shared ZAI_API_KEY precedence.</Criterion>
+          <Criterion>Edited source and test MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY blocks remain accurate and paired.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/vvoc-config.test.ts src/plugins/web-tools/config.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Implement the direct Z.AI and Zhipu Tool API adapter with deterministic provider coverage.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add providers/zai.ts with one bounded direct-HTTP search path and one reader path selected exclusively by the resolved region.</Criterion>
+          <Criterion>International search targets api.z.ai with search-prime; China search targets open.bigmodel.cn with search_pro; both map canonical query, count, and freshness into documented request fields.</Criterion>
+          <Criterion>Search parsing validates the response envelope, normalizes link, content, and publish_date into the shared WebSearchResult shape, preserves order, and skips entries without a valid URL.</Criterion>
+          <Criterion>Reader requests target the selected region's /reader endpoint with url, timeout, and return_format and validate reader_result.content plus optional title, request ID, model, and creation metadata.</Criterion>
+          <Criterion>The fetch adapter probes supported direct media through the existing media loader first and invokes the reader endpoint only when the target is not a supported attachment.</Criterion>
+          <Criterion>Extend the shared provider error name union for zai and map HTTP authentication, rate limit, provider, malformed-response, timeout, abort, network, oversized, and unsupported outcomes without credential leakage.</Criterion>
+          <Criterion>zai.test.ts covers both regional endpoints and engines, request headers and bodies, search normalization, malformed envelopes, media bypass, textual reader output, metadata, errors, abort and timeout propagation, and secret-safe messages with injected fetch only.</Criterion>
+          <Criterion>The new adapter has complete GRACE module contract, map, change summary, and bounded semantic blocks.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/web-tools/providers/zai.test.ts src/plugins/web-tools/media-loader.test.ts src/plugins/web-tools/http.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Route canonical web_search and web_fetch through zai while preserving tool contracts.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>search-service.ts dispatches zai to the direct adapter after the existing web_search permission request and execution-time credential validation, without changing query, count, or freshness schema bounds.</Criterion>
+          <Criterion>fetch-service.ts dispatches zai after HTTP or HTTPS validation and the existing web_fetch permission request, without changing format or timeout schema bounds.</Criterion>
+          <Criterion>Structured results retain the canonical title and output contract and include safe provider zai, region, format, result count, credential source, and available request metadata.</Criterion>
+          <Criterion>Missing Z.AI credentials name ZAI_API_KEY and the applicable config field without a value; existing Exa, Brave, native, and Spider dispatch and metadata remain unchanged.</Criterion>
+          <Criterion>WebToolsPlugin logs selected provider, region, and credential source safely, preserves explicit user built-in permissions, and continues registering exactly web_search and web_fetch.</Criterion>
+          <Criterion>Service and plugin tests prove permission-before-network ordering, both regional routes, missing credentials, output normalization, attachment results, metadata, existing provider regression behavior, and credential-safe diagnostics.</Criterion>
+          <Criterion>Edited service, plugin, and test contracts, maps, summaries, and block anchors remain accurate.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/fetch-service.test.ts src/plugins/web-tools.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Run the integrated web-tools regression gate and resolve only in-scope failures.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>All web-tools configuration, transport, conversion, media, provider, service, and plugin tests pass together with no live network dependency.</Criterion>
+          <Criterion>Type checking, lint, and formatting checks pass for the implementation, and fixes remain inside the approved observed write scope unless new evidence requires an explicit reroute.</Criterion>
+          <Criterion>No generated dist output, user OpenCode configuration, MCP configuration, credential file, or unrelated provider behavior is modified.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/vvoc-config.test.ts src/plugins/web-tools.test.ts src/plugins/web-tools/*.test.ts src/plugins/web-tools/providers/*.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Document direct Z.AI provider behavior and synchronize GRACE ownership and verification.</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents provider zai for search and fetch, required international or china region, ZAI_API_KEY precedence, exact regional base endpoints, restart behavior, direct media handling, and ordinary API billing rather than Coding Plan MCP quota.</Criterion>
+          <Criterion>README explicitly states that WebToolsPlugin makes direct REST calls and neither requires nor manages the Z.AI remote MCP servers.</Criterion>
+          <Criterion>Add M-WEB-ZAI to the routed graph with accurate paths, purpose, dependencies, and V-M-WEB-ZAI ownership; update dependent module descriptions and dependencies where behavior changed.</Criterion>
+          <Criterion>Add V-M-WEB-ZAI to the verification projection and update existing config, plugin, search-service, and fetch-service entries with the new deterministic scenarios and commands.</Criterion>
+          <Criterion>Graph and verification indexes directly own every new semantic anchor, and current source LINKS fields match routed GRACE ownership.</Criterion>
+          <Criterion>Documentation commands, paths, endpoint names, provider names, and billing caveats are checked against current source and the approved specification.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Complete package, schema, and repository verification without billed provider calls.</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The focused test command from the specification passes with fresh output.</Criterion>
+          <Criterion>bun run check, bun run build, and bun run release:check pass with the canonical schema and package surface synchronized.</Criterion>
+          <Criterion>GRACE lint and status report no new errors attributable to C-ZAI-DIRECT-WEB-PROVIDERS; any pre-existing repository-wide integrity errors are recorded separately and not repaired outside scope.</Criterion>
+          <Criterion>git diff contains only approved implementation, documentation, schema, tests, and GRACE lifecycle files, with no secrets or generated dist files.</Criterion>
+          <Criterion>No real Z.AI or Zhipu request is required for completion; a live smoke test remains optional and requires separate explicit authorization because it may consume paid balance.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/vvoc-config.test.ts src/plugins/web-tools.test.ts src/plugins/web-tools/config.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/fetch-service.test.ts src/plugins/web-tools/providers/zai.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run release:check</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-006>
+    </ImplementationPlan>
+  </C-ZAI-DIRECT-WEB-PROVIDERS>
+</GraceChangePlan>

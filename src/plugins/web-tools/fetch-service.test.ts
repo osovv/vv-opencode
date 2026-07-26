@@ -17,6 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered direct Z.AI reader dispatch, regional metadata, attachments, and missing credentials.]
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the web_fetch tool service.]
 // END_CHANGE_SUMMARY
 
@@ -184,6 +185,76 @@ describe("createWebFetchTool", () => {
     });
   });
 
+  test("surfaces direct Z.AI reader content and regional request metadata", async () => {
+    const definition = createWebFetchTool({
+      provider: "zai",
+      region: "china",
+      envVar: "ZAI_API_KEY",
+      configField: "web.fetch.apiKey",
+      credential: { value: "zai-secret", source: "config" },
+    });
+    const result = await withFetch(
+      async (url) =>
+        String(url).endsWith("/api/paas/v4/reader")
+          ? new Response(
+              JSON.stringify({
+                request_id: "reader-1",
+                reader_result: { title: "页面", content: "读取内容" },
+              }),
+              { headers: { "content-type": "application/json" } },
+            )
+          : new Response("<html>probe</html>", {
+              headers: { "content-type": "text/html" },
+            }),
+      () =>
+        definition.execute(
+          { url: "https://example.test/page", format: "markdown", timeout: 30 },
+          createContext(),
+        ),
+    );
+
+    expect(structuredResult(result)).toEqual({
+      title: "web_fetch: https://example.test/page",
+      output: "读取内容",
+      metadata: {
+        provider: "zai",
+        region: "china",
+        format: "markdown",
+        credentialSource: "config",
+        status: 200,
+        requestId: "reader-1",
+        title: "页面",
+      },
+    });
+  });
+
+  test("returns direct Z.AI media through the canonical attachment result", async () => {
+    const definition = createWebFetchTool({
+      provider: "zai",
+      region: "international",
+      envVar: "ZAI_API_KEY",
+      configField: "web.fetch.apiKey",
+      credential: { value: "zai-secret", source: "env" },
+    });
+    const result = await withFetch(
+      async () =>
+        new Response(PNG_BYTES, { status: 200, headers: { "content-type": "image/png" } }),
+      () =>
+        definition.execute(
+          { url: "https://example.test/image.png", format: "markdown", timeout: 30 },
+          createContext(),
+        ),
+    );
+    const structured = structuredResult(result);
+    expect(structured.attachments?.[0]).toMatchObject({ type: "file", mime: "image/png" });
+    expect(structured.metadata).toEqual({
+      provider: "zai",
+      region: "international",
+      format: "markdown",
+      credentialSource: "env",
+    });
+  });
+
   test("missing Spider credentials name both supported locations without values", async () => {
     const definition = createWebFetchTool({
       provider: "spider",
@@ -199,6 +270,25 @@ describe("createWebFetchTool", () => {
 
     expect(error).toMatchObject({ provider: "spider", code: "MISSING_CREDENTIAL" });
     expect(String(error.message)).toContain("SPIDER_API_KEY");
+    expect(String(error.message)).toContain("web.fetch.apiKey");
+  });
+
+  test("missing Z.AI credentials name both supported locations without values", async () => {
+    const definition = createWebFetchTool({
+      provider: "zai",
+      region: "international",
+      envVar: "ZAI_API_KEY",
+      configField: "web.fetch.apiKey",
+    });
+    const error = await definition
+      .execute(
+        { url: "https://example.test/page", format: "markdown", timeout: 30 },
+        createContext(),
+      )
+      .catch((caught) => caught);
+
+    expect(error).toMatchObject({ provider: "zai", code: "MISSING_CREDENTIAL" });
+    expect(String(error.message)).toContain("ZAI_API_KEY");
     expect(String(error.message)).toContain("web.fetch.apiKey");
   });
 });

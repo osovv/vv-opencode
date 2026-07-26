@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered direct Z.AI dispatch, regional metadata, and unchanged canonical schema.]
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the web_search tool service.]
 // END_CHANGE_SUMMARY
 
@@ -139,6 +140,48 @@ describe("createWebSearchTool", () => {
       provider: "brave",
       resultCount: 0,
       credentialSource: "config",
+    });
+  });
+
+  test("dispatches direct Z.AI search and reports the explicit region", async () => {
+    let requestedUrl = "";
+    const definition = createWebSearchTool({
+      provider: "zai",
+      region: "international",
+      envVar: "ZAI_API_KEY",
+      configField: "web.search.apiKey",
+      credential: { value: "zai-secret", source: "env" },
+    });
+
+    const result = await withFetch(
+      async (url) => {
+        requestedUrl = String(url);
+        return new Response(
+          JSON.stringify({
+            search_result: [
+              {
+                title: "Z.AI Tool API",
+                link: "https://example.test/zai",
+                content: "Direct search result.",
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      },
+      () => definition.execute({ query: "zai", count: 4 }, createContext()),
+    );
+
+    expect(requestedUrl).toBe("https://api.z.ai/api/paas/v4/web_search");
+    expect(structuredResult(result)).toEqual({
+      title: "web_search: zai",
+      output: "1. [Z.AI Tool API](https://example.test/zai)\n   Direct search result.",
+      metadata: {
+        provider: "zai",
+        region: "international",
+        resultCount: 1,
+        credentialSource: "env",
+      },
     });
   });
 

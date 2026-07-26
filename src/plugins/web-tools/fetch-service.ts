@@ -2,9 +2,9 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Build the provider-neutral web_fetch tool: input validation, permission request, provider dispatch, and structured text or attachment results.
-//   SCOPE: web_fetch ToolDefinition factory; delegates retrieval and conversion to the native and Spider adapters.
-//   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/exa.ts]
-//   LINKS: [M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-MEDIA-LOADER, M-PLUGIN-WEB-TOOLS]
+//   SCOPE: web_fetch ToolDefinition factory; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters.
+//   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
+//   LINKS: [M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-PLUGIN-WEB-TOOLS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Routed canonical web_fetch calls through the explicit-region direct Z.AI reader adapter.]
 //   LAST_CHANGE: [v1.0.0 - Initial web_fetch tool service.]
 // END_CHANGE_SUMMARY
 
@@ -29,6 +30,7 @@ import type { ResolvedWebFetchConfig } from "./config.js";
 import { WebProviderError } from "./providers/exa.js";
 import { fetchNative, type NativeFetchOutcome } from "./providers/native-fetch.js";
 import { scrapeSpider, type SpiderOutcome } from "./providers/spider.js";
+import { fetchZai, type ZaiReaderOutcome } from "./providers/zai.js";
 
 const z = tool.schema;
 
@@ -85,16 +87,41 @@ function spiderResult(
   }
   return { title: `web_fetch: ${url}`, output: outcome.content, metadata };
 }
+
+function zaiResult(
+  url: string,
+  format: FetchFormat,
+  region: "international" | "china",
+  credentialSource: "env" | "config",
+  outcome: ZaiReaderOutcome,
+): Exclude<ToolResult, string> {
+  const metadata = {
+    provider: "zai",
+    region,
+    format,
+    credentialSource,
+    ...outcome.metadata,
+  };
+  if (outcome.kind === "media") {
+    return {
+      title: `web_fetch: ${url}`,
+      output: mediaSummary(outcome.attachment),
+      attachments: [outcome.attachment],
+      metadata,
+    };
+  }
+  return { title: `web_fetch: ${url}`, output: outcome.content, metadata };
+}
 // END_BLOCK_RESULT_MAPPING
 
 /**
  * Create the web_fetch tool bound to the resolved fetch configuration.
  * execute validates http or https schemes, asks permission key web_fetch with patterns [url],
- * routes textual extraction to native or Spider, returns media as attachments with a short
+ * routes textual extraction to native, Spider, or direct Z.AI reader, returns media as attachments with a short
  * Markdown summary in the same ToolResult, and reports metadata
  * { provider, format, credentialSource?, status?, durationMs? }.
- * Native fetch requires no credential; Spider validates its credential at execution time
- * with an actionable message naming SPIDER_API_KEY and web.fetch.apiKey.
+ * Native fetch requires no credential; Spider and Z.AI validate credentials at execution time
+ * with actionable messages naming the environment variable and web.fetch.apiKey.
  */
 export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefinition {
   return tool({
@@ -146,9 +173,29 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
 
       if (!resolved.credential) {
         throw new WebProviderError(
-          "spider",
+          resolved.provider,
           "MISSING_CREDENTIAL",
-          `missing credential for spider: set ${resolved.envVar ?? "SPIDER_API_KEY"} or ${resolved.configField ?? "web.fetch.apiKey"}`,
+          `missing credential for ${resolved.provider}: set ${resolved.envVar ?? "SPIDER_API_KEY"} or ${resolved.configField ?? "web.fetch.apiKey"}`,
+        );
+      }
+      if (resolved.provider === "zai") {
+        if (!resolved.region) {
+          throw new Error("web.fetch.region is required when provider is zai");
+        }
+        const outcome = await fetchZai({
+          url: args.url,
+          format: args.format,
+          region: resolved.region,
+          credential: resolved.credential,
+          abort: context.abort,
+          timeoutMs,
+        });
+        return zaiResult(
+          args.url,
+          args.format,
+          resolved.region,
+          resolved.credential.source,
+          outcome,
         );
       }
       const outcome = await scrapeSpider({

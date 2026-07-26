@@ -1,8 +1,8 @@
 // FILE: src/plugins/web-tools/config.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Resolve the optional vvoc web section into concrete provider choices and credentials for the web tools plugin.
-//   SCOPE: Provider defaults, credential resolution with environment precedence over config apiKey fields, credential source reporting, and a best-effort git-tracked project-config warning helper.
+//   PURPOSE: Resolve the optional vvoc web section into concrete provider choices, explicit Z.AI regions, and credentials for the web tools plugin.
+//   SCOPE: Provider defaults, fail-closed Z.AI region resolution, credential resolution with environment precedence over config apiKey fields, credential source reporting, and a best-effort git-tracked project-config warning helper.
 //   DEPENDS: [src/lib/config-layers.ts, src/lib/vvoc-config.ts, node:path]
 //   LINKS: [M-WEB-CONFIG, M-PLUGIN-WEB-TOOLS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -20,12 +20,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Resolved direct Z.AI search and fetch regions with shared ZAI_API_KEY precedence.]
 //   LAST_CHANGE: [v1.0.0 - Initial runtime web config and credential resolver for the unified web tools plugin.]
 // END_CHANGE_SUMMARY
 
 import { basename, dirname } from "node:path";
 import type { ConfigSource, VvocConfigSnapshot } from "../../lib/config-layers.js";
-import type { VvocWebConfig } from "../../lib/vvoc-config.js";
+import type { VvocWebConfig, VvocWebRegion } from "../../lib/vvoc-config.js";
 
 /** A resolved credential. The value must never be logged or printed. */
 export type WebProviderCredential = {
@@ -33,19 +34,25 @@ export type WebProviderCredential = {
   source: "env" | "config";
 };
 
-export type ResolvedWebSearchConfig = {
-  provider: "exa" | "brave";
-  /** Environment variable consulted first for this provider. */
-  envVar: "EXA_API_KEY" | "BRAVE_API_KEY";
-  /** Config field path consulted second, used in actionable errors. */
-  configField: "web.search.apiKey";
-  /** Absent when neither source provides a value; services fail at execution time. */
-  credential?: WebProviderCredential;
-};
+export type ResolvedWebSearchConfig =
+  | {
+      provider: "exa" | "brave";
+      envVar: "EXA_API_KEY" | "BRAVE_API_KEY";
+      configField: "web.search.apiKey";
+      credential?: WebProviderCredential;
+    }
+  | {
+      provider: "zai";
+      region: VvocWebRegion;
+      envVar: "ZAI_API_KEY";
+      configField: "web.search.apiKey";
+      credential?: WebProviderCredential;
+    };
 
 export type ResolvedWebFetchConfig = {
-  provider: "native" | "spider";
-  envVar?: "SPIDER_API_KEY";
+  provider: "native" | "spider" | "zai";
+  region?: VvocWebRegion;
+  envVar?: "SPIDER_API_KEY" | "ZAI_API_KEY";
   configField?: "web.fetch.apiKey";
   credential?: WebProviderCredential;
 };
@@ -60,7 +67,11 @@ export type ResolvedWebConfig = {
 /** Injectable command runner for testability. Returns the process exit status. */
 export type CommandRunner = (cmd: string[], cwd: string) => { status: number };
 
-const SEARCH_ENV_VARS = { exa: "EXA_API_KEY", brave: "BRAVE_API_KEY" } as const;
+const SEARCH_ENV_VARS = {
+  exa: "EXA_API_KEY",
+  brave: "BRAVE_API_KEY",
+  zai: "ZAI_API_KEY",
+} as const;
 
 // START_BLOCK_CREDENTIAL_RESOLUTION
 function resolveCredential(
@@ -74,6 +85,13 @@ function resolveCredential(
     return { value: configValue, source: "config" };
   }
   return undefined;
+}
+
+function requireZaiRegion(value: unknown, field: string): VvocWebRegion {
+  if (value === "international" || value === "china") {
+    return value;
+  }
+  throw new Error(`${field} is required when provider is zai`);
 }
 // END_BLOCK_CREDENTIAL_RESOLUTION
 
@@ -92,23 +110,39 @@ export function resolveWebRuntimeConfig(
   const searchProvider = web?.search?.provider ?? "exa";
   const fetchProvider = web?.fetch?.provider ?? "native";
 
-  const searchEnvVar = SEARCH_ENV_VARS[searchProvider];
-  const search: ResolvedWebSearchConfig = {
-    provider: searchProvider,
-    envVar: searchEnvVar,
-    configField: "web.search.apiKey",
-    credential: resolveCredential(env[searchEnvVar], web?.search?.apiKey),
-  };
+  const search: ResolvedWebSearchConfig =
+    searchProvider === "zai"
+      ? {
+          provider: "zai",
+          region: requireZaiRegion(web?.search?.region, "web.search.region"),
+          envVar: "ZAI_API_KEY",
+          configField: "web.search.apiKey",
+          credential: resolveCredential(env.ZAI_API_KEY, web?.search?.apiKey),
+        }
+      : {
+          provider: searchProvider,
+          envVar: SEARCH_ENV_VARS[searchProvider],
+          configField: "web.search.apiKey",
+          credential: resolveCredential(env[SEARCH_ENV_VARS[searchProvider]], web?.search?.apiKey),
+        };
 
   const fetch: ResolvedWebFetchConfig =
-    fetchProvider === "spider"
+    fetchProvider === "zai"
       ? {
-          provider: "spider",
-          envVar: "SPIDER_API_KEY",
+          provider: "zai",
+          region: requireZaiRegion(web?.fetch?.region, "web.fetch.region"),
+          envVar: "ZAI_API_KEY",
           configField: "web.fetch.apiKey",
-          credential: resolveCredential(env.SPIDER_API_KEY, web?.fetch?.apiKey),
+          credential: resolveCredential(env.ZAI_API_KEY, web?.fetch?.apiKey),
         }
-      : { provider: "native" };
+      : fetchProvider === "spider"
+        ? {
+            provider: "spider",
+            envVar: "SPIDER_API_KEY",
+            configField: "web.fetch.apiKey",
+            credential: resolveCredential(env.SPIDER_API_KEY, web?.fetch?.apiKey),
+          }
+        : { provider: "native" };
 
   return { search, fetch, warnings: [...loaded.warnings] };
 }

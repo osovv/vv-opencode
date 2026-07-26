@@ -1,0 +1,70 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-ZAI-DIRECT-WEB-PROVIDERS>
+    <Summary>Add direct Z.AI and Zhipu Tool API provider options to the canonical web_search and web_fetch tools without introducing MCP client behavior.</Summary>
+    <Problem>WebToolsPlugin currently supports Exa or Brave search and native or Spider fetch. Users who have Z.AI or Zhipu API access cannot route the canonical web_search and web_fetch tools directly through the documented Z.AI international or Zhipu China Tool API endpoints, and configuring the separate remote MCP servers exposes additional provider-specific tools instead of preserving the canonical vvoc tool surface.</Problem>
+    <Goals>
+      <Goal>Add zai as a selectable provider for both web.search and web.fetch while preserving the existing canonical model-facing tool names and schemas.</Goal>
+      <Goal>Require an explicit international or china region for each selected zai provider so endpoint and search-engine routing never rely on an implicit billing-region guess.</Goal>
+      <Goal>Call the documented HTTP Tool API endpoints directly with bearer authentication, bounded transport, normalized results, credential-safe diagnostics, and no MCP protocol dependency.</Goal>
+      <Goal>Preserve direct JPEG, PNG, GIF, WebP, and PDF attachments on the fetch path while using the Z.AI or Zhipu reader endpoint for textual extraction.</Goal>
+      <Goal>Keep canonical vvoc schema, README, GRACE graph, verification projections, source contracts, and deterministic provider tests synchronized.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not implement an MCP client, Streamable HTTP MCP transport, SSE transport, MCP discovery, or MCP tool invocation.</NonGoal>
+      <NonGoal>Do not claim or attempt to consume GLM Coding Plan MCP quota through direct Tool API requests.</NonGoal>
+      <NonGoal>Do not modify, install, disable, proxy, or remove user-configured OpenCode MCP servers.</NonGoal>
+      <NonGoal>Do not add Z.AI-specific arguments to the canonical web_search or web_fetch model-facing schemas.</NonGoal>
+      <NonGoal>Do not silently fall back between international and China endpoints, search engines, credentials, or regions.</NonGoal>
+      <NonGoal>Do not perform billed live-provider requests as part of deterministic repository verification.</NonGoal>
+    </NonGoals>
+    <Constraints>
+      <Constraint>Implementation must use the documented direct HTTP Tool API endpoints and must not add an MCP SDK or protocol implementation.</Constraint>
+      <Constraint>Configuration remains strict schema v3, provider selection remains startup-resolved, and existing user-owned configuration must not be silently rewritten or migrated.</Constraint>
+      <Constraint>Credentials must remain outside model-visible output, logs, error details, metadata values, fixtures, and committed repository content.</Constraint>
+      <Constraint>All network paths must use the shared bounded transport with abort propagation, timeout enforcement, redirect behavior, and response-size limits.</Constraint>
+      <Constraint>Verification must be deterministic and must not require a real Z.AI key, paid balance, Coding Plan quota, or live provider availability.</Constraint>
+      <Constraint>Source contracts, README, canonical schema, GRACE graph, and GRACE verification state must remain synchronized with the implemented public behavior.</Constraint>
+    </Constraints>
+    <AcceptanceCriteria>
+      <Criterion>The strict canonical vvoc schema accepts provider zai for web.search and web.fetch, accepts region international or china for those sections, and rejects a zai provider selection without an explicit valid region.</Criterion>
+      <Criterion>Existing exa, brave, native, and spider configuration remains valid and behaviorally unchanged; region is not required for those providers.</Criterion>
+      <Criterion>Z.AI credentials resolve from ZAI_API_KEY before the selected section's apiKey, report only env or config as their source, participate in existing configured-apiKey redaction and tracked-project warnings, and never appear in logs or errors.</Criterion>
+      <Criterion>International search sends a bounded authenticated POST to https://api.z.ai/api/paas/v4/web_search with search_engine search-prime; China search sends the equivalent request to https://open.bigmodel.cn/api/paas/v4/web_search with search_engine search_pro.</Criterion>
+      <Criterion>The canonical search query maps to search_query, count remains within the existing canonical 1 through 20 limit, and freshness maps to oneDay, oneWeek, oneMonth, or oneYear without adding provider-specific model arguments.</Criterion>
+      <Criterion>Z.AI and Zhipu search_result entries normalize link to url, content to snippet, publish_date to publishedAt, preserve provider ordering, skip malformed entries without a URL, and render through the existing ranked Markdown path.</Criterion>
+      <Criterion>International fetch sends a bounded authenticated POST to https://api.z.ai/api/paas/v4/reader and China fetch sends the equivalent request to https://open.bigmodel.cn/api/paas/v4/reader with url, timeout, and return_format mapped from the canonical call.</Criterion>
+      <Criterion>Reader responses validate the documented envelope and return reader_result.content as textual tool output with safe metadata including provider, region, format, credential source, and available request metadata.</Criterion>
+      <Criterion>Supported image and PDF targets continue to return direct attachments through the shared media loader without sending those payloads through the reader endpoint; unsupported textual targets proceed to the selected reader endpoint.</Criterion>
+      <Criterion>Authentication, rate-limit, provider, malformed-response, timeout, abort, network, and oversized-response failures remain credential-safe and use the existing bounded transport and provider error taxonomy.</Criterion>
+      <Criterion>WebToolsPlugin startup diagnostics include the selected zai region without credential values, built-in web tool suppression remains runtime-only, and the plugin still registers exactly web_search and web_fetch.</Criterion>
+      <Criterion>README configuration and security guidance documents both regions, ZAI_API_KEY precedence, direct Tool API billing, the absence of Coding Plan MCP quota use, restart requirements, and the unchanged canonical tool surface.</Criterion>
+      <Criterion>Focused config, schema, search, fetch, provider, media, plugin, and credential-safety tests pass together with repository check, build, release consistency, and GRACE validation gates.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-WEB-TOOLS />
+      <M-WEB-CONFIG />
+      <M-WEB-SEARCH-SERVICE />
+      <M-WEB-FETCH-SERVICE />
+      <M-WEB-HTTP />
+      <M-WEB-MEDIA-LOADER />
+      <M-CLI-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/vvoc-config.test.ts src/plugins/web-tools.test.ts src/plugins/web-tools/config.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/fetch-service.test.ts src/plugins/web-tools/providers/zai.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic HTTP fixtures prove strict region configuration, endpoint and engine routing, request mapping, response normalization, direct media attachments, credential precedence and redaction safety, bounded errors, unchanged existing providers, public documentation accuracy, and valid package and GRACE state without making billed live-provider calls.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user explicitly approved direct REST integration for both international and China regions and requested no MCP client integration.</Assumption>
+      <Assumption>The documented public Tool API endpoints are the supported direct integration surface even if the managed Coding Plan MCP service uses additional internal routing.</Assumption>
+      <Assumption>Direct /paas/v4/web_search and /paas/v4/reader calls use ordinary platform API entitlement and billing rather than GLM Coding Plan MCP quota.</Assumption>
+      <Assumption>ZAI_API_KEY is the canonical environment credential for both regions; section-local apiKey remains the explicit configuration fallback.</Assumption>
+      <Assumption>The international premium search engine remains search-prime and the China advanced search engine remains search_pro for the implementation target.</Assumption>
+      <Assumption>If documented provider behavior changes or a selected region rejects the configured key, the plugin fails clearly and does not retry another region or endpoint.</Assumption>
+    </Assumptions>
+  </C-ZAI-DIRECT-WEB-PROVIDERS>
+</GraceChangeSpec>

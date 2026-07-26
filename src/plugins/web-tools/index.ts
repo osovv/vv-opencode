@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Added credential-safe direct Z.AI region diagnostics while preserving the canonical tool surface.]
 //   LAST_CHANGE: [v1.0.0 - Initial WebToolsPlugin with runtime built-in suppression and credential-safe startup diagnostics.]
 // END_CHANGE_SUMMARY
 
@@ -66,8 +67,10 @@ export const WebToolsPlugin: Plugin = async ({ client, directory }) => {
       message: "web tools configuration loaded",
       extra: {
         searchProvider: resolved.search.provider,
+        ...(resolved.search.provider === "zai" ? { searchRegion: resolved.search.region } : {}),
         searchCredentialSource: resolved.search.credential?.source ?? "missing",
         fetchProvider: resolved.fetch.provider,
+        ...(resolved.fetch.provider === "zai" ? { fetchRegion: resolved.fetch.region } : {}),
         fetchCredentialSource:
           resolved.fetch.provider === "native"
             ? "not-required"

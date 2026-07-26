@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify the optional strict web section of canonical vvoc schema v3: parsing, rejection, normalization, rendering, and schema-file parity.
-//   SCOPE: web section parse/render round-trips, strict rejection of unknown providers and keys and empty apiKey, default omission, createWebConfig behavior, and embedded schema versus schemas/vvoc/v3.json equivalence.
+//   SCOPE: web section parse/render round-trips, strict provider and Z.AI region validation, rejection of unknown keys and empty apiKey, default omission, createWebConfig behavior, and embedded schema versus schemas/vvoc/v3.json equivalence.
 //   DEPENDS: [src/lib/vvoc-config.ts, schemas/vvoc/v3.json]
 //   LINKS: [M-CLI-CONFIG, M-PLUGIN-WEB-TOOLS]
 //   ROLE: TEST
@@ -15,6 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered strict Z.AI provider regions, normalization, compatibility, and schema parity.]
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the optional web section added in vvoc config v3.1.0.]
 // END_CHANGE_SUMMARY
 
@@ -59,6 +60,31 @@ describe("optional web section parsing", () => {
     const parsed = parseVvocConfigText(docWithWeb({ fetch: { provider: "spider" } }), "test");
     expect(parsed.web?.fetch?.provider).toBe("spider");
     expect(parsed.web?.search).toBeUndefined();
+  });
+
+  test("zai search and fetch require and preserve explicit regions", () => {
+    const parsed = parseVvocConfigText(
+      docWithWeb({
+        search: { provider: "zai", region: "international" },
+        fetch: { provider: "zai", region: "china" },
+      }),
+      "test",
+    );
+    expect(parsed.web?.search).toEqual({ provider: "zai", region: "international" });
+    expect(parsed.web?.fetch).toEqual({ provider: "zai", region: "china" });
+  });
+
+  test("zai provider without a region is rejected", () => {
+    expect(() =>
+      parseVvocConfigText(docWithWeb({ search: { provider: "zai" } }), "test"),
+    ).toThrow();
+    expect(() => parseVvocConfigText(docWithWeb({ fetch: { provider: "zai" } }), "test")).toThrow();
+  });
+
+  test("an unknown zai region is rejected", () => {
+    expect(() =>
+      parseVvocConfigText(docWithWeb({ search: { provider: "zai", region: "global" } }), "test"),
+    ).toThrow();
   });
 
   test("an unknown provider value is rejected with a schema error", () => {
@@ -111,6 +137,19 @@ describe("createWebConfig normalization", () => {
     expect(createWebConfig({ search: { provider: "exa" }, fetch: {} })).toEqual({
       search: { provider: "exa" },
     });
+  });
+
+  test("normalizes and renders explicit zai regions", () => {
+    const web = createWebConfig({
+      search: { provider: "zai", region: "international", apiKey: "search-key" },
+      fetch: { provider: "zai", region: "china", apiKey: "fetch-key" },
+    });
+    expect(web).toEqual({
+      search: { provider: "zai", region: "international", apiKey: "search-key" },
+      fetch: { provider: "zai", region: "china", apiKey: "fetch-key" },
+    });
+    const rendered = renderVvocConfig({ ...createDefaultVvocConfig(), web });
+    expect(parseVvocConfigText(rendered, "test").web).toEqual(web);
   });
 });
 

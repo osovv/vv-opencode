@@ -20,6 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Extended shared provider error attribution with the direct zai adapter.]
 //   LAST_CHANGE: [v1.0.0 - Initial Exa Search API adapter and shared provider search contracts.]
 // END_CHANGE_SUMMARY
 
@@ -32,7 +33,7 @@ import {
   type FetchLike,
 } from "../http.js";
 
-export type WebProviderName = "exa" | "brave" | "spider" | "native";
+export type WebProviderName = "exa" | "brave" | "spider" | "native" | "zai";
 
 export type WebProviderErrorCode =
   | "AUTH_FAILED"

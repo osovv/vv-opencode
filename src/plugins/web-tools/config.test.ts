@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify runtime web config and credential resolution plus the git-tracked apiKey warning helper.
-//   SCOPE: Provider defaults, environment-over-config precedence, credential source reporting, native credential freedom, and git-tracked warning behavior with an injected command runner.
+//   SCOPE: Provider defaults, explicit Z.AI region handling, environment-over-config precedence, credential source reporting, native credential freedom, and git-tracked warning behavior with an injected command runner.
 //   DEPENDS: [bun:test, src/plugins/web-tools/config.ts, src/lib/vvoc-config.ts, src/lib/config-layers.ts]
 //   LINKS: [M-WEB-CONFIG]
 //   ROLE: TEST
@@ -14,6 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered both Z.AI regions, shared environment precedence, and fail-closed missing regions.]
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the runtime web config and credential resolver.]
 // END_CHANGE_SUMMARY
 
@@ -81,6 +82,65 @@ describe("resolveWebRuntimeConfig", () => {
     expect(resolved.search.credential).toEqual({ value: "b", source: "env" });
     expect(resolved.fetch.envVar).toBe("SPIDER_API_KEY");
     expect(resolved.fetch.credential).toEqual({ value: "s", source: "env" });
+  });
+
+  test("zai search and fetch preserve regions and share ZAI_API_KEY precedence", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot(
+        {
+          search: { provider: "zai", region: "international", apiKey: "search-config" },
+          fetch: { provider: "zai", region: "china", apiKey: "fetch-config" },
+        },
+        { kind: "global" },
+      ),
+      { ZAI_API_KEY: "zai-env" },
+    );
+    expect(resolved.search).toEqual({
+      provider: "zai",
+      region: "international",
+      envVar: "ZAI_API_KEY",
+      configField: "web.search.apiKey",
+      credential: { value: "zai-env", source: "env" },
+    });
+    expect(resolved.fetch).toEqual({
+      provider: "zai",
+      region: "china",
+      envVar: "ZAI_API_KEY",
+      configField: "web.fetch.apiKey",
+      credential: { value: "zai-env", source: "env" },
+    });
+  });
+
+  test("zai uses section apiKey when ZAI_API_KEY is absent", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot(
+        {
+          search: { provider: "zai", region: "china", apiKey: "search-config" },
+          fetch: { provider: "zai", region: "international", apiKey: "fetch-config" },
+        },
+        { kind: "global" },
+      ),
+      {},
+    );
+    expect(resolved.search.credential).toEqual({ value: "search-config", source: "config" });
+    expect(resolved.fetch.provider === "zai" && resolved.fetch.credential).toEqual({
+      value: "fetch-config",
+      source: "config",
+    });
+  });
+
+  test("zai fails closed when an in-memory config omits its required region", () => {
+    const invalid = { provider: "zai" } as never;
+    expect(() =>
+      resolveWebRuntimeConfig(snapshot({ search: invalid }, { kind: "global" }), {
+        ZAI_API_KEY: "z",
+      }),
+    ).toThrow("web.search.region");
+    expect(() =>
+      resolveWebRuntimeConfig(snapshot({ fetch: invalid }, { kind: "global" }), {
+        ZAI_API_KEY: "z",
+      }),
+    ).toThrow("web.fetch.region");
   });
 
   test("native fetch has no envVar, configField, or credential requirement", () => {

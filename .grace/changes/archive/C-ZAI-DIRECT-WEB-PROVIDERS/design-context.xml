@@ -1,0 +1,23 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-ZAI-DIRECT-WEB-PROVIDERS</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The provider-neutral web tools already isolate configuration, service dispatch, bounded HTTP transport, media attachment handling, and provider adapters. A direct Z.AI adapter can therefore preserve the two canonical tools while mapping the public Tool API envelopes into existing normalized search and fetch results. Explicit region selection prevents accidental endpoint and billing-region assumptions. The direct API path is intentionally distinguished from the separate Coding Plan MCP service because Z.AI documentation and subscription terms state that direct general-purpose API access does not consume Coding Plan MCP quota.</Rationale>
+  <Alternatives>
+    <Alternative>Embedding an MCP Streamable HTTP client was rejected because the user explicitly requires direct HTTP Tool API calls and no MCP integration.</Alternative>
+    <Alternative>Registering separate zai_search and zai_reader tools was rejected because it would duplicate the model-facing tool surface and defeat provider-neutral prompts and permissions.</Alternative>
+    <Alternative>Using one implicit default region was rejected because endpoint, engine, entitlement, latency, and billing behavior differ materially between international and China services.</Alternative>
+    <Alternative>Using the Coding Plan model base URL for Tool API requests was rejected because the documented reader and search REST surfaces are the ordinary /api/paas/v4 Tool API endpoints, while Coding Plan web capabilities are documented separately as remote MCP services.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Live credential smoke tests are deferred to an explicitly authorized manual check because they may consume paid API balance and are not required for deterministic repository verification.</Decision>
+    <Decision>Provider-specific search domain filters, content-size controls, cache controls, image summaries, and link summaries remain deferred so the canonical model-facing schemas do not expand in this change.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A user selects web.search provider zai with region international, supplies ZAI_API_KEY, and receives normalized ranked Markdown from the api.z.ai search-prime endpoint.</Scenario>
+    <Scenario>A user selects web.search provider zai with region china and receives normalized ranked Markdown from the open.bigmodel.cn search_pro endpoint.</Scenario>
+    <Scenario>A user selects web.fetch provider zai in either region and receives reader_result.content in the requested canonical textual format.</Scenario>
+    <Scenario>A direct PNG or PDF URL returns the same canonical attachment result as existing fetch providers without invoking the Z.AI reader endpoint.</Scenario>
+    <Scenario>A zai provider is configured without region or credentials and fails with an actionable validation or execution error that names supported configuration locations without exposing values.</Scenario>
+    <Scenario>An existing Exa, Brave, native, or Spider configuration continues to behave exactly as before.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

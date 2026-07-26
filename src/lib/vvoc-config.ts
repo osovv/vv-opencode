@@ -2,9 +2,9 @@
 // VERSION: 3.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, orchestration normalization, and validation helpers.
-//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in profiles, strict current config parsing, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
+//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in profiles, strict current config parsing including direct Z.AI provider regions, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
 //   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
-//   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
+//   LINKS: [M-CLI-CONFIG, M-WEB-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION-INTERNAL-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -34,6 +34,7 @@
 //   parseVvocConfigText - Strictly parses the canonical vvoc config document.
 //   renderVvocConfig - Renders canonical vvoc.json.
 //   validateVvocConfigDocument - Validates parsed vvoc config against JSON Schema.
+//   VvocWebRegion - Explicit Z.AI Tool API endpoint region.
 //   VvocWebSearchConfig - Optional web search provider section type.
 //   VvocWebFetchConfig - Optional web fetch provider section type.
 //   VvocWebConfig - Optional canonical web tools section type.
@@ -41,6 +42,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Added strict direct Z.AI provider and explicit region configuration for search and fetch.]
 //   LAST_CHANGE: [v3.0.0 - Removed lenient vvoc config parsing and made plugins a required canonical v3 section.]
 //   LAST_CHANGE: [v3.1.0 - Added optional strict web section (search/fetch provider enums and apiKey fields) with createWebConfig normalization and conditional rendering.]
 //   LAST_CHANGE: [v2.5.0 - Added reviewer and orchestrator role defaults to createDefaultRoleAssignments.]
@@ -139,15 +141,31 @@ export type SecretsRedactionConfig = {
   debug: boolean;
 };
 
-export type VvocWebSearchConfig = {
-  provider?: "exa" | "brave";
-  apiKey?: string;
-};
+export type VvocWebRegion = "international" | "china";
 
-export type VvocWebFetchConfig = {
-  provider?: "native" | "spider";
-  apiKey?: string;
-};
+export type VvocWebSearchConfig =
+  | {
+      provider?: "exa" | "brave";
+      region?: never;
+      apiKey?: string;
+    }
+  | {
+      provider: "zai";
+      region: VvocWebRegion;
+      apiKey?: string;
+    };
+
+export type VvocWebFetchConfig =
+  | {
+      provider?: "native" | "spider";
+      region?: never;
+      apiKey?: string;
+    }
+  | {
+      provider: "zai";
+      region: VvocWebRegion;
+      apiKey?: string;
+    };
 
 export type VvocWebConfig = {
   search?: VvocWebSearchConfig;
@@ -262,8 +280,21 @@ const VVOC_PRESET_SCHEMA = {
   },
 };
 
-const WEB_SEARCH_PROVIDERS = ["exa", "brave"] as const;
-const WEB_FETCH_PROVIDERS = ["native", "spider"] as const;
+const WEB_SEARCH_PROVIDERS = ["exa", "brave", "zai"] as const;
+const WEB_FETCH_PROVIDERS = ["native", "spider", "zai"] as const;
+const WEB_REGIONS = ["international", "china"] as const;
+
+const ZAI_REGION_REQUIREMENT = Object.fromEntries([
+  [
+    "if",
+    {
+      properties: { provider: { const: "zai" } },
+      required: ["provider"],
+    },
+  ],
+  // oxlint-disable-next-line unicorn/no-thenable -- JSON Schema conditional keyword.
+  ["then", { required: ["region"] }],
+]);
 
 const WEB_CONFIG_SCHEMA = {
   type: "object",
@@ -274,16 +305,20 @@ const WEB_CONFIG_SCHEMA = {
       additionalProperties: false,
       properties: {
         provider: { type: "string", enum: [...WEB_SEARCH_PROVIDERS] },
+        region: { type: "string", enum: [...WEB_REGIONS] },
         apiKey: { type: "string", minLength: 1 },
       },
+      allOf: [ZAI_REGION_REQUIREMENT],
     },
     fetch: {
       type: "object",
       additionalProperties: false,
       properties: {
         provider: { type: "string", enum: [...WEB_FETCH_PROVIDERS] },
+        region: { type: "string", enum: [...WEB_REGIONS] },
         apiKey: { type: "string", minLength: 1 },
       },
+      allOf: [ZAI_REGION_REQUIREMENT],
     },
   },
 };
@@ -526,7 +561,7 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
 function normalizeWebProviderSection(
   value: unknown,
   providers: readonly string[],
-): { provider?: string; apiKey?: string } | undefined {
+): { provider?: string; region?: VvocWebRegion; apiKey?: string } | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -537,17 +572,21 @@ function normalizeWebProviderSection(
   const apiKey = normalizeOptionalString(
     typeof value.apiKey === "string" ? value.apiKey : undefined,
   );
-  if (provider === undefined && apiKey === undefined) {
+  const region =
+    typeof value.region === "string" && (WEB_REGIONS as readonly string[]).includes(value.region)
+      ? (value.region as VvocWebRegion)
+      : undefined;
+  if (provider === undefined && region === undefined && apiKey === undefined) {
     return undefined;
   }
-  return compactObject({ provider, apiKey });
+  return compactObject({ provider, region, apiKey });
 }
 
 // START_CONTRACT: createWebConfig
 //   PURPOSE: Normalize an optional web section from a validated document or in-memory config.
 //   INPUTS: { value: unknown - candidate web section }
 //   OUTPUTS: { VvocWebConfig | undefined - normalized section, or undefined when empty }
-//   SIDE_EFFECTS: none; apiKey values are preserved exactly and never logged
+//   SIDE_EFFECTS: none; region is preserved and apiKey values are preserved exactly and never logged
 //   LINKS: M-PLUGIN-WEB-TOOLS
 // END_CONTRACT: createWebConfig
 export function createWebConfig(value: unknown): VvocWebConfig | undefined {
