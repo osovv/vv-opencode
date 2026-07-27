@@ -17,6 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [DIRECT-FIX - Covered runtime format and timeout fallbacks when OpenCode omits schema-defaulted web_fetch arguments.]
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered direct Z.AI reader dispatch, regional metadata, attachments, and missing credentials.]
 //   LAST_CHANGE: [v1.0.0 - Initial coverage for the web_fetch tool service.]
 // END_CHANGE_SUMMARY
@@ -76,6 +77,43 @@ describe("createWebFetchTool", () => {
       schema.safeParse({ url: "https://example.test", timeout: WEB_FETCH_MAX_TIMEOUT_SECONDS + 1 })
         .success,
     ).toBe(false);
+  });
+
+  test("applies format and timeout defaults when OpenCode omits them at execution", async () => {
+    let readerBody: Record<string, unknown> | undefined;
+    const definition = createWebFetchTool({
+      provider: "zai",
+      region: "international",
+      credential: { value: "zai-secret", source: "env" },
+    });
+    const runtimeArgs = {
+      url: "https://example.test/page",
+    } as Parameters<typeof definition.execute>[0];
+
+    const result = await withFetch(
+      async (url, init) => {
+        if (String(url).endsWith("/api/paas/v4/reader")) {
+          readerBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          return new Response(JSON.stringify({ reader_result: { content: "defaulted" } }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response("<html>probe</html>", {
+          headers: { "content-type": "text/html" },
+        });
+      },
+      () => definition.execute(runtimeArgs, createContext()),
+    );
+
+    expect(readerBody).toEqual({
+      url: "https://example.test/page",
+      timeout: WEB_FETCH_DEFAULT_TIMEOUT_SECONDS,
+      return_format: "markdown",
+    });
+    expect(structuredResult(result).metadata).toMatchObject({
+      provider: "zai",
+      format: "markdown",
+    });
   });
 
   test("rejects non-http URLs before permission or network work", async () => {

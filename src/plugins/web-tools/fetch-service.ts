@@ -16,6 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [DIRECT-FIX - Applied web_fetch format and timeout defaults inside execute when OpenCode omits schema defaults at runtime.]
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Routed canonical web_fetch calls through the explicit-region direct Z.AI reader adapter.]
 //   LAST_CHANGE: [v1.0.0 - Initial web_fetch tool service.]
 // END_CHANGE_SUMMARY
@@ -153,22 +154,25 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
         );
       }
 
+      const format: FetchFormat = args.format ?? "markdown";
+      const timeoutSeconds = args.timeout ?? WEB_FETCH_DEFAULT_TIMEOUT_SECONDS;
+
       await context.ask({
         permission: "web_fetch",
         patterns: [args.url],
         always: [],
-        metadata: { provider: resolved.provider, format: args.format },
+        metadata: { provider: resolved.provider, format },
       });
 
-      const timeoutMs = args.timeout * 1000;
+      const timeoutMs = timeoutSeconds * 1000;
       if (resolved.provider === "native") {
         const outcome = await fetchNative({
           url: args.url,
-          format: args.format,
+          format,
           abort: context.abort,
           timeoutMs,
         });
-        return nativeResult(args.url, args.format, outcome);
+        return nativeResult(args.url, format, outcome);
       }
 
       if (!resolved.credential) {
@@ -184,28 +188,22 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
         }
         const outcome = await fetchZai({
           url: args.url,
-          format: args.format,
+          format,
           region: resolved.region,
           credential: resolved.credential,
           abort: context.abort,
           timeoutMs,
         });
-        return zaiResult(
-          args.url,
-          args.format,
-          resolved.region,
-          resolved.credential.source,
-          outcome,
-        );
+        return zaiResult(args.url, format, resolved.region, resolved.credential.source, outcome);
       }
       const outcome = await scrapeSpider({
         url: args.url,
-        format: args.format,
+        format,
         credential: resolved.credential,
         abort: context.abort,
         timeoutMs,
       });
-      return spiderResult(args.url, args.format, resolved.credential.source, outcome);
+      return spiderResult(args.url, format, resolved.credential.source, outcome);
     },
   });
 }
