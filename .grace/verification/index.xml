@@ -12,6 +12,7 @@
         <V-M-CLI-AGENT-MODELS />
         <V-M-PLUGIN-TOGGLE-CONFIG />
         <V-M-CLI-COMMANDS />
+        <V-M-CLI-GUARDIAN />
         <V-M-PLUGIN-MODEL-ROLES />
         <V-M-PLUGIN-GUARDIAN />
         <V-M-PLUGIN-HASHLINE-EDIT />

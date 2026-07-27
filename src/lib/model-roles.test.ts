@@ -15,11 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.3.0 - Updated binding expectations for reviewer and orchestrator role additions.]
-//   LAST_CHANGE: [v0.2.1 - Updated deterministic managed-agent binding expectations so vv-controller resolves to the built-in smart role.]
-//   LAST_CHANGE: [v0.5.0 - Removed vv-analyst and vv-architect binding expectations. Agents removed from managed-agents list.
-//   LAST_CHANGE: [v0.1.2 - Updated built-in managed-agent binding expectations to vv-* tracked role keys.]
-//   LAST_CHANGE: [v0.1.1 - Added coverage for blank role bindings, whitespace-consistent role references, and full deterministic built-in binding assertions.]
-//   LAST_CHANGE: [v0.1.0 - Added module-local coverage for built-in role exposure, parsing normalization, field-specific errors, and non-transitive role resolution.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

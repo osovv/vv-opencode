@@ -281,6 +281,13 @@ The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plug
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |
 
+Guardian duration overrides use positive whole milliseconds. Both `--timeout-ms` and
+`--review-toast-duration-ms` reject zero, negative, fractional, missing, or malformed values:
+
+```bash
+vvoc guardian config --print --timeout-ms 30000 --review-toast-duration-ms 5000
+```
+
 ---
 ---
 

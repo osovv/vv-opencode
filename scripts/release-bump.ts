@@ -51,9 +51,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [DIRECT-FIX - Added bounded npm metadata retry before post-CI tag finalization.]
-//   LAST_CHANGE: [DIRECT-FIX - Finalized tags and GitHub Releases locally after CI because GITHUB_TOKEN cannot tag commits containing workflow changes.]
-//   LAST_CHANGE: [DIRECT-FIX - Moved tag creation and npm publication behind exact-SHA CI verification instead of pushing a tag before tests.]
-//   LAST_CHANGE: [v1.1.0 - Updated for full per-commit diff context in release summaries plus mandatory summary generation.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync, writeFileSync } from "node:fs";

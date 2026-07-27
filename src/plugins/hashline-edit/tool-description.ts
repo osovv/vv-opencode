@@ -14,7 +14,6 @@
 // END_MODULE_MAP
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.6.0 - Clarified that automatic range-boundary echo stripping applies only to exact adjacent-line duplicates.]
-//   LAST_CHANGE: [v0.5.0 - Split replace into replace (single line) and replace_range (range) to prevent accidental end-boundary errors.]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 

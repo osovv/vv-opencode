@@ -19,10 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Added the default-enabled web-tools plugin toggle.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added the default-enabled context TUI plugin toggle.]
-//   LAST_CHANGE: [v1.2.0 - Made plugin toggle checks pure over the already-loaded vvoc config snapshot.]
-//   LAST_CHANGE: [v1.1.0 - Loaded plugin toggles from the effective vvoc config source.]
-//   LAST_CHANGE: [v1.0.0 - Initial implementation for runtime plugin toggle.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS

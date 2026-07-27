@@ -18,7 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.2.0 - Added global/project write scopes and effective/project/global read scopes.]
-//   LAST_CHANGE: [v0.1.0 - Added vvoc role list/set/unset over canonical v3 roles with built-in role protections.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

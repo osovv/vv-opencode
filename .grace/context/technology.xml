@@ -59,7 +59,8 @@
     <Script name="fmt">Runs oxfmt --write src.</Script>
     <Script name="fmt:check">Runs oxfmt --check src.</Script>
     <Script name="test">Runs bun test.</Script>
-    <Script name="check">Runs typecheck, lint, fmt:check, and tests.</Script>
+    <Script name="grace:check">Validates the expected governed src and scripts file set, required semantic block pairing, malformed hash-prefixed anchors, and exactly one current LAST_CHANGE per governed file while preserving explicit raw/declaration exceptions.</Script>
+    <Script name="check">Runs typecheck, lint, fmt:check, tests, and grace:check.</Script>
     <Script name="pack:check">Builds dist, verifies root, server plugin, and default TUI subpath exports by importing generated files, then runs npm pack --dry-run.</Script>
     <Script name="release:check">Runs scripts/release-check.ts to validate package identity, package version, hosted schema id, schema config const, changelog presence, and latest changelog summary.</Script>
     <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, create and push the release commit, dispatch and wait for exact-SHA CI publication, retry npm metadata and verify gitHead, then create the annotated tag and GitHub Release locally.</Script>
@@ -67,7 +68,7 @@
   </Scripts>
   <TestingStack>
     <ModuleLevel>bun test targeted files for lib, command, plugin, workflow, secrets, hashline, and release automation modules.</ModuleLevel>
-    <WaveLevel>bun run typecheck, bun run lint, bun run fmt:check, and bun test.</WaveLevel>
+    <WaveLevel>bun run typecheck, bun run lint, bun run fmt:check, bun test, and bun run grace:check.</WaveLevel>
     <PhaseLevel>bun run check, bun run build, bun run pack:check, and bun run release:check when release or package consistency matters.</PhaseLevel>
     <GraceValidation>bunx @osovv/grace-cli@rc lint --path . and bunx @osovv/grace-cli@rc status --path . validate GRACE 4 artifacts.</GraceValidation>
   </TestingStack>

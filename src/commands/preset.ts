@@ -21,10 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Added scoped preset reads and global/project role-only preset writes.]
-//   LAST_CHANGE: [v0.4.0 - Switched preset application to canonical role-only writes and removed legacy scope/OpenCode target mutation behavior.]
-//   LAST_CHANGE: [v0.4.1 - Stopped preset flows from running sync rewrites; now bootstrap vvoc.json only when missing and keep existing config sections untouched unless listed roles change.]
-//   LAST_CHANGE: [v0.4.2 - Switched existing-file preset flows to strict raw vvoc.json validation and role-only document mutation without preset reseeding side effects.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added validated atomic role/profile application, profile reporting, target paths, and restart guidance.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

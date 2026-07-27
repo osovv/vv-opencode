@@ -15,14 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Denied and disabled canonical web_search and web_fetch access for the constrained guardian agent.]
-//   LAST_CHANGE: [v0.5.0 - Guardian hardening: auto-approval now requires an explicit low risk_level (not just a score below threshold); the review subprocess runs as the constrained guardian agent; the planned action is protected from prompt truncation by trimming the transcript instead; debug file logging is opt-in via OPENCODE_GUARDIAN_DEBUG and the structured log no longer embeds raw planned-action payloads.]
-//   LAST_CHANGE: [v0.7.0 - Removed old SDK permission reply fallback; Guardian now uses current permission.reply or HTTP reply only.]
-//   LAST_CHANGE: [v0.6.0 - Used the shared startup vvoc config snapshot for plugin toggles and Guardian runtime config resolution.]
-//   LAST_CHANGE: [v0.5.0 - Loaded Guardian runtime policy and fast-role model from the effective vvoc config source.]
-//   LAST_CHANGE: [v0.4.2 - Corrected module metadata annotations to match file path and active dependency usage.]
-//   LAST_CHANGE: [v0.4.1 - Prioritized roles.fast as Guardian's default runtime model while still honoring non-model guardian policy config and env model overrides.]
-//   LAST_CHANGE: [v0.4.0 - Resolved Guardian runtime model from roles.fast before subagent registration and added explicit guardian failure codes.]
-//   LAST_CHANGE: [v0.3.0 - Switched Guardian runtime config loading to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";

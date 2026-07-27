@@ -18,18 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
-//   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between plugin fixtures.]
-//   LAST_CHANGE: [v0.4.2 - Added coverage for scoped repository-memory guidance.]
-//   LAST_CHANGE: [v0.4.1 - Added coverage for explore-specific compact search/discovery system guidance.]
-//   LAST_CHANGE: [v0.4.0 - Added coverage for vv-controller primary injection and managed analyst subagent exclusion.]
-//   LAST_CHANGE: [v0.3.4 - Updated editing-workflow assertion for context-anchored hashline refs.]
-//   LAST_CHANGE: [v0.3.3 - Added regression coverage for primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites.]
-//   LAST_CHANGE: [v0.3.2 - Updated assertions to match narrowed explore-only-context-gathering guidance.]
-//   LAST_CHANGE: [v0.3.1 - Added coverage verifying vv-* tracked subagents remain excluded from primary-session system context injection.]
-//   LAST_CHANGE: [v0.3.0 - Added coverage for standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance blocks.]
-//   LAST_CHANGE: [v0.2.0 - Added coverage for task routing, execution stability, and loop-control guidance blocks in primary-session system injection.]
-//   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for primary-session-only system context injection.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added concrete profile selection, negative prompt isolation, and startup snapshot coverage.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";

@@ -20,9 +20,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Added exact-value redaction rules for configured web apiKey fields.]
-//   LAST_CHANGE: [v1.3.0 - Resolved secrets-redaction settings from the shared startup vvoc config snapshot.]
-//   LAST_CHANGE: [v1.2.0 - Loaded secrets-redaction config from the effective vvoc source.]
-//   LAST_CHANGE: [v1.1.0 - Switched secrets-redaction config loading to the canonical vvoc.json file.]
 // END_CHANGE_SUMMARY
 
 import {

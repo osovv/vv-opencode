@@ -4,7 +4,7 @@
 //   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, and collect-all review rounds.
 //   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, close gating, and review-round helpers.
 //   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts]
-//   LINKS: [M-WORKFLOW-STATE]
+//   LINKS: M-WORKFLOW-STATE, M-WORKFLOW-PROTOCOL, M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-STATE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -46,12 +46,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Added revertReviewerLaunch so a failed tracked result returns an in-flight reviewer to pending instead of stranding the work item in REVIEWER_ALREADY_IN_FLIGHT.]
-//   LAST_CHANGE: [v0.3.1 - Added bounded result excerpts to implementer hard-stop state and reviewer round results.]
-//   LAST_CHANGE: [v0.3.0 - Replaced inferred sequential reviewer states with explicit work-item mode, reviewer intent, in-flight tracking, and collect-all review-round aggregation.]
-//   LAST_CHANGE: [v0.2.0 - Allowed fresh review-only work items to transition directly from reviewer outcomes.]
-//   LAST_CHANGE: [v0.1.2 - Required actor metadata for tracked transitions so reviewer counters cannot be bypassed by actor-less updates.]
-//   LAST_CHANGE: [v0.1.1 - Enforced deterministic transition invariants with sticky hard-stop states and optional closed-item listing support.]
-//   LAST_CHANGE: [v0.1.0 - Added session-scoped in-memory workflow state store with idempotent open, transitions, close/list/get, and review-round helpers.]
 // END_CHANGE_SUMMARY
 
 import type { ParsedResultBlock, TrackedAgentName } from "./protocol.js";

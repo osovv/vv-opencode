@@ -16,11 +16,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Registered and inspected the dedicated TUI plugin config during init.]
-//   LAST_CHANGE: [v0.8.1 - Removed the harmful RTK token-saving recommendation from the init outro; RTK distorts proxied command output and confuses LLM sessions.]
-//   LAST_CHANGE: [v0.8.0 - Skipped global managed skill symlink creation for project-scope init.]
-//   LAST_CHANGE: [v0.7.1 - Added managed skill file scaffolding during vvoc init.]
-//   LAST_CHANGE: [v0.7.0 - Ensured the project-local managed planning artifact directory exists during project-scope init.]
-//   LAST_CHANGE: [v0.6.1 - Exported runInit as the command helper and kept the non-interactive path internal so the module map matches the public surface.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

@@ -15,29 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.1.2 - Added pinned base-package migration and OpenCode host compatibility coverage.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added dedicated tui.json(c) mutation, path, idempotence, and inspection coverage.]
-//   LAST_CHANGE: [v1.4.1 - Added managed skill distribution and behavioral coverage for vv-handoff.]
-//   LAST_CHANGE: [v1.3.0 - Added strict current-only vvoc config rejection and no-rewrite mutation coverage.]
-//   LAST_CHANGE: [v1.4.0 - Updated managed registration coverage so old-name agents and old command entries remain untouched.]
-//   LAST_CHANGE: [v1.2.8 - Added regression test for syncManagedSkillFiles not syncing references when parent skill is skipped (config-safety).]
-//   LAST_CHANGE: [v1.2.7 - Added vv-reflect template coverage for user-provided domain and product insight capture.]
-//   LAST_CHANGE: [v1.2.6 - Added vv-reflect template coverage for generalized lesson synthesis instead of current-session recaps.]
-//   LAST_CHANGE: [v1.2.5 - Updated managed vv-controller registration expectations to seed and sync `model = vv-role:smart` while preserving root defaults.]
-//   LAST_CHANGE: [v1.2.4 - Added static schema regression coverage for the package-versioned URL and plugins property placement.]
-//   LAST_CHANGE: [v1.2.3 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
-//   LAST_CHANGE: [v1.2.2 - Reworked the vv-deepseek refresh regression to write drifted managed presets directly before syncVvocConfig runs.]
-//   LAST_CHANGE: [v1.2.0 - Added coverage for managed vv-controller registrations and planning artifact directory scaffolding.]
-//   LAST_CHANGE: [v1.2.1 - Added regression coverage proving sync restores drifted vv-deepseek while preserving custom non-managed presets.]
-//   LAST_CHANGE: [v1.1.7 - Added regression coverage for managed `tools.apply_patch = false` writes and sibling `tools.*` preservation during OpenCode config sync.]
-//   LAST_CHANGE: [v1.1.6 - Added regression coverage ensuring legacy old-name cleanup is blocked when the legacy prompt file exists but is user-owned (missing vvoc managed marker).]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated canonical fresh-config preset key coverage from vv-openai to vv-codex.]
-//   LAST_CHANGE: [v1.2.5 - Added managed skill distribution coverage for vv-reflect.]
-//   LAST_CHANGE: [v1.1.5 - Added coverage ensuring legacy cleanup preserves old-name agents that keep legacy prompt paths but diverge from managed model/permission/description/mode fields.]
-//   LAST_CHANGE: [v1.1.4 - Added coverage proving legacy cleanup is restricted to clearly vvoc-managed old tracked entries and preserves user-owned agents that reuse old names.]
-//   LAST_CHANGE: [v1.1.3 - Added legacy tracked-agent migration coverage to verify sync removes pre-rename implementer/spec-reviewer/code-reviewer registrations while preserving unrelated agent entries and comments.]
-//   LAST_CHANGE: [v1.1.2 - Updated managed registration and prompt assertions to vv-* tracked subagent names and filenames.]
-//   LAST_CHANGE: [v1.1.1 - Updated managed registration coverage so only `agent.explore` is auto-seeded among built-in OpenCode agents.]
-//   LAST_CHANGE: [v1.1.0 - Added installation inspection coverage for canonical role inventory ordering and unresolved vv-role reference diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

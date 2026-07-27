@@ -19,7 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conditional OPENCODE_TUI_CONFIG selection for existing managed TUI files.]
-//   LAST_CHANGE: [v1.0.0 - Added deterministic OpenCode launch planning and subprocess execution.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

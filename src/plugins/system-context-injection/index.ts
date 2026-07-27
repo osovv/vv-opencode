@@ -15,18 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.6.0 - Used the shared startup vvoc config snapshot for plugin toggles and skill-path source decisions.]
-//   LAST_CHANGE: [v0.5.0 - Used effective vvoc source resolution to avoid forcing global skill discovery into project sandbox sessions.]
-//   LAST_CHANGE: [v0.4.2 - Added scoped repository-memory guidance for .vvoc lessons and runbooks indexes.]
-//   LAST_CHANGE: [v0.4.1 - Added explore-specific system guidance that enforces compact search/discovery handoffs instead of file dumps.]
-//   LAST_CHANGE: [v0.3.4 - Added vvoc managed skill directory to config.skills.paths in config hook.]
-//   LAST_CHANGE: [v0.3.3 - Updated editing workflow guidance to prefer exact context-anchored `line#hash#anchor` refs from read output.]
-//   LAST_CHANGE: [v0.4.0 - Removed `apply_patch` instruction from editing_workflow block — tool-level disable is stronger than prompt text.]
-//   LAST_CHANGE: [v0.3.2 - Added primary-session editing workflow guidance that prefers hashline-backed `edit` over shell rewrites and forbids `apply_patch` use.]
-//   LAST_CHANGE: [v0.3.1 - Narrowed explore subagent guidance to context-gathering only, prohibiting solution proposals, planning, or recommendations.]
-//   LAST_CHANGE: [v0.3.0 - Added standard trajectories, working-state, reroute, semantic continuity, assumption discipline, anti-drift, and project-overlay guidance for primary sessions.]
-//   LAST_CHANGE: [v0.2.0 - Expanded primary-session system guidance with task routing, execution stability, and loop-control rules while preserving subagent exclusion.]
-//   LAST_CHANGE: [v0.1.0 - Added a reusable main-session system context injector with default proactive explore guidance.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Separated universal primary guidance from one concrete startup-resolved vv-controller policy.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";

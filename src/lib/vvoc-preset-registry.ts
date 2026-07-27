@@ -18,10 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.1.0 - Added a shared built-in vvoc preset registry so config sync and completions use one source of truth.]
-//   LAST_CHANGE: [v0.2.0 - vv-osovv: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-sol-xhigh; vv-osovv-cheap: fast→openai/vv-gpt-5.6-luna-low, smart→openai/vv-gpt-5.6-terra-high.]
-//   LAST_CHANGE: [v0.3.0 - Replaced unavailable GPT-5.6 Luna Low with GPT-5.4 Mini Low for the fast role in both osovv presets.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Renamed vv-openai to vv-codex and updated all model references to openai/vv-codex-gpt-* namespace.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added an explicit orchestration profile to every managed preset.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";

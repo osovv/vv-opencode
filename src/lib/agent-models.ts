@@ -35,7 +35,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Removed variant splitting from model argument parsing so provider/model:free passes through unchanged.]
-//   LAST_CHANGE: [v0.3.0 - Added variant-aware OpenCode agent targets for build/plan/general/explore while keeping top-level default model fields plain.]
 // END_CHANGE_SUMMARY
 
 import {

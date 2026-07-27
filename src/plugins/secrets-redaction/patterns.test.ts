@@ -15,7 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
-//   LAST_CHANGE: [v1.0.1 - Added bearer_token .md filename negative test.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

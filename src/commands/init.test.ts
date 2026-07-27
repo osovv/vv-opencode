@@ -15,16 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added project-local TUI registration and idempotence expectations.]
-//   LAST_CHANGE: [v0.10.1 - Added init scaffolding expectation for vv-handoff managed skill.]
-//   LAST_CHANGE: [v0.9.0 - Added project-local .opencode/.vvoc assertions and global side-effect guards for scoped init.]
-//   LAST_CHANGE: [v0.10.0 - Updated init expectations for reviewer and orchestrator role bindings.]
-//   LAST_CHANGE: [v0.8.1 - Updated init expectations so the managed vv-controller agent is seeded with the built-in smart role.]
-//   LAST_CHANGE: [v0.8.1 - Removed vv-plan/vv-review command assertions after replacing them with managed skills system.]
-//   LAST_CHANGE: [v0.8.0 - Added init expectation for the managed planning artifact directory.]
-//   LAST_CHANGE: [v0.9.0 - Removed vv-analyst and vv-architect init expectations. Agents removed from managed-agents list.
-//   LAST_CHANGE: [v0.6.2 - Updated init expectations for vv-* tracked subagent names and prompt filenames.]
-//   LAST_CHANGE: [v0.6.1 - Updated init expectations so only `agent.explore` is auto-seeded among built-in OpenCode agents.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated fresh-init preset expectations from vv-openai to vv-codex.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

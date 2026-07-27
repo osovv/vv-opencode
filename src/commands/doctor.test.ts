@@ -15,9 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.1.2 - Added OpenCode host compatibility diagnostic coverage.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added managed TUI source, parse, and registration diagnostic coverage.]
-//   LAST_CHANGE: [v0.2.0 - Added invalid vvoc config doctor diagnostics without mutation coverage.]
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";

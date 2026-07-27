@@ -37,9 +37,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added layered dedicated tui.json(c) source and write-target resolution.]
-//   LAST_CHANGE: [v1.1.0 - Replaced keyed runtime memoization with a single loadVvocConfig startup promise shared by all plugins.]
-//   LAST_CHANGE: [v1.0.1 - Memoized loadEffectiveVvocConfigForRuntime to eliminate redundant ancestor discovery across multiple plugins during startup.]
-//   LAST_CHANGE: [v1.0.0 - Added layered config source discovery, write target resolution, and runtime vvoc loading.]
 // END_CHANGE_SUMMARY
 
 import { access, readFile } from "node:fs/promises";

@@ -16,7 +16,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TUI registration creation and malformed-config no-rewrite coverage.]
-//   LAST_CHANGE: [v1.0.0 - Added strict invalid-config rejection and plugin toggle preservation coverage for vvoc sync.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";

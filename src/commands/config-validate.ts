@@ -19,7 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.7.0 - Added global/project/effective validation scopes without creating missing configs.]
-//   LAST_CHANGE: [v0.6.0 - Added explicit unsupported-version reporting and path-aware semantic role assignment validation for roles/presets.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

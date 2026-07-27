@@ -15,10 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.6.0 - Hardened rename: path-equivalent source/target are detected via resolve() to avoid write-then-delete data loss, and an existing rename target is refused instead of being silently clobbered.]
-//   LAST_CHANGE: [v0.5.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
-//   LAST_CHANGE: [v0.4.0 - Read source snapshots are loaded only for eligible read output and only trusted when visible rows still match the file.]
-//   LAST_CHANGE: [v0.3.0 - Read output now uses the full file snapshot when available so partial and truncated reads emit edit-valid context anchors.]
-//   LAST_CHANGE: [v0.2.0 - Read output now emits context-anchored hashes (line#hash#anchor|content) for collision-resistant edit anchors.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";

@@ -29,9 +29,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Added canonical project .opencode and .vvoc/vvoc.json helpers and removed legacy root OpenCode path semantics.]
-//   LAST_CHANGE: [v0.5.1 - Added getGlobalOpencodeSkillsDir for OpenCode skills directory resolution.]
-//   LAST_CHANGE: [v0.5.0 - Added the managed skills directory helper.]
-//   LAST_CHANGE: [v0.3.0 - Added the canonical global vvoc config file path helper for vvoc.json.]
 // END_CHANGE_SUMMARY
 
 import { homedir } from "node:os";

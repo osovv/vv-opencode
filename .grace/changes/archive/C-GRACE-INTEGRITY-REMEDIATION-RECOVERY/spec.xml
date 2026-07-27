@@ -1,0 +1,50 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-GRACE-INTEGRITY-REMEDIATION-RECOVERY>
+    <Summary>Recover and apply the already implemented GRACE integrity remediation through a final gate that does not re-evaluate the superseded baseline as current state.</Summary>
+    <Problem>The superseded remediation plan implemented and verified its target successfully, but its TargetAssertions included a MustPassCommand that invokes grace lint with assertions current. While the change remains active, current intentionally evaluates that change's pre-implementation baseline, so the final gate can never pass after the target exists.</Problem>
+    <Goals>
+      <Goal>Preserve the completed runtime, test, markup, context, graph, verification, policy, and documentation remediation without modifying its behavior.</Goal>
+      <Goal>Replace the impossible lifecycle gate with a recovery plan whose baseline describes the already implemented state and whose outer final validation evaluates that state correctly.</Goal>
+      <Goal>Apply and archive the verified remediation with fresh deterministic evidence and no unrelated files.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The superseded specification, plan assertions, scopes, tasks, and design context remain unchanged except for the allowed terminal lifecycle status transition and archive move.</Constraint>
+      <Constraint>No source behavior, public API, schema, generated dist output, changelog, or historical archived bundle may be changed by this recovery.</Constraint>
+      <Constraint>Fresh target tests, repository checks, build, pack, release consistency, GRACE final validation, and diff checks must pass before apply and commit.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Do not add another runtime fix or broaden the completed remediation.</NonGoal>
+      <NonGoal>Do not weaken or bypass any target assertion from the superseded remediation.</NonGoal>
+      <NonGoal>Do not edit the external grace-cli implementation.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>The superseded remediation bundle is archived with terminal superseded status and unchanged normative content.</Criterion>
+      <Criterion>The implemented Guardian, web_search, hashline markup, single-LAST_CHANGE, workflow dependency, Web Tools flow, and baseline-policy targets remain present and verified.</Criterion>
+      <Criterion>The recovery final gate passes without invoking assertions current for the superseded active baseline.</Criterion>
+      <Criterion>After explicit user authorization, the recovery bundle is marked applied, archived, and committed with only approved files.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-GUARDIAN />
+      <M-WEB-SEARCH-SERVICE />
+      <M-PLUGIN-HASHLINE-EDIT />
+      <M-WORKFLOW-STATE />
+      <M-WORKFLOW-TRANSITIONS />
+      <M-WORKFLOW-PERSISTENCE />
+      <M-RELEASE-AUTOMATION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/commands/guardian.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/providers/zai.test.ts src/plugins/hashline-edit.edit-operations.test.ts scripts/check-grace-markup.test.ts src/plugins/workflow.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path . --change C-GRACE-INTEGRITY-REMEDIATION-RECOVERY --assertions final --runCommands</ExpectedCommand>
+      <ExpectedCommand>git diff --check</ExpectedCommand>
+      <ExpectedEvidence>All completed remediation targets remain present, every deterministic command passes, GRACE reports only the recovery change before apply, and the final committed tree contains no generated or unrelated files.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user's instruction to go ahead, fix everything, and commit explicitly authorizes superseding the impossible plan, applying the recovery after fresh evidence, and creating the commit.</Assumption>
+      <Assumption>The failed current assertion is a lifecycle-plan contradiction rather than a runtime or repository integrity failure.</Assumption>
+    </Assumptions>
+  </C-GRACE-INTEGRITY-REMEDIATION-RECOVERY>
+</GraceChangeSpec>

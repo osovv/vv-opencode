@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the provider-neutral web_search tool schema, permission flow, dispatch, rendering, metadata, and credential-safe errors.
 //   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
 //   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/search-service.ts]
-//   LINKS: [M-WEB-SEARCH-SERVICE, V-M-WEB-SEARCH-SERVICE]
+//   LINKS: M-WEB-SEARCH-SERVICE, V-M-WEB-SEARCH-SERVICE, DF-WEB-SEARCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -16,8 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered direct Z.AI dispatch, regional metadata, and unchanged canonical schema.]
-//   LAST_CHANGE: [v1.0.0 - Initial coverage for the web_search tool service.]
+//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Covered runtime count fallback when OpenCode omits the schema-defaulted argument.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -69,6 +68,43 @@ describe("createWebSearchTool", () => {
     expect(schema.safeParse({ query: "vvoc", count: 21 }).success).toBe(false);
     expect(schema.safeParse({ query: "vvoc", freshness: "hour" }).success).toBe(false);
     expect(schema.parse({ query: "vvoc", freshness: "week" }).freshness).toBe("week");
+  });
+
+  test("applies count 8 when OpenCode omits it at execution", async () => {
+    const events: string[] = [];
+    let requestBody: Record<string, unknown> | undefined;
+    const definition = createWebSearchTool({
+      provider: "zai",
+      region: "international",
+      envVar: "ZAI_API_KEY",
+      configField: "web.search.apiKey",
+      credential: { value: "zai-secret", source: "env" },
+    });
+    const runtimeArgs = { query: "vvoc" } as Parameters<typeof definition.execute>[0];
+
+    await withFetch(
+      async (_url, init) => {
+        events.push("fetch");
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({ search_result: [] }), {
+          headers: { "content-type": "application/json" },
+        });
+      },
+      () =>
+        definition.execute(
+          runtimeArgs,
+          createContext(async () => {
+            events.push("ask");
+          }),
+        ),
+    );
+
+    expect(events).toEqual(["ask", "fetch"]);
+    expect(requestBody).toEqual({
+      search_engine: "search-prime",
+      search_query: "vvoc",
+      count: 8,
+    });
   });
 
   test("asks permission before Exa dispatch and returns ranked Markdown metadata", async () => {

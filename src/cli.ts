@@ -18,7 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.2.11 - Aligned meta description with package.json, README, and GitHub repo; license and badge polish.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Registered the top-level orchestration command.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";

@@ -1,0 +1,74 @@
+<GraceChangeSpec graceVersion="4.0" status="superseded">
+  <C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION>
+    <ReplacementChange>C-GRACE-INTEGRITY-REMEDIATION-RECOVERY</ReplacementChange>
+    <Summary>Remediate the runtime verification gaps and semantic GRACE drift found during the repository-wide markup review, then add deterministic checks that prevent the same classes of false coverage and ungoverned-file regressions.</Summary>
+    <Problem>GRACE lint and status report a structurally healthy repository, but the review found material semantic gaps: Guardian CLI numeric parsing can emit and write schema-invalid zero values without a dedicated command test; web_search does not apply its declared count default when OpenCode omits the argument at execution; one hashline test has corrupted file-local anchors and is silently treated as ungoverned; workflow dependency edges disagree with source imports and file contracts; repeated LAST_CHANGE entries make grace file navigation report stale history; unified Web Tools lack durable product use cases and data flows; and most historical plans demonstrate that existence-only baseline assertions are too weak for future execution preflight.</Problem>
+    <Goals>
+      <Goal>Make Guardian CLI configuration writes schema-safe by rejecting invalid positive-integer arguments and covering the command through a dedicated graph and verification module.</Goal>
+      <Goal>Apply the canonical web_search count default inside execute when OpenCode omits schema-defaulted arguments, with deterministic provider-level regression coverage.</Goal>
+      <Goal>Restore valid file-local markup, normalize governed CHANGE_SUMMARY blocks to one current LAST_CHANGE entry, and add a deterministic repository check for governed-file coverage and summary cardinality.</Goal>
+      <Goal>Synchronize workflow dependency edges with actual imports and source contracts.</Goal>
+      <Goal>Add durable Web Tools requirements, search and fetch data flows, and critical verification intent that explain the public capability and its boundaries.</Goal>
+      <Goal>Strengthen repository policy for future GraceChangePlan baseline assertions without rewriting historical archived lifecycle artifacts.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Archived .grace/changes/archive bundles are immutable historical records and must not be rewritten to retrofit stronger assertions.</Constraint>
+      <Constraint>Generated dist output must not be edited manually; implementation changes remain in src, scripts, context, graph, verification, tests, and repository instructions.</Constraint>
+      <Constraint>Public web_search and web_fetch names, provider choices, model-facing schema bounds, credential precedence, and direct media behavior remain unchanged except that omitted web_search count must reliably resolve to the already-declared default of eight.</Constraint>
+      <Constraint>Guardian timeoutMs and reviewToastDurationMs remain positive integer fields under canonical schema v3; invalid CLI values must fail before printing or writing a configuration result.</Constraint>
+      <Constraint>The raw workflow system-instruction prompt and src/env.d.ts remain explicit documented file-local markup exceptions because injected prompt comments would alter model context and the declaration shim has no runtime module contract.</Constraint>
+      <Constraint>Verification must be deterministic, offline, credential-safe, and must not require live web providers or user-owned config mutation.</Constraint>
+      <Constraint>Repository-wide LAST_CHANGE normalization must derive one truthful current summary from current behavior and relevant git/change evidence rather than blindly retaining the first or last physical historical entry.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Do not add new web providers, tools, Guardian settings, config schema fields, or user-facing commands.</NonGoal>
+      <NonGoal>Do not modify the external grace-cli implementation or depend on an unpublished GRACE validator feature.</NonGoal>
+      <NonGoal>Do not rewrite git history, changelog history, archived GraceChangeSpec or GraceChangePlan content, or generated release artifacts.</NonGoal>
+      <NonGoal>Do not broadly refactor Guardian, Web Tools, workflow state, hashline editing, or release automation beyond changes required for the approved remediation.</NonGoal>
+      <NonGoal>Do not add GRACE comments to the runtime workflow system-instruction payload.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>Guardian CLI rejects non-finite, fractional, zero, and negative timeout-ms and review-toast-duration-ms values with actionable diagnostics before print or write; accepted output validates as canonical vvoc schema v3.</Criterion>
+      <Criterion>A dedicated M-CLI-GUARDIAN and V-M-CLI-GUARDIAN own Guardian command behavior, and deterministic tests cover print, scoped write, preservation, invalid existing config, valid numeric normalization, and invalid numeric rejection.</Criterion>
+      <Criterion>web_search execute resolves an omitted count to eight before permission metadata and provider dispatch; direct Z.AI request mapping and service tests prove the runtime default rather than only schema.parse behavior.</Criterion>
+      <Criterion>src/plugins/hashline-edit.edit-operations.test.ts contains valid unprefixed MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY anchors and grace file show recognizes it as governed.</Criterion>
+      <Criterion>A deterministic repository-owned GRACE markup check covers the expected TypeScript, TSX, script, and explicitly selected graph-owned source files; it fails on missing or malformed required blocks, unexpected ungoverned files, and multiple or absent LAST_CHANGE entries while allowing only documented exceptions.</Criterion>
+      <Criterion>Every governed source and test file contains exactly one truthful LAST_CHANGE entry; git history and archived change bundles remain the history source instead of accumulating file-local changelog lines.</Criterion>
+      <Criterion>The durable workflow graph reflects source dependency direction among M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, and M-WORKFLOW-PERSISTENCE, including type-level architectural dependencies where they affect module ownership.</Criterion>
+      <Criterion>requirements.xml includes a canonical unified Web Tools use case with goals, acceptance, constraints, and non-goals; graph and verification add routed search and fetch data flows plus critical scenarios for permission ordering, runtime defaults, provider routing, bounded transport, attachments, and credential safety.</Criterion>
+      <Criterion>Repository engineering policy requires future plans that modify existing behavior to assert meaningful baseline content or explicitly justify why existence-only assertions are sufficient; no archived plan is changed.</Criterion>
+      <Criterion>Graph and verification indexes directly own every new module, flow, and verification anchor, and affected file-local LINKS fields remain accurate.</Criterion>
+      <Criterion>Targeted regressions, the repository GRACE markup check, bun run check, bun run build, bun run pack:check, bun run release:check, grace lint, and grace status all pass with fresh evidence and no generated dist changes committed.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-GUARDIAN />
+      <M-CLI-COMMANDS />
+      <M-CLI-CONFIG />
+      <M-WEB-SEARCH-SERVICE />
+      <M-WEB-ZAI />
+      <M-PLUGIN-WEB-TOOLS />
+      <M-PLUGIN-HASHLINE-EDIT />
+      <M-WORKFLOW-STATE />
+      <M-WORKFLOW-TRANSITIONS />
+      <M-WORKFLOW-PERSISTENCE />
+      <M-RELEASE-AUTOMATION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/commands/guardian.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/providers/zai.test.ts src/plugins/hashline-edit.edit-operations.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test scripts/check-grace-markup.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path . --assertions current</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic evidence proves schema-safe Guardian CLI output and writes, runtime web_search default propagation, restored file governance, single current change summaries, truthful workflow dependencies, durable Web Tools product and flow coverage, stronger future baseline policy, valid package surfaces, and zero unexplained GRACE drift.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user approved one repository-wide GRACE remediation change including normalization of all governed LAST_CHANGE blocks.</Assumption>
+      <Assumption>Archived lifecycle bundles remain authoritative historical records and are intentionally excluded from normalization or assertion retrofits.</Assumption>
+      <Assumption>src/env.d.ts and src/plugins/workflow/system-instruction.md are the only approved file-local markup exceptions unless implementation evidence requires an explicit specification amendment.</Assumption>
+      <Assumption>A dedicated Guardian command module is preferable to continuing the broad V-M-CLI-COMMANDS coverage claim for nontrivial Guardian parsing and write behavior.</Assumption>
+    </Assumptions>
+  </C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION>
+</GraceChangeSpec>

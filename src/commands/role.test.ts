@@ -15,7 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.2.0 - Added project-scope role write isolation coverage.]
-//   LAST_CHANGE: [v0.1.0 - Added coverage for role list/set/unset and built-in role protections.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

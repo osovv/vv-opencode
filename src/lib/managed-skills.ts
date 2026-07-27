@@ -21,9 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.3 - Added vv-handoff to the canonical managed skill set.]
-//   LAST_CHANGE: [v0.5.2 - Added vv-reflect to the canonical managed skill set.]
-//   LAST_CHANGE: [v0.5.1 - Added loadManagedSkillReference and listManagedSkillReferenceNames for copying reference files alongside skill templates.]
-//   LAST_CHANGE: [v0.5.0 - Initial module for managed skill file resolution and template loading.]
 // END_CHANGE_SUMMARY
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";

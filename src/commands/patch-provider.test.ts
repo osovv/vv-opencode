@@ -15,11 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.8.0 - Updated GPT-5.6 (terra/sol) limit assertions to input 272000 / context 400000 to match the corrected Codex metadata.]
-//   LAST_CHANGE: [v0.6.0 - Added full-object assertions for vv-gpt-5.6-luna-low, vv-gpt-5.6-terra-high, vv-gpt-5.6-sol-xhigh in first-apply and reapply tests.]
-//   LAST_CHANGE: [v0.5.0 - Added project-scope OpenCode patch isolation coverage.]
-//   LAST_CHANGE: [v0.4.3 - Added reasoning:true expectation in openai patch test.]
-//   LAST_CHANGE: [v0.7.0 - Replaced GPT-5.6 Luna Low assertions with the GPT-5.4 Mini Low fixed-effort alias.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated all alias names to vv-codex-gpt-*, added input limit assertions, added codex preset coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

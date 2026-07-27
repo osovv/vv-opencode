@@ -15,7 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Added effective-scope plugin listing and vvoc toggle source coverage.]
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

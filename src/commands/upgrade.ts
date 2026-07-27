@@ -25,9 +25,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.7.0 - Made post-upgrade sync failures explicit partial upgrades with manual vvoc.json fix instructions.]
-//   LAST_CHANGE: [v0.5.0 - Redesigned upgrade into a global-only Bun install flow that runs post-install sync in a fresh subprocess.]
-//   LAST_CHANGE: [v0.25.6 - Added post-upgrade shell completion installation after successful sync.]
-//   LAST_CHANGE: [v0.6.0 - Replaced npm description changelog with jsDelivr CHANGELOG.md fetch and version-range parsing. Added --allow-prerelease flag.]
 // END_CHANGE_SUMMARY
 import { defineCommand } from "citty";
 import { getPackageVersion, PACKAGE_NAME } from "../lib/package.js";

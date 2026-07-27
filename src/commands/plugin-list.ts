@@ -20,7 +20,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Added effective/project/global plugin list scopes and source-matched vvoc toggles.]
-//   LAST_CHANGE: [v0.4.0 - Initial GRACE implementation for plugin list command.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

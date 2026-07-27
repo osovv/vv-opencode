@@ -4,7 +4,7 @@
 //   PURPOSE: Provide deterministic workflow launch policy, reviewer role mapping, review-round aggregation, and loop-gate policy checks.
 //   SCOPE: Record-aware launch allowance resolution, reviewer agent/role mapping, explicit review-round settlement checks, mode-specific aggregate state resolution, and implementation retry round-limit helpers.
 //   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/state.ts]
-//   LINKS: [M-WORKFLOW-TRANSITIONS]
+//   LINKS: M-WORKFLOW-TRANSITIONS, M-WORKFLOW-PROTOCOL, M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -24,8 +24,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.3.0 - Replaced sequential reviewer transitions with record-aware explicit review-round launch policy and mode-specific collect-all aggregation.]
-//   LAST_CHANGE: [v0.2.0 - Allowed fresh work items to start with reviewer subagents for review-only workflows.]
-//   LAST_CHANGE: [v0.1.0 - Added deterministic state transition policy, launch-allowance resolution, and review round-gate checks.]
 // END_CHANGE_SUMMARY
 
 import type { TrackedAgentName } from "./protocol.js";

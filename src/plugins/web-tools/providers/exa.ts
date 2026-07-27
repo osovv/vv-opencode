@@ -21,7 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Extended shared provider error attribution with the direct zai adapter.]
-//   LAST_CHANGE: [v1.0.0 - Initial Exa Search API adapter and shared provider search contracts.]
 // END_CHANGE_SUMMARY
 
 import type { WebProviderCredential } from "../config.js";

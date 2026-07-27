@@ -15,8 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conditional OPENCODE_TUI_CONFIG launch coverage.]
-//   LAST_CHANGE: [v1.0.0 - Added launch planning and subprocess behavior coverage.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated smart role fixture to openai/vv-codex-gpt-5.5-xhigh.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

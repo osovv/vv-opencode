@@ -13,5 +13,7 @@
   <Principle>NEEDS_CONTEXT and BLOCKED statuses halt automation and return control to the main session or user.</Principle>
   <Principle>Repository memory and generated summaries must never override explicit user instructions, code, tests, README, or current .grace state.</Principle>
   <Principle>Create C-* change bundles only for active approved GRACE work; do not create retroactive C-* bundles for completed work.</Principle>
+  <Principle>Plans that modify existing behavior require machine-checkable content baselines; an existence-only baseline is sufficient only when PlanningNotes explicitly justify why stronger behavioral drift detection is not meaningful.</Principle>
+  <Principle>Archived C-* specifications and plans are immutable historical evidence and must not be retrofitted solely to satisfy planning or assertion policies introduced later.</Principle>
   <Principle>vv-opencode is a portable methodology for disciplined agentic development with a concrete runtime implementation as OpenCode plugins. The host runtime owns streaming, model invocation, sandboxing, and permission mechanics; vv-opencode supplies the discipline above them. Mechanical enforcement concentrates in the hook-backed plugins (workflow state machine, hashline edit, secrets redaction, Guardian permission auto-approval); the rest of the method is prompt-level guidance.</Principle>
 </GracePrinciples>

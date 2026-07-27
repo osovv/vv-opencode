@@ -15,9 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.13 - Added regression coverage for canonical built-in preset-name completion output across shells.]
-//   LAST_CHANGE: [v0.4.12 - Restricted unset-role completion assertions to avoid built-in role suggestions.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated canonical patch-provider completion from openai to codex and preset names from vv-openai to vv-codex.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added top-level orchestration and nested show/set profile completion coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";

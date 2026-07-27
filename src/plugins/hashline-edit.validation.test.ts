@@ -15,7 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Replaced old whitespace-collapsed hash acceptance coverage with rejection coverage.]
-//   LAST_CHANGE: [v0.3.0 - Added regression coverage for spaced context-anchor references preserving their anchor hash.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

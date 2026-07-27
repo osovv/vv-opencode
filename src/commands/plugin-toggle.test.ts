@@ -15,9 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Updated CLI toggle inventory coverage for the eighth default-enabled plugin.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical context toggle inventory coverage.]
-//   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle isolation coverage.]
-//   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle CLI.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";

@@ -1,10 +1,10 @@
 // FILE: src/commands/guardian.ts
 // VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Expose Guardian-specific vvoc CLI helpers backed by the canonical vvoc.json config file.
-//   SCOPE: Guardian config command wiring plus CLI argument normalization for guardian section values.
+//   PURPOSE: Expose schema-safe Guardian-specific vvoc CLI helpers backed by the canonical vvoc.json config file.
+//   SCOPE: Guardian config command wiring plus strict CLI argument normalization for Guardian model, threshold, and positive-integer duration values.
 //   DEPENDS: [citty, src/lib/opencode.ts]
-//   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
+//   LINKS: M-CLI-GUARDIAN, M-CLI-COMMANDS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN, V-M-CLI-GUARDIAN
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Switched Guardian config writes to the canonical vvoc.json file.]
+//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Rejected fractional and non-positive Guardian duration arguments before printing or writing config.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -53,7 +53,7 @@ const config = defineCommand({
     },
     "timeout-ms": {
       type: "string",
-      description: "Timeout in milliseconds.",
+      description: "Positive integer timeout in milliseconds.",
     },
     "approval-risk-threshold": {
       type: "string",
@@ -61,7 +61,7 @@ const config = defineCommand({
     },
     "review-toast-duration-ms": {
       type: "string",
-      description: "Toast duration in milliseconds.",
+      description: "Positive integer toast duration in milliseconds.",
     },
   },
   async run({ args }) {
@@ -134,10 +134,10 @@ function parsePositiveIntegerArg(value: unknown, label: string): number | undefi
     return undefined;
   }
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(`${label} must be a positive integer`);
   }
-  return Math.round(parsed);
+  return parsed;
 }
 
 function parseThresholdArg(value: unknown, label: string): number | undefined {

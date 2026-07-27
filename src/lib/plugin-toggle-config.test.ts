@@ -15,9 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Added web-tools toggle coverage and updated the canonical plugin count to eight.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added canonical default-enabled context toggle coverage.]
-//   LAST_CHANGE: [v1.1.0 - Switched plugin toggle tests to pure config-object assertions.]
-//   LAST_CHANGE: [v1.0.0 - Initial test implementation for plugin toggle config.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";

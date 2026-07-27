@@ -15,8 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.3.0 - Fixed a redaction bypass: tool-part payloads (ToolPart.state input/output/error/metadata) are now deep-redacted in chat.messages.transform; removed the dead msg.info.state path that never matched the SDK message shape.]
-//   LAST_CHANGE: [v1.2.0 - Used the shared startup vvoc config snapshot for plugin toggles and redaction settings.]
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
 // END_CHANGE_SUMMARY
 
 import { resolveSecretsRedactionRuntimeConfig } from "./config.js";

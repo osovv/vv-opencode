@@ -15,8 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [DIRECT-FIX - Covered npm metadata retries, exact run watching, and exact changelog version matching.]
-//   LAST_CHANGE: [DIRECT-FIX - Moved tag and GitHub Release finalization to the authenticated local process after CI publication.]
-//   LAST_CHANGE: [DIRECT-FIX - Added regression coverage preventing pre-verification tag pushes and tag-triggered publishing.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

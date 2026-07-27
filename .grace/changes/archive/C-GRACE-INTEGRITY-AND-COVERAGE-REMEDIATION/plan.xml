@@ -1,0 +1,311 @@
+<GraceChangePlan graceVersion="4.0" status="superseded">
+  <C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION>
+    <ReplacementChange>C-GRACE-INTEGRITY-REMEDIATION-RECOVERY</ReplacementChange>
+    <IntentSummary>Fix the two confirmed runtime verification gaps, restore and enforce file-local GRACE governance, normalize stale change summaries, correct workflow dependency direction, add durable unified Web Tools product and flow coverage, and strengthen future baseline assertion policy while preserving archived lifecycle history and existing public compatibility surfaces.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>.grace/changes/active/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/spec.xml</Value>
+        <Value>.grace/changes/active/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/design-context.xml</Value>
+        <Value>M-CLI-COMMANDS</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-WEB-SEARCH-SERVICE</Value>
+        <Value>M-WEB-ZAI</Value>
+        <Value>M-PLUGIN-HASHLINE-EDIT</Value>
+        <Value>M-WORKFLOW-STATE</Value>
+        <Value>M-WORKFLOW-TRANSITIONS</Value>
+        <Value>M-WORKFLOW-PERSISTENCE</Value>
+        <Value>M-RELEASE-AUTOMATION</Value>
+        <Value>src/commands/guardian.ts</Value>
+        <Value>src/plugins/web-tools/search-service.ts</Value>
+        <Value>src/plugins/hashline-edit.edit-operations.test.ts</Value>
+        <Value>AGENTS.md</Value>
+      </MustExist>
+      <MustNotExist>
+        <Value>M-CLI-GUARDIAN</Value>
+      </MustNotExist>
+      <MustNotExist>
+        <Value>V-M-CLI-GUARDIAN</Value>
+      </MustNotExist>
+      <MustNotExist>
+        <Value>src/commands/guardian.test.ts</Value>
+      </MustNotExist>
+      <MustNotExist>
+        <Value>scripts/check-grace-markup.ts</Value>
+      </MustNotExist>
+      <MustContain><File>src/commands/guardian.ts</File><Text>return Math.round(parsed);</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/search-service.ts</File><Text>count: args.count,</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit.edit-operations.test.ts</File><Text>// HN#KY|// START_MODULE_CONTRACT</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;M-WORKFLOW-STATE&gt;&lt;Name&gt;WorkflowState&lt;/Name&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;Depends&gt;M-WORKFLOW-PROTOCOL, M-WORKFLOW-PERSISTENCE&lt;/Depends&gt;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>from "./transitions.js";</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/persistence.ts</File><Text>from "./state.js";</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>LAST_CHANGE: [v0.2.0</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>LAST_CHANGE: [v0.6.0</Text></MustContain>
+      <MustNotContain><File>.grace/context/requirements.xml</File><Text>&lt;UC-022&gt;</Text></MustNotContain>
+      <MustNotContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-SEARCH&gt;</Text></MustNotContain>
+      <MustNotContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-FETCH&gt;</Text></MustNotContain>
+      <MustNotContain><File>AGENTS.md</File><Text>existence-only baseline</Text></MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustExist>
+        <Value>src/commands/guardian.test.ts</Value>
+        <Value>scripts/check-grace-markup.ts</Value>
+        <Value>scripts/check-grace-markup.test.ts</Value>
+      </MustExist>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>M-CLI-GUARDIAN</Anchor></MustOwn>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>DF-WEB-SEARCH</Anchor></MustOwn>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>DF-WEB-FETCH</Anchor></MustOwn>
+      <MustOwn><Owner>VD-MAIN</Owner><Anchor>V-M-CLI-GUARDIAN</Anchor></MustOwn>
+      <MustVerify>
+        <Module>M-CLI-GUARDIAN</Module>
+        <Module>M-WEB-SEARCH-SERVICE</Module>
+        <Module>M-PLUGIN-HASHLINE-EDIT</Module>
+        <Module>M-WORKFLOW-STATE</Module>
+        <Module>M-WORKFLOW-TRANSITIONS</Module>
+        <Module>M-WORKFLOW-PERSISTENCE</Module>
+        <Module>M-RELEASE-AUTOMATION</Module>
+      </MustVerify>
+      <MustContain><File>src/commands/guardian.ts</File><Text>Number.isInteger(parsed)</Text></MustContain>
+      <MustContain><File>src/commands/guardian.test.ts</File><Text>fractional</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/search-service.ts</File><Text>args.count ?? 8</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/search-service.test.ts</File><Text>OpenCode omits</Text></MustContain>
+      <MustNotContain><File>src/plugins/hashline-edit.edit-operations.test.ts</File><Text>// HN#KY|// START_MODULE_CONTRACT</Text></MustNotContain>
+      <MustContain><File>package.json</File><Text>"grace:check"</Text></MustContain>
+      <MustContain><File>.grace/context/requirements.xml</File><Text>&lt;UC-022&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-SEARCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-FETCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>&lt;VF-WEB-SEARCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>&lt;VF-WEB-FETCH&gt;</Text></MustContain>
+      <MustContain><File>AGENTS.md</File><Text>existence-only baseline</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/commands/guardian.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/providers/zai.test.ts src/plugins/hashline-edit.edit-operations.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun test scripts/check-grace-markup.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run grace:check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>grace lint --path . --assertions current</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>grace status --path .</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>The approved specification and non-normative design context are the only current active change artifacts; no plan or implementation exists yet.</Note>
+        <Note>Guardian CLI accepts positive fractional values, rounds them after validation, and can therefore produce timeoutMs and reviewToastDurationMs equal to zero for input 0.4.</Note>
+        <Note>web_search schema.parse applies count eight, but tool execute receives raw OpenCode arguments and currently forwards args.count without a runtime fallback.</Note>
+        <Note>GRACE lint reports 140 governed files because the hashline edit-operations test has hash-prefixed semantic comments and the two approved raw/declaration exceptions are intentionally ungoverned.</Note>
+        <Note>Multiple LAST_CHANGE entries exist across governed src and scripts files, while grace file show surfaces only one physical entry and can report obsolete history.</Note>
+        <Note>Workflow source contracts and imports establish state-to-transitions and persistence-to-state dependencies that are not represented truthfully in the durable graph.</Note>
+      </Baseline>
+      <Target>
+        <Note>Runtime fixes are independently regression-tested before repository-wide annotation normalization begins.</Note>
+        <Note>The repository-owned GRACE markup checker defines the expected governed set, the two explicit exceptions, required block pairing, and exactly one LAST_CHANGE entry.</Note>
+        <Note>Durable context, graph, and verification changes are applied centrally after source behavior and annotation state stabilize.</Note>
+        <Note>Archived change bundles remain byte-for-byte untouched.</Note>
+      </Target>
+      <ScopeDecisions>
+        <Note>Broad src and scripts globs are intentional because the approved single-LAST_CHANGE normalization spans 81 existing files and newly edited files must satisfy the same invariant.</Note>
+        <Note>README is in scope only for concise public Guardian integer-input guidance if current command documentation would otherwise become inaccurate.</Note>
+        <Note>M-CLI-GUARDIAN receives dedicated verification; M-CLI-COMMANDS remains the command-tree composition module and should no longer be the sole evidence for Guardian parsing behavior.</Note>
+        <Note>The markup checker belongs to M-RELEASE-AUTOMATION and must run in the standard check path so green GRACE structure cannot silently omit an expected governed file.</Note>
+      </ScopeDecisions>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-GUARDIAN />
+        <M-CLI-COMMANDS />
+        <M-CLI-CONFIG />
+        <M-WEB-SEARCH-SERVICE />
+        <M-WEB-ZAI />
+        <M-PLUGIN-WEB-TOOLS />
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-WORKFLOW-STATE />
+        <M-WORKFLOW-TRANSITIONS />
+        <M-WORKFLOW-PERSISTENCE />
+        <M-RELEASE-AUTOMATION />
+        <DF-WEB-SEARCH />
+        <DF-WEB-FETCH />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-GUARDIAN />
+        <V-M-CLI-COMMANDS />
+        <V-M-WEB-SEARCH-SERVICE />
+        <V-M-WEB-ZAI />
+        <V-M-PLUGIN-WEB-TOOLS />
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-WORKFLOW-STATE />
+        <V-M-WORKFLOW-TRANSITIONS />
+        <V-M-WORKFLOW-PERSISTENCE />
+        <V-M-RELEASE-AUTOMATION />
+      </VerificationAnchors>
+      <ContextArtifact>principles.xml</ContextArtifact>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/spec.xml</File>
+      <File>.grace/changes/active/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/design-context.xml</File>
+      <File>.grace/changes/active/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/plan.xml</File>
+      <File>AGENTS.md</File>
+      <File>README.md</File>
+      <File>package.json</File>
+      <File>.grace/context/principles.xml</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>scripts/check-grace-markup.ts</File>
+      <File>scripts/check-grace-markup.test.ts</File>
+      <Glob>src/**/*.ts</Glob>
+      <Glob>src/**/*.tsx</Glob>
+      <Glob>scripts/**/*.ts</Glob>
+    </ObservedWriteScope>
+    <StaleStateWarnings>
+      <Warning>Read every target file fresh before editing; the repository-wide LAST_CHANGE inventory and source line references from the review are evidence, not stable edit coordinates.</Warning>
+      <Warning>If the latest relevant change for a file cannot be determined confidently from current behavior, git history, or archived change evidence, stop normalization for that file and record the ambiguity instead of guessing.</Warning>
+      <Warning>Do not edit any file under .grace/changes/archive; archive mutations violate the approved specification even if they would make old assertions stronger.</Warning>
+      <Warning>Do not add comments or semantic markup to src/plugins/workflow/system-instruction.md; enforce its explicit exception externally.</Warning>
+      <Warning>If grace-cli rejects VF anchors in the verification index or durable scope, preserve the existing project-owned critical-flow convention and reroute the plan before inventing unsupported XML structure.</Warning>
+      <Warning>Generated dist files may be regenerated for verification but must not be staged or edited manually.</Warning>
+    </StaleStateWarnings>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Make Guardian CLI numeric configuration schema-safe and add dedicated deterministic command coverage.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update the Guardian command module contract and current change summary to state strict positive-integer parsing for timeout-ms and review-toast-duration-ms.</Criterion>
+          <Criterion>Reject non-finite, fractional, zero, and negative values before renderGuardianConfig or writeGuardianConfig is called; preserve existing model trimming, threshold behavior, scope selection, print behavior, and config-dir semantics.</Criterion>
+          <Criterion>Add src/commands/guardian.test.ts using isolated temporary config roots and captured output to cover default print, valid overrides, project/global write targets, invalid existing config preservation, and invalid numeric rejection without user-owned writes.</Criterion>
+          <Criterion>Accepted printed and written Guardian sections parse through the canonical vvoc config helpers and remain schema-valid.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/guardian.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Apply the canonical web_search count default during execution and cover omitted runtime arguments.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Normalize count to eight inside createWebSearchTool execute before constructing provider input while preserving explicit valid counts and freshness behavior.</Criterion>
+          <Criterion>Add a deterministic service regression that calls execute with only query, captures a direct Z.AI request body, and proves count eight reaches the provider without a live network call.</Criterion>
+          <Criterion>Keep permission-before-network ordering, credential checks, provider metadata, result rendering, and all existing Exa, Brave, and Z.AI behavior unchanged.</Criterion>
+          <Criterion>Update affected source and test contracts, maps where necessary, and retain exactly one current LAST_CHANGE entry in files touched by this task.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/providers/zai.test.ts src/plugins/web-tools/providers/exa.test.ts src/plugins/web-tools/providers/brave.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Restore the corrupted hashline test markup and implement repository-owned GRACE markup validation.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Remove embedded hashline prefixes from the hashline edit-operations test metadata without changing executable test behavior.</Criterion>
+          <Criterion>Add scripts/check-grace-markup.ts with a documented expected-governed file contract for src and scripts, explicit exceptions for src/env.d.ts and workflow/system-instruction.md, required paired module contract/map/change-summary blocks, malformed hash-prefixed anchor detection, and exactly one LAST_CHANGE rule.</Criterion>
+          <Criterion>Add deterministic fixture-driven tests for valid files, missing blocks, malformed prefixed anchors, duplicate LAST_CHANGE, absent LAST_CHANGE, and exception handling.</Criterion>
+          <Criterion>Add a package grace:check command and integrate it into the normal repository check path without changing public package exports.</Criterion>
+          <Criterion>Update M-RELEASE-AUTOMATION contracts and verification intent for the new repository integrity gate.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/check-grace-markup.test.ts src/plugins/hashline-edit.edit-operations.test.ts</Command>
+          <Command>grace file show src/plugins/hashline-edit.edit-operations.test.ts --path .</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Normalize governed file CHANGE_SUMMARY blocks to one truthful current LAST_CHANGE entry.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>For every governed src and scripts file, retain or write exactly one concise LAST_CHANGE that describes the latest materially relevant current behavior using current source, git history, and archived change evidence.</Criterion>
+          <Criterion>Do not infer the current entry solely from physical order or file VERSION headers; resolve ambiguous files conservatively and stop rather than fabricating history.</Criterion>
+          <Criterion>Preserve MODULE_CONTRACT, MODULE_MAP, function contracts, block anchors, executable code, tests, and formatting except where another approved task explicitly changes behavior.</Criterion>
+          <Criterion>Keep src/env.d.ts and workflow/system-instruction.md as documented exceptions and leave every archived change bundle untouched.</Criterion>
+          <Criterion>bun run grace:check reports the full expected governed set with no duplicate, missing, malformed, or unexpected summary state.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run grace:check</Command>
+          <Command>bun run fmt:check</Command>
+          <Command>grace file show src/plugins/hashline-edit/index.ts --path .</Command>
+          <Command>grace file show src/lib/opencode.ts --path .</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Synchronize Guardian ownership, workflow dependencies, and unified Web Tools durable context and flows.</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add routed M-CLI-GUARDIAN and V-M-CLI-GUARDIAN records with accurate paths, purpose, dependencies, focused tests, expected behavior, and file-local LINKS; keep M-CLI-COMMANDS as command-tree composition ownership.</Criterion>
+          <Criterion>Correct M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, and M-WORKFLOW-PERSISTENCE dependency edges to reflect actual source and type imports without inventing a runtime dependency that does not exist.</Criterion>
+          <Criterion>Add UC-022 for canonical Web Tools, including user action, product goal, acceptance, constraints, non-goals, and related DF-WEB-SEARCH and DF-WEB-FETCH flows.</Criterion>
+          <Criterion>Add routed graph flows for search and fetch covering startup-resolved config, permission ordering, runtime defaults, credentials, provider dispatch, bounded HTTP, conversion or attachments, and structured results.</Criterion>
+          <Criterion>Add critical VF-WEB-SEARCH and VF-WEB-FETCH scenarios and update affected module verification expectations, indexes, technology context, and source LINKS according to supported GRACE grammar.</Criterion>
+          <Criterion>GRACE navigation for affected modules reports truthful ownership, dependencies, tests, and current summaries.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . --assertions current</Command>
+          <Command>grace module health M-CLI-GUARDIAN --path .</Command>
+          <Command>grace module health M-WORKFLOW-STATE --path .</Command>
+          <Command>grace module health M-WORKFLOW-PERSISTENCE --path .</Command>
+          <Command>bun test src/commands/guardian.test.ts src/plugins/workflow.test.ts src/plugins/web-tools/search-service.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Strengthen future baseline assertion policy and synchronize public documentation.</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update AGENTS.md and principles.xml so plans modifying existing behavior require machine-checkable content baselines or an explicit reason why existence-only assertions are sufficient.</Criterion>
+          <Criterion>Document that archived plans are immutable and must not be retrofitted solely to satisfy newer planning policy.</Criterion>
+          <Criterion>Update README only where needed to state Guardian positive-integer option behavior and preserve copy-pasteable current commands; do not hand-edit CHANGELOG.md.</Criterion>
+          <Criterion>Update technology or verification documentation for grace:check and ensure every changed command, path, and exception matches implementation.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run grace:check</Command>
+          <Command>bun run release:check</Command>
+          <Command>grace lint --path . --assertions current</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Run the integrated remediation gate and reconcile only approved in-scope failures.</Title>
+        <DependsOn>T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>All targeted Guardian, Web Tools, hashline, workflow, and markup-check tests pass without live providers or user-owned config writes.</Criterion>
+          <Criterion>bun run check, build, pack:check, and release:check pass with no manually edited or staged dist files.</Criterion>
+          <Criterion>grace lint current assertions, parallel preflight, and status pass with the active change fully explained and no unrelated drift.</Criterion>
+          <Criterion>git diff contains only approved source, tests, scripts, documentation, context, graph, verification, and active lifecycle files; archived change bundles and CHANGELOG.md remain unchanged.</Criterion>
+          <Criterion>If verification reveals a requirement outside the approved specification or observed write scope, stop and reroute instead of broadening the remediation silently.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/guardian.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/providers/zai.test.ts src/plugins/hashline-edit.edit-operations.test.ts scripts/check-grace-markup.test.ts src/plugins/workflow.test.ts</Command>
+          <Command>bun run grace:check</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run release:check</Command>
+          <Command>grace lint --path . --assertions current</Command>
+          <Command>grace lint --path . --parallel-preflight</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-007>
+    </ImplementationPlan>
+  </C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION>
+</GraceChangePlan>

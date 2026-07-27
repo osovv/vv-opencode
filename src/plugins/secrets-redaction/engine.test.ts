@@ -17,8 +17,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.2 - Added a regression test that a zero-width custom regex terminates instead of looping forever.]
-//   LAST_CHANGE: [v1.0.0 - Added direct engine coverage for real email redaction and overlap handling.]
-//   LAST_CHANGE: [v1.0.1 - Added test that bearer_token does NOT redact .md filenames in the full pipeline.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

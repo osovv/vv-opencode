@@ -12,6 +12,7 @@
         <M-CLI-AGENT-MODELS />
         <M-PLUGIN-TOGGLE-CONFIG />
         <M-CLI-COMMANDS />
+        <M-CLI-GUARDIAN />
         <M-PLUGIN-MODEL-ROLES />
         <M-CLI-ROLE />
         <M-CLI-PRESET />
@@ -77,6 +78,8 @@
         <DF-WORKFLOW-PERSISTENCE />
         <DF-CONTEXT-INSPECTION />
         <DF-ORCHESTRATION-PROFILE />
+        <DF-WEB-SEARCH />
+        <DF-WEB-FETCH />
       </Owns>
     </GD-MAIN>
   </GraphDocuments>

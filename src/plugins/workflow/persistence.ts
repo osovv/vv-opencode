@@ -9,7 +9,7 @@
 //     Directory auto-creation on snapshot. Safe null return on missing, corrupt,
 //     or incomplete persisted files.
 //   DEPENDS: [node:fs, node:path, src/lib/vvoc-paths.ts, src/plugins/workflow/state.ts]
-//   LINKS: M-WORKFLOW-PERSISTENCE
+//   LINKS: M-WORKFLOW-PERSISTENCE, M-CONFIG-LAYERS, M-WORKFLOW-STATE, V-M-WORKFLOW-PERSISTENCE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -24,9 +24,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.2.2 - Validated optional bounded result excerpts during workflow state hydrate and snapshot round-trips.]
-//   LAST_CHANGE: [v0.2.1 - Reworded persisted-state validation as corrupt/incomplete data handling while keeping fail-closed hydrate behavior.]
-//   LAST_CHANGE: [v0.2.0 - Validated explicit workflow intent and review-round fields during hydrate so incomplete records fail closed.]
-//   LAST_CHANGE: [v0.1.0 - Initial implementation of per-session hydrate/snapshot.]
 // END_CHANGE_SUMMARY
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

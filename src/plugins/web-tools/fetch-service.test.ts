@@ -4,7 +4,7 @@
 //   PURPOSE: Verify the provider-neutral web_fetch tool schema, URL validation, permission flow, provider dispatch, attachments, metadata, and credential errors.
 //   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
 //   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/fetch-service.ts]
-//   LINKS: [M-WEB-FETCH-SERVICE, V-M-WEB-FETCH-SERVICE]
+//   LINKS: M-WEB-FETCH-SERVICE, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -18,8 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [DIRECT-FIX - Covered runtime format and timeout fallbacks when OpenCode omits schema-defaulted web_fetch arguments.]
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered direct Z.AI reader dispatch, regional metadata, attachments, and missing credentials.]
-//   LAST_CHANGE: [v1.0.0 - Initial coverage for the web_fetch tool service.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

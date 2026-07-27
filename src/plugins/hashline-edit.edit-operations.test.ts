@@ -1,22 +1,21 @@
 // FILE: src/plugins/hashline-edit.edit-operations.test.ts
-// WX#SQ|// VERSION: 0.6.0
-// HN#KY|// START_MODULE_CONTRACT
-// XK#MK|//   PURPOSE: Verify hashline batch edit ordering, deduplication, and primitive failure handling.
-// KZ#ZW|//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, and BOF/EOF insertion into empty files.
-// TX#HX|//   DEPENDS: [bun:test, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/types.ts]
-//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
-// HH#HH|//   ROLE: TEST
-// QT#TM|//   MAP_MODE: LOCALS
-// VR#RQ|// END_MODULE_CONTRACT
-// JV#NR|//
-// JN#TR|// START_MODULE_MAP
-// YX#WT|//   hashline edit-operations tests - Verify batch ordering, range/delete insert conflicts, same-anchor insert ordering, BOF prepend ordering, deduplication, and primitive failure behavior.
-// WJ#VQ|// END_MODULE_MAP
-// NQ#PR|//
-// NH#HM|// START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Migrated range edits from replace+end to replace_range op.]
-// QY#YZ|// END_CHANGE_SUMMARY
-// ZP#QS|
+// VERSION: 0.6.0
+// START_MODULE_CONTRACT
+//   PURPOSE: Verify hashline batch edit ordering, deduplication, and primitive failure handling.
+//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, and BOF/EOF insertion into empty files.
+//   DEPENDS: [bun:test, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/types.ts]
+//   LINKS: M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT
+//   ROLE: TEST
+//   MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   anchorFor - Build a current line/hash anchor for test fixtures.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Restored valid file-local GRACE anchors after hashline read prefixes were embedded in metadata.]
+// END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import {

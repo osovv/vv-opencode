@@ -25,7 +25,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Covered vvoc attribution for web_search and web_fetch.]
-//   LAST_CHANGE: [DIRECT-FIX - Covered unavailable connected MCP catalogs separately from known-zero disconnected schemas.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

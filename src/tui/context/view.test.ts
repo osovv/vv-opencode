@@ -21,7 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [DIRECT-FIX - Preloaded the OpenTUI Solid transform before all test discovery so reactive rendering is deterministic in CI.]
-//   LAST_CHANGE: [DIRECT-FIX - Covered connected MCP schema catalogs rendered as unavailable rather than zero.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

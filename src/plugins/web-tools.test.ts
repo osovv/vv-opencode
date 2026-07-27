@@ -4,7 +4,7 @@
 //   PURPOSE: Verify WebToolsPlugin toggle behavior, canonical tool registration, runtime built-in suppression, diagnostics, and tracked-config warnings.
 //   SCOPE: Plugin-level tests using isolated vvoc project configs and stubbed OpenCode logging.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/web-tools/index.ts]
-//   LINKS: [M-PLUGIN-WEB-TOOLS, V-M-PLUGIN-WEB-TOOLS]
+//   LINKS: M-PLUGIN-WEB-TOOLS, V-M-PLUGIN-WEB-TOOLS, DF-WEB-SEARCH, DF-WEB-FETCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -19,7 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered regional Z.AI startup diagnostics without credential leakage.]
-//   LAST_CHANGE: [v1.0.0 - Initial coverage for WebToolsPlugin registration, suppression, and credential-safe diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";

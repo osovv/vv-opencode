@@ -18,7 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.3.0 - Removed old whitespace-collapsed hash computation; only current line hashes are accepted.]
-//   LAST_CHANGE: [v0.2.0 - Added context-anchored hash computation to improve collision resistance; updated read output to emit anchor hashes via formatHashAnchoredLine.]
 // END_CHANGE_SUMMARY
 
 import { HASHLINE_DICT } from "./constants.js";

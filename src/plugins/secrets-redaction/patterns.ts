@@ -19,7 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.0.2 - Deduplicated combined regex flags so an inline (?i) pattern no longer produces an invalid duplicate flag set at startup.]
-//   LAST_CHANGE: [v1.0.1 - Tightened bearer_token lookahead to exclude . _ - after match, preventing false positives on long filenames with extension.]
 // END_CHANGE_SUMMARY
 
 export interface PatternRule {

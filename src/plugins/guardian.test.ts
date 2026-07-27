@@ -20,12 +20,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput fixtures for OpenCode 1.18.2 experimental workspace registration.]
-//   LAST_CHANGE: [v0.4.0 - Added coverage proving Guardian ignores the old permission API and keeps current HTTP reply fallback.]
-//   LAST_CHANGE: [v0.3.1 - Updated invalid fast-role expectation for strict shared vvoc config loading.]
-//   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated Guardian fixtures.]
-//   LAST_CHANGE: [v0.2.1 - Added regression coverage ensuring stale guardian model fields cannot override roles.fast defaults while env model overrides still can.]
-//   LAST_CHANGE: [v0.2.0 - Added fast-role resolution, initialization failure, and manual fallback behavior coverage.]
-//   LAST_CHANGE: [v0.1.0 - Added coverage for Guardian plugin config registration as a hidden subagent.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, expect, test } from "bun:test";

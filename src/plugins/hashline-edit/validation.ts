@@ -20,8 +20,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Removed old hash compatibility fallback so validation accepts only current line and context hashes.]
-//   LAST_CHANGE: [v0.3.0 - Anchor normalization now preserves context-anchor hashes when refs contain spaces around both separators.]
-//   LAST_CHANGE: [v0.2.0 - Added optional context-anchored hash support to LineRef, isCompatibleLineHash, validateLineRef/validateLineRefs, mismatch formatting, and remap generation for collision-resistant anchors.]
 // END_CHANGE_SUMMARY
 
 import { HASHLINE_REF_PATTERN } from "./constants.js";

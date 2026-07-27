@@ -21,7 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Resolved direct Z.AI search and fetch regions with shared ZAI_API_KEY precedence.]
-//   LAST_CHANGE: [v1.0.0 - Initial runtime web config and credential resolver for the unified web tools plugin.]
 // END_CHANGE_SUMMARY
 
 import { basename, dirname } from "node:path";

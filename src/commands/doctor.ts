@@ -15,9 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.1.2 - Added installed OpenCode version and managed TUI compatibility diagnostics.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TUI source, parse, plugin inventory, and registration diagnostics.]
-//   LAST_CHANGE: [v0.5.0 - Added global/project/effective diagnostic scopes with selected source reporting.]
-//   LAST_CHANGE: [v0.4.0 - Added canonical role inventory output while keeping unresolved role-reference failures in Problems diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

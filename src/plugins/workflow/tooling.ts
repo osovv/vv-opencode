@@ -19,9 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.2.1 - Exposed bounded result excerpts in work-item serialization for blocked and needs_context recovery.]
-//   LAST_CHANGE: [v0.2.0 - Required explicit work-item mode and requiredReviewers, and exposed review-round metadata in list/open tool output.]
-//   LAST_CHANGE: [v0.1.1 - Wired work_item_list includeClosed flag into state listing options.]
-//   LAST_CHANGE: [v0.1.0 - Added workflow core tooling handlers for open/list/close operations with structured results and VVOC headers.]
 // END_CHANGE_SUMMARY
 
 import {

@@ -34,8 +34,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Removed two creative-role managed subagents. Only executor subagents remain.]
-//   LAST_CHANGE: [v0.3.1 - Renamed tracked subagents to vv-* names and aligned managed prompt file names with the tracked-agent naming convention.]
-//   LAST_CHANGE: [v0.3.0 - Added the managed enhancer primary agent alongside the existing vvoc subagent definitions.]
 // END_CHANGE_SUMMARY
 
 import { readFile } from "node:fs/promises";

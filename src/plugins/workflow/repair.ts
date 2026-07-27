@@ -19,9 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.1.3 - Added missing-blank-line repair guidance while preserving fail-closed duplicate-field handling.]
-//   LAST_CHANGE: [v0.1.2 - Excluded duplicate strict top-block field errors from same-session repair so ambiguous tracked results fail closed.]
-//   LAST_CHANGE: [v0.1.1 - Restricted repair to safe format-only protocol errors and sent format-only prompt requests with tools disabled where supported.]
-//   LAST_CHANGE: [v0.1.0 - Added bounded same-session result repair helpers for malformed tracked workflow outputs in resumable OpenCode task envelopes.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";

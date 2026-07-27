@@ -15,14 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Switched preset coverage to canonical role-only writes and removed legacy OpenCode target mutation assertions.]
-//   LAST_CHANGE: [v0.4.1 - Added guards for no-sync side effects: existing OpenCode byte preservation, vvoc non-role section/preset preservation, and CLI argument error paths.]
-//   LAST_CHANGE: [v0.4.2 - Asserted raw vvoc.json section/preset preservation and first-run bootstrap behavior when the vvoc config path is missing.]
-//   LAST_CHANGE: [v0.4.3 - Added vv-deepseek to preset list expectations and error message assertions.]
-//   LAST_CHANGE: [v0.4.4 - Updated vv-openai expectations so default is GPT-5.4 and smart remains vv-gpt-5.5-xhigh.]
-//   LAST_CHANGE: [v0.4.5 - Added regression coverage for the canonical built-in preset key set.]
-//   LAST_CHANGE: [v0.4.6 - Added osovv assignment coverage and switched their fast role expectation to vv-gpt-5.4-mini-low.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated all preset name expectations from vv-openai to vv-codex and model refs to openai/vv-codex-gpt-*.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added built-in mapping, atomic role/profile writes, preservation, failure, and CLI reporting coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

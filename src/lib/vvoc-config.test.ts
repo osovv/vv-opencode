@@ -16,7 +16,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered strict Z.AI provider regions, normalization, compatibility, and schema parity.]
-//   LAST_CHANGE: [v1.0.0 - Initial coverage for the optional web section added in vvoc config v3.1.0.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

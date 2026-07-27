@@ -19,10 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.6.0 - Added launch to top-level completion output.]
-//   LAST_CHANGE: [v0.5.15 - Switched built-in preset completions to the shared internal preset registry so managed names stay in sync.]
-//   LAST_CHANGE: [v0.5.14 - Restricted unset-role completions so shell suggestions no longer imply built-in roles are unsettable.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Replaced the canonical openai patch-provider completion with codex while retaining openai as a resolver-only compatibility alias.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added orchestration show/set and profile-value completions across bash, zsh, and fish.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

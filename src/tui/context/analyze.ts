@@ -21,7 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Classified web_search and web_fetch as vvoc-managed tools.]
-//   LAST_CHANGE: [DIRECT-FIX - Preserved unknown connected MCP schemas as unavailable rather than estimating them as zero.]
 // END_CHANGE_SUMMARY
 
 import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2";

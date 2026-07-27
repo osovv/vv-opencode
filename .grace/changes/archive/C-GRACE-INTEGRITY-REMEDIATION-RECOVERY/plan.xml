@@ -1,0 +1,149 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-GRACE-INTEGRITY-REMEDIATION-RECOVERY>
+    <IntentSummary>Adopt the already implemented remediation as the recovery baseline, preserve every target, run a non-recursive final gate, and apply, archive, and commit the verified result.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-GUARDIAN</Value>
+        <Value>V-M-CLI-GUARDIAN</Value>
+        <Value>src/commands/guardian.test.ts</Value>
+        <Value>scripts/check-grace-markup.ts</Value>
+        <Value>scripts/check-grace-markup.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/commands/guardian.ts</File><Text>Number.isInteger(parsed)</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/search-service.ts</File><Text>args.count ?? 8</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"grace:check"</Text></MustContain>
+      <MustContain><File>.grace/context/requirements.xml</File><Text>&lt;UC-022&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-SEARCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-FETCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>&lt;VF-WEB-SEARCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>&lt;VF-WEB-FETCH&gt;</Text></MustContain>
+      <MustContain><File>AGENTS.md</File><Text>existence-only baseline</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustExist>
+        <Value>M-CLI-GUARDIAN</Value>
+        <Value>V-M-CLI-GUARDIAN</Value>
+        <Value>src/commands/guardian.test.ts</Value>
+        <Value>scripts/check-grace-markup.ts</Value>
+        <Value>scripts/check-grace-markup.test.ts</Value>
+      </MustExist>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>M-CLI-GUARDIAN</Anchor></MustOwn>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>DF-WEB-SEARCH</Anchor></MustOwn>
+      <MustOwn><Owner>GD-MAIN</Owner><Anchor>DF-WEB-FETCH</Anchor></MustOwn>
+      <MustOwn><Owner>VD-MAIN</Owner><Anchor>V-M-CLI-GUARDIAN</Anchor></MustOwn>
+      <MustVerify>
+        <Module>M-CLI-GUARDIAN</Module>
+        <Module>M-WEB-SEARCH-SERVICE</Module>
+        <Module>M-PLUGIN-HASHLINE-EDIT</Module>
+        <Module>M-WORKFLOW-STATE</Module>
+        <Module>M-WORKFLOW-TRANSITIONS</Module>
+        <Module>M-WORKFLOW-PERSISTENCE</Module>
+        <Module>M-RELEASE-AUTOMATION</Module>
+      </MustVerify>
+      <MustContain><File>src/commands/guardian.ts</File><Text>Number.isInteger(parsed)</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/search-service.ts</File><Text>args.count ?? 8</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"grace:check"</Text></MustContain>
+      <MustContain><File>.grace/context/requirements.xml</File><Text>&lt;UC-022&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-SEARCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>&lt;DF-WEB-FETCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>&lt;VF-WEB-SEARCH&gt;</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>&lt;VF-WEB-FETCH&gt;</Text></MustContain>
+      <MustContain><File>AGENTS.md</File><Text>existence-only baseline</Text></MustContain>
+      <MustPassCommand><Command>bun test src/commands/guardian.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/providers/zai.test.ts src/plugins/hashline-edit.edit-operations.test.ts scripts/check-grace-markup.test.ts src/plugins/workflow.test.ts</Command></MustPassCommand>
+      <MustPassCommand><Command>bun run check</Command></MustPassCommand>
+      <MustPassCommand><Command>bun run build</Command></MustPassCommand>
+      <MustPassCommand><Command>bun run pack:check</Command></MustPassCommand>
+      <MustPassCommand><Command>bun run release:check</Command></MustPassCommand>
+      <MustPassCommand><Command>git diff --check</Command></MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Baseline>
+        <Note>The runtime and durable remediation is already implemented and has fresh passing evidence; this recovery begins from that content rather than the superseded pre-implementation baseline.</Note>
+        <Note>The superseded final gate fails only because it recursively invokes assertions current, which correctly checks its no-longer-current pre-implementation baseline.</Note>
+      </Baseline>
+      <Target>
+        <Note>No source or durable behavior changes are required beyond preserving the implemented remediation.</Note>
+        <Note>The outer GRACE final mode evaluates the selected recovery target and runs deterministic commands without a self-contradictory nested current assertion.</Note>
+      </Target>
+      <ScopeDecisions>
+        <Note>The broad src and scripts scopes remain necessary because the adopted remediation normalized LAST_CHANGE across the governed repository.</Note>
+        <Note>The superseded bundle receives only its terminal lifecycle status and archive move; its approved assertions, tasks, and explanatory content remain unchanged.</Note>
+      </ScopeDecisions>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-GUARDIAN />
+        <M-CLI-COMMANDS />
+        <M-CLI-CONFIG />
+        <M-WEB-SEARCH-SERVICE />
+        <M-WEB-ZAI />
+        <M-PLUGIN-WEB-TOOLS />
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-WORKFLOW-STATE />
+        <M-WORKFLOW-TRANSITIONS />
+        <M-WORKFLOW-PERSISTENCE />
+        <M-RELEASE-AUTOMATION />
+        <DF-WEB-SEARCH />
+        <DF-WEB-FETCH />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-GUARDIAN />
+        <V-M-CLI-COMMANDS />
+        <V-M-WEB-SEARCH-SERVICE />
+        <V-M-WEB-ZAI />
+        <V-M-PLUGIN-WEB-TOOLS />
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-WORKFLOW-STATE />
+        <V-M-WORKFLOW-TRANSITIONS />
+        <V-M-WORKFLOW-PERSISTENCE />
+        <V-M-RELEASE-AUTOMATION />
+      </VerificationAnchors>
+      <ContextArtifact>principles.xml</ContextArtifact>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/archive/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/spec.xml</File>
+      <File>.grace/changes/archive/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/design-context.xml</File>
+      <File>.grace/changes/archive/C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION/plan.xml</File>
+      <File>.grace/changes/active/C-GRACE-INTEGRITY-REMEDIATION-RECOVERY/spec.xml</File>
+      <File>.grace/changes/active/C-GRACE-INTEGRITY-REMEDIATION-RECOVERY/plan.xml</File>
+      <File>AGENTS.md</File>
+      <File>README.md</File>
+      <File>package.json</File>
+      <File>.grace/context/principles.xml</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>scripts/check-grace-markup.ts</File>
+      <File>scripts/check-grace-markup.test.ts</File>
+      <Glob>src/**/*.ts</Glob>
+      <Glob>src/**/*.tsx</Glob>
+      <Glob>scripts/**/*.ts</Glob>
+    </ObservedWriteScope>
+    <StaleStateWarnings>
+      <Warning>Do not change source behavior while recovering lifecycle state; any new runtime requirement requires a separate approved change.</Warning>
+      <Warning>Do not alter the superseded bundle after its terminal status and archive move.</Warning>
+      <Warning>Generated dist files may be regenerated for verification but must not be staged or committed.</Warning>
+    </StaleStateWarnings>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Validate and apply the recovered remediation lifecycle.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The recovery baseline and target assertions describe the already implemented remediation and pass without source edits.</Criterion>
+          <Criterion>All deterministic target commands pass with fresh output.</Criterion>
+          <Criterion>The final diff contains only adopted remediation and lifecycle recovery files.</Criterion>
+          <Criterion>The user-authorized recovery is applied, archived, and committed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . --change C-GRACE-INTEGRITY-REMEDIATION-RECOVERY --assertions final --runCommands</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-001>
+    </ImplementationPlan>
+  </C-GRACE-INTEGRITY-REMEDIATION-RECOVERY>
+</GraceChangePlan>

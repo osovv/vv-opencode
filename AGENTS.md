@@ -56,6 +56,12 @@ the conflict rather than guessing.
    state is derived from current files, assertions, and scopes.
 6. A source change is not complete when its module ownership, dependencies, data flows,
    or verification contract are stale.
+7. Plans that modify existing behavior must include a machine-checkable content baseline
+   (`MustContain`, `MustNotContain`, or another behavior-sensitive assertion). An
+   existence-only baseline is sufficient only when `PlanningNotes` explicitly explain why
+   file existence is the strongest meaningful drift detector for that target.
+8. Archived `C-*` specifications and plans are immutable historical evidence. Never retrofit
+   archived bundles solely to satisfy planning or assertion policy introduced later.
 
 ## First Five Minutes
 

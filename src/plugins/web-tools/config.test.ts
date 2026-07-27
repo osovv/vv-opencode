@@ -15,7 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered both Z.AI regions, shared environment precedence, and fail-closed missing regions.]
-//   LAST_CHANGE: [v1.0.0 - Initial coverage for the runtime web config and credential resolver.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

@@ -15,14 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.3 - Added coverage for lightweight XML-like assignment packet tags and header-first reviewer-finding containers in workflow-managed prompts.]
-//   LAST_CHANGE: [v0.5.2 - Added coverage for normalized reviewer location guidance and controller-to-implementer finding handoff details in managed prompts.]
-//   LAST_CHANGE: [v0.5.1 - Rejected ambiguous plain `Status:` prompt lines for tracked agents so strict workflow protocol fields stay unambiguous.]
-//   LAST_CHANGE: [v0.5.0 - Added prompt-template coverage for vv-controller and three executor subagents.]
-//   LAST_CHANGE: [v0.4.1 - Updated tracked-agent template coverage for vv-* naming and strict top-block workflow protocol requirements.]
-//   LAST_CHANGE: [v0.4.0 - Expanded prompt-template coverage for rerouting, working-state externalization, semantic continuity, assumptions, anti-drift, and project-overlay hooks.]
-//   LAST_CHANGE: [v0.3.0 - Expanded prompt-template coverage for stable enhancer schema, shared status outputs, and investigation/report protocols.]
-//   LAST_CHANGE: [v0.2.2 - Added coverage requiring the enhancer to emit the final XML prompt in English.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Replaced controller route/loop assertions with profile-neutral invariant and negative-policy coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";

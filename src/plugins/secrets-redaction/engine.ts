@@ -17,7 +17,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Guarded the scan loop against zero-width regex matches (lookahead/anchor patterns) to prevent an infinite loop on user-configured patterns.]
-//   LAST_CHANGE: [v1.1.0 - Fixed overlap handling so first and wider earlier matches redact correctly instead of being skipped entirely.]
 // END_CHANGE_SUMMARY
 
 import { type PatternRule, type PatternSet } from "./patterns.js";

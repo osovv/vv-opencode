@@ -1,7 +1,7 @@
 <GraceRequirements graceVersion="4.0">
   <ProjectName>@osovv/vv-opencode</ProjectName>
   <Annotation>Curated, opinionated OpenCode process layer for spec-first, review-driven, safer agentic development with managed agents, managed skills, semantic model roles, workflow tracking, safety plugins, native TUI context inspection, and the vvoc CLI.</Annotation>
-  <Keywords>opencode, plugins, tui, context-usage, workflow, model-roles, hashline-edit, work-items, controller, managed-agents, managed-skills, bun, typescript</Keywords>
+  <Keywords>opencode, plugins, tui, context-usage, workflow, model-roles, hashline-edit, web-search, web-fetch, work-items, controller, managed-agents, managed-skills, bun, typescript</Keywords>
   <Users>
     <User>Engineer who wants a repeatable OpenCode workflow with spec-first planning, review gates, safer edits, portable model choices, and long-run safety.</User>
     <User>Team or maintainer who wants the same agent workflow to be reproducible across machines, repositories, and model providers.</User>
@@ -16,6 +16,7 @@
     <Goal>Improve long-run safety with Guardian permission review, secrets redaction, hashline-backed edits, strict config validation, and clear recovery diagnostics.</Goal>
     <Goal>Provide one CLI, vvoc, for setup, sync, launch, status, diagnostics, roles, presets, plugin toggles, completions, and upgrades.</Goal>
     <Goal>Expose an honest OpenCode-native /context view that combines provider-reported usage with clearly labeled approximate category accounting.</Goal>
+    <Goal>Provide provider-neutral web_search and web_fetch tools with stable runtime defaults, permission checks, bounded transport, and normalized outputs.</Goal>
     <Goal>Maintain the 1.0 daily-driver baseline as a practical, curated OpenCode workflow whose setup commands, managed skill trajectory, public package exports, schema v3, and spec artifact layout remain stable compatibility surfaces unless a release explicitly documents a breaking change.</Goal>
   </Goals>
   <UseCases>
@@ -168,6 +169,14 @@
       <Acceptance>The host-owned bounded dialog keeps provider/model and measured usage visible across Overview, Tools, and MCP tabs; derives percentages only from a positive current model context limit; separates current schemas from active post-compaction tool history; attributes MCP usage only through unique longest sanitized server prefixes; leaves ambiguous tools under Other external/plugin with bounded diagnostics; and degrades safely on missing state.</Acceptance>
       <RelatedFlow>DF-CONTEXT-INSPECTION</RelatedFlow>
     </UC-021>
+    <UC-022>
+      <Name>CanonicalWebTools</Name>
+      <Action>OpenCode agent calls web_search or web_fetch through the installed Web Tools plugin.</Action>
+      <Goal>Search or retrieve public web content through one provider-neutral contract regardless of the configured backend.</Goal>
+      <Acceptance>Each tool requests permission before network access, applies stable runtime defaults when optional arguments are omitted, validates startup-resolved credentials and explicit Z.AI region selection, uses bounded provider transport, returns normalized search Markdown or fetched text/attachments with structured metadata, and redacts credential-bearing failure details.</Acceptance>
+      <RelatedFlow>DF-WEB-SEARCH</RelatedFlow>
+      <RelatedFlow>DF-WEB-FETCH</RelatedFlow>
+    </UC-022>
   </UseCases>
   <NonGoals>
     <NonGoal>Do not replace OpenCode itself; vv-opencode layers process, managed config, skills, and plugins on top of OpenCode.</NonGoal>
@@ -178,6 +187,7 @@
     <NonGoal>Do not publish packages automatically from normal branch pushes.</NonGoal>
     <NonGoal>Do not edit generated dist output manually.</NonGoal>
     <NonGoal>Do not present estimated context categories as exact provider payload attribution or infer MCP ownership beyond OpenCode's unique longest sanitized server-prefix contract; collisions and other uncertainty remain unattributed.</NonGoal>
+    <NonGoal>Do not expose provider-specific MCP servers or provider-specific public web tool names.</NonGoal>
   </NonGoals>
   <Constraints>
     <Constraint>OpenCode config remains in OpenCode-managed paths; vvoc must not invent unrelated config locations.</Constraint>
@@ -196,6 +206,7 @@
     <Constraint>Package exports are public API and must remain valid unless an explicit breaking change is approved.</Constraint>
     <Constraint>Release automation must verify the exact release commit in CI before npm publication, and it must not create or push the release tag until publication succeeds.</Constraint>
     <Constraint>After the 1.0 stabilization point, user-facing setup flow, managed skill names, canonical vvoc schema v3, public package exports, and spec package layout changes must be release-noted as compatibility-relevant changes.</Constraint>
+    <Constraint>Web provider selection and credentials resolve from the startup config snapshot; changing them requires an OpenCode restart.</Constraint>
   </Constraints>
   <Risks>
     <Risk>Shared workflows may reference custom roles not assigned on another machine, causing startup failures.</Risk>
@@ -208,6 +219,7 @@
     <Risk>Forcing default_agent to vv-controller may surprise users who intentionally selected another default.</Risk>
     <Risk>Plugin toggles can disable critical safety or workflow behavior unless status and doctor output make that visible.</Risk>
     <Risk>Strict schema behavior can frustrate users with hand-edited configs unless errors include precise recovery steps.</Risk>
+    <Risk>External search and fetch provider APIs, quotas, response shapes, and regional endpoints can change independently of vvoc.</Risk>
   </Risks>
   <OpenQuestions>
     <Question>Should future versions validate role assignments against provider-declared capabilities such as vision?</Question>

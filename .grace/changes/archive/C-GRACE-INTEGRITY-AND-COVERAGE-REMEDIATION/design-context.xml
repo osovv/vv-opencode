@@ -1,0 +1,24 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The remediation treats the clean structural GRACE report as necessary but insufficient. Runtime regressions and stale semantic projections demonstrate that repository-owned checks must validate expected coverage, truthful dependency edges, and executable defaults rather than relying only on XML grammar and the presence of test files.</Rationale>
+  <Alternatives>
+    <Alternative>Keeping Guardian under only M-CLI-COMMANDS was rejected because the broad verification entry already overclaimed coverage while omitting the command's numeric parsing and write behavior.</Alternative>
+    <Alternative>Changing grace-cli to require every source file was rejected because grace-cli is external to this repository and raw prompt or declaration files need explicit project-owned exceptions.</Alternative>
+    <Alternative>Adding GRACE comments to workflow/system-instruction.md was rejected because the file is copied into dist and injected into model context as runtime content.</Alternative>
+    <Alternative>Retrofitting stronger baseline assertions into archived plans was rejected because archived lifecycle artifacts are immutable historical evidence rather than current policy documents.</Alternative>
+    <Alternative>Keeping multiple LAST_CHANGE lines as a local changelog was rejected because grace file navigation currently surfaces only one physical entry and frequently reports an obsolete change.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether grace-cli should eventually gain native expected-governed-file coverage and multi-entry change-history support may be proposed upstream after the repository-owned checks prove the desired contract.</Decision>
+    <Decision>Other broad CLI commands may receive dedicated M-CLI-* modules later if future evidence shows similarly nontrivial behavior hidden behind M-CLI-COMMANDS.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A user runs guardian config with timeout-ms 0.4, 1.5, zero, a negative value, or non-numeric text; the command fails without printing or writing schema-invalid config.</Scenario>
+    <Scenario>OpenCode invokes web_search with only query; execute requests permission and sends count eight to the selected provider.</Scenario>
+    <Scenario>A source edit accidentally saves hashline read prefixes around semantic headers or adds a second LAST_CHANGE; the repository check fails before commit and identifies the file.</Scenario>
+    <Scenario>An agent asks for workflow architecture; graph navigation reports state-to-transition and persistence-to-state dependencies consistent with source contracts and imports.</Scenario>
+    <Scenario>An agent investigates Web Tools product intent; requirements, graph flows, module records, and critical verification expose the canonical search and fetch behavior without consulting archived implementation plans.</Scenario>
+    <Scenario>A future plan changes existing behavior; its baseline uses content assertions or records an explicit rationale for an existence-only baseline before execution approval.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

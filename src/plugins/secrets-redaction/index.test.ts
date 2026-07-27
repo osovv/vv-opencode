@@ -19,10 +19,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.2.0 - Covered exact-value redaction and deduplication for configured web apiKey fields.]
-//   LAST_CHANGE: [v1.3.0 - Replaced the invalid info.state fixture with a real ToolPart.state fixture so the regression test proves tool inputs/outputs/errors are redacted.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
-//   LAST_CHANGE: [v1.2.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
-//   LAST_CHANGE: [v1.1.0 - Switched test fixtures to the canonical vvoc.json config file and ignored legacy local config files.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";

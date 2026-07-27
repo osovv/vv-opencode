@@ -18,8 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added dedicated global/project/effective TUI config resolution coverage.]
-//   LAST_CHANGE: [v1.1.0 - Added runtime loadVvocConfig singleton-promise coverage.]
-//   LAST_CHANGE: [v1.0.0 - Added deterministic temp-dir tests for layered config resolution.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";

@@ -4,7 +4,7 @@
 //   PURPOSE: Build the provider-neutral web_fetch tool: input validation, permission request, provider dispatch, and structured text or attachment results.
 //   SCOPE: web_fetch ToolDefinition factory; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
-//   LINKS: M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-WEB-EXA, M-PLUGIN-WEB-TOOLS
+//   LINKS: M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-WEB-EXA, M-PLUGIN-WEB-TOOLS, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,8 +17,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [DIRECT-FIX - Applied web_fetch format and timeout defaults inside execute when OpenCode omits schema defaults at runtime.]
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Routed canonical web_fetch calls through the explicit-region direct Z.AI reader adapter.]
-//   LAST_CHANGE: [v1.0.0 - Initial web_fetch tool service.]
 // END_CHANGE_SUMMARY
 
 import {

@@ -30,25 +30,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput and structured ToolResult fixtures for OpenCode 1.18.2.]
-//   LAST_CHANGE: [v0.5.2 - Added result body, bounded excerpt, missing-blank-line diagnostic, repair guidance, hard-stop, and persistence coverage.]
-//   LAST_CHANGE: [v0.5.1 - Reworded workflow persisted-state rejection coverage as corrupt/incomplete data handling.]
-//   LAST_CHANGE: [v0.5.0 - Reset the runtime vvoc config singleton between workflow plugin fixtures.]
-//   LAST_CHANGE: [v0.4.0 - Reworked workflow tests around explicit work-item intent, awaiting_reviews, and collect-all parallel reviewer rounds.]
-//   LAST_CHANGE: [v0.3.8 - Added persistence tests for hydrate/snapshot round-trip, corrupt JSON handling, session cleanup, and store hydration on creation.]
-//   LAST_CHANGE: [v0.3.7 - Added coverage that workflow guidance and tracked launches accept header-first assignment prompts with lightweight XML-like tagged bodies.]
-//   LAST_CHANGE: [v0.3.6 - Added coverage that duplicate strict top-block fields inside resumable task wrappers fail closed without same-session repair.]
-//   LAST_CHANGE: [v0.3.5 - Added coverage for one-shot same-session repair of malformed tracked results in resumable OpenCode task envelopes.]
-//   LAST_CHANGE: [v0.3.4 - Added coverage that recognized task-result wrappers with non-whitespace suffix text are not unwrapped.]
-//   LAST_CHANGE: [v0.3.3 - Added coverage that loose task_id/task_result wrappers without OpenCode resume metadata are not unwrapped.]
-//   LAST_CHANGE: [v0.3.2 - Added coverage that foreign `<task_result>` text without an OpenCode task envelope is not unwrapped.]
-//   LAST_CHANGE: [v0.3.1 - Added regression coverage for tracked result parsing from OpenCode task output wrappers.]
-//   LAST_CHANGE: [v0.3.0 - Added coverage for review-only workflows starting fresh work items with reviewer subagents.]
-//   LAST_CHANGE: [v0.2.1 - Added coverage ensuring helper primary agent enhancer does not receive workflow protocol guidance injection.]
-//   LAST_CHANGE: [v0.2.0 - Added WorkflowPlugin integration coverage for tracked launch/result hooks, loop-gate enforcement, protocol errors, and primary-only guidance injection.]
-//   LAST_CHANGE: [v0.1.2 - Added coverage for duplicate top-block field rejection and missing transition actor rejection.]
-//   LAST_CHANGE: [v0.1.1 - Added strict top-block, case-sensitive status, deterministic transition guard, sticky hard-stop, and includeClosed coverage.]
-//   LAST_CHANGE: [v0.1.0 - Added shared workflow core coverage for protocol, state, transitions, and tooling modules.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added reviewer-only, selective, and tracked guidance selection coverage without changing enforcement tests.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";

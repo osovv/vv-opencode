@@ -15,11 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.11.0 - Added coverage that current v3 validation requires the plugins section.]
-//   LAST_CHANGE: [v0.10.0 - Added strict project-scope validation missing-layer coverage.]
-//   LAST_CHANGE: [v0.9.0 - Replaced legacy v1/v2 acceptance checks with canonical v3 role-based failure coverage including unsupported-version and preset role-path errors.]
-//   LAST_CHANGE: [v0.9.1 - Aligned OpenAI default-role fixtures with GPT-5.4 while smart remains vv-gpt-5.5-xhigh.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Updated smart role fixture reference to openai/vv-codex-gpt-5.5-xhigh.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added root and preset orchestration profile path validation coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";

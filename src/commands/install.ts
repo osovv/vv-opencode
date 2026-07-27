@@ -15,11 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Added a preflight readVvocConfig validation so an invalid existing vvoc.json fails loudly before any install mutation instead of after a partial write.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Registered the managed TUI subpath during installation.]
-//   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink creation for project-scope installs.]
-//   LAST_CHANGE: [v0.5.0 - Added managed skill file install during vvoc install.]
-//   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope install.]
-//   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config scaffolding with canonical vvoc.json creation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

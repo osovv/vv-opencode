@@ -25,9 +25,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.1.3 - Preserved separated result body text and added missing blank-line diagnostics for body text inside the strict top block.]
-//   LAST_CHANGE: [v0.1.2 - Rejected duplicate strict top-block protocol fields to keep parse outcomes deterministic.]
-//   LAST_CHANGE: [v0.1.1 - Enforced case-sensitive status validation and strict top-block line validation for protocol-only fields.]
-//   LAST_CHANGE: [v0.1.0 - Added workflow protocol grammar, strict top-block parser, per-agent status validation, and prompt-header extraction.]
 // END_CHANGE_SUMMARY
 
 export const TRACKED_SUBAGENT_NAMES = [

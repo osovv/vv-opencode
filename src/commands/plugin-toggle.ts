@@ -16,7 +16,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle writes while preserving global defaults.]
-//   LAST_CHANGE: [v1.0.0 - Initial implementation for runtime plugin enable/disable.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

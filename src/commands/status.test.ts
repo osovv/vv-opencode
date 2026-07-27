@@ -15,11 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v1.1.2 - Added OpenCode host compatibility status coverage.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added selected TUI source and managed package status coverage.]
-//   LAST_CHANGE: [v0.2.0 - Added invalid vvoc config status diagnostics without mutation coverage.]
-//   LAST_CHANGE: [v0.1.1 - Added selected source reporting assertions for project status.]
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added selected/default profile and invalid explicit profile reporting coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";

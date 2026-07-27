@@ -15,8 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.3.0 - Used the shared startup vvoc config snapshot for plugin toggles and role-map loading.]
-//   LAST_CHANGE: [v0.2.0 - Loaded role assignments from the effective vvoc config source.]
-//   LAST_CHANGE: [v0.1.0 - Added startup config-hook role resolution for supported OpenCode model fields with explicit unknown-role and unsupported-target errors.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";

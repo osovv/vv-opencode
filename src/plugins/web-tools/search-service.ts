@@ -4,7 +4,7 @@
 //   PURPOSE: Build the provider-neutral web_search tool: input validation, permission request, provider dispatch, and ranked Markdown rendering.
 //   SCOPE: web_search ToolDefinition factory and Markdown rendering; delegates transport to the Exa, Brave, and direct Z.AI adapters.
 //   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts, src/plugins/web-tools/providers/brave.ts, src/plugins/web-tools/providers/zai.ts]
-//   LINKS: [M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-WEB-ZAI, M-WEB-HTTP, M-PLUGIN-WEB-TOOLS]
+//   LINKS: M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-WEB-ZAI, M-WEB-HTTP, M-PLUGIN-WEB-TOOLS, V-M-WEB-SEARCH-SERVICE, DF-WEB-SEARCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -15,8 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Routed canonical web_search calls through the explicit-region direct Z.AI adapter.]
-//   LAST_CHANGE: [v1.0.0 - Initial web_search tool service.]
+//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Applied the declared count default inside execute when OpenCode omits schema defaults.]
 // END_CHANGE_SUMMARY
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin";
@@ -78,6 +77,8 @@ export function createWebSearchTool(resolved: ResolvedWebSearchConfig): ToolDefi
         .describe("Optional time window restricting results."),
     },
     async execute(args, context) {
+      const count = args.count ?? 8;
+
       await context.ask({
         permission: "web_search",
         patterns: [args.query],
@@ -95,7 +96,7 @@ export function createWebSearchTool(resolved: ResolvedWebSearchConfig): ToolDefi
 
       const searchInput = {
         query: args.query,
-        count: args.count,
+        count,
         freshness: args.freshness,
         credential: resolved.credential,
         abort: context.abort,

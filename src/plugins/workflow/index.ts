@@ -3,8 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance.
 //   SCOPE: work_item_open/list/close registration, tracked launch validation, result normalization and repair, round aggregation with bounded excerpts, implementation round limits, persistence, and profile-selected chat.message guidance.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
-//   LINKS: [M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
+//   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -15,20 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.1 - Fixed session.deleted cleanup to read the session id from properties.info.id (per the SDK event shape), drop the in-memory store, and remove a duplicate directory deletion.]
-//   LAST_CHANGE: [v0.5.0 - Reverted in-flight reviewer launches on failed tracked results (invalid output, parse/repair failure, missing work item, apply failure) so work items are no longer stranded in REVIEWER_ALREADY_IN_FLIGHT.]
-//   LAST_CHANGE: [v0.4.1 - Propagated bounded tracked-result excerpts through protocol errors, state-application errors, hard stops, and persisted work-item state.]
-//   LAST_CHANGE: [v0.4.0 - Read plugin toggles from the shared startup vvoc config snapshot.]
-//   LAST_CHANGE: [v0.3.0 - Integrated explicit work-item intent, reviewer in-flight tracking, and collect-all review-round result aggregation.]
-//   LAST_CHANGE: [v0.2.6 - Restricted work-item tools and workflow guidance injection to vv-controller sessions only.]
-//   LAST_CHANGE: [v0.2.5 - Limited resumable result repair to safe format-only protocol errors and disabled tool use during repair prompts where supported.]
-//   LAST_CHANGE: [v0.2.4 - Added a single same-session repair attempt for malformed tracked results inside recognized resumable OpenCode task envelopes.]
-//   LAST_CHANGE: [v0.2.3 - Tightened OpenCode task-result envelope detection to the known resumable task header shape before unwrapping.]
-//   LAST_CHANGE: [v0.2.2 - Restricted task-result wrapper extraction to recognized OpenCode task envelopes so foreign `<task_result>` text still fails strict parsing.]
-//   LAST_CHANGE: [v0.2.1 - Extracted inner OpenCode `<task_result>` content before strict tracked result parsing so task wrapper metadata does not trip protocol validation.]
-//   LAST_CHANGE: [v0.2.0 - Used transition-policy checks so fresh work items can start with reviewer subagents for review-only workflows.]
-//   LAST_CHANGE: [v0.1.1 - Excluded helper primary agents like enhancer from workflow guidance injection because they cannot participate in tracked workflow tooling.]
-//   LAST_CHANGE: [v0.1.0 - Added workflow plugin integration with tool wiring, tracked launch/result hooks, loop-gate enforcement, and primary-session guidance injection.]
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Selected reviewer-only, selective, or full tracked guidance from the startup orchestration policy.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";

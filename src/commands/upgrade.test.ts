@@ -15,7 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.7.0 - Added explicit partial-upgrade warning coverage for sync failures and sync launch errors.]
-//   LAST_CHANGE: [v0.6.0 - Added tests for multi-version changelog, graceful degradation, and --allow-prerelease flag.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";

@@ -18,11 +18,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.8.0 - Corrected GPT-5.6 (terra/sol) limits to the post-PR#33972 Codex metadata: input 372000->272000 and context 500000->400000, aligning to the 272K premium-pricing tripwire.]
-//   LAST_CHANGE: [v0.5.0 - Added --scope global|project provider patch writes.]
-//   LAST_CHANGE: [v0.4.3 - Added reasoning:true to vv-gpt-5.4-xhigh and vv-gpt-5.5-xhigh in openai patch preset.]
-//   LAST_CHANGE: [v0.6.0 - Added vv-gpt-5.6-luna-low, vv-gpt-5.6-terra-high, vv-gpt-5.6-sol-xhigh to openai patch preset.]
-//   LAST_CHANGE: [v0.7.0 - Replaced the unavailable vv-gpt-5.6-luna-low alias with vv-gpt-5.4-mini-low.]
-//   LAST_CHANGE: [C-CODEX-PRESET-LIMITS - Renamed managed aliases to vv-codex-gpt-* namespace with explicit Codex subscription limits and made codex the canonical patch-provider preset.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

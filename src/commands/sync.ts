@@ -15,11 +15,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.5.0 - Added a preflight readVvocConfig validation so an invalid existing vvoc.json fails loudly before any sync mutation instead of after a partial write.]
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Synchronized the managed TUI subpath in dedicated tui.json(c).]
-//   LAST_CHANGE: [v0.6.0 - Skipped global managed skill symlink sync for project-scope sync.]
-//   LAST_CHANGE: [v0.5.0 - Added managed skill file sync during vvoc sync.]
-//   LAST_CHANGE: [v0.4.0 - Ensured the project-local managed planning artifact directory exists during project-scope sync.]
-//   LAST_CHANGE: [v0.3.0 - Replaced per-feature vvoc config syncing with canonical vvoc.json refresh.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";

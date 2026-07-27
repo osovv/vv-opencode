@@ -21,9 +21,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput fixtures for OpenCode 1.18.2 experimental workspace registration.]
-//   LAST_CHANGE: [v0.3.0 - Reset the runtime vvoc config singleton between isolated plugin fixtures.]
-//   LAST_CHANGE: [v0.2.0 - Added effective runtime source precedence coverage for env and project-local vvoc config.]
-//   LAST_CHANGE: [v0.1.0 - Added deterministic coverage for ModelRolesPlugin role resolution and failure semantics.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";

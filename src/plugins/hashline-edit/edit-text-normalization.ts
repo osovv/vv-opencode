@@ -20,8 +20,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.4.0 - Restricted range-boundary echo stripping to exact line matches so differently indented nested syntax is preserved.]
-//   LAST_CHANGE: [v0.3.0 - Hashline payload prefix stripping now recognizes context-anchored `line#hash#anchor|content` rows.]
-//   LAST_CHANGE: [v0.2.0 - Made prepend echo stripping symmetric with append so single-line anchor echoes are removed instead of duplicating the anchor line.]
 // END_CHANGE_SUMMARY
 
 const HASHLINE_PREFIX_RE =

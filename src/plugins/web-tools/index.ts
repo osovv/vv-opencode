@@ -4,7 +4,7 @@
 //   PURPOSE: Register the canonical web_search and web_fetch tools and suppress OpenCode built-ins at runtime while the web-tools plugin is enabled.
 //   SCOPE: Startup vvoc snapshot use, plugin toggle handling, runtime permission suppression, tool registration, and credential-safe diagnostics.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts]
-//   LINKS: [M-PLUGIN-WEB-TOOLS, M-WEB-CONFIG, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE]
+//   LINKS: M-PLUGIN-WEB-TOOLS, M-WEB-CONFIG, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE, V-M-PLUGIN-WEB-TOOLS, DF-WEB-SEARCH, DF-WEB-FETCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,7 +17,6 @@
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Added credential-safe direct Z.AI region diagnostics while preserving the canonical tool surface.]
-//   LAST_CHANGE: [v1.0.0 - Initial WebToolsPlugin with runtime built-in suppression and credential-safe startup diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
