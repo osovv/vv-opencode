@@ -1,3 +1,12 @@
+## <small>1.2.1 (2026-07-27)</small>
+
+### Summary
+
+Version 1.2.1 fixes a robustness gap in the web_fetch tool where omitted format and timeout arguments from OpenCode could cause undefined behavior; the tool now applies markdown formatting and a standard timeout as sensible defaults when those values are not provided at runtime, ensuring fetch operations complete reliably even when callers omit optional parameters.
+
+* fix(web-tools): default omitted fetch arguments ([060869d](https://github.com/osovv/vv-opencode/commit/060869d))
+* chore(grace): reconcile semantic metadata ([26c9bb4](https://github.com/osovv/vv-opencode/commit/26c9bb4))
+
 ## 1.2.0 (2026-07-26)
 
 ### Summary
