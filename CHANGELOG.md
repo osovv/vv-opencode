@@ -1,3 +1,11 @@
+## <small>1.2.3 (2026-08-11)</small>
+
+### Summary
+
+This release fixes a Guardian plugin regression that affected users running OpenCode in the embedded TUI. In that environment, OpenCode supplies a legacy SDK client that lacks the standard `client.permission.reply` method, and the previous raw HTTP fallback targeted a placeholder server URL with no listener, causing low-risk auto-allow permission responses to fail with `PERMISSION_REPLY_FAILED`. Guardian now restores the deprecated SDK respond endpoint as the first path for such embedded clients, so auto-allow replies succeed as expected, while the HTTP fallback remains in place for hosted servers; it also preserves the underlying cause of any reply failure in logs for easier diagnosis.
+
+* fix(guardian): restore legacy permission respond fallback for embedded clients ([1bee1ca](https://github.com/osovv/vv-opencode/commit/1bee1ca))
+
 ## <small>1.2.2 (2026-08-11)</small>
 
 ### Summary
