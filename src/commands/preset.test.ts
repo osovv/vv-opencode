@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Switched preset coverage to canonical role-only writes and removed legacy OpenCode target mutation assertions.]
+//   LAST_CHANGE: [v1.2.4 - Dropped vv-minimax and updated vv-zai fast/vision plus vv-osovv and vv-osovv-cheap vision role assertions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -31,7 +31,6 @@ describe("preset helpers", () => {
     expect(Object.keys(createDefaultVvocConfig().presets)).toEqual([
       "vv-codex",
       "vv-zai",
-      "vv-minimax",
       "vv-deepseek",
       "vv-osovv",
       "vv-osovv-cheap",
@@ -47,25 +46,17 @@ describe("preset helpers", () => {
     ).toEqual({
       "vv-codex": "single-session",
       "vv-zai": "balanced",
-      "vv-minimax": "balanced",
       "vv-deepseek": "balanced",
       "vv-osovv": "single-session",
       "vv-osovv-cheap": "single-session",
     });
   });
 
-  test("listConfiguredPresets shows the seeded vv-codex, vv-deepseek, vv-zai, and vv-minimax presets", () => {
+  test("listConfiguredPresets shows the seeded built-in presets", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual([
-      "vv-codex",
-      "vv-deepseek",
-      "vv-minimax",
-      "vv-osovv",
-      "vv-osovv-cheap",
-      "vv-zai",
-    ]);
+    expect(presets).toEqual(["vv-codex", "vv-deepseek", "vv-osovv", "vv-osovv-cheap", "vv-zai"]);
   });
 
   test("formatPreset renders the expected preset object", () => {
@@ -88,8 +79,8 @@ describe("preset helpers", () => {
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
-    expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.1"');
+    expect(output).toContain('"vision": "openai/gpt-5.4"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
   });
 
   test("formatPreset renders all five vv-osovv-cheap role assignments", () => {
@@ -98,7 +89,7 @@ describe("preset helpers", () => {
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-terra-high"');
-    expect(output).toContain('"vision": "minimax-coding-plan/MiniMax-M2.7"');
+    expect(output).toContain('"vision": "openai/gpt-5.4"');
     expect(output).toContain('"reviewer": "deepseek/deepseek-v4-pro"');
   });
 });
@@ -184,7 +175,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-codex, vv-deepseek, vv-minimax, vv-osovv, vv-osovv-cheap, vv-zai",
+        "unknown preset: missing. Available presets: vv-codex, vv-deepseek, vv-osovv, vv-osovv-cheap, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -468,9 +459,9 @@ describe("applyPreset", () => {
       );
       const vvocConfig = await readVvocConfig(paths);
       expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5-turbo");
-      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.1");
-      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.5-airx");
-      expect(vvocConfig?.roles.vision).toBe("zai-coding-plan/glm-4.6v");
+      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.2");
+      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.7");
+      expect(vvocConfig?.roles.vision).toBe("openai/gpt-5.4");
       expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
     } finally {
       await rm(configHome, { recursive: true, force: true });

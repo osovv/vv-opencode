@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Added a shared built-in vvoc preset registry so config sync and completions use one source of truth.]
+//   LAST_CHANGE: [v1.2.4 - Dropped vv-minimax and dead zai fast/vision models; vv-zai fast=zai-coding-plan/glm-4.7, vision=openai/gpt-5.4; vv-osovv and vv-osovv-cheap vision=openai/gpt-5.4; zai smart/reviewer roles use the official plan flagship zai-coding-plan/glm-5.2.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -44,21 +44,10 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Starter ZAI role assignments for built-in vvoc roles.",
     agents: {
       default: "zai-coding-plan/glm-5-turbo",
-      smart: "zai-coding-plan/glm-5.1",
-      fast: "zai-coding-plan/glm-4.5-airx",
-      vision: "zai-coding-plan/glm-4.6v",
-      reviewer: "zai-coding-plan/glm-5.1",
-    },
-    orchestration: { profile: "balanced" },
-  },
-  "vv-minimax": {
-    description: "Starter MiniMax role assignments for built-in vvoc roles.",
-    agents: {
-      default: "minimax-coding-plan/MiniMax-M2.7",
-      smart: "minimax-coding-plan/MiniMax-M2.7",
-      fast: "minimax-coding-plan/MiniMax-M2.1",
-      vision: "minimax-coding-plan/MiniMax-M2.7",
-      reviewer: "minimax-coding-plan/MiniMax-M2.7",
+      smart: "zai-coding-plan/glm-5.2",
+      fast: "zai-coding-plan/glm-4.7",
+      vision: "openai/gpt-5.4",
+      reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "balanced" },
   },
@@ -74,23 +63,23 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     orchestration: { profile: "balanced" },
   },
   "vv-osovv": {
-    description: "Personal osovv role assignments (deepseek + openai + minimax + zai).",
+    description: "Personal osovv role assignments (deepseek + openai + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "openai/vv-codex-gpt-5.4-mini-low",
       smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
-      vision: "minimax-coding-plan/MiniMax-M2.7",
-      reviewer: "zai-coding-plan/glm-5.1",
+      vision: "openai/gpt-5.4",
+      reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "single-session" },
   },
   "vv-osovv-cheap": {
-    description: "Cheap osovv role assignments (deepseek + openai + minimax).",
+    description: "Cheap osovv role assignments (deepseek + openai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "openai/vv-codex-gpt-5.4-mini-low",
       smart: "openai/vv-codex-gpt-5.6-terra-high",
-      vision: "minimax-coding-plan/MiniMax-M2.7",
+      vision: "openai/gpt-5.4",
       reviewer: "deepseek/deepseek-v4-pro",
     },
     orchestration: { profile: "single-session" },

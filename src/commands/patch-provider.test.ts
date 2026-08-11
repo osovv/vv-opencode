@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Updated GPT-5.6 (terra/sol) limit assertions to input 272000 / context 400000 to match the corrected Codex metadata.]
+//   LAST_CHANGE: [v1.2.4 - Removed the zai patch preset and its malformed glm-4.5-airx assertions; supported presets are now stepfun-ai and codex.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -38,14 +38,6 @@ describe("resolvePatchProviderPreset", () => {
     expect(value.models["step-3.7-flash"].modalities.input).toEqual(["text", "image"]);
   });
 
-  test("returns the built-in zai config patch", () => {
-    expect(resolvePatchProviderPreset("zai")).toMatchObject({
-      kind: "provider-object",
-      providerID: "zai-coding-plan",
-      summary: "provider.zai-coding-plan.models.glm-4.5-airx patched",
-    });
-  });
-
   test("returns the built-in codex alias patch (canonical)", () => {
     expect(resolvePatchProviderPreset("codex")).toMatchObject({
       kind: "provider-object",
@@ -66,7 +58,7 @@ describe("resolvePatchProviderPreset", () => {
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, zai, codex. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex. Compatibility aliases: openai",
     );
   });
 });
@@ -88,40 +80,6 @@ describe("applyPatchProviderPreset", () => {
       expect(content).toContain("step-3.7-flash");
       expect(content).toContain("Step 3.7 Flash");
       expect(content).toContain("256000");
-    } finally {
-      await rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  test("writes the global zai coding plan patch", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
-
-    try {
-      const { result } = await applyPatchProviderPreset("zai", {
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
-      const parsed = JSON.parse(content) as {
-        provider?: Record<
-          string,
-          {
-            models?: Record<
-              string,
-              Record<string, { limit?: { context?: number; output?: number } }>
-            >;
-          }
-        >;
-      };
-
-      expect(result.action).toBe("created");
-      expect(
-        parsed.provider?.["zai-coding-plan"]?.models?.["glm-4.5-airx"]?.["name: glm-4.5-airx"]
-          ?.limit,
-      ).toEqual({
-        context: 128000,
-        output: 96000,
-      });
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

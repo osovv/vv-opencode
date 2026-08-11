@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Corrected GPT-5.6 (terra/sol) limits to the post-PR#33972 Codex metadata: input 372000->272000 and context 500000->400000, aligning to the 272K premium-pricing tripwire.]
+//   LAST_CHANGE: [v1.2.4 - Removed the malformed zai patch (glm-4.5-airx); supported patch presets are now stepfun-ai and codex.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -44,19 +44,6 @@ type ProviderObjectPatchPreset = {
 };
 
 type PatchPreset = ProviderBaseUrlPatchPreset | ProviderObjectPatchPreset;
-
-const ZAI_CODING_PLAN_PATCH = {
-  models: {
-    "glm-4.5-airx": {
-      "name: glm-4.5-airx": {
-        limit: {
-          context: 128000,
-          output: 96000,
-        },
-      },
-    },
-  },
-} as const satisfies Record<string, unknown>;
 
 const STEPFUN_PATCH = {
   options: {
@@ -153,12 +140,6 @@ const PATCH_PROVIDER_PRESETS = {
     providerID: "stepfun",
     value: STEPFUN_PATCH,
     summary: "provider.stepfun.models.step-3.7-flash patched + baseURL",
-  },
-  zai: {
-    kind: "provider-object",
-    providerID: "zai-coding-plan",
-    value: ZAI_CODING_PLAN_PATCH,
-    summary: "provider.zai-coding-plan.models.glm-4.5-airx patched",
   },
   codex: {
     kind: "provider-object",

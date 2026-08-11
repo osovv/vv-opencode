@@ -728,7 +728,6 @@ describe("canonical vvoc config helpers", () => {
       expect(Object.keys(vvocConfig?.presets ?? {})).toEqual([
         "vv-codex",
         "vv-zai",
-        "vv-minimax",
         "vv-deepseek",
         "vv-osovv",
         "vv-osovv-cheap",
@@ -1239,12 +1238,11 @@ describe("provider object helpers", () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-opencode-provider-object-"));
     const zaiPatch = {
       models: {
-        "glm-4.5-airx": {
-          "name: glm-4.5-airx": {
-            limit: {
-              context: 128000,
-              output: 96000,
-            },
+        "glm-5.2": {
+          name: "GLM-5.2",
+          limit: {
+            context: 1000000,
+            output: 131072,
           },
         },
       },
@@ -1292,12 +1290,11 @@ describe("provider object helpers", () => {
       expect(parsed.provider?.["zai-coding-plan"]?.models?.Existing).toEqual({
         name: "Existing",
       });
-      expect(parsed.provider?.["zai-coding-plan"]?.models?.["glm-4.5-airx"]).toEqual({
-        "name: glm-4.5-airx": {
-          limit: {
-            context: 128000,
-            output: 96000,
-          },
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.["glm-5.2"]).toEqual({
+        name: "GLM-5.2",
+        limit: {
+          context: 1000000,
+          output: 131072,
         },
       });
     } finally {

@@ -276,7 +276,7 @@ The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plug
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
 | `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
-| `vvoc patch-provider stepfun-ai\|zai\|codex` | Patch an OpenCode provider; `codex` adds subscription-safe OpenAI aliases and also accepts `openai` for compatibility |
+| `vvoc patch-provider stepfun-ai\|codex` | Patch an OpenCode provider; `codex` adds subscription-safe OpenAI aliases and also accepts `openai` for compatibility |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |
@@ -321,7 +321,6 @@ Built-in presets declare an orchestration mapping:
 | `vv-osovv` | single-session |
 | `vv-osovv-cheap` | single-session |
 | `vv-zai` | balanced |
-| `vv-minimax` | balanced |
 | `vv-deepseek` | balanced |
 
 Applying a built-in preset changes both model roles and the root orchestration profile
@@ -359,7 +358,6 @@ vvoc role set fast openai/gpt-5.4-mini
 vvoc preset vv-codex
 vvoc preset vv-zai
 vvoc preset vv-deepseek
-vvoc preset vv-minimax
 vvoc preset vv-osovv
 vvoc preset vv-osovv-cheap
 ```

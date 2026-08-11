@@ -129,7 +129,7 @@ describe("init scenarios", () => {
       expect(vvocConfig.roles.reviewer).toBeDefined();
       expect(vvocConfig.presets["vv-codex"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
-      expect(vvocConfig.presets["vv-minimax"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-deepseek"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-osovv"]?.agents.default).toBeDefined();
     } finally {
       rmSync(configHome, { recursive: true, force: true });
