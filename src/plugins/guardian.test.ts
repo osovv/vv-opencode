@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput fixtures for OpenCode 1.18.2 experimental workspace registration.]
+//   LAST_CHANGE: [Direct fix - Added coverage for the legacy SDK permission respond fallback used by embedded OpenCode clients without client.permission.reply.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, expect, test } from "bun:test";
@@ -361,6 +361,58 @@ test("Guardian disabled-mode deny uses current HTTP reply fallback when permissi
     reply: "reject",
     message: "Guardian nested reviews do not allow additional permissions.",
   });
+});
+
+test("Guardian disabled-mode deny uses legacy SDK respond when permission.reply is absent", async () => {
+  const { projectDir } = await setupGuardianWorkspace();
+  const legacyCalls: Array<{ path?: unknown; query?: unknown; body?: unknown }> = [];
+  const originalFetch = globalThis.fetch;
+  let httpFallbackCalled = false;
+  process.env.OPENCODE_GUARDIAN_DISABLED = "1";
+
+  globalThis.fetch = (async () => {
+    httpFallbackCalled = true;
+    return new Response(JSON.stringify(true), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  try {
+    const plugin = await GuardianPlugin({
+      client: {
+        postSessionIdPermissionsPermissionId: async (input: unknown) => {
+          legacyCalls.push(input as { path?: unknown; query?: unknown; body?: unknown });
+          return { data: true };
+        },
+      } as never,
+      project: {} as never,
+      directory: projectDir,
+      worktree: projectDir,
+      experimental_workspace: { register: () => undefined },
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    });
+
+    await plugin.event?.({
+      event: {
+        type: "permission.asked",
+        properties: {
+          id: "perm_legacy",
+          sessionID: "session_legacy",
+          permission: "bash",
+        },
+      },
+    } as never);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  expect(legacyCalls).toEqual([
+    {
+      path: { id: "session_legacy", permissionID: "perm_legacy" },
+      query: { directory: projectDir },
+      body: { response: "reject" },
+    },
+  ]);
+  expect(httpFallbackCalled).toBe(false);
 });
 
 test("Guardian review failures fall back to manual approval without auto-allow", async () => {

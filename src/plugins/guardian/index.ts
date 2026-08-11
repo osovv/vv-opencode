@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Denied and disabled canonical web_search and web_fetch access for the constrained guardian agent.]
+//   LAST_CHANGE: [Direct fix - Restored legacy SDK permission respond fallback for embedded OpenCode clients where client.permission.reply is absent, and preserved the reply failure cause in Guardian logs.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -260,6 +260,12 @@ function createGuardianPluginError(options: {
     (error as Error & { cause?: unknown }).cause = options.cause;
   }
   return error;
+}
+
+function guardianErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const serialized = JSON.stringify(error);
+  return serialized ?? String(error);
 }
 
 function asModelRolesError(error: unknown): ModelRolesError | undefined {
@@ -885,6 +891,7 @@ async function replyToPermission(
   client: Parameters<Plugin>[0]["client"],
   serverUrl: URL,
   directory: string,
+  sessionID: string,
   requestID: string,
   decision: "allow" | "deny",
   message?: string,
@@ -907,6 +914,50 @@ async function replyToPermission(
 
     if (response.data !== true) {
       throw new Error("permission.reply was not acknowledged");
+    }
+
+    return true;
+  }
+
+  // OpenCode passes a legacy root SDK client to plugins in the embedded TUI;
+  // client.permission.reply is absent there and the raw HTTP fallback cannot reach
+  // the in-process server, so use the still-supported deprecated respond endpoint first.
+  const legacyClient = client as {
+    postSessionIdPermissionsPermissionId?: (input: {
+      path: {
+        id: string;
+        permissionID: string;
+      };
+      query?: {
+        directory?: string;
+      };
+      body: {
+        response: "once" | "always" | "reject";
+      };
+    }) => Promise<{
+      data?: boolean;
+      error?: unknown;
+    }>;
+  };
+
+  if (legacyClient.postSessionIdPermissionsPermissionId) {
+    const response = await legacyClient.postSessionIdPermissionsPermissionId({
+      path: {
+        id: sessionID,
+        permissionID: requestID,
+      },
+      query: directory ? { directory } : undefined,
+      body: {
+        response: reply,
+      },
+    });
+
+    if (response.error) {
+      throw new Error(`legacy permission respond failed: ${JSON.stringify(response.error)}`);
+    }
+
+    if (response.data !== true) {
+      throw new Error("legacy permission respond was not acknowledged");
     }
 
     return true;
@@ -1062,13 +1113,14 @@ async function reviewPermissionRequest(
             client,
             serverUrl,
             directory,
+            permissionEvent.sessionID,
             permissionEvent.id,
             "allow",
           );
         } catch (error) {
           throw createGuardianPluginError({
             code: "PERMISSION_REPLY_FAILED",
-            message: "PERMISSION_REPLY_FAILED: guardian auto-allow reply was not acknowledged",
+            message: `PERMISSION_REPLY_FAILED: guardian auto-allow reply was not acknowledged: ${truncateText(guardianErrorMessage(error), MAX_LOG_CHARS)}`,
             cause: error,
           });
         }
@@ -1232,10 +1284,18 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
           client,
           serverUrl,
           directory,
+          properties.sessionID,
           properties.id,
           "deny",
           "Guardian nested reviews do not allow additional permissions.",
-        ).catch(() => false);
+        ).catch((error) =>
+          writeGuardianDebug({
+            phase: "nested_deny_reply_failed",
+            requestID: properties.id,
+            sessionID: properties.sessionID,
+            error: truncateText(guardianErrorMessage(error), MAX_LOG_CHARS),
+          }),
+        );
       },
     };
   }
