@@ -1,9 +1,9 @@
 // FILE: src/commands/guardian.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify Guardian CLI printing, scoped writes, preservation, and schema-safe numeric argument rejection.
-//   SCOPE: Subprocess-level coverage for canonical defaults, valid overrides, global/project targets, invalid existing config byte stability, and invalid positive-integer duration inputs.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, node:url, src/cli.ts, src/lib/vvoc-config.ts]
+//   SCOPE: Subprocess coverage for config reads/writes plus direct deterministic coverage of invalid positive-integer duration inputs.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, node:url, src/cli.ts, src/commands/guardian.ts, src/lib/vvoc-config.ts]
 //   LINKS: M-CLI-GUARDIAN, M-CLI-CONFIG, V-M-CLI-GUARDIAN
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -12,10 +12,11 @@
 // START_MODULE_MAP
 //   CLI_PATH - Registered CLI entrypoint used by isolated subprocess tests.
 //   runGuardianConfig - Invoke the registered Guardian config CLI in an isolated subprocess.
+//   parsePositiveIntegerArg tests - Reject fractional, non-finite, and non-positive duration values without subprocess contention.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Added complete Guardian config CLI coverage including fractional duration rejection.]
+//   LAST_CHANGE: [v1.1.0 - Moved invalid-duration cases to direct parser coverage so the full suite does not spawn twelve redundant CLI processes.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -23,6 +24,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parsePositiveIntegerArg } from "./guardian.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 const CLI_PATH = fileURLToPath(new URL("../cli.ts", import.meta.url));
@@ -82,21 +84,16 @@ describe("guardian config CLI", () => {
     }
   });
 
-  for (const flag of ["--timeout-ms", "--review-toast-duration-ms"]) {
-    for (const value of ["0", "-1", "0.4", "1.5", "NaN", "Infinity"]) {
-      test(`rejects ${flag} ${value}`, async () => {
-        const cwd = await mkdtemp(join(tmpdir(), "vvoc-guardian-invalid-number-"));
-        try {
-          const result = await runGuardianConfig(["--print", flag, value], cwd);
-          expect(result.exitCode).not.toBe(0);
-          expect(result.stdout).toBe("");
-          expect(result.stderr).toContain(`${flag.slice(2)} must be a positive integer`);
-        } finally {
-          await rm(cwd, { recursive: true, force: true });
-        }
-      }, 20_000);
+  test("rejects invalid positive-integer duration values", () => {
+    for (const flag of ["--timeout-ms", "--review-toast-duration-ms"]) {
+      const label = flag.slice(2);
+      for (const value of ["0", "-1", "0.4", "1.5", "NaN", "Infinity"]) {
+        expect(() => parsePositiveIntegerArg(value, label)).toThrow(
+          `${label} must be a positive integer`,
+        );
+      }
     }
-  }
+  });
 
   test("writes canonical global and project configs while preserving unrelated sections", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-guardian-global-"));

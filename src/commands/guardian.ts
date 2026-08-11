@@ -1,5 +1,5 @@
 // FILE: src/commands/guardian.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Expose schema-safe Guardian-specific vvoc CLI helpers backed by the canonical vvoc.json config file.
 //   SCOPE: Guardian config command wiring plus strict CLI argument normalization for Guardian model, threshold, and positive-integer duration values.
@@ -11,10 +11,11 @@
 //
 // START_MODULE_MAP
 //   default - Guardian command group.
+//   parsePositiveIntegerArg - Normalize optional positive-integer CLI duration arguments.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Rejected fractional and non-positive Guardian duration arguments before printing or writing config.]
+//   LAST_CHANGE: [v0.4.0 - Exported positive-integer argument normalization for deterministic direct verification without excess CLI subprocesses.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -129,7 +130,7 @@ function readGuardianOverridesFromArgs(args: Record<string, unknown>): GuardianC
   return overrides;
 }
 
-function parsePositiveIntegerArg(value: unknown, label: string): number | undefined {
+export function parsePositiveIntegerArg(value: unknown, label: string): number | undefined {
   if (value === undefined || value === "") {
     return undefined;
   }
