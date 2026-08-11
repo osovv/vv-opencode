@@ -14,7 +14,6 @@
 // END_MODULE_MAP
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [v0.7.0 - Directed adjacent block insertions to append/prepend, required intentional closure preservation, and corrected malformed examples.]
-//   LAST_CHANGE: [v0.6.0 - Clarified that automatic range-boundary echo stripping applies only to exact adjacent-line duplicates.]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 
