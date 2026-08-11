@@ -3,12 +3,13 @@
 Date: 2026-04-20
 Project: `@osovv/vv-opencode`
 
-This file tracks ideas worth revisiting later that are currently blocked by OpenCode core, plugin APIs, or SDK/runtime limitations.
+This file tracks ideas worth revisiting later that are blocked by OpenCode core, plugin APIs, or SDK/runtime limitations, and preserves the outcome when a blocker is later removed.
 
 ## How To Use
 
 - Add new blocked ideas at the top.
 - Capture the desired behavior, the exact blocker, and what would need to change upstream.
+- When upstream capabilities remove a blocker, mark the entry `unblocked`, record the re-evaluation date and evidence, and retain any remaining limitations.
 - Keep entries concrete enough that a future session can quickly re-evaluate them.
 
 ## Entry Template
@@ -69,8 +70,9 @@ Notes:
 
 ### Idea: `/btw` side-question command
 
-Status: blocked
+Status: unblocked
 Date: 2026-04-20
+Re-evaluated: 2026-08-03
 Owner: vvoc
 
 Desired behavior:
@@ -81,30 +83,38 @@ Why we want it:
 
 Keep short contextual questions out of the main conversation while still letting the user ask about what the agent already knows.
 
-Current blocker:
+What changed:
 
-OpenCode supports custom slash commands, subagents, agents, and plugin hooks, but it does not appear to expose a native side-question primitive with Claude Code's semantics.
+Modern OpenCode 1.18.x exposes a TUI plugin API that is sufficient to implement the side-question workflow without changing OpenCode core. A TUI plugin can register `/btw`, read the active session's messages and parts, render an overlay through the top-level app slot, create and prompt a separate temporary session asynchronously, deny all tools, and delete that session when the overlay closes.
 
-The missing behavior is the combination of all of the following:
+This supports the important user-facing behavior:
 
-- full visibility into the current session context
+- access to a bounded snapshot of the exposed current session context
 - no tool access
-- no persistence in conversation history
+- no additions to the parent conversation history
 - ephemeral overlay-style answer instead of a normal transcript turn
 - ability to run independently while the main turn is still running
 
-A custom OpenCode command can approximate only part of this behavior. It can be named `/btw` and can restrict tools, but it does not appear to give us a way to suppress history writes or render the response as an ephemeral side panel/overlay.
+Remaining limitations:
 
-What would unblock it:
+- The stable OpenCode release does not yet include a native `/btw` command.
+- A standalone plugin can snapshot the exposed session messages and tool parts, but it cannot reliably reuse the parent's exact model-visible system/instruction prefix or provider prompt-cache prefix.
+- The practical implementation uses a temporary child session that exists in OpenCode storage until the plugin deletes it, while keeping the parent transcript unchanged.
 
-Any upstream OpenCode capability that provides one of these paths:
+Exact Claude Code parity would benefit from the narrow side-question endpoint proposed by upstream PR `#21002`, which reuses canonical parent context without adding the question or answer to session history.
 
-- a built-in side-question command API
-- a plugin hook or SDK method for ephemeral, non-transcript responses
-- command/session metadata that marks a command result as non-persistent
-- a TUI extension point for overlay responses detached from normal chat history
+Supported implementation direction:
+
+- Add `/btw` to the existing `@osovv/vv-opencode/tui` module alongside `/context`.
+- Open a dismissible overlay, snapshot bounded parent context, and run a tool-free `promptAsync` request in a temporary child session.
+- Abort and delete the temporary session on cancellation or close so the parent session and its queue remain untouched.
 
 Notes:
 
-- If OpenCode later adds ephemeral command responses, revisit whether `vvoc` should implement `/btw` as a managed command, a plugin feature, or an upstream contribution.
-- Relevant docs checked during investigation: Claude Code `commands` and `interactive-mode`; OpenCode `commands`, `agents`, `plugins`, `config`, and `tui`.
+- The native OpenCode feature request remains open and is currently labelled for the 2.0 line.
+- PR `#21002` is the active native proposal; PR `#18635` was an earlier closed background-session implementation.
+- Community TUI plugins such as `opencode-mini-session`, `opencode-sidechat`, and `opencode-bytheway` demonstrate that overlay and temporary-session variants work on current OpenCode releases.
+- Relevant upstream links:
+  - `https://github.com/anomalyco/opencode/issues/16992`
+  - `https://github.com/anomalyco/opencode/pull/21002`
+  - `https://github.com/anomalyco/opencode/pull/18635`
