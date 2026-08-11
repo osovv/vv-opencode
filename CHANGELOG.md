@@ -1,3 +1,14 @@
+## <small>1.2.2 (2026-08-11)</small>
+
+### Summary
+
+Release 1.2.2 hardens editing safety, config validation, and repository integrity. The hash-anchored edit tool now explicitly directs structural insertions to safer append/prepend operations so new code is added next to surviving lines instead of replacing closing braces or other structural syntax, and it requires preservation of consumed closing syntax during range rewrites to prevent unbalanced code; this guidance is backed by new regression tests and corrected examples. The Guardian config command now strictly rejects zero, negative, fractional, or malformed duration values like `--timeout-ms` before printing or writing anything, preventing schema-invalid configuration (including silently rounded zero durations) and documenting the accepted positive-integer input in the README. The web_search tool now reliably applies its declared default result count of eight at execution time when the count argument is omitted, so searches return the expected number of results regardless of how OpenCode passes optional arguments. The release also restores corrupted file-local markup that had made a test file unrecognized, adds a repository-wide GRACE markup check (`grace:check`) that enforces governed-file coverage and single accurate change summaries across the codebase, corrects workflow dependency ownership to match the actual source structure, and strengthens planning policy so behavior-changing work requires meaningful content baselines. Together these changes make edits less likely to break file structure, make CLI configuration writing schema-safe, and close several gaps in verification and documentation coverage.
+
+* test(guardian): avoid redundant CLI subprocesses ([682ebae](https://github.com/osovv/vv-opencode/commit/682ebae))
+* chore(grace): keep current hashline change summary ([9d4a449](https://github.com/osovv/vv-opencode/commit/9d4a449))
+* fix(edit): guide structural insert operations ([d64f5d8](https://github.com/osovv/vv-opencode/commit/d64f5d8))
+* fix(grace): remediate integrity and coverage gaps ([ce9ced7](https://github.com/osovv/vv-opencode/commit/ce9ced7))
+
 ## <small>1.2.1 (2026-07-27)</small>
 
 ### Summary
