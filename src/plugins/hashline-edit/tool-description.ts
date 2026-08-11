@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit override.
-//   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, operation choice, and stale-anchor recovery.
+//   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, structural operation choice, and stale-anchor recovery.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -13,6 +13,7 @@
 //   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `edit` tool.
 // END_MODULE_MAP
 // START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.7.0 - Directed adjacent block insertions to append/prepend, required intentional closure preservation, and corrected malformed examples.]
 //   LAST_CHANGE: [v0.6.0 - Clarified that automatic range-boundary echo stripping applies only to exact adjacent-line duplicates.]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
@@ -23,6 +24,8 @@ export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored l
 3. replace_range with pos+end replaces ALL lines FROM pos THROUGH end (BOTH INCLUSIVE). The end line WILL BE replaced. If you set end to a line that belongs to the next function/method/statement, that line is DELETED.
    CORRECT: pos on the first line to replace, end on the LAST line to replace — not the line after.
 4. lines must contain ONLY the content that belongs inside the replaced range. Lines AFTER end survive unchanged — do NOT include them in lines. If you do, they will appear twice.
+   INSERTION SAFETY: To add a function, handler, statement, or block NEXT TO existing code, use append/prepend anchored to a surviving line. To add code AFTER a closed block, append after its final structural closing line. Do NOT replace that closing line merely to reproduce it and add content after it.
+   STRUCTURAL CLOSURES: If replace_range intentionally consumes lines containing closing syntax such as }, });, ], ), );, or </tag>, lines MUST include every closure required by the resulting code. Never assume autocorrect reconstructs omitted closing syntax.
 5. Tags MUST be copied exactly from read output or >>> mismatch output. NEVER guess or reconstruct tags.
 6. Batch = multiple operations in edits[], NOT one big replace covering everything. Each operation targets the smallest possible change.
 7. lines must contain plain replacement text only (no LINE#HASH#ANCHOR| prefixes, no diff + markers).
@@ -36,9 +39,9 @@ ANCHOR FORMAT:
 
 OPERATION CHOICE:
   replace with pos -> replace ONE line at pos (end is rejected)
-  replace_range with pos+end -> replace range pos..end INCLUSIVE (both lines replaced)
-  append with pos -> insert lines AFTER the anchored line (use when you need to ADD lines, not replace)
-  prepend with pos -> insert lines BEFORE the anchored line
+  replace_range with pos+end -> replace range pos..end INCLUSIVE (both lines replaced); use only when those existing lines must change or be removed
+  append with pos -> insert lines AFTER the anchored line; preferred for adding code after a block's final }, });, ], or other closing line
+  prepend with pos -> insert lines BEFORE the anchored line; preferred for adding code before an existing declaration or block
   append/prepend without pos -> EOF/BOF insertion (also creates missing files)
 
 CONTENT FORMAT:
@@ -48,7 +51,7 @@ CONTENT FORMAT:
 FILE MODES:
   delete=true deletes file and requires edits=[] with no rename
   rename moves final content to a new path and removes old path
-<operations>
+</operations>
 
 <examples>
 Given this file after read:
@@ -58,26 +61,34 @@ Given this file after read:
   13#QR#GH|} // end of hello()
 
 Single-line replace (change line 11):
-  { op: "replace", pos: "11#XJ#CD", lines: ["  console.log("hello");"] }
+  { op: "replace", pos: "11#XJ#CD", lines: ["  console.log(\\"hello\\");"] }
   Result: line 11 replaced. Lines 10, 12-13 unchanged.
 
 Range replace (replace lines 11-12, function body):
-  { op: "replace_range", pos: "11#XJ#CD", end: "12#MB#EF", lines: ["  return "hello world";"] }
+  { op: "replace_range", pos: "11#XJ#CD", end: "12#MB#EF", lines: ["  return \\"hello world\\";"] }
   Result: lines 11-12 removed, replaced by 1 new line. Lines 10, 13 unchanged.
 
 BAD - end is one line too far (DELETES closing brace):
-  { op: "replace_range", pos: "11#XJ#CD", end: "13#QR#GH", lines: ["  return "hello world";"] }
+  { op: "replace_range", pos: "11#XJ#CD", end: "13#QR#GH", lines: ["  return \\"hello world\\";"] }
   Result: line 13 (closing brace) is REPLACED too — function is broken!
   CORRECT: use end: "12#MB#EF" — only replace lines 11-12, keep line 13 unchanged.
 
 BAD - lines extend past end (DUPLICATES line 13):
-  { op: "replace_range", pos: "11#XJ#CD", end: "12#MB#EF", lines: ["  return "hi";", "}"] }
+  { op: "replace_range", pos: "11#XJ#CD", end: "12#MB#EF", lines: ["  return \\"hi\\";", "}"] }
   Line 13 is "}" which already exists after end. Including it in lines duplicates it.
-  CORRECT: { op: "replace_range", pos: "11#XJ#CD", end: "12#MB#EF", lines: ["  return "hi";"] }
+  CORRECT: { op: "replace_range", pos: "11#XJ#CD", end: "12#MB#EF", lines: ["  return \\"hi\\";"] }
 
 Append after a line (insert between functions):
   { op: "append", pos: "13#QR#GH", lines: ["", "function added() {", "  return true;", "}"] }
   Result: 4 lines inserted after line 13. All existing lines unchanged.
+
+BAD - replacing a closing line only to insert after it:
+  { op: "replace_range", pos: "13#QR#GH", end: "13#QR#GH", lines: ["} // end of hello()", "", "function added() {", "}"] }
+  This unnecessarily consumes the existing closing line. If that closure is omitted or altered, hello() becomes unbalanced.
+  CORRECT: { op: "append", pos: "13#QR#GH", lines: ["", "function added() {", "}"] }
+
+When a structural rewrite really changes both opening and closing syntax:
+  Use replace_range covering the complete structure, and include the required replacement closures explicitly. Re-read the edited region or run the narrow syntax/type check immediately afterward.
 </examples>
 
 <auto>
