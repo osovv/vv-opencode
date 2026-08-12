@@ -1,3 +1,15 @@
+## <small>1.2.5 (2026-08-12)</small>
+
+### Summary
+
+Release 1.2.5 reworks the built-in preset and role lineup to keep model-role assignments current and user-safe. The unused vision role is removed, leaving four built-in roles (default, smart, fast, reviewer) while legacy configs that still contain a vision value remain valid. The vv-codex preset now relies entirely on the GPT-5.6 codex family, with a new vv-codex-gpt-5.6-luna-low fast tier replacing the old gpt-5.4-mini alias with a smarter, cheaper model, and the vv-osovv-* fast tier switches to the same Luna alias so the whole lineup shares one 5.6 family. New self-contained vv-kimi and vv-alibaba presets add kimi-k3 and qwen3.8-max reasoning-effort aliases, and the osovv family is renamed and expanded into vv-osovv-sol, vv-osovv-flash, vv-osovv-kimi, and vv-osovv-qwen, which share one base and differ only in the smart role; the stale vv-minimax preset and dead zai models are dropped in favor of the official plan lineup. vvoc patch-provider also gains kimi and alibaba alias patches plus an all preset that patches every registered provider at once, and the /btw side-question idea is now marked unblocked for the OpenCode TUI plugin.
+
+* chore(patch-provider): drop the unused vv-codex-gpt-5.4-mini-low alias ([932356a](https://github.com/osovv/vv-opencode/commit/932356a))
+* feat(presets): drop vision role, rework lineup, add kimi/alibaba and patch-provider all ([33f71a9](https://github.com/osovv/vv-opencode/commit/33f71a9))
+* feat(presets): switch vv-osovv-* fast tier to vv-codex-gpt-5.6-luna-low ([e8892dd](https://github.com/osovv/vv-opencode/commit/e8892dd))
+* fix(presets): drop vv-minimax, remove dead zai models, pin official plan lineup ([221a4bc](https://github.com/osovv/vv-opencode/commit/221a4bc))
+* docs(ideas): mark /btw unblocked with re-evaluation evidence ([d329987](https://github.com/osovv/vv-opencode/commit/d329987)), closes [#21002](https://github.com/osovv/vv-opencode/issues/21002)
+
 ## <small>1.2.4 (2026-08-12)</small>
 
 ### Summary
