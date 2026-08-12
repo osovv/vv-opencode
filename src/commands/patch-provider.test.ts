@@ -46,7 +46,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(resolvePatchProviderPreset("codex")).toMatchObject({
       kind: "provider-object",
       providerID: "openai",
-      summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
+      summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
     });
   });
   test("returns the built-in kimi alias patch", () => {
@@ -98,7 +98,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(compatibilityPreset).toMatchObject({
       kind: "provider-object",
       providerID: "openai",
-      summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
+      summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
     });
   });
 
@@ -172,22 +172,6 @@ describe("applyPatchProviderPreset", () => {
       expect(result.action).toBe("created");
       expect(parsed.model).toBeUndefined();
       expect(parsed.small_model).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.4-mini-low"]).toEqual({
-        name: "VV Codex GPT-5.4 Mini Low",
-        id: "gpt-5.4-mini",
-        reasoning: true,
-        variants: {},
-        limit: {
-          context: 400000,
-          input: 272000,
-          output: 128000,
-        },
-        options: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
-      });
       expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.5-xhigh"]).toEqual({
         name: "VV Codex GPT-5.5-XHigh",
         id: "gpt-5.5",
@@ -302,9 +286,6 @@ describe("applyPatchProviderPreset", () => {
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toEqual({
         name: "Legacy managed alias retained conservatively",
       });
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.4-mini-low"]?.name).toBe(
-        "VV Codex GPT-5.4 Mini Low",
-      );
       expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.5-xhigh"]?.name).toBe(
         "VV Codex GPT-5.5-XHigh",
       );

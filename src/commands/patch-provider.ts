@@ -67,22 +67,6 @@ const STEPFUN_PATCH = {
 
 const OPENAI_PATCH = {
   models: {
-    "vv-codex-gpt-5.4-mini-low": {
-      name: "VV Codex GPT-5.4 Mini Low",
-      id: "gpt-5.4-mini",
-      variants: {},
-      limit: {
-        context: 400000,
-        input: 272000,
-        output: 128000,
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "low",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
-    },
     "vv-codex-gpt-5.5-xhigh": {
       name: "VV Codex GPT-5.5-XHigh",
       id: "gpt-5.5",
@@ -197,7 +181,7 @@ const PATCH_PROVIDER_PRESETS = {
     kind: "provider-object",
     providerID: "openai",
     value: OPENAI_PATCH,
-    summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
+    summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
   },
   kimi: {
     kind: "provider-object",
