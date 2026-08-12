@@ -722,15 +722,18 @@ describe("canonical vvoc config helpers", () => {
       expect(vvocConfig?.roles.default).toBeDefined();
       expect(vvocConfig?.roles.smart).toBeDefined();
       expect(vvocConfig?.roles.fast).toBeDefined();
-      expect(vvocConfig?.roles.vision).toBeDefined();
       expect(vvocConfig?.roles.reviewer).toBeDefined();
       expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
       expect(Object.keys(vvocConfig?.presets ?? {})).toEqual([
         "vv-codex",
         "vv-zai",
         "vv-deepseek",
-        "vv-osovv",
-        "vv-osovv-cheap",
+        "vv-kimi",
+        "vv-alibaba",
+        "vv-osovv-sol",
+        "vv-osovv-flash",
+        "vv-osovv-kimi",
+        "vv-osovv-qwen",
       ]);
       expect(vvocConfig?.presets["vv-codex"]?.orchestration).toEqual({
         profile: "single-session",
@@ -1467,7 +1470,6 @@ describe("inspectInstallation", () => {
         "default",
         "smart",
         "fast",
-        "vision",
         "reviewer",
         "custom",
       ]);

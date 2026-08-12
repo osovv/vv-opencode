@@ -1,3 +1,9 @@
+## <small>1.2.4 (2026-08-12)</small>
+
+### Summary
+
+Release 1.2.4 reworks the built-in preset lineup and drops the dead vision role. Built-in roles shrink from five to four (default, smart, fast, reviewer): vision was bound to no OpenCode agent and is removed from the schema minimum, default config, all presets, and completion while legacy configs with a vision value stay valid. The vv-codex preset moves fully onto the GPT-5.6 codex family (terra-high default, a new vv-codex-gpt-5.6-luna-low alias as fast, sol-xhigh smart and reviewer) and plain gpt-5.4 is dropped; fresh-install default roles use plain gpt-5.6-terra/sol/luna. New branded self-contained presets vv-kimi (kimi-k3 with the vv-kimi-k3-max effort alias) and vv-alibaba (qwen3.8-max with the vv-qwen3.8-max-xhigh alias) work with only that provider's subscription. The author osovv family is renamed and expanded: vv-osovv becomes vv-osovv-sol, vv-osovv-cheap becomes vv-osovv-flash (smart deepseek-v4-flash), and new vv-osovv-kimi and vv-osovv-qwen variants join — all four share one base and differ only in smart. vvoc patch-provider gains kimi and alibaba alias patches plus an all preset that patches every registered provider at once. The v3 schema roles minimum loosens from 5 to 4 properties, requiring a package version bump.
+
 ## <small>1.2.3 (2026-08-11)</small>
 
 ### Summary

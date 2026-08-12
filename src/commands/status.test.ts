@@ -72,12 +72,12 @@ test("status prints built-in role inventory after init-style seeding", async () 
     const defaultIndex = stdout.indexOf("  default:");
     const smartIndex = stdout.indexOf("  smart:");
     const fastIndex = stdout.indexOf("  fast:");
-    const visionIndex = stdout.indexOf("  vision:");
+    const reviewerIndex = stdout.indexOf("  reviewer:");
 
     expect(defaultIndex).toBeGreaterThan(-1);
     expect(smartIndex).toBeGreaterThan(defaultIndex);
     expect(fastIndex).toBeGreaterThan(smartIndex);
-    expect(visionIndex).toBeGreaterThan(fastIndex);
+    expect(reviewerIndex).toBeGreaterThan(fastIndex);
   } finally {
     process.chdir(initialCwd);
     await rm(configHome, { recursive: true, force: true });

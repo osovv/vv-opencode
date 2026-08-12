@@ -28,7 +28,7 @@
 //   LAST_CHANGE: [v0.3.1 - Added reviewer role, removed orchestrator. Reviewers bound to reviewer, vv-controller back on smart.]
 // END_CHANGE_SUMMARY
 
-export const BUILTIN_ROLE_NAMES = ["default", "smart", "fast", "vision", "reviewer"] as const;
+export const BUILTIN_ROLE_NAMES = ["default", "smart", "fast", "reviewer"] as const;
 export type BuiltInRoleName = (typeof BUILTIN_ROLE_NAMES)[number];
 
 export const ROLE_REFERENCE_PREFIX = "vv-role:";

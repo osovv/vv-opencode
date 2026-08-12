@@ -276,7 +276,7 @@ The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plug
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
 | `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
-| `vvoc patch-provider stepfun-ai\|codex` | Patch an OpenCode provider; `codex` adds subscription-safe OpenAI aliases and also accepts `openai` for compatibility |
+| `vvoc patch-provider stepfun-ai\|codex\|kimi\|alibaba\|all` | Patch OpenCode providers; `codex` adds subscription-safe OpenAI aliases (also accepts `openai`), `kimi`/`alibaba` add vv- reasoning-effort aliases, `all` patches every provider at once |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |
@@ -318,8 +318,12 @@ Built-in presets declare an orchestration mapping:
 | Preset | Profile |
 |---|---|
 | `vv-codex` | single-session |
-| `vv-osovv` | single-session |
-| `vv-osovv-cheap` | single-session |
+| `vv-kimi` | single-session |
+| `vv-alibaba` | single-session |
+| `vv-osovv-sol` | single-session |
+| `vv-osovv-flash` | single-session |
+| `vv-osovv-kimi` | single-session |
+| `vv-osovv-qwen` | single-session |
 | `vv-zai` | balanced |
 | `vv-deepseek` | balanced |
 
@@ -349,20 +353,24 @@ vvoc role list
 vvoc role list --scope effective
 
 # Assign models to roles
-vvoc role set default openai/gpt-5.4
+vvoc role set default openai/gpt-5.6-terra
 vvoc role set team-review anthropic/claude-sonnet-4-5 --scope project
-vvoc role set smart openai/vv-codex-gpt-5.5-xhigh
-vvoc role set fast openai/gpt-5.4-mini
+vvoc role set smart openai/vv-codex-gpt-5.6-sol-xhigh
+vvoc role set fast openai/gpt-5.6-luna
 
 # Switch provider presets
 vvoc preset vv-codex
 vvoc preset vv-zai
 vvoc preset vv-deepseek
-vvoc preset vv-osovv
-vvoc preset vv-osovv-cheap
+vvoc preset vv-kimi
+vvoc preset vv-alibaba
+vvoc preset vv-osovv-sol
+vvoc preset vv-osovv-flash
+vvoc preset vv-osovv-kimi
+vvoc preset vv-osovv-qwen
 ```
 
-Built-in role IDs: `default`, `smart`, `fast`, `vision` + any custom lowercase-hyphenated IDs.
+Built-in role IDs: `default`, `smart`, `fast`, `reviewer` + any custom lowercase-hyphenated IDs.
 
 Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed on every `vvoc install`/`vvoc sync`; user-defined presets are preserved as-is.
 

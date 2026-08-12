@@ -14,14 +14,18 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.4 - Removed the zai patch preset and its malformed glm-4.5-airx assertions; supported presets are now stepfun-ai and codex.]
+//   LAST_CHANGE: [v1.2.4 - Added kimi and alibaba alias patch tests plus applyAllPatchProviderPresets coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyPatchProviderPreset, resolvePatchProviderPreset } from "./patch-provider.js";
+import {
+  applyAllPatchProviderPresets,
+  applyPatchProviderPreset,
+  resolvePatchProviderPreset,
+} from "./patch-provider.js";
 
 describe("resolvePatchProviderPreset", () => {
   test("returns the built-in stepfun provider patch with step-3.7-flash model", () => {
@@ -45,6 +49,48 @@ describe("resolvePatchProviderPreset", () => {
       summary: "provider.openai.models vv-codex-gpt-5.4/5.5/5.6 aliases patched",
     });
   });
+  test("returns the built-in kimi alias patch", () => {
+    expect(resolvePatchProviderPreset("kimi")).toMatchObject({
+      kind: "provider-object",
+      providerID: "moonshotai",
+      summary: "provider.moonshotai.models.vv-kimi-k3-max patched",
+    });
+    const value = JSON.parse(
+      JSON.stringify(
+        (resolvePatchProviderPreset("kimi") as { value: Record<string, unknown> }).value,
+      ),
+    );
+    expect(value.models["vv-kimi-k3-max"].id).toBe("kimi-k3");
+    expect(value.models["vv-kimi-k3-max"].options.reasoningEffort).toBe("max");
+  });
+
+  test("returns the built-in alibaba alias patch", () => {
+    expect(resolvePatchProviderPreset("alibaba")).toMatchObject({
+      kind: "provider-object",
+      providerID: "alibaba-token-plan",
+      summary: "provider.alibaba-token-plan.models.vv-qwen3.8-max-xhigh patched",
+    });
+    const value = JSON.parse(
+      JSON.stringify(
+        (resolvePatchProviderPreset("alibaba") as { value: Record<string, unknown> }).value,
+      ),
+    );
+    expect(value.models["vv-qwen3.8-max-xhigh"].id).toBe("qwen3.8-max");
+    expect(value.models["vv-qwen3.8-max-xhigh"].options.reasoningEffort).toBe("xhigh");
+  });
+
+  test("codex patch includes the vv-codex-gpt-5.6-luna-low alias", () => {
+    const value = JSON.parse(
+      JSON.stringify(
+        (resolvePatchProviderPreset("codex") as { value: Record<string, unknown> }).value,
+      ),
+    );
+    expect(value.models["vv-codex-gpt-5.6-luna-low"]).toMatchObject({
+      id: "gpt-5.6-luna",
+      limit: { input: 272000, context: 400000, output: 128000 },
+    });
+    expect(value.models["vv-codex-gpt-5.6-luna-low"].options.reasoningEffort).toBe("low");
+  });
 
   test("returns the built-in openai alias patch (compatibility)", () => {
     const compatibilityPreset = resolvePatchProviderPreset("openai");
@@ -58,7 +104,7 @@ describe("resolvePatchProviderPreset", () => {
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, kimi, alibaba. Compatibility aliases: openai",
     );
   });
 });
@@ -268,6 +314,74 @@ describe("applyPatchProviderPreset", () => {
       expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-sol-xhigh"]?.name).toBe(
         "VV Codex GPT-5.6 Sol XHigh",
       );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+  test("writes the global kimi alias patch idempotently", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
+
+    try {
+      const first = await applyPatchProviderPreset("kimi", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const second = await applyPatchProviderPreset("kimi", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
+      expect(first.result.action).toBe("created");
+      expect(second.result.action).toBe("kept");
+      expect(content).toContain("vv-kimi-k3-max");
+      expect(content).toContain("kimi-k3");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("writes the global alibaba alias patch idempotently", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
+
+    try {
+      const first = await applyPatchProviderPreset("alibaba", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const second = await applyPatchProviderPreset("alibaba", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
+      expect(first.result.action).toBe("created");
+      expect(second.result.action).toBe("kept");
+      expect(content).toContain("vv-qwen3.8-max-xhigh");
+      expect(content).toContain("qwen3.8-max");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("applyAllPatchProviderPresets applies every registered patch in order", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
+
+    try {
+      const results = await applyAllPatchProviderPresets({
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      expect(results.map((entry) => entry.preset)).toEqual([
+        "stepfun-ai",
+        "codex",
+        "kimi",
+        "alibaba",
+      ]);
+      expect(results.map((entry) => entry.result.action)).toEqual([
+        "created",
+        "updated",
+        "updated",
+        "updated",
+      ]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

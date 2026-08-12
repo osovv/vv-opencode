@@ -125,12 +125,11 @@ describe("init scenarios", () => {
       expect(vvocConfig.roles.default).toBeDefined();
       expect(vvocConfig.roles.smart).toBeDefined();
       expect(vvocConfig.roles.fast).toBeDefined();
-      expect(vvocConfig.roles.vision).toBeDefined();
       expect(vvocConfig.roles.reviewer).toBeDefined();
       expect(vvocConfig.presets["vv-codex"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-deepseek"]?.agents.default).toBeDefined();
-      expect(vvocConfig.presets["vv-osovv"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-osovv-sol"]?.agents.default).toBeDefined();
     } finally {
       rmSync(configHome, { recursive: true, force: true });
       rmSync(tmpDir, { recursive: true, force: true });

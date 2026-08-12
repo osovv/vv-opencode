@@ -109,7 +109,7 @@ test("generateBashCompletion - contains role command flow", () => {
   const output = generateBashCompletion();
   expect(output).toContain('local commands="set unset list"');
   expect(output).toContain("role:set");
-  expect(output).toContain("default smart fast vision");
+  expect(output).toContain("default smart fast");
   expect(output).toContain("_vvoc_role_ids");
   expect(output).not.toContain("role:unset)");
 });
@@ -117,7 +117,7 @@ test("generateBashCompletion - contains role command flow", () => {
 test("generateZshCompletion - contains role id commands", () => {
   const output = generateZshCompletion();
   expect(output).toContain("set)");
-  expect(output).toContain("default smart fast vision");
+  expect(output).toContain("default smart fast");
   expect(output).toContain("unset)");
   expect(output).toContain("<custom-role-id>");
 });
@@ -125,7 +125,7 @@ test("generateZshCompletion - contains role id commands", () => {
 test("generateFishCompletion - contains role id completions", () => {
   const output = generateFishCompletion();
   expect(output).toContain("function __vvoc_role_ids");
-  expect(output).toContain("echo default smart fast vision");
+  expect(output).toContain("echo default smart fast");
   expect(output).toContain("__fish_seen_subcommand_from set");
   expect(output).not.toContain(
     "__fish_seen_subcommand_from role; and __fish_seen_subcommand_from set unset",
@@ -136,9 +136,9 @@ test("completion scripts - contain patch-provider presets", () => {
   expect(generateBashCompletion()).toContain("_vvoc_patch_provider_presets");
   expect(generateZshCompletion()).toContain("_vvoc_patch_provider_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_patch_provider_cmds");
-  expect(generateBashCompletion()).toContain('local commands="stepfun-ai codex"');
-  expect(generateZshCompletion()).toContain("stepfun-ai codex");
-  expect(generateFishCompletion()).toContain("echo stepfun-ai codex");
+  expect(generateBashCompletion()).toContain('local commands="stepfun-ai codex kimi alibaba all"');
+  expect(generateZshCompletion()).toContain("stepfun-ai codex kimi alibaba all");
+  expect(generateFishCompletion()).toContain("echo stepfun-ai codex kimi alibaba all");
 });
 
 test("completion scripts - contain preset commands and default preset names", () => {
@@ -148,11 +148,13 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain(
-    "list show vv-codex vv-zai vv-deepseek vv-osovv vv-osovv-cheap",
+    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen",
   );
-  expect(generateZshCompletion()).toContain("vv-codex vv-zai vv-deepseek vv-osovv vv-osovv-cheap");
+  expect(generateZshCompletion()).toContain(
+    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen",
+  );
   expect(generateFishCompletion()).toContain(
-    "echo vv-codex vv-zai vv-deepseek vv-osovv vv-osovv-cheap",
+    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen",
   );
 });
 

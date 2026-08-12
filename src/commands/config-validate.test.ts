@@ -79,10 +79,9 @@ test("validateVvocConfigContent - role-based custom preset assignments pass", ()
         presets: {
           custom: {
             agents: {
-              default: "openai/gpt-5.4",
-              smart: "openai/gpt-5.4:xhigh",
-              fast: "openai/gpt-5.4-mini",
-              vision: "openai/gpt-5.4",
+              default: "openai/gpt-5.6-terra",
+              smart: "openai/gpt-5.6-sol:xhigh",
+              fast: "openai/gpt-5.6-luna",
             },
           },
         },
@@ -138,11 +137,10 @@ test("validateVvocConfigContent - missing required built-in role ids fails with 
       {
         ...createDefaultVvocConfig(),
         roles: {
-          default: "openai/gpt-5.4",
-          smart: "openai/vv-codex-gpt-5.5-xhigh",
-          fast: "openai/gpt-5.4-mini",
-          reviewer: "openai/gpt-5.4",
-          helper: "openai/gpt-5.4",
+          default: "openai/gpt-5.6-terra",
+          smart: "openai/gpt-5.6-sol",
+          fast: "openai/gpt-5.6-luna",
+          helper: "openai/gpt-5.6-luna",
         },
       },
       null,
@@ -153,7 +151,7 @@ test("validateVvocConfigContent - missing required built-in role ids fails with 
 
   expect(result.valid).toBe(false);
   expect(
-    result.errors.some((error) => error.includes('/roles missing required property "vision"')),
+    result.errors.some((error) => error.includes('/roles missing required property "reviewer"')),
   ).toBe(true);
 });
 

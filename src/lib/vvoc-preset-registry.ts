@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.4 - Dropped vv-minimax and dead zai fast/vision models; vv-zai fast=zai-coding-plan/glm-4.7, vision=openai/gpt-5.4; vv-osovv and vv-osovv-cheap vision=openai/gpt-5.4; zai smart/reviewer roles use the official plan flagship zai-coding-plan/glm-5.2.]
+//   LAST_CHANGE: [v1.2.4 - Nine-preset lineup without vision: vv-codex on the GPT-5.6 codex family (terra-high/luna-low/sol-xhigh), new vv-kimi and vv-alibaba branded presets, vv-osovv-sol/flash/kimi/qwen family sharing one base and differing only in smart.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -32,11 +32,10 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
   "vv-codex": {
     description: "Starter Codex subscription role assignments for built-in vvoc roles.",
     agents: {
-      default: "openai/gpt-5.4",
-      smart: "openai/vv-codex-gpt-5.5-xhigh",
-      fast: "openai/gpt-5.4-mini",
-      vision: "openai/gpt-5.4",
-      reviewer: "openai/gpt-5.4",
+      default: "openai/vv-codex-gpt-5.6-terra-high",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
+      smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
+      reviewer: "openai/vv-codex-gpt-5.6-sol-xhigh",
     },
     orchestration: { profile: "single-session" },
   },
@@ -44,9 +43,8 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Starter ZAI role assignments for built-in vvoc roles.",
     agents: {
       default: "zai-coding-plan/glm-5-turbo",
-      smart: "zai-coding-plan/glm-5.2",
       fast: "zai-coding-plan/glm-4.7",
-      vision: "openai/gpt-5.4",
+      smart: "zai-coding-plan/glm-5.2",
       reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "balanced" },
@@ -55,32 +53,69 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Starter DeepSeek role assignments for built-in vvoc roles.",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      smart: "deepseek/deepseek-v4-pro",
       fast: "deepseek/deepseek-v4-flash",
-      vision: "deepseek/deepseek-v4-pro",
+      smart: "deepseek/deepseek-v4-pro",
       reviewer: "deepseek/deepseek-v4-pro",
     },
     orchestration: { profile: "balanced" },
   },
-  "vv-osovv": {
-    description: "Personal osovv role assignments (deepseek + openai + zai).",
+  "vv-kimi": {
+    description: "Starter Moonshot role assignments for built-in vvoc roles.",
+    agents: {
+      default: "moonshotai/kimi-k3",
+      fast: "moonshotai/kimi-k2.7-code-highspeed",
+      smart: "moonshotai/vv-kimi-k3-max",
+      reviewer: "moonshotai/kimi-k2.7-code",
+    },
+    orchestration: { profile: "single-session" },
+  },
+  "vv-alibaba": {
+    description: "Starter Alibaba token plan role assignments for built-in vvoc roles.",
+    agents: {
+      default: "alibaba-token-plan/qwen3.8-max",
+      fast: "alibaba-token-plan/deepseek-v4-flash",
+      smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
+      reviewer: "alibaba-token-plan/glm-5.2",
+    },
+    orchestration: { profile: "single-session" },
+  },
+  "vv-osovv-sol": {
+    description: "Personal osovv stack with codex sol smart (deepseek + openai + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "openai/vv-codex-gpt-5.4-mini-low",
       smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
-      vision: "openai/gpt-5.4",
       reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "single-session" },
   },
-  "vv-osovv-cheap": {
-    description: "Cheap osovv role assignments (deepseek + openai).",
+  "vv-osovv-flash": {
+    description: "Personal osovv stack with deepseek v4 flash smart (deepseek + openai + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "openai/vv-codex-gpt-5.4-mini-low",
-      smart: "openai/vv-codex-gpt-5.6-terra-high",
-      vision: "openai/gpt-5.4",
-      reviewer: "deepseek/deepseek-v4-pro",
+      smart: "deepseek/deepseek-v4-flash",
+      reviewer: "zai-coding-plan/glm-5.2",
+    },
+    orchestration: { profile: "single-session" },
+  },
+  "vv-osovv-kimi": {
+    description: "Personal osovv stack with kimi k3 smart (deepseek + openai + kimi + zai).",
+    agents: {
+      default: "deepseek/deepseek-v4-flash",
+      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      smart: "moonshotai/vv-kimi-k3-max",
+      reviewer: "zai-coding-plan/glm-5.2",
+    },
+    orchestration: { profile: "single-session" },
+  },
+  "vv-osovv-qwen": {
+    description: "Personal osovv stack with qwen3.8 smart (deepseek + openai + qwen + zai).",
+    agents: {
+      default: "deepseek/deepseek-v4-flash",
+      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
+      reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "single-session" },
   },

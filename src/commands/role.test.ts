@@ -40,9 +40,9 @@ describe("role helpers", () => {
       "default",
       "smart",
       "fast",
-      "vision",
       "custom",
       "team",
+      "vision",
     ]);
   });
 

@@ -126,7 +126,6 @@ async function writeProjectLayer(projectDir: string): Promise<void> {
           default: "openai/gpt-5.4",
           smart: "openai/vv-codex-gpt-5.5-xhigh",
           fast: "openai/gpt-5.4-mini",
-          vision: "openai/gpt-5.4",
         },
         guardian: { timeoutMs: 90000, approvalRiskThreshold: 80, reviewToastDurationMs: 90000 },
         secretsRedaction: {

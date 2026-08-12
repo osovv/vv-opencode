@@ -30,7 +30,7 @@ import {
 
 describe("built-in roles", () => {
   test("exposes built-in role ids deterministically", () => {
-    expect(BUILTIN_ROLE_NAMES).toEqual(["default", "smart", "fast", "vision", "reviewer"]);
+    expect(BUILTIN_ROLE_NAMES).toEqual(["default", "smart", "fast", "reviewer"]);
 
     const bindings = getBuiltInRoleBindings();
     expect(bindings).toEqual({

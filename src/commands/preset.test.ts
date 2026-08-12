@@ -32,8 +32,12 @@ describe("preset helpers", () => {
       "vv-codex",
       "vv-zai",
       "vv-deepseek",
-      "vv-osovv",
-      "vv-osovv-cheap",
+      "vv-kimi",
+      "vv-alibaba",
+      "vv-osovv-sol",
+      "vv-osovv-flash",
+      "vv-osovv-kimi",
+      "vv-osovv-qwen",
     ]);
   });
 
@@ -47,8 +51,12 @@ describe("preset helpers", () => {
       "vv-codex": "single-session",
       "vv-zai": "balanced",
       "vv-deepseek": "balanced",
-      "vv-osovv": "single-session",
-      "vv-osovv-cheap": "single-session",
+      "vv-kimi": "single-session",
+      "vv-alibaba": "single-session",
+      "vv-osovv-sol": "single-session",
+      "vv-osovv-flash": "single-session",
+      "vv-osovv-kimi": "single-session",
+      "vv-osovv-qwen": "single-session",
     });
   });
 
@@ -56,7 +64,17 @@ describe("preset helpers", () => {
     const presets = listConfiguredPresets(createDefaultVvocConfig().presets).map(
       (entry) => entry.name,
     );
-    expect(presets).toEqual(["vv-codex", "vv-deepseek", "vv-osovv", "vv-osovv-cheap", "vv-zai"]);
+    expect(presets).toEqual([
+      "vv-alibaba",
+      "vv-codex",
+      "vv-deepseek",
+      "vv-kimi",
+      "vv-osovv-flash",
+      "vv-osovv-kimi",
+      "vv-osovv-qwen",
+      "vv-osovv-sol",
+      "vv-zai",
+    ]);
   });
 
   test("formatPreset renders the expected preset object", () => {
@@ -66,31 +84,28 @@ describe("preset helpers", () => {
     expect(output).toContain(
       '"description": "Starter Codex subscription role assignments for built-in vvoc roles."',
     );
-    expect(output).toContain('"default": "openai/gpt-5.4"');
-    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.5-xhigh"');
-    expect(output).toContain('"fast": "openai/gpt-5.4-mini"');
-    expect(output).toContain('"vision": "openai/gpt-5.4"');
-    expect(output).toContain('"profile": "single-session"');
+    expect(output).toContain('"default": "openai/vv-codex-gpt-5.6-terra-high"');
+    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
+    expect(output).toContain('"reviewer": "openai/vv-codex-gpt-5.6-sol-xhigh"');
   });
 
-  test("formatPreset renders all five vv-osovv role assignments", () => {
-    const resolved = resolvePreset("vv-osovv", createDefaultVvocConfig().presets);
+  test("formatPreset renders all four vv-osovv-sol role assignments", () => {
+    const resolved = resolvePreset("vv-osovv-sol", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
-    expect(output).toContain('"vision": "openai/gpt-5.4"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
   });
 
-  test("formatPreset renders all five vv-osovv-cheap role assignments", () => {
-    const resolved = resolvePreset("vv-osovv-cheap", createDefaultVvocConfig().presets);
+  test("formatPreset renders all four vv-osovv-flash role assignments", () => {
+    const resolved = resolvePreset("vv-osovv-flash", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
-    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-terra-high"');
-    expect(output).toContain('"vision": "openai/gpt-5.4"');
-    expect(output).toContain('"reviewer": "deepseek/deepseek-v4-pro"');
+    expect(output).toContain('"smart": "deepseek/deepseek-v4-flash"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
   });
 });
 
@@ -144,7 +159,6 @@ describe("applyPreset", () => {
       expect(vvocConfig?.roles.default).toBe("openai/gpt-5.4");
       expect(vvocConfig?.roles.smart).toBe("openai/gpt-5.4:xhigh");
       expect(vvocConfig?.roles.fast).toBe(defaultConfig.roles.fast);
-      expect(vvocConfig?.roles.vision).toBe(defaultConfig.roles.vision);
       expect(vvocConfig?.roles["team-review"]).toBe("anthropic/claude-sonnet-4-5:high");
       expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
 
@@ -175,7 +189,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-codex, vv-deepseek, vv-osovv, vv-osovv-cheap, vv-zai",
+        "unknown preset: missing. Available presets: vv-alibaba, vv-codex, vv-deepseek, vv-kimi, vv-osovv-flash, vv-osovv-kimi, vv-osovv-qwen, vv-osovv-sol, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -296,12 +310,16 @@ describe("applyPreset", () => {
 
       const bootstrapped = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       expect(bootstrapped.version).toBe(3);
-      expect(bootstrapped.roles.default).toBe("openai/gpt-5.4");
-      expect(bootstrapped.roles.smart).toBe("openai/vv-codex-gpt-5.5-xhigh");
+      expect(bootstrapped.roles.default).toBe("openai/vv-codex-gpt-5.6-terra-high");
+      expect(bootstrapped.roles.smart).toBe("openai/vv-codex-gpt-5.6-sol-xhigh");
       expect(bootstrapped.orchestration).toEqual({ profile: "single-session" });
       expect(applied.orchestration).toEqual({ profile: "single-session", action: "updated" });
-      expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe("openai/gpt-5.4");
-      expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe("openai/vv-codex-gpt-5.5-xhigh");
+      expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe(
+        "openai/vv-codex-gpt-5.6-terra-high",
+      );
+      expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe(
+        "openai/vv-codex-gpt-5.6-sol-xhigh",
+      );
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
@@ -461,7 +479,6 @@ describe("applyPreset", () => {
       expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5-turbo");
       expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.2");
       expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.7");
-      expect(vvocConfig?.roles.vision).toBe("openai/gpt-5.4");
       expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
     } finally {
       await rm(configHome, { recursive: true, force: true });
