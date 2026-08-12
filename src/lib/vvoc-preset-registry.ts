@@ -83,7 +83,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv stack with codex sol smart (deepseek + openai + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
       reviewer: "zai-coding-plan/glm-5.2",
     },
@@ -93,7 +93,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv stack with deepseek v4 flash smart (deepseek + openai + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "deepseek/deepseek-v4-flash",
       reviewer: "zai-coding-plan/glm-5.2",
     },
@@ -103,7 +103,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv stack with kimi k3 smart (deepseek + openai + kimi + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "moonshotai/vv-kimi-k3-max",
       reviewer: "zai-coding-plan/glm-5.2",
     },
@@ -113,7 +113,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     description: "Personal osovv stack with qwen3.8 smart (deepseek + openai + qwen + zai).",
     agents: {
       default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-codex-gpt-5.4-mini-low",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
       reviewer: "zai-coding-plan/glm-5.2",
     },

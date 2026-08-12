@@ -94,7 +94,7 @@ describe("preset helpers", () => {
     const resolved = resolvePreset("vv-osovv-sol", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
   });
@@ -103,7 +103,7 @@ describe("preset helpers", () => {
     const resolved = resolvePreset("vv-osovv-flash", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.4-mini-low"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"smart": "deepseek/deepseek-v4-flash"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
   });
