@@ -1,3 +1,11 @@
+## <small>1.2.6 (2026-08-13)</small>
+
+### Summary
+
+Version 1.2.6 adds DeepSeek to the provider patching workflow. `vvoc patch-provider` now accepts a `deepseek` preset that installs the `vv-deepseek-v4-flash-max` alias with max reasoning effort and official text modalities, so users can opt into the higher-reasoning variant without hand-editing OpenCode config. The default preset lineup now routes the `smart` agent role to that alias, the `deepseek` preset is included in the `all` patch and in shell completions, and every patched provider (stepfun-ai, codex, kimi, alibaba) now declares its official input/output modalities so models are advertised with accurate text, image, video, and PDF capabilities.
+
+* feat(presets): add deepseek vv-deepseek-v4-flash-max alias with official modalities ([0e9fe65](https://github.com/osovv/vv-opencode/commit/0e9fe65))
+
 ## <small>1.2.5 (2026-08-12)</small>
 
 ### Summary
