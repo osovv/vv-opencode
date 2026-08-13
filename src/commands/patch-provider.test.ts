@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.4 - Added kimi and alibaba alias patch tests plus applyAllPatchProviderPresets coverage.]
+//   LAST_CHANGE: [v1.2.6 - Added the deepseek alias patch tests and official modalities across all patched models.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -39,7 +39,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(value.options.baseURL).toBe("https://api.stepfun.ai/v1");
     expect(value.models["step-3.7-flash"].name).toBe("Step 3.7 Flash");
     expect(value.models["step-3.7-flash"].limit.context).toBe(256000);
-    expect(value.models["step-3.7-flash"].modalities.input).toEqual(["text", "image"]);
+    expect(value.models["step-3.7-flash"].modalities.input).toEqual(["text", "image", "video"]);
   });
 
   test("returns the built-in codex alias patch (canonical)", () => {
@@ -79,6 +79,24 @@ describe("resolvePatchProviderPreset", () => {
     expect(value.models["vv-qwen3.8-max-xhigh"].options.reasoningEffort).toBe("xhigh");
   });
 
+  test("returns the built-in deepseek alias patch", () => {
+    expect(resolvePatchProviderPreset("deepseek")).toMatchObject({
+      kind: "provider-object",
+      providerID: "deepseek",
+      summary: "provider.deepseek.models.vv-deepseek-v4-flash-max patched",
+    });
+    const value = JSON.parse(
+      JSON.stringify(
+        (resolvePatchProviderPreset("deepseek") as { value: Record<string, unknown> }).value,
+      ),
+    );
+    expect(value.models["vv-deepseek-v4-flash-max"].id).toBe("deepseek-v4-flash");
+    expect(value.models["vv-deepseek-v4-flash-max"].options.reasoningEffort).toBe("max");
+    expect(value.models["vv-deepseek-v4-flash-max"].modalities).toEqual({
+      input: ["text"],
+      output: ["text"],
+    });
+  });
   test("codex patch includes the vv-codex-gpt-5.6-luna-low alias", () => {
     const value = JSON.parse(
       JSON.stringify(
@@ -104,7 +122,7 @@ describe("resolvePatchProviderPreset", () => {
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, kimi, alibaba. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba. Compatibility aliases: openai",
     );
   });
 });
@@ -158,6 +176,10 @@ describe("applyPatchProviderPreset", () => {
                   input?: number;
                   output?: number;
                 };
+                modalities?: {
+                  input?: string[];
+                  output?: string[];
+                };
                 options?: {
                   reasoningEffort?: string;
                   reasoningSummary?: string;
@@ -181,6 +203,10 @@ describe("applyPatchProviderPreset", () => {
           input: 272000,
           output: 128000,
         },
+        modalities: {
+          input: ["text", "image", "pdf"],
+          output: ["text"],
+        },
         reasoning: true,
         options: {
           reasoningEffort: "xhigh",
@@ -197,6 +223,10 @@ describe("applyPatchProviderPreset", () => {
           input: 272000,
           output: 128000,
         },
+        modalities: {
+          input: ["text", "image", "pdf"],
+          output: ["text"],
+        },
         reasoning: true,
         options: {
           reasoningEffort: "high",
@@ -212,6 +242,10 @@ describe("applyPatchProviderPreset", () => {
           context: 400000,
           input: 272000,
           output: 128000,
+        },
+        modalities: {
+          input: ["text", "image", "pdf"],
+          output: ["text"],
         },
         reasoning: true,
         options: {
@@ -343,6 +377,28 @@ describe("applyPatchProviderPreset", () => {
     }
   });
 
+  test("writes the global deepseek alias patch idempotently", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
+
+    try {
+      const first = await applyPatchProviderPreset("deepseek", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const second = await applyPatchProviderPreset("deepseek", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
+      expect(first.result.action).toBe("created");
+      expect(second.result.action).toBe("kept");
+      expect(content).toContain("vv-deepseek-v4-flash-max");
+      expect(content).toContain("deepseek-v4-flash");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
   test("applyAllPatchProviderPresets applies every registered patch in order", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
@@ -354,11 +410,13 @@ describe("applyPatchProviderPreset", () => {
       expect(results.map((entry) => entry.preset)).toEqual([
         "stepfun-ai",
         "codex",
+        "deepseek",
         "kimi",
         "alibaba",
       ]);
       expect(results.map((entry) => entry.result.action)).toEqual([
         "created",
+        "updated",
         "updated",
         "updated",
         "updated",

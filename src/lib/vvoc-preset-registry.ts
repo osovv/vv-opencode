@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.4 - Nine-preset lineup without vision: vv-codex on the GPT-5.6 codex family (terra-high/luna-low/sol-xhigh), new vv-kimi and vv-alibaba branded presets, vv-osovv-sol/flash/kimi/qwen family sharing one base and differing only in smart.]
+//   LAST_CHANGE: [v1.2.6 - vv-osovv-flash smart switches to the deepseek/vv-deepseek-v4-flash-max reasoning-effort alias.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -94,7 +94,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
-      smart: "deepseek/deepseek-v4-flash",
+      smart: "deepseek/vv-deepseek-v4-flash-max",
       reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "single-session" },

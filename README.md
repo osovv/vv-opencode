@@ -276,7 +276,7 @@ The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plug
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
 | `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
-| `vvoc patch-provider stepfun-ai\|codex\|kimi\|alibaba\|all` | Patch OpenCode providers; `codex` adds subscription-safe OpenAI aliases (also accepts `openai`), `kimi`/`alibaba` add vv- reasoning-effort aliases, `all` patches every provider at once |
+| `vvoc patch-provider stepfun-ai\|codex\|deepseek\|kimi\|alibaba\|all` | Patch OpenCode providers; `codex` adds subscription-safe OpenAI aliases (also accepts `openai`), `deepseek`/`kimi`/`alibaba` add vv- reasoning-effort aliases, `all` patches every provider at once |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc version` | Print installed version |

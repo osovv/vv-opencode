@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.4 - Added vv-codex-gpt-5.6-luna-low to the openai patch, new kimi/alibaba alias patches, and the `all` preset that patches every provider at once.]
+//   LAST_CHANGE: [v1.2.6 - Added the deepseek alias patch (vv-deepseek-v4-flash-max) and official modalities across all patched models.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -58,7 +58,7 @@ const STEPFUN_PATCH = {
         output: 256000,
       },
       modalities: {
-        input: ["text", "image"],
+        input: ["text", "image", "video"],
         output: ["text"],
       },
     },
@@ -76,6 +76,10 @@ const OPENAI_PATCH = {
         input: 272000,
         output: 128000,
       },
+      modalities: {
+        input: ["text", "image", "pdf"],
+        output: ["text"],
+      },
       reasoning: true,
       options: {
         reasoningEffort: "xhigh",
@@ -91,6 +95,10 @@ const OPENAI_PATCH = {
         context: 400000,
         input: 272000,
         output: 128000,
+      },
+      modalities: {
+        input: ["text", "image", "pdf"],
+        output: ["text"],
       },
       reasoning: true,
       options: {
@@ -108,6 +116,10 @@ const OPENAI_PATCH = {
         input: 272000,
         output: 128000,
       },
+      modalities: {
+        input: ["text", "image", "pdf"],
+        output: ["text"],
+      },
       reasoning: true,
       options: {
         reasoningEffort: "xhigh",
@@ -123,6 +135,10 @@ const OPENAI_PATCH = {
         context: 400000,
         input: 272000,
         output: 128000,
+      },
+      modalities: {
+        input: ["text", "image", "pdf"],
+        output: ["text"],
       },
       reasoning: true,
       options: {
@@ -144,6 +160,10 @@ const KIMI_PATCH = {
         context: 1000000,
         output: 1000000,
       },
+      modalities: {
+        input: ["text", "image", "video"],
+        output: ["text"],
+      },
       reasoning: true,
       options: {
         reasoningEffort: "max",
@@ -162,9 +182,35 @@ const ALIBABA_PATCH = {
         context: 1000000,
         output: 131072,
       },
+      modalities: {
+        input: ["text", "image", "video", "pdf"],
+        output: ["text"],
+      },
       reasoning: true,
       options: {
         reasoningEffort: "xhigh",
+      },
+    },
+  },
+} as const satisfies Record<string, unknown>;
+
+const DEEPSEEK_PATCH = {
+  models: {
+    "vv-deepseek-v4-flash-max": {
+      name: "VV DeepSeek V4 Flash Max",
+      id: "deepseek-v4-flash",
+      variants: {},
+      limit: {
+        context: 1000000,
+        output: 384000,
+      },
+      modalities: {
+        input: ["text"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "max",
       },
     },
   },
@@ -182,6 +228,12 @@ const PATCH_PROVIDER_PRESETS = {
     providerID: "openai",
     value: OPENAI_PATCH,
     summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
+  },
+  deepseek: {
+    kind: "provider-object",
+    providerID: "deepseek",
+    value: DEEPSEEK_PATCH,
+    summary: "provider.deepseek.models.vv-deepseek-v4-flash-max patched",
   },
   kimi: {
     kind: "provider-object",

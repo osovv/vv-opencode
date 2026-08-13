@@ -104,7 +104,7 @@ describe("preset helpers", () => {
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
-    expect(output).toContain('"smart": "deepseek/deepseek-v4-flash"');
+    expect(output).toContain('"smart": "deepseek/vv-deepseek-v4-flash-max"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
   });
 });
