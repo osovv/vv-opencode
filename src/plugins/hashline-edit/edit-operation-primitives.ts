@@ -1,39 +1,39 @@
 // FILE: src/plugins/hashline-edit/edit-operation-primitives.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Apply validated hashline edit operations to an in-memory file snapshot one mutation at a time.
-//   SCOPE: Single-line replace, range replace, anchored insert-before/after, and BOF/EOF insert helpers.
-//   DEPENDS: [src/plugins/hashline-edit/autocorrect-replacement-lines.ts, src/plugins/hashline-edit/edit-text-normalization.ts, src/plugins/hashline-edit/validation.ts]
+//   PURPOSE: Apply validated hashline edit operations literally to an in-memory file snapshot one mutation at a time.
+//   SCOPE: Single-line replace, range replace, anchored insert-before/after with exact-match echo trimming, and BOF/EOF insert helpers that preserve trailing-newline sentinels.
+//   DEPENDS: [src/plugins/hashline-edit/edit-text-normalization.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   applySetLine - Replace or delete a single anchored line.
-//   applyReplaceLines - Replace or delete an inclusive anchored line range.
-//   applyInsertAfter - Insert lines after an anchored line.
-//   applyInsertBefore - Insert lines before an anchored line.
-//   applyAppend - Insert lines at EOF, creating content for an empty file.
+//   EditApplyOptions - Optional validation skip and warning collector for primitive apply calls.
+//   applySetLine - Replace or delete a single anchored line literally.
+//   applyReplaceLines - Replace or delete an inclusive anchored line range literally, trimming only exact boundary echoes.
+//   applyInsertAfter - Insert lines after an anchored line, trimming only an exact anchor echo.
+//   applyInsertBefore - Insert lines before an anchored line, trimming only an exact anchor echo.
+//   applyAppend - Insert lines at EOF without creating a phantom blank line before the trailing newline.
 //   applyPrepend - Insert lines at BOF, creating content for an empty file.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [v0.2.0 - Removed autocorrect and indent restoration, switched echo trimming to exact-match with warnings, and fixed EOF append inserting a phantom blank line before the trailing newline.]
 // END_CHANGE_SUMMARY
 
-import { autocorrectReplacementLines } from "./autocorrect-replacement-lines.js";
 import {
-  restoreLeadingIndent,
-  stripInsertAnchorEcho,
-  stripInsertBeforeEcho,
-  stripRangeBoundaryEcho,
+  stripExactBoundaryEchoes,
+  stripExactInsertBeforeEcho,
+  stripExactInsertEcho,
   toNewLines,
 } from "./edit-text-normalization.js";
 import { parseLineRef, validateLineRef } from "./validation.js";
 
-interface EditApplyOptions {
+export interface EditApplyOptions {
   skipValidation?: boolean;
+  onWarning?: (message: string) => void;
 }
 
 function shouldValidate(options?: EditApplyOptions): boolean {
@@ -52,15 +52,7 @@ export function applySetLine(
 
   const { line } = parseLineRef(anchor);
   const result = [...lines];
-  const originalLine = lines[line - 1] ?? "";
-  const normalized = newText === null ? [] : toNewLines(newText);
-  const corrected = autocorrectReplacementLines([originalLine], normalized);
-  const replacement = corrected.map((entry, index) => {
-    if (index !== 0) {
-      return entry;
-    }
-    return restoreLeadingIndent(originalLine, entry);
-  });
+  const replacement = newText === null ? [] : toNewLines(newText);
 
   if (replacement.length > 1) {
     throw new Error(
@@ -94,18 +86,16 @@ export function applyReplaceLines(
   }
 
   const result = [...lines];
-  const originalRange = lines.slice(startLine - 1, endLine);
   const normalized = newText === null ? [] : toNewLines(newText);
-  const stripped = stripRangeBoundaryEcho(lines, startLine, endLine, normalized);
-  const corrected = autocorrectReplacementLines(originalRange, stripped);
-  const restored = corrected.map((entry, index) => {
-    if (index !== 0) {
-      return entry;
-    }
-    return restoreLeadingIndent(lines[startLine - 1] ?? "", entry);
-  });
+  const trimmed = stripExactBoundaryEchoes(lines, startLine, endLine, normalized);
+  const dropped = trimmed.droppedLeading + trimmed.droppedTrailing;
+  if (dropped > 0) {
+    options?.onWarning?.(
+      `replace_range lines ${startLine}-${endLine}: dropped ${dropped} exact boundary echo line(s) duplicating surviving neighbors; the rest of the payload was applied literally`,
+    );
+  }
 
-  result.splice(startLine - 1, endLine - startLine + 1, ...restored);
+  result.splice(startLine - 1, endLine - startLine + 1, ...trimmed.lines);
   return result;
 }
 
@@ -121,12 +111,17 @@ export function applyInsertAfter(
 
   const { line } = parseLineRef(anchor);
   const result = [...lines];
-  const newLines = stripInsertAnchorEcho(lines[line - 1] ?? "", toNewLines(text));
-  if (newLines.length === 0) {
+  const trimmed = stripExactInsertEcho(lines[line - 1] ?? "", toNewLines(text));
+  if (trimmed.stripped > 0) {
+    options?.onWarning?.(
+      `append at line ${line}: dropped payload line identical to the anchor line`,
+    );
+  }
+  if (trimmed.lines.length === 0) {
     throw new Error(`append (anchored) requires non-empty text for ${anchor}`);
   }
 
-  result.splice(line, 0, ...newLines);
+  result.splice(line, 0, ...trimmed.lines);
   return result;
 }
 
@@ -142,12 +137,17 @@ export function applyInsertBefore(
 
   const { line } = parseLineRef(anchor);
   const result = [...lines];
-  const newLines = stripInsertBeforeEcho(lines[line - 1] ?? "", toNewLines(text));
-  if (newLines.length === 0) {
+  const trimmed = stripExactInsertBeforeEcho(lines[line - 1] ?? "", toNewLines(text));
+  if (trimmed.stripped > 0) {
+    options?.onWarning?.(
+      `prepend at line ${line}: dropped payload line identical to the anchor line`,
+    );
+  }
+  if (trimmed.lines.length === 0) {
     throw new Error(`prepend (anchored) requires non-empty text for ${anchor}`);
   }
 
-  result.splice(line - 1, 0, ...newLines);
+  result.splice(line - 1, 0, ...trimmed.lines);
   return result;
 }
 
@@ -158,6 +158,12 @@ export function applyAppend(lines: string[], text: string | string[]): string[] 
   }
   if (lines.length === 1 && lines[0] === "") {
     return [...normalized];
+  }
+  // A newline-terminated file splits into a trailing "" sentinel. Append
+  // before it so no phantom blank line is created and the final newline is
+  // preserved.
+  if (lines.length > 1 && lines[lines.length - 1] === "") {
+    return [...lines.slice(0, -1), ...normalized, ""];
   }
   return [...lines, ...normalized];
 }

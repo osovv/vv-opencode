@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit.edit-operations.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline batch edit ordering, deduplication, and primitive failure handling.
-//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, and BOF/EOF insertion into empty files.
+//   SCOPE: Overlapping and non-overlapping range edits, range/delete insert conflict rejection, same-line precedence, same-anchor insert ordering, repeated BOF prepends, dedupe across anchor normalization, empty anchored insert rejection, BOF/EOF insertion into empty files, trailing-newline sentinel appending, and echo-trim warning propagation.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/types.ts]
 //   LINKS: M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Restored valid file-local GRACE anchors after hashline read prefixes were embedded in metadata.]
+//   LAST_CHANGE: [v0.7.0 - Added trailing-newline sentinel append and batch warning-propagation coverage for literal application.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -215,5 +215,42 @@ describe("hashline edit-operations", () => {
     expect(() => applyHashlineEditsWithReport(content, edits)).toThrow(
       /single-line replacement only/,
     );
+  });
+  test("appends before the trailing newline sentinel", () => {
+    expect(applyAppend(["line1", ""], ["line2"])).toEqual(["line1", "line2", ""]);
+  });
+
+  test("appends literally after a real blank last line of an unterminated file", () => {
+    expect(applyAppend(["line1", " "], ["line2"])).toEqual(["line1", " ", "line2"]);
+  });
+
+  test("surfaces echo-trim warnings in the batch report", () => {
+    const content = "line 1\nline 2\nline 3";
+    const lines = content.split("\n");
+
+    const report = applyHashlineEditsWithReport(content, [
+      {
+        op: "replace_range",
+        pos: anchorFor(lines, 2),
+        end: anchorFor(lines, 2),
+        lines: ["line 1", "new 2", "line 3"],
+      },
+    ]);
+
+    expect(report.content).toBe("line 1\nnew 2\nline 3");
+    expect(report.warnings.length).toBe(1);
+    expect(report.warnings[0]).toContain("exact boundary echo");
+  });
+
+  test("returns no warnings for literal batches", () => {
+    const content = "line 1\nline 2";
+    const lines = content.split("\n");
+
+    const report = applyHashlineEditsWithReport(content, [
+      { op: "replace", pos: anchorFor(lines, 2), lines: ["changed"] },
+    ]);
+
+    expect(report.content).toBe("line 1\nchanged");
+    expect(report.warnings).toEqual([]);
   });
 });

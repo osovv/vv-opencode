@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit override.
-//   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, structural operation choice, and stale-anchor recovery.
+//   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, operation choice, literal payload semantics, and stale-anchor recovery.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -12,8 +12,9 @@
 // START_MODULE_MAP
 //   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `edit` tool.
 // END_MODULE_MAP
+//
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Directed adjacent block insertions to append/prepend, required intentional closure preservation, and corrected malformed examples.]
+//   LAST_CHANGE: [v0.8.0 - Documented literal application, physical single-line entries, blank-payload rejection, exact echo trimming with warnings, and the post-edit diff summary.]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 
@@ -24,11 +25,15 @@ export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored l
    CORRECT: pos on the first line to replace, end on the LAST line to replace — not the line after.
 4. lines must contain ONLY the content that belongs inside the replaced range. Lines AFTER end survive unchanged — do NOT include them in lines. If you do, they will appear twice.
    INSERTION SAFETY: To add a function, handler, statement, or block NEXT TO existing code, use append/prepend anchored to a surviving line. To add code AFTER a closed block, append after its final structural closing line. Do NOT replace that closing line merely to reproduce it and add content after it.
-   STRUCTURAL CLOSURES: If replace_range intentionally consumes lines containing closing syntax such as }, });, ], ), );, or </tag>, lines MUST include every closure required by the resulting code. Never assume autocorrect reconstructs omitted closing syntax.
+   STRUCTURAL CLOSURES: If replace_range intentionally consumes lines containing closing syntax such as }, });, ], ), );, or </tag>, lines MUST include every closure required by the resulting code. Never assume the tool reconstructs omitted closing syntax.
 5. Tags MUST be copied exactly from read output or >>> mismatch output. NEVER guess or reconstruct tags.
 6. Batch = multiple operations in edits[], NOT one big replace covering everything. Each operation targets the smallest possible change.
 7. lines must contain plain replacement text only (no LINE#HASH#ANCHOR| prefixes, no diff + markers).
 8. CRITICAL: Double-quote characters inside lines strings MUST be escaped as \\". Unescaped \\" inside a JSON string will break the parser. Example: ["const x = \\"hello\\";"] — NOT ["const x = "hello";"]. Single quotes and backticks do NOT need escaping.
+9. LITERAL APPLICATION: payloads are applied byte-for-byte. There is NO merging, splitting, indentation fixing, or other content rewriting. The only automatic removals are exact duplicate echoes, and each one is reported as a Warning line in the result.
+10. PHYSICAL LINES: every string[] entry in lines must be exactly one physical line. Entries with embedded newlines are rejected. A string value is split on newlines.
+11. DELETION: to delete lines use lines: [] or lines: null with replace/replace_range. lines: [""] is REJECTED because a single blank line is ambiguous — use append/prepend when you really want to insert a blank line.
+12. VERIFY: successful results include a bounded diff (@@ block) of what changed. Check that it matches your intent before moving on.
 </must>
 
 <operations>
@@ -44,8 +49,9 @@ OPERATION CHOICE:
   append/prepend without pos -> EOF/BOF insertion (also creates missing files)
 
 CONTENT FORMAT:
-  lines: string (single line) or string[] (multi-line, preferred)
-  lines: null or lines: [] with replace -> DELETE those lines
+  lines: string (single line) or string[] (multi-line, preferred); each array entry is exactly one physical line
+  lines: null or lines: [] with replace/replace_range -> DELETE those lines
+  lines: [""] with replace/replace_range -> REJECTED (ambiguous); use [] / null to delete, append/prepend to insert blank lines
 
 FILE MODES:
   delete=true deletes file and requires edits=[] with no rename
@@ -91,12 +97,11 @@ When a structural rewrite really changes both opening and closing syntax:
 </examples>
 
 <auto>
-Built-in autocorrect (you do NOT need to handle these):
-  Merged lines are auto-expanded back to original line count.
-  Indentation is auto-restored from original lines.
+Built-in normalization (you do NOT need to handle these):
   BOM and CRLF line endings are preserved automatically.
-  Hashline prefixes and diff markers in text are auto-stripped.
-  Boundary echo lines exactly duplicating adjacent surviving lines are auto-stripped.
+  Hashline prefixes and diff + markers copied into text are auto-stripped.
+  Exact duplicate echoes are dropped and reported as Warning lines: a payload line identical to the append/prepend anchor line, or a range payload longer than its range whose first/last line exactly duplicates a surviving neighbor.
+Everything else is applied literally — no merging, splitting, or indentation fixes.
 </auto>
 
 Recovery:

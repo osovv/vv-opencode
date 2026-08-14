@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/edit-operations.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Validate, order, deduplicate, and apply a batch of hashline edit operations against a file snapshot.
-//   SCOPE: Batch region computation, comprehensive conflict detection covering all mutation types, exact-edit deduplication, bottom-up application ordering, and no-op reporting.
+//   PURPOSE: Validate, order, deduplicate, and apply a batch of hashline edit operations literally against a file snapshot while collecting apply warnings.
+//   SCOPE: Batch region computation, comprehensive conflict detection covering all mutation types, exact-edit deduplication, bottom-up application ordering, no-op reporting, and warning aggregation.
 //   DEPENDS: [src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/types.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -10,12 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineApplyReport - Result shape returned after applying a batch of hashline edits.
-//   applyHashlineEditsWithReport - Validate and apply a batch of edits while reporting no-ops and deduplicated operations.
+//   HashlineApplyReport - Result shape returned after applying a batch of hashline edits, including apply warnings.
+//   applyHashlineEditsWithReport - Validate and apply a batch of edits literally while reporting no-ops, deduplicated operations, and echo-trim warnings.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Added replace_range support alongside replace to prevent accidental end-boundary errors.]
+//   LAST_CHANGE: [v0.7.0 - Application is literal: primitives receive a warning collector and HashlineApplyReport surfaces echo-trim warnings.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -210,6 +210,7 @@ export interface HashlineApplyReport {
   content: string;
   noopEdits: number;
   deduplicatedEdits: number;
+  warnings: string[];
 }
 
 export function applyHashlineEditsWithReport(
@@ -221,6 +222,7 @@ export function applyHashlineEditsWithReport(
       content,
       noopEdits: 0,
       deduplicatedEdits: 0,
+      warnings: [],
     };
   }
 
@@ -261,6 +263,12 @@ export function applyHashlineEditsWithReport(
 
   let lines = content.length === 0 ? [] : content.split("\n");
 
+  const warnings: string[] = [];
+  const applyOptions = {
+    skipValidation: true,
+    onWarning: (message: string) => warnings.push(message),
+  };
+
   const regions = computeEditRegions(sortedEdits);
   validateBatchConflicts(regions);
 
@@ -272,19 +280,19 @@ export function applyHashlineEditsWithReport(
     let next = lines;
     switch (edit.op) {
       case "replace_range":
-        next = applyReplaceLines(lines, edit.pos, edit.end, edit.lines, { skipValidation: true });
+        next = applyReplaceLines(lines, edit.pos, edit.end, edit.lines, applyOptions);
         break;
       case "replace":
-        next = applySetLine(lines, edit.pos, edit.lines, { skipValidation: true });
+        next = applySetLine(lines, edit.pos, edit.lines, applyOptions);
         break;
       case "append":
         next = edit.pos
-          ? applyInsertAfter(lines, edit.pos, edit.lines, { skipValidation: true })
+          ? applyInsertAfter(lines, edit.pos, edit.lines, applyOptions)
           : applyAppend(lines, edit.lines);
         break;
       case "prepend":
         next = edit.pos
-          ? applyInsertBefore(lines, edit.pos, edit.lines, { skipValidation: true })
+          ? applyInsertBefore(lines, edit.pos, edit.lines, applyOptions)
           : applyPrepend(lines, edit.lines);
         break;
     }
@@ -298,6 +306,7 @@ export function applyHashlineEditsWithReport(
   return {
     content: lines.join("\n"),
     noopEdits,
+    warnings,
     deduplicatedEdits: dedupeResult.deduplicatedEdits,
   };
 }

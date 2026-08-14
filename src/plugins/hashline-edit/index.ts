@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output with context-anchored hash references.
-//   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, file mutation execution, and success metadata emission.
+//   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, literal file mutation execution, bounded post-edit diff feedback, and success metadata emission.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Hardened rename: path-equivalent source/target are detected via resolve() to avoid write-then-delete data loss, and an existing rename target is refused instead of being silently clobbered.]
+//   LAST_CHANGE: [v0.7.0 - Successful edits now report line deltas, apply warnings, and a bounded diff in the tool output; application is literal.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
@@ -71,6 +71,63 @@ function findFirstChangedLine(beforeContent: string, afterContent: string): numb
     }
   }
   return undefined;
+}
+const DIFF_CONTEXT_LINES = 2;
+const DIFF_MAX_RENDERED_LINES = 40;
+
+interface EditDiffSummary {
+  additions: number;
+  deletions: number;
+  rendered: string[];
+}
+
+function summarizeEditDiff(beforeContent: string, afterContent: string): EditDiffSummary {
+  const before = beforeContent.length === 0 ? [] : beforeContent.split("\n");
+  const after = afterContent.length === 0 ? [] : afterContent.split("\n");
+
+  const minLen = Math.min(before.length, after.length);
+  let prefix = 0;
+  while (prefix < minLen && before[prefix] === after[prefix]) {
+    prefix += 1;
+  }
+
+  let suffix = 0;
+  while (
+    suffix < minLen - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  const removed = before.slice(prefix, before.length - suffix);
+  const added = after.slice(prefix, after.length - suffix);
+  if (removed.length === 0 && added.length === 0) {
+    return { additions: 0, deletions: 0, rendered: [] };
+  }
+
+  const rendered: string[] = [`@@ changed lines ${prefix + 1} @@`];
+  const contextStart = Math.max(0, prefix - DIFF_CONTEXT_LINES);
+  for (let i = contextStart; i < prefix; i += 1) {
+    rendered.push(`  ${before[i]}`);
+  }
+  for (const line of removed) {
+    rendered.push(`- ${line}`);
+  }
+  for (const line of added) {
+    rendered.push(`+ ${line}`);
+  }
+  const tailStart = before.length - suffix;
+  const contextEnd = Math.min(before.length, tailStart + DIFF_CONTEXT_LINES);
+  for (let i = tailStart; i < contextEnd; i += 1) {
+    rendered.push(`  ${before[i]}`);
+  }
+
+  if (rendered.length > DIFF_MAX_RENDERED_LINES) {
+    const kept = rendered.slice(0, DIFF_MAX_RENDERED_LINES - 1);
+    kept.push(`… (${rendered.length - kept.length} more diff lines)`);
+    return { additions: added.length, deletions: removed.length, rendered: kept };
+  }
+  return { additions: added.length, deletions: removed.length, rendered };
 }
 
 function publishSuccessMetadata(args: {
@@ -430,7 +487,25 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
       deduplicatedEdits: applyResult.deduplicatedEdits,
     });
 
-    return isMove ? `Moved ${filePath} to ${rename}` : `Updated ${effectivePath}`;
+    const diffSummary = summarizeEditDiff(oldEnvelope.content, canonicalNewContent);
+    const firstChangedLine = findFirstChangedLine(oldEnvelope.content, canonicalNewContent);
+    const stats = `+${diffSummary.additions}/-${diffSummary.deletions}${
+      firstChangedLine !== undefined ? `, first change line ${firstChangedLine}` : ""
+    }`;
+    const headline = isMove
+      ? `Moved ${filePath} to ${rename} (${stats})`
+      : `Updated ${effectivePath} (${stats})`;
+    const outputParts = [headline];
+    for (const warning of applyResult.warnings) {
+      outputParts.push(`Warning: ${warning}`);
+    }
+    if (applyResult.deduplicatedEdits > 0) {
+      outputParts.push(
+        `Note: ${applyResult.deduplicatedEdits} duplicate edit(s) were applied only once.`,
+      );
+    }
+    outputParts.push(...diffSummary.rendered);
+    return outputParts.join("\n");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof HashlineMismatchError) {

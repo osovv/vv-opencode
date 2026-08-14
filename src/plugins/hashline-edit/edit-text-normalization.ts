@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/edit-text-normalization.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Normalize edit payload text so copied hashline rows and accidental diff markers do not corrupt replacements.
-//   SCOPE: Prefix stripping, line splitting, indentation restoration, whitespace-tolerant insert echo trimming, and exact range-boundary echo trimming.
+//   PURPOSE: Normalize edit payload text so copied hashline rows and accidental diff markers do not corrupt replacements, and trim only provably accidental echo lines.
+//   SCOPE: Prefix stripping, line splitting, exact-match insert echo trimming with reporting, and exact-match range-boundary echo trimming with reporting.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -12,30 +12,20 @@
 // START_MODULE_MAP
 //   stripLinePrefixes - Remove copied hashline or diff prefixes when most payload lines include them.
 //   toNewLines - Normalize string or string[] payloads into plain content lines.
-//   restoreLeadingIndent - Reapply the template line indentation for obvious unindented replacements.
-//   stripInsertAnchorEcho - Remove duplicated anchor echoes from append payloads.
-//   stripInsertBeforeEcho - Remove duplicated anchor echoes from prepend payloads.
-//   stripRangeBoundaryEcho - Remove exact copies of surrounding lines accidentally included in replace payloads.
+//   EchoTrimResult - Trimmed payload lines plus the number of exact echo lines removed.
+//   stripExactInsertEcho - Remove a leading payload line that exactly duplicates the append anchor line.
+//   stripExactInsertBeforeEcho - Remove a trailing payload line that exactly duplicates the prepend anchor line.
+//   BoundaryEchoTrimResult - Trimmed payload lines plus removed leading/trailing boundary echo counts.
+//   stripExactBoundaryEchoes - Remove exact copies of surviving neighbor lines from over-long replace payloads.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Restricted range-boundary echo stripping to exact line matches so differently indented nested syntax is preserved.]
+//   LAST_CHANGE: [v0.5.0 - Replaced whitespace-insensitive autocorrect helpers with exact-match, reported echo trimming so valid payloads apply literally.]
 // END_CHANGE_SUMMARY
 
 const HASHLINE_PREFIX_RE =
   /^\s*(?:>>>|>>)?\s*\d+\s*#\s*[ZPMQVRWSNKTXJBYH]{2}(?:\s*#\s*[ZPMQVRWSNKTXJBYH]{2})?\|/;
 const DIFF_PLUS_RE = /^[+](?![+])/;
-
-function equalsIgnoringWhitespace(left: string, right: string): boolean {
-  if (left === right) {
-    return true;
-  }
-  return left.replace(/\s+/g, "") === right.replace(/\s+/g, "");
-}
-
-function leadingWhitespace(text: string): string {
-  return text.match(/^\s*/)?.[0] ?? "";
-}
 
 export function stripLinePrefixes(lines: string[]): string[] {
   let hashPrefixCount = 0;
@@ -83,68 +73,76 @@ export function toNewLines(input: string | string[]): string[] {
   return stripLinePrefixes(input.split("\n"));
 }
 
-export function restoreLeadingIndent(templateLine: string, line: string): string {
-  if (line.length === 0) {
-    return line;
-  }
-  const templateIndent = leadingWhitespace(templateLine);
-  if (templateIndent.length === 0) {
-    return line;
-  }
-  if (leadingWhitespace(line).length > 0) {
-    return line;
-  }
-  if (templateLine.trim() === line.trim()) {
-    return line;
-  }
-  return `${templateIndent}${line}`;
+export interface EchoTrimResult {
+  lines: string[];
+  stripped: number;
 }
 
-export function stripInsertAnchorEcho(anchorLine: string, newLines: string[]): string[] {
-  if (newLines.length === 0) {
-    return newLines;
+/**
+ * Remove a leading payload line that exactly duplicates the append anchor
+ * line. Only byte-identical echoes are trimmed; whitespace-differing lines
+ * are literal content and stay in the payload.
+ */
+export function stripExactInsertEcho(anchorLine: string, newLines: string[]): EchoTrimResult {
+  if (newLines.length > 0 && newLines[0] === anchorLine) {
+    return { lines: newLines.slice(1), stripped: 1 };
   }
-  if (equalsIgnoringWhitespace(newLines[0] ?? "", anchorLine)) {
-    return newLines.slice(1);
-  }
-  return newLines;
+  return { lines: newLines, stripped: 0 };
 }
 
-export function stripInsertBeforeEcho(anchorLine: string, newLines: string[]): string[] {
-  if (newLines.length === 0) {
-    return newLines;
+/**
+ * Remove a trailing payload line that exactly duplicates the prepend anchor
+ * line. Only byte-identical echoes are trimmed.
+ */
+export function stripExactInsertBeforeEcho(anchorLine: string, newLines: string[]): EchoTrimResult {
+  if (newLines.length > 0 && newLines[newLines.length - 1] === anchorLine) {
+    return { lines: newLines.slice(0, -1), stripped: 1 };
   }
-  if (equalsIgnoringWhitespace(newLines[newLines.length - 1] ?? "", anchorLine)) {
-    return newLines.slice(0, -1);
-  }
-  return newLines;
+  return { lines: newLines, stripped: 0 };
 }
 
-export function stripRangeBoundaryEcho(
-  lines: string[],
+export interface BoundaryEchoTrimResult {
+  lines: string[];
+  droppedLeading: number;
+  droppedTrailing: number;
+}
+
+/**
+ * Remove exact copies of the surviving neighbor lines from a replace payload
+ * that is longer than the replaced range. Payloads that are not longer than
+ * their range are returned untouched so intentional boundary content is
+ * never silently dropped.
+ */
+export function stripExactBoundaryEchoes(
+  fileLines: string[],
   startLine: number,
   endLine: number,
   newLines: string[],
-): string[] {
+): BoundaryEchoTrimResult {
   const replacedCount = endLine - startLine + 1;
-  if (newLines.length <= 1 || newLines.length <= replacedCount) {
-    return newLines;
+  if (newLines.length <= replacedCount) {
+    return { lines: newLines, droppedLeading: 0, droppedTrailing: 0 };
   }
 
   let output = newLines;
+  let droppedLeading = 0;
+  let droppedTrailing = 0;
+
   const beforeIndex = startLine - 2;
-  if (beforeIndex >= 0 && output[0] === lines[beforeIndex]) {
+  if (beforeIndex >= 0 && output[0] === fileLines[beforeIndex]) {
     output = output.slice(1);
+    droppedLeading = 1;
   }
 
   const afterIndex = endLine;
   if (
-    afterIndex < lines.length &&
+    afterIndex < fileLines.length &&
     output.length > 0 &&
-    output[output.length - 1] === lines[afterIndex]
+    output[output.length - 1] === fileLines[afterIndex]
   ) {
     output = output.slice(0, -1);
+    droppedTrailing = 1;
   }
 
-  return output;
+  return { lines: output, droppedLeading, droppedTrailing };
 }

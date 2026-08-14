@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/normalize-edits.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate and normalize raw hashline tool arguments into strongly-typed edit operations.
-//   SCOPE: Raw edit input shape, anchor trimming, required-field validation, and replace/replace_range/append/prepend normalization.
+//   SCOPE: Raw edit input shape, anchor trimming, required-field validation, physical single-line payload enforcement, blank-payload rejection for replacements, and replace/replace_range/append/prepend normalization.
 //   DEPENDS: [src/plugins/hashline-edit/types.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Split "replace" validation: "replace" rejects end, "replace_range" requires both pos and end.]
+//   LAST_CHANGE: [v0.4.0 - Rejected embedded newlines inside array payload entries and blank-only replace/replace_range payloads with teaching errors.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -70,10 +70,20 @@ function normalizeReplaceEdit(edit: RawHashlineEdit, index: number): ReplaceEdit
     );
   }
 
+  const lines = requireLines(edit, index);
+  assertNonBlankReplacement(edit, index, lines);
+  if (typeof lines === "string" && (lines.includes("\n") || lines.includes("\r"))) {
+    throw new Error(
+      `Edit ${index}: replace received a string payload with embedded newlines. ` +
+        'Use "replace_range" with pos + end for multi-line replacement.',
+    );
+  }
+  assertPhysicalLines(edit, index, lines);
+
   return {
     op: "replace",
     pos,
-    lines: requireLines(edit, index),
+    lines,
   };
 }
 
@@ -83,11 +93,14 @@ function normalizeReplaceRangeEdit(edit: RawHashlineEdit, index: number): Replac
   if (!pos || !end) {
     throw new Error(`Edit ${index}: replace_range requires both pos and end anchors`);
   }
+  const lines = requireLines(edit, index);
+  assertNonBlankReplacement(edit, index, lines);
+  assertPhysicalLines(edit, index, lines);
   return {
     op: "replace_range",
     pos,
     end,
-    lines: requireLines(edit, index),
+    lines,
   };
 }
 
@@ -100,6 +113,7 @@ function normalizeInsertEdit(
   const end = normalizeAnchor(edit.end);
   const anchor = pos ?? end;
   const lines = requireLines(edit, index);
+  assertPhysicalLines(edit, index, lines);
   const normalized: AppendEdit | PrependEdit = {
     op,
     lines,
@@ -108,6 +122,38 @@ function normalizeInsertEdit(
     normalized.pos = anchor;
   }
   return normalized;
+}
+
+function assertPhysicalLines(edit: RawHashlineEdit, index: number, lines: string | string[]): void {
+  if (typeof lines === "string") {
+    return;
+  }
+  for (let entryIndex = 0; entryIndex < lines.length; entryIndex += 1) {
+    const entry = lines[entryIndex] ?? "";
+    if (entry.includes("\n") || entry.includes("\r")) {
+      throw new Error(
+        `Edit ${index}: lines[${entryIndex}] for ${edit.op ?? "unknown"} contains an embedded newline. ` +
+          "Each array entry must be exactly one physical line; split the content into separate entries.",
+      );
+    }
+  }
+}
+
+function assertNonBlankReplacement(
+  edit: RawHashlineEdit,
+  index: number,
+  lines: string | string[],
+): void {
+  const isBlank =
+    (typeof lines === "string" && lines === "") ||
+    (Array.isArray(lines) && lines.length === 1 && lines[0] === "");
+  if (!isBlank) {
+    return;
+  }
+  throw new Error(
+    `Edit ${index}: ${edit.op ?? "unknown"} with a single blank line (lines: [""]) is ambiguous and was rejected. ` +
+      "To delete lines use lines: [] or lines: null. To insert a blank line use append or prepend.",
+  );
 }
 
 export function normalizeHashlineEdits(rawEdits: RawHashlineEdit[]): HashlineEdit[] {

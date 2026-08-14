@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit.test.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
-//   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, normalization heuristics, and BOM/CRLF preservation.
+//   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, literal payload application, blank/embedded-newline payload rejection, EOF append behavior, normalization heuristics, post-edit diff feedback, and BOM/CRLF preservation.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Added regression coverage preserving intentionally nested range-boundary lines that differ only by indentation.]
+//   LAST_CHANGE: [v0.8.0 - Replaced autocorrect expectations with literal-application coverage and added blank-payload, embedded-newline, EOF-append, and diff-feedback regression tests.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -170,7 +170,7 @@ describe("HashlineEditPlugin", () => {
         { filePath, edits: [{ op: "replace", pos: anchor, lines: ["line2 updated"] }] },
         context as never,
       );
-      expect(result).toBe(`Updated ${filePath}`);
+      expect(result).toContain(`Updated ${filePath}`);
       expect(await readFile(filePath, "utf8")).toBe("line1\nline2 updated\nline3");
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -270,7 +270,12 @@ describe("HashlineEditPlugin", () => {
         context as never,
       );
 
-      expect(result).toBe(`Updated ${filePath}`);
+      expect(result).toContain(`Updated ${filePath}`);
+      expect(result).toContain("+1/-1");
+      expect(result).toContain("first change line 2");
+      expect(result).toContain("@@ changed lines 2 @@");
+      expect(result).toContain('-   return "hi";');
+      expect(result).toContain('+   return "hello";');
       expect(await readFile(filePath, "utf8")).toBe('function greet() {\n  return "hello";\n}\n');
       expect(metadataCalls).toHaveLength(1);
       expect(metadataCalls[0]?.title).toBe(filePath);
@@ -315,7 +320,7 @@ describe("HashlineEditPlugin", () => {
         context as never,
       );
 
-      expect(result).toBe(`Updated ${filePath}`);
+      expect(result).toContain(`Updated ${filePath}`);
       expect(await readFile(filePath, "utf8")).toBe("line1\nreplaced\nline4\ninserted\n");
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -343,7 +348,7 @@ describe("HashlineEditPlugin", () => {
         context as never,
       );
 
-      expect(result).toBe(`Updated ${filePath}`);
+      expect(result).toContain(`Updated ${filePath}`);
       expect(await readFile(filePath, "utf8")).toBe("line1\nline2");
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -373,7 +378,8 @@ describe("HashlineEditPlugin", () => {
         context as never,
       );
 
-      expect(result).toBe(`Moved ${filePath} to ${renamedPath}`);
+      expect(result).toContain(`Moved ${filePath} to ${renamedPath}`);
+      expect(result).toContain("+1/-1");
       await expect(readFile(filePath, "utf8")).rejects.toThrow();
       expect(await readFile(renamedPath, "utf8")).toBe("line1\nline2-updated");
     } finally {
@@ -578,7 +584,7 @@ describe("HashlineEditPlugin", () => {
         context as never,
       );
 
-      expect(result).toBe(`Updated ${filePath}`);
+      expect(result).toContain(`Updated ${filePath}`);
       expect(await readFile(filePath, "utf8")).toBe(
         "\uFEFFconst first = 1;\r\nconst second = 3;\r\n",
       );
@@ -598,6 +604,32 @@ describe("HashlineEditPlugin", () => {
         "after",
       ]),
     ).toEqual(["before", "new 1", "new 2", "after"]);
+  });
+
+  test("reports a warning when stripping exact boundary echoes", () => {
+    const lines = ["before", "old 1", "old 2", "after"];
+    const warnings: string[] = [];
+
+    applyReplaceLines(
+      lines,
+      anchorFor(lines, 2),
+      anchorFor(lines, 3),
+      ["before", "new 1", "new 2", "after"],
+      { onWarning: (message) => warnings.push(message) },
+    );
+
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toContain("exact boundary echo");
+  });
+
+  test("keeps boundary-identical payload lines when the payload is not longer than the range", () => {
+    const lines = ["before", "old", "after"];
+
+    expect(applyReplaceLines(lines, anchorFor(lines, 2), anchorFor(lines, 2), ["before"])).toEqual([
+      "before",
+      "before",
+      "after",
+    ]);
   });
 
   test("preserves range boundary lines that differ only by indentation", () => {
@@ -629,6 +661,18 @@ describe("HashlineEditPlugin", () => {
     ]);
   });
 
+  test("keeps whitespace-differing insert payload lines literally", () => {
+    const lines = ["line1", "line2", "line3"];
+
+    expect(applyInsertAfter(lines, anchorFor(lines, 1), [" line1", "between"])).toEqual([
+      "line1",
+      " line1",
+      "between",
+      "line2",
+      "line3",
+    ]);
+  });
+
   test("autocorrects merged replacement lines back to the original line count", () => {
     const lines = ["const a = 1;", "const b = 2;"];
 
@@ -639,6 +683,101 @@ describe("HashlineEditPlugin", () => {
         anchorFor(lines, 2),
         "const a = 10; const b = 20;",
       ),
-    ).toEqual(["const a = 10;", "const b = 20;"]);
+    ).toEqual(["const a = 10; const b = 20;"]);
+  });
+
+  test("applies merged single-line replacement payloads literally", () => {
+    const lines = ["const a = 1;", "const b = 2;"];
+
+    expect(
+      applyReplaceLines(
+        lines,
+        anchorFor(lines, 1),
+        anchorFor(lines, 2),
+        "const a = 10; const b = 20;",
+      ),
+    ).toEqual(["const a = 10; const b = 20;"]);
+  });
+
+  test("appends to a newline-terminated file without a phantom blank line", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-eof-"));
+
+    try {
+      const filePath = join(directory, "eof.ts");
+      await writeFile(filePath, "line1\nline2\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        { filePath, edits: [{ op: "append", lines: ["line3"] }] },
+        context as never,
+      );
+
+      expect(result).toContain(`Updated ${filePath}`);
+      expect(result).toContain("+1/-0");
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2\nline3\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects blank-only replacement payloads with teaching guidance", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-blank-"));
+
+    try {
+      const filePath = join(directory, "blank.ts");
+      const originalLines = ["line1", "line2"];
+      await writeFile(filePath, originalLines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          edits: [{ op: "replace", pos: anchorFor(originalLines, 2), lines: [""] }],
+        },
+        context as never,
+      );
+
+      expect(result).toContain("ambiguous");
+      expect(result).toContain("lines: []");
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects embedded newlines inside array payload entries", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-newline-"));
+
+    try {
+      const filePath = join(directory, "newline.ts");
+      const originalLines = ["line1", "line2"];
+      await writeFile(filePath, originalLines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool?.edit;
+      expect(editTool).toBeDefined();
+
+      const { context } = createToolContext(directory);
+      const result = await editTool!.execute(
+        {
+          filePath,
+          edits: [{ op: "append", pos: anchorFor(originalLines, 1), lines: ["a\nb"] }],
+        },
+        context as never,
+      );
+
+      expect(result).toContain("embedded newline");
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

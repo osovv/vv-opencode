@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit.normalize-edits.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify raw hashline edit normalization into typed operations.
-//   SCOPE: Replace normalization, anchored append/prepend normalization, anchor precedence, required-lines failures, null-to-empty-array conversion for inserts, and unsupported-op failures.
+//   SCOPE: Replace normalization, anchored append/prepend normalization, anchor precedence, required-lines failures, null-to-empty-array conversion for inserts, unsupported-op failures, embedded-newline entry rejection, and blank-only replacement rejection.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/normalize-edits.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Migrated range test from replace+end to replace_range; replace rejects end.]
+//   LAST_CHANGE: [v0.4.0 - Added coverage rejecting embedded newlines in array entries and blank-only replace/replace_range payloads.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -97,5 +97,60 @@ describe("hashline normalize-edits", () => {
     ] as unknown as RawHashlineEdit[];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/unsupported op/);
+  });
+  test("rejects array payload entries containing embedded newlines", () => {
+    const input: RawHashlineEdit[] = [{ op: "append", pos: "2#VK", lines: ["a\nb"] }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/embedded newline/);
+  });
+
+  test("rejects carriage returns inside array payload entries", () => {
+    const input: RawHashlineEdit[] = [
+      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: ["a\rb"] },
+    ];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/embedded newline/);
+  });
+
+  test("rejects blank-only replace payloads with teaching guidance", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: [""] }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/ambiguous/);
+    expect(() => normalizeHashlineEdits(input)).toThrow(/lines: \[\]/);
+  });
+
+  test("rejects blank-only replace_range payloads", () => {
+    const input: RawHashlineEdit[] = [
+      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: [""] },
+    ];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/ambiguous/);
+  });
+
+  test("rejects blank string payloads for replace", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: "" }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/ambiguous/);
+  });
+
+  test("rejects replace string payloads with embedded newlines", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: "a\nb" }];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/replace_range/);
+  });
+
+  test("still accepts empty-array and null payloads as deletions", () => {
+    expect(normalizeHashlineEdits([{ op: "replace", pos: "2#VK", lines: [] }])).toEqual([
+      { op: "replace", pos: "2#VK", lines: [] },
+    ]);
+    expect(
+      normalizeHashlineEdits([{ op: "replace_range", pos: "2#VK", end: "3#MB", lines: null }]),
+    ).toEqual([{ op: "replace_range", pos: "2#VK", end: "3#MB", lines: [] }]);
+  });
+
+  test("allows blank lines inside insert payloads", () => {
+    expect(normalizeHashlineEdits([{ op: "append", pos: "2#VK", lines: [""] }])).toEqual([
+      { op: "append", pos: "2#VK", lines: [""] },
+    ]);
   });
 });
