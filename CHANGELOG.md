@@ -1,3 +1,11 @@
+## <small>1.2.7 (2026-08-14)</small>
+
+### Summary
+
+Hashline Edit now applies edit payloads literally, removing the silent autocorrect heuristics that could lose or duplicate lines; ambiguous payloads such as blank entries or entries containing embedded newlines are rejected fail-closed instead of being guessed at, while exact duplicate echoes are trimmed and reported as visible warnings. End-of-file appends no longer introduce a phantom blank line, and every successful edit returns a bounded diff with added/removed line counts and the first changed line, making it easier to confirm edits match intent before continuing.
+
+* feat(hashline-edit): apply edit payloads literally and report bounded post-edit diffs ([5da05e6](https://github.com/osovv/vv-opencode/commit/5da05e6))
+
 ## <small>1.2.6 (2026-08-13)</small>
 
 ### Summary
