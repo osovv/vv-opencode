@@ -1,3 +1,11 @@
+## <small>1.2.8 (2026-08-18)</small>
+
+### Summary
+
+Version 1.2.8 introduces per-model edit-format routing to the hashline-edit plugin, so each session only sees the editing tool matching its active model's native format. DeepSeek sessions use the dsh str_replace_editor contract, Qwen and Kimi use an exact oldString/newString replace tool with prior-read enforcement and visible fallback matching, GPT/Codex pass through to the host editor, and unmatched models keep the hash-anchored editing tool (renamed from edit to hashline_edit). Hashline editing is hardened with mandatory three-part LINE#HASH#ANCHOR references, unified replace semantics with an optional end anchor, and visible warnings when insert payloads would duplicate neighboring lines. The vvoc config now accepts a boolean or an object with enabled and routing for the plugin, letting users override the default routing per provider or model, and every edit result reports its edit mode along with provider and model identifiers. This reduces failed and wrong-location edits by ensuring each model works with the editing format it was designed for, backed by stale-file and drift protections across all profiles.
+
+* feat(hashline-edit): route per-model edit formats with native profiles ([e43e410](https://github.com/osovv/vv-opencode/commit/e43e410)), closes [HASH#ANCHOR](https://github.com/HASH/issues/ANCHOR)
+
 ## <small>1.2.7 (2026-08-14)</small>
 
 ### Summary
