@@ -852,7 +852,17 @@ describe("HashlineEditPlugin routing", () => {
         message: glmMessage as never,
         parts: [],
       });
-      expect(glmMessage.tools).toEqual({ edit: false, str_replace_editor: false });
+      expect(glmMessage.tools).toEqual({ hashline_edit: false, str_replace_editor: false });
+
+      const minimaxMessage = userMessage({
+        providerID: "minimax-coding-plan",
+        modelID: "MiniMax-M2.7",
+      });
+      await hook({ sessionID: "session-5", model: minimaxMessage.model } as never, {
+        message: minimaxMessage as never,
+        parts: [],
+      });
+      expect(minimaxMessage.tools).toEqual({ edit: false, str_replace_editor: false });
 
       const gptMessage = userMessage({ providerID: "openai", modelID: "gpt-5.4" });
       await hook({ sessionID: "session-4", model: gptMessage.model } as never, {
@@ -912,15 +922,18 @@ describe("HashlineEditPlugin routing", () => {
       );
       expect(deepseekOutput.output).toBe("1: const a = 1;");
 
-      const glmMessage = userMessage({ providerID: "zai-coding-plan", modelID: "glm-5.1" });
-      await hook_call(chatHook, "session-glm", glmMessage);
-      const glmOutput = { title: "t", output: "1: const a = 1;", metadata: {} };
+      const minimaxMessage = userMessage({
+        providerID: "minimax-coding-plan",
+        modelID: "MiniMax-M2.7",
+      });
+      await hook_call(chatHook, "session-minimax", minimaxMessage);
+      const minimaxOutput = { title: "t", output: "1: const a = 1;", metadata: {} };
       await plugin["tool.execute.after"]?.(
-        { tool: "read", sessionID: "session-glm", callID: "c2", args: {} } as never,
-        glmOutput as never,
+        { tool: "read", sessionID: "session-minimax", callID: "c2", args: {} } as never,
+        minimaxOutput as never,
       );
-      expect(glmOutput.output).toContain("1#");
-      expect(glmOutput.output).toContain("|const a = 1;");
+      expect(minimaxOutput.output).toContain("1#");
+      expect(minimaxOutput.output).toContain("|const a = 1;");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

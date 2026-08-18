@@ -208,7 +208,7 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 - `str_replace_editor` — the DeepSeek dsh contract (`view`/`create`/`str_replace`/`insert`) with exact-verbatim matching.
 - `passthrough` — no vvoc edit tool is exposed; the host-provided editing path stays in charge.
 
-The default routing table sends `deepseek` to `str_replace_editor`, `kimi` and `qwen` to `replace`, and `gpt`/`codex` to `passthrough`; everything else stays on `hashline`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins.
+The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwen`, and `glm` to `replace`, and `gpt`/`codex` to `passthrough`; everything else stays on `hashline`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins.
 
 Override routing in `vvoc.json` (schema v3). The `plugins["hashline-edit"]` entry accepts a boolean or an object:
 

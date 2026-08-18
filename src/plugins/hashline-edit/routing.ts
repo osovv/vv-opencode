@@ -1,5 +1,5 @@
 // FILE: src/plugins/hashline-edit/routing.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define edit-mode routing configuration and resolve the active edit mode for a session model.
 //   SCOPE: EditMode vocabulary, strict routing config parsing with the default routing table, plugin entry union resolution, and case-insensitive provider-then-model substring matching.
@@ -22,7 +22,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Established routing vocabulary, default table, strict parsing, and provider-then-model resolution.]
+//   LAST_CHANGE: [v0.2.0 - Added glm to the default routing table on the replace profile.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_VOCABULARY
@@ -48,6 +48,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     { pattern: "deepseek", mode: "str_replace_editor" },
     { pattern: "kimi", mode: "replace" },
     { pattern: "qwen", mode: "replace" },
+    { pattern: "glm", mode: "replace" },
     { pattern: "gpt", mode: "passthrough" },
     { pattern: "codex", mode: "passthrough" },
   ],

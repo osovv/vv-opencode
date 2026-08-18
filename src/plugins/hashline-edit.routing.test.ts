@@ -26,7 +26,7 @@ import {
 } from "./hashline-edit/routing.js";
 
 describe("hashline routing config", () => {
-  test("default table routes deepseek, kimi, qwen, gpt, codex and defaults to hashline", () => {
+  test("default table routes deepseek, kimi, qwen, glm, gpt, codex and defaults to hashline", () => {
     expect(DEFAULT_ROUTING_CONFIG.default).toBe("hashline");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
@@ -53,6 +53,12 @@ describe("hashline routing config", () => {
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
         providerID: "zai-coding-plan",
         modelID: "glm-5.1",
+      }),
+    ).toBe("replace");
+    expect(
+      resolveEditMode(DEFAULT_ROUTING_CONFIG, {
+        providerID: "minimax-coding-plan",
+        modelID: "MiniMax-M2.7",
       }),
     ).toBe("hashline");
   });
