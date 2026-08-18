@@ -52,6 +52,7 @@ import {
   writeProviderBaseUrl,
   writeOpenCodeProviderObject,
 } from "./opencode.js";
+import { materializeHashlineEditEntry } from "./plugin-toggle-config.js";
 import {
   createDefaultVvocConfig,
   parseVvocConfigText,
@@ -844,7 +845,9 @@ describe("canonical vvoc config helpers", () => {
       expect(syncResult.action).toBe("created");
       const created = await readVvocConfig(paths);
       expect(created?.version).toBe(3);
-      expect(created?.plugins).toEqual(createDefaultVvocConfig().plugins);
+      const expectedPlugins = { ...createDefaultVvocConfig().plugins };
+      expectedPlugins["hashline-edit"] = materializeHashlineEditEntry(true);
+      expect(created?.plugins).toEqual(expectedPlugins);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

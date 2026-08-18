@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Define edit-mode routing configuration and resolve the active edit mode for a session model.
 //   SCOPE: EditMode vocabulary, strict routing config parsing with the default routing table, plugin entry union resolution, and case-insensitive provider-then-model substring matching.
-//   DEPENDS: [none]
+//   DEPENDS: [src/lib/plugin-toggle-config.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 //   EditMode - Union type of edit mode identifiers.
 //   RoutingRule - One ordered pattern-to-mode routing entry.
 //   RoutingConfig - Parsed routing table with default mode and ordered rules.
-//   DEFAULT_ROUTING_CONFIG - Built-in routing table applied when config does not override it.
+//   DEFAULT_ROUTING_CONFIG - Built-in routing table derived from the shared lib table; applied when config does not override it.
 //   parseRoutingConfig - Strictly parse an unknown routing value into a RoutingConfig or throw.
 //   HashlineEditPluginSettings - Resolved enabled flag and routing config for the hashline-edit plugin entry.
 //   parseHashlineEditPluginEntry - Resolve the plugins["hashline-edit"] boolean-or-object union into enabled flag and routing config.
@@ -22,8 +22,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added glm to the default routing table on the replace profile.]
+//   LAST_CHANGE: [v0.3.0 - Derived DEFAULT_ROUTING_CONFIG from the shared lib table so vvoc sync and the plugin agree on one source.]
 // END_CHANGE_SUMMARY
+
+import { DEFAULT_HASHLINE_EDIT_ROUTING } from "../../lib/plugin-toggle-config.js";
 
 // START_BLOCK_VOCABULARY
 export const EDIT_MODES = ["hashline", "replace", "str_replace_editor", "passthrough"] as const;
@@ -42,17 +44,9 @@ export interface RoutingConfig {
 // END_BLOCK_VOCABULARY
 
 // START_BLOCK_DEFAULT_TABLE
-export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
-  default: "hashline",
-  rules: [
-    { pattern: "deepseek", mode: "str_replace_editor" },
-    { pattern: "kimi", mode: "replace" },
-    { pattern: "qwen", mode: "replace" },
-    { pattern: "glm", mode: "replace" },
-    { pattern: "gpt", mode: "passthrough" },
-    { pattern: "codex", mode: "passthrough" },
-  ],
-};
+export const DEFAULT_ROUTING_CONFIG: RoutingConfig = parseRoutingConfig(
+  DEFAULT_HASHLINE_EDIT_ROUTING,
+);
 // END_BLOCK_DEFAULT_TABLE
 
 // START_BLOCK_PARSE

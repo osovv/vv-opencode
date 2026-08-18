@@ -210,6 +210,8 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 
 The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwen`, and `glm` to `replace`, and `gpt`/`codex` to `passthrough`; everything else stays on `hashline`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins.
 
+`vvoc sync` and `vvoc init` write this default table into `vvoc.json` so it is visible and editable. Materialization is conservative: a routing value you have changed is never overwritten; the table is only filled in where it is missing.
+
 Override routing in `vvoc.json` (schema v3). The `plugins["hashline-edit"]` entry accepts a boolean or an object:
 
 ```json

@@ -25,6 +25,8 @@ import {
   PLUGIN_TOGGLE_NAMES,
   createDefaultPluginToggleConfig,
   isPluginEnabled,
+  materializeHashlineEditEntry,
+  DEFAULT_HASHLINE_EDIT_ROUTING,
 } from "./plugin-toggle-config.js";
 // END_BLOCK_IMPORT_HELPERS
 
@@ -154,3 +156,45 @@ describe("object-form plugin entries", () => {
   });
 });
 // END_BLOCK_OBJECT_ENTRY_TESTS
+
+// START_BLOCK_MATERIALIZE_TESTS
+describe("materializeHashlineEditEntry", () => {
+  test("expands undefined and boolean entries to the full object with default routing", () => {
+    expect(materializeHashlineEditEntry(undefined)).toEqual({
+      enabled: true,
+      routing: DEFAULT_HASHLINE_EDIT_ROUTING,
+    });
+    expect(materializeHashlineEditEntry(true)).toEqual({
+      enabled: true,
+      routing: DEFAULT_HASHLINE_EDIT_ROUTING,
+    });
+    expect(materializeHashlineEditEntry(false)).toEqual({
+      enabled: false,
+      routing: DEFAULT_HASHLINE_EDIT_ROUTING,
+    });
+  });
+
+  test("preserves a user routing block that differs from the default", () => {
+    const customRouting = { default: "hashline", rules: { qwen: "hashline" } };
+    expect(materializeHashlineEditEntry({ enabled: true, routing: customRouting })).toEqual({
+      enabled: true,
+      routing: customRouting,
+    });
+  });
+
+  test("keeps enabled=false and fills routing when absent on an object entry", () => {
+    expect(materializeHashlineEditEntry({ enabled: false })).toEqual({
+      enabled: false,
+      routing: DEFAULT_HASHLINE_EDIT_ROUTING,
+    });
+  });
+
+  test("does not mutate the shared default routing table", () => {
+    const first = materializeHashlineEditEntry(true);
+    (first.routing as { rules: Record<string, string> }).rules.qwen = "hashline";
+    const second = materializeHashlineEditEntry(true);
+    expect((second.routing as { rules: Record<string, string> }).rules.qwen).toBe("replace");
+    expect(DEFAULT_HASHLINE_EDIT_ROUTING.rules.qwen).toBe("replace");
+  });
+});
+// END_BLOCK_MATERIALIZE_TESTS

@@ -1,8 +1,8 @@
 // FILE: src/lib/plugin-toggle-config.ts
-// VERSION: 1.3.0
+// VERSION: 1.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define canonical plugin toggle names, default-all-true values, and a pure plugin-enabled helper for loaded vvoc config snapshots.
-//   SCOPE: Plugin name constants, default config builder, pure toggle checks, and the toggle config type.
+//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, conservative hashline-edit entry materialization, pure toggle checks, and the toggle config type.
 //   DEPENDS: [none]
 //   LINKS: [M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -14,12 +14,14 @@
 //   VvocPluginToggleConfig - Type alias mapping plugin names to boolean toggles or object entries.
 //   VvocPluginEntryConfig - Object-form plugin entry with optional enabled flag and plugin-owned routing config.
 //   createDefaultPluginToggleConfig - Returns a Record with all known plugins set to true.
+//   DEFAULT_HASHLINE_EDIT_ROUTING - Default edit-routing table materialized into vvoc.json for the hashline-edit plugin.
+//   materializeHashlineEditEntry - Expand the hashline-edit entry so the routing table is present without overwriting user values.
 //   isPluginEnabled - Returns whether the named plugin is enabled in a loaded vvoc config object.
 //   isVvocPluginEnabled - Alias for isPluginEnabled with explicit vvoc naming.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.3.0 - Plugin entries accept an object form with optional enabled flag and plugin-owned config; isPluginEnabled resolves both forms.]
+//   LAST_CHANGE: [v1.4.0 - Added the default hashline edit-routing table and conservative materialization of the hashline-edit plugin entry for vvoc sync/init.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -40,6 +42,21 @@ export type VvocPluginEntryConfig = {
 };
 
 export type VvocPluginToggleConfig = Record<string, boolean | VvocPluginEntryConfig>;
+
+// Default edit-routing table for the hashline-edit plugin. Materialized into vvoc.json
+// on sync/init so it is visible and editable; kept as a plain config-shape object
+// (rules as a pattern->mode record). The plugin converts it to its runtime form.
+export const DEFAULT_HASHLINE_EDIT_ROUTING = {
+  default: "hashline",
+  rules: {
+    deepseek: "str_replace_editor",
+    kimi: "replace",
+    qwen: "replace",
+    glm: "replace",
+    gpt: "passthrough",
+    codex: "passthrough",
+  },
+} as const;
 // END_BLOCK_CONSTANTS
 
 // START_BLOCK_DEFAULT_CONFIG
@@ -51,6 +68,45 @@ export function createDefaultPluginToggleConfig(): VvocPluginToggleConfig {
   return config;
 }
 // END_BLOCK_DEFAULT_CONFIG
+
+// START_BLOCK_HASHLINE_ROUTING_MATERIALIZE
+function defaultHashlineRoutingCopy(): Record<string, unknown> {
+  return {
+    default: DEFAULT_HASHLINE_EDIT_ROUTING.default,
+    rules: { ...DEFAULT_HASHLINE_EDIT_ROUTING.rules },
+  };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Materialize the hashline-edit plugin entry so the edit-routing table is always
+ * present in vvoc.json. Conservative: a user value that differs from the default
+ * is never overwritten. Boolean or missing entries expand to the full object with
+ * the default routing table; object entries keep their enabled flag and routing
+ * block when present, filling routing with the default only when it is absent.
+ */
+export function materializeHashlineEditEntry(
+  current: boolean | VvocPluginEntryConfig | undefined,
+): VvocPluginEntryConfig {
+  if (current === undefined || typeof current === "boolean") {
+    return {
+      enabled: current === undefined ? true : current,
+      routing: defaultHashlineRoutingCopy(),
+    };
+  }
+
+  const materialized: VvocPluginEntryConfig = {
+    enabled: current.enabled ?? true,
+  };
+  materialized.routing = isPlainRecord(current.routing)
+    ? current.routing
+    : defaultHashlineRoutingCopy();
+  return materialized;
+}
+// END_BLOCK_HASHLINE_ROUTING_MATERIALIZE
 
 // START_CONTRACT: isPluginEnabled
 //   PURPOSE: Return whether the named plugin is enabled in an already-loaded vvoc config.
