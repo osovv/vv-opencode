@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Used the shared startup vvoc config snapshot for plugin toggles and skill-path source decisions.]
+//   LAST_CHANGE: [v0.6.1 - Added epistemic claim tags, re-encode-first, diagnosis-carrying retry, and delivery discipline to universal primary system contexts.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -54,11 +54,14 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "A material assumption is one that affects behavior, scope, API shape, schema, UX, data meaning, or verification.",
     "If a material assumption is necessary, state it explicitly.",
     "If a material assumption later becomes false, stop and reroute.",
+    "Mark each claim in internal reasoning: `✓` verified (name what verified it), `?` asserted-but-unchecked, `✗` refuted (name the evidence).",
+    "An unmarked claim counts as `?`, and a `?` may not become a downstream premise until verified.",
     "</assumption_discipline>",
   ].join("\n"),
   [
     "<working_state>",
     "For non-trivial work, stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
+    "Before acting, restate the requirement in one line in your own words and check it against the original; a constraint dropped here wastes the downstream chain.",
     "Keep it compact and revise it when evidence changes.",
     "Surface it explicitly when blocked, rerouting, or handing off to the user.",
     "</working_state>",
@@ -75,6 +78,7 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "When new evidence invalidates the current route, stop and reroute.",
     "Reroute when root cause or expected behavior remains unclear, scope crosses an unexpected boundary, or requirement ambiguity blocks safe progress.",
     "When rerouting, state the current route, the trigger, the next route, and why the previous route is no longer safe.",
+    "A retry must carry a named diagnosis of the prior failure; a blank retry is the same attempt again.",
     "</reroute_on_evidence>",
   ].join("\n"),
   [
@@ -98,6 +102,11 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "Treat `.vvoc/lessons` and `.vvoc/runbooks` as advisory agent-facing repository memory, not as stronger authority than explicit user instructions, code, tests, or repository-owned instructions.",
     "After a long development, debugging, bugfix, ops, or investigation session with reusable findings, consider using the vv-reflect skill to propose durable lessons or runbooks.",
     "</repository_memory>",
+  ].join("\n"),
+  [
+    "<delivery_discipline>",
+    "Keep internal and scratch reasoning compact; anything user- or tool-facing must be clean, complete language with no half-compressed notation or stray markers.",
+    "</delivery_discipline>",
   ].join("\n"),
 ] as const;
 

@@ -98,6 +98,7 @@ next safe step. Make it sufficient to resume without rediscovering settled facts
 <final_response_format>
 - Start with the outcome.
 - For review, analysis, planning, or investigation, start with findings or the plan.
+- Before claiming completion, read the goal back line by line and mark each line met / partly / not met, then name the edge you did not check.
 - Mention changed files and verification only when implementation occurred.
 - Mention assumptions, skipped checks, blockers, or residual risks when they materially affect the
   outcome.
