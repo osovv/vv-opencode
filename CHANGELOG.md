@@ -1,3 +1,14 @@
+## <small>1.2.10 (2026-08-18)</small>
+
+### Summary
+
+Release 1.2.10 introduces the ToolHistoryCompactionPlugin, which shrinks the conversation context replayed to the model on every turn without touching on-disk storage or tool inputs: old file reads collapse to compact "[Read &lt;file&gt;, lines X-Y]" headers, oversized ephemeral outputs (bash/grep/glob) are pruned to head/marker/tail form, and session-long knowledge results (web fetch/search, skills, subagent reports) are always retained, with a protected recent tail and minimum-savings guard to keep rewrites deterministic and prompt-cache friendly. The release also materializes the default hashline edit-routing table into vvoc.json on sync/init so it is visible and editable without ever overwriting user-changed values, and routes GLM models to the replace editing profile that matches their training, improving edit reliability for GLM users. These changes reduce token pressure and context-limit pressure in long sessions, expose edit-routing configuration more transparently, and lower edit error rates for GLM-based workflows.
+
+* chore: bump version from 1.2.8 to 1.2.9 with changelog ([fac201b](https://github.com/osovv/vv-opencode/commit/fac201b))
+* feat(config): materialize hashline edit-routing table into vvoc.json on sync ([eb9da0e](https://github.com/osovv/vv-opencode/commit/eb9da0e))
+* feat(hashline-edit): route glm models to the replace profile ([f0c8dc2](https://github.com/osovv/vv-opencode/commit/f0c8dc2))
+* feat(tool-history-compaction): non-destructive compaction of replayed tool history ([6a4fb56](https://github.com/osovv/vv-opencode/commit/6a4fb56))
+
 ## <small>1.2.9 (2026-08-18)</small>
 
 ### Summary
