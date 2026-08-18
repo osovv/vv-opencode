@@ -113,7 +113,10 @@ import {
   type ConfigReadScope,
   type ConfigSource,
 } from "./config-layers.js";
-import { materializeHashlineEditEntry } from "./plugin-toggle-config.js";
+import {
+  materializeHashlineEditEntry,
+  materializeToolHistoryCompactionEntry,
+} from "./plugin-toggle-config.js";
 import {
   getConfigHome,
   getGlobalOpencodeSkillsDir,
@@ -993,6 +996,9 @@ export async function syncVvocConfig(
     : createDefaultVvocConfig();
   nextConfig.plugins["hashline-edit"] = materializeHashlineEditEntry(
     nextConfig.plugins["hashline-edit"],
+  );
+  nextConfig.plugins["tool-history-compaction"] = materializeToolHistoryCompactionEntry(
+    nextConfig.plugins["tool-history-compaction"],
   );
   return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }

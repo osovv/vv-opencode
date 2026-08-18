@@ -1,0 +1,68 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-TOOL-HISTORY-COMPACTION>
+    <Summary>New focused plugin `tool-history-compaction` that shrinks the replayed conversation context without touching on-disk storage, by rewriting only the in-memory message copy the model is about to receive (experimental.chat.messages.transform). It follows the DeepSeek Harness model: deterministic, model-free, non-destructive, and output-only — tool-call inputs are never modified. Compaction is tool-classified, not blanket: knowledge-bearing results (web fetch/search, skill, subagent reports) are retained because they stay relevant for the whole session, while ephemeral file/shell results (read, bash, grep, glob) are compacted aggressively because later edits of the same files supersede them. Two mechanisms: old read outputs collapse to a [Read &lt;file&gt;, lines X-Y] header (default on), and other ephemeral outputs are head/marker/tail pruned past a threshold. A protected recent tail, an idempotent pure-function rewrite, and a minimum-savings guard keep the provider prompt cache viable: each part is rewritten at most once, then the smaller prefix re-arms.</Summary>
+    <Problem>Every completed tool part replays its full state.input plus state.output on every subsequent turn (packages/opencode/src/session/message-v2.ts:319-320 re-emits input verbatim; output is only character-truncated). opencode.db telemetry (5041 sessions) shows the waste and its shape: median ~172k chars of tool I/O per session, ~97.5% of it older than the last message; read outputs total 328M chars (94% of all output weight, 34k reads over 2k chars), bash 76M, grep 33M, webfetch 37M. But not all of that is equally safe to drop: webfetch/web-search/skill results are session-long knowledge, while read/bash/grep outputs and edit diffs describe files that keep changing, so their older instances are quickly superseded. Prefix-cache hit rates are already 88-99% across the routing models, so most billed tokens are cheap cache-reads, but average prompt sizes (qwen3.8-max 347k, kimi-k3 327k tokens) press context limits and force LLM compactions that cost a call and lose fidelity. Replaying old read outputs also re-emits stale LINE#ID#ANCHOR anchors the model may reuse. The DeepSeek Harness compaction-tool-result-pruner already solves the output side (head + fixed marker + tail, threshold, idempotent, non-destructive, cache-aware); this change ports that model to the OpenCode plugin surface and adds the knowledge-vs-ephemeral retention split the harnesses signal (oh-my-pi protects skill/plan reads; superseded-read pruning drops reads invalidated by later edits).</Problem>
+    <Goals>
+      <Goal>New focused plugin M-PLUGIN-TOOL-HISTORY-COMPACTION (src/plugins/tool-history-compaction/), exported from the package barrel, enabled via the vvoc plugin toggle, operating only through experimental.chat.messages.transform so storage and UI diff views keep the full payload.</Goal>
+      <Goal>Output-only compaction: tool-call inputs (state.input) are never modified under any policy; only the content of state.output of completed tool parts may be rewritten.</Goal>
+      <Goal>Deterministic idempotent rewrite: compaction is a pure function of (part content, age in the message array); no wall-clock, randomness, or request-order inputs; a part already in compact form is detected by its marker and skipped, so each part is rewritten at most once and the rewritten prefix is byte-stable for prompt caching.</Goal>
+      <Goal>Tool retention classification: a configurable case-insensitive substring list `retainTools` (default covering web fetch/search, skill, and subagent families) marks knowledge results that are never compacted; all other completed tool parts are ephemeral and eligible.</Goal>
+      <Goal>readSlim (default on): replace old read outputs with [Read &lt;file&gt;, lines X-Y], file recovered from state.input.filePath and range from the output header when present; when the file/range cannot be determined, fall back to output pruning instead of fabricating a summary.</Goal>
+      <Goal>Output pruning (default on) for ephemeral non-read tools (bash, grep, glob, and others): replace output text exceeding outputMaxChars with headChars + fixed marker + tailChars (DeepSeek Harness shape); rich ordering preserved; Unicode-safe slicing.</Goal>
+      <Goal>Protected tail invariants: never rewrite parts in the last assistant message, the last protectLastCalls completed tool calls, parts with state.status === "error", or parts already compacted by OpenCode (state.time.compacted).</Goal>
+      <Goal>minSavingsChars guard: skip any rewrite whose compacted form is not at least minSavingsChars shorter, so sub-threshold edits do not churn the prompt cache for no gain.</Goal>
+      <Goal>Config in vvoc.json under plugins["tool-history-compaction"] (boolean-or-object), conservatively materialized into vvoc.json on sync/init like the hashline-edit routing table, strictly validated fail-loud; schema v3 widened to accept the new plugin shape without invalidating existing documents.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>OpenCode plugin API 1.18.x: experimental.chat.messages.transform fires immediately before toModelMessagesEffect with input {} and output { messages: { info, parts }[] }; it mutates only the in-memory copy; the hook carries no model argument, so the current model is resolved from the chat.message-populated session model cache (established hashline-edit pattern).</Constraint>
+      <Constraint>Never change part structure: type, callID, tool, ordering, and state.status are immutable; only the content of state.output of completed tool parts may be rewritten, so Anthropic tool_use/tool_result stitching and provider replay stay intact.</Constraint>
+      <Constraint>Inputs are never touched: state.input is replay-stable and must remain byte-identical under every policy and tier.</Constraint>
+      <Constraint>Non-destructive only: never use tool.execute.after for compaction; on-disk message parts keep the full payload for the transcript and diff views.</Constraint>
+      <Constraint>Prompt-cache stability: rewrites must be deterministic and idempotent and must not depend on wall-clock or session-global mutable state that changes per turn.</Constraint>
+      <Constraint>vvoc schema v3 strictness: widening plugins additionalProperties to accept the tool-history-compaction shape must remain backward compatible; unknown keys and invalid budgets still fail loudly; no silent migration.</Constraint>
+      <Constraint>Plugins share the startup config snapshot; config changes require an OpenCode restart (established invariant).</Constraint>
+      <Constraint>Do not interfere with OpenCode's own compaction placeholder ("[Old tool result content cleared]") or its summarizer; skip such parts.</Constraint>
+      <Constraint>DeepSeek Harness compaction-tool-result-pruner (MIT) is a behavioral reference only, not a code dependency; nothing is copied verbatim from proprietary harness sources.</Constraint>
+      <Constraint>Character budgets are not token budgets (DeepSeek Harness caveat); char-based thresholds and the minSavingsChars guard are the proxy, with token-level budgets deferred.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Compaction of tool-call inputs of any kind (old_string/new_string, patchText, hashline edits, etc.).</NonGoal>
+      <NonGoal>Destructive storage-side compaction via tool.execute.after.</NonGoal>
+      <NonGoal>LLM summarization or replacing OpenCode's compaction/summarizer.</NonGoal>
+      <NonGoal>Changes to hashline-edit edit/read semantics, its routing table, or its anchored read transform.</NonGoal>
+      <NonGoal>apply_patch/patch profile work (deferred with C-EDIT-FORMAT-ROUTING).</NonGoal>
+      <NonGoal>Bitmap/vision compression (oh-my-pi snapcompact) or provider-native compact endpoints (codex /compact).</NonGoal>
+      <NonGoal>Token-accurate budgets; live config reload; content-aware retention rules beyond tool-name classification.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>Given a real SDK-shaped messages array with historical completed tool parts, the transform hook deterministically rewrites eligible outputs; running it twice over the same input yields byte-identical output (idempotence), and a second pass over already-compacted parts performs no further change.</Criterion>
+      <Criterion>Retained tools (matching retainTools) have their outputs left byte-identical regardless of size; a webfetch/web-search/skill/subagent result survives compaction untouched.</Criterion>
+      <Criterion>readSlim on: an old read part becomes [Read &lt;file&gt;, lines X-Y]; a read whose filePath is absent or whose line range cannot be recovered from the header falls back to output pruning and never fabricates a summary.</Criterion>
+      <Criterion>Output pruning: an over-threshold ephemeral output is replaced with exactly headChars code points, the fixed marker, then tailChars code points, never exceeding outputMaxChars and strictly smaller than the input; an under-threshold output is left untouched; slicing never splits a surrogate pair.</Criterion>
+      <Criterion>state.input is byte-identical before and after compaction for every part, under every policy.</Criterion>
+      <Criterion>The last assistant message, the last protectLastCalls completed tool calls, error parts, and time.compacted parts are never modified by any layer.</Criterion>
+      <Criterion>Structure invariants hold under compaction: callID/type/tool/order unchanged; a tool_use/tool_result pairing test asserts the assistant tool parts still pair with their results after rewrite.</Criterion>
+      <Criterion>minSavingsChars guard: a rewrite whose savings fall below the threshold is skipped (test asserts no churn on a near-threshold output).</Criterion>
+      <Criterion>Config: plugins["tool-history-compaction"] parses boolean-or-object strictly; defaults materialize into vvoc.json on sync without overwriting user values; invalid budgets/unknown keys fail loudly at load; an existing v3 document with the new plugin key still validates against the widened schema.</Criterion>
+      <Criterion>Fresh full suite passes: bun test, bun run check, bun run build; bunx @osovv/grace-cli@rc lint --path . and status --path . pass with the new active bundle; bun run pack:check when the public export surface changes.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-CLI-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/tool-history-compaction &amp;&amp; bun run check &amp;&amp; bun run build &amp;&amp; bunx @osovv/grace-cli@rc lint --path . &amp;&amp; bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Targeted tests built on real SDK part shapes (lesson-plugin-tests-match-real-sdk-shapes); fresh full-suite pass; grace lint/status green with the new active bundle; post-release rerun of the opencode.db telemetry extraction showing a reduced median tool-I/O replay weight per session and retained webfetch/search outputs, with no change to cache-hit-rate slope for sessions with the plugin enabled.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>experimental.chat.messages.transform fires on every prompt build with the full in-memory message list and only the in-memory copy is mutated (verified against OpenCode v1.18.18 session/prompt.ts:1255-1262 and message-v2.ts:290-323); assumed stable across host 1.18.x patch releases.</Assumption>
+      <Assumption>The transform hook does not receive the current model, but no layer needs it: output compaction and retention are model-agnostic, so no session model cache is required for this plugin.</Assumption>
+      <Assumption>Tool part shape in the hook matches message-v2.ts: part.type === "tool", part.tool, part.callID, part.state.{status,input,output,time,metadata}.</Assumption>
+      <Assumption>read input carries filePath and the read output header encodes the line range when available (confirmed from opencode.db); when absent the fallback is pruning, not guessing.</Assumption>
+      <Assumption>Case-insensitive substring matching against tool names is a sufficient retention classifier for the default list (web fetch/search, skill, subagent families); edge-case tool families can be pinned via the configurable retainTools list.</Assumption>
+      <Assumption>Deterministic idempotent rewrites keep the provider prompt cache viable: each part invalidates the prefix at most once at the point of first rewrite and the smaller prefix re-arms afterward, matching the DeepSeek Harness documented behavior (pruned prefix eligible for reuse while route, envelope, and preceding history remain identical).</Assumption>
+      <Assumption>Compaction is safe to enable by default because it is non-destructive, cache-aware, tail-protected, idempotent, and input-preserving; users who prefer full fidelity can disable the plugin or set outputMaxChars to 0.</Assumption>
+    </Assumptions>
+  </C-TOOL-HISTORY-COMPACTION>
+</GraceChangeSpec>

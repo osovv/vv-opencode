@@ -169,7 +169,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 
 ---
 
-## The Eight Plugins
+## The Nine Plugins
 
 | Plugin | What it helps you do |
 |---|---|
@@ -181,6 +181,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
 | **WebToolsPlugin** | Register the provider-neutral `web_search` and `web_fetch` tools, return direct image/PDF attachments, and hide OpenCode's built-in web tools at runtime unless the user explicitly configured their permissions. |
 | **ContextTuiPlugin** | Add a native scrollable `/context` dialog with measured usage plus detailed observable per-tool and per-MCP schema/history estimates, explicitly marking data that OpenCode does not expose. |
+| **ToolHistoryCompactionPlugin** | Shrink the replayed conversation context non-destructively by compacting old tool outputs in the model replay (old reads to `[Read <file>, lines X-Y]`, over-budget ephemeral outputs pruned), while retaining web/search/skill knowledge results. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
 
@@ -225,8 +226,38 @@ Override routing in `vvoc.json` (schema v3). The `plugins["hashline-edit"]` entr
   }
 }
 ```
-
 Routing changes require an OpenCode restart, like other runtime plugin settings.
+
+### Tool History Compaction
+
+`ToolHistoryCompactionPlugin` shrinks the context replayed to the model on every turn without touching on-disk storage. It rewrites only the in-memory message copy through the `experimental.chat.messages.transform` hook, and only the `output` of old completed tool parts — `input` and part structure (callID/type/order) are never changed, so provider tool_use/tool_result stitching stays intact.
+
+Compaction is tool-classified, not blanket:
+
+- **Retained (never compacted):** results that stay relevant for the whole session — `webfetch`/`web_fetch`/web readers, web/search tools, `skill`, and subagent (`task`/`agent`) outputs.
+- **Old reads** collapse to `[Read <file>, lines X-Y]` (range recovered from the line-numbered output; missing file or range falls back to head/tail pruning, never a fabricated summary).
+- **Other ephemeral outputs** (`bash`, `grep`, `glob`, …) past `outputMaxChars` are pruned to `headChars` + a fixed marker + `tailChars`, DeepSeek-Harness style.
+
+A protected tail never rewrites the last assistant message or the last `protectLastCalls` completed calls; error parts and parts already compacted by OpenCode are skipped. Rewrites are deterministic and idempotent (each part is rewritten at most once), and a `minSavingsChars` guard skips rewrites that would churn the prompt cache for a tiny gain.
+
+Config lives in `vvoc.json` under `plugins["tool-history-compaction"]` (boolean or object) and is conservatively materialized by `vvoc sync`/`init`:
+
+```json
+"plugins": {
+  "tool-history-compaction": {
+    "enabled": true,
+    "protectLastCalls": 3,
+    "minSavingsChars": 2000,
+    "outputMaxChars": 2048,
+    "headChars": 1200,
+    "tailChars": 400,
+    "readSlim": true,
+    "retainTools": ["webfetch", "web_fetch", "web-reader", "webreader", "search", "brave", "skill", "task", "agent"]
+  }
+}
+```
+
+Set `outputMaxChars` to `0` to disable pruning, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart.
 
 ### Web Tools
 

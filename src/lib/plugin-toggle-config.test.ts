@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Added web-tools toggle coverage and updated the canonical plugin count to eight.]
+//   LAST_CHANGE: [v1.5.0 - Added tool-history-compaction toggle coverage and updated the canonical plugin count to nine.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
@@ -26,7 +26,9 @@ import {
   createDefaultPluginToggleConfig,
   isPluginEnabled,
   materializeHashlineEditEntry,
+  materializeToolHistoryCompactionEntry,
   DEFAULT_HASHLINE_EDIT_ROUTING,
+  DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY,
 } from "./plugin-toggle-config.js";
 // END_BLOCK_IMPORT_HELPERS
 
@@ -34,7 +36,7 @@ const WEB_TOOLS_PLUGIN_NAME = "web-tools";
 
 // START_BLOCK_CONSTANTS_TEST
 describe("PLUGIN_TOGGLE_NAMES", () => {
-  test("contains exactly the 8 vvoc-managed plugins", () => {
+  test("contains exactly the 9 vvoc-managed plugins", () => {
     expect(PLUGIN_TOGGLE_NAMES).toEqual([
       "guardian",
       "hashline-edit",
@@ -44,12 +46,12 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "secrets-redaction",
       "context",
       WEB_TOOLS_PLUGIN_NAME,
+      "tool-history-compaction",
     ]);
   });
-
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(8);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(9);
   });
 });
 // END_BLOCK_CONSTANTS_TEST
@@ -198,3 +200,32 @@ describe("materializeHashlineEditEntry", () => {
   });
 });
 // END_BLOCK_MATERIALIZE_TESTS
+
+// START_BLOCK_TOOL_HISTORY_MATERIALIZE_TESTS
+describe("materializeToolHistoryCompactionEntry", () => {
+  test("expands undefined and boolean entries to the full default entry", () => {
+    expect(materializeToolHistoryCompactionEntry(undefined)).toEqual({
+      ...DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY,
+    });
+    expect(materializeToolHistoryCompactionEntry(false)).toEqual({
+      ...DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY,
+      enabled: false,
+    });
+  });
+
+  test("preserves user config keys that differ from defaults", () => {
+    const custom = materializeToolHistoryCompactionEntry({
+      enabled: true,
+      readSlim: false,
+      outputMaxChars: 4096,
+    });
+    expect(custom.readSlim).toBe(false);
+    expect(custom.outputMaxChars).toBe(4096);
+    expect(custom.protectLastCalls).toBe(DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.protectLastCalls);
+  });
+
+  test("keeps enabled=false on an object entry", () => {
+    expect(materializeToolHistoryCompactionEntry({ enabled: false }).enabled).toBe(false);
+  });
+});
+// END_BLOCK_TOOL_HISTORY_MATERIALIZE_TESTS

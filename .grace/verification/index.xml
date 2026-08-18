@@ -20,6 +20,7 @@
         <V-M-PLUGIN-SECRETS-REDACTION />
         <V-M-PLUGIN-CONTEXT-TUI />
         <V-M-PLUGIN-WEB-TOOLS />
+        <V-M-PLUGIN-TOOL-HISTORY-COMPACTION />
         <V-M-WEB-CONFIG />
         <V-M-WEB-HTTP />
         <V-M-WEB-SEARCH-SERVICE />

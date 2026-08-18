@@ -2,7 +2,7 @@
 // VERSION: 1.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define canonical plugin toggle names, default-all-true values, and a pure plugin-enabled helper for loaded vvoc config snapshots.
-//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, conservative hashline-edit entry materialization, pure toggle checks, and the toggle config type.
+//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, default tool-history-compaction entry, conservative plugin entry materialization, pure toggle checks, and the toggle config type.
 //   DEPENDS: [none]
 //   LINKS: [M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,13 +15,16 @@
 //   VvocPluginEntryConfig - Object-form plugin entry with optional enabled flag and plugin-owned routing config.
 //   createDefaultPluginToggleConfig - Returns a Record with all known plugins set to true.
 //   DEFAULT_HASHLINE_EDIT_ROUTING - Default edit-routing table materialized into vvoc.json for the hashline-edit plugin.
+//   DEFAULT_TOOL_HISTORY_COMPACTION_RETAIN_TOOLS - Default knowledge-tool retention substrings for tool-history-compaction.
+//   DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY - Default materializable config entry for tool-history-compaction.
 //   materializeHashlineEditEntry - Expand the hashline-edit entry so the routing table is present without overwriting user values.
+//   materializeToolHistoryCompactionEntry - Expand the tool-history-compaction entry so the compaction config is present without overwriting user values.
 //   isPluginEnabled - Returns whether the named plugin is enabled in a loaded vvoc config object.
 //   isVvocPluginEnabled - Alias for isPluginEnabled with explicit vvoc naming.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.4.0 - Added the default hashline edit-routing table and conservative materialization of the hashline-edit plugin entry for vvoc sync/init.]
+//   LAST_CHANGE: [v1.5.0 - Added the default tool-history-compaction entry and conservative materialization for vvoc sync/init.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -34,12 +37,13 @@ export const PLUGIN_TOGGLE_NAMES = [
   "secrets-redaction",
   "context",
   "web-tools",
+  "tool-history-compaction",
 ] as const;
 
 export type VvocPluginEntryConfig = {
   enabled?: boolean;
   routing?: Record<string, unknown>;
-};
+} & Record<string, unknown>;
 
 export type VvocPluginToggleConfig = Record<string, boolean | VvocPluginEntryConfig>;
 
@@ -58,6 +62,32 @@ export const DEFAULT_HASHLINE_EDIT_ROUTING = {
   },
 } as const;
 // END_BLOCK_CONSTANTS
+
+// START_BLOCK_TOOL_HISTORY_DEFAULTS
+// Default retention list and materializable entry for the tool-history-compaction plugin.
+export const DEFAULT_TOOL_HISTORY_COMPACTION_RETAIN_TOOLS = [
+  "webfetch",
+  "web_fetch",
+  "web-reader",
+  "webreader",
+  "search",
+  "brave",
+  "skill",
+  "task",
+  "agent",
+] as const;
+
+export const DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY = {
+  enabled: true,
+  protectLastCalls: 3,
+  minSavingsChars: 2000,
+  outputMaxChars: 2048,
+  headChars: 1200,
+  tailChars: 400,
+  readSlim: true,
+  retainTools: [...DEFAULT_TOOL_HISTORY_COMPACTION_RETAIN_TOOLS],
+} as const;
+// END_BLOCK_TOOL_HISTORY_DEFAULTS
 
 // START_BLOCK_DEFAULT_CONFIG
 export function createDefaultPluginToggleConfig(): VvocPluginToggleConfig {
@@ -107,6 +137,49 @@ export function materializeHashlineEditEntry(
   return materialized;
 }
 // END_BLOCK_HASHLINE_ROUTING_MATERIALIZE
+
+// START_BLOCK_TOOL_HISTORY_MATERIALIZE
+function defaultToolHistoryCompactionCopy(): Record<string, unknown> {
+  return {
+    protectLastCalls: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.protectLastCalls,
+    minSavingsChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.minSavingsChars,
+    outputMaxChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.outputMaxChars,
+    headChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.headChars,
+    tailChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.tailChars,
+    readSlim: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.readSlim,
+    retainTools: [...DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.retainTools],
+  };
+}
+
+/**
+ * Materialize the tool-history-compaction plugin entry so the compaction config is
+ * always present in vvoc.json. Conservative: user values are never overwritten;
+ * boolean or missing entries expand to the full default entry; object entries keep
+ * their enabled flag and any user-provided config keys, filling only absent keys
+ * with defaults.
+ */
+export function materializeToolHistoryCompactionEntry(
+  current: boolean | VvocPluginEntryConfig | undefined,
+): VvocPluginEntryConfig {
+  const defaults = defaultToolHistoryCompactionCopy();
+  if (current === undefined || typeof current === "boolean") {
+    return {
+      enabled: current === undefined ? true : current,
+      ...defaults,
+    };
+  }
+  const materialized: VvocPluginEntryConfig = {
+    ...defaults,
+    enabled: current.enabled ?? true,
+  };
+  for (const key of Object.keys(defaults)) {
+    if (current[key] !== undefined) {
+      materialized[key] = current[key];
+    }
+  }
+  return materialized;
+}
+// END_BLOCK_TOOL_HISTORY_MATERIALIZE
 
 // START_CONTRACT: isPluginEnabled
 //   PURPOSE: Return whether the named plugin is enabled in an already-loaded vvoc config.

@@ -73,6 +73,10 @@
     "./plugins/web-tools": {
       "types": "./dist/plugins/web-tools/index.d.ts",
       "import": "./dist/plugins/web-tools/index.js"
+    },
+    "./plugins/tool-history-compaction": {
+      "types": "./dist/plugins/tool-history-compaction/index.d.ts",
+      "import": "./dist/plugins/tool-history-compaction/index.js"
     }
   },
   "scripts": {

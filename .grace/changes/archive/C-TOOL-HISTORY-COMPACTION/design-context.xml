@@ -1,0 +1,32 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-TOOL-HISTORY-COMPACTION</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Two owner decisions sharpen the slice. First: never touch tool-call inputs. This matches every harness surveyed — DeepSeek Harness prunes outputs only, oh-my-pi and codex and oh-my-openagent never trim replayed arguments — and removes the riskiest layer (models expect their own arguments back verbatim). Second: compaction must be tool-classified, not blanket. opencode.db shows read outputs are 94% of replayed output weight and are inherently ephemeral (a later edit supersedes an earlier read), while webfetch/web-search/skill/subagent results are session-long knowledge that must survive compaction. This maps to the harness evidence: oh-my-pi protects skill and plan reads via protectedTools and prunes "superseded reads" dropped by later edits, while DeepSeek Harness prunes by size uniformly. The plugin is therefore output-only, non-destructive, deterministic, and idempotent (our cache strategy: each part is rewritten at most once, then the smaller prefix re-arms on the provider cache), with a knowledge-tier retention list and an ephemeral-tier compaction path (read headline collapse plus head/marker/tail pruning).</Rationale>
+  <Alternatives>
+    <Alternative>Input slimming for edit-family tools (stub old_string/new_string/patchText). Rejected by owner decision and by unanimous harness precedent that inputs stay verbatim; also risks confusing models that expect their own arguments back.</Alternative>
+    <Alternative>Blanket truncation of all outputs past a size threshold. Rejected by owner: knowledge results (webfetch/websearch) live longer than file-edit diffs and must not be dropped by a uniform rule.</Alternative>
+    <Alternative>Compress on save via tool.execute.after. Rejected: destructive, drops the full payload from storage and the diff/transcript views; contradicts the non-destructive philosophy and the owner's DeepSeek Harness preference.</Alternative>
+    <Alternative>LLM summarization of old tool calls. Rejected: already OpenCode's compaction territory; adds a model call, latency, and fidelity loss; this slice is model-free.</Alternative>
+    <Alternative>Extend hashline-edit instead of a new plugin. Rejected: compaction is cross-cutting and must also cover built-in read/bash/grep/webfetch; a focused plugin keeps hashline-edit's contract clean and mirrors DeepSeek Harness's separate composable pruner package.</Alternative>
+    <Alternative>codex /compact server endpoint and prompt_cache_key. Rejected: requires provider infrastructure we do not control; not portable to DeepSeek/qwen/kimi/glm backends.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Token-accurate budgets replacing char budgets, if transform-time token counts become available from providers.</Decision>
+    <Decision>Content-aware retention beyond tool-name classification (e.g., detecting a file edit that supersedes a prior read, and pruning that read even inside the tail window — oh-my-pi superseded-read pruning).</Decision>
+    <Decision>Per-tool slim forms for specific ephemeral tools (e.g., a grep/glob header form) beyond the generic head/tail prune.</Decision>
+    <Decision>chrome-devtools snapshot retention: UI state is ephemeral but current-state-relevant; default leaves it to head/tail pruning, revisitable via retainTools.</Decision>
+    <Decision>Bash output retention semantics: bash outputs can carry current working state; default head/tail prune outside the protected tail, revisiting a content-aware rule is deferred.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Anthropic stitching: only state.output content changes; callID, part type, input, and order are immutable, so tool_use/tool_result pairing is preserved.</Scenario>
+    <Scenario>Prompt cache: a part is rewritten once (idempotent, deterministic); subsequent turns replay the identical compacted form, so the provider prefix cache re-arms on the smaller prompt and stays warm until the provider TTL, after which the cache was cold anyway.</Scenario>
+    <Scenario>In-flight call: the last assistant message and the last protectLastCalls completed calls are never touched, so the model always sees the exact context it is continuing from.</Scenario>
+    <Scenario>Webfetch/websearch knowledge: a webfetch result older than the protected tail is retained byte-identical because it matches retainTools, regardless of its size.</Scenario>
+    <Scenario>Read superseded by later edit: an old read collapses to [Read &lt;file&gt;, lines X-Y]; the model re-reads the file if it needs current content, which is cheap and avoids stale anchor reuse.</Scenario>
+    <Scenario>readSlim on a read whose filePath is missing or whose header has no line range: fall back to head/tail pruning; never fabricate [Read &lt;file&gt;].</Scenario>
+    <Scenario>Error part: never compacted; the model must see the failure to recover.</Scenario>
+    <Scenario>OpenCode compaction already ran: state.time.compacted parts are skipped so we do not double-compact or fight the placeholder.</Scenario>
+    <Scenario>Near-threshold output: minSavingsChars guard skips it, avoiding a cache-churn rewrite that would save less than the placeholder costs.</Scenario>
+    <Scenario>User pins an extra tool family: adding a substring to retainTools on the next restart extends retention; existing behavior for other tools is unchanged.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

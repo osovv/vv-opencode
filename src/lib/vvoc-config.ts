@@ -377,6 +377,23 @@ export const VVOC_CONFIG_SCHEMA = {
             },
             additionalProperties: false,
           },
+          {
+            type: "object",
+            properties: {
+              enabled: { type: "boolean" },
+              protectLastCalls: { type: "integer", minimum: 0 },
+              minSavingsChars: { type: "integer", minimum: 0 },
+              outputMaxChars: { type: "integer", minimum: 0 },
+              headChars: { type: "integer", minimum: 0 },
+              tailChars: { type: "integer", minimum: 0 },
+              readSlim: { type: "boolean" },
+              retainTools: {
+                type: "array",
+                items: { type: "string", minLength: 1 },
+              },
+            },
+            additionalProperties: false,
+          },
         ],
       },
     },
@@ -666,18 +683,14 @@ function createPluginToggleConfig(overrides: unknown = {}): VvocPluginToggleConf
       continue;
     }
     if (isPlainObject(pluginValue)) {
-      const entry: VvocPluginEntryConfig = {};
-      if (pluginValue.enabled !== undefined) {
-        if (typeof pluginValue.enabled !== "boolean") {
-          throw new Error(`plugins["${pluginName}"].enabled must be a boolean`);
-        }
-        entry.enabled = pluginValue.enabled;
+      // Schema validation already ran; preserve every validated key (enabled,
+      // routing, and plugin-owned config such as tool-history-compaction budgets).
+      const entry: VvocPluginEntryConfig = { ...pluginValue };
+      if (entry.enabled !== undefined && typeof entry.enabled !== "boolean") {
+        throw new Error(`plugins["${pluginName}"].enabled must be a boolean`);
       }
-      if (pluginValue.routing !== undefined) {
-        if (!isPlainObject(pluginValue.routing)) {
-          throw new Error(`plugins["${pluginName}"].routing must be an object`);
-        }
-        entry.routing = pluginValue.routing as Record<string, unknown>;
+      if (entry.routing !== undefined && !isPlainObject(entry.routing)) {
+        throw new Error(`plugins["${pluginName}"].routing must be an object`);
       }
       config[pluginName] = entry;
       continue;

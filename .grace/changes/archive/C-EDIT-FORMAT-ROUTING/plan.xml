@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-EDIT-FORMAT-ROUTING>
     <IntentSummary>Implement per-model edit-format routing in the hashline-edit plugin: session-model detection via chat.message, per-model tool visibility via UserMessage.tools mutation, native replace profile (qwen/kimi), native dsh str_replace_editor profile (deepseek), hashline rename to hashline_edit with three-part-ref enforcement and replace/replace_range unification, routing config union in vvoc schema, and editMode telemetry metadata.</IntentSummary>
     <BaselineAssertions>

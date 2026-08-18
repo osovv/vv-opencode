@@ -1,0 +1,200 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-TOOL-HISTORY-COMPACTION>
+    <IntentSummary>Implement the tool-history-compaction plugin: output-only, non-destructive compaction of the in-memory replay via experimental.chat.messages.transform, following the DeepSeek Harness model. Tool classification retains knowledge outputs (web fetch/search, skill, subagent) and compacts ephemeral outputs (read to a [Read &lt;file&gt;, lines X-Y] header; bash/grep/glob and others to head/marker/tail pruning), with a protected recent tail, idempotent deterministic rewrites, a minimum-savings guard, strict vvoc config materialized on sync, schema v3 widening, barrel export, README, and graph/verification entries.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>src/plugins/hashline-edit/index.ts</Value>
+        <Value>src/index.ts</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>"hashline-edit"</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>routing</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>HashlineEditPlugin</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>tool-history-compaction</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>tool-history-compaction</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/index.ts</File>
+        <Text>ToolHistoryCompactionPlugin</Text>
+      </MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-TOOL-HISTORY-COMPACTION</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>ToolHistoryCompactionPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>tool-history-compaction</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>retainTools</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/index.ts</File>
+        <Text>experimental.chat.messages.transform</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/config.ts</File>
+        <Text>retainTools</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/prune.ts</File>
+        <Text>tool output pruned</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/read-slim.ts</File>
+        <Text>[Read </Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/plugins/tool-history-compaction/index.ts</File>
+        <Text>tool.execute.after</Text>
+      </MustNotContain>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CLI-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <Glob>src/plugins/tool-history-compaction/*.ts</Glob>
+      <Glob>src/plugins/tool-history-compaction*.test.ts</Glob>
+      <File>src/index.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/commands/plugin-toggle.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Config module and retention classification: strict parsing, defaults, retainTools substring matching</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>config.ts parses plugins["tool-history-compaction"] boolean-or-object strictly: enabled (default true), protectLastCalls (default 3), minSavingsChars (default 2000), outputMaxChars (default 2048), headChars (default 1200), tailChars (default 400), readSlim (default true), retainTools (default web fetch/search/skill/subagent substrings); unknown keys and invalid budgets throw fail-loud; headChars+tailChars+marker must fit within outputMaxChars; outputMaxChars 0 disables pruning.</Criterion>
+          <Criterion>retention.ts exposes isRetainedTool(tool, retainTools) matching case-insensitive substrings against the tool name; the default list covers webfetch, web_fetch, web-reader/webreader, search, brave, skill, task, agent.</Criterion>
+          <Criterion>Tests cover boolean/object/missing/undefined parsing, invalid values, budget invariant, substring matching case-insensitivity, and default list behavior.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.config.test.ts src/plugins/tool-history-compaction.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Output prune engine: head/marker/tail with code-point-safe slicing, threshold and min-savings guards</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>prune.ts exposes a fixed PRUNE_MARKER ("[... tool output pruned ...]") and pruneOutput(text, config): over-threshold text is replaced with exactly headChars code points, marker, tailChars code points, never exceeding outputMaxChars and strictly smaller than the input; under-threshold or non-string output is untouched; slicing never splits a UTF-16 surrogate pair.</Criterion>
+          <Criterion>A part already containing the marker (previously compacted) is detected and skipped (idempotence).</Criterion>
+          <Criterion>Savings are compared against minSavingsChars; a rewrite that saves less than the threshold is skipped.</Criterion>
+          <Criterion>Tests cover threshold boundaries, surrogate safety, marker idempotence, and min-savings skip.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.prune.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Read slim: old read outputs to [Read &lt;file&gt;, lines X-Y] with fail-closed fallback</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>read-slim.ts exposes slimReadOutput(part): for a read tool part with a string output, the file is recovered from state.input.filePath (or path/file aliases) and the line range from the output header when present, producing [Read &lt;file&gt;, lines X-Y]; an absent file or unrecoverable range falls back to pruneOutput instead of fabricating a summary.</Criterion>
+          <Criterion>Inputs are never modified; only the output string of eligible read parts changes.</Criterion>
+          <Criterion>Tests cover filePath/path aliases, header range recovery, missing file fallback, missing range fallback, and input immutability.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.read-slim.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Transform core: message walk, protected tail, retention dispatch, idempotency</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>transform.ts exposes compactMessages(messages, config): iterates parts newest-first; the last assistant message plus the last protectLastCalls completed tool calls are protected; error parts and parts with state.time.compacted are never touched; retained tools (retainTools) are never touched; eligible old read parts use readSlim when enabled; other eligible ephemeral outputs use pruneOutput.</Criterion>
+          <Criterion>Part structure (type, callID, tool, ordering, state.status, state.input) is never changed; only state.output strings of eligible parts are replaced; a second pass over the same input is byte-identical (idempotent).</Criterion>
+          <Criterion>Tests use real SDK-shaped part objects (lesson-plugin-tests-match-real-sdk-shapes): protection of tail/error/compacted parts, retention dispatch, readSlim on/off, prune application, input immutability, and idempotence.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.transform.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Plugin wiring: transform hook, config load, barrel export, plugin-toggle materialization, schema widening</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>index.ts registers ToolHistoryCompactionPlugin (Plugin async ({ directory })): loads vvoc config via loadVvocConfig, parses the plugin entry, returns {} when disabled, and registers the experimental.chat.messages.transform hook that rewrites only the in-memory messages copy; no tool.execute.after usage anywhere in the plugin.</Criterion>
+          <Criterion>src/index.ts exports ToolHistoryCompactionPlugin from the package root.</Criterion>
+          <Criterion>plugin-toggle-config.ts adds "tool-history-compaction" to PLUGIN_TOGGLE_NAMES and materializes the default config object into vvoc.json on sync/init conservatively (user values never overwritten), mirrored in the opencode.ts materialization call site.</Criterion>
+          <Criterion>schemas/vvoc/v3.json plugins additionalProperties accepts the tool-history-compaction object shape (enabled, protectLastCalls, minSavingsChars, outputMaxChars, headChars, tailChars, readSlim, retainTools) while existing boolean and hashline-edit routing documents still validate.</Criterion>
+          <Criterion>Tests cover hook registration shape, disabled-plugin no-op, materialization conservatism, schema validation of the new shape, and that an existing v3 document with the new key validates.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.test.ts src/lib/plugin-toggle-config.test.ts src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Durable state and docs: graph and verification entries, README section</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>.grace/graph/main.xml gains M-PLUGIN-TOOL-HISTORY-COMPACTION reflecting the transform-only output compaction, retention classification, and non-destructive scope; M-PLUGIN-TOGGLE-CONFIG and M-CLI-CONFIG entries reflect the new plugin toggle and schema shape where touched.</Criterion>
+          <Criterion>.grace/verification/main.xml gains V-M-PLUGIN-TOOL-HISTORY-COMPACTION recording the targeted test files and the telemetry rerun procedure.</Criterion>
+          <Criterion>README documents the plugin purpose, config shape and defaults, retention classification, protected tail, and how to enable/disable it.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path . &amp;&amp; bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Full verification gate: suite, checks, build, packaging, GRACE end-state</Title>
+        <DependsOn>T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Fresh full evidence passes: bun test (all suites), bun run check (typecheck+lint+fmt+tests), bun run build.</Criterion>
+          <Criterion>bun run pack:check passes when the public export surface changes.</Criterion>
+          <Criterion>GRACE end-state validation passes for the selected change: bunx @osovv/grace-cli@rc lint --path . --change C-TOOL-HISTORY-COMPACTION --assertions final (with --run-commands for MustPassCommand).</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test &amp;&amp; bun run check &amp;&amp; bun run build &amp;&amp; bunx @osovv/grace-cli@rc lint --path . --change C-TOOL-HISTORY-COMPACTION --assertions final --run-commands</Command>
+        </Verification>
+      </T-007>
+    </ImplementationPlan>
+  </C-TOOL-HISTORY-COMPACTION>
+</GraceChangePlan>

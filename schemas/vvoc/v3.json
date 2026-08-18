@@ -162,6 +162,20 @@
                 }
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "protectLastCalls": { "type": "integer", "minimum": 0 },
+              "minSavingsChars": { "type": "integer", "minimum": 0 },
+              "outputMaxChars": { "type": "integer", "minimum": 0 },
+              "headChars": { "type": "integer", "minimum": 0 },
+              "tailChars": { "type": "integer", "minimum": 0 },
+              "readSlim": { "type": "boolean" },
+              "retainTools": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            }
           }
         ]
       }

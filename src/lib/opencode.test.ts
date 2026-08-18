@@ -52,7 +52,10 @@ import {
   writeProviderBaseUrl,
   writeOpenCodeProviderObject,
 } from "./opencode.js";
-import { materializeHashlineEditEntry } from "./plugin-toggle-config.js";
+import {
+  materializeHashlineEditEntry,
+  materializeToolHistoryCompactionEntry,
+} from "./plugin-toggle-config.js";
 import {
   createDefaultVvocConfig,
   parseVvocConfigText,
@@ -847,6 +850,7 @@ describe("canonical vvoc config helpers", () => {
       expect(created?.version).toBe(3);
       const expectedPlugins = { ...createDefaultVvocConfig().plugins };
       expectedPlugins["hashline-edit"] = materializeHashlineEditEntry(true);
+      expectedPlugins["tool-history-compaction"] = materializeToolHistoryCompactionEntry(true);
       expect(created?.plugins).toEqual(expectedPlugins);
     } finally {
       await rm(configHome, { recursive: true, force: true });

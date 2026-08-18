@@ -23,6 +23,7 @@
         <M-PLUGIN-SECRETS-REDACTION />
         <M-PLUGIN-CONTEXT-TUI />
         <M-PLUGIN-WEB-TOOLS />
+        <M-PLUGIN-TOOL-HISTORY-COMPACTION />
         <M-WEB-CONFIG />
         <M-WEB-HTTP />
         <M-WEB-SEARCH-SERVICE />
