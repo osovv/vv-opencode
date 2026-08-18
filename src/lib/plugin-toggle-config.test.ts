@@ -117,3 +117,40 @@ describe("web-tools toggle", () => {
   });
 });
 // END_BLOCK_WEB_TOOLS_TOGGLE_TESTS
+
+// START_BLOCK_OBJECT_ENTRY_TESTS
+describe("object-form plugin entries", () => {
+  test("object entry without enabled defaults to enabled", () => {
+    expect(
+      isPluginEnabled(
+        { plugins: { "hashline-edit": { routing: { default: "hashline" } } } },
+        "hashline-edit",
+      ),
+    ).toBe(true);
+    expect(isPluginEnabled({ plugins: { "hashline-edit": {} } }, "hashline-edit")).toBe(true);
+  });
+
+  test("object entry respects the enabled flag", () => {
+    expect(
+      isPluginEnabled({ plugins: { "hashline-edit": { enabled: false } } }, "hashline-edit"),
+    ).toBe(false);
+    expect(
+      isPluginEnabled(
+        { plugins: { "hashline-edit": { enabled: true, routing: { default: "replace" } } } },
+        "hashline-edit",
+      ),
+    ).toBe(true);
+  });
+
+  test("boolean entries keep their behavior next to object entries", () => {
+    const config = {
+      plugins: {
+        guardian: false,
+        "hashline-edit": { enabled: true, routing: { default: "hashline" } },
+      },
+    };
+    expect(isPluginEnabled(config, "guardian")).toBe(false);
+    expect(isPluginEnabled(config, "hashline-edit")).toBe(true);
+  });
+});
+// END_BLOCK_OBJECT_ENTRY_TESTS

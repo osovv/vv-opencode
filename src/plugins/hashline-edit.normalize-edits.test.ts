@@ -22,98 +22,102 @@ import { normalizeHashlineEdits, type RawHashlineEdit } from "./hashline-edit/no
 
 describe("hashline normalize-edits", () => {
   test("maps replace with pos to a replace edit", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: "updated" }];
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ", lines: "updated" }];
 
     expect(normalizeHashlineEdits(input)).toEqual([
-      { op: "replace", pos: "2#VK", lines: "updated" },
+      { op: "replace", pos: "2#VK#ZZ", lines: "updated" },
     ]);
   });
 
   test("maps replace_range with pos and end to a ranged replace edit", () => {
     const input: RawHashlineEdit[] = [
-      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: ["a", "b"] },
+      { op: "replace_range", pos: "2#VK#ZZ", end: "4#MB#ZZ", lines: ["a", "b"] },
     ];
 
     expect(normalizeHashlineEdits(input)).toEqual([
-      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: ["a", "b"] },
+      { op: "replace_range", pos: "2#VK#ZZ", end: "4#MB#ZZ", lines: ["a", "b"] },
     ]);
   });
 
-  test("rejects replace with end", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", end: "4#MB", lines: ["a"] }];
+  test("maps replace with end to a ranged replace edit", () => {
+    const input: RawHashlineEdit[] = [
+      { op: "replace", pos: "2#VK#ZZ", end: "4#MB#ZZ", lines: ["a"] },
+    ];
 
-    expect(() => normalizeHashlineEdits(input)).toThrow(/replace does not accept end/i);
+    expect(normalizeHashlineEdits(input)).toEqual([
+      { op: "replace_range", pos: "2#VK#ZZ", end: "4#MB#ZZ", lines: ["a"] },
+    ]);
   });
 
   test("rejects replace_range without end", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace_range", pos: "2#VK", lines: ["a"] }];
+    const input: RawHashlineEdit[] = [{ op: "replace_range", pos: "2#VK#ZZ", lines: ["a"] }];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/requires both pos and end/i);
   });
 
   test("rejects replace with multi-line lines payload", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: ["line1", "line2"] }];
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ", lines: ["line1", "line2"] }];
 
-    expect(() => normalizeHashlineEdits(input)).toThrow(/single-line replacement only/i);
+    expect(() => normalizeHashlineEdits(input)).toThrow(/no end anchor/i);
   });
 
   test("maps anchored append and prepend while preserving op", () => {
     const input: RawHashlineEdit[] = [
-      { op: "append", pos: "2#VK", lines: ["after"] },
-      { op: "prepend", pos: "4#MB", lines: ["before"] },
+      { op: "append", pos: "2#VK#ZZ", lines: ["after"] },
+      { op: "prepend", pos: "4#MB#ZZ", lines: ["before"] },
     ];
 
     expect(normalizeHashlineEdits(input)).toEqual([
-      { op: "append", pos: "2#VK", lines: ["after"] },
-      { op: "prepend", pos: "4#MB", lines: ["before"] },
+      { op: "append", pos: "2#VK#ZZ", lines: ["after"] },
+      { op: "prepend", pos: "4#MB#ZZ", lines: ["before"] },
     ]);
   });
 
   test("prefers pos over end when both anchors are present for inserts", () => {
     const input: RawHashlineEdit[] = [
-      { op: "prepend", pos: "3#AA", end: "7#BB", lines: ["before"] },
+      { op: "prepend", pos: "3#VK#ZZ", end: "7#MB#ZZ", lines: ["before"] },
     ];
 
     expect(normalizeHashlineEdits(input)).toEqual([
-      { op: "prepend", pos: "3#AA", lines: ["before"] },
+      { op: "prepend", pos: "3#VK#ZZ", lines: ["before"] },
     ]);
   });
 
   test("converts null lines to empty array for append", () => {
-    const input: RawHashlineEdit[] = [{ op: "append", pos: "2#VK", lines: null }];
+    const input: RawHashlineEdit[] = [{ op: "append", pos: "2#VK#ZZ", lines: null }];
 
-    expect(normalizeHashlineEdits(input)).toEqual([{ op: "append", pos: "2#VK", lines: [] }]);
+    expect(normalizeHashlineEdits(input)).toEqual([{ op: "append", pos: "2#VK#ZZ", lines: [] }]);
   });
 
   test("rejects edits that omit lines", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK" }];
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ" }];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/lines is required/);
   });
 
   test("rejects unsupported operations", () => {
     const input = [
-      { op: "set_line", pos: "2#VK", lines: "updated" },
+      { op: "set_line", pos: "2#VK#ZZ", lines: "updated" },
     ] as unknown as RawHashlineEdit[];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/unsupported op/);
   });
   test("rejects array payload entries containing embedded newlines", () => {
-    const input: RawHashlineEdit[] = [{ op: "append", pos: "2#VK", lines: ["a\nb"] }];
+    const input: RawHashlineEdit[] = [{ op: "append", pos: "2#VK#ZZ", lines: ["a\nb"] }];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/embedded newline/);
   });
 
   test("rejects carriage returns inside array payload entries", () => {
     const input: RawHashlineEdit[] = [
-      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: ["a\rb"] },
+      { op: "replace_range", pos: "2#VK#ZZ", end: "4#MB#ZZ", lines: ["a\rb"] },
     ];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/embedded newline/);
   });
 
   test("rejects blank-only replace payloads with teaching guidance", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: [""] }];
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ", lines: [""] }];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/ambiguous/);
     expect(() => normalizeHashlineEdits(input)).toThrow(/lines: \[\]/);
@@ -121,36 +125,48 @@ describe("hashline normalize-edits", () => {
 
   test("rejects blank-only replace_range payloads", () => {
     const input: RawHashlineEdit[] = [
-      { op: "replace_range", pos: "2#VK", end: "4#MB", lines: [""] },
+      { op: "replace_range", pos: "2#VK#ZZ", end: "4#MB#ZZ", lines: [""] },
     ];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/ambiguous/);
   });
 
   test("rejects blank string payloads for replace", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: "" }];
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ", lines: "" }];
 
     expect(() => normalizeHashlineEdits(input)).toThrow(/ambiguous/);
   });
 
-  test("rejects replace string payloads with embedded newlines", () => {
-    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK", lines: "a\nb" }];
+  test("rejects replace string payloads with embedded newlines but no end", () => {
+    const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ", lines: "a\nb" }];
 
-    expect(() => normalizeHashlineEdits(input)).toThrow(/replace_range/);
+    expect(() => normalizeHashlineEdits(input)).toThrow(/no end anchor/i);
+  });
+
+  test("accepts replace string payloads with embedded newlines when end is present", () => {
+    const input: RawHashlineEdit[] = [
+      { op: "replace", pos: "2#VK#ZZ", end: "3#MB#ZZ", lines: "a\nb" },
+    ];
+
+    expect(normalizeHashlineEdits(input)).toEqual([
+      { op: "replace_range", pos: "2#VK#ZZ", end: "3#MB#ZZ", lines: "a\nb" },
+    ]);
   });
 
   test("still accepts empty-array and null payloads as deletions", () => {
-    expect(normalizeHashlineEdits([{ op: "replace", pos: "2#VK", lines: [] }])).toEqual([
-      { op: "replace", pos: "2#VK", lines: [] },
+    expect(normalizeHashlineEdits([{ op: "replace", pos: "2#VK#ZZ", lines: [] }])).toEqual([
+      { op: "replace", pos: "2#VK#ZZ", lines: [] },
     ]);
     expect(
-      normalizeHashlineEdits([{ op: "replace_range", pos: "2#VK", end: "3#MB", lines: null }]),
-    ).toEqual([{ op: "replace_range", pos: "2#VK", end: "3#MB", lines: [] }]);
+      normalizeHashlineEdits([
+        { op: "replace_range", pos: "2#VK#ZZ", end: "3#MB#ZZ", lines: null },
+      ]),
+    ).toEqual([{ op: "replace_range", pos: "2#VK#ZZ", end: "3#MB#ZZ", lines: [] }]);
   });
 
   test("allows blank lines inside insert payloads", () => {
-    expect(normalizeHashlineEdits([{ op: "append", pos: "2#VK", lines: [""] }])).toEqual([
-      { op: "append", pos: "2#VK", lines: [""] },
+    expect(normalizeHashlineEdits([{ op: "append", pos: "2#VK#ZZ", lines: [""] }])).toEqual([
+      { op: "append", pos: "2#VK#ZZ", lines: [""] },
     ]);
   });
 });

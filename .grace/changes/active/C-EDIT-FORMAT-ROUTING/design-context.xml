@@ -1,0 +1,27 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-EDIT-FORMAT-ROUTING</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>One edit format for all models is disproven by telemetry: error rates on hashline range 20-34% for qwen3.8-max/kimi-k3/deepseek-v4-flash, dominated by anchor mechanics, while every one of those families has an official native harness (qwen-code, kimi-code, deepseek-harness dsh) whose edit contract the models are trained on. Independent prior art confirms the approach: oh-my-pi resolveEditMode routes edit variants per model with the same exclusions (kimi, deepseek-v4-flash to replace), and grok-build ships parallel file-toolsets (standard/hashline/codex/opencode) with slot-wise swapping. OpenCode cannot do per-model tool schemas through the plugin API (static registration, tool.definition hook lacks model context), but per-model visibility is achievable: chat.message mutates UserMessage.tools before persistence, and SessionTools.resolve filters the tool list by it before the request reaches the model. Full extraction evidence lives in /home/al/dev/harnesses/EXTRACTION (00 provenance, 01-08 contracts, 09 telemetry baseline, SUMMARY matrix).</Rationale>
+  <Alternatives>
+    <Alternative>Single polyglot edit tool accepting both hashline edits[] and old_string/new_string shapes, validated per session model. Rejected: schema and description are static, so no native fidelity; str_replace_editor command-style does not fit one schema cleanly; wrong-shape rejection would replace native-failure confusion with our own.</Alternative>
+    <Alternative>Multiple registered tools without per-model visibility, relying on execute-time rejection of the wrong tool. Rejected: every model would see all edit-type tools in the catalog, contradicting the core requirement that each model sees only its native tool, and reproducing cross-format confusion.</Alternative>
+    <Alternative>Migrate to oh-my-pi which owns its harness and resolves edit modes natively. Rejected for now: loses the vv-opencode governance layer (guardian, workflow, secrets redaction, model roles, vvoc CLI) and OpenCode ecosystem/telemetry continuity; revisitable if OpenCode plugin API regresses or post-Patch-2 telemetry shows the gap unbridgeable.</Alternative>
+    <Alternative>Keep deepseek-v4-flash on a custom replace profile instead of dsh str_replace_editor (oh-my-pi does exactly this). Rejected by explicit owner decision: deepseek gets its native dsh tool, no custom substitute.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>apply_patch/patch profile for step and codex families (format fully extracted: codex grammar and step clone it 1:1; OpenCode is MIT so a faithful port is possible later).</Decision>
+    <Decision>grok search_replace profile and the capitalized Edit alias for kimi (same replace engine, extra registrations).</Decision>
+    <Decision>str_replace_editor directory-view depth and hidden-entry policy tuning beyond dsh defaults.</Decision>
+    <Decision>Hash length increase beyond two characters (collision risk appears minor in telemetry; token cost tradeoff).</Decision>
+    <Decision>Upstream proposal to OpenCode for first-class per-model plugin tool visibility, which would replace the UserMessage.tools mutation mechanism.</Decision>
+    <Decision>Whether passthrough models (gpt/codex) should also get write disabled to mimic the host apply_patch environment.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Model switch mid-session: the next user message re-resolves the profile and re-mutates message.tools; stale history referencing the previous tool is handled by the safety-net rejection with teaching text.</Scenario>
+    <Scenario>Subagent child session: task tool prompts through SessionPrompt.prompt, chat.message fires with the child model, visibility mutations apply; a subagent pinned to a different model gets its own profile.</Scenario>
+    <Scenario>Model detection cache miss at tool time (unknown path): fail-closed default hashline for edit semantics and anchored read, preserving current behavior.</Scenario>
+    <Scenario>User TUI tool toggles: client-provided per-message tools become session permission rules and compose with message.tools mutations without conflict.</Scenario>
+    <Scenario>Config rollback: setting an explicit routing override with default hashline and empty rules restores legacy all-hashline behavior without schema changes.</Scenario>
+    <Scenario>File edited between view and str_replace (or read and replace): mtime/size drift detected, operation rejected fail-closed with re-read guidance, standing in for dsh replaceIfVersion CAS.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

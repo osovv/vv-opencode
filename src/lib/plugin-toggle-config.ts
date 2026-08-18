@@ -1,5 +1,5 @@
 // FILE: src/lib/plugin-toggle-config.ts
-// VERSION: 1.0.0
+// VERSION: 1.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define canonical plugin toggle names, default-all-true values, and a pure plugin-enabled helper for loaded vvoc config snapshots.
 //   SCOPE: Plugin name constants, default config builder, pure toggle checks, and the toggle config type.
@@ -11,14 +11,15 @@
 //
 // START_MODULE_MAP
 //   PLUGIN_TOGGLE_NAMES - Canonical list of vvoc-managed plugin names.
-//   VvocPluginToggleConfig - Type alias for Record<string, boolean>.
+//   VvocPluginToggleConfig - Type alias mapping plugin names to boolean toggles or object entries.
+//   VvocPluginEntryConfig - Object-form plugin entry with optional enabled flag and plugin-owned routing config.
 //   createDefaultPluginToggleConfig - Returns a Record with all known plugins set to true.
 //   isPluginEnabled - Returns whether the named plugin is enabled in a loaded vvoc config object.
 //   isVvocPluginEnabled - Alias for isPluginEnabled with explicit vvoc naming.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Added the default-enabled web-tools plugin toggle.]
+//   LAST_CHANGE: [v1.3.0 - Plugin entries accept an object form with optional enabled flag and plugin-owned config; isPluginEnabled resolves both forms.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -33,7 +34,12 @@ export const PLUGIN_TOGGLE_NAMES = [
   "web-tools",
 ] as const;
 
-export type VvocPluginToggleConfig = Record<string, boolean>;
+export type VvocPluginEntryConfig = {
+  enabled?: boolean;
+  routing?: Record<string, unknown>;
+};
+
+export type VvocPluginToggleConfig = Record<string, boolean | VvocPluginEntryConfig>;
 // END_BLOCK_CONSTANTS
 
 // START_BLOCK_DEFAULT_CONFIG
@@ -63,19 +69,24 @@ export function isPluginEnabled(
 
   const pluginValue = config.plugins?.[pluginName];
   // If the specific plugin is not listed, default to enabled
-  if (typeof pluginValue !== "boolean") {
+  if (pluginValue === undefined) {
     return true;
   }
 
-  if (process.env.DEBUG?.includes("vvoc")) {
-    console.log(
-      "[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED] plugin " +
-        pluginName +
-        " enabled: " +
-        pluginValue,
-    );
+  if (typeof pluginValue === "boolean") {
+    if (process.env.DEBUG?.includes("vvoc")) {
+      console.log(
+        "[plugin-toggle][isPluginEnabled][BLOCK_CHECK_PLUGIN_ENABLED] plugin " +
+          pluginName +
+          " enabled: " +
+          pluginValue,
+      );
+    }
+    return pluginValue;
   }
-  return pluginValue;
+
+  // Object entry: enabled defaults to true; plugin-owned sections do not disable it.
+  return pluginValue.enabled !== false;
 }
 
 export const isVvocPluginEnabled = isPluginEnabled;

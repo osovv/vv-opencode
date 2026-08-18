@@ -1,0 +1,224 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-EDIT-FORMAT-ROUTING>
+    <IntentSummary>Implement per-model edit-format routing in the hashline-edit plugin: session-model detection via chat.message, per-model tool visibility via UserMessage.tools mutation, native replace profile (qwen/kimi), native dsh str_replace_editor profile (deepseek), hashline rename to hashline_edit with three-part-ref enforcement and replace/replace_range unification, routing config union in vvoc schema, and editMode telemetry metadata.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>src/plugins/hashline-edit/index.ts</Value>
+        <Value>src/plugins/hashline-edit/validation.ts</Value>
+        <Value>src/plugins/hashline-edit/normalize-edits.ts</Value>
+        <Value>src/plugins/hashline-edit/tool-description.ts</Value>
+        <Value>src/plugins/hashline-edit/edit-operations.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+      </MustExist>
+            <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>edit: tool({</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>"tool.execute.after"</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/tool-description.ts</File>
+        <Text>Backward-compatible</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/normalize-edits.ts</File>
+        <Text>replace does not accept end</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>"hashline-edit"</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>hashline_edit</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>str_replace_editor</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>chat.message</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>routing</Text>
+      </MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-HASHLINE-EDIT</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+        <Module>M-CONFIG-LAYERS</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+            <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>hashline_edit: tool({</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>str_replace_editor: tool({</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>"chat.message"</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>editMode</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/routing.ts</File>
+        <Text>resolveEditMode</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/replace-engine.ts</File>
+        <Text>old_string</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/str-replace-editor.ts</File>
+        <Text>str_replace</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>routing</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/tool-description.ts</File>
+        <Text>three-part</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/plugins/hashline-edit/normalize-edits.ts</File>
+        <Text>replace does not accept end</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/plugins/hashline-edit/tool-description.ts</File>
+        <Text>Backward-compatible</Text>
+      </MustNotContain>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CONFIG-LAYERS />
+        <M-CLI-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CONFIG-LAYERS />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <Glob>src/plugins/hashline-edit/*.ts</Glob>
+      <Glob>src/plugins/hashline-edit*.test.ts</Glob>
+      <File>schemas/vvoc/v3.json</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/config-layers.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>README.md</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Routing core and session state: EditMode resolver, routing config parsing, session model cache, session file cache</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>routing.ts exports EditMode (hashline | replace | str_replace_editor | passthrough), parseRoutingConfig (strict, invalid values throw), and resolveEditMode(config, providerID, modelID) matching case-insensitive substring rules against providerID then modelID, first match wins, default hashline.</Criterion>
+          <Criterion>session-state.ts exports a session model cache (set/get by sessionID) and a session file cache (record/check mtime+size per sessionID+path) with drift detection.</Criterion>
+          <Criterion>Tests cover rule precedence, provider-then-model matching, unknown-model default, cache hit/miss, and file drift detection.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.routing.test.ts src/plugins/hashline-edit.session-state.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>vvoc config schema union: plugins.hashline-edit accepts boolean or object with enabled and routing</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>schemas/vvoc/v3.json plugins values accept boolean or an object with optional enabled boolean and optional routing object (default string enum plus rules record of enum modes); existing boolean configs validate unchanged.</Criterion>
+          <Criterion>vvoc-config parsing exposes the resolved hashline-edit plugin settings; invalid routing values fail loudly at load.</Criterion>
+          <Criterion>plugin-toggle-config isVvocPluginEnabled treats the object form via its enabled field, defaulting true when absent.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/vvoc-config.test.ts src/lib/plugin-toggle-config.test.ts src/lib/config-layers.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Replace engine: qwen/kimi native replace contract with prior-read enforcement and visible fallbacks</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Exact literal match applies; zero matches return a teaching error directing to re-read; multiple matches without replace_all return an error naming the occurrence count; replace_all replaces every occurrence; old===new and empty-old-on-existing-file are rejected.</Criterion>
+          <Criterion>Fallback layers are limited to unicode confusables and trailing whitespace (indentation never relaxed) and each used layer emits a visible warning in the output.</Criterion>
+          <Criterion>Prior-read enforcement uses the session file cache: unread file rejected in default strict mode, mtime/size drift since read rejected fail-closed; mode configurable strict | warn | off.</Criterion>
+          <Criterion>Successful results include the bounded diff summary (+A/-R, first change line) and editMode metadata.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.replace-engine.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>DeepSeek profile: dsh str_replace_editor contract (view/create/str_replace/insert) with view-cache CAS equivalent</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>view renders the dsh header, 6-padded line numbers with two spaces, view_range validation with dsh error texts, and the dsh truncation marker at maxOutputChars; directory view lists two levels excluding hidden, node_modules, __pycache__.</Criterion>
+          <Criterion>str_replace matches exact-verbatim only; zero matches return the dsh FS_EDIT_NOT_FOUND text; multiple matches return the ambiguity text listing all occurrence line numbers; insert validates insert_line range and inserts after the line; create rejects existing files with the dsh guard text; relative paths return the absolute-path hint.</Criterion>
+          <Criterion>Mutations check the view-cache mtime/size snapshot and reject fail-closed when the file drifted since the last view.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.str-replace-editor.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Hashline hardening: mandatory three-part refs, replace/replace_range unification, neighbor-duplicate warnings</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Edit operations reject two-part LINE#HASH refs with a teaching error that shows the required three-part form; read output and mismatch snippets keep rendering full triples.</Criterion>
+          <Criterion>replace accepts an optional end anchor and applies as a range when present; replace_range remains accepted as an alias; multi-line replace without end is rejected with add-end guidance; the obsolete replace-does-not-accept-end error is gone.</Criterion>
+          <Criterion>Payload lines that duplicate surviving neighbors outside the exact-echo cases produce visible warnings while still applying literally.</Criterion>
+          <Criterion>tool-description documents mandatory three-part anchors and the unified replace semantics with updated examples.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.normalize-edits.test.ts src/plugins/hashline-edit.edit-operations.test.ts src/plugins/hashline-edit.tool-description.test.ts src/plugins/hashline-edit.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Plugin wiring: register hashline_edit, replace edit, and str_replace_editor; chat.message model cache and UserMessage.tools visibility mutation; routed read hook; tool.execute.before safety net; editMode telemetry</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Plugin registers hashline_edit (renamed hashline semantics), edit (replace profile with snake_case and camelCase parameter aliases), and str_replace_editor; routing config is read from the startup vvoc snapshot with the default table (qwen replace, kimi replace, deepseek str_replace_editor, gpt/codex passthrough, default hashline).</Criterion>
+          <Criterion>chat.message populates the session model cache from UserMessage.model and mutates UserMessage.tools to hide every edit-type tool outside the resolved profile; tests assert on real SDK UserMessage shapes.</Criterion>
+          <Criterion>tool.execute.before rejects wrong-profile tool calls with a teaching error naming the correct tool; read hook applies anchor transform only for hashline sessions.</Criterion>
+          <Criterion>Every edit-type result metadata includes editMode, providerID, modelID; boolean false plugin toggle still disables everything; boolean true uses default routing.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.test.ts src/plugins/hashline-edit.routing.test.ts</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Durable state and docs: graph and verification updates, README routing section</Title>
+        <DependsOn>T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-PLUGIN-HASHLINE-EDIT graph entry reflects routing, the three registered tools, and the rename; M-PLUGIN-TOGGLE-CONFIG and M-CLI-CONFIG entries reflect the config union where touched.</Criterion>
+          <Criterion>V-M-PLUGIN-HASHLINE-EDIT verification entry records the new targeted test files and the telemetry rerun procedure.</Criterion>
+          <Criterion>README documents the routing table, config shape, per-model tool visibility, and the hashline rename.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path . &amp;&amp; bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-007>
+    </ImplementationPlan>
+  </C-EDIT-FORMAT-ROUTING>
+</GraceChangePlan>

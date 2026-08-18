@@ -26,11 +26,14 @@ import {
   applySetLine,
 } from "./hashline-edit/edit-operation-primitives.js";
 import { applyHashlineEditsWithReport } from "./hashline-edit/edit-operations.js";
-import { computeLineHash } from "./hashline-edit/hash-computation.js";
+import { computeAnchorHash, computeLineHash } from "./hashline-edit/hash-computation.js";
 import type { HashlineEdit } from "./hashline-edit/types.js";
 
 function anchorFor(lines: string[], line: number): string {
-  return `${line}#${computeLineHash(line, lines[line - 1] ?? "")}`;
+  const content = lines[line - 1] ?? "";
+  const hash = computeLineHash(line, content);
+  const anchor = computeAnchorHash(line, lines[line - 2], content, lines[line]);
+  return `${line}#${hash}#${anchor}`;
 }
 
 describe("hashline edit-operations", () => {
@@ -167,7 +170,7 @@ describe("hashline edit-operations", () => {
     const content = "line 1\nline 2";
     const lines = content.split("\n");
     const canonical = anchorFor(lines, 1);
-    const spaced = ` 1 # ${canonical.split("#")[1]} `;
+    const spaced = ` 1 # ${canonical.split("#")[1]} # ${canonical.split("#")[2]} `;
     const report = applyHashlineEditsWithReport(content, [
       { op: "append", pos: canonical, lines: ["inserted"] },
       { op: "append", pos: spaced, lines: ["inserted"] },
@@ -251,6 +254,44 @@ describe("hashline edit-operations", () => {
     ]);
 
     expect(report.content).toBe("line 1\nchanged");
+    expect(report.warnings).toEqual([]);
+  });
+
+  test("warns when append payload duplicates the lines already following the anchor", () => {
+    const content = "alpha\nbeta\ngamma";
+    const lines = content.split("\n");
+
+    const report = applyHashlineEditsWithReport(content, [
+      { op: "append", pos: anchorFor(lines, 1), lines: ["beta", "gamma"] },
+    ]);
+
+    expect(report.content).toBe("alpha\nbeta\ngamma\nbeta\ngamma");
+    expect(report.warnings.length).toBe(1);
+    expect(report.warnings[0]).toContain("duplicates the 2 line(s) already following the anchor");
+  });
+
+  test("warns when prepend payload duplicates the lines already preceding the anchor", () => {
+    const content = "alpha\nbeta\ngamma";
+    const lines = content.split("\n");
+
+    const report = applyHashlineEditsWithReport(content, [
+      { op: "prepend", pos: anchorFor(lines, 3), lines: ["alpha", "beta"] },
+    ]);
+
+    expect(report.content).toBe("alpha\nbeta\nalpha\nbeta\ngamma");
+    expect(report.warnings.length).toBe(1);
+    expect(report.warnings[0]).toContain("duplicates the 2 line(s) already preceding the anchor");
+  });
+
+  test("does not warn for novel append content", () => {
+    const content = "alpha\nbeta";
+    const lines = content.split("\n");
+
+    const report = applyHashlineEditsWithReport(content, [
+      { op: "append", pos: anchorFor(lines, 2), lines: ["gamma"] },
+    ]);
+
+    expect(report.content).toBe("alpha\nbeta\ngamma");
     expect(report.warnings).toEqual([]);
   });
 });

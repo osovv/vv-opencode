@@ -12,7 +12,6 @@
 // START_MODULE_MAP
 //   CLI_PATH - Registered CLI entrypoint used by isolated subprocess tests.
 //   runGuardianConfig - Invoke the registered Guardian config CLI in an isolated subprocess.
-//   parsePositiveIntegerArg tests - Reject fractional, non-finite, and non-positive duration values without subprocess contention.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

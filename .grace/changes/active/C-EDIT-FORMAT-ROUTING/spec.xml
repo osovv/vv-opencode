@@ -1,0 +1,60 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-EDIT-FORMAT-ROUTING>
+    <Summary>Per-model routing of edit-tool semantics in the hashline-edit plugin: each session's active model sees exactly one edit-type tool carrying its native format (hashline, qwen/kimi replace, or DeepSeek dsh str_replace_editor), plus targeted hashline hardening against the two observed residual failure classes (silent wrong-copy edits on duplicate lines, replace/replace_range confusion).</Summary>
+    <Problem>Baseline telemetry (opencode.db, see harnesses/EXTRACTION/09-telemetry-baseline.md): edit error rates on hashline are qwen3.8-max(-preview) 20.2-27.1%, kimi-k3 33.7%, deepseek-v4-flash 22.4%; 70-78% of those errors are anchor mechanics (hash mismatch, reference format), i.e. models fail the format, not the task. All three families have official native harnesses whose edit contracts the models are trained on (qwen-code edit, kimi-code Edit, deepseek-harness str_replace_editor). Additionally hashline itself has two residual failure classes: (1) silent wrong-copy edits on duplicate lines because two-part LINE#HASH refs validate by content only (computeLineHash ignores line number for significant content), and (2) replace vs replace_range confusion (~141 baseline errors: "replace is for single-line replacement only", "replace does not accept end").</Problem>
+    <Goals>
+      <Goal>Deterministic session-model detection: sessionID to providerID/modelID cache populated from the chat.message hook (UserMessage.model), fail-closed default when unknown.</Goal>
+      <Goal>Per-model tool visibility: mutate UserMessage.tools in chat.message so each session exposes exactly one edit-type tool; tool.execute.before safety-net rejection with teaching error for wrong-tool calls.</Goal>
+      <Goal>Replace profile for qwen and kimi: edit tool with old_string/new_string/replace_all contract (snake_case and camelCase parameter aliases), exact match then limited visible fallback layers (unicode confusables, trailing whitespace; indentation never relaxed), uniqueness rule, prior-read enforcement with TOCTOU re-check, teaching errors, bounded diff summary output.</Goal>
+      <Goal>DeepSeek profile: str_replace_editor tool implementing the dsh contract verbatim (view/create/str_replace/insert commands, 6-padded cat -n view with view_range, truncation marker, exact-verbatim matching, ambiguity error listing all occurrence line numbers, create guard, absolute-path hint), with mtime/size view-cache as the fail-closed equivalent of dsh replaceIfVersion CAS.</Goal>
+      <Goal>Rename the hashline edit tool from edit to hashline_edit; hashline remains the default profile for all unmatched models; anchored read transform applies only to hashline sessions.</Goal>
+      <Goal>Hashline hardening: require three-part LINE#HASH#ANCHOR refs in edit operations (reject two-part refs with a teaching error); unify replace to accept an optional end anchor with replace_range kept as an alias; visible warnings when payload lines duplicate surviving neighbors outside exact-echo cases.</Goal>
+      <Goal>Routing configuration in vvoc.json as a backward-compatible union for plugins.hashline-edit (boolean keeps enabled-with-default-routing), ordered pattern rules matched case-insensitively against providerID then modelID, first match wins, default hashline.</Goal>
+      <Goal>Telemetry metadata: every edit-type tool result carries editMode and resolved model identifiers so post-release telemetry splits errors per mode.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>OpenCode plugin API 1.18.x: static tool registration at plugin startup; per-model visibility only via UserMessage.tools mutation and host tool-id gates; no grammar-constrained freeform tools.</Constraint>
+      <Constraint>Patch 1 philosophy binds all profiles: literal application, fail-closed rejection with context, visible warnings, no silent heuristics.</Constraint>
+      <Constraint>vvoc schema v3 strictness: the plugins value extension must stay backward compatible (existing boolean configs remain valid); invalid config fails loudly, no silent migration.</Constraint>
+      <Constraint>Plugins share the startup config snapshot; routing changes require an OpenCode restart (established invariant).</Constraint>
+      <Constraint>dsh contract texts are copied verbatim under MIT with attribution recorded; nothing is copied verbatim from proprietary Claude Code sources.</Constraint>
+      <Constraint>hash mismatch remains fail-closed by design; it is protection, not a defect.</Constraint>
+      <Constraint>Routing must not depend on the host's gpt-* apply_patch gating; behavior for models outside routing rules defaults to hashline.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>apply_patch/patch profile (step, codex families) in this slice.</NonGoal>
+      <NonGoal>grok search_replace profile in this slice.</NonGoal>
+      <NonGoal>Grammar-constrained decoding or freeform tool payloads.</NonGoal>
+      <NonGoal>Hot reload of routing configuration.</NonGoal>
+      <NonGoal>Emulating native read formats beyond disabling anchor injection for non-hashline sessions (OpenCode default line-numbered output is sufficient because old-text quoting is verbatim).</NonGoal>
+      <NonGoal>Changes to built-in OpenCode edit behavior for sessions where the plugin is disabled.</NonGoal>
+      <NonGoal>Migrating away from OpenCode or depending on oh-my-pi at runtime.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>Test harness using real SDK shapes proves that a session whose model matches the replace rule gets message.tools mutations hiding hashline_edit and str_replace_editor, and a deepseek-matched session hides edit and hashline_edit, leaving only the profile tool visible.</Criterion>
+      <Criterion>str_replace_editor behavior matches the dsh contract: view renders the exact header and 6-padded numbering and truncation marker; str_replace with zero matches returns the verbatim FS_EDIT_NOT_FOUND text; multiple matches return the ambiguity text listing all occurrence line numbers; create on an existing file returns the dsh guard text; relative path returns the absolute-path hint; edits against a file changed since view are rejected fail-closed.</Criterion>
+      <Criterion>Replace profile: exact match applies literally; zero matches return a teaching error directing to re-read; multiple matches without replace_all return an error naming the occurrence count; file not read in this session is rejected under default strict prior-read mode; a file modified after read is rejected; any fallback layer used emits a visible warning; successful results include the bounded diff summary.</Criterion>
+      <Criterion>Hashline sessions expose only hashline_edit; read output carries anchors; two-part refs in edit operations are rejected with a teaching error pointing at the three-part form; replace with end applies as a range; replace_range remains accepted; multi-line replace without end is rejected with add-end guidance.</Criterion>
+      <Criterion>Routing config: plugins.hashline-edit as boolean true enables the plugin with the default routing table (qwen to replace, kimi to replace, deepseek to str_replace_editor, gpt/codex passthrough, default hashline); an explicit rules object overrides; boolean false disables the plugin entirely; invalid routing config fails loudly at load.</Criterion>
+      <Criterion>Every edit-type tool result metadata includes editMode, providerID, and modelID.</Criterion>
+      <Criterion>Full test suite passes fresh: bun test, bun run typecheck, bun run lint, bun run fmt:check; grace lint and grace status pass with the new active bundle.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-HASHLINE-EDIT />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-CONFIG-LAYERS />
+      <M-CLI-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/hashline-edit &amp;&amp; bun run check &amp;&amp; bunx @osovv/grace-cli@rc lint --path . &amp;&amp; bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Targeted tests per acceptance criterion built on real SDK shapes (lesson-plugin-tests-match-real-sdk-shapes); fresh full-suite pass; post-release telemetry rerun of harnesses/EXTRACTION/telemetry-baseline.py showing reduced edit error rates for qwen3.8-max, kimi-k3, deepseek-v4-flash, split by the editMode metadata tag.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>UserMessage.tools mutation in the chat.message hook persists with the message and filters the per-request tool list; verified against OpenCode v1.18.18 source (session/prompt.ts, session/tools.ts) and assumed stable across host 1.18.x patch releases.</Assumption>
+      <Assumption>The three target models are reliably matched by case-insensitive substring patterns on providerID/modelID (qwen, kimi, deepseek-v4-flash); the config can pin exact modelIDs where substring is too broad.</Assumption>
+      <Assumption>Extracted native contracts are accurate as of the pinned provenance commits (qwen-code c396fe3d, kimi-code d96cd037, deepseek-harness 47f94385); dsh is developer preview and may drift upstream.</Assumption>
+      <Assumption>Boolean true in plugins.hashline-edit means enabled-with-default-routing (the routing fix is the point of this change); users who want legacy all-hashline behavior pin it via an explicit routing override.</Assumption>
+      <Assumption>Subagent child sessions receive chat.message with their own model (task tool routes through SessionPrompt.prompt), so visibility mutations cover subagents; the tool.execute.before safety net covers any residual path.</Assumption>
+    </Assumptions>
+  </C-EDIT-FORMAT-ROUTING>
+</GraceChangeSpec>

@@ -1,33 +1,49 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Override OpenCode's default `edit` tool with a hash-anchored edit implementation and hash-aware read output with context-anchored hash references.
-//   SCOPE: Hashline-backed edit tool registration, read-output transformation with anchor hashes, anchor validation, literal file mutation execution, bounded post-edit diff feedback, and success metadata emission.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
+//   PURPOSE: Route per-model edit tooling: register hashline_edit, replace-profile edit, and dsh str_replace_editor; resolve the session edit mode from vvoc routing config; expose only the profile tool to each model; and transform read output with anchors for hashline sessions.
+//   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, tool.execute.before safety net, routed read transformation, hashline/replace/str_replace_editor execution, bounded post-edit diff feedback, and editMode telemetry metadata.
+//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/replace-engine.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineEditPlugin - Registers the hash-anchored `edit` tool override and post-read output enhancer.
+//   HashlineEditPlugin - Registers routed edit tools (hashline_edit, edit, str_replace_editor), per-model tool visibility, and the routed read-output enhancer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Successful edits now report line deltas, apply warnings, and a bounded diff in the tool output; application is literal.]
+//   LAST_CHANGE: [v0.8.0 - Added per-model edit-format routing with native replace and dsh str_replace_editor profiles, per-model tool visibility via chat.message, safety-net rejection, and editMode telemetry.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { findFirstChangedLine, summarizeEditDiff } from "./diff-summary.js";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
 import { computeAnchorHash, computeLineHash } from "./hash-computation.js";
 import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.js";
-import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
+import { applyReplaceEdit, formatReplaceSuccess } from "./replace-engine.js";
+import {
+  parseHashlineEditPluginEntry,
+  resolveEditMode,
+  type EditMode,
+  type RoutingConfig,
+} from "./routing.js";
+import { SessionFileCache, SessionModelCache, type FileSnapshot } from "./session-state.js";
+import {
+  STR_REPLACE_EDITOR_DESCRIPTION,
+  StrReplaceEditor,
+  type StrReplaceEditorArgs,
+  type StrReplaceEditorFs,
+  type StrReplaceEditorFsEntry,
+} from "./str-replace-editor.js";
+import { HASHLINE_EDIT_DESCRIPTION, REPLACE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
 import { HashlineMismatchError } from "./validation.js";
 import { loadVvocConfig } from "../../lib/config-layers.js";
-import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const z = tool.schema;
 const CONTENT_OPEN_TAG = "<content>";
@@ -38,6 +54,29 @@ const OPENCODE_LINE_TRUNCATION_SUFFIX = "... (line truncated to 2000 chars)";
 const COLON_READ_LINE_PATTERN = /^\s*(\d+): ?(.*)$/;
 const PIPE_READ_LINE_PATTERN = /^\s*(\d+)\| ?(.*)$/;
 
+// START_BLOCK_ROUTING_CONSTANTS
+const EDIT_TYPE_TOOLS = ["hashline_edit", "edit", "str_replace_editor"] as const;
+
+type EditTypeTool = (typeof EDIT_TYPE_TOOLS)[number];
+
+function isEditTypeTool(toolName: string): toolName is EditTypeTool {
+  return (EDIT_TYPE_TOOLS as readonly string[]).includes(toolName);
+}
+
+function visibleToolsForMode(mode: EditMode): EditTypeTool[] {
+  switch (mode) {
+    case "hashline":
+      return ["hashline_edit"];
+    case "replace":
+      return ["edit"];
+    case "str_replace_editor":
+      return ["str_replace_editor"];
+    case "passthrough":
+      return [];
+  }
+}
+// END_BLOCK_ROUTING_CONSTANTS
+
 type HashlineEditArgs = {
   filePath: string;
   edits: RawHashlineEdit[];
@@ -45,11 +84,83 @@ type HashlineEditArgs = {
   rename?: string;
 };
 
+type ReplaceEditArgs = {
+  filePath?: string;
+  file_path?: string;
+  oldString?: string;
+  old_string?: string;
+  newString?: string;
+  new_string?: string;
+  replaceAll?: boolean;
+  replace_all?: boolean;
+};
+
 type ReadToolArgs = {
   filePath?: unknown;
   path?: unknown;
   file?: unknown;
 };
+
+interface EditTelemetry {
+  editMode: EditMode;
+  providerID?: string;
+  modelID?: string;
+}
+
+// START_BLOCK_FS_HELPERS
+async function statSnapshot(filePath: string): Promise<FileSnapshot | undefined> {
+  try {
+    const info = await stat(filePath);
+    if (!info.isFile()) {
+      return undefined;
+    }
+    return { mtimeMs: info.mtimeMs, size: info.size };
+  } catch {
+    return undefined;
+  }
+}
+
+function createNodeStrReplaceFs(): StrReplaceEditorFs {
+  return {
+    async exists(path: string): Promise<boolean> {
+      try {
+        await stat(path);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async isDirectory(path: string): Promise<boolean> {
+      try {
+        return (await stat(path)).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+    async readText(path: string): Promise<string> {
+      return readFile(path, "utf8");
+    },
+    async writeText(path: string, content: string): Promise<void> {
+      await writeFile(path, content, "utf8");
+    },
+    async listDir(path: string): Promise<StrReplaceEditorFsEntry[]> {
+      const entries = await readdir(path, { withFileTypes: true });
+      return entries.map((entry): StrReplaceEditorFsEntry => {
+        const type = entry.isDirectory() ? "directory" : "file";
+        return { name: entry.name, type };
+      });
+    },
+    async stat(path: string): Promise<FileSnapshot | undefined> {
+      try {
+        const info = await stat(path);
+        return { mtimeMs: info.mtimeMs, size: info.isFile() ? info.size : 0 };
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
+// END_BLOCK_FS_HELPERS
 
 function canCreateFromMissingFile(edits: HashlineEdit[]): boolean {
   if (edits.length === 0) {
@@ -60,76 +171,6 @@ function canCreateFromMissingFile(edits: HashlineEdit[]): boolean {
   );
 }
 
-function findFirstChangedLine(beforeContent: string, afterContent: string): number | undefined {
-  const beforeLines = beforeContent.split("\n");
-  const afterLines = afterContent.split("\n");
-  const maxLength = Math.max(beforeLines.length, afterLines.length);
-
-  for (let index = 0; index < maxLength; index += 1) {
-    if ((beforeLines[index] ?? "") !== (afterLines[index] ?? "")) {
-      return index + 1;
-    }
-  }
-  return undefined;
-}
-const DIFF_CONTEXT_LINES = 2;
-const DIFF_MAX_RENDERED_LINES = 40;
-
-interface EditDiffSummary {
-  additions: number;
-  deletions: number;
-  rendered: string[];
-}
-
-function summarizeEditDiff(beforeContent: string, afterContent: string): EditDiffSummary {
-  const before = beforeContent.length === 0 ? [] : beforeContent.split("\n");
-  const after = afterContent.length === 0 ? [] : afterContent.split("\n");
-
-  const minLen = Math.min(before.length, after.length);
-  let prefix = 0;
-  while (prefix < minLen && before[prefix] === after[prefix]) {
-    prefix += 1;
-  }
-
-  let suffix = 0;
-  while (
-    suffix < minLen - prefix &&
-    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-  ) {
-    suffix += 1;
-  }
-
-  const removed = before.slice(prefix, before.length - suffix);
-  const added = after.slice(prefix, after.length - suffix);
-  if (removed.length === 0 && added.length === 0) {
-    return { additions: 0, deletions: 0, rendered: [] };
-  }
-
-  const rendered: string[] = [`@@ changed lines ${prefix + 1} @@`];
-  const contextStart = Math.max(0, prefix - DIFF_CONTEXT_LINES);
-  for (let i = contextStart; i < prefix; i += 1) {
-    rendered.push(`  ${before[i]}`);
-  }
-  for (const line of removed) {
-    rendered.push(`- ${line}`);
-  }
-  for (const line of added) {
-    rendered.push(`+ ${line}`);
-  }
-  const tailStart = before.length - suffix;
-  const contextEnd = Math.min(before.length, tailStart + DIFF_CONTEXT_LINES);
-  for (let i = tailStart; i < contextEnd; i += 1) {
-    rendered.push(`  ${before[i]}`);
-  }
-
-  if (rendered.length > DIFF_MAX_RENDERED_LINES) {
-    const kept = rendered.slice(0, DIFF_MAX_RENDERED_LINES - 1);
-    kept.push(`… (${rendered.length - kept.length} more diff lines)`);
-    return { additions: added.length, deletions: removed.length, rendered: kept };
-  }
-  return { additions: added.length, deletions: removed.length, rendered };
-}
-
 function publishSuccessMetadata(args: {
   context: ToolContext;
   filePath: string;
@@ -137,6 +178,7 @@ function publishSuccessMetadata(args: {
   afterContent: string;
   noopEdits: number;
   deduplicatedEdits: number;
+  telemetry: EditTelemetry;
 }): void {
   args.context.metadata({
     title: args.filePath,
@@ -147,6 +189,9 @@ function publishSuccessMetadata(args: {
       noopEdits: args.noopEdits,
       deduplicatedEdits: args.deduplicatedEdits,
       firstChangedLine: findFirstChangedLine(args.beforeContent, args.afterContent),
+      editMode: args.telemetry.editMode,
+      providerID: args.telemetry.providerID,
+      modelID: args.telemetry.modelID,
       filediff: {
         file: args.filePath,
         path: args.filePath,
@@ -415,7 +460,12 @@ function transformReadOutput(output: string, sourceLines?: string[]): string {
   return result.join("\n");
 }
 
-async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext): Promise<string> {
+// START_BLOCK_HASHLINE_EXECUTE
+async function executeHashlineEdit(
+  args: HashlineEditArgs,
+  context: ToolContext,
+  telemetry: EditTelemetry,
+): Promise<string> {
   try {
     const { filePath, rename, delete: deleteMode } = args;
     if (deleteMode && rename) {
@@ -485,6 +535,7 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
       afterContent: canonicalNewContent,
       noopEdits: applyResult.noopEdits,
       deduplicatedEdits: applyResult.deduplicatedEdits,
+      telemetry,
     });
 
     const diffSummary = summarizeEditDiff(oldEnvelope.content, canonicalNewContent);
@@ -514,13 +565,208 @@ async function executeHashlineEdit(args: HashlineEditArgs, context: ToolContext)
     return `Error: ${message}`;
   }
 }
+// END_BLOCK_HASHLINE_EXECUTE
 
+// START_BLOCK_REPLACE_EXECUTE
+async function executeReplaceEdit(
+  args: ReplaceEditArgs,
+  context: ToolContext,
+  sessionID: string,
+  fileCache: SessionFileCache,
+  telemetry: EditTelemetry,
+): Promise<string> {
+  const filePath = args.filePath ?? args.file_path;
+  if (!filePath || filePath.trim().length === 0) {
+    return "Error: filePath is required (filePath or file_path)";
+  }
+  const oldString = args.oldString ?? args.old_string ?? "";
+  const newString = args.newString ?? args.new_string ?? "";
+  const replaceAll = args.replaceAll ?? args.replace_all ?? false;
+
+  try {
+    const fileSnapshot = await statSnapshot(filePath);
+
+    if (fileSnapshot === undefined && oldString === "") {
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, newString, "utf8");
+      const created = await statSnapshot(filePath);
+      if (created) {
+        fileCache.record(sessionID, filePath, created);
+      }
+      publishSuccessMetadata({
+        context,
+        filePath,
+        beforeContent: "",
+        afterContent: newString,
+        noopEdits: 0,
+        deduplicatedEdits: 0,
+        telemetry,
+      });
+      return `Created ${filePath}\n${formatReplaceSuccess(filePath, "", {
+        content: newString,
+        layer: "exact",
+        replacements: 1,
+        warnings: [],
+      })}`;
+    }
+
+    if (fileSnapshot === undefined) {
+      return `Error: File not found: ${filePath}`;
+    }
+
+    const verdict = fileCache.check(sessionID, filePath, fileSnapshot);
+    if (verdict === "unread") {
+      return `Error: ${filePath} has not been read in this session. Use the Read tool to load the file first, then retry the edit.`;
+    }
+    if (verdict === "drifted") {
+      return `Error: ${filePath} changed since it was last read. Re-read the file and retry the edit against the current content.`;
+    }
+
+    const rawContent = await readFile(filePath, "utf8");
+    const envelope = canonicalizeFileText(rawContent);
+    const result = applyReplaceEdit(envelope.content, { oldString, newString, replaceAll });
+    if (!result.ok) {
+      return `Error: ${result.error}`;
+    }
+
+    await writeFile(filePath, restoreFileText(result.content, envelope), "utf8");
+    const updated = await statSnapshot(filePath);
+    if (updated) {
+      fileCache.record(sessionID, filePath, updated);
+    }
+
+    publishSuccessMetadata({
+      context,
+      filePath,
+      beforeContent: envelope.content,
+      afterContent: result.content,
+      noopEdits: 0,
+      deduplicatedEdits: 0,
+      telemetry,
+    });
+    return formatReplaceSuccess(filePath, envelope.content, result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `Error: ${message}`;
+  }
+}
+// END_BLOCK_REPLACE_EXECUTE
+
+// START_BLOCK_STR_REPLACE_EXECUTE
+async function executeStrReplaceEditor(
+  args: StrReplaceEditorArgs,
+  context: ToolContext,
+  sessionID: string,
+  fileCache: SessionFileCache,
+  telemetry: EditTelemetry,
+): Promise<string> {
+  const editor = new StrReplaceEditor({
+    fs: createNodeStrReplaceFs(),
+    onViewed: (path, snapshot) => fileCache.record(sessionID, path, snapshot),
+    checkFreshness: (path, current) => fileCache.check(sessionID, path, current),
+  });
+
+  const result = await editor.execute(args);
+  if (!result.ok) {
+    return `Error: ${result.error}`;
+  }
+
+  if (args.command !== "view") {
+    context.metadata({
+      title: args.path,
+      metadata: {
+        filePath: args.path,
+        path: args.path,
+        file: args.path,
+        editMode: telemetry.editMode,
+        providerID: telemetry.providerID,
+        modelID: telemetry.modelID,
+      },
+    });
+  }
+  return result.output;
+}
+// END_BLOCK_STR_REPLACE_EXECUTE
+
+// START_BLOCK_PLUGIN
 export const HashlineEditPlugin: Plugin = async ({ directory }) => {
   const vvoc = await loadVvocConfig({ cwd: directory });
-  if (!isVvocPluginEnabled(vvoc.config, "hashline-edit")) return {};
+  const settings = parseHashlineEditPluginEntry(vvoc.config.plugins?.["hashline-edit"]);
+  if (!settings.enabled) return {};
+  const routing: RoutingConfig = settings.routing;
+
+  const modelCache = new SessionModelCache();
+  const fileCache = new SessionFileCache();
+
+  const resolveSessionMode = (sessionID: string): EditMode =>
+    resolveEditMode(routing, modelCache.get(sessionID));
+
+  const telemetryFor = (sessionID: string): EditTelemetry => {
+    const model = modelCache.get(sessionID);
+    return {
+      editMode: resolveEditMode(routing, model),
+      providerID: model?.providerID,
+      modelID: model?.modelID,
+    };
+  };
+
   return {
+    "chat.message": async (input, output) => {
+      const model = output.message?.model;
+      if (
+        input.sessionID &&
+        model &&
+        typeof model.providerID === "string" &&
+        typeof model.modelID === "string"
+      ) {
+        modelCache.set(input.sessionID, { providerID: model.providerID, modelID: model.modelID });
+      }
+
+      const mode = resolveEditMode(routing, model);
+      const visible = new Set<string>(visibleToolsForMode(mode));
+      const message = output.message;
+      if (!message) return;
+      const toolsMap = message.tools ?? {};
+      for (const toolName of EDIT_TYPE_TOOLS) {
+        if (!visible.has(toolName)) {
+          toolsMap[toolName] = false;
+        }
+      }
+      message.tools = toolsMap;
+    },
+
+    "tool.execute.before": async (input) => {
+      if (!isEditTypeTool(input.tool)) {
+        return;
+      }
+      const mode = resolveSessionMode(input.sessionID);
+      const visible = visibleToolsForMode(mode);
+      if (visible.includes(input.tool)) {
+        return;
+      }
+      const preferred = visible[0] ?? "the host-provided edit tool (for example apply_patch)";
+      throw new Error(
+        `${input.tool} is not available for this session's model (edit mode: ${mode}). Use ${preferred} instead.`,
+      );
+    },
+
     "tool.execute.after": async (input, output) => {
-      if (!isReadTool(input.tool) || typeof output.output !== "string") {
+      if (!isReadTool(input.tool)) {
+        return;
+      }
+
+      const filePath = readArgFilePath(input.args);
+      if (filePath) {
+        const snapshot = await statSnapshot(filePath);
+        if (snapshot) {
+          fileCache.record(input.sessionID, filePath, snapshot);
+        }
+      }
+
+      if (typeof output.output !== "string") {
+        return;
+      }
+      if (resolveSessionMode(input.sessionID) !== "hashline") {
         return;
       }
       if (!isHashlineEligibleReadOutput(output.output)) {
@@ -528,8 +774,9 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
       }
       output.output = transformReadOutput(output.output, await readSourceLines(input.args));
     },
+
     tool: {
-      edit: tool({
+      hashline_edit: tool({
         description: HASHLINE_EDIT_DESCRIPTION,
         args: {
           filePath: z.string().describe("Absolute path to the file to edit"),
@@ -537,35 +784,98 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
           rename: z.string().optional().describe("Rename the file after edits are applied"),
           edits: z
             .array(
-              z
-                .object({
-                  op: z.enum(["replace", "replace_range", "append", "prepend"]),
-                  pos: z.string().optional().describe("Primary anchor in LINE#HASH#ANCHOR format"),
-                  end: z
-                    .string()
-                    .optional()
-                    .describe(
-                      "Range end for replace_range in LINE#HASH#ANCHOR format (required for replace_range, rejected for replace)",
-                    ),
-                  lines: z
-                    .union([z.array(z.string()), z.string(), z.null()])
-                    .describe("Replacement or inserted lines as plain text content"),
-                })
-                .refine(
-                  (obj) =>
-                    !(obj.op === "replace" && Array.isArray(obj.lines) && obj.lines.length > 1),
-                  {
-                    message:
-                      "replace accepts at most 1 replacement line. " +
-                      "Use array with 1 element, a string, or null. " +
-                      "For multi-line replacement, use replace_range with pos + end.",
-                  },
-                ),
+              z.object({
+                op: z.enum(["replace", "replace_range", "append", "prepend"]),
+                pos: z
+                  .string()
+                  .optional()
+                  .describe("Primary anchor in LINE#HASH#ANCHOR three-part format"),
+                end: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "Optional range end anchor in LINE#HASH#ANCHOR format. With end, replace covers the inclusive range pos..end; required when op is replace_range.",
+                  ),
+                lines: z
+                  .union([z.array(z.string()), z.string(), z.null()])
+                  .describe("Replacement or inserted lines as plain text content"),
+              }),
             )
             .describe("Hash-anchored edit operations to apply to the file"),
         },
-        execute: (args, context) => executeHashlineEdit(args, context),
+        execute: (args, context) =>
+          executeHashlineEdit(args, context, telemetryFor(context.sessionID)),
+      }),
+
+      edit: tool({
+        description: REPLACE_EDIT_DESCRIPTION,
+        args: {
+          filePath: z.string().optional().describe("Absolute path to the file to modify"),
+          file_path: z
+            .string()
+            .optional()
+            .describe("Alias of filePath (snake_case form used by some models)"),
+          oldString: z.string().optional().describe("Exact text to replace"),
+          old_string: z.string().optional().describe("Alias of oldString"),
+          newString: z.string().optional().describe("Replacement text"),
+          new_string: z.string().optional().describe("Alias of newString"),
+          replaceAll: z
+            .boolean()
+            .optional()
+            .describe("Replace every occurrence instead of requiring a unique match"),
+          replace_all: z.boolean().optional().describe("Alias of replaceAll"),
+        },
+        execute: (args, context) =>
+          executeReplaceEdit(
+            args,
+            context,
+            context.sessionID,
+            fileCache,
+            telemetryFor(context.sessionID),
+          ),
+      }),
+
+      str_replace_editor: tool({
+        description: STR_REPLACE_EDITOR_DESCRIPTION,
+        args: {
+          command: z
+            .enum(["view", "create", "str_replace", "insert"])
+            .describe("The command to run: view, create, str_replace, or insert"),
+          path: z.string().describe("Absolute path to file or directory"),
+          file_text: z
+            .string()
+            .optional()
+            .describe("Required parameter of create command with the content of the new file"),
+          old_str: z
+            .string()
+            .optional()
+            .describe("Required parameter of str_replace command: the exact text to replace"),
+          new_str: z
+            .string()
+            .optional()
+            .describe(
+              "Optional parameter of str_replace command with the replacement text; required for insert",
+            ),
+          insert_line: z
+            .number()
+            .int()
+            .optional()
+            .describe("Required parameter of insert command; new_str is inserted AFTER this line"),
+          view_range: z
+            .array(z.number().int())
+            .optional()
+            .describe("Optional [start, end] line range for view; end may be -1 for end of file"),
+        },
+        execute: (args, context) =>
+          executeStrReplaceEditor(
+            args,
+            context,
+            context.sessionID,
+            fileCache,
+            telemetryFor(context.sessionID),
+          ),
       }),
     },
   };
 };
+// END_BLOCK_PLUGIN

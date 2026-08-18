@@ -162,3 +162,73 @@ describe("schema parity", () => {
     );
   });
 });
+
+describe("plugins union parsing and schema", () => {
+  function docWithPlugins(plugins: unknown): string {
+    return JSON.stringify({ ...createDefaultVvocConfig(), plugins }, null, 2);
+  }
+
+  test("boolean plugin entries parse unchanged (backward compatible)", () => {
+    const parsed = parseVvocConfigText(
+      docWithPlugins({ guardian: false, "hashline-edit": true }),
+      "test",
+    );
+    expect(parsed.plugins.guardian).toBe(false);
+    expect(parsed.plugins["hashline-edit"]).toBe(true);
+  });
+
+  test("object plugin entries parse with enabled and routing preserved", () => {
+    const parsed = parseVvocConfigText(
+      docWithPlugins({
+        "hashline-edit": {
+          enabled: true,
+          routing: { default: "hashline", rules: { qwen: "replace" } },
+        },
+      }),
+      "test",
+    );
+    expect(parsed.plugins["hashline-edit"]).toEqual({
+      enabled: true,
+      routing: { default: "hashline", rules: { qwen: "replace" } },
+    });
+  });
+
+  test("schema rejects invalid routing modes and unknown routing keys", () => {
+    const invalidMode = JSON.parse(
+      docWithPlugins({ "hashline-edit": { routing: { default: "patch" } } }),
+    );
+    expect(validateVvocConfigDocument(invalidMode).length).toBeGreaterThan(0);
+
+    const invalidRule = JSON.parse(
+      docWithPlugins({ "hashline-edit": { routing: { rules: { qwen: "patch" } } } }),
+    );
+    expect(validateVvocConfigDocument(invalidRule).length).toBeGreaterThan(0);
+
+    const unknownKey = JSON.parse(
+      docWithPlugins({ "hashline-edit": { routing: { bogus: true } } }),
+    );
+    expect(validateVvocConfigDocument(unknownKey).length).toBeGreaterThan(0);
+
+    const nonBoolean = JSON.parse(docWithPlugins({ guardian: "yes" }));
+    expect(validateVvocConfigDocument(nonBoolean).length).toBeGreaterThan(0);
+  });
+
+  test("schema accepts the object form alongside booleans", () => {
+    const valid = JSON.parse(
+      docWithPlugins({
+        guardian: false,
+        "hashline-edit": { enabled: true, routing: { default: "hashline" } },
+      }),
+    );
+    expect(validateVvocConfigDocument(valid)).toEqual([]);
+  });
+
+  test("embedded plugins schema matches schemas/vvoc/v3.json plugins property", () => {
+    const fileSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as {
+      properties: Record<string, unknown>;
+    };
+    expect((VVOC_CONFIG_SCHEMA.properties as Record<string, unknown>).plugins).toEqual(
+      fileSchema.properties.plugins,
+    );
+  });
+});

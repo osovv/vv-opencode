@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Display installed OpenCode plugins with their status (enabled/disabled) and selected source paths.
 //   SCOPE: Read-scope parsing, plugin array inspection, effective vvoc plugin toggle loading, table rendering, and graceful handling of missing config.
-//   DEPENDS: [citty, src/lib/config-layers.ts]
+//   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts]
 //   LINKS: M-CLI-PLUGIN-LIST, M-CLI-CONFIG
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Added effective/project/global plugin list scopes and source-matched vvoc toggles.]
+//   LAST_CHANGE: [v0.6.0 - Resolved vvoc plugin toggles through the boolean-or-object union so object entries report their enabled state.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -28,6 +28,7 @@ import {
   resolveOpenCodeConfigSource,
   type ConfigReadScope,
 } from "../lib/config-layers.js";
+import { isVvocPluginEnabled } from "../lib/plugin-toggle-config.js";
 
 export type PluginEntry = {
   name: string;
@@ -151,7 +152,11 @@ export async function loadVvocPluginToggles(
 ): Promise<Record<string, boolean> | null> {
   try {
     const { config } = await loadVvocConfigForRead({ scope, cwd, configDir, allowDefault: true });
-    return config.plugins;
+    const toggles: Record<string, boolean> = {};
+    for (const pluginName of Object.keys(config.plugins)) {
+      toggles[pluginName] = isVvocPluginEnabled(config, pluginName);
+    }
+    return toggles;
   } catch {
     return null;
   }

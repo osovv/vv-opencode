@@ -136,7 +136,34 @@
       "type": "object",
       "propertyNames": { "minLength": 1 },
       "additionalProperties": {
-        "type": "boolean"
+        "anyOf": [
+          { "type": "boolean" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "routing": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "type": "string",
+                    "enum": ["hashline", "replace", "str_replace_editor", "passthrough"]
+                  },
+                  "rules": {
+                    "type": "object",
+                    "propertyNames": { "minLength": 1 },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["hashline", "replace", "str_replace_editor", "passthrough"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "web": {

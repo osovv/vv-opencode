@@ -146,7 +146,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 - **Review-driven execution** — keep implementation, spec review, and code review as separate steps instead of one agent silently doing everything
 - **Portable model choices** — use roles like `vv-role:smart` and `vv-role:fast` in shared agents, then map those roles per machine or project
 - **Long-run safety** — Guardian auto-approves routine low-risk permission requests, leaves risky ones to OpenCode's manual approval flow, and secrets redaction reduces accidental leakage
-- **Safer edits** — hashline-backed `edit` ties changes to fresh `read` output so agents are less likely to write against stale line numbers
+- **Safer edits** — per-model edit routing gives each model its native editing tool: hashline-anchored edits, exact oldString/newString replace, or the DeepSeek `str_replace_editor`, all tied to fresh `read` output so agents rarely write against stale content
 
 ---
 
@@ -176,7 +176,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **WorkflowPlugin** | Keep multi-agent work structured with explicit work items, bounded implementation/review loops, reviewer result collection, and safe stops when more context is needed. |
 | **ModelRolesPlugin** | Use semantic model roles instead of hardcoded model IDs in OpenCode agents, subagents, and command configs — e.g. `vv-role:smart`, `vv-role:fast` — then map those roles per machine or project. |
 | **GuardianPlugin** | Keep long or AFK agent runs moving by auto-approving routine low-risk permission requests. If something looks risky, Guardian does not auto-approve it and leaves the decision to OpenCode's normal manual approval flow. |
-| **HashlineEditPlugin** | Make agent edits safer by tying changes to fresh `read` output, reducing wrong-line and stale-context edits. |
+| **HashlineEditPlugin** | Route each model to its native editing tool (hashline anchors, exact replace, or DeepSeek `str_replace_editor`), tying changes to fresh `read` output to reduce wrong-line and stale-context edits. |
 | **SystemContextInjectionPlugin** | Inject universal primary guidance plus one startup-resolved orchestration policy into vv-controller, with skill discovery and subagent-only explore worker prompts. |
 | **SecretsRedactionPlugin** | Reduce accidental secret leakage by redacting tokens, keys, emails, and other sensitive values before messages are sent to the model. |
 | **WebToolsPlugin** | Register the provider-neutral `web_search` and `web_fetch` tools, return direct image/PDF attachments, and hide OpenCode's built-in web tools at runtime unless the user explicitly configured their permissions. |
@@ -198,6 +198,33 @@ Workflow work items are opened with explicit intent. For implementation loops, c
 ```
 
 For review-only reports, use `"mode": "review_only"`. In review-only mode, reviewer `FAIL` is a completed finding result: required reviewers are collected independently, parallel `spec` and `code` reviewers may both return `FAIL`, and the item does not route to `vv-implementer` unless the user explicitly requests fixes.
+
+### Edit Format Routing
+
+`HashlineEditPlugin` resolves an edit mode per session model and exposes only the matching edit tool to that model:
+
+- `hashline` — the `hashline_edit` tool with `LINE#HASH#ANCHOR` references and anchored read output (default for unmatched models).
+- `replace` — the `edit` tool with exact `oldString`/`newString` replacement, prior-read enforcement, and visible unicode/trailing-whitespace fallbacks.
+- `str_replace_editor` — the DeepSeek dsh contract (`view`/`create`/`str_replace`/`insert`) with exact-verbatim matching.
+- `passthrough` — no vvoc edit tool is exposed; the host-provided editing path stays in charge.
+
+The default routing table sends `deepseek` to `str_replace_editor`, `kimi` and `qwen` to `replace`, and `gpt`/`codex` to `passthrough`; everything else stays on `hashline`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins.
+
+Override routing in `vvoc.json` (schema v3). The `plugins["hashline-edit"]` entry accepts a boolean or an object:
+
+```json
+"plugins": {
+  "hashline-edit": {
+    "enabled": true,
+    "routing": {
+      "default": "hashline",
+      "rules": { "qwen": "hashline", "deepseek": "str_replace_editor" }
+    }
+  }
+}
+```
+
+Routing changes require an OpenCode restart, like other runtime plugin settings.
 
 ### Web Tools
 

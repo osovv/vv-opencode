@@ -13,7 +13,10 @@
 //   anchorFor - Builds a visible hashline anchor for fixture content.
 //   createPluginInput - Builds an isolated OpenCode plugin input fixture.
 //   createToolContext - Builds a tool execution context fixture.
+//   hook_call - Invokes the chat.message hook with a session model fixture.
 //   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   userMessage - Builds an SDK-shaped user message fixture carrying a provider/model pair.
+//   writeProjectVvocConfig - Seeds a project .vvoc/vvoc.json overriding the hashline-edit plugin entry.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -21,7 +24,7 @@
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,6 +35,7 @@ import {
 import { computeAnchorHash, computeLineHash } from "./hashline-edit/hash-computation.js";
 import { HashlineEditPlugin } from "./hashline-edit/index.js";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 
@@ -81,7 +85,10 @@ function createToolContext(directory: string) {
 }
 
 function anchorFor(lines: string[], line: number): string {
-  return `${line}#${computeLineHash(line, lines[line - 1] ?? "")}`;
+  const content = lines[line - 1] ?? "";
+  const hash = computeLineHash(line, content);
+  const anchor = computeAnchorHash(line, lines[line - 2], content, lines[line]);
+  return `${line}#${hash}#${anchor}`;
 }
 
 describe("HashlineEditPlugin", () => {
@@ -90,7 +97,7 @@ describe("HashlineEditPlugin", () => {
 
     try {
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      expect(plugin.tool?.edit).toBeDefined();
+      expect(plugin.tool?.hashline_edit).toBeDefined();
 
       const output = {
         title: directory,
@@ -166,7 +173,7 @@ describe("HashlineEditPlugin", () => {
       expect(output.output).toContain(`${anchor}|line2`);
 
       const { context } = createToolContext(directory);
-      const result = await plugin.tool!.edit.execute(
+      const result = await plugin.tool!.hashline_edit.execute(
         { filePath, edits: [{ op: "replace", pos: anchor, lines: ["line2 updated"] }] },
         context as never,
       );
@@ -238,7 +245,7 @@ describe("HashlineEditPlugin", () => {
       expect(output.output).not.toContain(laterSnapshotAnchor);
 
       const { context } = createToolContext(directory);
-      const result = await plugin.tool!.edit.execute(
+      const result = await plugin.tool!.hashline_edit.execute(
         { filePath, edits: [{ op: "replace", pos: fallbackAnchor, lines: ["line2 updated"] }] },
         context as never,
       );
@@ -257,10 +264,10 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, 'function greet() {\n  return "hi";\n}\n', "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
-      const anchor = `2#${computeLineHash(2, '  return "hi";')}`;
+      const anchor = `2#${computeLineHash(2, '  return "hi";')}#${computeAnchorHash(2, "function greet() {", '  return "hi";', "}")}`;
       const { context, metadataCalls } = createToolContext(directory);
       const result = await editTool!.execute(
         {
@@ -296,7 +303,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, `${originalLines.join("\n")}\n`, "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -333,7 +340,7 @@ describe("HashlineEditPlugin", () => {
     try {
       const filePath = join(directory, "created.ts");
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -365,7 +372,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, originalLines.join("\n"), "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -395,7 +402,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, "line1\n", "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -423,7 +430,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, "line1\n", "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -431,7 +438,7 @@ describe("HashlineEditPlugin", () => {
         {
           filePath,
           delete: true,
-          edits: [{ op: "replace", pos: "1#ZZ", lines: ["bad"] }],
+          edits: [{ op: "replace", pos: "1#ZZ#ZZ", lines: ["bad"] }],
         },
         context as never,
       );
@@ -451,7 +458,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, "line1\n", "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -478,14 +485,14 @@ describe("HashlineEditPlugin", () => {
     try {
       const filePath = join(directory, "missing.ts");
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
       const result = await editTool!.execute(
         {
           filePath,
-          edits: [{ op: "append", pos: "1#ZZ", lines: ["bad"] }],
+          edits: [{ op: "append", pos: "1#ZZ#ZZ", lines: ["bad"] }],
         },
         context as never,
       );
@@ -505,7 +512,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, `${originalLines.join("\n")}\n`, "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -533,8 +540,8 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, 'function greet() {\n  return "hi";\n}\n', "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
-      const staleAnchor = `2#${computeLineHash(2, '  return "hi";')}`;
+      const editTool = plugin.tool?.hashline_edit;
+      const staleAnchor = `2#${computeLineHash(2, '  return "hi";')}#${computeAnchorHash(2, "function greet() {", '  return "hi";', "}")}`;
 
       const firstContext = createToolContext(directory).context;
       await editTool!.execute(
@@ -572,8 +579,8 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, original, "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
-      const anchor = `2#${computeLineHash(2, "const second = 2;")}`;
+      const editTool = plugin.tool?.hashline_edit;
+      const anchor = `2#${computeLineHash(2, "const second = 2;")}#${computeAnchorHash(2, "const first = 1;", "const second = 2;", "")}`;
 
       const { context } = createToolContext(directory);
       const result = await editTool!.execute(
@@ -707,7 +714,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, "line1\nline2\n", "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -733,7 +740,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, originalLines.join("\n"), "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -762,7 +769,7 @@ describe("HashlineEditPlugin", () => {
       await writeFile(filePath, originalLines.join("\n"), "utf8");
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
-      const editTool = plugin.tool?.edit;
+      const editTool = plugin.tool?.hashline_edit;
       expect(editTool).toBeDefined();
 
       const { context } = createToolContext(directory);
@@ -781,3 +788,249 @@ describe("HashlineEditPlugin", () => {
     }
   });
 });
+
+function userMessage(model: { providerID: string; modelID: string }) {
+  return {
+    id: "msg_1",
+    sessionID: "session-1",
+    role: "user" as const,
+    time: { created: Date.now() },
+    agent: "build",
+    model,
+    tools: undefined as Record<string, boolean> | undefined,
+  };
+}
+
+async function writeProjectVvocConfig(directory: string, pluginsEntry: unknown): Promise<void> {
+  const doc = JSON.parse(renderVvocConfig(createDefaultVvocConfig())) as {
+    plugins: Record<string, unknown>;
+  };
+  doc.plugins["hashline-edit"] = pluginsEntry;
+  await mkdir(join(directory, ".vvoc"), { recursive: true });
+  await writeFile(
+    join(directory, ".vvoc", "vvoc.json"),
+    JSON.stringify(doc, null, 2) + "\n",
+    "utf8",
+  );
+}
+
+describe("HashlineEditPlugin routing", () => {
+  test("registers hashline_edit, replace edit, and str_replace_editor tools", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-reg-"));
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      expect(plugin.tool?.hashline_edit).toBeDefined();
+      expect(plugin.tool?.edit).toBeDefined();
+      expect(plugin.tool?.str_replace_editor).toBeDefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("chat.message hides non-profile edit tools per model", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-vis-"));
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const hook = plugin["chat.message"]!;
+
+      const deepseekMessage = userMessage({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
+      await hook({ sessionID: "session-1", model: deepseekMessage.model } as never, {
+        message: deepseekMessage as never,
+        parts: [],
+      });
+      expect(deepseekMessage.tools).toEqual({ hashline_edit: false, edit: false });
+
+      const qwenMessage = userMessage({ providerID: "alibaba-token-plan", modelID: "qwen3.8-max" });
+      await hook({ sessionID: "session-2", model: qwenMessage.model } as never, {
+        message: qwenMessage as never,
+        parts: [],
+      });
+      expect(qwenMessage.tools).toEqual({ hashline_edit: false, str_replace_editor: false });
+
+      const glmMessage = userMessage({ providerID: "zai-coding-plan", modelID: "glm-5.1" });
+      await hook({ sessionID: "session-3", model: glmMessage.model } as never, {
+        message: glmMessage as never,
+        parts: [],
+      });
+      expect(glmMessage.tools).toEqual({ edit: false, str_replace_editor: false });
+
+      const gptMessage = userMessage({ providerID: "openai", modelID: "gpt-5.4" });
+      await hook({ sessionID: "session-4", model: gptMessage.model } as never, {
+        message: gptMessage as never,
+        parts: [],
+      });
+      expect(gptMessage.tools).toEqual({
+        hashline_edit: false,
+        edit: false,
+        str_replace_editor: false,
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("tool.execute.before rejects wrong-profile tools with a teaching error", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-guard-"));
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const chatHook = plugin["chat.message"]!;
+      const beforeHook = plugin["tool.execute.before"]!;
+
+      const message = userMessage({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
+      await hook_call(chatHook, "session-1", message);
+
+      await expect(
+        beforeHook(
+          { tool: "hashline_edit", sessionID: "session-1", callID: "c1" } as never,
+          { args: {} } as never,
+        ),
+      ).rejects.toThrow(/str_replace_editor instead/);
+
+      await expect(
+        beforeHook(
+          { tool: "str_replace_editor", sessionID: "session-1", callID: "c2" } as never,
+          { args: {} } as never,
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("read hook adds anchors only for hashline sessions", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-read-"));
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const chatHook = plugin["chat.message"]!;
+
+      const deepseekMessage = userMessage({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
+      await hook_call(chatHook, "session-deepseek", deepseekMessage);
+      const deepseekOutput = { title: "t", output: "1: const a = 1;", metadata: {} };
+      await plugin["tool.execute.after"]?.(
+        { tool: "read", sessionID: "session-deepseek", callID: "c1", args: {} } as never,
+        deepseekOutput as never,
+      );
+      expect(deepseekOutput.output).toBe("1: const a = 1;");
+
+      const glmMessage = userMessage({ providerID: "zai-coding-plan", modelID: "glm-5.1" });
+      await hook_call(chatHook, "session-glm", glmMessage);
+      const glmOutput = { title: "t", output: "1: const a = 1;", metadata: {} };
+      await plugin["tool.execute.after"]?.(
+        { tool: "read", sessionID: "session-glm", callID: "c2", args: {} } as never,
+        glmOutput as never,
+      );
+      expect(glmOutput.output).toContain("1#");
+      expect(glmOutput.output).toContain("|const a = 1;");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("replace edit enforces prior read and applies exact matches", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-replace-"));
+    try {
+      const filePath = join(directory, "sample.ts");
+      await writeFile(filePath, "alpha\nbeta\ngamma\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const chatHook = plugin["chat.message"]!;
+      const message = userMessage({ providerID: "moonshotai", modelID: "kimi-k3" });
+      await hook_call(chatHook, "session-1", message);
+
+      const { context } = createToolContext(directory);
+      const editTool = plugin.tool!.edit;
+
+      const unread = await editTool.execute(
+        { filePath, oldString: "beta", newString: "BETA" },
+        context as never,
+      );
+      expect(unread).toContain("has not been read in this session");
+
+      await plugin["tool.execute.after"]?.(
+        { tool: "read", sessionID: "session-1", callID: "c1", args: { filePath } } as never,
+        { title: "t", output: "1: alpha", metadata: {} } as never,
+      );
+
+      const result = await editTool.execute(
+        { filePath, oldString: "beta", newString: "BETA" },
+        context as never,
+      );
+      expect(result).toContain(`Updated ${filePath}`);
+      expect(await readFile(filePath, "utf8")).toBe("alpha\nBETA\ngamma\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("str_replace_editor executes the dsh contract through the plugin", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-dsh-"));
+    try {
+      const filePath = join(directory, "sample.py");
+      await writeFile(filePath, "alpha\nbeta\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const chatHook = plugin["chat.message"]!;
+      const message = userMessage({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
+      await hook_call(chatHook, "session-1", message);
+
+      const { context } = createToolContext(directory);
+      const editorTool = plugin.tool!.str_replace_editor;
+
+      const viewed = await editorTool.execute(
+        { command: "view", path: filePath },
+        context as never,
+      );
+      expect(viewed).toContain("Here's the content of");
+
+      const replaced = await editorTool.execute(
+        { command: "str_replace", path: filePath, old_str: "beta", new_str: "BETA" },
+        context as never,
+      );
+      expect(replaced).toBe(`The file ${filePath} has been edited successfully.`);
+      expect(await readFile(filePath, "utf8")).toBe("alpha\nBETA\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("routing overrides from project vvoc config change profile visibility", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-config-"));
+    try {
+      await writeProjectVvocConfig(directory, {
+        enabled: true,
+        routing: { default: "hashline", rules: { qwen: "hashline" } },
+      });
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const chatHook = plugin["chat.message"]!;
+      const message = userMessage({ providerID: "alibaba-token-plan", modelID: "qwen3.8-max" });
+      await hook_call(chatHook, "session-1", message);
+      expect(message.tools).toEqual({ edit: false, str_replace_editor: false });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("disabled plugin entry registers nothing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-disabled-"));
+    try {
+      await writeProjectVvocConfig(directory, false);
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      expect(plugin.tool).toBeUndefined();
+      expect(plugin["chat.message"]).toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+async function hook_call(
+  hook: (input: never, output: never) => Promise<void>,
+  sessionID: string,
+  message: ReturnType<typeof userMessage>,
+): Promise<void> {
+  await hook(
+    { sessionID, model: message.model } as never,
+    { message: message as never, parts: [] } as never,
+  );
+}

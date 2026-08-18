@@ -14,6 +14,8 @@
 //   resolvePatchProviderPreset - Validate an OpenCode patch preset name and return its config.
 //   PatchProviderPresetName - Supported built-in patch-provider preset names.
 //   applyPatchProviderPreset - Apply the selected OpenCode patch preset to global or project OpenCode config.
+//   PATCH_ALL_PRESET - Preset name constant selecting every built-in patch-provider preset.
+//   applyAllPatchProviderPresets - Apply all built-in patch-provider presets in sequence to the selected scope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

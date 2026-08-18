@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/edit-operation-primitives.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply validated hashline edit operations literally to an in-memory file snapshot one mutation at a time.
-//   SCOPE: Single-line replace, range replace, anchored insert-before/after with exact-match echo trimming, and BOF/EOF insert helpers that preserve trailing-newline sentinels.
+//   SCOPE: Single-line replace, range replace, anchored insert-before/after with exact-match echo trimming, neighbor-duplication warnings for insertions, and BOF/EOF insert helpers that preserve trailing-newline sentinels.
 //   DEPENDS: [src/plugins/hashline-edit/edit-text-normalization.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Removed autocorrect and indent restoration, switched echo trimming to exact-match with warnings, and fixed EOF append inserting a phantom blank line before the trailing newline.]
+//   LAST_CHANGE: [v0.3.0 - Added visible warnings when append/prepend payloads duplicate the lines already adjacent to the anchor, applied literally.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -38,6 +38,18 @@ export interface EditApplyOptions {
 
 function shouldValidate(options?: EditApplyOptions): boolean {
   return options?.skipValidation !== true;
+}
+
+function linesEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length || left.length === 0) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function applySetLine(
@@ -121,6 +133,13 @@ export function applyInsertAfter(
     throw new Error(`append (anchored) requires non-empty text for ${anchor}`);
   }
 
+  const following = lines.slice(line, line + trimmed.lines.length);
+  if (linesEqual(trimmed.lines, following)) {
+    options?.onWarning?.(
+      `append at line ${line}: payload duplicates the ${trimmed.lines.length} line(s) already following the anchor; applying literally creates a duplicate block`,
+    );
+  }
+
   result.splice(line, 0, ...trimmed.lines);
   return result;
 }
@@ -145,6 +164,13 @@ export function applyInsertBefore(
   }
   if (trimmed.lines.length === 0) {
     throw new Error(`prepend (anchored) requires non-empty text for ${anchor}`);
+  }
+
+  const preceding = lines.slice(line - 1 - trimmed.lines.length, line - 1);
+  if (linesEqual(trimmed.lines, preceding)) {
+    options?.onWarning?.(
+      `prepend at line ${line}: payload duplicates the ${trimmed.lines.length} line(s) already preceding the anchor; applying literally creates a duplicate block`,
+    );
   }
 
   result.splice(line - 1, 0, ...trimmed.lines);

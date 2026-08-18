@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit override.
-//   SCOPE: Stable instructions for read-then-edit workflow, anchor usage, operation choice, literal payload semantics, and stale-anchor recovery.
+//   PURPOSE: Provide the LLM-facing tool descriptions for the hash-anchored edit tool and the replace-profile edit tool.
+//   SCOPE: Stable instructions for read-then-edit workflow, three-part anchor usage, unified replace operation choice, literal payload semantics, stale-anchor recovery, and replace-profile exact-match semantics.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -10,18 +10,19 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `edit` tool.
+//   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `hashline_edit` tool.
+//   REPLACE_EDIT_DESCRIPTION - LLM-facing description for the replace-profile `edit` tool.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Documented literal application, physical single-line entries, blank-payload rejection, exact echo trimming with warnings, and the post-edit diff summary.]
+//   LAST_CHANGE: [v0.9.0 - Documented mandatory three-part anchors and unified replace with optional end for hashline, and added the replace-profile edit description.]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 
 <must>
 1. SNAPSHOT: All edits in one call reference the ORIGINAL file state. Do NOT adjust line numbers for prior edits in the same batch — the system applies them bottom-up automatically.
-2. replace replaces ONE line at pos. It does NOT accept end. For multi-line replacement, use replace_range.
-3. replace_range with pos+end replaces ALL lines FROM pos THROUGH end (BOTH INCLUSIVE). The end line WILL BE replaced. If you set end to a line that belongs to the next function/method/statement, that line is DELETED.
+2. replace with pos replaces ONE line. Add an end anchor to replace the INCLUSIVE range pos..end in a single operation (replace_range is an alias that requires pos + end).
+3. For range replacement, the end line WILL BE replaced. If you set end to a line that belongs to the next function/method/statement, that line is DELETED.
    CORRECT: pos on the first line to replace, end on the LAST line to replace — not the line after.
 4. lines must contain ONLY the content that belongs inside the replaced range. Lines AFTER end survive unchanged — do NOT include them in lines. If you do, they will appear twice.
    INSERTION SAFETY: To add a function, handler, statement, or block NEXT TO existing code, use append/prepend anchored to a surviving line. To add code AFTER a closed block, append after its final structural closing line. Do NOT replace that closing line merely to reproduce it and add content after it.
@@ -39,11 +40,12 @@ export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored l
 <operations>
 ANCHOR FORMAT:
   Each anchor is \`{line_number}#{hash_id}#{anchor_hash}\` from read output like \`42#VK#AB|content\`.
-  Backward-compatible \`{line}#{hash}\` also accepted.
+  Anchors MUST be the full three-part triple copied exactly from read output. Two-part \`{line}#{hash}\` references are REJECTED for edits.
 
 OPERATION CHOICE:
-  replace with pos -> replace ONE line at pos (end is rejected)
-  replace_range with pos+end -> replace range pos..end INCLUSIVE (both lines replaced); use only when those existing lines must change or be removed
+  replace with pos -> replace ONE line at pos
+  replace with pos + end -> replace range pos..end INCLUSIVE (both lines replaced)
+  replace_range with pos+end -> alias for replace with end; use only when those existing lines must change or be removed
   append with pos -> insert lines AFTER the anchored line; preferred for adding code after a block's final }, });, ], or other closing line
   prepend with pos -> insert lines BEFORE the anchored line; preferred for adding code before an existing declaration or block
   append/prepend without pos -> EOF/BOF insertion (also creates missing files)
@@ -106,3 +108,23 @@ Everything else is applied literally — no merging, splitting, or indentation f
 
 Recovery:
 - If you get a hash mismatch error, copy the updated anchors shown in that error or re-read the file before retrying.`;
+
+export const REPLACE_EDIT_DESCRIPTION = `Edit a file by replacing an exact text span with new text (oldString/newString).
+
+<must>
+1. READ FIRST: Read the target file before editing. Edits against a file that was never read, or that changed since the last read, are rejected.
+2. oldString MUST be the exact literal text to replace, including whitespace and indentation. Copy it from the Read output (without the line-number prefix).
+3. oldString must match exactly ONE place. If it appears more than once, add surrounding lines to make it unique, or set replaceAll to change every occurrence.
+4. newString is the exact replacement text. It must differ from oldString.
+5. To create a new file, call edit on a missing path with an empty oldString and the full file content as newString.
+6. LITERAL APPLICATION: no merging, indentation fixing, or content rewriting is applied. Limited visible fallbacks exist only for typography (unicode confusables) and trailing whitespace; each is reported as a Warning.
+</must>
+
+<params>
+filePath (or file_path): absolute path to the file.
+oldString (or old_string): exact text to replace; empty only when creating a missing file.
+newString (or new_string): replacement text.
+replaceAll (or replace_all): optional, replace every occurrence instead of requiring a unique match.
+</params>
+
+A successful result includes a bounded diff (@@ block) and a +A/-R stat line; verify it matches your intent before moving on.`;

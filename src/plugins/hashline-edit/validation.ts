@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/validation.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Parse and validate hashline references with optional context-anchored hashes against the current file snapshot before edits are applied.
-//   SCOPE: Anchor normalization, line reference parsing with optional anchor hash, full-batch validation with anchor-hash verification, and mismatch diagnostics for current hashline anchors.
+//   SCOPE: Anchor normalization, line reference parsing with optional anchor hash, mandatory three-part edit reference enforcement, full-batch validation with anchor-hash verification, and mismatch diagnostics for current hashline anchors.
 //   DEPENDS: [src/plugins/hashline-edit/constants.ts, src/plugins/hashline-edit/hash-computation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -13,13 +13,14 @@
 //   LineRef - Parsed `{ line, hash, anchorHash? }` structure for a normalized hashline anchor.
 //   normalizeLineRef - Strip copied prefixes and inline content from a raw anchor string.
 //   parseLineRef - Parse a normalized hashline anchor and fail loudly on malformed references.
+//   requireThreePartRef - Parse an edit anchor and reject two-part references missing the anchor hash.
 //   validateLineRef - Validate a single anchor against the current file lines including context-anchored hash.
 //   validateLineRefs - Validate a batch of anchors and aggregate mismatches.
 //   HashlineMismatchError - Rich mismatch error that includes updated surrounding anchors.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Removed old hash compatibility fallback so validation accepts only current line and context hashes.]
+//   LAST_CHANGE: [v0.5.0 - Added requireThreePartRef so edit anchors must carry the full line#hash#anchor triple.]
 // END_CHANGE_SUMMARY
 
 import { HASHLINE_REF_PATTERN } from "./constants.js";
@@ -111,6 +112,18 @@ export function parseLineRef(ref: string): LineRef {
   throw new Error(
     `Invalid line reference format: "${ref}". Expected format: "{line_number}#{hash_id}" or "{line_number}#{hash_id}#{anchor_hash}"`,
   );
+}
+
+export function requireThreePartRef(ref: string, context: string): LineRef {
+  const parsed = parseLineRefWithHint(ref, []);
+  if (!parsed.anchorHash) {
+    throw new Error(
+      `${context}: anchor "${ref}" is missing the anchor hash. Use the full three-part ` +
+        '"{line_number}#{hash_id}#{anchor_hash}" reference copied exactly from the latest read output. ' +
+        "Two-part references are no longer accepted for edits.",
+    );
+  }
+  return parsed;
 }
 
 export class HashlineMismatchError extends Error {

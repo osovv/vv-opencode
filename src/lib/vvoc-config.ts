@@ -59,6 +59,7 @@ import {
 } from "./vvoc-preset-registry.js";
 import {
   createDefaultPluginToggleConfig,
+  type VvocPluginEntryConfig,
   type VvocPluginToggleConfig,
 } from "./plugin-toggle-config.js";
 
@@ -348,7 +349,36 @@ export const VVOC_CONFIG_SCHEMA = {
     plugins: {
       type: "object",
       propertyNames: { minLength: 1 },
-      additionalProperties: { type: "boolean" },
+      additionalProperties: {
+        anyOf: [
+          { type: "boolean" },
+          {
+            type: "object",
+            properties: {
+              enabled: { type: "boolean" },
+              routing: {
+                type: "object",
+                properties: {
+                  default: {
+                    type: "string",
+                    enum: ["hashline", "replace", "str_replace_editor", "passthrough"],
+                  },
+                  rules: {
+                    type: "object",
+                    propertyNames: { minLength: 1 },
+                    additionalProperties: {
+                      type: "string",
+                      enum: ["hashline", "replace", "str_replace_editor", "passthrough"],
+                    },
+                  },
+                },
+                additionalProperties: false,
+              },
+            },
+            additionalProperties: false,
+          },
+        ],
+      },
     },
     web: WEB_CONFIG_SCHEMA,
   },
@@ -633,7 +663,26 @@ function createPluginToggleConfig(overrides: unknown = {}): VvocPluginToggleConf
   for (const [pluginName, pluginValue] of Object.entries(overrides)) {
     if (typeof pluginValue === "boolean") {
       config[pluginName] = pluginValue;
+      continue;
     }
+    if (isPlainObject(pluginValue)) {
+      const entry: VvocPluginEntryConfig = {};
+      if (pluginValue.enabled !== undefined) {
+        if (typeof pluginValue.enabled !== "boolean") {
+          throw new Error(`plugins["${pluginName}"].enabled must be a boolean`);
+        }
+        entry.enabled = pluginValue.enabled;
+      }
+      if (pluginValue.routing !== undefined) {
+        if (!isPlainObject(pluginValue.routing)) {
+          throw new Error(`plugins["${pluginName}"].routing must be an object`);
+        }
+        entry.routing = pluginValue.routing as Record<string, unknown>;
+      }
+      config[pluginName] = entry;
+      continue;
+    }
+    throw new Error(`plugins["${pluginName}"] must be a boolean or an object`);
   }
 
   return config;

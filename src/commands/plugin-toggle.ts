@@ -51,7 +51,13 @@ async function togglePlugin(
   }
 
   const plugins = config.plugins as Record<string, unknown>;
-  plugins[pluginName] = enabled;
+  const existing = plugins[pluginName];
+  if (typeof existing === "object" && existing !== null && !Array.isArray(existing)) {
+    // Preserve plugin-owned config (e.g. routing); toggle only the enabled flag.
+    plugins[pluginName] = { ...(existing as Record<string, unknown>), enabled };
+  } else {
+    plugins[pluginName] = enabled;
+  }
 
   await writeFile(paths.vvocConfigPath, JSON.stringify(config, null, 2) + "\n", "utf8");
 
