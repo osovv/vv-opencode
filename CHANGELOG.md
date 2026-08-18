@@ -1,3 +1,11 @@
+## <small>1.2.11 (2026-08-18)</small>
+
+### Summary
+
+This release strengthens the system-context guidance that vv-opencode injects into sessions. The assumption discipline now requires every claim to be tagged as verified, asserted, or refuted, with unmarked claims treated as unverified, so material assumptions can no longer silently become downstream premises. The working-state guidance adds a one-line restatement of the requirement before acting to catch dropped constraints early, and reroute guidance now demands that a retry carry a named diagnosis of the prior failure rather than blankly repeating the same attempt. A new delivery-discipline block keeps internal reasoning compact while forcing clean, complete output for anything user- or tool-facing, and the vv-controller's final response format now requires reading the goal back line by line, marking each line as met, partly met, or not met, and naming the edge that was not checked before claiming completion. Together these changes reduce wasted retries and premature completion claims, and make the verification status of assumptions explicit throughout a session.
+
+* feat(system-context-injection): add epistemic tags, re-encode-first, diagnosis retry, and done-check ([8524ee4](https://github.com/osovv/vv-opencode/commit/8524ee4))
+
 ## <small>1.2.10 (2026-08-18)</small>
 
 ### Summary
