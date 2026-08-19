@@ -1,3 +1,11 @@
+## <small>1.3.4 (2026-08-19)</small>
+
+### Summary
+
+Version 1.3.4 reworks the tool-history-compaction plugin to protect your active working context and make pruning recoverable. The previous call-count-based tail protection is replaced with an absolute recent-message window (protectRecentMessages, default 8) anchored by message recency time, so outputs inside the newest messages are never rewritten regardless of call count, output size, tool class, or parallel batching, even when OpenCode reorders messages before the transform hook. A protection-budget leak was also fixed: retained tools such as task, agent, websearch, and skill no longer consume the per-call protection budget, so older bash/read outputs stay protected in agent-heavy sessions. Additionally, pruning is now recoverable by default (savePrunedOutput): the full pruned output is persisted once per tool call under your XDG data home in the vvoc tool-output directory, and the prune marker embeds the saved path so the model can re-read the complete output instead of reconstructing it from head and tail fragments. Schema v3, sync materialization, and the README were updated to reflect the new configuration options.
+
+* feat(tool-history-compaction): protect the recent message window and persist pruned outputs ([b44eeeb](https://github.com/osovv/vv-opencode/commit/b44eeeb))
+
 ## <small>1.3.3 (2026-08-19)</small>
 
 ### Summary
