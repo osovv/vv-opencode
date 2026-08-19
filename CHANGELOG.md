@@ -1,3 +1,17 @@
+## 1.3.0 (2026-08-19)
+
+### Summary
+
+Version 1.3.0 introduces a new analytics system to help users understand and optimize token usage and prompt-cache effectiveness. A new AnalyticsPlugin collects per-step token and cache telemetry with vvoc and OpenCode version attribution into local-only JSONL files, the new `vvoc analytics cache-hit-rate` command aggregates and compares cache hit rates by day, week, month, model, provider, project, session, or vvoc/OpenCode version with date/project filters and JSON output, and the TUI gains a live per-session cache percentage indicator plus a vvoc version footer. A new vvoc-usage-analytics managed skill lets users ask usage, cache, and cost questions conversationally during a session, including historical comparisons from opencode.db that predate the plugin. All telemetry stays on the machine, and analytics collection can be disabled via the plugin toggle.
+
+* feat(analytics): add analytics types, JSONL store, metrics, and version helper export ([a709547](https://github.com/osovv/vv-opencode/commit/a709547))
+* feat(analytics): add cache-hit-rate CLI command with grouping and JSON output ([8d0e70f](https://github.com/osovv/vv-opencode/commit/8d0e70f))
+* feat(analytics): add live cache indicator and vvoc version footer for the TUI ([8098f10](https://github.com/osovv/vv-opencode/commit/8098f10))
+* feat(analytics): add server plugin collecting step-finish telemetry with version attribution ([9db2cb3](https://github.com/osovv/vv-opencode/commit/9db2cb3))
+* feat(analytics): register analytics toggle, CLI command, and TUI wiring ([e54d4b0](https://github.com/osovv/vv-opencode/commit/e54d4b0))
+* feat(skills): add vvoc-usage-analytics managed skill with read-only opencode.db queries ([d61cda0](https://github.com/osovv/vv-opencode/commit/d61cda0))
+* docs(analytics): document cache hit rate analytics in README and stabilize CLI exit-code tests ([8519eab](https://github.com/osovv/vv-opencode/commit/8519eab))
+
 ## <small>1.2.11 (2026-08-18)</small>
 
 ### Summary
