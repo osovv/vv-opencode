@@ -1,3 +1,11 @@
+## <small>1.3.2 (2026-08-19)</small>
+
+### Summary
+
+The vvoc version label in the TUI has been relocated from the sidebar footer slot to the append-mode `app_bottom` slot, so it now appears in the bottom app bar on every screen without displacing OpenCode's own footer or prompt content, which previously owned that single-winner slot. Theme colors are now passed directly as RGBA values instead of being converted to hex strings, making both the version label and the live cache indicator render with accurate theme colors more reliably, and both slot registrations now include explicit plugin IDs as required by the OpenCode runtime.
+
+* fix(tui): move vvoc label to append-mode app_bottom slot and apply theme fg color directly ([a01453d](https://github.com/osovv/vv-opencode/commit/a01453d))
+
 ## <small>1.3.1 (2026-08-19)</small>
 
 ### Summary
