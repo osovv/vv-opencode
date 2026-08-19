@@ -1,3 +1,11 @@
+## <small>1.3.1 (2026-08-19)</small>
+
+### Summary
+
+Version 1.3.1 fixes a TUI stability issue where the live cache hit rate indicator and the vvoc branding footer rendered label text in a way that OpenTUI rejected, which could crash the OpenCode terminal interface. Labels are now wrapped in proper text elements, and theme colors are converted to a reliable hex format that OpenTUI parses consistently. Regression tests were added with real OpenTUI rendering to prevent this class of crash from returning.
+
+* fix(tui): wrap slot labels in text elements to prevent OpenTUI orphan text crashes ([70589a7](https://github.com/osovv/vv-opencode/commit/70589a7))
+
 ## 1.3.0 (2026-08-19)
 
 ### Summary
