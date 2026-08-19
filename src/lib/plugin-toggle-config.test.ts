@@ -47,11 +47,12 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "context",
       WEB_TOOLS_PLUGIN_NAME,
       "tool-history-compaction",
+      "analytics",
     ]);
   });
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(9);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(10);
   });
 });
 // END_BLOCK_CONSTANTS_TEST

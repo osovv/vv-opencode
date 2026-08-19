@@ -5,7 +5,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble and run the vvoc CLI entrypoint.
 //   SCOPE: Package version lookup, top-level command registration, and main command execution.
-//   DEPENDS: [citty, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
+//   DEPENDS: [citty, src/commands/analytics.ts, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -17,10 +17,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.11 - Aligned meta description with package.json, README, and GitHub repo; license and badge polish.]
+//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Registered the analytics command in the CLI tree.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
+import analytics from "./commands/analytics.js";
 import completion from "./commands/completion.js";
 import config from "./commands/config.js";
 import doctor from "./commands/doctor.js";
@@ -50,6 +51,7 @@ const main = defineCommand({
       "Portable OpenCode workflow toolkit — 6 plugins, managed agents & skills, a spec-to-code pipeline, security, and the vvoc CLI.",
   },
   subCommands: {
+    analytics,
     completion,
     config,
     doctor,

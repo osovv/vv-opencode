@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.5.0 - Added the default tool-history-compaction entry and conservative materialization for vvoc sync/init.]
+//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added the analytics plugin toggle name.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -38,6 +38,7 @@ export const PLUGIN_TOGGLE_NAMES = [
   "context",
   "web-tools",
   "tool-history-compaction",
+  "analytics",
 ] as const;
 
 export type VvocPluginEntryConfig = {
