@@ -1,0 +1,154 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-TOOL-HISTORY-COMPACTION-RECENT-WINDOW>
+    <IntentSummary>Rework tool-history-compaction protection and recoverability: add an absolute recent-message window (protectRecentMessages, default 8) anchored by message recency time with array-position fallback, stop retained tools from consuming the per-call protection budget, and persist full pruned outputs to $XDG_DATA_HOME/vvoc/tool-output/ with the path embedded in the prune marker (savePrunedOutput, default on). Keeps output-only non-destructive compaction, idempotence, strict schema v3 config, and the existing config keys.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>src/plugins/tool-history-compaction/transform.ts</Value>
+        <Value>src/plugins/tool-history-compaction/prune.ts</Value>
+        <Value>src/plugins/tool-history-compaction/config.ts</Value>
+        <Value>src/plugins/tool-history-compaction/index.ts</Value>
+        <Value>src/plugins/tool-history-compaction/retention.ts</Value>
+        <Value>src/plugins/tool-history-compaction/read-slim.ts</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>src/lib/vvoc-paths.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/transform.ts</File>
+        <Text>remainingProtection</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/prune.ts</File>
+        <Text>PRUNE_MARKER</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/plugins/tool-history-compaction/transform.ts</File>
+        <Text>protectRecentMessages</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/plugins/tool-history-compaction/prune.ts</File>
+        <Text>Full output saved to</Text>
+      </MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-TOOL-HISTORY-COMPACTION</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/transform.ts</File>
+        <Text>protectRecentMessages</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/tool-history-compaction/prune.ts</File>
+        <Text>Full output saved to</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>protectRecentMessages</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>savePrunedOutput</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>protectRecentMessages</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>savePrunedOutput</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/tool-history-compaction.config.test.ts src/plugins/tool-history-compaction.prune.test.ts src/plugins/tool-history-compaction.read-slim.test.ts src/plugins/tool-history-compaction.transform.test.ts src/plugins/tool-history-compaction.saved-output.test.ts src/plugins/tool-history-compaction.test.ts src/lib/plugin-toggle-config.test.ts src/lib/opencode.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CLI-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <Glob>src/plugins/tool-history-compaction/*.ts</Glob>
+      <Glob>src/plugins/tool-history-compaction*.test.ts</Glob>
+      <File>src/plugins/tool-history-compaction.saved-output.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-paths.ts</File>
+      <File>src/commands/plugin-toggle.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Config vocabulary: protectRecentMessages and savePrunedOutput keys, defaults, validation</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>config.ts adds protectRecentMessages (non-negative int, default 8) and savePrunedOutput (boolean, default true) to ToolHistoryCompactionConfig and CONFIG_KEYS; unknown keys still fail loudly; assertBudgetsFit unchanged.</Criterion>
+          <Criterion>plugin-toggle-config.ts DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY and defaultToolHistoryCompactionCopy include the two new keys; materializeToolHistoryCompactionEntry fills them conservatively without overwriting user values.</Criterion>
+          <Criterion>schema v3 tool-history-compaction object shape accepts protectRecentMessages (integer minimum 0) and savePrunedOutput (boolean); existing documents with old keys still validate.</Criterion>
+          <Criterion>Tests cover default resolution, custom values, invalid values fail loud, materialization conservatism, and schema acceptance.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.config.test.ts src/lib/plugin-toggle-config.test.ts src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Recency-time window helper and transform rework</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>New helper recentMessageIndexes(messages, count) returns the indices of the newest count messages by info.time (completed ?? created), tie-broken by array position; missing times fall back to array position order deterministically.</Criterion>
+          <Criterion>compactMessages protects every completed tool part whose message index is in the window unconditionally (before retention, readSlim, prune, and before remainingProtection accounting).</Criterion>
+          <Criterion>Outside the window: retained tools are skipped and do NOT decrement remainingProtection; remainingProtection decrements only for non-retained eligible parts; readSlim and prune apply as before.</Criterion>
+          <Criterion>The last-message protection is subsumed by the window (protectRecentMessages >= 1 always protects the newest message); firstMessage logic is removed.</Criterion>
+          <Criterion>Tests cover: window protects parallel batches and over-budget outputs inside the last N messages; retained tools outside window do not consume budget; shuffled array with preserved times protects the same newest messages; array without times uses position fallback.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.transform.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Disk-backed prune: saved-output module and marker path embedding</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>New saved-output.ts exposes savedOutputDir(dataHomeOverride?), savedOutputPath(callID, dataHomeOverride?) (deterministic sanitized filename tool-&lt;callID&gt;.txt), and savePrunedOutputOnce(output, callID, dataHomeOverride?) that writes the file only when it does not already exist and returns the path or undefined.</Criterion>
+          <Criterion>pruneOutput gains an optional savedPath parameter; when present, the pruned output appends "Full output saved to: &lt;path&gt;" after the marker; PRUNE_MARKER and alreadyCompacted detection stay intact; min-savings accounting includes the appended note.</Criterion>
+          <Criterion>transform.ts passes the persisted path into pruneOutput for non-read pruned parts when config.savePrunedOutput is true; readSlim markers never write files (they already carry the source path).</Criterion>
+          <Criterion>Tests cover deterministic path per callID, write-once idempotence, marker containing the path, file content equals original output, no-write when disabled, and readSlim no-write.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/tool-history-compaction.saved-output.test.ts src/plugins/tool-history-compaction.prune.test.ts src/plugins/tool-history-compaction.transform.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Full verification gate</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Fresh targeted suite passes; bun run check, bun run build, bun run pack:check pass; grace lint/status green with the active bundle; final change-scoped assertion gate passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check &amp;&amp; bun run build &amp;&amp; bun run pack:check &amp;&amp; bunx @osovv/grace-cli@rc lint --path . --change C-TOOL-HISTORY-COMPACTION-RECENT-WINDOW --assertions final --run-commands</Command>
+        </Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-TOOL-HISTORY-COMPACTION-RECENT-WINDOW>
+</GraceChangePlan>

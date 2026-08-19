@@ -100,4 +100,38 @@ describe("pruneOutput", () => {
     const b = pruneOutput(BIG_TEXT, config({ headChars: 100, tailChars: 40 }));
     expect(a!.output).toBe(b!.output);
   });
+
+  test("savedPath embeds a recoverable note in the marker", () => {
+    const result = pruneOutput(
+      BIG_TEXT,
+      config({ headChars: 100, tailChars: 40 }),
+      "/data/vvoc/tool-output/tool-call-1.txt",
+    );
+    expect(result).not.toBeNull();
+    const { output } = result!;
+    expect(output).toContain(PRUNE_MARKER);
+    expect(output).toContain("/data/vvoc/tool-output/tool-call-1.txt");
+    expect(countCodePoints(output)).toBeLessThan(countCodePoints(BIG_TEXT));
+  });
+
+  test("savedPath keeps the marker detectably compacted", () => {
+    const result = pruneOutput(
+      BIG_TEXT,
+      config({ headChars: 100, tailChars: 40 }),
+      "/data/vvoc/tool-output/tool-call-1.txt",
+    );
+    expect(alreadyCompacted(result!.output)).toBe(true);
+  });
+
+  test("savedPath output stays within the budget accounting for the note", () => {
+    const result = pruneOutput(
+      BIG_TEXT,
+      config({ headChars: 100, tailChars: 40 }),
+      "/data/vvoc/tool-output/tool-call-1.txt",
+    );
+    const noteLength = countCodePoints("/data/vvoc/tool-output/tool-call-1.txt");
+    expect(countCodePoints(result!.output)).toBeLessThanOrEqual(
+      100 + PRUNE_MARKER.length + noteLength + 40,
+    );
+  });
 });

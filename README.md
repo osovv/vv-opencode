@@ -234,13 +234,15 @@ Routing changes require an OpenCode restart, like other runtime plugin settings.
 
 `ToolHistoryCompactionPlugin` shrinks the context replayed to the model on every turn without touching on-disk storage. It rewrites only the in-memory message copy through the `experimental.chat.messages.transform` hook, and only the `output` of old completed tool parts — `input` and part structure (callID/type/order) are never changed, so provider tool_use/tool_result stitching stays intact.
 
+The **recent working context is never touched**: the newest message and the last `protectRecentMessages` messages (default 8, measured by message recency time with array-order fallback) are always replayed verbatim, regardless of call count, output size, tool class, or parallel batching. Compaction only applies to messages older than that window.
+
 Compaction is tool-classified, not blanket:
 
-- **Retained (never compacted):** results that stay relevant for the whole session — `webfetch`/`web_fetch`/web readers, web/search tools, `skill`, and subagent (`task`/`agent`) outputs.
+- **Retained (never compacted):** results that stay relevant for the whole session — `webfetch`/`web_fetch`/web readers, web/search tools, `skill`, and subagent (`task`/`agent`) outputs. Retained tools also never consume the per-call protection budget.
 - **Old reads** collapse to `[Read <file>, lines X-Y]` (range recovered from the line-numbered output; missing file or range falls back to head/tail pruning, never a fabricated summary).
-- **Other ephemeral outputs** (`bash`, `grep`, `glob`, …) past `outputMaxChars` are pruned to `headChars` + a fixed marker + `tailChars`, DeepSeek-Harness style.
+- **Other ephemeral outputs** (`bash`, `grep`, `glob`, …) past `outputMaxChars` are pruned to `headChars` + a fixed marker + `tailChars`, DeepSeek-Harness style. With `savePrunedOutput` (default on), the full output is written once to `$XDG_DATA_HOME/vvoc/tool-output/tool-<callID>.txt` and the marker embeds `Full output saved to: <path>`, so the model can re-read the full content instead of reconstructing it from fragments.
 
-A protected tail never rewrites the last assistant message or the last `protectLastCalls` completed calls; error parts and parts already compacted by OpenCode are skipped. Rewrites are deterministic and idempotent (each part is rewritten at most once), and a `minSavingsChars` guard skips rewrites that would churn the prompt cache for a tiny gain.
+Outside the window, the last `protectLastCalls` completed calls are also protected; error parts and parts already compacted by OpenCode are skipped. Rewrites are deterministic and idempotent (each part is rewritten at most once, and the saved path is deterministic per callID), and a `minSavingsChars` guard skips rewrites that would churn the prompt cache for a tiny gain.
 
 Config lives in `vvoc.json` under `plugins["tool-history-compaction"]` (boolean or object) and is conservatively materialized by `vvoc sync`/`init`:
 
@@ -249,6 +251,8 @@ Config lives in `vvoc.json` under `plugins["tool-history-compaction"]` (boolean 
   "tool-history-compaction": {
     "enabled": true,
     "protectLastCalls": 3,
+    "protectRecentMessages": 8,
+    "savePrunedOutput": true,
     "minSavingsChars": 2000,
     "outputMaxChars": 2048,
     "headChars": 1200,
@@ -259,7 +263,7 @@ Config lives in `vvoc.json` under `plugins["tool-history-compaction"]` (boolean 
 }
 ```
 
-Set `outputMaxChars` to `0` to disable pruning, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart.
+Set `outputMaxChars` to `0` to disable pruning, `protectRecentMessages` to `0` to disable the message window (only the newest message stays protected), `savePrunedOutput` to `false` to skip disk persistence, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart.
 
 ### Cache Hit Rate Analytics
 

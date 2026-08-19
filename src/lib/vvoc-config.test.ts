@@ -223,6 +223,43 @@ describe("plugins union parsing and schema", () => {
     expect(validateVvocConfigDocument(valid)).toEqual([]);
   });
 
+  test("schema accepts tool-history-compaction recent-window and saved-output keys", () => {
+    const valid = JSON.parse(
+      docWithPlugins({
+        "tool-history-compaction": {
+          enabled: true,
+          protectLastCalls: 3,
+          protectRecentMessages: 8,
+          savePrunedOutput: true,
+          minSavingsChars: 2000,
+          outputMaxChars: 2048,
+          headChars: 1200,
+          tailChars: 400,
+          readSlim: true,
+          retainTools: ["webfetch", "search", "skill", "task", "agent"],
+        },
+      }),
+    );
+    expect(validateVvocConfigDocument(valid)).toEqual([]);
+  });
+
+  test("schema rejects invalid tool-history-compaction key values", () => {
+    const negativeWindow = JSON.parse(
+      docWithPlugins({ "tool-history-compaction": { protectRecentMessages: -1 } }),
+    );
+    expect(validateVvocConfigDocument(negativeWindow).length).toBeGreaterThan(0);
+
+    const nonBooleanSave = JSON.parse(
+      docWithPlugins({ "tool-history-compaction": { savePrunedOutput: "yes" } }),
+    );
+    expect(validateVvocConfigDocument(nonBooleanSave).length).toBeGreaterThan(0);
+
+    const unknownKey = JSON.parse(
+      docWithPlugins({ "tool-history-compaction": { bogusBudget: 1 } }),
+    );
+    expect(validateVvocConfigDocument(unknownKey).length).toBeGreaterThan(0);
+  });
+
   test("embedded plugins schema matches schemas/vvoc/v3.json plugins property", () => {
     const fileSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as {
       properties: Record<string, unknown>;

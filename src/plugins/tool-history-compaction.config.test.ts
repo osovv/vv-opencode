@@ -38,6 +38,14 @@ describe("config defaults", () => {
     expect(DEFAULT_TOOL_HISTORY_COMPACTION.protectLastCalls).toBe(
       DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.protectLastCalls,
     );
+    expect(DEFAULT_TOOL_HISTORY_COMPACTION.protectRecentMessages).toBe(
+      DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.protectRecentMessages,
+    );
+    expect(DEFAULT_TOOL_HISTORY_COMPACTION.savePrunedOutput).toBe(
+      DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.savePrunedOutput,
+    );
+    expect(DEFAULT_TOOL_HISTORY_COMPACTION.protectRecentMessages).toBe(8);
+    expect(DEFAULT_TOOL_HISTORY_COMPACTION.savePrunedOutput).toBe(true);
     expect(DEFAULT_TOOL_HISTORY_COMPACTION.readSlim).toBe(true);
     expect(DEFAULT_TOOL_HISTORY_COMPACTION.outputMaxChars).toBe(2048);
     expect(DEFAULT_TOOL_HISTORY_COMPACTION.headChars).toBe(1200);
@@ -83,6 +91,14 @@ describe("config validation", () => {
     expect(() => resolveConfig({ outputMaxChars: 1000, bogus: true })).toThrow(
       /unknown config key/,
     );
+  });
+
+  test("protectRecentMessages and savePrunedOutput validate strictly", () => {
+    expect(resolveConfig({ protectRecentMessages: 4 }).protectRecentMessages).toBe(4);
+    expect(resolveConfig({ savePrunedOutput: false }).savePrunedOutput).toBe(false);
+    expect(() => resolveConfig({ protectRecentMessages: -1 })).toThrow(/non-negative integer/);
+    expect(() => resolveConfig({ protectRecentMessages: 1.5 })).toThrow(/non-negative integer/);
+    expect(() => resolveConfig({ savePrunedOutput: "yes" })).toThrow(/must be a boolean/);
   });
 
   test("negative or non-integer budgets fail loudly", () => {

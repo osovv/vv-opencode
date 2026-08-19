@@ -127,7 +127,11 @@ describe("ToolHistoryCompactionPlugin", () => {
   test("transform hook compacts only the in-memory copy, preserving inputs and structure", async () => {
     const directory = await mkdtemp(join(tmpdir(), "thc-transform-"));
     try {
-      await writeProjectVvocConfig(directory, { enabled: true, protectLastCalls: 0 });
+      await writeProjectVvocConfig(directory, {
+        enabled: true,
+        protectLastCalls: 0,
+        protectRecentMessages: 0,
+      });
       const plugin = await ToolHistoryCompactionPlugin(createPluginInput(directory));
       const hook = plugin["experimental.chat.messages.transform"]!;
 
@@ -163,6 +167,7 @@ describe("ToolHistoryCompactionPlugin", () => {
         enabled: true,
         readSlim: false,
         protectLastCalls: 0,
+        protectRecentMessages: 0,
       });
       const plugin = await ToolHistoryCompactionPlugin(createPluginInput(directory));
       const hook = plugin["experimental.chat.messages.transform"]!;

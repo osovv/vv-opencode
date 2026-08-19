@@ -1,0 +1,54 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-TOOL-HISTORY-COMPACTION-RECENT-WINDOW>
+    <Summary>Fix the tool-history-compaction plugin's working-context protection: replace the call-count-based protected tail (protectLastCalls, which is consumed by retained tools and counts parts instead of messages) with an absolute message-window guarantee (protectRecentMessages, default 8) that never compacts any output inside the last N messages regardless of call count or tool class, anchor the window by message recency time instead of array position so OpenCode's message reordering (bl.apply before the transform hook) cannot push fresh results into the compaction zone, stop retained tools from consuming the per-call protection budget, and make pruning recoverable by persisting the full pruned output to disk with the path embedded in the prune marker (savePrunedOutput, default on).</Summary>
+    <Problem>Users report that active working context gets truncated during live sessions: long bash outputs and read contents disappear from the replay, so multi-step agent flows that patch a long task description reconstruct payloads from head/tail fragments and produce garbage. Root causes, verified against the running OpenCode 1.18.18 host and the archived C-TOOL-HISTORY-COMPACTION spec: (1) protection is per-call (protectLastCalls=3) not per-message, so one assistant message with many parallel calls exhausts the budget; (2) retained tools (task/agent/websearch/skill) decrement remainingProtection before the isRetainedTool check in transform.ts, so agent-heavy sessions burn the entire tail budget on tools that are never compacted anyway; (3) the hook fires on a message list passed through bl.apply(), so "the last array entry" is not guaranteed to be the newest message and fresh results can be rewritten before the model consumes them (observed live: 2 of 3 fresh parallel reads returned already-slimmed); (4) pruning is lossy without an on-disk copy, so even correctly-pruned old outputs are unrecoverable.</Problem>
+    <Goals>
+      <Goal>Absolute recent-message window: add protectRecentMessages (default 8); no completed tool output inside the last N messages is ever rewritten, regardless of tool class, call count, output size, or retention status.</Goal>
+      <Goal>Recency-time window anchor: the protected window is computed from message info.time (completed ?? created), falling back to array position only when times are absent, so reordering by OpenCode before the transform hook cannot demote fresh messages into the compaction zone.</Goal>
+      <Goal>Fix protection-budget leak: retained tools no longer consume the per-call protection budget; remainingProtection is decremented only for compaction-eligible (non-retained) parts, and only outside the recent-message window.</Goal>
+      <Goal>Recoverable pruning: when savePrunedOutput is enabled (default), the full original output of every pruned part is written once to $XDG_DATA_HOME/vvoc/tool-output/tool-&lt;callID&gt;.txt and the prune marker embeds the saved path, so the model can re-read the full content instead of reconstructing it from head/tail.</Goal>
+      <Goal>Readability invariant: the [Read &lt;file&gt;, lines X-Y] readSlim marker already carries the source path and stays recoverable; readSlim remains disabled inside the recent-message window.</Goal>
+      <Goal>Idempotence and cache stability preserved: rewrites remain a pure function of (part content, recency); the saved-path marker is deterministic per callID; a part already carrying the marker is skipped.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>OpenCode transform hook shape unchanged: experimental.chat.messages.transform mutates only the in-memory message copy; on-disk parts keep full payloads.</Constraint>
+      <Constraint>state.input and part structure (type, callID, tool, order, state.status) remain immutable under every policy.</Constraint>
+      <Constraint>Config stays strict schema v3 with fail-loud validation; new keys protectRecentMessages and savePrunedOutput are added to the tool-history-compaction shape and materialized conservatively on sync/init without overwriting user values.</Constraint>
+      <Constraint>Determinism: the saved file path is a pure function of part.callID (sanitized), and the file is written at most once per part (existence guard) so repeated transform passes are byte-stable.</Constraint>
+      <Constraint>Behavioral reference remains the DeepSeek Harness model plus the message-window lesson from oh-my-pi (protectedTools / recent-token preservation) and OpenCode's own preserve_recent_tokens; no proprietary code is copied.</Constraint>
+      <Constraint>The change keeps backward compatibility of existing config keys (protectLastCalls, minSavingsChars, outputMaxChars, headChars, tailChars, readSlim, retainTools); existing vvoc.json documents stay valid.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Token-accurate budgets; content-aware retention beyond tool-name classification.</NonGoal>
+      <NonGoal>Changing OpenCode's own bash output truncation or its SessionCompaction behavior.</NonGoal>
+      <NonGoal>Disk-backed full output for retained knowledge tools (webfetch/search/skill/task) or for readSlim markers (already carry the source path).</NonGoal>
+      <NonGoal>Live config reload; runtime model awareness.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>Given a real SDK-shaped messages array with more than protectRecentMessages messages, all completed tool outputs inside the last protectRecentMessages messages (by info.time, fallback array position) are byte-identical after compactMessages, even when they exceed outputMaxChars, are parallel calls in one message, or match no retainTools entry.</Criterion>
+      <Criterion>Retained tools outside the recent-message window are never compacted and do not decrement remainingProtection; a bash part immediately older than retained task parts remains protected when protectLastCalls budget allows.</Criterion>
+      <Criterion>A message list whose array order is shuffled (recency times preserved) protects exactly the same newest-N messages as the chronologically ordered list (time-anchor, fallback to index when times are absent).</Criterion>
+      <Criterion>With savePrunedOutput on, a pruned part's output contains the PRUNE_MARKER plus "Full output saved to: &lt;path&gt;", the file exists at $XDG_DATA_HOME/vvoc/tool-output/tool-&lt;callID&gt;.txt with the original full output, and a second transform pass does not rewrite the part again and does not rewrite the file.</Criterion>
+      <Criterion>With savePrunedOutput off, prune output contains only head + marker + tail as before.</Criterion>
+      <Criterion>readSlim is disabled inside the recent-message window and active outside it exactly as configured.</Criterion>
+      <Criterion>state.input is byte-identical before and after compaction for every part; part structure invariants hold (callID/type/tool/order/status unchanged).</Criterion>
+      <Criterion>Config parses boolean-or-object strictly with the new keys; unknown keys and invalid values fail loudly; schema v3 validates documents with the new keys; sync materializes defaults conservatively.</Criterion>
+      <Criterion>Fresh full suite passes: targeted tests, bun run check, bun run build, bun run pack:check (export surface), grace lint/status green with the active bundle.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-CLI-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/tool-history-compaction* src/lib/plugin-toggle-config.test.ts src/lib/opencode.test.ts &amp;&amp; bun run check &amp;&amp; bun run build &amp;&amp; bun run pack:check &amp;&amp; bunx @osovv/grace-cli@rc lint --path . &amp;&amp; bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Targeted tests assert the message-window guarantee (last 8 messages untouched under size/parallel/retained pressure), the retention budget fix, the recency-time anchor under shuffled ordering, the saved-output marker plus on-disk file, and readSlim window gating; fresh full-suite and packaging evidence passes; grace lint/status green.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The transform hook receives messages whose info.time carries completed/created timestamps for real messages; fallback to array position keeps determinism when times are absent (fixtures).</Assumption>
+      <Assumption>part.callID is a stable unique identifier suitable for a sanitized deterministic filename; collisions are prevented by an existence guard and deterministic naming.</Assumption>
+      <Assumption>Writing to $XDG_DATA_HOME/vvoc/tool-output/ is an acceptable side effect for a non-destructive plugin because it only adds data and never mutates OpenCode storage or user config; directory creation is idempotent.</Assumption>
+      <Assumption>Existing users with protectLastCalls configured keep working behavior; the new window is additive and defaults protect more, so enabling-by-default stays safe.</Assumption>
+    </Assumptions>
+  </C-TOOL-HISTORY-COMPACTION-RECENT-WINDOW>
+</GraceChangeSpec>

@@ -31,6 +31,10 @@ import { DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY } from "../../lib/plugin-toggle-c
 export interface ToolHistoryCompactionConfig {
   /** Number of most recent completed tool calls (plus the last assistant message) never rewritten. */
   protectLastCalls: number;
+  /** Number of the newest messages whose completed tool outputs are never rewritten under any policy. */
+  protectRecentMessages: number;
+  /** Persist the full pruned output to disk and embed its path in the prune marker. */
+  savePrunedOutput: boolean;
   /** Minimum character savings for a rewrite to be applied; smaller rewrites are skipped. */
   minSavingsChars: number;
   /** Prune when output text exceeds this many code points; 0 disables pruning. */
@@ -63,6 +67,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const CONFIG_KEYS = new Set([
   "protectLastCalls",
+  "protectRecentMessages",
+  "savePrunedOutput",
   "minSavingsChars",
   "outputMaxChars",
   "headChars",
@@ -125,11 +131,26 @@ export function resolveConfig(raw: unknown): ToolHistoryCompactionConfig {
     );
   }
 
+  const savePrunedOutput =
+    raw.savePrunedOutput === undefined
+      ? DEFAULT_TOOL_HISTORY_COMPACTION.savePrunedOutput
+      : raw.savePrunedOutput;
+  if (typeof savePrunedOutput !== "boolean") {
+    throw new Error(
+      `tool-history-compaction: savePrunedOutput must be a boolean; got ${JSON.stringify(raw.savePrunedOutput)}`,
+    );
+  }
+
   const resolved: ToolHistoryCompactionConfig = {
     protectLastCalls:
       raw.protectLastCalls === undefined
         ? DEFAULT_TOOL_HISTORY_COMPACTION.protectLastCalls
         : parseNonNegativeInt(raw.protectLastCalls, "protectLastCalls"),
+    protectRecentMessages:
+      raw.protectRecentMessages === undefined
+        ? DEFAULT_TOOL_HISTORY_COMPACTION.protectRecentMessages
+        : parseNonNegativeInt(raw.protectRecentMessages, "protectRecentMessages"),
+    savePrunedOutput,
     minSavingsChars:
       raw.minSavingsChars === undefined
         ? DEFAULT_TOOL_HISTORY_COMPACTION.minSavingsChars

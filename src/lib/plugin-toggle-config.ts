@@ -81,6 +81,8 @@ export const DEFAULT_TOOL_HISTORY_COMPACTION_RETAIN_TOOLS = [
 export const DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY = {
   enabled: true,
   protectLastCalls: 3,
+  protectRecentMessages: 8,
+  savePrunedOutput: true,
   minSavingsChars: 2000,
   outputMaxChars: 2048,
   headChars: 1200,
@@ -143,6 +145,8 @@ export function materializeHashlineEditEntry(
 function defaultToolHistoryCompactionCopy(): Record<string, unknown> {
   return {
     protectLastCalls: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.protectLastCalls,
+    protectRecentMessages: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.protectRecentMessages,
+    savePrunedOutput: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.savePrunedOutput,
     minSavingsChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.minSavingsChars,
     outputMaxChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.outputMaxChars,
     headChars: DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY.headChars,

@@ -1,0 +1,24 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-TOOL-HISTORY-COMPACTION-RECENT-WINDOW</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Post-release evidence from daily driving refuted three assumptions of the original C-TOOL-HISTORY-COMPACTION design. (1) "protectLastCalls counts the working context": it counts parts, not messages, and retained tools decrement the budget before the retained check, so agent-heavy sessions (task/agent/websearch calls that are never compacted) drain the whole tail budget and leave bash/read outputs unprotected almost immediately. (2) "the last message in the array is the newest": the OpenCode run loop passes the message list through bl.apply() before triggering experimental.chat.messages.transform, so array position is not a reliable recency signal; observed live, two of three fresh parallel reads returned already-slimmed markers. (3) "the model re-reads when it needs content": a stateless model does not know its read output was replaced by a marker on the next turn, so it reconstructs payloads from head/tail memory instead of re-reading — exactly the "full garbage" symptom for long task descriptions patched through CLI tools. The fix protects by message recency time (an absolute recent window of 8 messages), fixes the budget leak, and makes pruning recoverable by persisting the full output to disk with the path embedded in the marker, mirroring OpenCode's own "Full output saved to" mechanism for over-limit bash output.</Rationale>
+  <Alternatives>
+    <Alternative>Keep call-count protection and only raise protectLastCalls. Rejected: the unit is wrong (parts vs messages), parallel batches and retained tools still defeat it, and it cannot express "the last 5-10 messages are the working context" the user asked for.</Alternative>
+    <Alternative>Disable compaction entirely. Rejected: the original motivation (172k median tool-I/O chars per session, 88-99% cache hit rates) is still valid; the fix is to protect the working window and keep the old prefix compacted.</Alternative>
+    <Alternative>Do not persist pruned output; rely on the model re-reading. Rejected: refuted by live observation — the model does not know content was replaced, so recovery must be visible in the marker itself (a path), exactly like OpenCode core does.</Alternative>
+    <Alternative>Protect by token budget like OpenCode preserve_recent_tokens. Rejected for the default: the user asked for an absolute message-count guarantee; a token budget is deferred as an optional extension because it complicates determinism and the default config.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Token-budget window instead of message count, if per-transform token estimates become cheap and deterministic.</Decision>
+    <Decision>Content-aware retention (e.g., superseded-read pruning inside the window when a later edit invalidates a prior read) — oh-my-pi pattern.</Decision>
+    <Decision>Per-tool slim forms for bash/grep/glob beyond generic head/tail pruning.</Decision>
+    <Decision>GC of persisted tool-output files (age or session-scoped cleanup policy) after observing disk growth.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Agent patches a long task description through a CLI: the read and bash outputs that feed the patch live inside the last 8 messages, so they survive intact; the final bash patch call itself is in the newest message and protected.</Scenario>
+    <Scenario>Parallel batch of 10 reads in one message: the message window protects the whole message, not 3 of 10 parts.</Scenario>
+    <Scenario>OpenCode reorders the message array before the transform hook: recency-time anchoring still protects the newest 8 messages by time, not by array position.</Scenario>
+    <Scenario>Old bash output outside the window is pruned with savePrunedOutput on: the marker carries "Full output saved to: &lt;path&gt;" and the model re-reads the file when it needs the full content.</Scenario>
+    <Scenario>Retained task/websearch calls sit between the window and an older bash output: they no longer consume the call budget, so the bash output stays protected for the configured number of calls.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

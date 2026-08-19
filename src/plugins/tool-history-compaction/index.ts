@@ -1,5 +1,5 @@
 // FILE: src/plugins/tool-history-compaction/index.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register the tool-history-compaction plugin: load vvoc config, gate on the enabled toggle, and rewrite only the in-memory message copy the model is about to receive via experimental.chat.messages.transform.
 //   SCOPE: Plugin entry point, config loading, transform hook registration, and disabled no-op.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Established the transform-only compaction plugin with retention classification and DSH-style pruning.]
+//   LAST_CHANGE: [v0.2.0 - Recent-message window, retained-budget fix, and recoverable pruning.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin } from "@opencode-ai/plugin";

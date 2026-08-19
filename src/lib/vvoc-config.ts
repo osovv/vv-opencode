@@ -382,6 +382,8 @@ export const VVOC_CONFIG_SCHEMA = {
             properties: {
               enabled: { type: "boolean" },
               protectLastCalls: { type: "integer", minimum: 0 },
+              protectRecentMessages: { type: "integer", minimum: 0 },
+              savePrunedOutput: { type: "boolean" },
               minSavingsChars: { type: "integer", minimum: 0 },
               outputMaxChars: { type: "integer", minimum: 0 },
               headChars: { type: "integer", minimum: 0 },
