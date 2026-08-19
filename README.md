@@ -166,10 +166,11 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **Workflow Tracking** | Replace free-form multi-agent chaos with explicit work items, bounded review rounds, reviewer result collection, and hard stops when more context is needed |
 | **Unified Web Tools** | Replace provider-specific search and reader schemas with the canonical `web_search` and `web_fetch` tools, configurable for Exa, Brave, native retrieval, or Spider extraction |
 | **Context Inspector** | Run `/context` in an active OpenCode TUI session for Overview, Tools, and MCP tabs with provider-reported usage, approximate context-window percentages, active post-compaction tool history, and deterministic source attribution |
+| **Cache Analytics** | Watch a live per-session `cache NN%` indicator in the TUI and compare cache hit rates across vvoc releases, OpenCode versions, models, and projects with `vvoc analytics cache-hit-rate` |
 
 ---
 
-## The Nine Plugins
+## The Ten Plugins
 
 | Plugin | What it helps you do |
 |---|---|
@@ -182,6 +183,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **WebToolsPlugin** | Register the provider-neutral `web_search` and `web_fetch` tools, return direct image/PDF attachments, and hide OpenCode's built-in web tools at runtime unless the user explicitly configured their permissions. |
 | **ContextTuiPlugin** | Add a native scrollable `/context` dialog with measured usage plus detailed observable per-tool and per-MCP schema/history estimates, explicitly marking data that OpenCode does not expose. |
 | **ToolHistoryCompactionPlugin** | Shrink the replayed conversation context non-destructively by compacting old tool outputs in the model replay (old reads to `[Read <file>, lines X-Y]`, over-budget ephemeral outputs pruned), while retaining web/search/skill knowledge results. |
+| **AnalyticsPlugin** | Persist per-step token and cache telemetry with vvoc/OpenCode version attribution, show a live `cache NN%` indicator next to the session prompt plus a `vvoc vX.Y.Z` sidebar footer, and answer "did my cache optimizations help?" via `vvoc analytics cache-hit-rate`. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
 
@@ -258,6 +260,24 @@ Config lives in `vvoc.json` under `plugins["tool-history-compaction"]` (boolean 
 ```
 
 Set `outputMaxChars` to `0` to disable pruning, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart.
+
+### Cache Hit Rate Analytics
+
+`AnalyticsPlugin` records one line per completed model step — fresh input, cache read, cache write, output, reasoning, recorded cost — to `$XDG_DATA_HOME/vvoc/analytics/usage-YYYY-MM.jsonl`, attributed with the vvoc version, the OpenCode version (from session telemetry), project, provider, model, and agent. Telemetry never leaves the machine; disable collection with `"plugins": { "analytics": false }` and delete old monthly files freely.
+
+In the TUI you get a live `cache NN%` indicator next to the session prompt (green at 80%+, yellow at 50%+, red below, muted `n/a` before the first cache-eligible step) and a `vvoc vX.Y.Z` label in the sidebar footer. The indicator is per-session and computed in memory.
+
+Retrospective analysis lives in the CLI:
+
+```bash
+vvoc analytics cache-hit-rate --group-by day                       # daily trend
+vvoc analytics cache-hit-rate --group-by vvoc --since 30d         # compare vvoc releases
+vvoc analytics cache-hit-rate --group-by opencode --since 30d     # compare OpenCode upgrades
+vvoc analytics cache-hit-rate --group-by session|model|provider|project|week|month
+vvoc analytics cache-hit-rate --project my-repo --order hit-rate --limit 10 --json
+```
+
+The hit rate is token-weighted: `cacheRead / (cacheRead + cacheWrite + input)` over cache-eligible steps; `COVERAGE` shows the share of steps whose provider reported cache tokens at all, so providers without prompt caching read as `n/a` instead of a misleading `0%`. `--since`/`--until` accept `Nd`/`Nw`/`Nm` or `YYYY-MM-DD`.
 
 ### Web Tools
 
@@ -339,6 +359,7 @@ The `context` vvoc plugin toggle defaults to enabled. Disable it with `vvoc plug
 | `vvoc patch-provider stepfun-ai\|codex\|deepseek\|kimi\|alibaba\|all` | Patch OpenCode providers; `codex` adds subscription-safe OpenAI aliases (also accepts `openai`), `deepseek`/`kimi`/`alibaba` add vv- reasoning-effort aliases, `all` patches every provider at once |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade global package and run follow-up sync; sync failure is reported as a partial upgrade |
+| `vvoc analytics cache-hit-rate` | Aggregate persisted cache hit rate by day, week, month, session, model, provider, project, vvoc version, or OpenCode version |
 | `vvoc version` | Print installed version |
 
 Guardian duration overrides use positive whole milliseconds. Both `--timeout-ms` and
@@ -475,6 +496,7 @@ Spec documents           → ./.vvoc/specs/YYYY-MM-DD-<slug>/spec.xml
 Optional design context  → ./.vvoc/specs/YYYY-MM-DD-<slug>/design-context.xml
 Implementation plans     → ./.vvoc/specs/YYYY-MM-DD-<slug>/plan.xml
 Persisted data           → $XDG_DATA_HOME/vvoc/
+Usage analytics          → $XDG_DATA_HOME/vvoc/analytics/usage-YYYY-MM.jsonl  (local-only cache telemetry)
 Repository memory       → ./.vvoc/lessons/*.xml              (lazy vv-reflect fallback)
                            ./.vvoc/runbooks/*.xml             (lazy vv-reflect fallback)
 Session handoff notes   → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml

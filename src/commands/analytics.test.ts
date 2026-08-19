@@ -154,12 +154,13 @@ describe("renderCacheHitRateTable", () => {
 
 async function runCommand(
   args: Record<string, unknown>,
-): Promise<{ stdout: string[]; stderr: string[] }> {
+): Promise<{ stdout: string[]; stderr: string[]; exitCode: number }> {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const originalLog = console.log;
   const originalError = console.error;
-  const originalExitCode = process.exitCode;
+  const originalExitCode = process.exitCode ?? 0;
+  let exitCode = 0;
   console.log = (line: string) => {
     stdout.push(line);
   };
@@ -175,12 +176,13 @@ async function runCommand(
       options: {} as never,
       subCommand: undefined as never,
     } as never);
+    exitCode = typeof process.exitCode === "number" ? process.exitCode : 0;
   } finally {
     console.log = originalLog;
     console.error = originalError;
-    process.exitCode = originalExitCode;
+    process.exitCode = typeof originalExitCode === "number" ? originalExitCode : 0;
   }
-  return { stdout, stderr };
+  return { stdout, stderr, exitCode };
 }
 
 async function withStore(
@@ -241,22 +243,22 @@ describe("cacheHitRateCommand", () => {
 
   test("prints the friendly empty state and exits 0 when nothing matches", async () => {
     await withStore([usage({ partID: "a" })], async () => {
-      const { stdout } = await runCommand({ since: "2020-01-01", until: "2020-01-02" });
+      const { stdout, exitCode } = await runCommand({ since: "2020-01-01", until: "2020-01-02" });
       expect(stdout[0]).toBe("No analytics records matched the given filters.");
-      expect(process.exitCode === 0 || process.exitCode === undefined).toBe(true);
+      expect(exitCode).toBe(0);
     });
   });
 
   test("rejects an invalid --group-by naming the flag", async () => {
-    const { stderr } = await runCommand({ "group-by": "bogus" });
+    const { stderr, exitCode } = await runCommand({ "group-by": "bogus" });
     expect(stderr[0]).toContain("--group-by");
-    expect(process.exitCode).toBe(1);
+    expect(exitCode).toBe(1);
   });
 
   test("rejects an invalid --since naming the flag", async () => {
-    const { stderr } = await runCommand({ since: "yesterday!" });
+    const { stderr, exitCode } = await runCommand({ since: "yesterday!" });
     expect(stderr[0]).toContain("--since");
-    expect(process.exitCode).toBe(1);
+    expect(exitCode).toBe(1);
   });
 
   test("respects --limit by truncating rendered rows", async () => {
