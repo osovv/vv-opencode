@@ -77,6 +77,10 @@
     "./plugins/tool-history-compaction": {
       "types": "./dist/plugins/tool-history-compaction/index.d.ts",
       "import": "./dist/plugins/tool-history-compaction/index.js"
+    },
+    "./plugins/analytics": {
+      "types": "./dist/plugins/analytics/index.d.ts",
+      "import": "./dist/plugins/analytics/index.js"
     }
   },
   "scripts": {
@@ -89,7 +93,7 @@
     "grace:check": "bun scripts/check-grace-markup.ts",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run grace:check && bun test",
-    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); if (!('WebToolsPlugin' in root)) throw new Error('dist root export missing WebToolsPlugin'); const tui = await import('./dist/tui.js'); if (!tui.default || typeof tui.default.tui !== 'function') throw new Error('dist TUI export missing default tui module'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js'); await import('./dist/plugins/web-tools/index.js')\" && npm pack --dry-run",
+    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); if (!('WebToolsPlugin' in root)) throw new Error('dist root export missing WebToolsPlugin'); if (!('AnalyticsPlugin' in root)) throw new Error('dist root export missing AnalyticsPlugin'); const tui = await import('./dist/tui.js'); if (!tui.default || typeof tui.default.tui !== 'function') throw new Error('dist TUI export missing default tui module'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js'); await import('./dist/plugins/web-tools/index.js'); await import('./dist/plugins/analytics/index.js')\" && npm pack --dry-run",
     "tui:local": "bun scripts/tui-local.ts",
     "release:check": "bun scripts/release-check.ts",
     "release:bump": "bun scripts/release-bump.ts",
