@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify the vvoc branding footer label text, slot registration, config independence, and fail-soft behavior.
-//   SCOPE: Label version composition, sidebar_footer slot targeting, missing slot API tolerance, registration failure tolerance, and render injection.
+//   SCOPE: Label version composition, sidebar_footer slot targeting, missing slot API tolerance, registration failure tolerance, render injection, and real OpenTUI rendering of the default label.
 //   DEPENDS: [bun:test, @opencode-ai/plugin/tui, src/tui/branding/footer.tsx, src/lib/package.ts]
 //   LINKS: [M-TUI-BRANDING-FOOTER, V-M-TUI-BRANDING-FOOTER]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added branding footer coverage for label, slot, and fail-soft paths.]
+//   LAST_CHANGE: [2026-08-20-orphan-text-fix - Added a real-render regression test for the default label to catch orphan text errors.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -71,7 +71,7 @@ describe("registerBrandingFooter", () => {
     };
     const element = slot.slots.sidebar_footer() as { text: string; color: string };
     expect(element.text).toBe(`vvoc v${PACKAGE_VERSION}`);
-    expect(element.color).toBe("rgba(128, 128, 128, 1)");
+    expect(element.color).toBe("#808080");
   });
 
   test("returns silently when api.slots is missing", () => {
@@ -89,5 +89,21 @@ describe("registerBrandingFooter", () => {
     const state = api as unknown as { state?: unknown };
     expect(state.state).toBeUndefined();
     registerBrandingFooter(api, { renderLabel: markerRenderer().renderLabel as never });
+  });
+
+  test("default label renders through real OpenTUI without orphan text errors", async () => {
+    const { testRender } = await import("@opentui/solid");
+    const { api, registeredSlots } = fakeApi();
+    registerBrandingFooter(api);
+
+    const slot = registeredSlots[0] as {
+      slots: { sidebar_footer: () => unknown };
+    };
+    const setup = await testRender(() => slot.slots.sidebar_footer() as never, {
+      width: 30,
+      height: 3,
+    });
+    await setup.flush();
+    expect(setup.captureCharFrame()).toContain(brandingFooterLabel());
   });
 });

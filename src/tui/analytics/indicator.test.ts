@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify the live indicator accumulator, label thresholds, registration gating, session filtering, and fail-soft slot handling.
-//   SCOPE: Step-finish-only accumulation, eligibility and tone boundaries, disabled toggle no-op, event subscription filtering, muted non-rendering, and slot failure tolerance.
+//   SCOPE: Step-finish-only accumulation, eligibility and tone boundaries, disabled toggle no-op, event subscription filtering, muted non-rendering, slot failure tolerance, and real OpenTUI rendering of the default label.
 //   DEPENDS: [bun:test, @opencode-ai/plugin/tui, @opencode-ai/sdk, src/tui/analytics/indicator.tsx, src/lib/analytics/types.ts]
 //   LINKS: [M-TUI-ANALYTICS-INDICATOR, V-M-TUI-ANALYTICS-INDICATOR]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added indicator coverage for accumulation, tones, gating, and fail-soft slots.]
+//   LAST_CHANGE: [2026-08-20-orphan-text-fix - Added a real-render regression test for the default label to catch orphan text errors.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -154,7 +154,7 @@ describe("registerAnalyticsIndicator", () => {
       color: string;
     };
     expect(element.label.text).toBe("cache 82%");
-    expect(element.color).toContain("rgba(");
+    expect(element.color).toMatch(/^#[0-9a-f]{6}$/);
   });
 
   test("renders nothing while the label is muted", async () => {
@@ -187,6 +187,20 @@ describe("registerAnalyticsIndicator", () => {
     await registerAnalyticsIndicator(api, undefined, testDeps());
     emit(partUpdatedEvent(stepFinishPart(), "ses_other"));
     expect(renderSlot(registeredSlots, "ses_1")).toBeUndefined();
+  });
+
+  test("default label renders through real OpenTUI without orphan text errors", async () => {
+    const { testRender } = await import("@opentui/solid");
+    const { DEFAULT_DEPENDENCIES } = await import("./indicator.js");
+    const label = indicatorLabel(
+      state({ eligibleSteps: 1, cacheRead: 900, cacheWrite: 100, input: 100 }),
+    );
+    const setup = await testRender(
+      () => DEFAULT_DEPENDENCIES.renderLabel(label, "rgba(0,255,0,1)") as never,
+      { width: 20, height: 3 },
+    );
+    await setup.flush();
+    expect(setup.captureCharFrame()).toContain(label.text);
   });
 });
 

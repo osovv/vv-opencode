@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Show a static vvoc version label in the OpenCode sidebar footer slot.
 //   SCOPE: Version label text, muted theme rendering, and fail-soft sidebar_footer slot registration independent of analytics config.
-//   DEPENDS: [@opencode-ai/plugin/tui, @opentui/solid, src/lib/package.ts]
+//   DEPENDS: [@opencode-ai/plugin/tui, @opentui/solid, src/lib/package.ts, src/tui/color.ts]
 //   LINKS: [M-TUI-BRANDING-FOOTER, M-PLUGIN-ANALYTICS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -16,12 +16,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added vvoc version branding footer for the sidebar slot.]
+//   LAST_CHANGE: [2026-08-20-orphan-text-fix - Wrapped the footer label in a text element so raw strings always have a text parent as OpenTUI requires.]
 // END_CHANGE_SUMMARY
 
 import type { JSX } from "@opentui/solid";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import { getPackageVersionSync } from "../../lib/package.js";
+import { rgbaToHex } from "../color.js";
 
 export type BrandingDependencies = {
   /** Renders the label node; defaults to the muted span. */
@@ -29,7 +30,11 @@ export type BrandingDependencies = {
 };
 
 const DEFAULT_DEPENDENCIES: BrandingDependencies = {
-  renderLabel: (text, color) => <span style={{ color }}>{text}</span>,
+  renderLabel: (text, color) => (
+    <text>
+      <span style={{ fg: color }}>{text}</span>
+    </text>
+  ),
 };
 
 /** The rendered label, e.g. "vvoc v1.2.11". */
@@ -53,7 +58,7 @@ export function registerBrandingFooter(
       slots: {
         sidebar_footer: () => {
           const muted = api.theme.current.textMuted;
-          const color = `rgba(${muted.r}, ${muted.g}, ${muted.b}, ${muted.a})`;
+          const color = rgbaToHex(api.theme.current.textMuted);
           return dependencies.renderLabel(brandingFooterLabel(), color);
         },
       },

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Show a live per-session cache hit rate indicator in the OpenCode session prompt slot.
 //   SCOPE: Rolling step-finish accumulator, tone thresholds and label text, toggle-gated registration, session-filtered event subscription, and fail-soft slot rendering.
-//   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/types.ts]
+//   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/types.ts, src/tui/color.ts]
 //   LINKS: [M-TUI-ANALYTICS-INDICATOR, M-ANALYTICS-TYPES, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,11 +14,12 @@
 //   StepFinishLike - Structural step-finish part shape accepted from either SDK generation.
 //   createIndicatorAccumulator - Rolling per-session sums fed by step-finish parts.
 //   indicatorLabel - Label and tone for the current state with threshold colors.
+//   DEFAULT_DEPENDENCIES - Production dependencies with the themed text-element label renderer.
 //   registerAnalyticsIndicator - Registers the live session_prompt_right indicator.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added live cache hit rate indicator for the session prompt slot.]
+//   LAST_CHANGE: [2026-08-20-orphan-text-fix - Wrapped the indicator label in a text element to satisfy OpenTUI text parenting and prevent TUI crashes.]
 // END_CHANGE_SUMMARY
 
 import type { JSX } from "@opentui/solid";
@@ -27,6 +28,7 @@ import type { PluginOptions } from "@opencode-ai/plugin";
 import { loadVvocConfigForRead } from "../../lib/config-layers.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { IndicatorTokens } from "../../lib/analytics/types.js";
+import { rgbaToHex } from "../color.js";
 
 /** Structural step-finish shape accepted from either SDK generation. */
 export type StepFinishLike = {
@@ -45,7 +47,7 @@ export type IndicatorDependencies = {
   renderLabel: (label: IndicatorLabel, color: string) => JSX.Element;
 };
 
-const DEFAULT_DEPENDENCIES: IndicatorDependencies = {
+export const DEFAULT_DEPENDENCIES: IndicatorDependencies = {
   enabled: async (api) => {
     const vvoc = await loadVvocConfigForRead({
       scope: "effective",
@@ -54,7 +56,11 @@ const DEFAULT_DEPENDENCIES: IndicatorDependencies = {
     });
     return isVvocPluginEnabled(vvoc.config, "analytics");
   },
-  renderLabel: (label, color) => <span style={{ color }}>{label.text}</span>,
+  renderLabel: (label, color) => (
+    <text>
+      <span style={{ fg: color }}>{label.text}</span>
+    </text>
+  ),
 };
 
 // START_BLOCK_INDICATOR_ACCUMULATOR
@@ -168,6 +174,6 @@ function toneColor(api: TuiPluginApi, tone: IndicatorLabel["tone"]): string {
         : tone === "red"
           ? theme.error
           : theme.textMuted;
-  return `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${rgba.a})`;
+  return rgbaToHex(rgba);
 }
 // END_BLOCK_REGISTER_INDICATOR
