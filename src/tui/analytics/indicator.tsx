@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Show a live per-session cache hit rate indicator in the OpenCode session prompt slot.
 //   SCOPE: Rolling step-finish accumulator, tone thresholds and label text, toggle-gated registration, session-filtered event subscription, and fail-soft slot rendering.
-//   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/types.ts, src/tui/color.ts]
+//   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk, @opentui/core, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/types.ts]
 //   LINKS: [M-TUI-ANALYTICS-INDICATOR, M-ANALYTICS-TYPES, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -19,16 +19,16 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-20-orphan-text-fix - Wrapped the indicator label in a text element to satisfy OpenTUI text parenting and prevent TUI crashes.]
+//   LAST_CHANGE: [2026-08-21-slot-mode-fix - Passed theme RGBA directly as fg and added a plugin id to the session_prompt_right registration.]
 // END_CHANGE_SUMMARY
 
 import type { JSX } from "@opentui/solid";
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
+import type { RGBA } from "@opentui/core";
+import type { TuiPluginApi, TuiSlotContext } from "@opencode-ai/plugin/tui";
 import type { PluginOptions } from "@opencode-ai/plugin";
 import { loadVvocConfigForRead } from "../../lib/config-layers.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { IndicatorTokens } from "../../lib/analytics/types.js";
-import { rgbaToHex } from "../color.js";
 
 /** Structural step-finish shape accepted from either SDK generation. */
 export type StepFinishLike = {
@@ -43,8 +43,8 @@ export type IndicatorLabel = {
 
 export type IndicatorDependencies = {
   enabled: (api: TuiPluginApi) => Promise<boolean>;
-  /** Renders the label node; defaults to the themed span. */
-  renderLabel: (label: IndicatorLabel, color: string) => JSX.Element;
+  /** Renders the label node; defaults to the themed text element. */
+  renderLabel: (label: IndicatorLabel, color: RGBA) => JSX.Element;
 };
 
 export const DEFAULT_DEPENDENCIES: IndicatorDependencies = {
@@ -138,16 +138,21 @@ export async function registerAnalyticsIndicator(
   api.lifecycle.onDispose(unsubscribe);
 
   try {
-    api.slots.register({
+    // OpenCode's runtime requires a string plugin id on slot registrations, while
+    // the SDK's TuiSlotPlugin type still types id as never; cast bridges the two.
+    const plugin = {
+      id: "vvoc-analytics-indicator",
+      order: 900,
       slots: {
-        session_prompt_right: (_ctx, props) => {
+        session_prompt_right: (_ctx: TuiSlotContext, props: { session_id?: string }) => {
           if (props.session_id !== currentSessionID(api)) return undefined;
           const label = indicatorLabel(accumulator.get());
           if (label.tone === "muted") return undefined;
           return dependencies.renderLabel(label, toneColor(api, label.tone));
         },
       },
-    });
+    } as unknown as Parameters<TuiPluginApi["slots"]["register"]>[0];
+    api.slots.register(plugin);
   } catch {
     // Fail-soft: no indicator for this session.
   }
@@ -163,8 +168,8 @@ function currentSessionID(api: TuiPluginApi): string {
   return "";
 }
 
-/** Maps an indicator tone to a theme color expression. */
-function toneColor(api: TuiPluginApi, tone: IndicatorLabel["tone"]): string {
+/** Maps an indicator tone to the theme RGBA color instance. */
+function toneColor(api: TuiPluginApi, tone: IndicatorLabel["tone"]): RGBA {
   const theme = api.theme.current;
   const rgba =
     tone === "green"
@@ -174,6 +179,6 @@ function toneColor(api: TuiPluginApi, tone: IndicatorLabel["tone"]): string {
         : tone === "red"
           ? theme.error
           : theme.textMuted;
-  return rgbaToHex(rgba);
+  return rgba;
 }
 // END_BLOCK_REGISTER_INDICATOR

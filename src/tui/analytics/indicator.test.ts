@@ -2,8 +2,8 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify the live indicator accumulator, label thresholds, registration gating, session filtering, and fail-soft slot handling.
-//   SCOPE: Step-finish-only accumulation, eligibility and tone boundaries, disabled toggle no-op, event subscription filtering, muted non-rendering, slot failure tolerance, and real OpenTUI rendering of the default label.
-//   DEPENDS: [bun:test, @opencode-ai/plugin/tui, @opencode-ai/sdk, src/tui/analytics/indicator.tsx, src/lib/analytics/types.ts]
+//   SCOPE: Step-finish-only accumulation, eligibility and tone boundaries, disabled toggle no-op, event subscription filtering, muted non-rendering, slot failure tolerance, plugin id registration, and real OpenTUI rendering with the applied fg color.
+//   DEPENDS: [bun:test, @opencode-ai/plugin/tui, @opencode-ai/sdk, @opentui/core, src/tui/analytics/indicator.tsx, src/lib/analytics/types.ts]
 //   LINKS: [M-TUI-ANALYTICS-INDICATOR, V-M-TUI-ANALYTICS-INDICATOR]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -16,10 +16,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-20-orphan-text-fix - Added a real-render regression test for the default label to catch orphan text errors.]
+//   LAST_CHANGE: [2026-08-21-slot-mode-fix - Coverage now asserts the plugin id and the applied fg color via captureSpans.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { RGBA } from "@opentui/core";
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import type { Event, Part } from "@opencode-ai/sdk";
 import {
@@ -101,10 +102,10 @@ function fakeApi(options: { slotsFail?: boolean } = {}) {
     state: { path: { directory: "/home/al/dev/project" } },
     theme: {
       current: {
-        success: { r: 0, g: 255, b: 0, a: 1 },
-        warning: { r: 255, g: 255, b: 0, a: 1 },
-        error: { r: 255, g: 0, b: 0, a: 1 },
-        textMuted: { r: 128, g: 128, b: 128, a: 1 },
+        success: RGBA.fromInts(0, 255, 0, 255),
+        warning: RGBA.fromInts(255, 255, 0, 255),
+        error: RGBA.fromInts(255, 0, 0, 255),
+        textMuted: RGBA.fromInts(128, 128, 128, 255),
       },
     },
     event: {
@@ -145,16 +146,17 @@ describe("registerAnalyticsIndicator", () => {
     const { api, emit, registeredSlots } = fakeApi();
     await registerAnalyticsIndicator(api, undefined, testDeps());
 
+    expect((registeredSlots[0] as { id: string }).id).toBe("vvoc-analytics-indicator");
     emit(partUpdatedEvent(stepFinishPart(), "ses_other"));
     expect(renderSlot(registeredSlots, "ses_1")).toBeUndefined();
 
     emit(partUpdatedEvent(stepFinishPart()));
     const element = renderSlot(registeredSlots, "ses_1") as {
       label: { text: string };
-      color: string;
+      color: RGBA;
     };
     expect(element.label.text).toBe("cache 82%");
-    expect(element.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(element.color).toBe(api.theme.current.success);
   });
 
   test("renders nothing while the label is muted", async () => {
@@ -195,12 +197,21 @@ describe("registerAnalyticsIndicator", () => {
     const label = indicatorLabel(
       state({ eligibleSteps: 1, cacheRead: 900, cacheWrite: 100, input: 100 }),
     );
-    const setup = await testRender(
-      () => DEFAULT_DEPENDENCIES.renderLabel(label, "rgba(0,255,0,1)") as never,
-      { width: 20, height: 3 },
-    );
+    const green = RGBA.fromInts(0, 255, 0, 255);
+    const setup = await testRender(() => DEFAULT_DEPENDENCIES.renderLabel(label, green) as never, {
+      width: 20,
+      height: 3,
+    });
     await setup.flush();
     expect(setup.captureCharFrame()).toContain(label.text);
+    const spans = setup.captureSpans() as unknown as {
+      lines: Array<{ spans: Array<{ text: string; fg: { buffer: Record<string, number> } }> }>;
+    };
+    const span = spans.lines
+      .flatMap((line) => line.spans)
+      .find((entry) => entry.text.includes("cache"));
+    expect(span).toBeDefined();
+    expect(Math.round(span!.fg.buffer["1"])).toBe(255);
   });
 });
 
@@ -208,7 +219,7 @@ describe("registerAnalyticsIndicator", () => {
 function testDeps(enabled = true) {
   return {
     enabled: async () => enabled,
-    renderLabel: (label: { text: string }, color: string) => ({ label, color }),
+    renderLabel: (label: { text: string }, color: RGBA) => ({ label, color }),
   } as unknown as Parameters<typeof registerAnalyticsIndicator>[2];
 }
 

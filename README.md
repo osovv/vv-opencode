@@ -183,7 +183,7 @@ OpenCode is a strong, flexible base for agentic coding, but it intentionally lea
 | **WebToolsPlugin** | Register the provider-neutral `web_search` and `web_fetch` tools, return direct image/PDF attachments, and hide OpenCode's built-in web tools at runtime unless the user explicitly configured their permissions. |
 | **ContextTuiPlugin** | Add a native scrollable `/context` dialog with measured usage plus detailed observable per-tool and per-MCP schema/history estimates, explicitly marking data that OpenCode does not expose. |
 | **ToolHistoryCompactionPlugin** | Shrink the replayed conversation context non-destructively by compacting old tool outputs in the model replay (old reads to `[Read <file>, lines X-Y]`, over-budget ephemeral outputs pruned), while retaining web/search/skill knowledge results. |
-| **AnalyticsPlugin** | Persist per-step token and cache telemetry with vvoc/OpenCode version attribution, show a live `cache NN%` indicator next to the session prompt plus a `vvoc vX.Y.Z` sidebar footer, and answer "did my cache optimizations help?" via `vvoc analytics cache-hit-rate`. |
+| **AnalyticsPlugin** | Persist per-step token and cache telemetry with vvoc/OpenCode version attribution, show a live `cache NN%` indicator next to the session prompt plus a `vvoc vX.Y.Z` label in the bottom app bar, and answer "did my cache optimizations help?" via `vvoc analytics cache-hit-rate`. |
 
 Workflow work items are opened with explicit intent. For implementation loops, controllers use:
 
@@ -265,7 +265,7 @@ Set `outputMaxChars` to `0` to disable pruning, or `"enabled": false` to disable
 
 `AnalyticsPlugin` records one line per completed model step — fresh input, cache read, cache write, output, reasoning, recorded cost — to `$XDG_DATA_HOME/vvoc/analytics/usage-YYYY-MM.jsonl`, attributed with the vvoc version, the OpenCode version (from session telemetry), project, provider, model, and agent. Telemetry never leaves the machine; disable collection with `"plugins": { "analytics": false }` and delete old monthly files freely.
 
-In the TUI you get a live `cache NN%` indicator next to the session prompt (green at 80%+, yellow at 50%+, red below, muted `n/a` before the first cache-eligible step) and a `vvoc vX.Y.Z` label in the sidebar footer. The indicator is per-session and computed in memory.
+In the TUI you get a live `cache NN%` indicator next to the session prompt (green at 80%+, yellow at 50%+, red below, muted `n/a` before the first cache-eligible step) and a `vvoc vX.Y.Z` label in the bottom app bar. Both use append-mode host slots, so OpenCode's own footer and prompt content stay intact. The indicator is per-session and computed in memory.
 
 Retrospective analysis lives in the CLI:
 
