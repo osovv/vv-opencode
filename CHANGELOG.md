@@ -1,3 +1,11 @@
+## <small>1.3.3 (2026-08-19)</small>
+
+### Summary
+
+In this release the TUI branding footer is upgraded to show a single combined version line in the sidebar — `• OpenCode <version> · vvoc vX.Y.Z` — replacing the previous standalone vvoc label in the bottom app bar. The new footer reads the OpenCode version from the running app, renders with the active theme colors, and deliberately wins the sidebar footer slot so it appears in a native-looking, always-visible location. This makes it easier for users to see at a glance which OpenCode and vvoc versions are active in a session.
+
+* feat(tui): render combined OpenCode and vvoc versions in the sidebar footer ([ea5aa66](https://github.com/osovv/vv-opencode/commit/ea5aa66))
+
 ## <small>1.3.2 (2026-08-19)</small>
 
 ### Summary
