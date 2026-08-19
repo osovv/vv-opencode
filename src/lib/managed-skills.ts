@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   MANAGED_SKILL_NAMES - Canonical vvoc-managed skill names, including vv-reflect and vv-handoff.
+//   MANAGED_SKILL_NAMES - Canonical vvoc-managed skill names: vv-* work-protocol skills plus vvoc-* tooling skills.
 //   ManagedSkillName - Type for vvoc-managed skill names.
 //   getManagedSkillFilePath - Resolves the skill file path inside a vvoc skills directory.
 //   loadManagedSkillTemplate - Loads the bundled skill template for a managed skill.
@@ -20,8 +20,9 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.3 - Added vv-handoff to the canonical managed skill set.]
+//   LAST_CHANGE: [2026-08-19-usage-analytics-skill - Added the vvoc-usage-analytics tooling skill (first vvoc-* managed skill).]
 // END_CHANGE_SUMMARY
+
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocSkillsDir } from "./vvoc-paths.js";
@@ -33,6 +34,7 @@ export const MANAGED_SKILL_NAMES = [
   "vv-execute",
   "vv-reflect",
   "vv-handoff",
+  "vvoc-usage-analytics",
 ] as const;
 
 export type ManagedSkillName = (typeof MANAGED_SKILL_NAMES)[number];

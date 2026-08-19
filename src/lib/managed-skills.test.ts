@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation, vv-execute explicit mode choice, vv-review findings-only routing, and managed skill lookup precedence.
+//   SCOPE: vv-execute metadata isolation, vv-execute explicit mode choice, vv-review findings-only routing, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added workflow skill visibility and lookup regression coverage.]
+//   LAST_CHANGE: [2026-08-19-usage-analytics-skill - Added vvoc-usage-analytics template, reference, and registration coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -101,5 +101,34 @@ describe("managed workflow skill prompts", () => {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("vvoc-usage-analytics managed skill", () => {
+  test("registers in MANAGED_SKILL_NAMES and loads a template with frontmatter", async () => {
+    const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
+    expect(MANAGED_SKILL_NAMES).toContain("vvoc-usage-analytics");
+
+    const template = await loadManagedSkillTemplate("vvoc-usage-analytics");
+    const { frontmatter, body } = splitFrontmatter(template);
+    expect(frontmatter).toContain("name: vvoc-usage-analytics");
+    expect(frontmatter).toContain("cache hit rate");
+    expect(body).toContain("mode=ro");
+    expect(body).toContain("cacheRead / (cacheRead + cacheWrite + input)");
+  });
+
+  test("ships the opencode-db-queries reference", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    expect(await listManagedSkillReferenceNames("vvoc-usage-analytics")).toEqual([
+      "opencode-db-queries.md",
+    ]);
+    const reference = await loadManagedSkillReference(
+      "vvoc-usage-analytics",
+      "opencode-db-queries.md",
+    );
+    expect(reference).toContain("mode=ro");
+    expect(reference).toContain("step-finish");
+    expect(reference).toContain("1.18.x");
   });
 });

@@ -279,6 +279,8 @@ vvoc analytics cache-hit-rate --project my-repo --order hit-rate --limit 10 --js
 
 The hit rate is token-weighted: `cacheRead / (cacheRead + cacheWrite + input)` over cache-eligible steps; `COVERAGE` shows the share of steps whose provider reported cache tokens at all, so providers without prompt caching read as `n/a` instead of a misleading `0%`. `--since`/`--until` accept `Nd`/`Nw`/`Nm` or `YYYY-MM-DD`.
 
+Agents can run this analysis conversationally too: the managed `vvoc-usage-analytics` skill answers usage, cache, and cost questions inside a session — including historical comparisons from `opencode.db` that predate the analytics plugin (see Managed Skills).
+
 ### Web Tools
 
 `WebToolsPlugin` exposes exactly two canonical model-facing tools:
@@ -568,7 +570,7 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 ## Managed Skills
 
-Six workflow skills are scaffolded alongside agents:
+Managed skills come in two families: `vv-*` skills guide the work protocol (spec, plan, execute, review, reflect, handoff), while `vvoc-*` skills operate and observe the vvoc/OpenCode tooling itself. Seven skills are scaffolded alongside agents:
 
 | Skill | When to use it | What it gives you |
 |---|---|---|
@@ -578,6 +580,7 @@ Six workflow skills are scaffolded alongside agents:
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
 | `vv-reflect` | A long development, debugging, ops, or investigation session produced reusable knowledge | Durable notes in existing docs or `.vvoc/lessons` / `.vvoc/runbooks` for future agents |
 | `vv-handoff` | You are ending a session and want the visible context preserved for a future session | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, without running new checks or collecting fresh context |
+| `vvoc-usage-analytics` | You ask about token usage, cache hit rate, costs, or whether a vvoc/OpenCode upgrade changed caching | An agent-run read-only analysis across `vvoc analytics`, the analytics JSONL, and historical `opencode.db` data (validated SQL snippets included) |
 
 Spec and plan artifacts stay XML so requirements, tasks, acceptance criteria, and dependencies remain easy to grep and review.
 
