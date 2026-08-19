@@ -51,6 +51,7 @@
 //   writeManagedAgentModel - Writes or removes a bundled vvoc-managed OpenCode agent model override in OpenCode config.
 //   writeGuardianConfig - Writes the guardian section into the canonical vvoc.json document.
 //   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates TUI compatibility.
+//   extractOpenCodeVersion - Extracts the first semantic version found in `opencode --version` output.
 //   isTuiOpenCodeVersionCompatible - Compares an OpenCode version with the managed TUI minimum.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
 //   inspectInstallationForScope - Reads installation state using strict/effective layered source resolution.
@@ -64,7 +65,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.4.0 - Hardened ensureManagedSkillSymlink: a non-symlink at the managed path is treated as user-owned and skipped instead of unlinked, and an already-correct vvoc link is kept rather than recreated.]
+//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Exported extractOpenCodeVersion for analytics attribution.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -1095,7 +1096,8 @@ async function runOpenCodeVersionCommand(): Promise<{
   return { exitCode, stdout, stderr };
 }
 
-function extractOpenCodeVersion(output: string): string | undefined {
+/** Extracts the first semantic version found in `opencode --version` output. */
+export function extractOpenCodeVersion(output: string): string | undefined {
   const match = output.match(
     /(?:^|\s)v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?=\s|$)/,
   );
