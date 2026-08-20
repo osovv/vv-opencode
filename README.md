@@ -31,6 +31,7 @@ vv-opencode addresses each of these:
 - **A state machine for multi-agent work** — explicit work items, required reviewers, round limits, and hard stops instead of free-form subagent loops.
 - **Portable model choices** — agents reference roles like `vv-role:smart` and `vv-role:fast`; you map roles to concrete models per machine or project and switch stacks with one preset command.
 - **Per-model editing** — each model edits through the tool it knows best: DeepSeek gets its `str_replace_editor` contract, GLM/Qwen/Kimi get exact-match replace, and GPT keeps the host editing path. Routing is resolved dynamically per session, and every edit is anchored to a fresh file read — fewer wrong-line and stale-context errors.
+- **Provider-neutral web tools** — agents get one canonical `web_search` and `web_fetch` contract backed by Exa, Brave, Z.AI, native retrieval, or Spider, instead of provider-specific search and reader schemas leaking into your prompts.
 - **Long-run safety** — Guardian auto-approves routine low-risk permissions (risky ones stay in OpenCode's manual approval flow), and secrets are redacted before they reach the model.
 - **Reproducible setup** — `vvoc install` / `vvoc sync` recreate the same workflow on any machine or project.
 
