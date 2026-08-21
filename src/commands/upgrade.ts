@@ -110,7 +110,7 @@ export async function runUpgradeFlow(
 
     if (!latestVersion) {
       if (options.allowPrerelease) {
-        logger.log("No release candidate available on the rc channel yet.");
+        logger.log("There is no release candidate on the rc channel yet.");
         logger.log("Default upgrades keep using the stable latest channel.");
         return { exitCode: 0, status: "no-rc-candidate" };
       }

@@ -117,6 +117,7 @@ jobs:
           set -euo pipefail
           PACKAGE_NAME="@osovv/vv-opencode"
           CURRENT_SHA="$(git rev-parse HEAD)"
+          CHANNEL="${RELEASE_CHANNEL}"
 
           if PUBLISHED_SHA="$(npm view "${PACKAGE_NAME}@${RELEASE_VERSION}" gitHead 2>/dev/null)"; then
             PUBLISHED_SHA="$(printf '%s' "${PUBLISHED_SHA}" | tr -d '[:space:]')"
@@ -130,5 +131,5 @@ jobs:
             fi
             echo "${PACKAGE_NAME}@${RELEASE_VERSION} is already published from the requested commit; continuing"
           else
-            npm publish --access public --provenance --tag "${RELEASE_CHANNEL}"
+            npm publish --access public --provenance --tag "$CHANNEL"
           fi

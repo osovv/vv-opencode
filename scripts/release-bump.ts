@@ -28,6 +28,9 @@
 //   ReleaseWorkflowDispatchInput - Inputs required to dispatch verified publication.
 //   PublishedReleaseFinalizationInput - Inputs required for authenticated release finalization.
 //   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
+//   parseReleaseBumpArgs - Parses release:bump arguments into npm version args plus an optional explicit channel.
+//   deriveReleaseChannel - Deterministically derives the latest or rc publication channel from a version.
+//   resolveReleaseChannel - Derives the channel for a bumped version and rejects a contradicting explicit channel.
 //   readPackageVersion - Reads the package version from package.json.
 //   run - Runs a command via execFileSync with inherited stdio and exits on failure.
 //   runCapture - Runs a command and captures stdout as a string.

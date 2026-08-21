@@ -324,7 +324,7 @@ test("runUpgradeFlow - reports no-rc-candidate when the rc dist-tag is absent", 
   );
   expect(result).toEqual({ exitCode: 0, status: "no-rc-candidate" });
   expect(commands).toEqual([]);
-  expect(logger.logLines.join("\n")).toContain("No release candidate available on the rc channel");
+  expect(logger.logLines.join("\n")).toContain("no release candidate on the rc channel");
   expect(logger.errorLines).toEqual([]);
 });
 
