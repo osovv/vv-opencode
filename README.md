@@ -160,7 +160,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 
 ## What's inside
 
-### The ten plugins
+### The eleven plugins
 
 | Plugin | What it does |
 |---|---|
@@ -173,6 +173,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 | **WebToolsPlugin** | Two provider-neutral tools — `web_search` and `web_fetch` — over Exa, Brave, Z.AI, native retrieval, or Spider, with permission checks and normalized output. |
 | **ToolHistoryCompactionPlugin** | Shrinks the context replayed to the model by compacting old tool outputs non-destructively, without touching on-disk history. |
 | **AnalyticsPlugin** | Local-only token and cache telemetry per model step, a live `cache NN%` indicator in the TUI, and `vvoc analytics cache-hit-rate` for retrospective comparison. |
+| **PeakHoursPlugin** | Warns or blocks models whose provider is in peak-priced hours right now, suggests connected off-peak providers, and shows a persistent orange banner in the TUI. |
 | **ContextTuiPlugin** | The `/context` inspector: an honest, scrollable TUI dialog showing context-window usage by category, tool, and MCP server. |
 
 ### Managed agents
@@ -480,6 +481,42 @@ vvoc analytics cache-hit-rate --project my-repo --order hit-rate --limit 10 --js
 The hit rate is token-weighted: `cacheRead / (cacheRead + cacheWrite + input)` over cache-eligible steps; `COVERAGE` shows the share of steps whose provider reported cache tokens at all, so providers without prompt caching read as `n/a` instead of a misleading `0%`. `--since`/`--until` accept `Nd`/`Nw`/`Nm` or `YYYY-MM-DD`; `--order` accepts `date`, `steps`, or `hit-rate`.
 
 Agents can run this analysis conversationally too: the managed `vvoc-usage-analytics` skill answers usage, cache, and cost questions inside a session — including historical comparisons from `opencode.db` that predate the analytics plugin.
+
+### Peak hours
+
+Several providers (DeepSeek, Z.AI, Qwen) bill higher rates during daily or weekday peak windows. `PeakHoursPlugin` matches the provider of each outgoing message against local schedules and either warns or blocks — it never switches the model for you and never fetches pricing from the network.
+
+Behavior per mode:
+
+- **hard** (default): a message to a peak-priced provider is rejected before any LLM request, with the window end, the wait time, and the connected providers that are currently outside peak (`PEAK_HOURS_BLOCK: provider "deepseek" is in peak hours until 10:00 UTC (about 3 h). … Connected providers outside peak hours right now: z-ai, qwen. …`).
+- **soft**: the message goes through, the model receives a one-line cost notice, and the TUI shows a persistent orange banner in the bottom slot: `⚠ PEAK deepseek until 10:00 UTC · elevated pricing · off-peak now: z-ai, qwen`.
+
+Nothing already in flight is ever killed:
+
+- a session created before the current window started is grandfathered to soft for its lifetime (`graceActiveSessions`, on by default — decisions come from persisted session data, so they survive restarts);
+- subagent sessions, managed subagents, and `guardian` are always soft — the decision to work was already admitted at the parent level;
+- internal OpenCode agents (`compaction`, `title`, `summary`) are exempt entirely.
+
+Schedules match **providers, not models**, with alias normalization (`zai`/`zhipu`/`glm` → `z-ai`, `alibaba`/`dashscope` → `qwen`). Unknown providers are never warned about or blocked, and a malformed schedule logs a warning and disables that provider's schedule instead of blocking anything (fail-open).
+
+Config lives in `vvoc.json` under `plugins["peak-hours"]` and is conservatively materialized by `vvoc sync`/`init` — your edits are never overwritten. The built-in defaults carry a revision date because providers move these clocks (verified 2026-08-21: DeepSeek ×2 surcharge effective 2026-08-16; Z.AI weekday coding-plan clock; Qwen 22:00–08:00 UTC+8 off-peak plan window):
+
+```json
+"plugins": {
+  "peak-hours": {
+    "enabled": true,
+    "mode": "hard",
+    "graceActiveSessions": true,
+    "schedules": {
+      "deepseek": { "windows": [{ "start": "01:00", "end": "04:00", "tz": "UTC" }, { "start": "06:00", "end": "10:00", "tz": "UTC" }] },
+      "z-ai": { "windows": [{ "start": "06:00", "end": "10:00", "tz": "UTC", "days": [1, 2, 3, 4, 5] }] },
+      "qwen": { "windows": [{ "start": "00:00", "end": "14:00", "tz": "UTC" }] }
+    }
+  }
+}
+```
+
+Windows use `HH:MM` in an explicit timezone (default UTC), may cross midnight (`"start": "22:00", "end": "02:00"`), and accept an optional `days` restriction (0=Sunday … 6=Saturday, default all days). A provider entry may override the global mode with `"mode": "soft"`. Set the top-level `"mode": "soft"` to downgrade everywhere, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart, like other runtime plugin settings.
 
 ### Web tools
 
