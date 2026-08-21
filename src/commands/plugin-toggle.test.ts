@@ -35,7 +35,7 @@ describe("plugin toggle", () => {
     expect(names.includes("hashline-edit")).toBe(true);
     expect(names.includes("context")).toBe(true);
     expect(names.includes(WEB_TOOLS_PLUGIN_NAME)).toBe(true);
-    expect(names.length).toBe(10);
+    expect(names.length).toBe(11);
   });
 
   test("vvoc.json toggle write round-trips", async () => {
