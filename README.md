@@ -124,10 +124,10 @@ All artifacts for one feature live together:
 
 Package ids are date-prefixed (`YYYY-MM-DD-<slug>`, for example `2026-06-24-cache-store`) so active packages sort by creation date; the prefix is date-only, never a full timestamp. Spec and plan lifecycle runs through a top-level status: `draft` while being written, `approved` after explicit user approval, `applied` after successful execution. `vv-execute` archives applied packages by moving the whole directory to `.vvoc/specs/archive/YYYY-MM-DD-<slug>-<timestamp>/`.
 
-Specs and plans are XML, so requirements, tasks, acceptance criteria, and dependencies stay grep-able:
+Specs and plans are XML, so requirements, tasks, acceptance criteria, and dependencies stay grep-able. Task and wave identity lives in unique element names (`<TASK-T-001>…</TASK-T-001>`, `<WAVE-1>…</WAVE-1>`), so grep/sed extraction stays exact without a separate query language:
 
 ```bash
-grep '<id>T-' .vvoc/specs/*/plan.xml        # task ids
+grep '<TASK-T-' .vvoc/specs/*/plan.xml      # task ids
 grep '<criterion>' .vvoc/specs/*/plan.xml   # acceptance criteria
 grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 ```

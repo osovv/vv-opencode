@@ -45,27 +45,27 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
   <purpose>List all module names</purpose>
 </helper>
 <helper name="list-tasks">
-  <command>grep '&lt;id&gt;T-' PLAN_PATH</command>
+  <command>grep '&lt;TASK-T-' PLAN_PATH</command>
   <purpose>List all task IDs in document order</purpose>
 </helper>
 <helper name="extract-task">
-  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH</command>
-  <purpose>Extract one full task by ID (replace T-NNN with actual ID like T-001)</purpose>
+  <command>sed -n '/&lt;TASK-T-NNN&gt;/,/&lt;\/TASK-T-NNN&gt;/p' PLAN_PATH</command>
+  <purpose>Extract one full task by ID (replace T-NNN in the TASK-T-NNN element name with the actual ID, e.g. TASK-T-001)</purpose>
 </helper>
 <helper name="extract-snippet">
-  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | sed -n '/&lt;snippet&gt;/,/&lt;\/snippet&gt;/p'</command>
+  <command>sed -n '/&lt;TASK-T-NNN&gt;/,/&lt;\/TASK-T-NNN&gt;/p' PLAN_PATH | sed -n '/&lt;snippet&gt;/,/&lt;\/snippet&gt;/p'</command>
   <purpose>Extract only the code snippet for a specific task</purpose>
 </helper>
 <helper name="extract-acceptance">
-  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | sed -n '/&lt;acceptance&gt;/,/&lt;\/acceptance&gt;/p'</command>
+  <command>sed -n '/&lt;TASK-T-NNN&gt;/,/&lt;\/TASK-T-NNN&gt;/p' PLAN_PATH | sed -n '/&lt;acceptance&gt;/,/&lt;\/acceptance&gt;/p'</command>
   <purpose>Extract all acceptance criteria for a specific task</purpose>
 </helper>
 <helper name="task-file">
-  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | grep '&lt;file&gt;'</command>
+  <command>sed -n '/&lt;TASK-T-NNN&gt;/,/&lt;\/TASK-T-NNN&gt;/p' PLAN_PATH | grep '&lt;file&gt;'</command>
   <purpose>Get the target file for a specific task</purpose>
 </helper>
 <helper name="task-status">
-  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | grep '&lt;status&gt;'</command>
+  <command>sed -n '/&lt;TASK-T-NNN&gt;/,/&lt;\/TASK-T-NNN&gt;/p' PLAN_PATH | grep '&lt;status&gt;'</command>
   <purpose>Get current status of a specific task</purpose>
 </helper>
 <helper name="dependency-graph">
@@ -73,11 +73,11 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
   <purpose>Show all task dependencies</purpose>
 </helper>
 <helper name="task-deps">
-  <command>sed -n '/&lt;id&gt;T-NNN&lt;\/id&gt;/,/&lt;\/task&gt;/p' PLAN_PATH | grep '&lt;task_id&gt;'</command>
+  <command>sed -n '/&lt;TASK-T-NNN&gt;/,/&lt;\/TASK-T-NNN&gt;/p' PLAN_PATH | grep '&lt;task_id&gt;'</command>
   <purpose>List dependencies for a specific task</purpose>
 </helper>
 <helper name="count-tasks">
-  <command>grep -c '&lt;id&gt;T-' PLAN_PATH</command>
+  <command>grep -c '&lt;TASK-T-' PLAN_PATH</command>
   <purpose>Count total tasks in the plan</purpose>
 </helper>
 <helper name="all-files">
@@ -103,8 +103,8 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
   <check>Plan contains a non-empty &lt;spec&gt; path pointing to a readable active spec file at .vvoc/specs/&lt;id&gt;/spec.xml. Stop and report if the spec path is under archive/.</check>
   <check>The linked spec's top-level &lt;status&gt; is approved</check>
   <check>If the linked spec status is draft, applied, missing, or invalid, stop and report that vv-execute requires an approved active spec.</check>
-  <check>Plan contains &lt;tasks&gt; section with at least one &lt;task&gt;</check>
-  <check>Each task has non-empty &lt;id&gt;, &lt;title&gt;, and &lt;file&gt;</check>
+  <check>Plan contains &lt;tasks&gt; section with at least one &lt;TASK-T-NNN&gt; element grouped under &lt;WAVE-N&gt; elements</check>
+  <check>Each task element name matches the TASK-T-NNN pattern and the task has non-empty &lt;title&gt; and &lt;file&gt;. There is no child id element — identity lives in the element name.</check>
   <check>Each task has &lt;snippet&gt; (may be empty but must exist)</check>
   <check>Each task has &lt;acceptance&gt; with at least one &lt;criterion&gt;</check>
   <action>If any check fails, stop and report the issue with line numbers. Do not proceed with broken plan.</action>

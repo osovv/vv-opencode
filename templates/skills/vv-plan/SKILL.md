@@ -36,8 +36,9 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 <rule>When first saving the plan, set the top-level status to &lt;status&gt;draft&lt;/status&gt;. Only change it to approved after the user explicitly reads/reviews and approves the final plan. Never set the top-level status to applied yourself; applied is reserved for vv-execute after successful execution.</rule>
 <rule>The plan contains two major sections: architecture (modules, contracts, dependencies) and tasks (implementation steps with code snippets).</rule>
 <rule>Architecture section uses child tags: module, name, purpose, file (path, role), contract, depends_on (module).</rule>
-<rule>Tasks use child tags: id (T-NNN pattern), title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command). Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.</rule>
-<rule>Every XML element is named for grep extraction. Use: `grep '&lt;id&gt;T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for dependency graph.</rule>
+<rule>Tasks are grouped into wave elements whose identity is the element name: &lt;WAVE-1&gt;, &lt;WAVE-2&gt;, … Each wave contains a &lt;goal&gt; and its tasks.</rule>
+<rule>A task's identity is its element name in the TASK-T-NNN pattern: &lt;TASK-T-001&gt;…&lt;/TASK-T-001&gt;. The identity repeats on both boundaries so long blocks stay addressable. Tasks use child tags: title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command). Do NOT add a child id element — the element name is the single authoritative identity. Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.</rule>
+<rule>Every XML element is named for grep extraction. Use: `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for dependency graph.</rule>
 <rule>Populate the &lt;spec&gt; element with the path to the spec.xml this plan implements.</rule>
 <rule>If a design-context.xml was found and read as explanatory context, populate the &lt;design-context&gt; element with the path to design-context.xml so execution tools and reviewers can locate it.</rule>
 <location>Save plan.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/plan.xml</location>
@@ -61,10 +62,9 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 </acceptance_criteria_format>
 
 <example>
-<rule>Here is a concrete example of one task in the new format. Every &lt;snippet&gt; uses CDATA, and every &lt;criterion&gt; is testable:</rule>
+<rule>Here is a concrete example of one task. The task identity is the element name, repeated on both boundaries; every &lt;snippet&gt; uses CDATA, and every &lt;criterion&gt; is testable:</rule>
 <sample-fragment>
-  &lt;task&gt;
-  &lt;id&gt;T-001&lt;/id&gt;
+  &lt;TASK-T-001&gt;
   &lt;title&gt;LRU Cache Store&lt;/title&gt;
   &lt;file&gt;src/lib/cache-store.ts&lt;/file&gt;
   &lt;status&gt;pending&lt;/status&gt;
@@ -111,9 +111,9 @@ export type CacheStoreOptions = {
   &lt;verification&gt;
     &lt;command&gt;bun test src/lib/cache-store.test.ts&lt;/command&gt;
   &lt;/verification&gt;
-  &lt;/task&gt;
+  &lt;/TASK-T-001&gt;
 </sample-fragment>
-<rule>Notice: the snippet uses CDATA wrapping (mandatory). Every element is a child tag (no attributes). The task has id, title, file, status, description, snippet, acceptance, and verification — all as child elements.</rule>
+<rule>Notice: the task identity TASK-T-001 appears in the opening and closing element names. The snippet uses CDATA wrapping (mandatory). Every field is a child tag (no attributes): title, file, status, description, snippet, acceptance, and verification.</rule>
 </example>
 
 <file_structure>
@@ -142,6 +142,7 @@ export type CacheStoreOptions = {
 <forbidden>XML attributes in any tag — use child elements only</forbidden>
 <forbidden>Code outside CDATA — all snippets must be wrapped in CDATA sections</forbidden>
 <forbidden>Numbered criterion tags — use plain &lt;criterion&gt;, not numbered variants</forbidden>
+<forbidden>Generic &lt;task&gt; or &lt;wave&gt; elements with child id/num elements — identity belongs in the element name: &lt;TASK-T-NNN&gt;, &lt;WAVE-N&gt;</forbidden>
 </no_placeholders>
 
 <self_review>
@@ -150,7 +151,7 @@ export type CacheStoreOptions = {
 <check>Acceptance criteria quality: Is every criterion testable? Could a reviewer or implementer write a failing test for it?</check>
 <check>Type consistency: Do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
 <rule>Fix issues inline as you find them. No second review pass needed — just fix and continue.</rule>
-<check>Format compliance: Are there zero XML attributes? Is every snippet in CDATA? Are tasks using id child tags instead of task-N numbering?</check>
+<check>Format compliance: Are there zero XML attributes? Is every snippet in CDATA? Is every task a &lt;TASK-T-NNN&gt; element with identity in the element name and no child id element?</check>
 <check>Architecture presence: Does the plan have an architecture section with modules, contracts, and dependency graph?</check>
 </self_review>
 

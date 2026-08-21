@@ -28,11 +28,9 @@
   </architecture>
 
   <tasks>
-    <wave>
-      <num>1</num>
+    <WAVE-1>
       <goal></goal>
-      <task>
-        <id>T-001</id>
+      <TASK-T-001>
         <title></title>
         <file></file>
         <status>pending</status>
@@ -49,7 +47,7 @@
         <verification>
           <command></command>
         </verification>
-      </task>
-    </wave>
+      </TASK-T-001>
+    </WAVE-1>
   </tasks>
 </plan>
