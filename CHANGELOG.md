@@ -1,3 +1,14 @@
+## <small>1.3.5 (2026-08-21)</small>
+
+### Summary
+
+Release 1.3.5 clarifies what vv-opencode offers and makes plan documents easier to work with by hand. The docs are restructured around an outcome-first pitch that reframes the package as an opinionated agentic development layer for OpenCode, adds a "You just talk to OpenCode normally" section showing how vv-controller picks the lightest trajectory for each request while explicit spec, plan, and execute skills take over only when the work needs them, and surfaces provider-neutral web tools in a new Why section. On the functional side, plan tasks and waves now carry their identity in unique element names (`<TASK-T-NNN>` and `<WAVE-N>`) instead of generic tags with child id/num elements, so long task blocks stay addressable and grep/sed extraction used by vv-plan and vv-execute remains exact without a separate query language; the plan template, skill format rules, plan-validation checks, and README grep examples are updated to match.
+
+* docs(readme): reframe pitch as agentic layer and add natural-trajectory section ([d197955](https://github.com/osovv/vv-opencode/commit/d197955))
+* docs(readme): restructure around outcome-first pitch and runtime value ([9e6910b](https://github.com/osovv/vv-opencode/commit/9e6910b))
+* docs(readme): surface provider-neutral web tools in the Why section ([c90ecf0](https://github.com/osovv/vv-opencode/commit/c90ecf0))
+* feat(skills): give plan tasks and waves unique element-name boundaries ([8f52f0c](https://github.com/osovv/vv-opencode/commit/8f52f0c))
+
 ## <small>1.3.4 (2026-08-19)</small>
 
 ### Summary
