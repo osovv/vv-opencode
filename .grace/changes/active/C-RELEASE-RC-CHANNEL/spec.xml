@@ -1,0 +1,60 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-RELEASE-RC-CHANNEL>
+    <Summary>Publish release candidates through a dedicated npm rc dist-tag channel so default upgrades stay on latest, with an explicit opt-in upgrade path to the latest release candidate.</Summary>
+    <Problem>The publish workflow runs npm publish without a tag, which moves the latest dist-tag onto any published version including pre-releases. The first published release candidate would silently become the default upgrade target for every vvoc upgrade user. The existing --allow-prerelease upgrade flag resolves the highest version among all published versions instead of an explicitly managed channel, so accidental alpha or beta publications would also be picked up.</Problem>
+    <Goals>
+      <Goal>Extend publish.yml with a required release channel input that defaults to latest and passes an explicit npm dist-tag on publication, keeping the existing already-published recovery path unchanged.</Goal>
+      <Goal>Derive the release channel in release-bump from the bumped version (rc pre-release versions publish to the rc channel, everything else to latest), pass it to the publish workflow dispatch, and mark rc GitHub Releases as pre-release.</Goal>
+      <Goal>Resolve the --rc upgrade flag (and the existing --allow-prerelease flag) from the npm rc dist-tag instead of the maximum published version, so the release candidate channel is explicitly managed.</Goal>
+      <Goal>Keep the default upgrade path untouched: without opt-in flags it resolves the latest dist-tag and never offers a pre-release.</Goal>
+      <Goal>Report a clear message when the rc channel has no published candidate instead of failing or silently selecting another version.</Goal>
+      <Goal>Document the release-candidate workflow and the upgrade flags in README and keep GRACE graph and verification synchronized.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not add arbitrary user-named channel support; exactly one pre-release channel, rc, is managed.</NonGoal>
+      <NonGoal>Do not change the default upgrade channel, the version comparison semantics, or the post-upgrade sync and completion flow.</NonGoal>
+      <NonGoal>Do not change install pinning semantics: sync keeps pinning the exact installed version, including pre-release versions.</NonGoal>
+      <NonGoal>Do not change release gates, trusted publishing, provenance, or the exact-SHA publication policy.</NonGoal>
+      <NonGoal>Do not publish release candidates automatically from branch or tag pushes.</NonGoal>
+    </NonGoals>
+    <Constraints>
+      <Constraint>publish.yml must reject publication when the channel input is not latest or rc.</Constraint>
+      <Constraint>The rc channel must only ever be published through npm publish --tag rc; the latest channel must never be moved onto a pre-release version.</Constraint>
+      <Constraint>Channel derivation is deterministic from the bumped semver: versions containing an rc pre-release identifier publish to rc; all other versions publish to latest; an explicit channel argument, when accepted, must agree with the derivation.</Constraint>
+      <Constraint>Upgrade channel resolution must read the npm dist-tags endpoint for the package and degrade to a clear already-latest or no-candidate message when the rc tag is absent, never to an implicit fallback version.</Constraint>
+      <Constraint>Existing upgrade behavior for users without flags and the already-latest short-circuit for versions ordered above the resolved target must remain unchanged.</Constraint>
+      <Constraint>Workflow files, release scripts, upgrade command, README, GRACE graph, and GRACE verification stay synchronized with the implemented behavior.</Constraint>
+    </Constraints>
+    <AcceptanceCriteria>
+      <Criterion>publish.yml accepts a channel input, validates it against latest and rc, and publishes with the matching npm dist-tag while the already-published recovery branch keeps skipping publication.</Criterion>
+      <Criterion>release-bump derives rc for bumped versions with an rc pre-release identifier and latest otherwise, dispatches publish.yml with the derived channel, and creates rc GitHub Releases with the pre-release marker.</Criterion>
+      <Criterion>The bump script rejects an explicit channel argument that contradicts the version-derived channel.</Criterion>
+      <Criterion>vvoc upgrade without flags resolves the latest dist-tag and never resolves a pre-release version.</Criterion>
+      <Criterion>vvoc upgrade --rc and --allow-prerelease resolve the version currently pointed to by the npm rc dist-tag, install it when newer than the current version, and report already-latest when it is not.</Criterion>
+      <Criterion>When the rc dist-tag is absent from the registry, the upgrade command prints a clear no release candidate message and exits successfully without installing anything.</Criterion>
+      <Criterion>Deterministic tests cover channel derivation from versions, dist-tag resolution and degradation, flag equivalence, unchanged default resolution, and the existing already-latest ordering including pre-release versions.</Criterion>
+      <Criterion>The publish workflow YAML structure, the dispatch inputs, and the release script channel plumbing are covered by repository checks, and README documents the rc release workflow and both upgrade flags.</Criterion>
+      <Criterion>Focused tests, repository check, build, pack check, release consistency, and GRACE validation gates pass with fresh output.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-UPGRADE />
+      <M-RELEASE-AUTOMATION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/commands/upgrade.test.ts scripts/release-bump.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic output proves channel derivation and dispatch plumbing, dist-tag based rc resolution with absent-tag degradation, unchanged default latest resolution and already-latest ordering, workflow input validation, and synchronized documentation and GRACE state, without publishing to npm or requiring network access beyond mocked registry responses.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user explicitly approved the npm dist-tag design with exactly one managed pre-release channel named rc, the --rc flag as the canonical opt-in with --allow-prerelease kept as an equivalent alias, and an unchanged default latest channel.</Assumption>
+      <Assumption>Post-upgrade sync already re-pins the OpenCode plugin and TUI specifiers to the exact installed version because managed specifier matching accepts any PACKAGE_NAME@version prefix, including pre-release versions.</Assumption>
+      <Assumption>npm moves the latest dist-tag onto any published version when no tag is passed, including pre-releases, which is the failure mode this change closes.</Assumption>
+      <Assumption>Existing release gates, trusted publishing, and the exact-SHA policy remain sufficient for rc publications; an rc publication is the same CI-gated flow with a different dist-tag and a pre-release marker on the GitHub Release.</Assumption>
+      <Assumption>GitHub Releases created from rc bumps may be marked pre-release without affecting tag naming or the recovery flow.</Assumption>
+    </Assumptions>
+  </C-RELEASE-RC-CHANNEL>
+</GraceChangeSpec>

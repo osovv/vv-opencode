@@ -1,0 +1,195 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-RELEASE-RC-CHANNEL>
+    <IntentSummary>Make the npm publication channel explicit end to end: publish.yml gains a validated channel input and passes --tag on npm publish, release-bump derives the channel from the bumped version and marks rc GitHub Releases as pre-release, and the upgrade command resolves --rc (with --allow-prerelease as an equivalent alias) from the npm rc dist-tag with clear no-candidate degradation, leaving the default latest upgrade path unchanged, with README and GRACE projections synchronized.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-UPGRADE</Value>
+        <Value>M-RELEASE-AUTOMATION</Value>
+        <Value>V-M-CLI-UPGRADE</Value>
+        <Value>V-M-RELEASE-AUTOMATION</Value>
+        <Value>src/commands/upgrade.ts</Value>
+        <Value>src/commands/upgrade.test.ts</Value>
+        <Value>scripts/release-bump.ts</Value>
+        <Value>scripts/release-bump.test.ts</Value>
+        <Value>.github/workflows/publish.yml</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/commands/upgrade.ts</File>
+        <Text>allowPrerelease</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/commands/upgrade.ts</File>
+        <Text>fetchLatestVersionIncludingPrerelease</Text>
+      </MustContain>
+      <MustContain>
+        <File>scripts/release-bump.ts</File>
+        <Text>commit_sha</Text>
+      </MustContain>
+      <MustContain>
+        <File>.github/workflows/publish.yml</File>
+        <Text>npm publish --access public --provenance</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>vvoc upgrade</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-UPGRADE</Module>
+        <Module>M-RELEASE-AUTOMATION</Module>
+      </MustVerify>
+      <MustContain>
+        <File>.github/workflows/publish.yml</File>
+        <Text>--tag "$CHANNEL"</Text>
+      </MustContain>
+      <MustContain>
+        <File>scripts/release-bump.ts</File>
+        <Text>deriveReleaseChannel</Text>
+      </MustContain>
+      <MustContain>
+        <File>scripts/release-bump.ts</File>
+        <Text>--prerelease</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/commands/upgrade.ts</File>
+        <Text>fetchRcDistTagVersion</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/commands/upgrade.ts</File>
+        <Text>no release candidate</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>--rc</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/commands/upgrade.test.ts scripts/release-bump.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-UPGRADE />
+        <M-RELEASE-AUTOMATION />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-UPGRADE />
+        <V-M-RELEASE-AUTOMATION />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-RELEASE-RC-CHANNEL/plan.xml</File>
+      <File>.github/workflows/publish.yml</File>
+      <File>scripts/release-bump.ts</File>
+      <File>scripts/release-bump.test.ts</File>
+      <File>src/commands/upgrade.ts</File>
+      <File>src/commands/upgrade.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Resolve rc upgrades from the npm dist-tag endpoint with degradation.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>upgrade.ts adds a dist-tags fetch (GET /@scope%2Fname entry point or /-/package/.../dist-tags) returning the rc tag version, exported as fetchRcDistTagVersion with the same fail-soft null semantics as the existing latest fetch.</Criterion>
+          <Criterion>The command gains a --rc boolean flag; --rc and --allow-prerelease both resolve the target from the rc dist-tag, replacing the maximum-of-all-versions resolution, and remain injectable through the existing dependency overrides.</Criterion>
+          <Criterion>When the rc dist-tag is absent or unresolvable, the command prints a clear no release candidate message, exits zero, installs nothing, and runs no sync or completion subprocess.</Criterion>
+          <Criterion>Default resolution without flags still reads the latest dist-tag only, and the existing already-latest short-circuit and semver ordering (including pre-release ordering) are unchanged.</Criterion>
+          <Criterion>runUpgradeFlow status handling gains the no-candidate outcome without disturbing the existing statuses, and injectable tests cover flag equivalence, absent-tag degradation, default unchanged behavior, and ordering against pre-release current versions.</Criterion>
+          <Criterion>MODULE_CONTRACT, MODULE_MAP, block anchors, and CHANGE_SUMMARY stay accurate in both edited files.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/upgrade.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Derive the release channel in release-bump and mark rc releases as pre-release.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>release-bump.ts exports deriveReleaseChannel(version) returning rc for versions whose pre-release identifiers start with rc and latest otherwise, deterministic and pure.</Criterion>
+          <Criterion>parseNpmVersionArgs or a sibling parser accepts an optional explicit --channel argument, validates it against latest and rc, and rejects a value contradicting the version-derived channel with a clear error naming both.</Criterion>
+          <Criterion>ReleaseWorkflowDispatchInput gains the channel field, dispatchVerifiedPublishWorkflow passes it as a -f channel= input, and the retry hint message includes the channel field.</Criterion>
+          <Criterion>PublishedReleaseFinalizationInput gains the channel, and gh release create for rc channels adds --prerelease while latest stays unchanged.</Criterion>
+          <Criterion>main() derives the channel from the bumped version, and console output states the derived channel before dispatch.</Criterion>
+          <Criterion>Deterministic tests cover rc and latest derivation across explicit and keyword bumps, channel contradiction rejection, dispatch argument assembly including the channel input, and --prerelease flag presence per channel.</Criterion>
+          <Criterion>MODULE_CONTRACT, MODULE_MAP, and CHANGE_SUMMARY stay accurate in both edited files.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/release-bump.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Publish through a validated channel input in publish.yml.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>publish.yml gains a required channel string input with a latest default and the workflow validates the value against latest and rc before publication, failing closed on anything else.</Criterion>
+          <Criterion>The publish step runs npm publish --access public --provenance --tag "$CHANNEL" (or equivalent quoting) so the latest dist-tag can never move onto a pre-release publication.</Criterion>
+          <Criterion>The already-published recovery branch keeps skipping npm publish and still succeeds, independent of channel.</Criterion>
+          <Criterion>No other workflow gates, permissions, or exact-SHA verification steps change.</Criterion>
+          <Criterion>Workflow structure remains valid YAML with the concurrency group still keyed by version.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run release:check</Command>
+          <Command>git diff -- .github/workflows/publish.yml</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Document the rc workflow and upgrade flags.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-003</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents the release-candidate workflow: prerelease bumps with --preid rc publish to the rc dist-tag, default upgrades stay on latest, and a final stable bump of the same version publishes to latest.</Criterion>
+          <Criterion>README documents vvoc upgrade --rc including --allow-prerelease equivalence and the no-candidate message, plus manual npm install @rc for plugin consumers.</Criterion>
+          <Criterion>Every documented command, flag, and default is checked against current source and the workflow file.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Run the integrated regression gate and resolve only in-scope failures.</Title>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-004</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>All upgrade and release-bump tests pass together with the full repository suite and no live npm, gh, or git mutations occur in tests.</Criterion>
+          <Criterion>bun run check passes with no regressions outside the observed write scope.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Synchronize GRACE projections and run final gates.</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-CLI-UPGRADE and M-RELEASE-AUTOMATION descriptions reflect dist-tag based rc resolution and channel-aware publication, and their graph entries stay otherwise unchanged.</Criterion>
+          <Criterion>V-M-CLI-UPGRADE and V-M-RELEASE-AUTOMATION gain the new deterministic scenarios and commands while preserving existing ones.</Criterion>
+          <Criterion>bun run build, bun run pack:check, and bun run release:check pass, and git diff contains only approved files with no secrets or generated dist content.</Criterion>
+          <Criterion>GRACE lint and status report no errors attributable to C-RELEASE-RC-CHANNEL.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run build</Command>
+          <Command>bun run release:check</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-006>
+    </ImplementationPlan>
+  </C-RELEASE-RC-CHANNEL>
+</GraceChangePlan>

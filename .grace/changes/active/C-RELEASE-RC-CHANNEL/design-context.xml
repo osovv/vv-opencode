@@ -1,0 +1,24 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-RELEASE-RC-CHANNEL</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The repository already consumes another package's rc channel (bunx @osovv/grace-cli@rc), so npm dist-tags are the established mechanism in this ecosystem. Investigation found the upgrade command already reads the latest dist-tag by default and already accepts --allow-prerelease, and release scripts already accept prerelease version bumps; the only structural gap is that publish.yml runs npm publish without --tag. npm moves the latest dist-tag onto any newly published version when no tag is passed, including pre-releases, so the first naive rc publication would silently repoint every default upgrade onto the candidate. The change therefore centers on making the publication channel explicit end to end and on making the opt-in upgrade path read an explicitly managed channel pointer instead of the maximum published version, which would also pick up accidental alpha or beta publications.</Rationale>
+  <Rationale>Channel derivation from the bumped version keeps the operator workflow unchanged: bun run release:bump -- prerelease --preid rc produces 1.4.0-rc.1 and publishes to rc automatically, while a final 1.4.0 bump publishes to latest. An explicit channel argument may only confirm the derivation, never contradict it, which keeps a single source of truth and prevents operator error. The --rc flag is the canonical user-facing opt-in and --allow-prerelease remains as an equivalent alias for continuity because it is already shipped and documented.</Rationale>
+  <Rationale>Verified existing behavior that bounds the change: managed OpenCode plugin and TUI specifiers match any PACKAGE_NAME@version prefix, so the post-upgrade sync re-pins installations onto the exact rc version without new work; both release scripts' semver patterns already accept pre-release versions; schema $id patching during bumps is version-agnostic. The default upgrade path and its already-latest short-circuit are deliberately untouched, including the semver ordering edge where a user on 1.4.0-rc.1 remains at latest until 1.4.0 ships.</Rationale>
+  <Alternatives>
+    <Alternative>Arbitrary user-named channels (beta, canary, next) were rejected for now: one managed rc channel covers the need, and extra channels add dispatch inputs, documentation, and upgrade flag surface without a current consumer.</Alternative>
+    <Alternative>Keeping --allow-prerelease as maximum-of-all-versions and adding --rc separately was rejected: two different pre-release resolution semantics confuse users, and the maximum-of-all behavior would still pick up accidental non-rc pre-release publications.</Alternative>
+    <Alternative>Publishing rc versions from a separate branch or workflow was rejected: the exact-SHA CI-gated publish flow is the established safety property and only needs a channel input.</Alternative>
+    <Alternative>Skipping GitHub Release creation for rc versions was rejected in favor of pre-release marked releases: candidates still need visible notes, and the pre-release marker keeps them out of latest release surfaces.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>A dedicated vvoc upgrade --channel beta surface if a second channel is ever needed, including whether upgrade should enumerate available channels from the dist-tags endpoint.</Decision>
+    <Decision>Whether rc changelog entries should be grouped or separated in CHANGELOG.md presentation.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Maintainer runs release:bump with prerelease --preid rc producing 1.4.0-rc.1; publish.yml receives channel rc and runs npm publish --tag rc; the latest dist-tag still points at 1.3.5, so a default vvoc upgrade reports already-latest.</Scenario>
+    <Scenario>User on 1.3.5 runs vvoc upgrade --rc; the command resolves the rc dist-tag to 1.4.0-rc.1, installs it, and the post-upgrade sync re-pins OpenCode plugin and TUI specifiers to the exact rc version.</Scenario>
+    <Scenario>User on 1.4.0-rc.1 runs default vvoc upgrade after 1.4.0 ships; latest resolves 1.4.0 which orders above the candidate, so the default path upgrades them off the candidate.</Scenario>
+    <Scenario>Registry has no rc dist-tag; vvoc upgrade --rc prints a clear no release candidate message, exits zero, and installs nothing.</Scenario>
+    <Scenario>A recovery rerun of publish.yml against an already published rc version skips npm publish and still succeeds, unchanged.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>
