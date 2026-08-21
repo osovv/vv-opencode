@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-PLUGIN-PEAK-HOURS>
     <IntentSummary>Add a pure provider-level peak-hours schedule library, a peak-hours server plugin that warns or blocks chat.message requests to peak-priced providers with dynamic off-peak connected-provider suggestions and session-age plus subagent grace, a persistent app_bottom TUI banner, conservative materialized revision-dated default schedules behind strict schema v3 validation, subpath and root package exports, README guidance, and synchronized GRACE graph, verification, and requirements projections.</IntentSummary>
     <BaselineAssertions>

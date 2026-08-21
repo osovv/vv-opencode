@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-PLUGIN-PEAK-HOURS>
     <Summary>Add a peak-hours plugin with a pure provider-level schedule library, a chat.message server hook that warns or blocks peak-priced providers with dynamic off-peak provider suggestions, and a persistent app_bottom TUI banner, configured through a materialized vvoc schema v3 plugins entry.</Summary>
     <Problem>Multiple providers used by vvoc users (deepseek, z-ai, qwen) bill higher rates during daily or weekday peak windows. Users unknowingly start or continue expensive work during those windows, static suggestion lists in configuration do not reflect which providers the user actually has connected, and no vvoc surface currently informs or gates model usage by time of day.</Problem>
