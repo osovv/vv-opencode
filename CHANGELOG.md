@@ -1,3 +1,29 @@
+## <small>1.3.6-rc.0 (2026-08-21)</small>
+
+### Summary
+
+This release adds the PeakHoursPlugin, which makes peak-priced billing windows visible and optionally gates new work: in hard mode a message whose provider is inside a configured peak window is rejected before any LLM request with the window end, wait time, and connected providers currently outside peak, while soft mode appends a bounded cost notice and keeps a persistent orange TUI banner visible; sessions created before a window started, subagent-like agents, and internal OpenCode agents are never hard-blocked, revision-dated default schedules for DeepSeek, Z.AI, and Qwen are materialized into vvoc.json by sync/init without overwriting user edits, and unknown providers are never gated. The release also makes the npm publication channel explicit end to end: pre-release versions now publish to a dedicated rc dist-tag with pre-release-marked GitHub Releases instead of silently moving the latest tag, so default `vvoc upgrade` stays on stable releases, and users can deliberately opt into candidates with `vvoc upgrade --rc` (or `--allow-prerelease`), which resolves the rc dist-tag and reports clearly when no candidate is available.
+
+* chore(grace): add approved C-PLUGIN-PEAK-HOURS spec and plan bundle ([02aefdb](https://github.com/osovv/vv-opencode/commit/02aefdb))
+* chore(grace): add approved C-RELEASE-RC-CHANNEL spec and plan bundle ([39a2e76](https://github.com/osovv/vv-opencode/commit/39a2e76))
+* chore(grace): apply and archive C-PLUGIN-PEAK-HOURS ([5069639](https://github.com/osovv/vv-opencode/commit/5069639))
+* chore(grace): apply and archive C-RELEASE-RC-CHANNEL ([3de9627](https://github.com/osovv/vv-opencode/commit/3de9627))
+* chore(grace): synchronize release channel projections for C-RELEASE-RC-CHANNEL ([a47c700](https://github.com/osovv/vv-opencode/commit/a47c700))
+* docs(peak-hours): document modes, grace, defaults, aliases, and the TUI banner ([9b01d07](https://github.com/osovv/vv-opencode/commit/9b01d07))
+* docs(release): document the rc dist-tag channel, upgrade flags, and maintainer workflow ([2906a51](https://github.com/osovv/vv-opencode/commit/2906a51))
+* feat(peak-hours): add chat.message server plugin with grace and suggestions ([760f418](https://github.com/osovv/vv-opencode/commit/760f418))
+* feat(peak-hours): add persistent app_bottom TUI banner ([5fb1853](https://github.com/osovv/vv-opencode/commit/5fb1853))
+* feat(peak-hours): add pure provider-level schedule library ([419fc8d](https://github.com/osovv/vv-opencode/commit/419fc8d))
+* feat(peak-hours): add toggle, revision-dated default schedules, schema arm, and sync materialization ([2acf947](https://github.com/osovv/vv-opencode/commit/2acf947))
+* feat(peak-hours): synchronize GRACE graph, verification, and requirements projections ([cfb8cf1](https://github.com/osovv/vv-opencode/commit/cfb8cf1))
+* feat(publish): publish through a validated channel input with an explicit npm dist-tag ([f33d386](https://github.com/osovv/vv-opencode/commit/f33d386))
+* feat(release): derive publish channel from version and mark rc releases pre-release ([1b78336](https://github.com/osovv/vv-opencode/commit/1b78336))
+* feat(upgrade): resolve rc upgrades from the npm rc dist-tag ([c6b3664](https://github.com/osovv/vv-opencode/commit/c6b3664))
+* test(peak-hours): update canonical plugin count in CLI toggle coverage ([fbb60a5](https://github.com/osovv/vv-opencode/commit/fbb60a5))
+* test(release): fix channel contradiction test to assert the exit path ([2fc2190](https://github.com/osovv/vv-opencode/commit/2fc2190))
+* fix(grace): sync analytics and branding MODULE_MAP blocks with actual symbols ([3ec0f02](https://github.com/osovv/vv-opencode/commit/3ec0f02))
+* fix(peak-hours): describe the peak-hours schema arm in both schema surfaces ([302d2a4](https://github.com/osovv/vv-opencode/commit/302d2a4))
+
 ## <small>1.3.5 (2026-08-21)</small>
 
 ### Summary
