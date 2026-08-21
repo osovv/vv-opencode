@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.5.0 - Added tool-history-compaction toggle coverage and updated the canonical plugin count to nine.]
+//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added peak-hours toggle, default schedules, and materialization coverage; updated the canonical plugin count.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
@@ -27,8 +27,11 @@ import {
   isPluginEnabled,
   materializeHashlineEditEntry,
   materializeToolHistoryCompactionEntry,
+  materializePeakHoursEntry,
   DEFAULT_HASHLINE_EDIT_ROUTING,
   DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY,
+  DEFAULT_PEAK_HOURS_SCHEDULES,
+  DEFAULT_PEAK_HOURS_ENTRY,
 } from "./plugin-toggle-config.js";
 // END_BLOCK_IMPORT_HELPERS
 
@@ -48,11 +51,12 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       WEB_TOOLS_PLUGIN_NAME,
       "tool-history-compaction",
       "analytics",
+      "peak-hours",
     ]);
   });
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(10);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(11);
   });
 });
 // END_BLOCK_CONSTANTS_TEST
@@ -229,4 +233,50 @@ describe("materializeToolHistoryCompactionEntry", () => {
     expect(materializeToolHistoryCompactionEntry({ enabled: false }).enabled).toBe(false);
   });
 });
+
+// START_BLOCK_PEAK_HOURS_MATERIALIZE_TESTS
+describe("materializePeakHoursEntry", () => {
+  test("expands undefined and boolean entries to the full default entry", () => {
+    expect(materializePeakHoursEntry(undefined)).toEqual({
+      ...DEFAULT_PEAK_HOURS_ENTRY,
+    });
+    expect(materializePeakHoursEntry(false)).toEqual({
+      ...DEFAULT_PEAK_HOURS_ENTRY,
+      enabled: false,
+    });
+  });
+
+  test("fills only absent keys on object entries", () => {
+    const materialized = materializePeakHoursEntry({ enabled: true, mode: "soft" });
+    expect(materialized.mode).toBe("soft");
+    expect(materialized.graceActiveSessions).toBe(DEFAULT_PEAK_HOURS_ENTRY.graceActiveSessions);
+    expect(materialized.schedules).toEqual(DEFAULT_PEAK_HOURS_ENTRY.schedules);
+  });
+
+  test("preserves user-edited schedules without overwriting", () => {
+    const userSchedules = { deepseek: { windows: [{ start: "09:00", end: "11:00", tz: "UTC" }] } };
+    const materialized = materializePeakHoursEntry({
+      enabled: true,
+      graceActiveSessions: false,
+      schedules: userSchedules,
+    });
+    expect(materialized.schedules).toBe(userSchedules);
+    expect(materialized.graceActiveSessions).toBe(false);
+  });
+
+  test("does not mutate the shared default schedules", () => {
+    const first = materializePeakHoursEntry(true);
+    const firstSchedules = first.schedules as {
+      deepseek: { windows: Array<{ start: string }> };
+    };
+    firstSchedules.deepseek.windows[0]!.start = "99:00";
+    const second = materializePeakHoursEntry(true);
+    const secondSchedules = second.schedules as {
+      deepseek: { windows: Array<{ start: string }> };
+    };
+    expect(secondSchedules.deepseek.windows[0]!.start).toBe("01:00");
+    expect(DEFAULT_PEAK_HOURS_SCHEDULES.deepseek.windows[0]!.start).toBe("01:00");
+  });
+});
+// END_BLOCK_PEAK_HOURS_MATERIALIZE_TESTS
 // END_BLOCK_TOOL_HISTORY_MATERIALIZE_TESTS

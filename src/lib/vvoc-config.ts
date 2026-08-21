@@ -42,7 +42,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Added strict direct Z.AI provider and explicit region configuration for search and fetch.]
+//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added the strict peak-hours plugin entry schema arm with mode, grace, and schedule windows.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -392,6 +392,46 @@ export const VVOC_CONFIG_SCHEMA = {
               retainTools: {
                 type: "array",
                 items: { type: "string", minLength: 1 },
+              },
+            },
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              enabled: { type: "boolean" },
+              mode: { type: "string", enum: ["soft", "hard"] },
+              graceActiveSessions: { type: "boolean" },
+              schedules: {
+                type: "object",
+                propertyNames: { minLength: 1 },
+                additionalProperties: {
+                  type: "object",
+                  properties: {
+                    mode: { type: "string", enum: ["soft", "hard"] },
+                    windows: {
+                      type: "array",
+                      minItems: 1,
+                      items: {
+                        type: "object",
+                        properties: {
+                          start: { type: "string", pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+                          end: { type: "string", pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+                          tz: { type: "string", minLength: 1 },
+                          days: {
+                            type: "array",
+                            minItems: 1,
+                            items: { type: "integer", minimum: 0, maximum: 6 },
+                          },
+                        },
+                        required: ["start", "end"],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ["windows"],
+                  additionalProperties: false,
+                },
               },
             },
             additionalProperties: false,

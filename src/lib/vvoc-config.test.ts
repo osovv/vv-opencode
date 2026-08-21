@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered strict Z.AI provider regions, normalization, compatibility, and schema parity.]
+//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Covered peak-hours schema acceptance, rejection, and file schema parity.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -267,5 +267,67 @@ describe("plugins union parsing and schema", () => {
     expect((VVOC_CONFIG_SCHEMA.properties as Record<string, unknown>).plugins).toEqual(
       fileSchema.properties.plugins,
     );
+  });
+
+  test("schema accepts a valid peak-hours entry with schedules and weekday windows", () => {
+    const valid = JSON.parse(
+      docWithPlugins({
+        "peak-hours": {
+          enabled: true,
+          mode: "hard",
+          graceActiveSessions: true,
+          schedules: {
+            deepseek: {
+              windows: [
+                { start: "01:00", end: "04:00", tz: "UTC" },
+                { start: "06:00", end: "10:00" },
+              ],
+            },
+            "z-ai": {
+              mode: "soft",
+              windows: [{ start: "06:00", end: "10:00", tz: "UTC", days: [1, 2, 3, 4, 5] }],
+            },
+          },
+        },
+      }),
+    );
+    expect(validateVvocConfigDocument(valid)).toEqual([]);
+  });
+
+  test("schema rejects malformed peak-hours entries", () => {
+    const badTime = JSON.parse(
+      docWithPlugins({
+        "peak-hours": { schedules: { deepseek: { windows: [{ start: "24:00", end: "04:00" }] } } },
+      }),
+    );
+    expect(validateVvocConfigDocument(badTime).length).toBeGreaterThan(0);
+
+    const badMode = JSON.parse(docWithPlugins({ "peak-hours": { mode: "strict" } }));
+    expect(validateVvocConfigDocument(badMode).length).toBeGreaterThan(0);
+
+    const badDays = JSON.parse(
+      docWithPlugins({
+        "peak-hours": {
+          schedules: { qwen: { windows: [{ start: "00:00", end: "9:00", days: [9] }] } },
+        },
+      }),
+    );
+    expect(validateVvocConfigDocument(badDays).length).toBeGreaterThan(0);
+
+    const unknownKey = JSON.parse(docWithPlugins({ "peak-hours": { surcharge: true } }));
+    expect(validateVvocConfigDocument(unknownKey).length).toBeGreaterThan(0);
+
+    const missingWindows = JSON.parse(
+      docWithPlugins({ "peak-hours": { schedules: { deepseek: { mode: "hard" } } } }),
+    );
+    expect(validateVvocConfigDocument(missingWindows).length).toBeGreaterThan(0);
+  });
+
+  test("schema accepts boolean and absent peak-hours entries for backward compatibility", () => {
+    const booleanForm = JSON.parse(docWithPlugins({ "peak-hours": false }));
+    expect(validateVvocConfigDocument(booleanForm)).toEqual([]);
+
+    const absent = JSON.parse(docWithPlugins({ guardian: true }));
+    expect(validateVvocConfigDocument(absent)).toEqual([]);
   });
 });

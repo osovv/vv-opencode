@@ -2,9 +2,9 @@
 // VERSION: 1.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define canonical plugin toggle names, default-all-true values, and a pure plugin-enabled helper for loaded vvoc config snapshots.
-//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, default tool-history-compaction entry, conservative plugin entry materialization, pure toggle checks, and the toggle config type.
+//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, default tool-history-compaction entry, revision-dated default peak-hours schedules and entry, conservative plugin entry materialization, pure toggle checks, and the toggle config type.
 //   DEPENDS: [none]
-//   LINKS: [M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG]
+//   LINKS: [M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG, M-PEAK-HOURS-SCHEDULES]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,14 +17,18 @@
 //   DEFAULT_HASHLINE_EDIT_ROUTING - Default edit-routing table materialized into vvoc.json for the hashline-edit plugin.
 //   DEFAULT_TOOL_HISTORY_COMPACTION_RETAIN_TOOLS - Default knowledge-tool retention substrings for tool-history-compaction.
 //   DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY - Default materializable config entry for tool-history-compaction.
+//   DEFAULT_PEAK_HOURS_SCHEDULES_REVISION - Revision date of the built-in peak-hours schedule data.
+//   DEFAULT_PEAK_HOURS_SCHEDULES - Revision-dated built-in provider peak windows for the peak-hours plugin.
+//   DEFAULT_PEAK_HOURS_ENTRY - Default materializable config entry for the peak-hours plugin.
 //   materializeHashlineEditEntry - Expand the hashline-edit entry so the routing table is present without overwriting user values.
 //   materializeToolHistoryCompactionEntry - Expand the tool-history-compaction entry so the compaction config is present without overwriting user values.
+//   materializePeakHoursEntry - Expand the peak-hours entry so defaults are present without overwriting user values.
 //   isPluginEnabled - Returns whether the named plugin is enabled in a loaded vvoc config object.
 //   isVvocPluginEnabled - Alias for isPluginEnabled with explicit vvoc naming.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added the analytics plugin toggle name.]
+//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added the peak-hours toggle name, revision-dated default schedules, and conservative entry materialization.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -39,6 +43,7 @@ export const PLUGIN_TOGGLE_NAMES = [
   "web-tools",
   "tool-history-compaction",
   "analytics",
+  "peak-hours",
 ] as const;
 
 export type VvocPluginEntryConfig = {
@@ -91,6 +96,38 @@ export const DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY = {
   retainTools: [...DEFAULT_TOOL_HISTORY_COMPACTION_RETAIN_TOOLS],
 } as const;
 // END_BLOCK_TOOL_HISTORY_DEFAULTS
+
+// START_BLOCK_PEAK_HOURS_DEFAULTS
+// Revision-dated best-effort peak windows verified on 2026-08-21 from provider
+// documentation; users own their copy after materialization and providers move
+// these clocks. deepseek: x2 surcharge windows effective 2026-08-16
+// (api-docs.deepseek.com). z-ai: GLM Coding Plan weekday clock, 14:00-18:00
+// UTC+8 (docs.z.ai). qwen: 22:00-08:00 UTC+8 off-peak, i.e. peak 00:00-14:00
+// UTC daily (Alibaba Model Studio token plan).
+export const DEFAULT_PEAK_HOURS_SCHEDULES_REVISION = "2026-08-21";
+
+export const DEFAULT_PEAK_HOURS_SCHEDULES = {
+  deepseek: {
+    windows: [
+      { start: "01:00", end: "04:00", tz: "UTC" },
+      { start: "06:00", end: "10:00", tz: "UTC" },
+    ],
+  },
+  "z-ai": {
+    windows: [{ start: "06:00", end: "10:00", tz: "UTC", days: [1, 2, 3, 4, 5] }],
+  },
+  qwen: {
+    windows: [{ start: "00:00", end: "14:00", tz: "UTC" }],
+  },
+} as const;
+
+export const DEFAULT_PEAK_HOURS_ENTRY = {
+  enabled: true,
+  mode: "hard",
+  graceActiveSessions: true,
+  schedules: DEFAULT_PEAK_HOURS_SCHEDULES,
+} as const;
+// END_BLOCK_PEAK_HOURS_DEFAULTS
 
 // START_BLOCK_DEFAULT_CONFIG
 export function createDefaultPluginToggleConfig(): VvocPluginToggleConfig {
@@ -185,6 +222,52 @@ export function materializeToolHistoryCompactionEntry(
   return materialized;
 }
 // END_BLOCK_TOOL_HISTORY_MATERIALIZE
+
+// START_BLOCK_PEAK_HOURS_MATERIALIZE
+function defaultPeakHoursSchedulesCopy(): Record<string, unknown> {
+  return {
+    deepseek: {
+      windows: DEFAULT_PEAK_HOURS_SCHEDULES.deepseek.windows.map((window) => ({ ...window })),
+    },
+    "z-ai": {
+      windows: DEFAULT_PEAK_HOURS_SCHEDULES["z-ai"].windows.map((window) => ({ ...window })),
+    },
+    qwen: {
+      windows: DEFAULT_PEAK_HOURS_SCHEDULES.qwen.windows.map((window) => ({ ...window })),
+    },
+  };
+}
+
+/**
+ * Materialize the peak-hours plugin entry so defaults are always present in
+ * vvoc.json. Conservative: user values are never overwritten. Boolean or
+ * missing entries expand to the full default entry with the revision-dated
+ * schedules; object entries keep their enabled flag, mode, grace flag, and any
+ * user-provided schedules object, filling only absent keys with defaults.
+ */
+export function materializePeakHoursEntry(
+  current: boolean | VvocPluginEntryConfig | undefined,
+): VvocPluginEntryConfig {
+  if (current === undefined || typeof current === "boolean") {
+    return {
+      enabled: current === undefined ? true : current,
+      mode: DEFAULT_PEAK_HOURS_ENTRY.mode,
+      graceActiveSessions: DEFAULT_PEAK_HOURS_ENTRY.graceActiveSessions,
+      schedules: defaultPeakHoursSchedulesCopy(),
+    };
+  }
+
+  return {
+    enabled: current.enabled ?? true,
+    mode: current.mode ?? DEFAULT_PEAK_HOURS_ENTRY.mode,
+    graceActiveSessions:
+      current.graceActiveSessions ?? DEFAULT_PEAK_HOURS_ENTRY.graceActiveSessions,
+    schedules: isPlainRecord(current.schedules)
+      ? current.schedules
+      : defaultPeakHoursSchedulesCopy(),
+  };
+}
+// END_BLOCK_PEAK_HOURS_MATERIALIZE
 
 // START_CONTRACT: isPluginEnabled
 //   PURPOSE: Return whether the named plugin is enabled in an already-loaded vvoc config.

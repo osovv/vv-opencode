@@ -5,7 +5,15 @@
   "description": "Canonical vvoc configuration document.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "version", "roles", "guardian", "secretsRedaction", "presets", "plugins"],
+  "required": [
+    "$schema",
+    "version",
+    "roles",
+    "guardian",
+    "secretsRedaction",
+    "presets",
+    "plugins"
+  ],
   "properties": {
     "$schema": {
       "type": "string",
@@ -31,48 +39,101 @@
     "orchestration": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile"],
+      "required": [
+        "profile"
+      ],
       "properties": {
         "profile": {
           "type": "string",
-          "enum": ["single-session", "balanced", "orchestrated"]
+          "enum": [
+            "single-session",
+            "balanced",
+            "orchestrated"
+          ]
         }
       }
     },
     "guardian": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
+      "required": [
+        "timeoutMs",
+        "approvalRiskThreshold",
+        "reviewToastDurationMs"
+      ],
       "properties": {
-        "model": { "type": "string", "minLength": 1 },
-        "timeoutMs": { "type": "integer", "minimum": 1 },
-        "approvalRiskThreshold": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "reviewToastDurationMs": { "type": "integer", "minimum": 1 }
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "approvalRiskThreshold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "reviewToastDurationMs": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "secretsRedaction": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["secret", "ttlMs", "maxMappings", "patterns", "debug"],
+      "required": [
+        "secret",
+        "ttlMs",
+        "maxMappings",
+        "patterns",
+        "debug"
+      ],
       "properties": {
-        "secret": { "type": "string", "minLength": 1 },
-        "ttlMs": { "type": "integer", "minimum": 0 },
-        "maxMappings": { "type": "integer", "minimum": 1 },
-        "debug": { "type": "boolean" },
+        "secret": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ttlMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxMappings": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "debug": {
+          "type": "boolean"
+        },
         "patterns": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["keywords", "regex", "builtin", "exclude"],
+          "required": [
+            "keywords",
+            "regex",
+            "builtin",
+            "exclude"
+          ],
           "properties": {
             "keywords": {
               "type": "array",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["value"],
+                "required": [
+                  "value"
+                ],
                 "properties": {
-                  "value": { "type": "string", "minLength": 1 },
-                  "category": { "type": "string", "minLength": 1 }
+                  "value": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               }
             },
@@ -81,20 +142,35 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["pattern", "category"],
+                "required": [
+                  "pattern",
+                  "category"
+                ],
                 "properties": {
-                  "pattern": { "type": "string", "minLength": 1 },
-                  "category": { "type": "string", "minLength": 1 }
+                  "pattern": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               }
             },
             "builtin": {
               "type": "array",
-              "items": { "type": "string", "minLength": 1 }
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             },
             "exclude": {
               "type": "array",
-              "items": { "type": "string", "minLength": 1 }
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }
@@ -102,13 +178,20 @@
     },
     "presets": {
       "type": "object",
-      "propertyNames": { "minLength": 1 },
+      "propertyNames": {
+        "minLength": 1
+      },
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["agents"],
+        "required": [
+          "agents"
+        ],
         "properties": {
-          "description": { "type": "string", "minLength": 1 },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
           "agents": {
             "type": "object",
             "propertyNames": {
@@ -116,16 +199,25 @@
               "pattern": "^[a-z][a-z0-9-]*$"
             },
             "minProperties": 1,
-            "additionalProperties": { "type": "string", "minLength": 1 }
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
           },
           "orchestration": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["profile"],
+            "required": [
+              "profile"
+            ],
             "properties": {
               "profile": {
                 "type": "string",
-                "enum": ["single-session", "balanced", "orchestrated"]
+                "enum": [
+                  "single-session",
+                  "balanced",
+                  "orchestrated"
+                ]
               }
             }
           }
@@ -134,29 +226,47 @@
     },
     "plugins": {
       "type": "object",
-      "propertyNames": { "minLength": 1 },
+      "propertyNames": {
+        "minLength": 1
+      },
       "additionalProperties": {
         "anyOf": [
-          { "type": "boolean" },
+          {
+            "type": "boolean"
+          },
           {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "enabled": { "type": "boolean" },
+              "enabled": {
+                "type": "boolean"
+              },
               "routing": {
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "default": {
                     "type": "string",
-                    "enum": ["hashline", "replace", "str_replace_editor", "passthrough"]
+                    "enum": [
+                      "hashline",
+                      "replace",
+                      "str_replace_editor",
+                      "passthrough"
+                    ]
                   },
                   "rules": {
                     "type": "object",
-                    "propertyNames": { "minLength": 1 },
+                    "propertyNames": {
+                      "minLength": 1
+                    },
                     "additionalProperties": {
                       "type": "string",
-                      "enum": ["hashline", "replace", "str_replace_editor", "passthrough"]
+                      "enum": [
+                        "hashline",
+                        "replace",
+                        "str_replace_editor",
+                        "passthrough"
+                      ]
                     }
                   }
                 }
@@ -167,17 +277,123 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "enabled": { "type": "boolean" },
-              "protectLastCalls": { "type": "integer", "minimum": 0 },
-              "protectRecentMessages": { "type": "integer", "minimum": 0 },
-              "savePrunedOutput": { "type": "boolean" },
-              "minSavingsChars": { "type": "integer", "minimum": 0 },
-              "outputMaxChars": { "type": "integer", "minimum": 0 },
-              "headChars": { "type": "integer", "minimum": 0 },
-              "tailChars": { "type": "integer", "minimum": 0 },
-              "readSlim": { "type": "boolean" },
-              "retainTools": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+              "enabled": {
+                "type": "boolean"
+              },
+              "protectLastCalls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "protectRecentMessages": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "savePrunedOutput": {
+                "type": "boolean"
+              },
+              "minSavingsChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "outputMaxChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "headChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tailChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "readSlim": {
+                "type": "boolean"
+              },
+              "retainTools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "soft",
+                  "hard"
+                ]
+              },
+              "graceActiveSessions": {
+                "type": "boolean"
+              },
+              "schedules": {
+                "type": "object",
+                "propertyNames": {
+                  "minLength": 1
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "soft",
+                        "hard"
+                      ]
+                    },
+                    "windows": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string",
+                            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                          },
+                          "end": {
+                            "type": "string",
+                            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                          },
+                          "tz": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "days": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 6
+                            }
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "windows"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
           }
         ]
       }
@@ -190,17 +406,43 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "provider": { "type": "string", "enum": ["exa", "brave", "zai"] },
-            "region": { "type": "string", "enum": ["international", "china"] },
-            "apiKey": { "type": "string", "minLength": 1 }
+            "provider": {
+              "type": "string",
+              "enum": [
+                "exa",
+                "brave",
+                "zai"
+              ]
+            },
+            "region": {
+              "type": "string",
+              "enum": [
+                "international",
+                "china"
+              ]
+            },
+            "apiKey": {
+              "type": "string",
+              "minLength": 1
+            }
           },
           "allOf": [
             {
               "if": {
-                "properties": { "provider": { "const": "zai" } },
-                "required": ["provider"]
+                "properties": {
+                  "provider": {
+                    "const": "zai"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
               },
-              "then": { "required": ["region"] }
+              "then": {
+                "required": [
+                  "region"
+                ]
+              }
             }
           ]
         },
@@ -208,17 +450,43 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "provider": { "type": "string", "enum": ["native", "spider", "zai"] },
-            "region": { "type": "string", "enum": ["international", "china"] },
-            "apiKey": { "type": "string", "minLength": 1 }
+            "provider": {
+              "type": "string",
+              "enum": [
+                "native",
+                "spider",
+                "zai"
+              ]
+            },
+            "region": {
+              "type": "string",
+              "enum": [
+                "international",
+                "china"
+              ]
+            },
+            "apiKey": {
+              "type": "string",
+              "minLength": 1
+            }
           },
           "allOf": [
             {
               "if": {
-                "properties": { "provider": { "const": "zai" } },
-                "required": ["provider"]
+                "properties": {
+                  "provider": {
+                    "const": "zai"
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
               },
-              "then": { "required": ["region"] }
+              "then": {
+                "required": [
+                  "region"
+                ]
+              }
             }
           ]
         }
