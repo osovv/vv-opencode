@@ -11,6 +11,11 @@ on:
         description: "Exact release commit SHA to verify and publish"
         required: true
         type: string
+      channel:
+        description: "Publication channel (npm dist-tag): latest or rc"
+        required: true
+        type: string
+        default: latest
 
 permissions:
   id-token: write
@@ -45,11 +50,20 @@ jobs:
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
           REQUESTED_SHA: ${{ inputs.commit_sha }}
+          REQUESTED_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
           PKG_VERSION="$(node -p "require('./package.json').version")"
           CURRENT_SHA="$(git rev-parse HEAD)"
           TAG="v${PKG_VERSION}"
+
+          case "${REQUESTED_CHANNEL}" in
+            latest|rc) ;;
+            *)
+              echo "Unsupported channel: ${REQUESTED_CHANNEL}. Supported channels: latest, rc."
+              exit 1
+              ;;
+          esac
 
           if [ "${PKG_VERSION}" != "${REQUESTED_VERSION}" ]; then
             echo "Requested version ${REQUESTED_VERSION} does not match package.json version ${PKG_VERSION}"
@@ -71,7 +85,8 @@ jobs:
           fi
 
           echo "version=${PKG_VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "Release request verified for ${TAG} at ${CURRENT_SHA}"
+          echo "channel=${REQUESTED_CHANNEL}" >> "${GITHUB_OUTPUT}"
+          echo "Release request verified for ${TAG} at ${CURRENT_SHA} on channel ${REQUESTED_CHANNEL}"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -97,6 +112,7 @@ jobs:
       - name: Publish to npm
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.channel }}
         run: |
           set -euo pipefail
           PACKAGE_NAME="@osovv/vv-opencode"
@@ -114,5 +130,5 @@ jobs:
             fi
             echo "${PACKAGE_NAME}@${RELEASE_VERSION} is already published from the requested commit; continuing"
           else
-            npm publish --access public --provenance
+            npm publish --access public --provenance --tag "${RELEASE_CHANNEL}"
           fi
