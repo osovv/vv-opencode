@@ -14,17 +14,19 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Covered npm metadata retries, exact run watching, and exact changelog version matching.]
+//   LAST_CHANGE: [C-RELEASE-RC-CHANNEL - Covered channel derivation, contradiction rejection, dispatch channel input, and rc pre-release marking.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  deriveReleaseChannel,
   dispatchVerifiedPublishWorkflow,
   extractReleaseChangelogEntry,
   finalizePublishedRelease,
   parseWorkflowRunId,
+  resolveReleaseChannel,
   waitForPublishWorkflow,
   type ReleaseCommandRunner,
 } from "./release-bump.ts";
@@ -53,6 +55,7 @@ describe("release workflow dispatch", () => {
         branchName: "main",
         version: "1.2.3",
         commitSha: "0123456789abcdef0123456789abcdef01234567",
+        channel: "latest",
       },
       execute,
       capture,
@@ -80,9 +83,11 @@ describe("release workflow dispatch", () => {
           "version=1.2.3",
           "-f",
           "commit_sha=0123456789abcdef0123456789abcdef01234567",
+          "-f",
+          "channel=latest",
         ],
         failureMessage:
-          "Failed to dispatch publish.yml. Retry with: gh workflow run publish.yml --ref main -f version=1.2.3 -f commit_sha=0123456789abcdef0123456789abcdef01234567",
+          "Failed to dispatch publish.yml. Retry with: gh workflow run publish.yml --ref main -f version=1.2.3 -f commit_sha=0123456789abcdef0123456789abcdef01234567 -f channel=latest",
       },
     ]);
     expect(commands.some((entry) => entry.command === "git" && entry.args[0] === "tag")).toBe(
@@ -149,6 +154,7 @@ describe("release finalization", () => {
         commitSha,
         tagName: "v1.2.3",
         changelogText: changelog,
+        channel: "latest",
       },
       execute,
       capture,
@@ -202,6 +208,7 @@ describe("release finalization", () => {
           commitSha: "0123456789abcdef0123456789abcdef01234567",
           tagName: "v1.2.3",
           changelogText: "## 1.2.3\n\nCurrent release.",
+          channel: "latest",
         },
         execute,
         capture,
@@ -233,6 +240,7 @@ describe("release finalization", () => {
         commitSha,
         tagName: "v1.2.3",
         changelogText: "## 1.2.3\n\nCurrent release.",
+        channel: "latest",
       },
       execute,
       capture,
@@ -280,5 +288,98 @@ describe("publish workflow ordering", () => {
     expect(workflow).not.toContain("Create and push release tag");
     expect(workflow).not.toContain("git tag -a");
     expect(workflow).not.toContain("softprops/action-gh-release");
+  });
+});
+
+describe("release channel derivation", () => {
+  test("derives rc for rc pre-release versions and latest otherwise", () => {
+    expect(deriveReleaseChannel("1.4.0-rc.1")).toBe("rc");
+    expect(deriveReleaseChannel("1.4.0-rc.12")).toBe("rc");
+    expect(deriveReleaseChannel("2.0.0-0")).toBe("latest");
+    expect(deriveReleaseChannel("1.4.0-beta.1")).toBe("latest");
+    expect(deriveReleaseChannel("1.4.0")).toBe("latest");
+    expect(deriveReleaseChannel("v1.4.0-rc.2")).toBe("rc");
+  });
+
+  test("resolveReleaseChannel accepts a confirming explicit channel and rejects contradiction", () => {
+    expect(resolveReleaseChannel("1.4.0-rc.1", undefined)).toBe("rc");
+    expect(resolveReleaseChannel("1.4.0-rc.1", "rc")).toBe("rc");
+    expect(resolveReleaseChannel("1.4.0", "latest")).toBe("latest");
+
+    const originalExit = process.exit;
+    const exits: number[] = [];
+    process.exit = ((code?: number) => {
+      exits.push(code ?? 0);
+      throw new Error("exit called");
+    }) as typeof process.exit;
+    try {
+      expect(() => resolveReleaseChannel("1.4.0-rc.1", "latest")).toThrow("Channel mismatch");
+      expect(() => resolveReleaseChannel("1.4.0", "rc")).toThrow("Channel mismatch");
+      expect(exits).toEqual([1, 1]);
+    } finally {
+      process.exit = originalExit;
+    }
+  });
+});
+
+describe("rc release finalization", () => {
+  test("marks rc channel GitHub Releases as pre-release", () => {
+    const commands: CapturedCommand[] = [];
+    const commitSha = "0123456789abcdef0123456789abcdef01234567";
+    const execute: ReleaseCommandRunner = (command, args, failureMessage) => {
+      commands.push({ mode: "run", command, args, failureMessage });
+      return "";
+    };
+    const capture: ReleaseCommandRunner = (command, args, failureMessage) => {
+      commands.push({ mode: "capture", command, args, failureMessage });
+      return `${commitSha}\n`;
+    };
+
+    finalizePublishedRelease(
+      {
+        version: "1.4.0-rc.1",
+        commitSha,
+        tagName: "v1.4.0-rc.1",
+        changelogText: "## 1.4.0-rc.1\n\nCandidate.",
+        channel: "rc",
+      },
+      execute,
+      capture,
+    );
+
+    const releaseCreate = commands.find(
+      (entry) => entry.command === "gh" && entry.args[0] === "release",
+    );
+    expect(releaseCreate?.args).toContain("--prerelease");
+  });
+
+  test("does not mark latest channel GitHub Releases as pre-release", () => {
+    const commands: CapturedCommand[] = [];
+    const commitSha = "0123456789abcdef0123456789abcdef01234567";
+    const execute: ReleaseCommandRunner = (command, args, failureMessage) => {
+      commands.push({ mode: "run", command, args, failureMessage });
+      return "";
+    };
+    const capture: ReleaseCommandRunner = (command, args, failureMessage) => {
+      commands.push({ mode: "capture", command, args, failureMessage });
+      return `${commitSha}\n`;
+    };
+
+    finalizePublishedRelease(
+      {
+        version: "1.4.0",
+        commitSha,
+        tagName: "v1.4.0",
+        changelogText: "## 1.4.0\n\nStable.",
+        channel: "latest",
+      },
+      execute,
+      capture,
+    );
+
+    const releaseCreate = commands.find(
+      (entry) => entry.command === "gh" && entry.args[0] === "release",
+    );
+    expect(releaseCreate?.args).not.toContain("--prerelease");
   });
 });

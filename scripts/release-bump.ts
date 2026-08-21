@@ -107,6 +107,7 @@ export interface ReleaseWorkflowDispatchInput {
   branchName: string;
   version: string;
   commitSha: string;
+  channel: string;
 }
 
 export interface PublishedReleaseFinalizationInput {
@@ -114,6 +115,22 @@ export interface PublishedReleaseFinalizationInput {
   commitSha: string;
   tagName: string;
   changelogText: string;
+  channel: string;
+}
+
+/** Deterministically derives the publication channel from a bumped version. */
+export function deriveReleaseChannel(version: string): "latest" | "rc" {
+  const match = /^v?\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+    version.trim(),
+  );
+  const prerelease = match?.[1];
+  if (prerelease) {
+    const firstIdentifier = prerelease.split(".")[0] ?? "";
+    if (firstIdentifier === "rc" || firstIdentifier.startsWith("rc-")) {
+      return "rc";
+    }
+  }
+  return "latest";
 }
 
 function gitStatus(): string {
@@ -126,11 +143,20 @@ function gitStatus(): string {
 }
 
 function parseNpmVersionArgs(args: string[]): string[] {
+  const { versionArgs } = parseReleaseBumpArgs(args);
+  return versionArgs;
+}
+
+/** Parses release:bump arguments into npm version args plus an optional explicit channel. */
+export function parseReleaseBumpArgs(args: string[]): {
+  versionArgs: string[];
+  channel?: string;
+} {
   const bumpArg = args[0];
 
   if (!bumpArg) {
     console.error(
-      "Usage: bun run release:bump <patch|minor|major|prerelease|prepatch|preminor|premajor|<semver>> [--preid <id>]\n",
+      "Usage: bun run release:bump <patch|minor|major|prerelease|prepatch|preminor|premajor|<semver>> [--preid <id>] [--channel <latest|rc>]\n",
     );
     process.exit(1);
   }
@@ -140,9 +166,12 @@ function parseNpmVersionArgs(args: string[]): string[] {
     process.exit(1);
   }
 
+  let channel: string | undefined;
+  const versionArgs = [bumpArg];
   for (let index = 1; index < args.length; index++) {
     const arg = args[index];
     if (arg.startsWith("--preid=")) {
+      versionArgs.push(arg);
       continue;
     }
     if (arg === "--preid") {
@@ -151,16 +180,48 @@ function parseNpmVersionArgs(args: string[]): string[] {
         console.error("✗ --preid requires a non-empty value.");
         process.exit(1);
       }
+      versionArgs.push(arg, value);
+      index++;
+      continue;
+    }
+    if (arg.startsWith("--channel=")) {
+      channel = arg.slice("--channel=".length);
+      continue;
+    }
+    if (arg === "--channel") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("-")) {
+        console.error("✗ --channel requires a non-empty value.");
+        process.exit(1);
+      }
+      channel = value;
       index++;
       continue;
     }
 
     console.error(`✗ Unsupported npm version option: ${arg}`);
-    console.error("  release:bump only forwards the version target plus optional --preid.");
+    console.error("  release:bump only forwards the version target plus optional --preid and --channel.");
     process.exit(1);
   }
 
-  return args;
+  if (channel !== undefined && channel !== "latest" && channel !== "rc") {
+    console.error(`✗ Unsupported channel: ${channel}. Supported channels: latest, rc.`);
+    process.exit(1);
+  }
+
+  return { versionArgs, channel };
+}
+
+/** Derives the channel for a bumped version, rejecting an explicit channel that contradicts the derivation. */
+export function resolveReleaseChannel(newVersion: string, explicitChannel: string | undefined): "latest" | "rc" {
+  const derived = deriveReleaseChannel(newVersion);
+  if (explicitChannel !== undefined && explicitChannel !== derived) {
+    console.error(
+      `✗ Channel mismatch: version ${newVersion} derives channel "${derived}" but --channel "${explicitChannel}" was requested.`,
+    );
+    process.exit(1);
+  }
+  return derived;
 }
 
 function readPackageVersion(): string {
@@ -359,8 +420,10 @@ export function dispatchVerifiedPublishWorkflow(
       `version=${input.version}`,
       "-f",
       `commit_sha=${input.commitSha}`,
+      "-f",
+      `channel=${input.channel}`,
     ],
-    `Failed to dispatch publish.yml. Retry with: gh workflow run publish.yml --ref ${input.branchName} -f version=${input.version} -f commit_sha=${input.commitSha}`,
+    `Failed to dispatch publish.yml. Retry with: gh workflow run publish.yml --ref ${input.branchName} -f version=${input.version} -f commit_sha=${input.commitSha} -f channel=${input.channel}`,
   );
   const normalized = workflowOutput.trim();
   if (normalized) console.log(normalized);
@@ -450,15 +513,21 @@ export function finalizePublishedRelease(
     ["push", "origin", input.tagName],
     `Failed to push ${input.tagName}. The package is published and the tag exists locally.`,
   );
+  const releaseArgs = ["release", "create", input.tagName, "--verify-tag", "--title", input.tagName, "--notes", releaseNotes];
+  if (input.channel === "rc") {
+    releaseArgs.push("--prerelease");
+  }
   execute(
     "gh",
-    ["release", "create", input.tagName, "--verify-tag", "--title", input.tagName, "--notes", releaseNotes],
+    releaseArgs,
     `Failed to create GitHub Release ${input.tagName}. The package and tag already exist.`,
   );
 }
 
 function main(): void {
-  const npmVersionArgs = parseNpmVersionArgs(process.argv.slice(2));
+  const { versionArgs: npmVersionArgs, channel: explicitChannel } = parseReleaseBumpArgs(
+    process.argv.slice(2),
+  );
 
   // START_BLOCK_CHECK_CLEAN_WORKTREE
   const status = gitStatus();
@@ -487,7 +556,9 @@ function main(): void {
     console.error("✗ Failed to read new version from package.json after bump.");
     process.exit(1);
   }
+  const channel = resolveReleaseChannel(newVersion, explicitChannel);
   console.log(`New version: ${newVersion}`);
+  console.log(`Release channel: ${channel}`);
 
 
   // START_BLOCK_GENERATE_CHANGELOG
@@ -549,6 +620,7 @@ function main(): void {
     branchName,
     version: newVersion,
     commitSha: releaseCommitSha,
+    channel,
   });
   let workflowRunId: string;
   try {
@@ -571,6 +643,7 @@ function main(): void {
       commitSha: releaseCommitSha,
       tagName,
       changelogText: readFileSync(CHANGELOG_PATH, "utf8"),
+      channel,
     });
   } catch (error) {
     console.error(`\n✗ Release finalization failed: ${String(error)}`);
