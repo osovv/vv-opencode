@@ -313,8 +313,8 @@ describe("release channel derivation", () => {
       throw new Error("exit called");
     }) as typeof process.exit;
     try {
-      expect(() => resolveReleaseChannel("1.4.0-rc.1", "latest")).toThrow("Channel mismatch");
-      expect(() => resolveReleaseChannel("1.4.0", "rc")).toThrow("Channel mismatch");
+      expect(() => resolveReleaseChannel("1.4.0-rc.1", "latest")).toThrow("exit called");
+      expect(() => resolveReleaseChannel("1.4.0", "rc")).toThrow("exit called");
       expect(exits).toEqual([1, 1]);
     } finally {
       process.exit = originalExit;
