@@ -1,0 +1,276 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-PLUGIN-PEAK-HOURS>
+    <IntentSummary>Add a pure provider-level peak-hours schedule library, a peak-hours server plugin that warns or blocks chat.message requests to peak-priced providers with dynamic off-peak connected-provider suggestions and session-age plus subagent grace, a persistent app_bottom TUI banner, conservative materialized revision-dated default schedules behind strict schema v3 validation, subpath and root package exports, README guidance, and synchronized GRACE graph, verification, and requirements projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-TOGGLE-CONFIG</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>V-M-PLUGIN-TOGGLE-CONFIG</Value>
+        <Value>V-M-CLI-CONFIG</Value>
+        <Value>V-M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>src/lib/plugin-toggle-config.test.ts</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>src/lib/vvoc-config.test.ts</Value>
+        <Value>src/lib/opencode.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>src/index.ts</Value>
+        <Value>src/tui.tsx</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>package.json</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>analytics</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>protectLastCalls</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/opencode.ts</File>
+        <Text>materializeToolHistoryCompactionEntry</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>./plugins/analytics</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>AnalyticsPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/workflow/index.ts</File>
+        <Text>chat.message</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PEAK-HOURS-SCHEDULES</Module>
+        <Module>M-PLUGIN-PEAK-HOURS</Module>
+        <Module>M-TUI-PEAK-HOURS-BANNER</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-PLUGIN-CONTEXT-TUI</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/lib/peak-hours.ts</Value>
+        <Value>src/lib/peak-hours.test.ts</Value>
+        <Value>src/plugins/peak-hours/index.ts</Value>
+        <Value>src/plugins/peak-hours/index.test.ts</Value>
+        <Value>src/tui/peak-hours/banner.tsx</Value>
+        <Value>src/tui/peak-hours/banner.test.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>peak-hours</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>materializePeakHoursEntry</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>graceActiveSessions</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/opencode.ts</File>
+        <Text>materializePeakHoursEntry</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>peak-hours</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>./plugins/peak-hours</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>PeakHoursPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>peak-hours</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/peak-hours.test.ts src/lib/plugin-toggle-config.test.ts src/lib/vvoc-config.test.ts src/plugins/peak-hours/index.test.ts src/tui/peak-hours/banner.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PEAK-HOURS-SCHEDULES />
+        <M-PLUGIN-PEAK-HOURS />
+        <M-TUI-PEAK-HOURS-BANNER />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CLI-CONFIG />
+        <M-PLUGIN-CONTEXT-TUI />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PEAK-HOURS-SCHEDULES />
+        <V-M-PLUGIN-PEAK-HOURS />
+        <V-M-TUI-PEAK-HOURS-BANNER />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CLI-CONFIG />
+        <V-M-PLUGIN-CONTEXT-TUI />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-PLUGIN-PEAK-HOURS/plan.xml</File>
+      <File>src/lib/peak-hours.ts</File>
+      <File>src/lib/peak-hours.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/plugins/peak-hours/index.ts</File>
+      <File>src/plugins/peak-hours/index.test.ts</File>
+      <File>src/tui/peak-hours/banner.tsx</File>
+      <File>src/tui/peak-hours/banner.test.ts</File>
+      <File>src/tui.tsx</File>
+      <File>src/index.ts</File>
+      <File>package.json</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/context/requirements.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Implement the pure provider-level peak-hours schedule library.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/lib/peak-hours.ts exports clock-injectable window types with start, end, explicit timezone defaulting to UTC, and an optional days restriction defaulting to all days, plus provider schedule records keyed by normalized provider id.</Criterion>
+          <Criterion>activeWindow evaluation handles same-day and cross-midnight windows, non-UTC timezones, weekday restrictions, and multiple windows per provider, returning the active window and its end boundary for until formatting.</Criterion>
+          <Criterion>Provider alias normalization maps known provider id spellings, at minimum deepseek, z-ai, zai, glm-family, qwen, and alibaba ids, onto schedule keys; unknown ids never resolve to a schedule.</Criterion>
+          <Criterion>Malformed windows fail open: parsing returns a warning and a no-schedule result and never throws from evaluation paths.</Criterion>
+          <Criterion>suggestion filtering takes connected provider ids plus schedules plus a clock and returns connected providers currently outside any active peak window.</Criterion>
+          <Criterion>Deterministic table-driven tests cover window math, midnight crossing, timezones, weekdays, aliases, fail-open parsing, suggestions, and message text building blocks with an injected clock only.</Criterion>
+          <Criterion>The module carries complete MODULE_CONTRACT, MODULE_MAP, block anchors, and LINKS referencing M-PEAK-HOURS-SCHEDULES.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/peak-hours.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Extend plugin toggles, default schedules, materialization, and strict schema v3.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>plugin-toggle-config.ts adds the peak-hours toggle name, revision-dated DEFAULT_PEAK_HOURS_SCHEDULES for deepseek, z-ai, and qwen matching the approved 2026-08-21 windows, and materializePeakHoursEntry that expands boolean or missing entries to the full default and never overwrites user-provided mode, graceActiveSessions, or schedule values.</Criterion>
+          <Criterion>The embedded canonical schema in vvoc-config.ts gains a peak-hours arm accepting enabled, mode soft or hard, graceActiveSessions, and schedules with start, end, timezone, and optional days, rejecting malformed times, unknown modes, and unknown keys; every existing schema arm stays unchanged and schemas/vvoc/v3.json stays exactly equivalent.</Criterion>
+          <Criterion>Config parsing preserves peak-hours entries through createPluginToggleConfig and existing documents without the entry remain valid.</Criterion>
+          <Criterion>opencode.ts install, init, and sync paths materialize the peak-hours entry conservatively beside the existing hashline-edit and tool-history-compaction materialization calls.</Criterion>
+          <Criterion>Focused tests cover materialization conservatism for undefined, boolean, and user-edited object entries, schema acceptance and rejection cases, embedded and file schema equivalence, and sync behavior with injected fixtures.</Criterion>
+          <Criterion>Edited contracts, maps, change summaries, and block anchors remain accurate in every touched file.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/plugin-toggle-config.test.ts src/lib/vvoc-config.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Implement the peak-hours server plugin with soft note, hard block, and grace.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/peak-hours/index.ts resolves the startup vvoc snapshot, honors the peak-hours toggle, and registers only the chat.message hook.</Criterion>
+          <Criterion>Soft mode appends a bounded system note naming the provider and window end when the message model's provider is in peak, without blocking processing.</Criterion>
+          <Criterion>Hard mode throws before any LLM request for non-grace messages, with error text naming the provider, window end, remaining wait, and dynamically suggested connected off-peak providers, degrading to suggestion-free text when all connected providers are peak-active.</Criterion>
+          <Criterion>Grace exempts sessions created before the active window start and sessions with parentID, derived from persisted session fields via SDK lookups, so decisions are identical after a simulated restart; internal agents compaction, title, and summary plus known subagent-like agents including guardian and mode subagent agents are never hard-blocked.</Criterion>
+          <Criterion>Suggestions enumerate connected providers through the config providers surface minus peak-active providers without additional credentials.</Criterion>
+          <Criterion>Schedule or provider resolution failures log a warning and degrade to soft or no-op, never to a block.</Criterion>
+          <Criterion>Hook-level deterministic tests with injectable clock, session lookups, and provider listings prove soft, hard, grace, exemption, suggestion, fail-open, and disabled-toggle no-hook cases.</Criterion>
+          <Criterion>The plugin carries complete MODULE_CONTRACT, MODULE_MAP, block anchors, and LINKS referencing M-PLUGIN-PEAK-HOURS.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/peak-hours/index.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Implement the persistent app_bottom peak-hours TUI banner.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/tui/peak-hours/banner.tsx computes peak status from the shared schedule library, the effective vvoc config entry, the current model reference resolved from the open session's most recent model-bearing message with config model fallback, and api.state.provider for suggestions.</Criterion>
+          <Criterion>The banner registers in the app_bottom slot with a string plugin id, renders in warning colors while the current model's provider is in peak naming the provider, window end, and suggested off-peak providers, and returns nothing otherwise.</Criterion>
+          <Criterion>Registration is toggle-gated and fail-soft: a disabled entry or a failing slot API leaves the TUI untouched.</Criterion>
+          <Criterion>src/tui.tsx registers the banner beside the analytics indicator and branding footer with per-registration fail-soft isolation.</Criterion>
+          <Criterion>Deterministic tests with injectable clock, config, provider state, and model reference prove show and hide cases, suggestion text, toggle gating, and fail-soft registration without real OpenTUI rendering.</Criterion>
+          <Criterion>The banner module carries complete MODULE_CONTRACT, MODULE_MAP, block anchors, and LINKS referencing M-TUI-PEAK-HOURS-BANNER.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui/peak-hours/banner.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Publish exports and document peak-hours behavior.</Title>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/index.ts re-exports PeakHoursPlugin and package.json adds the ./plugins/peak-hours subpath export with types and import targets matching existing plugin exports, plus the pack check script line importing the new subpath.</Criterion>
+          <Criterion>README documents the peak-hours plugin: purpose, hard and soft modes, global and per-provider mode override, grace semantics for active sessions and subagents, default schedule table with revision date and sources, alias normalization, dynamic connected-provider suggestions, the app_bottom banner, config examples, and the restart requirement.</Criterion>
+          <Criterion>README states that the plugin never substitutes models and never fetches pricing from the network.</Criterion>
+          <Criterion>Every documented command, path, field, and default is checked against current source and schema.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Run the integrated regression gate and resolve only in-scope failures.</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>All peak-hours, toggle, schema, opencode sync, plugin, and banner tests pass together with no live provider, credential, or real TUI dependency.</Criterion>
+          <Criterion>bun run check passes for the whole repository with no regressions outside the observed write scope.</Criterion>
+          <Criterion>No generated dist output, user OpenCode configuration, credential file, or unrelated plugin behavior is modified.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Synchronize GRACE graph, verification, requirements, and run final gates.</Title>
+        <DependsOn>T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The routed graph owns M-PEAK-HOURS-SCHEDULES, M-PLUGIN-PEAK-HOURS, and M-TUI-PEAK-HOURS-BANNER with accurate paths, purposes, dependencies, and verification links, and updates M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG, and M-PLUGIN-CONTEXT-TUI where behavior changed.</Criterion>
+          <Criterion>The verification projection owns V-M-PEAK-HOURS-SCHEDULES, V-M-PLUGIN-PEAK-HOURS, and V-M-TUI-PEAK-HOURS-BANNER with deterministic scenarios and commands, and updates the affected existing entries.</Criterion>
+          <Criterion>requirements.xml gains the peak-hours cost-governance goal and use case consistent with the approved specification.</Criterion>
+          <Criterion>Graph and verification indexes directly own every new anchor and current source LINKS fields match routed ownership.</Criterion>
+          <Criterion>bun run build, bun run pack:check, and bun run release:check pass with schema, package, and release metadata consistent.</Criterion>
+          <Criterion>GRACE lint and status report no errors attributable to C-PLUGIN-PEAK-HOURS, and git diff contains only approved files with no secrets or generated dist content.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run release:check</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-007>
+    </ImplementationPlan>
+  </C-PLUGIN-PEAK-HOURS>
+</GraceChangePlan>

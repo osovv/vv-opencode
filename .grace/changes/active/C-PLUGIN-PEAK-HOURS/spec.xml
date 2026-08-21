@@ -1,0 +1,75 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-PLUGIN-PEAK-HOURS>
+    <Summary>Add a peak-hours plugin with a pure provider-level schedule library, a chat.message server hook that warns or blocks peak-priced providers with dynamic off-peak provider suggestions, and a persistent app_bottom TUI banner, configured through a materialized vvoc schema v3 plugins entry.</Summary>
+    <Problem>Multiple providers used by vvoc users (deepseek, z-ai, qwen) bill higher rates during daily or weekday peak windows. Users unknowingly start or continue expensive work during those windows, static suggestion lists in configuration do not reflect which providers the user actually has connected, and no vvoc surface currently informs or gates model usage by time of day.</Problem>
+    <Goals>
+      <Goal>Provide a pure, clock-injectable schedule library that evaluates provider-level peak windows with start and end times, explicit timezones, optional weekday restrictions, cross-midnight window support, until-boundary formatting, and provider id alias normalization.</Goal>
+      <Goal>Add a server plugin on the chat.message hook that, in soft mode, injects a bounded system note about active peak pricing and, in hard mode, throws a blocking error before any LLM request, both including dynamically computed suggestions of connected providers currently outside their peak windows.</Goal>
+      <Goal>Never hard-block work that is already in flight: sessions created before the active window start and subagent-like agents are always treated as soft, derived from persisted session data so the rule survives OpenCode restarts.</Goal>
+      <Goal>Show a persistent orange warning banner in the TUI app_bottom slot while the current model's provider is in peak, with the same dynamic provider suggestions, registered fail-soft from the default TUI module.</Goal>
+      <Goal>Materialize revision-dated built-in default schedules (deepseek, z-ai, qwen) into plugins["peak-hours"] on install, init, and sync using the conservative materialization pattern that never overwrites user-edited values.</Goal>
+      <Goal>Extend canonical schema v3 with the peak-hours plugin entry shape and keep the embedded schema and schemas/vvoc/v3.json in sync.</Goal>
+      <Goal>Publish the plugin as the ./plugins/peak-hours subpath export plus root export, and keep README, package surface, GRACE graph, and GRACE verification synchronized.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not automatically switch, rewrite, or substitute the selected model or provider; output.message.model is never mutated.</NonGoal>
+      <NonGoal>Do not implement model-level schedules; peak windows match providers only in this change.</NonGoal>
+      <NonGoal>Do not fetch provider pricing or schedules from the network; schedules are local configuration with dated built-in defaults.</NonGoal>
+      <NonGoal>Do not modify OpenCode model pickers, provider configuration, or connected provider setup.</NonGoal>
+      <NonGoal>Do not add cost calculation, billing analytics, or analytics record changes in this change.</NonGoal>
+      <NonGoal>Do not intercept requests through chat.params, chat.headers, or any per-step hook; gating happens once per user message in chat.message.</NonGoal>
+      <NonGoal>Do not perform live provider requests or real TUI rendering as part of repository verification.</NonGoal>
+    </NonGoals>
+    <Constraints>
+      <Constraint>Schedules match providers by normalized provider id against an explicit alias table; unknown providers are never warned about or blocked.</Constraint>
+      <Constraint>Fail-open behavior: a malformed window or schedule logs a warning and is treated as no schedule, and hard blocking must never result from a schedule parsing error.</Constraint>
+      <Constraint>Grace decisions derive from persisted session fields (time.created, parentID) and the known-subagent agent set, never from plugin memory alone.</Constraint>
+      <Constraint>Internal OpenCode agents (compaction, title, summary) and subagent-like agents (guardian, managed subagents, agents configured with subagent mode) are exempt from hard blocking.</Constraint>
+      <Constraint>Windows interpret times in an explicit timezone that defaults to UTC; windows may cross midnight; an optional days restriction selects weekdays with all days as the default.</Constraint>
+      <Constraint>Configuration stays strict schema v3; the peak-hours entry is optional so every existing valid config remains valid, and user-edited schedules are never rewritten by materialization.</Constraint>
+      <Constraint>The plugin shares the startup config snapshot; configuration changes require an OpenCode restart, consistent with existing runtime plugins.</Constraint>
+      <Constraint>Verification must be deterministic with an injectable clock and must not require real provider credentials, peak timing, or a live TUI.</Constraint>
+      <Constraint>Source contracts, README, package exports, canonical schema, GRACE graph, and GRACE verification state remain synchronized with the implemented behavior.</Constraint>
+    </Constraints>
+    <AcceptanceCriteria>
+      <Criterion>The schedule library returns the active window for a provider at an injected time, correctly handling cross-midnight windows, non-UTC timezones, optional weekday restrictions, and the no-schedule case, proven by deterministic table-driven tests.</Criterion>
+      <Criterion>Provider alias normalization maps known provider id spellings (including z-ai, zai, and glm-family ids, and qwen or alibaba ids) to schedule keys; the exact table is fixed during planning against real provider ids.</Criterion>
+      <Criterion>Revision-dated default schedules materialize conservatively: boolean or missing entries expand to the full default entry, and object entries keep user-provided mode, grace, and schedule values without overwrite.</Criterion>
+      <Criterion>The canonical schema accepts a valid peak-hours entry (enabled, mode soft or hard, graceActiveSessions, schedules with start, end, timezone, and optional days) and rejects malformed times, unknown modes, and unknown extra keys; all other schema arms are unchanged, and the embedded schema matches schemas/vvoc/v3.json.</Criterion>
+      <Criterion>In soft mode, a message whose model's provider is in peak receives a bounded system note naming the provider and the window end, and processing continues.</Criterion>
+      <Criterion>In hard mode, a message whose model's provider is in peak in a non-grace session throws before any LLM request, and the error text states the provider, the window end, the waiting time, and the suggested off-peak providers.</Criterion>
+      <Criterion>Sessions created before the active window start, sessions with a parentID, and messages from internal or subagent-like agents are never hard-blocked; they receive soft behavior at most, and the grace decision is identical after a simulated restart.</Criterion>
+      <Criterion>Suggestions enumerate connected providers minus providers currently inside a peak window, with none-connected degrading to suggestion-free messages; provider enumeration uses the server config providers surface and the TUI provider state without additional credentials.</Criterion>
+      <Criterion>A disabled peak-hours entry registers no chat.message hooks and no TUI banner, and the default-enabled entry follows the existing plugin toggle semantics.</Criterion>
+      <Criterion>The TUI banner registers in app_bottom only while the current model's provider is in peak, renders with warning colors, hides otherwise, and registration failures are fail-soft.</Criterion>
+      <Criterion>bun run pack:check imports the ./plugins/peak-hours subpath and the root PeakHoursPlugin export successfully, and README documents configuration, modes, grace, default schedule revision, aliasing, and the restart requirement.</Criterion>
+      <Criterion>Focused library, plugin, schema, and materialization tests pass together with repository check, build, pack, and GRACE validation gates.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PEAK-HOURS-SCHEDULES />
+      <M-PLUGIN-PEAK-HOURS />
+      <M-TUI-PEAK-HOURS-BANNER />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-CLI-CONFIG />
+      <M-PLUGIN-CONTEXT-TUI />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/peak-hours.test.ts src/plugins/peak-hours/index.test.ts src/lib/plugin-toggle-config.test.ts src/lib/vvoc-config.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic output with an injected clock proves window math including cross-midnight, timezone, and weekday cases; hook-level tests prove the soft note, the hard throw with suggestions, grace from persisted session fields, and exemption of internal and subagent-like agents; materialization and schema tests prove conservative writes, entry validation, and unchanged existing arms; pack and GRACE gates prove the synchronized package, graph, and verification state, all without live provider calls or real peak timing.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user explicitly approved: hard as the default mode with soft downgrade globally or per provider, no auto-substitution, provider-level schedule matching, dynamic suggestions of connected providers, the orange app_bottom banner, grandfathered sessions, and subagent-like agents always soft.</Assumption>
+      <Assumption>Built-in schedules verified on 2026-08-21 are best-effort local data: deepseek peak 01:00 to 04:00 and 06:00 to 10:00 UTC daily effective 2026-08-16, z-ai peak 06:00 to 10:00 UTC on weekdays per the GLM Coding Plan clock, and qwen peak 00:00 to 14:00 UTC daily per the 22:00 to 08:00 UTC+8 off-peak plan window; providers revise these and user edits win.</Assumption>
+      <Assumption>Throwing from the chat.message hook blocks message processing and surfaces the error text to the user, matching the workflow plugin hard-stop precedent.</Assumption>
+      <Assumption>Connected providers are enumerable server-side through the config providers surface and TUI-side through api.state.provider without additional authentication.</Assumption>
+      <Assumption>The TUI current-model reference resolves from the open session's most recent model-bearing message with state.config.model as the fallback, so banner accuracy on a brand-new empty session may lag until the first message; accepted for this change.</Assumption>
+      <Assumption>Grace uses session.time.created against the active window start, so a session older than the window is never hard-blocked for its lifetime, which is intentional even for long-lived sessions.</Assumption>
+      <Assumption>OpenCode 1.18.2 plugin and TUI surfaces (chat.message input.model, session parentID and time fields, app_bottom slot, provider state) remain the supported integration target.</Assumption>
+    </Assumptions>
+  </C-PLUGIN-PEAK-HOURS>
+</GraceChangeSpec>
