@@ -302,6 +302,29 @@ The optional schema-v3 `web` section follows the same layer precedence and is om
 
 Runtime compatibility is current-only: Guardian permission replies use the current OpenCode permission reply path (with the current HTTP reply fallback), hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
 
+### Release channels
+
+The package publishes through npm dist-tags with exactly one pre-release channel, `rc`. A default `vvoc upgrade` resolves only the stable `latest` dist-tag and never offers a release candidate; pre-release versions are published with `--tag rc`, so `latest` can never move onto a candidate.
+
+Opt in explicitly when you want candidates:
+
+```bash
+vvoc upgrade --rc                # upgrade to the version currently on the rc dist-tag
+vvoc upgrade --allow-prerelease  # same behavior, kept as an alias
+```
+
+When the `rc` dist-tag has no published candidate yet, the command reports it and installs nothing. If you sit on `1.4.0-rc.1` and the stable `1.4.0` ships, the default `vvoc upgrade` moves you onto the stable release — semver orders `1.4.0` above its candidates. Plugin consumers can install the channel directly with `npm i -g @osovv/vv-opencode@rc`.
+
+Maintainers release candidates through the same exact-SHA CI-gated flow, with the channel derived from the bumped version:
+
+```bash
+bun run release:bump -- prerelease --preid rc   # 1.4.0-rc.1, published to the rc dist-tag, GitHub Release marked pre-release
+bun run release:bump -- prerelease --preid rc   # next candidate: 1.4.0-rc.2
+bun run release:bump -- 1.4.0                   # final stable release, published to latest
+```
+
+An explicit `--channel latest|rc` argument may only confirm the derived channel; a contradicting value aborts the bump before any commit or publication.
+
 ### Stability and compatibility
 
 Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
