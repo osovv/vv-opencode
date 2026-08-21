@@ -11,8 +11,11 @@
 //
 // START_MODULE_MAP
 //   stepFinishPart - Builds a step-finish part payload.
+//   state - Builds an indicator token state fixture.
 //   fakeApi - Builds a minimal TuiPluginApi double with recording hooks.
 //   partUpdatedEvent - Builds a message.part.updated event payload.
+//   testDeps - Builds indicator dependencies with a marker label renderer.
+//   renderSlot - Invokes the first registered session_prompt_right renderer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

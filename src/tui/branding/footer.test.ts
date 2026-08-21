@@ -10,7 +10,11 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   THEME - Minimal theme RGBA triple used by the footer double.
+//   OPENCODE_VERSION - Fixed OpenCode version used by the footer double.
 //   fakeApi - Builds a minimal TuiPluginApi double with recording hooks.
+//   FooterSlotPlugin - Structural shape of a registered footer slot plugin.
+//   markerRenderer - Captures the version info and colors instead of real OpenTUI JSX.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

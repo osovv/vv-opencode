@@ -10,9 +10,9 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   makePlugin - Builds the plugin with capturing deps and forced enablement.
-//   emit - Invokes the plugin event hook with a cast event.
 //   stepFinishPart - Builds a step-finish part payload.
+//   makePlugin - Builds the plugin with capturing deps and forced enablement.
+//   sessionInfo - Builds a session info payload fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

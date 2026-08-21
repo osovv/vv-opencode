@@ -12,8 +12,10 @@
 // START_MODULE_MAP
 //   GROUP_BY_VALUES - Supported --group-by values.
 //   ORDER_VALUES - Supported --order values.
+//   CacheHitRateRow - Row shape projected from grouped metrics for JSON and table output.
 //   cacheHitRateCommand - cache-hit-rate subcommand definition.
 //   orderGroups - Orders grouped metrics by date, steps, or hit rate.
+//   sessionDisplayLabel - Resolves a session display label from session titles with a short-id fallback.
 //   buildCacheHitRateRows - Projects groups and session titles into JSON/table rows.
 //   renderCacheHitRateTable - Renders rows as a padded ASCII table.
 //   default - analytics parent command registering cache-hit-rate.

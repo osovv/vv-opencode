@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   IndicatorLabel - Label text plus color tone for the current indicator state.
+//   IndicatorDependencies - Injectable enablement and label renderer dependencies for focused tests.
 //   StepFinishLike - Structural step-finish part shape accepted from either SDK generation.
 //   createIndicatorAccumulator - Rolling per-session sums fed by step-finish parts.
 //   indicatorLabel - Label and tone for the current state with threshold colors.

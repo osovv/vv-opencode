@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   usage - Builds a usage record fixture.
+//   group - Builds a grouped metrics fixture.
 //   runCommand - Invokes the cache-hit-rate command with captured output.
 //   withStore - Seeds an isolated data home with records and runs a callback.
 // END_MODULE_MAP
