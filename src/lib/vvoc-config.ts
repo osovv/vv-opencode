@@ -398,6 +398,8 @@ export const VVOC_CONFIG_SCHEMA = {
           },
           {
             type: "object",
+            description:
+              "peak-hours plugin entry: enabled, mode, graceActiveSessions, and provider peak-window schedules.",
             properties: {
               enabled: { type: "boolean" },
               mode: { type: "string", enum: ["soft", "hard"] },
