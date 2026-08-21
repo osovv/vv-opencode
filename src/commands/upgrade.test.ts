@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Added explicit partial-upgrade warning coverage for sync failures and sync launch errors.]
+//   LAST_CHANGE: [C-RELEASE-RC-CHANNEL - Covered rc dist-tag resolution, no-candidate degradation, flag semantics, and default-path isolation.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -261,13 +261,14 @@ test("runUpgradeFlow - proceeds without changelog when fetch returns null", asyn
   expect(logger.logLines.join("\n")).not.toContain("--- Changelog ---");
 });
 
-test("runUpgradeFlow - resolves prerelease version with allowPrerelease option", async () => {
+test("runUpgradeFlow - resolves the rc dist-tag version with allowPrerelease option", async () => {
   const logger = createLoggerCapture();
   const commands: string[][] = [];
   const result = await runUpgradeFlow(
     {
       getCurrentVersion: async () => "0.35.10",
-      fetchLatestVersion: async () => "0.36.0-beta.1",
+      fetchLatestVersion: async () => "0.35.10",
+      fetchRcDistTagVersion: async () => "0.36.0-rc.1",
       fetchChangelog: async () => null,
       logger,
       runSubprocess: async (command) => {
@@ -278,7 +279,116 @@ test("runUpgradeFlow - resolves prerelease version with allowPrerelease option",
     { allowPrerelease: true },
   );
   expect(result.status).toBe("upgraded");
-  expect(commands[0]?.[3]).toContain("0.36.0-beta.1");
+  expect(commands[0]?.[3]).toContain("0.36.0-rc.1");
+  expect(logger.logLines.join("\n")).toContain("Latest release candidate: 0.36.0-rc.1");
+});
+
+test("runUpgradeFlow - rc channel upgrade ignores the latest dist-tag resolution", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  const result = await runUpgradeFlow(
+    {
+      getCurrentVersion: async () => "0.35.10",
+      fetchLatestVersion: async () => "1.0.0",
+      fetchRcDistTagVersion: async () => "0.36.0-rc.1",
+      fetchChangelog: async () => null,
+      logger,
+      runSubprocess: async (command) => {
+        commands.push([...command]);
+        return { exitCode: 0, stderr: "", stdout: "ok" };
+      },
+    },
+    { allowPrerelease: true },
+  );
+  expect(result.status).toBe("upgraded");
+  expect(commands[0]?.[3]).toContain("0.36.0-rc.1");
+  expect(commands[0]?.[3]).not.toContain("1.0.0");
+});
+
+test("runUpgradeFlow - reports no-rc-candidate when the rc dist-tag is absent", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  const result = await runUpgradeFlow(
+    {
+      getCurrentVersion: async () => "0.35.10",
+      fetchLatestVersion: async () => "0.36.0",
+      fetchRcDistTagVersion: async () => null,
+      fetchChangelog: async () => null,
+      logger,
+      runSubprocess: async (command) => {
+        commands.push([...command]);
+        return { exitCode: 0, stderr: "", stdout: "ok" };
+      },
+    },
+    { allowPrerelease: true },
+  );
+  expect(result).toEqual({ exitCode: 0, status: "no-rc-candidate" });
+  expect(commands).toEqual([]);
+  expect(logger.logLines.join("\n")).toContain("No release candidate available on the rc channel");
+  expect(logger.errorLines).toEqual([]);
+});
+
+test("runUpgradeFlow - reports already-latest on rc channel when the candidate is not newer", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  const result = await runUpgradeFlow(
+    {
+      getCurrentVersion: async () => "0.36.0-rc.1",
+      fetchLatestVersion: async () => "0.35.10",
+      fetchRcDistTagVersion: async () => "0.36.0-rc.1",
+      fetchChangelog: async () => null,
+      logger,
+      runSubprocess: async (command) => {
+        commands.push([...command]);
+        return { exitCode: 0, stderr: "", stdout: "ok" };
+      },
+    },
+    { allowPrerelease: true },
+  );
+  expect(result).toEqual({ exitCode: 0, status: "already-latest" });
+  expect(commands).toEqual([]);
+  expect(logger.logLines.join("\n")).toContain("Already at release candidate version: 0.36.0-rc.1");
+});
+
+test("runUpgradeFlow - default resolution never consults the rc channel", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  let rcConsulted = false;
+  const result = await runUpgradeFlow({
+    getCurrentVersion: async () => "0.35.10",
+    fetchLatestVersion: async () => "0.36.0",
+    fetchRcDistTagVersion: async () => {
+      rcConsulted = true;
+      return "0.37.0-rc.1";
+    },
+    fetchChangelog: async () => null,
+    logger,
+    runSubprocess: async (command) => {
+      commands.push([...command]);
+      return { exitCode: 0, stderr: "", stdout: "ok" };
+    },
+  });
+  expect(result.status).toBe("upgraded");
+  expect(rcConsulted).toBe(false);
+  expect(commands[0]?.[3]).toContain("0.36.0");
+});
+
+test("runUpgradeFlow - default upgrade off a candidate uses the latest dist-tag", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+  const result = await runUpgradeFlow({
+    getCurrentVersion: async () => "0.36.0-rc.1",
+    fetchLatestVersion: async () => "0.36.0",
+    fetchRcDistTagVersion: async () => "0.36.0-rc.1",
+    fetchChangelog: async () => null,
+    logger,
+    runSubprocess: async (command) => {
+      commands.push([...command]);
+      return { exitCode: 0, stderr: "", stdout: "ok" };
+    },
+  });
+  expect(result.status).toBe("upgraded");
+  expect(commands[0]?.[3]).toContain("0.36.0");
 });
 function createLoggerCapture(): {
   error: (message: string) => void;

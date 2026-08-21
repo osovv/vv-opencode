@@ -15,7 +15,7 @@
 //   buildInstallCommand - Build the Bun global install command for a specific version.
 //   buildPostInstallCompletionCommand - Build the fresh subprocess command for the default global completion flow.
 //   fetchLatestVersion - Query npm registry for latest stable version.
-//   fetchLatestVersionIncludingPrerelease - Query npm registry for highest version including pre-releases.
+//   fetchRcDistTagVersion - Query npm registry dist-tags for the version currently published as the rc channel.
 //   fetchChangelog - Fetch CHANGELOG.md from jsDelivr and extract entries between two versions.
 
 //   UpgradeFlowResult - Upgrade flow result type.
@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.7.0 - Made post-upgrade sync failures explicit partial upgrades with manual vvoc.json fix instructions.]
+//   LAST_CHANGE: [C-RELEASE-RC-CHANNEL - Resolved --rc (and --allow-prerelease) upgrades from the npm rc dist-tag with a clear no-candidate message.]
 // END_CHANGE_SUMMARY
 import { defineCommand } from "citty";
 import { getPackageVersion, PACKAGE_NAME } from "../lib/package.js";
@@ -35,7 +35,13 @@ type UpgradeCommand = readonly [string, ...string[]];
 
 export type UpgradeFlowResult = {
   exitCode: number;
-  status: "already-latest" | "registry-failed" | "install-failed" | "sync-warning" | "upgraded";
+  status:
+    | "already-latest"
+    | "registry-failed"
+    | "install-failed"
+    | "sync-warning"
+    | "upgraded"
+    | "no-rc-candidate";
 };
 
 export type UpgradeSubprocessResult = {
@@ -49,13 +55,14 @@ type UpgradeLogger = Pick<Console, "error" | "log" | "warn">;
 type UpgradeDependencies = {
   fetchChangelog: (fromVersion: string, toVersion: string) => Promise<string | null>;
   fetchLatestVersion: () => Promise<string | null>;
+  fetchRcDistTagVersion: () => Promise<string | null>;
   getCurrentVersion: () => Promise<string>;
   logger: UpgradeLogger;
   runSubprocess: (command: UpgradeCommand) => Promise<UpgradeSubprocessResult>;
 };
 
 type UpgradeOptions = {
-  /** When true, include pre-release versions when resolving the latest version. */
+  /** When true, resolve the target from the npm rc dist-tag (release candidate channel). */
   allowPrerelease?: boolean;
 };
 
@@ -67,13 +74,18 @@ export default defineCommand({
   args: {
     allowPrerelease: {
       type: "boolean",
-      description: "Allow upgrade to pre-release versions (alpha, beta, rc)",
+      description: "Allow upgrade to release candidate versions (the npm rc dist-tag)",
+      default: false,
+    },
+    rc: {
+      type: "boolean",
+      description: "Upgrade to the latest release candidate (npm rc dist-tag)",
       default: false,
     },
   },
   async run({ args }) {
     // START_BLOCK_RUN_UPGRADE
-    const result = await runUpgradeFlow({}, { allowPrerelease: args.allowPrerelease });
+    const result = await runUpgradeFlow({}, { allowPrerelease: args.allowPrerelease || args.rc });
     if (result.exitCode !== 0) {
       process.exitCode = result.exitCode;
     }
@@ -86,31 +98,38 @@ export async function runUpgradeFlow(
   options: UpgradeOptions = {},
 ): Promise<UpgradeFlowResult> {
   const logger = overrides.logger ?? console;
-  const resolveLatest = options.allowPrerelease
-    ? (overrides.fetchLatestVersion ?? fetchLatestVersionIncludingPrerelease)
-    : (overrides.fetchLatestVersion ?? fetchLatestVersion);
+  const fetchLatest = overrides.fetchLatestVersion ?? fetchLatestVersion;
+  const fetchRc = overrides.fetchRcDistTagVersion ?? fetchRcDistTagVersion;
   const fetchReleaseNotes = overrides.fetchChangelog ?? fetchChangelog;
   const getCurrentVersion = overrides.getCurrentVersion ?? getPackageVersion;
   const runSubprocess = overrides.runSubprocess ?? runSubprocessCommand;
 
   try {
-    const [currentVersion, latestVersion] = await Promise.all([
-      getCurrentVersion(),
-      resolveLatest(),
-    ]);
+    const currentVersion = await getCurrentVersion();
+    const latestVersion = options.allowPrerelease ? await fetchRc() : await fetchLatest();
 
     if (!latestVersion) {
+      if (options.allowPrerelease) {
+        logger.log("No release candidate available on the rc channel yet.");
+        logger.log("Default upgrades keep using the stable latest channel.");
+        return { exitCode: 0, status: "no-rc-candidate" };
+      }
       logger.error("NETWORK_ERROR: Could not reach npm registry");
       return { exitCode: 1, status: "registry-failed" };
     }
 
     if (compareVersions(currentVersion, latestVersion) >= 0) {
-      logger.log(`Already at latest version: ${currentVersion}`);
+      const channel = options.allowPrerelease ? "release candidate" : "latest";
+      logger.log(`Already at ${channel} version: ${currentVersion}`);
       return { exitCode: 0, status: "already-latest" };
     }
 
     logger.log(`Current version: ${currentVersion}`);
-    logger.log(`Latest version: ${latestVersion}`);
+    logger.log(
+      options.allowPrerelease
+        ? `Latest release candidate: ${latestVersion}`
+        : `Latest version: ${latestVersion}`,
+    );
     logger.log("Upgrade available!");
 
     const changelog = await getBestEffortChangelog({
@@ -292,22 +311,23 @@ function parseChangelogRange(
 }
 
 /**
- * Fetch the highest version from npm registry including pre-release versions.
- * Returns the maximum version string or null on failure.
+ * Fetch the version currently pointed to by the package's rc dist-tag.
+ * Returns the version string, or null when the tag is absent or the registry
+ * is unreachable — never falls back to another version.
  */
-export async function fetchLatestVersionIncludingPrerelease(): Promise<string | null> {
+export async function fetchRcDistTagVersion(): Promise<string | null> {
   try {
-    const url = `${NPM_REGISTRY}/${encodeURIComponent(PACKAGE_NAME)}`;
+    const url = `${NPM_REGISTRY}/-/package/${encodeURIComponent(PACKAGE_NAME)}/dist-tags`;
     const response = await fetch(url, {
       headers: { Accept: "application/json" },
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { versions?: Record<string, unknown> };
-    if (!data.versions) return null;
-    const allVersions = Object.keys(data.versions);
-    if (allVersions.length === 0) return null;
-    allVersions.sort((a, b) => compareVersions(a, b));
-    return allVersions[allVersions.length - 1] ?? null;
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { rc?: string };
+    return typeof data.rc === "string" && data.rc.trim() ? data.rc : null;
   } catch {
     return null;
   }
