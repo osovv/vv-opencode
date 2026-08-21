@@ -1,6 +1,6 @@
 # @osovv/vv-opencode
 
-**Curated, opinionated OpenCode plugin set** for spec-first, review-driven, safer agentic development — with managed agents, skills, safety plugins, and the `vvoc` CLI.
+**An opinionated agentic development layer for OpenCode** — spec-first when it matters, review-driven execution, portable model roles, safer tools, and long-run safety. Under the hood it ships as a set of OpenCode plugins, managed agents, skills, and the `vvoc` CLI.
 
 <p>
   <a href="https://www.npmjs.com/package/@osovv/vv-opencode"><img src="https://img.shields.io/npm/v/%40osovv%2Fvv-opencode?style=flat&label=npm&color=blue" alt="npm"></a>
@@ -34,6 +34,28 @@ vv-opencode addresses each of these:
 - **Provider-neutral web tools** — agents get one canonical `web_search` and `web_fetch` contract backed by Exa, Brave, Z.AI, native retrieval, or Spider, instead of provider-specific search and reader schemas leaking into your prompts.
 - **Long-run safety** — Guardian auto-approves routine low-risk permissions (risky ones stay in OpenCode's manual approval flow), and secrets are redacted before they reach the model.
 - **Reproducible setup** — `vvoc install` / `vvoc sync` recreate the same workflow on any machine or project.
+
+---
+
+## You just talk to OpenCode normally
+
+You don't need to learn a command surface first. Ask for what you want — `vv-controller` picks the lightest appropriate trajectory, and explicit skills take over only when the work needs them:
+
+```text
+> Rename this field and update its tests.
+→ handled directly
+
+> Why does auth occasionally return 401 after a token refresh?
+→ root-cause investigation first → targeted fix → verification
+
+> Add organizations with role-based access.
+→ vv-spec → approval → vv-plan → approval → vv-execute
+                               ├─ implement
+                               ├─ spec review
+                               └─ code review
+```
+
+Every managed skill can also be invoked explicitly when you want to drive the process yourself.
 
 ---
 
