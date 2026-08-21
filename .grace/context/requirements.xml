@@ -1,7 +1,7 @@
 <GraceRequirements graceVersion="4.0">
   <ProjectName>@osovv/vv-opencode</ProjectName>
   <Annotation>Curated, opinionated OpenCode process layer for spec-first, review-driven, safer agentic development with managed agents, managed skills, semantic model roles, workflow tracking, safety plugins, native TUI context inspection, and the vvoc CLI.</Annotation>
-  <Keywords>opencode, plugins, tui, context-usage, workflow, model-roles, hashline-edit, web-search, web-fetch, work-items, controller, managed-agents, managed-skills, bun, typescript</Keywords>
+  <Keywords>opencode, plugins, tui, context-usage, workflow, model-roles, hashline-edit, web-search, web-fetch, work-items, controller, managed-agents, managed-skills, peak-hours, bun, typescript</Keywords>
   <Users>
     <User>Engineer who wants a repeatable OpenCode workflow with spec-first planning, review gates, safer edits, portable model choices, and long-run safety.</User>
     <User>Team or maintainer who wants the same agent workflow to be reproducible across machines, repositories, and model providers.</User>
@@ -17,6 +17,7 @@
     <Goal>Provide one CLI, vvoc, for setup, sync, launch, status, diagnostics, roles, presets, plugin toggles, completions, and upgrades.</Goal>
     <Goal>Expose an honest OpenCode-native /context view that combines provider-reported usage with clearly labeled approximate category accounting.</Goal>
     <Goal>Provide provider-neutral web_search and web_fetch tools with stable runtime defaults, permission checks, bounded transport, and normalized outputs.</Goal>
+    <Goal>Make provider peak-hour pricing visible and optionally gate new peak-priced work through warnings, blocking with dynamic off-peak suggestions, and grace for work already in flight.</Goal>
     <Goal>Maintain the 1.0 daily-driver baseline as a practical, curated OpenCode workflow whose setup commands, managed skill trajectory, public package exports, schema v3, and spec artifact layout remain stable compatibility surfaces unless a release explicitly documents a breaking change.</Goal>
   </Goals>
   <UseCases>
@@ -177,6 +178,13 @@
       <RelatedFlow>DF-WEB-SEARCH</RelatedFlow>
       <RelatedFlow>DF-WEB-FETCH</RelatedFlow>
     </UC-022>
+    <UC-023>
+      <Name>PeakHoursCostGovernance</Name>
+      <Action>User sends a message whose model provider is currently inside a peak-priced billing window.</Action>
+      <Goal>Make peak pricing visible and optionally gate new work without ever killing work that is already in flight.</Goal>
+      <Acceptance>Soft mode appends a bounded model notice and shows a persistent orange app_bottom banner naming the provider, window end, and connected off-peak providers; hard mode rejects the message before any LLM request with the same suggestions; sessions created before the window start, subagent sessions, subagent-like agents, and internal OpenCode agents are never hard-blocked; schedules match providers with alias normalization, carry revision-dated defaults materialized conservatively into vvoc.json, and fail open on malformed data.</Acceptance>
+      <RelatedFlow>DF-LAYERED-CONFIG</RelatedFlow>
+    </UC-023>
   </UseCases>
   <NonGoals>
     <NonGoal>Do not replace OpenCode itself; vv-opencode layers process, managed config, skills, and plugins on top of OpenCode.</NonGoal>

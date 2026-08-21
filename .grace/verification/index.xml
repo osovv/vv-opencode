@@ -21,6 +21,9 @@
         <V-M-PLUGIN-CONTEXT-TUI />
         <V-M-PLUGIN-WEB-TOOLS />
         <V-M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <V-M-PEAK-HOURS-SCHEDULES />
+        <V-M-PLUGIN-PEAK-HOURS />
+        <V-M-TUI-PEAK-HOURS-BANNER />
         <V-M-WEB-CONFIG />
         <V-M-WEB-HTTP />
         <V-M-WEB-SEARCH-SERVICE />

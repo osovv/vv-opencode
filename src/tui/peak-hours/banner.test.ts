@@ -11,6 +11,8 @@
 //
 // START_MODULE_MAP
 //   NOW - Fixed Friday 07:00 UTC evaluation instant used by default fixtures.
+//   deepseekSchedules - Schedule fixture with the deepseek peak window active at NOW.
+//   BannerCall - Captured banner render call shape.
 //   deepseekEntry - Entry fixture with the deepseek peak windows active at NOW.
 //   THEME - Minimal theme double exposing the warning color.
 //   fakeApi - Builds a TuiPluginApi double with a session route, messages, providers, and slot capture.

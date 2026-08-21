@@ -18,6 +18,9 @@
 //   PeakHoursMode - Soft or hard enforcement mode.
 //   PeakHoursEntryConfig - Fully seeded plugin entry shape used by the server plugin and banner.
 //   ActivePeak - Active window hit with provider ids, boundary dates, and remaining minutes.
+//   DEFAULT_PEAK_TIMEZONE - Default window timezone (UTC).
+//   DEFAULT_PEAK_HOURS_MODE - Default enforcement mode (hard).
+//   ALL_WEEKDAYS - All seven weekday indexes.
 //   PROVIDER_KEY_ALIASES - Known provider id spellings mapped onto canonical schedule keys.
 //   normalizeProviderId - Lowercases, trims, and canonicalizes separators in a provider id.
 //   resolveProviderKey - Maps a provider id onto a schedule key through exact and alias matching.
@@ -108,7 +111,6 @@ export const PROVIDER_KEY_ALIASES: Record<string, string> = {
   modelstudio: "qwen",
 };
 
-// START_BLOCK_PROVIDER_KEY_RESOLUTION
 // START_CONTRACT: normalizeProviderId
 //   PURPOSE: Canonicalize a provider id for schedule matching.
 //   INPUTS: { id: string - provider id as observed from OpenCode surfaces }
@@ -144,9 +146,7 @@ export function resolveProviderKey(
   }
   return undefined;
 }
-// END_BLOCK_PROVIDER_KEY_RESOLUTION
 
-// START_BLOCK_WINDOW_PARSING
 // START_CONTRACT: parseTimeOfDay
 //   PURPOSE: Parse an HH:MM string into minutes past midnight.
 //   INPUTS: { value: string - candidate time-of-day string }
@@ -221,9 +221,7 @@ export function parsePeakWindow(spec: unknown): { window?: ParsedPeakWindow; war
     },
   };
 }
-// END_BLOCK_WINDOW_PARSING
 
-// START_BLOCK_ACTIVE_WINDOW_EVALUATION
 function zonedParts(date: Date, timeZone: string): { weekday: number; minutes: number } {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -318,9 +316,7 @@ export function findActivePeak(
     minutesRemaining: best.minutesRemaining,
   };
 }
-// END_BLOCK_ACTIVE_WINDOW_EVALUATION
 
-// START_BLOCK_SUGGESTIONS_AND_FORMATTING
 // START_CONTRACT: suggestOffPeakProviders
 //   PURPOSE: Filter connected provider ids down to those currently outside any active peak window.
 //   INPUTS: { now: Date - evaluation instant; schedules: PeakSchedules - loaded schedule map; connectedProviderIDs: readonly string[] - observed connected provider ids in display order }
@@ -372,9 +368,7 @@ export function formatWaitMinutes(minutes: number): string {
 export function formatPeakEndTime(date: Date): string {
   return `${date.toISOString().slice(11, 16)} UTC`;
 }
-// END_BLOCK_SUGGESTIONS_AND_FORMATTING
 
-// START_BLOCK_PLUGIN_ENTRY_PARSING
 // START_CONTRACT: parsePeakHoursEntry
 //   PURPOSE: Normalize a plugins["peak-hours"] value into a seeded entry, failing open on malformed pieces.
 //   INPUTS: { value: unknown - boolean, object, or undefined plugin entry value from the vvoc config }
@@ -474,4 +468,3 @@ export function parsePeakHoursEntry(value: unknown): {
 
   return { entry, warnings };
 }
-// END_BLOCK_PLUGIN_ENTRY_PARSING

@@ -24,6 +24,9 @@
         <M-PLUGIN-CONTEXT-TUI />
         <M-PLUGIN-WEB-TOOLS />
         <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <M-PEAK-HOURS-SCHEDULES />
+        <M-PLUGIN-PEAK-HOURS />
+        <M-TUI-PEAK-HOURS-BANNER />
         <M-WEB-CONFIG />
         <M-WEB-HTTP />
         <M-WEB-SEARCH-SERVICE />

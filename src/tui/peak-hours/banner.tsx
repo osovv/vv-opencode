@@ -50,7 +50,6 @@ export type PeakHoursBannerDependencies = {
   renderBanner: (text: string, color: RGBA) => JSX.Element;
 };
 
-// START_BLOCK_BANNER_TEXT
 // START_CONTRACT: buildPeakBannerText
 //   PURPOSE: Compose the one-line banner label with window end and suggestions.
 //   INPUTS: { providerID: string - peak provider id; peak: ActivePeak - active window hit; suggestions: readonly string[] - connected off-peak provider ids }
@@ -70,9 +69,7 @@ export function buildPeakBannerText(
       : " · every connected provider is in peak or unscheduled";
   return `⚠ PEAK ${providerID} until ${until} · elevated pricing${suffix}`;
 }
-// END_BLOCK_BANNER_TEXT
 
-// START_BLOCK_MODEL_RESOLUTION
 // START_CONTRACT: resolveBannerModelRef
 //   PURPOSE: Resolve the current model reference from the open session's messages with a config default fallback.
 //   INPUTS: { api: TuiPluginApi - TUI plugin api }
@@ -118,7 +115,6 @@ function currentSessionID(api: TuiPluginApi): string {
   }
   return "";
 }
-// END_BLOCK_MODEL_RESOLUTION
 
 // START_BLOCK_REGISTER_BANNER
 /**

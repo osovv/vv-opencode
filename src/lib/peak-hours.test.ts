@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   at - Builds a deterministic evaluation instant from an ISO string.
+//   DAILY - Builds single-window schedules keyed by sample-provider.
 //   dailyWindow - Builds a raw daily window fixture.
 // END_MODULE_MAP
 //

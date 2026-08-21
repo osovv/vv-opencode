@@ -94,7 +94,6 @@ function isInternalAgent(agentName: string | undefined): boolean {
 }
 // END_BLOCK_AGENT_EXEMPTIONS
 
-// START_BLOCK_MESSAGE_BUILDING
 // START_CONTRACT: buildHardBlockMessage
 //   PURPOSE: Compose the hard-mode blocking error text with window end, wait time, and suggestions.
 //   INPUTS: { providerID: string - peak provider id; peak: ActivePeak - active window hit; suggestions: readonly string[] - connected off-peak provider ids }
@@ -155,7 +154,6 @@ export function appendSystemNote(existingSystem: string | undefined, note: strin
   parts.push(note);
   return parts.join("\n\n");
 }
-// END_BLOCK_MESSAGE_BUILDING
 
 // START_BLOCK_DEFAULT_DEPENDENCIES
 function truncateLogText(value: string): string {

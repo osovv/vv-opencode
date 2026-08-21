@@ -234,6 +234,8 @@ describe("materializeToolHistoryCompactionEntry", () => {
   });
 });
 
+// END_BLOCK_TOOL_HISTORY_MATERIALIZE_TESTS
+
 // START_BLOCK_PEAK_HOURS_MATERIALIZE_TESTS
 describe("materializePeakHoursEntry", () => {
   test("expands undefined and boolean entries to the full default entry", () => {
@@ -279,4 +281,3 @@ describe("materializePeakHoursEntry", () => {
   });
 });
 // END_BLOCK_PEAK_HOURS_MATERIALIZE_TESTS
-// END_BLOCK_TOOL_HISTORY_MATERIALIZE_TESTS
