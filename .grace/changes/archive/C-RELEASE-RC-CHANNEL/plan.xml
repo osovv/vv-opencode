@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-RELEASE-RC-CHANNEL>
     <IntentSummary>Make the npm publication channel explicit end to end: publish.yml gains a validated channel input and passes --tag on npm publish, release-bump derives the channel from the bumped version and marks rc GitHub Releases as pre-release, and the upgrade command resolves --rc (with --allow-prerelease as an equivalent alias) from the npm rc dist-tag with clear no-candidate degradation, leaving the default latest upgrade path unchanged, with README and GRACE projections synchronized.</IntentSummary>
     <BaselineAssertions>

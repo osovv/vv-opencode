@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-RELEASE-RC-CHANNEL>
     <Summary>Publish release candidates through a dedicated npm rc dist-tag channel so default upgrades stay on latest, with an explicit opt-in upgrade path to the latest release candidate.</Summary>
     <Problem>The publish workflow runs npm publish without a tag, which moves the latest dist-tag onto any published version including pre-releases. The first published release candidate would silently become the default upgrade target for every vvoc upgrade user. The existing --allow-prerelease upgrade flag resolves the highest version among all published versions instead of an explicitly managed channel, so accidental alpha or beta publications would also be picked up.</Problem>
