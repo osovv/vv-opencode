@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.3 (2026-08-25)</small>
+
+### Summary
+
+The peak-hours cost-gating plugin now defaults to soft mode, so by default a message to a provider inside a peak-pricing window still goes through with a one-line cost notice and the orange TUI banner, with per-provider `mode` overrides and a top-level `"mode": "hard"` available for users who want stricter enforcement. When hard mode is enabled, blocking now occurs in `chat.params` after the user message has been persisted, which means blocked messages remain visible in session history and the rejection renders as a standard message error part naming the provider, window end, wait time, and off-peak provider suggestions instead of being dropped with a transient toast. This makes peak-hour enforcement less disruptive by default and prevents message loss when strict blocking is configured.
+
+* fix(peak-hours): default to soft mode and block in chat.params so messages persist ([51ee91a](https://github.com/osovv/vv-opencode/commit/51ee91a))
+
 ## <small>1.3.6-rc.2 (2026-08-25)</small>
 
 ### Summary
