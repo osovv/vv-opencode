@@ -511,8 +511,8 @@ Several providers (DeepSeek, Z.AI, Qwen) bill higher rates during daily or weekd
 
 Behavior per mode:
 
-- **hard** (default): a message to a peak-priced provider is rejected before any LLM request, with the window end, the wait time, and the connected providers that are currently outside peak (`PEAK_HOURS_BLOCK: provider "deepseek" is in peak hours until 10:00 UTC (about 3 h). … Connected providers outside peak hours right now: z-ai, qwen. …`).
-- **soft**: the message goes through, the model receives a one-line cost notice, and the TUI shows a persistent orange banner in the bottom slot: `⚠ PEAK deepseek until 10:00 UTC · elevated pricing · off-peak now: z-ai, qwen`.
+- **soft** (default): the message goes through, the model receives a one-line cost notice, and the TUI shows a persistent orange banner in the bottom slot: `⚠ PEAK deepseek until 10:00 UTC · elevated pricing · off-peak now: z-ai, qwen`.
+- **hard**: the LLM request is rejected with the window end, the wait time, and the connected providers that are currently outside peak (`PEAK_HOURS_BLOCK: provider "deepseek" is in peak hours until 10:00 UTC (about 3 h). … Connected providers outside peak hours right now: z-ai, qwen. …`). The block fires in `chat.params`, after the message is stored: your message stays in the session history and the block renders as a regular error entry, not a dropped message.
 
 Nothing already in flight is ever killed:
 
@@ -528,7 +528,7 @@ Config lives in `vvoc.json` under `plugins["peak-hours"]` and is conservatively 
 "plugins": {
   "peak-hours": {
     "enabled": true,
-    "mode": "hard",
+    "mode": "soft",
     "graceActiveSessions": true,
     "schedules": {
       "deepseek": { "windows": [{ "start": "01:00", "end": "04:00", "tz": "UTC" }, { "start": "06:00", "end": "10:00", "tz": "UTC" }] },
@@ -539,7 +539,7 @@ Config lives in `vvoc.json` under `plugins["peak-hours"]` and is conservatively 
 }
 ```
 
-Windows use `HH:MM` in an explicit timezone (default UTC), may cross midnight (`"start": "22:00", "end": "02:00"`), and accept an optional `days` restriction (0=Sunday … 6=Saturday, default all days). A provider entry may override the global mode with `"mode": "soft"`. Set the top-level `"mode": "soft"` to downgrade everywhere, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart, like other runtime plugin settings.
+Windows use `HH:MM` in an explicit timezone (default UTC), may cross midnight (`"start": "22:00", "end": "02:00"`), and accept an optional `days` restriction (0=Sunday … 6=Saturday, default all days). A provider entry may override the global mode with `"mode": "hard"`. Set the top-level `"mode": "hard"` to enforce blocking everywhere, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart, like other runtime plugin settings.
 
 ### Web tools
 

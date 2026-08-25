@@ -1,8 +1,8 @@
 // FILE: src/plugins/peak-hours/index.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Warn or block chat.message requests whose model provider is in configured peak hours, with dynamic off-peak provider suggestions and session-age plus subagent grace.
-//   SCOPE: Startup vvoc snapshot resolution and peak-hours entry parsing, internal and subagent-like agent exemptions, persisted-session grace lookup, connected provider enumeration with bounded fallback, soft system-note injection, hard blocking errors, and fail-open degradation.
+//   PURPOSE: Warn or block LLM requests whose model provider is in configured peak hours, with dynamic off-peak provider suggestions and session-age plus subagent grace.
+//   SCOPE: Startup vvoc snapshot resolution and peak-hours entry parsing, internal and subagent-like agent exemptions, persisted-session grace lookup, connected provider enumeration with bounded fallback, soft system-note injection through chat.message, hard blocking through a chat.params error raised after the user message is persisted, and fail-open degradation.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/managed-agents.ts, src/lib/peak-hours.ts]
 //   LINKS: [M-PLUGIN-PEAK-HOURS, M-PEAK-HOURS-SCHEDULES, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added the peak-hours chat.message plugin with soft notes, hard blocks, suggestions, and grace.]
+//   LAST_CHANGE: [DIRECT-FIX - Moved the hard block to chat.params so blocked messages persist in session history with a proper error part.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -232,15 +232,21 @@ async function listConnectedProviders(
 // END_BLOCK_DEFAULT_DEPENDENCIES
 
 // START_BLOCK_PLUGIN_ENTRY
+type PeakDecision = {
+  peak: ActivePeak;
+  mode: PeakHoursMode;
+};
+
 /**
  * Builds the peak-hours OpenCode server plugin.
  *
- * chat.message evaluates the message model's provider against the configured
- * schedules. Soft mode appends a bounded system notice; hard mode throws before
- * any LLM request with dynamic off-peak suggestions. Internal agents, subagent
- * agents, sessions with a parentID, and sessions created before the active
- * window start are never hard-blocked. Schedule and lookup failures degrade to
- * soft or no-op and never block.
+ * chat.message applies the soft system notice; chat.params enforces the hard
+ * block by throwing after the user message is persisted, so OpenCode renders
+ * the block as a standard message error part with dynamic off-peak suggestions
+ * instead of dropping the message. Internal agents, subagent agents, sessions
+ * with a parentID, and sessions created before the active window start are
+ * never hard-blocked. Schedule and lookup failures degrade to soft or no-op
+ * and never block.
  */
 export function createPeakHoursPlugin(
   dependencies: Partial<PeakHoursPluginDependencies> = {},
@@ -291,6 +297,51 @@ export function createPeakHoursPlugin(
 
     const knownSubagents = createKnownSubagentSet();
 
+    // Resolves the effective peak decision for one message: peak hit plus the
+    // mode after provider overrides, subagent softening, and persisted-session
+    // grace. Returns undefined when the provider is not in peak or the agent
+    // is internal OpenCode infrastructure.
+    const resolvePeakDecision = async (input: {
+      agent: string | undefined;
+      providerID: string;
+      sessionID: string;
+    }): Promise<PeakDecision | undefined> => {
+      if (isInternalAgent(input.agent)) return undefined;
+
+      const now = deps.now();
+      const peak = findActivePeak(now, entry.schedules, input.providerID);
+      if (!peak) return undefined;
+
+      const override = entry.schedules[peak.providerKey]?.mode;
+      let mode: PeakHoursMode = override ?? entry.mode;
+
+      // Subagent-like agents are continuation of already-admitted work.
+      if (input.agent && knownSubagents.has(input.agent)) {
+        mode = "soft";
+      }
+
+      if (mode === "hard") {
+        const session = await deps.session(input.sessionID);
+        if (!session) {
+          // Fail-open: unknown session state never blocks.
+          mode = "soft";
+        } else {
+          if (session.parentID) {
+            mode = "soft";
+          }
+          if (
+            entry.graceActiveSessions &&
+            session.createdMs !== undefined &&
+            session.createdMs < peak.startedAt.getTime()
+          ) {
+            mode = "soft";
+          }
+        }
+      }
+
+      return { peak, mode };
+    };
+
     await deps.log("info", "peak-hours plugin initialized", {
       mode: entry.mode,
       graceActiveSessions: entry.graceActiveSessions,
@@ -307,69 +358,57 @@ export function createPeakHoursPlugin(
       },
       "chat.message": async (input, output) => {
         const agent = output.message.agent ?? input.agent;
-        if (isInternalAgent(agent)) return;
-
         const providerID = input.model?.providerID ?? output.message.model?.providerID;
         if (!providerID) return;
 
-        const now = deps.now();
-        const peak = findActivePeak(now, entry.schedules, providerID);
-        if (!peak) return;
-
-        const override = entry.schedules[peak.providerKey]?.mode;
-        let mode: PeakHoursMode = override ?? entry.mode;
-
-        // Subagent-like agents are continuation of already-admitted work.
-        if (agent && knownSubagents.has(agent)) {
-          mode = "soft";
-        }
-
-        if (mode === "hard") {
-          const session = await deps.session(input.sessionID);
-          if (!session) {
-            // Fail-open: unknown session state never blocks.
-            mode = "soft";
-          } else {
-            if (session.parentID) {
-              mode = "soft";
-            }
-            if (
-              entry.graceActiveSessions &&
-              session.createdMs !== undefined &&
-              session.createdMs < peak.startedAt.getTime()
-            ) {
-              mode = "soft";
-            }
-          }
-        }
-
-        if (mode === "hard") {
-          const connected = await deps.connectedProviders();
-          const suggestions = suggestOffPeakProviders(now, entry.schedules, connected).filter(
-            (candidate) => normalizeProviderId(candidate) !== normalizeProviderId(providerID),
-          );
-          const message = buildHardBlockMessage(providerID, peak, suggestions);
-          await deps.log("info", "peak-hours hard block applied", {
-            providerID,
-            providerKey: peak.providerKey,
-            until: formatPeakEndTime(peak.endsAt),
-            waitMinutes: peak.minutesRemaining,
-            suggestions,
-            sessionID: input.sessionID,
-          });
-          throw new Error(message);
-        }
+        const decision = await resolvePeakDecision({
+          agent,
+          providerID,
+          sessionID: input.sessionID,
+        });
+        // Hard mode blocks later in chat.params, after the message is persisted.
+        if (!decision || decision.mode !== "soft") return;
 
         output.message.system = appendSystemNote(
           output.message.system,
-          buildSoftSystemNote(providerID, peak),
+          buildSoftSystemNote(providerID, decision.peak),
         );
         await deps.log("info", "peak-hours soft notice applied", {
           providerID,
-          providerKey: peak.providerKey,
-          until: formatPeakEndTime(peak.endsAt),
+          providerKey: decision.peak.providerKey,
+          until: formatPeakEndTime(decision.peak.endsAt),
           sessionID: input.sessionID,
         });
+      },
+      "chat.params": async (input) => {
+        const providerID = input.model?.providerID;
+        if (!providerID) return;
+
+        const decision = await resolvePeakDecision({
+          agent: input.agent,
+          providerID,
+          sessionID: input.sessionID,
+        });
+        if (!decision || decision.mode !== "hard") return;
+
+        const now = deps.now();
+        const connected = await deps.connectedProviders();
+        const suggestions = suggestOffPeakProviders(now, entry.schedules, connected).filter(
+          (candidate) => normalizeProviderId(candidate) !== normalizeProviderId(providerID),
+        );
+        const message = buildHardBlockMessage(providerID, decision.peak, suggestions);
+        await deps.log("info", "peak-hours hard block applied", {
+          providerID,
+          providerKey: decision.peak.providerKey,
+          until: formatPeakEndTime(decision.peak.endsAt),
+          waitMinutes: decision.peak.minutesRemaining,
+          suggestions,
+          sessionID: input.sessionID,
+        });
+        // Throwing here fails the LLM request after the user message is already
+        // persisted, so OpenCode renders the block as a standard message error
+        // part instead of dropping the message with a transient toast.
+        throw new Error(message);
       },
     };
   };

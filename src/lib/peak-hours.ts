@@ -19,7 +19,7 @@
 //   PeakHoursEntryConfig - Fully seeded plugin entry shape used by the server plugin and banner.
 //   ActivePeak - Active window hit with provider ids, boundary dates, and remaining minutes.
 //   DEFAULT_PEAK_TIMEZONE - Default window timezone (UTC).
-//   DEFAULT_PEAK_HOURS_MODE - Default enforcement mode (hard).
+//   DEFAULT_PEAK_HOURS_MODE - Default enforcement mode (soft).
 //   ALL_WEEKDAYS - All seven weekday indexes.
 //   PROVIDER_KEY_ALIASES - Known provider id spellings mapped onto canonical schedule keys.
 //   normalizeProviderId - Lowercases, trims, and canonicalizes separators in a provider id.
@@ -34,7 +34,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Restricted gating to subscription plan provider ids from the models.dev registry; bare pay-per-token APIs are never gated.]
+//   LAST_CHANGE: [DIRECT-FIX - Softened the default enforcement mode and restricted gating to registry-verified plan provider ids.]
 // END_CHANGE_SUMMARY
 
 export type PeakHoursClock = () => Date;
@@ -80,7 +80,7 @@ export type ActivePeak = {
 };
 
 export const DEFAULT_PEAK_TIMEZONE = "UTC";
-export const DEFAULT_PEAK_HOURS_MODE: PeakHoursMode = "hard";
+export const DEFAULT_PEAK_HOURS_MODE: PeakHoursMode = "soft";
 export const ALL_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 const MINUTES_PER_DAY = 1_440;

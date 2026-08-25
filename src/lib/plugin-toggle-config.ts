@@ -126,7 +126,7 @@ export const DEFAULT_PEAK_HOURS_SCHEDULES = {
 
 export const DEFAULT_PEAK_HOURS_ENTRY = {
   enabled: true,
-  mode: "hard",
+  mode: "soft",
   graceActiveSessions: true,
   schedules: DEFAULT_PEAK_HOURS_SCHEDULES,
 } as const;

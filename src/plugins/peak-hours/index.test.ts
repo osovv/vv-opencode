@@ -16,6 +16,7 @@
 //   makeDeps - Builds injectable dependencies with captured logs.
 //   makePlugin - Builds the plugin hooks with the given dependency overrides.
 //   makeIO - Builds chat.message input and mutable output for one message.
+//   makeParamsIO - Builds chat.params input and output for one LLM request.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -101,29 +102,54 @@ function makeIO(options: { agent?: string; providerID?: string; sessionID?: stri
   return { input, output };
 }
 
+/** chat.params-shaped input for the hard-block hook. */
+function makeParamsIO(options: { agent?: string; providerID?: string; sessionID?: string } = {}) {
+  const input = {
+    sessionID: options.sessionID ?? "ses_1",
+    agent: options.agent ?? "build",
+    model: options.providerID
+      ? { providerID: options.providerID, modelID: "some-model" }
+      : undefined,
+    provider: { info: { id: options.providerID ?? "provider" }, options: {}, source: "config" },
+    message: { id: "msg_1", role: "user", agent: options.agent ?? "build" },
+  };
+  const output = { temperature: 0, topP: 0, topK: 0, maxOutputTokens: undefined, options: {} };
+  return { input, output };
+}
+
 describe("PeakHoursPlugin gating", () => {
   test("registers no hooks when the entry is disabled", async () => {
     const { plugin } = await makePlugin({ entry: baseEntry({ enabled: false }) });
     expect(plugin["chat.message"]).toBeUndefined();
+    expect(plugin["chat.params"]).toBeUndefined();
     expect(plugin.config).toBeUndefined();
   });
 
-  test("registers the chat.message hook and config hook when enabled", async () => {
+  test("registers the chat.message, chat.params, and config hooks when enabled", async () => {
     const { plugin } = await makePlugin();
     expect(typeof plugin["chat.message"]).toBe("function");
+    expect(typeof plugin["chat.params"]).toBe("function");
     expect(typeof plugin.config).toBe("function");
   });
 });
 
 describe("PeakHoursPlugin hard mode", () => {
-  test("blocks a non-grace message with dynamic off-peak suggestions", async () => {
+  test("blocks a non-grace LLM request in chat.params with dynamic off-peak suggestions", async () => {
     const { plugin, logs } = await makePlugin();
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await expect(plugin["chat.message"]!(input as never, output as never)).rejects.toThrow(
+    await expect(plugin["chat.params"]!(input as never, output as never)).rejects.toThrow(
       /PEAK_HOURS_BLOCK: provider "deepseek" is in peak hours until 10:00 UTC \(about 3 h\).*z-ai, qwen, openai/s,
     );
     expect(logs.some((entry) => entry.message.includes("hard block applied"))).toBe(true);
+  });
+
+  test("chat.message never throws in hard mode and adds no note", async () => {
+    const { plugin } = await makePlugin();
+    const { input, output } = makeIO({ providerID: "deepseek" });
+
+    await expect(plugin["chat.message"]!(input as never, output as never)).resolves.toBeUndefined();
+    expect(output.message.system).toBeUndefined();
   });
 
   test("degrades to an all-peak message when every connected provider is peak-active", async () => {
@@ -136,9 +162,9 @@ describe("PeakHoursPlugin hard mode", () => {
       entry: baseEntry({ schedules }),
       connectedProviders: async () => ["deepseek", "z-ai", "qwen"],
     });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await expect(plugin["chat.message"]!(input as never, output as never)).rejects.toThrow(
+    await expect(plugin["chat.params"]!(input as never, output as never)).rejects.toThrow(
       /Every connected provider/,
     );
   });
@@ -149,10 +175,9 @@ describe("PeakHoursPlugin hard mode", () => {
         schedules: { deepseek: { mode: "soft", windows: [{ start: "06:00", end: "10:00" }] } },
       }),
     });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toContain("<peak_hours_notice>");
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 });
 
@@ -161,20 +186,18 @@ describe("PeakHoursPlugin grace and exemptions", () => {
     const { plugin } = await makePlugin({
       session: async () => ({ createdMs: new Date("2026-08-21T05:00:00.000Z").getTime() }),
     });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toContain("<peak_hours_notice>");
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 
   test("never hard-blocks a session with a parentID", async () => {
     const { plugin } = await makePlugin({
       session: async () => ({ createdMs: NOW.getTime(), parentID: "ses_parent" }),
     });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toContain("<peak_hours_notice>");
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 
   test("skips grace when graceActiveSessions is disabled", async () => {
@@ -182,36 +205,35 @@ describe("PeakHoursPlugin grace and exemptions", () => {
       entry: baseEntry({ graceActiveSessions: false }),
       session: async () => ({ createdMs: new Date("2026-08-21T05:00:00.000Z").getTime() }),
     });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await expect(plugin["chat.message"]!(input as never, output as never)).rejects.toThrow(
+    await expect(plugin["chat.params"]!(input as never, output as never)).rejects.toThrow(
       /PEAK_HOURS_BLOCK/,
     );
   });
 
   test("fails open to soft when the session lookup fails", async () => {
     const { plugin } = await makePlugin({ session: async () => undefined });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toContain("<peak_hours_notice>");
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 
   test("ignores internal OpenCode agents entirely", async () => {
     const { plugin } = await makePlugin();
-    const { input, output } = makeIO({ agent: "title", providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ agent: "title", providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toBeUndefined();
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 
   test("treats managed subagent and guardian agents as soft", async () => {
     for (const agent of ["vv-implementer", "guardian"]) {
       const { plugin } = await makePlugin();
-      const { input, output } = makeIO({ agent, providerID: "deepseek" });
+      const { input, output } = makeParamsIO({ agent, providerID: "deepseek" });
 
-      await plugin["chat.message"]!(input as never, output as never);
-      expect(output.message.system).toContain("<peak_hours_notice>");
+      await expect(
+        plugin["chat.params"]!(input as never, output as never),
+      ).resolves.toBeUndefined();
     }
   });
 });

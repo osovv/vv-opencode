@@ -304,7 +304,7 @@ describe("display formatting", () => {
 describe("parsePeakHoursEntry", () => {
   test("seeds defaults for undefined and boolean values", () => {
     expect(parsePeakHoursEntry(undefined)).toEqual({
-      entry: { enabled: true, mode: "hard", graceActiveSessions: true, schedules: {} },
+      entry: { enabled: true, mode: "soft", graceActiveSessions: true, schedules: {} },
       warnings: [],
     });
     expect(parsePeakHoursEntry(true).entry.enabled).toBe(true);
@@ -352,7 +352,7 @@ describe("parsePeakHoursEntry", () => {
 
   test("rejects non-object non-boolean values with defaults", () => {
     const { entry, warnings } = parsePeakHoursEntry("hard");
-    expect(entry.mode).toBe("hard");
+    expect(entry.mode).toBe(DEFAULT_PEAK_HOURS_MODE);
     expect(warnings).toHaveLength(1);
   });
 });
