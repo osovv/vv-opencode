@@ -520,7 +520,7 @@ Nothing already in flight is ever killed:
 - subagent sessions, managed subagents, and `guardian` are always soft — the decision to work was already admitted at the parent level;
 - internal OpenCode agents (`compaction`, `title`, `summary`) are exempt entirely.
 
-Schedules match **providers, not models**, with alias normalization (`zai`/`zhipu`/`glm` → `z-ai`, `alibaba`/`dashscope` → `qwen`). Unknown providers are never warned about or blocked, and a malformed schedule logs a warning and disables that provider's schedule instead of blocking anything (fail-open).
+Schedules match **providers, not models**. Subscription plan provider ids from the OpenCode catalog (models.dev) are gated: `zai-coding-plan` and `zhipuai-coding-plan` map to the `z-ai` schedule, `alibaba-token-plan` and `alibaba-token-plan-cn` map to the `qwen` schedule. Bare pay-per-token API providers (`zai`, `zhipuai`, `alibaba`, `alibaba-cn`, `openai`, …) publish no peak surcharge and are never gated. Unknown providers are never warned about or blocked, and a malformed schedule logs a warning and disables that provider's schedule instead of blocking anything (fail-open).
 
 Config lives in `vvoc.json` under `plugins["peak-hours"]` and is conservatively materialized by `vvoc sync`/`init` — your edits are never overwritten. The built-in defaults carry a revision date because providers move these clocks (verified 2026-08-21: DeepSeek ×2 surcharge effective 2026-08-16; Z.AI weekday coding-plan clock; Qwen 22:00–08:00 UTC+8 off-peak plan window):
 

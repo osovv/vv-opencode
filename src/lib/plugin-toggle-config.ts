@@ -102,8 +102,11 @@ export const DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY = {
 // documentation; users own their copy after materialization and providers move
 // these clocks. deepseek: x2 surcharge windows effective 2026-08-16
 // (api-docs.deepseek.com). z-ai: GLM Coding Plan weekday clock, 14:00-18:00
-// UTC+8 (docs.z.ai). qwen: 22:00-08:00 UTC+8 off-peak, i.e. peak 00:00-14:00
-// UTC daily (Alibaba Model Studio token plan).
+// UTC+8 (docs.z.ai), matching the zai-coding-plan and zhipuai-coding-plan
+// provider ids. qwen: Alibaba Token Plan off-peak 22:00-08:00 UTC+8, i.e. peak
+// 00:00-14:00 UTC daily, matching the alibaba-token-plan and
+// alibaba-token-plan-cn provider ids. Bare pay-per-token API providers (zai,
+// zhipuai, alibaba, alibaba-cn) publish no peak surcharge and are never gated.
 export const DEFAULT_PEAK_HOURS_SCHEDULES_REVISION = "2026-08-21";
 
 export const DEFAULT_PEAK_HOURS_SCHEDULES = {

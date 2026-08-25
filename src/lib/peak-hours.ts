@@ -34,7 +34,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added the pure peak-hours schedule library shared by the server plugin and TUI banner.]
+//   LAST_CHANGE: [DIRECT-FIX - Restricted gating to subscription plan provider ids from the models.dev registry; bare pay-per-token APIs are never gated.]
 // END_CHANGE_SUMMARY
 
 export type PeakHoursClock = () => Date;
@@ -94,21 +94,16 @@ const WEEKDAY_INDEX: Record<string, number> = {
   Sat: 6,
 };
 
-// Known alternate spellings of schedule-owned provider ids observed across
-// OpenCode provider catalogs. Canonical keys: deepseek, z-ai, qwen.
+// Provider ids observed in the OpenCode provider registry (models.dev) that
+// bill peak-hour premiums on subscription plans. Canonical schedule keys:
+// deepseek, z-ai, qwen. Bare pay-per-token API providers (zai, zhipuai,
+// alibaba, alibaba-cn) are deliberately NOT gated: their tariffs publish no
+// peak surcharge. GLM Coding Plans and Alibaba Token Plans are gated.
 export const PROVIDER_KEY_ALIASES: Record<string, string> = {
-  zai: "z-ai",
-  z_ai: "z-ai",
-  zhipu: "z-ai",
-  bigmodel: "z-ai",
-  glm: "z-ai",
-  "qwen-cloud": "qwen",
-  "qwen-coder": "qwen",
-  alibaba: "qwen",
-  "alibaba-cloud": "qwen",
-  alibabacloud: "qwen",
-  dashscope: "qwen",
-  modelstudio: "qwen",
+  "zai-coding-plan": "z-ai",
+  "zhipuai-coding-plan": "z-ai",
+  "alibaba-token-plan": "qwen",
+  "alibaba-token-plan-cn": "qwen",
 };
 
 // START_CONTRACT: normalizeProviderId

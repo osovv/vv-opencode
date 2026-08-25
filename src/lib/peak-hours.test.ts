@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added deterministic table-driven coverage for the peak-hours library.]
+//   LAST_CHANGE: [DIRECT-FIX - Covered registry-verified plan aliases and the bare-API no-gating rule.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -216,23 +216,30 @@ describe("provider key resolution", () => {
   };
 
   test("normalizes separators and case", () => {
-    expect(normalizeProviderId(" Z_Ai ")).toBe("z-ai");
-    expect(normalizeProviderId("Alibaba Cloud")).toBe("alibaba-cloud");
+    expect(normalizeProviderId(" Zai_Coding_Plan ")).toBe("zai-coding-plan");
+    expect(normalizeProviderId("Alibaba Token Plan")).toBe("alibaba-token-plan");
   });
 
-  test("matches exact keys first, then aliases", () => {
+  test("matches exact keys first, then subscription plan aliases", () => {
     expect(resolveProviderKey("deepseek", schedules)).toBe("deepseek");
-    expect(resolveProviderKey("z-ai", schedules)).toBe("z-ai");
-    expect(resolveProviderKey("ZAI", schedules)).toBe("z-ai");
-    expect(resolveProviderKey("zhipu", schedules)).toBe("z-ai");
-    expect(resolveProviderKey("glm", schedules)).toBe("z-ai");
-    expect(resolveProviderKey("alibaba", schedules)).toBe("qwen");
-    expect(resolveProviderKey("dashscope", schedules)).toBe("qwen");
+    expect(resolveProviderKey("zai-coding-plan", schedules)).toBe("z-ai");
+    expect(resolveProviderKey("ZAI-CODING-PLAN", schedules)).toBe("z-ai");
+    expect(resolveProviderKey("zhipuai-coding-plan", schedules)).toBe("z-ai");
+    expect(resolveProviderKey("alibaba-token-plan", schedules)).toBe("qwen");
+    expect(resolveProviderKey("Alibaba-Token-Plan-CN", schedules)).toBe("qwen");
     expect(resolveProviderKey("openai", schedules)).toBeUndefined();
   });
 
+  test("bare pay-per-token API providers are never gated", () => {
+    expect(resolveProviderKey("zai", schedules)).toBeUndefined();
+    expect(resolveProviderKey("zhipuai", schedules)).toBeUndefined();
+    expect(resolveProviderKey("alibaba", schedules)).toBeUndefined();
+    expect(resolveProviderKey("alibaba-cn", schedules)).toBeUndefined();
+    expect(resolveProviderKey("alibaba-coding-plan", schedules)).toBeUndefined();
+  });
+
   test("aliases do not resolve when the schedule key is absent", () => {
-    expect(resolveProviderKey("zai", { deepseek: { windows: [] } })).toBeUndefined();
+    expect(resolveProviderKey("zai-coding-plan", { deepseek: { windows: [] } })).toBeUndefined();
   });
 });
 
