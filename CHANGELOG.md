@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.1 (2026-08-25)</small>
+
+### Summary
+
+This release fixes the peak-hours plugin so peak-hour surcharge scheduling is applied only to subscription plan provider ids verified in the OpenCode provider registry (models.dev). GLM Coding Plan ids (`zai-coding-plan`, `zhipuai-coding-plan`) map to the Z.AI schedule, while Alibaba Token Plan ids (`alibaba-token-plan`, `alibaba-token-plan-cn`) map to the Qwen schedule; bare pay-per-token API providers such as `zai`, `zhipuai`, `alibaba`, `alibaba-cn`, and `openai` are never gated because their tariffs publish no peak surcharge. This prevents users on pay-per-token APIs from being incorrectly warned about or blocked by peak-hour windows, while unknown providers remain unblocked and malformed schedules still fail open.
+
+* fix(peak-hours): gate subscription plan provider ids only with registry-verified aliases ([61b84bb](https://github.com/osovv/vv-opencode/commit/61b84bb))
+
 ## <small>1.3.6-rc.0 (2026-08-21)</small>
 
 ### Summary
