@@ -24,10 +24,10 @@ describe("session model cache", () => {
   test("stores and returns model info per session", () => {
     const cache = new SessionModelCache();
     cache.set("ses_1", { providerID: "deepseek", modelID: "deepseek-v4-flash" });
-    cache.set("ses_2", { providerID: "moonshotai", modelID: "kimi-k3" });
+    cache.set("ses_2", { providerID: "kimi-for-coding", modelID: "k3" });
 
     expect(cache.get("ses_1")).toEqual({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
-    expect(cache.get("ses_2")).toEqual({ providerID: "moonshotai", modelID: "kimi-k3" });
+    expect(cache.get("ses_2")).toEqual({ providerID: "kimi-for-coding", modelID: "k3" });
     expect(cache.get("ses_missing")).toBeUndefined();
   });
 

@@ -947,7 +947,7 @@ describe("HashlineEditPlugin routing", () => {
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
       const chatHook = plugin["chat.message"]!;
-      const message = userMessage({ providerID: "moonshotai", modelID: "kimi-k3" });
+      const message = userMessage({ providerID: "kimi-for-coding", modelID: "k3" });
       await hook_call(chatHook, "session-1", message);
 
       const { context } = createToolContext(directory);

@@ -156,11 +156,11 @@ const KIMI_PATCH = {
   models: {
     "vv-kimi-k3-max": {
       name: "VV Kimi K3 Max",
-      id: "kimi-k3",
+      id: "k3",
       variants: {},
       limit: {
-        context: 1000000,
-        output: 1000000,
+        context: 1048576,
+        output: 131072,
       },
       modalities: {
         input: ["text", "image", "video"],
@@ -239,9 +239,9 @@ const PATCH_PROVIDER_PRESETS = {
   },
   kimi: {
     kind: "provider-object",
-    providerID: "moonshotai",
+    providerID: "kimi-for-coding",
     value: KIMI_PATCH,
-    summary: "provider.moonshotai.models.vv-kimi-k3-max patched",
+    summary: "provider.kimi-for-coding.models.vv-kimi-k3-max patched",
   },
   alibaba: {
     kind: "provider-object",

@@ -52,15 +52,15 @@ describe("resolvePatchProviderPreset", () => {
   test("returns the built-in kimi alias patch", () => {
     expect(resolvePatchProviderPreset("kimi")).toMatchObject({
       kind: "provider-object",
-      providerID: "moonshotai",
-      summary: "provider.moonshotai.models.vv-kimi-k3-max patched",
+      providerID: "kimi-for-coding",
+      summary: "provider.kimi-for-coding.models.vv-kimi-k3-max patched",
     });
     const value = JSON.parse(
       JSON.stringify(
         (resolvePatchProviderPreset("kimi") as { value: Record<string, unknown> }).value,
       ),
     );
-    expect(value.models["vv-kimi-k3-max"].id).toBe("kimi-k3");
+    expect(value.models["vv-kimi-k3-max"].id).toBe("k3");
     expect(value.models["vv-kimi-k3-max"].options.reasoningEffort).toBe("max");
   });
 

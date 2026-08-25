@@ -35,7 +35,7 @@ describe("hashline routing config", () => {
       }),
     ).toBe("str_replace_editor");
     expect(
-      resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "moonshotai", modelID: "kimi-k3" }),
+      resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "kimi-for-coding", modelID: "k3" }),
     ).toBe("replace");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {

@@ -60,12 +60,12 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     orchestration: { profile: "balanced" },
   },
   "vv-kimi": {
-    description: "Starter Moonshot role assignments for built-in vvoc roles.",
+    description: "Starter Kimi Coding Plan role assignments for built-in vvoc roles.",
     agents: {
-      default: "moonshotai/kimi-k3",
-      fast: "moonshotai/kimi-k2.7-code-highspeed",
-      smart: "moonshotai/vv-kimi-k3-max",
-      reviewer: "moonshotai/kimi-k2.7-code",
+      default: "kimi-for-coding/k3",
+      fast: "kimi-for-coding/kimi-for-coding-highspeed",
+      smart: "kimi-for-coding/vv-kimi-k3-max",
+      reviewer: "kimi-for-coding/kimi-for-coding",
     },
     orchestration: { profile: "single-session" },
   },
@@ -104,7 +104,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     agents: {
       default: "deepseek/deepseek-v4-flash",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
-      smart: "moonshotai/vv-kimi-k3-max",
+      smart: "kimi-for-coding/vv-kimi-k3-max",
       reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "single-session" },
