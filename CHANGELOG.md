@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.2 (2026-08-25)</small>
+
+### Summary
+
+This release moves all Kimi presets and provider patches from the previous provider to the kimi-for-coding subscription provider, updating the vv-kimi role assignments for default, fast, smart, and reviewer agents with the correct provider-scoped model IDs (such as k3 instead of the older kimi-k3 ID) and refreshed context and output limits. This matters to users because applying a Kimi preset now resolves to the intended subscription models directly, with accurate limits and routing behavior, so configured agents connect to the right endpoints without stale provider or model identifiers.
+
+* feat(presets): move kimi presets and patches to the kimi-for-coding subscription provider ([0029fda](https://github.com/osovv/vv-opencode/commit/0029fda))
+
 ## <small>1.3.6-rc.1 (2026-08-25)</small>
 
 ### Summary
