@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.4 (2026-08-26)</small>
+
+### Summary
+
+This release improves edit reliability by routing edit cohorts to the host's built-in edit tool. The hashline-edit plugin no longer registers its own `edit` tool or replace engine, so qwen, kimi, and glm sessions now edit through OpenCode's native matching layers, prior-read enforcement, and unified diff output instead of the shadowing replace profile that caused duplicated lines and false "not read/drifted" rejections. Routing now uses native tool names (`apply_patch | edit | str_replace_editor | hashline_edit`), with deepseek mapped to `str_replace_editor`, gpt/codex to `apply_patch`, and unmatched models to `hashline_edit`; each session exposes exactly one edit tool, the removed `replace`/`passthrough` values are rejected loudly, and the vvoc.json schema and README are updated to match.
+
+* feat(hashline-edit): route edit cohorts to the host built-in edit ([d6bdc2f](https://github.com/osovv/vv-opencode/commit/d6bdc2f))
+
 ## <small>1.3.6-rc.3 (2026-08-25)</small>
 
 ### Summary
