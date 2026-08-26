@@ -26,8 +26,8 @@ import {
 } from "./hashline-edit/routing.js";
 
 describe("hashline routing config", () => {
-  test("default table routes deepseek, kimi, qwen, glm, gpt, codex and defaults to hashline", () => {
-    expect(DEFAULT_ROUTING_CONFIG.default).toBe("hashline");
+  test("default table routes deepseek, kimi, qwen, glm, gpt, codex and defaults to hashline_edit", () => {
+    expect(DEFAULT_ROUTING_CONFIG.default).toBe("hashline_edit");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
         providerID: "deepseek",
@@ -36,31 +36,31 @@ describe("hashline routing config", () => {
     ).toBe("str_replace_editor");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "kimi-for-coding", modelID: "k3" }),
-    ).toBe("replace");
+    ).toBe("edit");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
         providerID: "alibaba-token-plan",
         modelID: "qwen3.8-max",
       }),
-    ).toBe("replace");
+    ).toBe("edit");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "openai", modelID: "gpt-5.4" }),
-    ).toBe("passthrough");
+    ).toBe("apply_patch");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "openai", modelID: "gpt-5.3-codex" }),
-    ).toBe("passthrough");
+    ).toBe("apply_patch");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
         providerID: "zai-coding-plan",
         modelID: "glm-5.1",
       }),
-    ).toBe("replace");
+    ).toBe("edit");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
         providerID: "minimax-coding-plan",
         modelID: "MiniMax-M2.7",
       }),
-    ).toBe("hashline");
+    ).toBe("hashline_edit");
   });
 
   test("parseRoutingConfig returns defaults for undefined and null", () => {
@@ -70,22 +70,25 @@ describe("hashline routing config", () => {
 
   test("parseRoutingConfig parses default and ordered rules", () => {
     const parsed = parseRoutingConfig({
-      default: "replace",
-      rules: { glm: "replace", minimax: "hashline" },
+      default: "edit",
+      rules: { glm: "edit", minimax: "hashline_edit" },
     });
-    expect(parsed.default).toBe("replace");
+    expect(parsed.default).toBe("edit");
     expect(parsed.rules).toEqual([
-      { pattern: "glm", mode: "replace" },
-      { pattern: "minimax", mode: "hashline" },
+      { pattern: "glm", mode: "edit" },
+      { pattern: "minimax", mode: "hashline_edit" },
     ]);
   });
 
   test("parseRoutingConfig rejects invalid modes, non-object rules, empty patterns, and non-object config", () => {
     expect(() => parseRoutingConfig({ default: "patch" })).toThrow(/must be one of/);
+    expect(() => parseRoutingConfig({ default: "replace" })).toThrow(/must be one of/);
+    expect(() => parseRoutingConfig({ default: "passthrough" })).toThrow(/must be one of/);
     expect(() => parseRoutingConfig({ rules: ["deepseek"] })).toThrow(/rules must be an object/);
-    expect(() => parseRoutingConfig({ rules: { "": "replace" } })).toThrow(/non-empty/);
+    expect(() => parseRoutingConfig({ rules: { "": "edit" } })).toThrow(/non-empty/);
     expect(() => parseRoutingConfig({ rules: { deepseek: "patch" } })).toThrow(/must be one of/);
-    expect(() => parseRoutingConfig("hashline")).toThrow(/must be an object/);
+    expect(() => parseRoutingConfig({ rules: { deepseek: "replace" } })).toThrow(/must be one of/);
+    expect(() => parseRoutingConfig("hashline_edit")).toThrow(/must be an object/);
   });
 
   test("parseHashlineEditPluginEntry resolves the boolean-or-object union", () => {
@@ -104,10 +107,10 @@ describe("hashline routing config", () => {
 
     const custom = parseHashlineEditPluginEntry({
       enabled: true,
-      routing: { default: "hashline", rules: { qwen: "hashline" } },
+      routing: { default: "hashline_edit", rules: { qwen: "hashline_edit" } },
     });
     expect(custom.enabled).toBe(true);
-    expect(custom.routing.rules).toEqual([{ pattern: "qwen", mode: "hashline" }]);
+    expect(custom.routing.rules).toEqual([{ pattern: "qwen", mode: "hashline_edit" }]);
 
     expect(parseHashlineEditPluginEntry({}).enabled).toBe(true);
     expect(() => parseHashlineEditPluginEntry("yes")).toThrow(/boolean or an object/);
@@ -123,20 +126,20 @@ describe("hashline routing config", () => {
 describe("hashline routing resolution", () => {
   test("matches providerID before modelID across rule order", () => {
     const config = parseRoutingConfig({
-      rules: { specialmodel: "replace", zai: "str_replace_editor" },
+      rules: { specialmodel: "edit", zai: "str_replace_editor" },
     });
     // Provider-level rule wins even though the model-level pattern is listed first.
     expect(resolveEditMode(config, { providerID: "zai", modelID: "specialmodel-x" })).toBe(
       "str_replace_editor",
     );
     expect(resolveEditMode(config, { providerID: "other", modelID: "specialmodel-x" })).toBe(
-      "replace",
+      "edit",
     );
   });
 
   test("first matching rule wins within a pass", () => {
     const config = parseRoutingConfig({
-      rules: { deepseek: "str_replace_editor", "deepseek-v4-flash": "replace" },
+      rules: { deepseek: "str_replace_editor", "deepseek-v4-flash": "edit" },
     });
     expect(resolveEditMode(config, { providerID: "deepseek", modelID: "deepseek-v4-flash" })).toBe(
       "str_replace_editor",
@@ -152,21 +155,21 @@ describe("hashline routing resolution", () => {
     ).toBe("str_replace_editor");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "MOONSHOTAI", modelID: "Kimi-K3" }),
-    ).toBe("replace");
+    ).toBe("edit");
   });
 
   test("unknown or missing models fall back to the default mode", () => {
-    expect(resolveEditMode(DEFAULT_ROUTING_CONFIG, undefined)).toBe("hashline");
-    expect(resolveEditMode(DEFAULT_ROUTING_CONFIG, {})).toBe("hashline");
+    expect(resolveEditMode(DEFAULT_ROUTING_CONFIG, undefined)).toBe("hashline_edit");
+    expect(resolveEditMode(DEFAULT_ROUTING_CONFIG, {})).toBe("hashline_edit");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
         providerID: "anthropic",
         modelID: "claude-opus-4-5",
       }),
-    ).toBe("hashline");
-    const config = parseRoutingConfig({ default: "replace" });
+    ).toBe("hashline_edit");
+    const config = parseRoutingConfig({ default: "edit" });
     expect(resolveEditMode(config, { providerID: "anthropic", modelID: "claude-opus-4-5" })).toBe(
-      "replace",
+      "edit",
     );
   });
 });

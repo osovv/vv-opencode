@@ -815,13 +815,13 @@ async function writeProjectVvocConfig(directory: string, pluginsEntry: unknown):
 }
 
 describe("HashlineEditPlugin routing", () => {
-  test("registers hashline_edit, replace edit, and str_replace_editor tools", async () => {
+  test("registers hashline_edit and str_replace_editor tools only (built-in edit stays host-owned)", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-reg-"));
     try {
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
       expect(plugin.tool?.hashline_edit).toBeDefined();
-      expect(plugin.tool?.edit).toBeDefined();
       expect(plugin.tool?.str_replace_editor).toBeDefined();
+      expect(plugin.tool?.edit).toBeUndefined();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -939,37 +939,40 @@ describe("HashlineEditPlugin routing", () => {
     }
   });
 
-  test("replace edit enforces prior read and applies exact matches", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-replace-"));
+  test("built-in edit stays host-owned: not registered, never blocked, visible for the edit cohort", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-builtin-edit-"));
     try {
-      const filePath = join(directory, "sample.ts");
-      await writeFile(filePath, "alpha\nbeta\ngamma\n", "utf8");
-
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
       const chatHook = plugin["chat.message"]!;
-      const message = userMessage({ providerID: "kimi-for-coding", modelID: "k3" });
-      await hook_call(chatHook, "session-1", message);
 
-      const { context } = createToolContext(directory);
-      const editTool = plugin.tool!.edit;
+      // The plugin registers no edit tool: the host built-in edit is the only
+      // edit runtime, and tool.execute.before must not block it.
+      expect(plugin.tool?.edit).toBeUndefined();
+      const before = plugin["tool.execute.before"]!;
+      await expect(
+        before({ tool: "edit", sessionID: "session-1", callID: "call-1" } as never, {} as never),
+      ).resolves.toBeUndefined();
 
-      const unread = await editTool.execute(
-        { filePath, oldString: "beta", newString: "BETA" },
-        context as never,
-      );
-      expect(unread).toContain("has not been read in this session");
+      // The edit cohort (kimi) keeps the built-in edit visible and hides the
+      // plugin profiles; its read output carries no hash anchors.
+      const kimiMessage = userMessage({ providerID: "kimi-for-coding", modelID: "k3" });
+      await hook_call(chatHook, "session-1", kimiMessage);
+      expect(kimiMessage.tools).toEqual({
+        hashline_edit: false,
+        str_replace_editor: false,
+      });
+      expect(kimiMessage.tools?.edit).toBeUndefined();
 
+      const output = {
+        title: directory,
+        output: "1: const first = 1;\n2: const second = 2;",
+        metadata: {},
+      };
       await plugin["tool.execute.after"]?.(
-        { tool: "read", sessionID: "session-1", callID: "c1", args: { filePath } } as never,
-        { title: "t", output: "1: alpha", metadata: {} } as never,
+        { tool: "read", sessionID: "session-1", callID: "call-1", args: {} } as never,
+        output as never,
       );
-
-      const result = await editTool.execute(
-        { filePath, oldString: "beta", newString: "BETA" },
-        context as never,
-      );
-      expect(result).toContain(`Updated ${filePath}`);
-      expect(await readFile(filePath, "utf8")).toBe("alpha\nBETA\ngamma\n");
+      expect(output.output).toBe("1: const first = 1;\n2: const second = 2;");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -1011,7 +1014,7 @@ describe("HashlineEditPlugin routing", () => {
     try {
       await writeProjectVvocConfig(directory, {
         enabled: true,
-        routing: { default: "hashline", rules: { qwen: "hashline" } },
+        routing: { default: "hashline_edit", rules: { qwen: "hashline_edit" } },
       });
 
       const plugin = await HashlineEditPlugin(createPluginInput(directory));

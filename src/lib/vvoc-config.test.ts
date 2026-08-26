@@ -182,14 +182,14 @@ describe("plugins union parsing and schema", () => {
       docWithPlugins({
         "hashline-edit": {
           enabled: true,
-          routing: { default: "hashline", rules: { qwen: "replace" } },
+          routing: { default: "hashline_edit", rules: { qwen: "edit" } },
         },
       }),
       "test",
     );
     expect(parsed.plugins["hashline-edit"]).toEqual({
       enabled: true,
-      routing: { default: "hashline", rules: { qwen: "replace" } },
+      routing: { default: "hashline_edit", rules: { qwen: "edit" } },
     });
   });
 
@@ -217,7 +217,7 @@ describe("plugins union parsing and schema", () => {
     const valid = JSON.parse(
       docWithPlugins({
         guardian: false,
-        "hashline-edit": { enabled: true, routing: { default: "hashline" } },
+        "hashline-edit": { enabled: true, routing: { default: "hashline_edit" } },
       }),
     );
     expect(validateVvocConfigDocument(valid)).toEqual([]);

@@ -30,7 +30,7 @@ vv-opencode addresses each of these:
 - **Review-driven execution** — implementation, spec review, and code review are separate steps with bounded retries, not one agent silently doing everything.
 - **A state machine for multi-agent work** — explicit work items, required reviewers, round limits, and hard stops instead of free-form subagent loops.
 - **Portable model choices** — agents reference roles like `vv-role:smart` and `vv-role:fast`; you map roles to concrete models per machine or project and switch stacks with one preset command.
-- **Per-model editing** — each model edits through the tool it knows best: DeepSeek gets its `str_replace_editor` contract, GLM/Qwen/Kimi get exact-match replace, and GPT keeps the host editing path. Routing is resolved dynamically per session, and every edit is anchored to a fresh file read — fewer wrong-line and stale-context errors.
+- **Per-model editing** — each model edits through the tool it knows best: DeepSeek gets its `str_replace_editor` contract, GLM/Qwen/Kimi use the host built-in `edit`, GPT keeps the host `apply_patch` path, and unmatched models get the plugin's `hashline_edit`. Routing is resolved dynamically per session and exposes exactly one edit tool to each model.
 - **Provider-neutral web tools** — agents get one canonical `web_search` and `web_fetch` contract backed by Exa, Brave, Z.AI, native retrieval, or Spider, instead of provider-specific search and reader schemas leaking into your prompts.
 - **Long-run safety** — Guardian auto-approves routine low-risk permissions (risky ones stay in OpenCode's manual approval flow), and secrets are redacted before they reach the model.
 - **Reproducible setup** — `vvoc install` / `vvoc sync` recreate the same workflow on any machine or project.
@@ -167,7 +167,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 | **WorkflowPlugin** | A state machine over multi-agent work: explicit work items, required reviewers, bounded implementation/review rounds, and hard stops when more context is needed. |
 | **ModelRolesPlugin** | Semantic model roles (`vv-role:smart`, `vv-role:fast`, …) instead of hardcoded model IDs in agents, subagents, and commands — resolved per machine or project at startup. |
 | **GuardianPlugin** | Keeps long or AFK runs moving by auto-approving routine low-risk permission requests; anything risky stays in OpenCode's normal manual approval flow. |
-| **HashlineEditPlugin** | Routes each model to the edit tool it knows best (DeepSeek `str_replace_editor`, exact replace for GLM/Qwen/Kimi, host path for GPT) and ties every edit to a fresh `read`, reducing wrong-line and stale-context edits. |
+| **HashlineEditPlugin** | Routes each model to exactly one native edit tool (host `edit` for GLM/Qwen/Kimi, host `apply_patch` for GPT, `str_replace_editor` for DeepSeek, `hashline_edit` for unmatched models) and hides the other edit tools per session. |
 | **SystemContextInjectionPlugin** | Injects the work policy selected by the orchestration profile into vv-controller at startup, plus skill discovery; subagents stay unpolluted. |
 | **SecretsRedactionPlugin** | Redacts tokens, keys, emails, and other sensitive values before messages reach the model, restoring them only where local execution needs the originals. |
 | **WebToolsPlugin** | Two provider-neutral tools — `web_search` and `web_fetch` — over Exa, Brave, Z.AI, native retrieval, or Spider, with permission checks and normalized output. |
@@ -425,14 +425,14 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 
 ### Edit format routing
 
-`HashlineEditPlugin` resolves an edit mode per session model and exposes only the matching edit tool to that model:
+`HashlineEditPlugin` resolves an edit mode per session model and exposes exactly one native edit tool to that model — either a host-owned tool or one of the plugin profiles:
 
-- `hashline` — the `hashline_edit` tool with `LINE#HASH#ANCHOR` references and anchored read output (default for unmatched models).
-- `replace` — the `edit` tool with exact `oldString`/`newString` replacement, prior-read enforcement, and visible unicode/trailing-whitespace fallbacks.
-- `str_replace_editor` — the DeepSeek dsh contract (`view`/`create`/`str_replace`/`insert`) with exact-verbatim matching.
-- `passthrough` — no vvoc edit tool is exposed; the host-provided editing path stays in charge.
+- `edit` — the host built-in edit (`filePath`/`oldString`/`newString`/`replaceAll`) with its native matching layers, prior-read enforcement, and unified diff output. Served to `qwen`, `kimi`, and `glm` cohorts; the plugin registers no `edit` tool, so the host runtime stays in charge.
+- `apply_patch` — the host built-in patch tool, shown by the host gate to `gpt`/`codex` models; the plugin never overrides or hides it.
+- `str_replace_editor` — the plugin's DeepSeek dsh contract (`view`/`create`/`str_replace`/`insert`) with exact-verbatim matching.
+- `hashline_edit` — the plugin's hash-anchored tool with `LINE#HASH#ANCHOR` references and anchored read output (default for unmatched models).
 
-The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwen`, and `glm` to `replace`, and `gpt`/`codex` to `passthrough`; everything else stays on `hashline`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins.
+The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwen`, and `glm` to `edit`, and `gpt`/`codex` to `apply_patch`; everything else stays on `hashline_edit`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins. For every mode the plugin hides the other edit tools from the model — including the host `edit` for the `str_replace_editor`/`hashline_edit` cohorts — so each session sees exactly one editing tool.
 
 `vvoc sync` and `vvoc init` write this default table into `vvoc.json` so it is visible and editable. Materialization is conservative: a routing value you have changed is never overwritten; the table is only filled in where it is missing. Override routing in `vvoc.json` (schema v3) — the `plugins["hashline-edit"]` entry accepts a boolean or an object:
 

@@ -182,7 +182,7 @@ describe("materializeHashlineEditEntry", () => {
   });
 
   test("preserves a user routing block that differs from the default", () => {
-    const customRouting = { default: "hashline", rules: { qwen: "hashline" } };
+    const customRouting = { default: "hashline_edit", rules: { qwen: "hashline_edit" } };
     expect(materializeHashlineEditEntry({ enabled: true, routing: customRouting })).toEqual({
       enabled: true,
       routing: customRouting,
@@ -198,10 +198,10 @@ describe("materializeHashlineEditEntry", () => {
 
   test("does not mutate the shared default routing table", () => {
     const first = materializeHashlineEditEntry(true);
-    (first.routing as { rules: Record<string, string> }).rules.qwen = "hashline";
+    (first.routing as { rules: Record<string, string> }).rules.qwen = "hashline_edit";
     const second = materializeHashlineEditEntry(true);
-    expect((second.routing as { rules: Record<string, string> }).rules.qwen).toBe("replace");
-    expect(DEFAULT_HASHLINE_EDIT_ROUTING.rules.qwen).toBe("replace");
+    expect((second.routing as { rules: Record<string, string> }).rules.qwen).toBe("edit");
+    expect(DEFAULT_HASHLINE_EDIT_ROUTING.rules.qwen).toBe("edit");
   });
 });
 // END_BLOCK_MATERIALIZE_TESTS

@@ -1,20 +1,20 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Route per-model edit tooling: register hashline_edit, replace-profile edit, and dsh str_replace_editor; resolve the session edit mode from vvoc routing config; expose only the profile tool to each model; and transform read output with anchors for hashline sessions.
-//   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, tool.execute.before safety net, routed read transformation, hashline/replace/str_replace_editor execution, bounded post-edit diff feedback, and editMode telemetry metadata.
-//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/replace-engine.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
+//   PURPOSE: Route per-model edit tooling: register hashline_edit and dsh str_replace_editor; resolve the session edit mode from vvoc routing config; expose exactly one edit tool per model (the host built-in edit/apply_patch for their cohorts, the plugin profiles otherwise); and transform read output with anchors for hashline sessions.
+//   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, tool.execute.before safety net, routed read transformation, hashline/str_replace_editor execution, bounded post-edit diff feedback, and editMode telemetry metadata.
+//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineEditPlugin - Registers routed edit tools (hashline_edit, edit, str_replace_editor), per-model tool visibility, and the routed read-output enhancer.
+//   HashlineEditPlugin - Registers routed edit tools (hashline_edit, str_replace_editor), per-model tool visibility, and the routed read-output enhancer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Added per-model edit-format routing with native replace and dsh str_replace_editor profiles, per-model tool visibility via chat.message, safety-net rejection, and editMode telemetry.]
+//   LAST_CHANGE: [v0.9.0 - Removed the replace profile: the plugin no longer registers an `edit` tool, so the host built-in edit serves qwen/kimi/glm cohorts with its native layers. Routing vocabulary is apply_patch|edit|str_replace_editor|hashline_edit.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
@@ -25,7 +25,6 @@ import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
 import { computeAnchorHash, computeLineHash } from "./hash-computation.js";
 import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.js";
-import { applyReplaceEdit, formatReplaceSuccess } from "./replace-engine.js";
 import {
   parseHashlineEditPluginEntry,
   resolveEditMode,
@@ -40,7 +39,7 @@ import {
   type StrReplaceEditorFs,
   type StrReplaceEditorFsEntry,
 } from "./str-replace-editor.js";
-import { HASHLINE_EDIT_DESCRIPTION, REPLACE_EDIT_DESCRIPTION } from "./tool-description.js";
+import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
 import { HashlineMismatchError } from "./validation.js";
 import { loadVvocConfig } from "../../lib/config-layers.js";
@@ -55,7 +54,16 @@ const COLON_READ_LINE_PATTERN = /^\s*(\d+): ?(.*)$/;
 const PIPE_READ_LINE_PATTERN = /^\s*(\d+)\| ?(.*)$/;
 
 // START_BLOCK_ROUTING_CONSTANTS
-const EDIT_TYPE_TOOLS = ["hashline_edit", "edit", "str_replace_editor"] as const;
+// Edit tools whose visibility chat.message manages. Includes the host
+// built-in `edit` so deepseek/hashline cohorts see exactly one edit tool;
+// `apply_patch` is deliberately absent (its visibility is owned by the host
+// gate and never forced by this plugin).
+const EDIT_VISIBILITY_TOOLS = ["hashline_edit", "edit", "str_replace_editor"] as const;
+
+// Plugin-owned edit tools only. The host built-in edit/apply_patch are never
+// registered or blocked by this plugin; they serve the `edit`/`apply_patch`
+// routing modes with their native behavior.
+const EDIT_TYPE_TOOLS = ["hashline_edit", "str_replace_editor"] as const;
 
 type EditTypeTool = (typeof EDIT_TYPE_TOOLS)[number];
 
@@ -65,13 +73,15 @@ function isEditTypeTool(toolName: string): toolName is EditTypeTool {
 
 function visibleToolsForMode(mode: EditMode): EditTypeTool[] {
   switch (mode) {
-    case "hashline":
+    case "hashline_edit":
       return ["hashline_edit"];
-    case "replace":
-      return ["edit"];
     case "str_replace_editor":
       return ["str_replace_editor"];
-    case "passthrough":
+    // The host owns these tools; the plugin exposes none of its own edit
+    // tools for `edit` (built-in edit stays visible) and `apply_patch`
+    // (the host gate shows it to gpt/codex cohorts).
+    case "edit":
+    case "apply_patch":
       return [];
   }
 }
@@ -82,17 +92,6 @@ type HashlineEditArgs = {
   edits: RawHashlineEdit[];
   delete?: boolean;
   rename?: string;
-};
-
-type ReplaceEditArgs = {
-  filePath?: string;
-  file_path?: string;
-  oldString?: string;
-  old_string?: string;
-  newString?: string;
-  new_string?: string;
-  replaceAll?: boolean;
-  replace_all?: boolean;
 };
 
 type ReadToolArgs = {
@@ -567,91 +566,6 @@ async function executeHashlineEdit(
 }
 // END_BLOCK_HASHLINE_EXECUTE
 
-// START_BLOCK_REPLACE_EXECUTE
-async function executeReplaceEdit(
-  args: ReplaceEditArgs,
-  context: ToolContext,
-  sessionID: string,
-  fileCache: SessionFileCache,
-  telemetry: EditTelemetry,
-): Promise<string> {
-  const filePath = args.filePath ?? args.file_path;
-  if (!filePath || filePath.trim().length === 0) {
-    return "Error: filePath is required (filePath or file_path)";
-  }
-  const oldString = args.oldString ?? args.old_string ?? "";
-  const newString = args.newString ?? args.new_string ?? "";
-  const replaceAll = args.replaceAll ?? args.replace_all ?? false;
-
-  try {
-    const fileSnapshot = await statSnapshot(filePath);
-
-    if (fileSnapshot === undefined && oldString === "") {
-      await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, newString, "utf8");
-      const created = await statSnapshot(filePath);
-      if (created) {
-        fileCache.record(sessionID, filePath, created);
-      }
-      publishSuccessMetadata({
-        context,
-        filePath,
-        beforeContent: "",
-        afterContent: newString,
-        noopEdits: 0,
-        deduplicatedEdits: 0,
-        telemetry,
-      });
-      return `Created ${filePath}\n${formatReplaceSuccess(filePath, "", {
-        content: newString,
-        layer: "exact",
-        replacements: 1,
-        warnings: [],
-      })}`;
-    }
-
-    if (fileSnapshot === undefined) {
-      return `Error: File not found: ${filePath}`;
-    }
-
-    const verdict = fileCache.check(sessionID, filePath, fileSnapshot);
-    if (verdict === "unread") {
-      return `Error: ${filePath} has not been read in this session. Use the Read tool to load the file first, then retry the edit.`;
-    }
-    if (verdict === "drifted") {
-      return `Error: ${filePath} changed since it was last read. Re-read the file and retry the edit against the current content.`;
-    }
-
-    const rawContent = await readFile(filePath, "utf8");
-    const envelope = canonicalizeFileText(rawContent);
-    const result = applyReplaceEdit(envelope.content, { oldString, newString, replaceAll });
-    if (!result.ok) {
-      return `Error: ${result.error}`;
-    }
-
-    await writeFile(filePath, restoreFileText(result.content, envelope), "utf8");
-    const updated = await statSnapshot(filePath);
-    if (updated) {
-      fileCache.record(sessionID, filePath, updated);
-    }
-
-    publishSuccessMetadata({
-      context,
-      filePath,
-      beforeContent: envelope.content,
-      afterContent: result.content,
-      noopEdits: 0,
-      deduplicatedEdits: 0,
-      telemetry,
-    });
-    return formatReplaceSuccess(filePath, envelope.content, result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return `Error: ${message}`;
-  }
-}
-// END_BLOCK_REPLACE_EXECUTE
-
 // START_BLOCK_STR_REPLACE_EXECUTE
 async function executeStrReplaceEditor(
   args: StrReplaceEditorArgs,
@@ -727,7 +641,11 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
       const message = output.message;
       if (!message) return;
       const toolsMap = message.tools ?? {};
-      for (const toolName of EDIT_TYPE_TOOLS) {
+      for (const toolName of EDIT_VISIBILITY_TOOLS) {
+        if (toolName === "edit" && mode === "edit") {
+          // The host built-in edit stays visible for the edit cohort.
+          continue;
+        }
         if (!visible.has(toolName)) {
           toolsMap[toolName] = false;
         }
@@ -766,7 +684,7 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
       if (typeof output.output !== "string") {
         return;
       }
-      if (resolveSessionMode(input.sessionID) !== "hashline") {
+      if (resolveSessionMode(input.sessionID) !== "hashline_edit") {
         return;
       }
       if (!isHashlineEligibleReadOutput(output.output)) {
@@ -805,34 +723,6 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
         },
         execute: (args, context) =>
           executeHashlineEdit(args, context, telemetryFor(context.sessionID)),
-      }),
-
-      edit: tool({
-        description: REPLACE_EDIT_DESCRIPTION,
-        args: {
-          filePath: z.string().optional().describe("Absolute path to the file to modify"),
-          file_path: z
-            .string()
-            .optional()
-            .describe("Alias of filePath (snake_case form used by some models)"),
-          oldString: z.string().optional().describe("Exact text to replace"),
-          old_string: z.string().optional().describe("Alias of oldString"),
-          newString: z.string().optional().describe("Replacement text"),
-          new_string: z.string().optional().describe("Alias of newString"),
-          replaceAll: z
-            .boolean()
-            .optional()
-            .describe("Replace every occurrence instead of requiring a unique match"),
-          replace_all: z.boolean().optional().describe("Alias of replaceAll"),
-        },
-        execute: (args, context) =>
-          executeReplaceEdit(
-            args,
-            context,
-            context.sessionID,
-            fileCache,
-            telemetryFor(context.sessionID),
-          ),
       }),
 
       str_replace_editor: tool({

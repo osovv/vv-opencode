@@ -28,7 +28,7 @@
 import { DEFAULT_HASHLINE_EDIT_ROUTING } from "../../lib/plugin-toggle-config.js";
 
 // START_BLOCK_VOCABULARY
-export const EDIT_MODES = ["hashline", "replace", "str_replace_editor", "passthrough"] as const;
+export const EDIT_MODES = ["apply_patch", "edit", "str_replace_editor", "hashline_edit"] as const;
 
 export type EditMode = (typeof EDIT_MODES)[number];
 
@@ -72,7 +72,7 @@ export function parseRoutingConfig(raw: unknown): RoutingConfig {
   }
 
   const defaultMode =
-    raw.default === undefined ? "hashline" : parseEditMode(raw.default, "default");
+    raw.default === undefined ? "hashline_edit" : parseEditMode(raw.default, "default");
   const rules: RoutingRule[] = [];
 
   if (raw.rules !== undefined) {

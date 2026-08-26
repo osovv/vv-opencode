@@ -57,14 +57,14 @@ export type VvocPluginToggleConfig = Record<string, boolean | VvocPluginEntryCon
 // on sync/init so it is visible and editable; kept as a plain config-shape object
 // (rules as a pattern->mode record). The plugin converts it to its runtime form.
 export const DEFAULT_HASHLINE_EDIT_ROUTING = {
-  default: "hashline",
+  default: "hashline_edit",
   rules: {
     deepseek: "str_replace_editor",
-    kimi: "replace",
-    qwen: "replace",
-    glm: "replace",
-    gpt: "passthrough",
-    codex: "passthrough",
+    kimi: "edit",
+    qwen: "edit",
+    glm: "edit",
+    gpt: "apply_patch",
+    codex: "apply_patch",
   },
 } as const;
 // END_BLOCK_CONSTANTS

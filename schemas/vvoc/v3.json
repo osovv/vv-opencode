@@ -248,10 +248,10 @@
                   "default": {
                     "type": "string",
                     "enum": [
-                      "hashline",
-                      "replace",
+                      "apply_patch",
+                      "edit",
                       "str_replace_editor",
-                      "passthrough"
+                      "hashline_edit"
                     ]
                   },
                   "rules": {
@@ -262,10 +262,10 @@
                     "additionalProperties": {
                       "type": "string",
                       "enum": [
-                        "hashline",
-                        "replace",
+                        "apply_patch",
+                        "edit",
                         "str_replace_editor",
-                        "passthrough"
+                        "hashline_edit"
                       ]
                     }
                   }

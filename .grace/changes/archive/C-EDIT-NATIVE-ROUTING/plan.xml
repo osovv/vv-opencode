@@ -1,0 +1,155 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-EDIT-NATIVE-ROUTING>
+    <IntentSummary>Stop overriding OpenCode's built-in edit tooling. Remove the plugin's replace profile (the plugin-owned `edit` tool that shadows the host built-in by id), stop registering any tool named `edit`, and let the host's built-in `edit` and `apply_patch` serve their native cohorts. The plugin keeps only `hashline_edit` and `str_replace_editor`. The routing vocabulary becomes native tool names `apply_patch | edit | str_replace_editor | hashline_edit` (`replace` and `passthrough` are removed and rejected loudly), the default table routes deepseek→str_replace_editor, kimi/qwen/glm→edit, gpt/codex→apply_patch, default→hashline_edit, and chat.message leaves exactly one edit tool visible per session (hiding the built-in edit for deepseek/hashline cohorts, never touching apply_patch).</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>src/plugins/hashline-edit/index.ts</Value>
+        <Value>src/plugins/hashline-edit/routing.ts</Value>
+        <Value>src/plugins/hashline-edit/replace-engine.ts</Value>
+        <Value>src/plugins/hashline-edit.replace-engine.test.ts</Value>
+        <Value>src/plugins/hashline-edit.routing.test.ts</Value>
+        <Value>src/plugins/hashline-edit.test.ts</Value>
+        <Value>src/plugins/hashline-edit.str-replace-editor.test.ts</Value>
+        <Value>src/plugins/hashline-edit/session-state.ts</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>src/lib/opencode.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/hashline-edit/index.ts</File>
+        <Text>edit: tool({</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/hashline-edit/routing.ts</File>
+        <Text>passthrough</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>rules: {</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>"passthrough"</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/plugins/hashline-edit/routing.ts</File>
+        <Text>apply_patch</Text>
+      </MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-HASHLINE-EDIT</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CLI-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/hashline-edit/index.ts</File>
+      <File>src/plugins/hashline-edit/routing.ts</File>
+      <File>src/plugins/hashline-edit/tool-description.ts</File>
+      <File>src/plugins/hashline-edit/replace-engine.ts</File>
+      <File>src/plugins/hashline-edit/replace-engine.test.ts</File>
+      <File>src/plugins/hashline-edit/routing.test.ts</File>
+      <File>src/plugins/hashline-edit.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Routing vocabulary: replace/passthrough removed, native tool names apply_patch/edit/str_replace_editor/hashline_edit</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>routing.ts EDIT_MODES equals ["apply_patch", "edit", "str_replace_editor", "hashline_edit"]; parseEditMode rejects "replace" and "passthrough" with a message listing the four accepted values; resolveEditMode keeps provider-then-model first-match semantics.</Criterion>
+          <Criterion>plugin-toggle-config.ts DEFAULT_HASHLINE_EDIT_ROUTING becomes { default: "hashline_edit", rules: { deepseek: "str_replace_editor", kimi: "edit", qwen: "edit", glm: "edit", gpt: "apply_patch", codex: "apply_patch" } } and defaultHashlineRoutingCopy keeps producing a deep copy of it.</Criterion>
+          <Criterion>schemas/vvoc/v3.json routing default and rules enums become ["apply_patch", "edit", "str_replace_editor", "hashline_edit"].</Criterion>
+          <Criterion>routing.test.ts asserts the four-value vocabulary, the new default table, loud rejection of replace/passthrough (including rules values and default), and unchanged provider-before-model / first-match / case-insensitivity / fallback-to-default behavior.</Criterion>
+          <Criterion>vvoc-config.test.ts routing expectations update to the four-value enum (the "patch" rejection test keeps failing loudly on an unknown mode).</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.routing.test.ts src/lib/plugin-toggle-config.test.ts src/lib/vvoc-config.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Remove the replace profile: delete replace-engine.ts and stop registering the edit tool</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/hashline-edit/replace-engine.ts and src/plugins/hashline-edit.replace-engine.test.ts are deleted; nothing imports applyReplaceEdit/formatReplaceSuccess/ReplaceEditParams anymore.</Criterion>
+          <Criterion>index.ts EDIT_TYPE_TOOLS becomes ["hashline_edit", "str_replace_editor"]; the tool map registers only hashline_edit and str_replace_editor; executeReplaceEdit and ReplaceEditArgs are removed; the REPLACE_EDIT_DESCRIPTION export and its tool-description.ts section are removed.</Criterion>
+          <Criterion>index.ts module contract, module map, and change summary reflect the two-tool registration and the removed replace profile.</Criterion>
+          <Criterion>hashline-edit.test.ts registration test asserts plugin.tool has exactly hashline_edit and str_replace_editor and no edit key; the "replace edit enforces prior read and applies exact matches" test is replaced by a host-edit visibility test (below in T-003) or removed together with the profile.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.test.ts src/plugins/hashline-edit.normalize-edits.test.ts src/plugins/hashline-edit.edit-operations.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Per-model visibility with the built-in edit: chat.message leaves exactly one edit tool visible</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>visibleToolsForMode returns: hashline_edit → ["hashline_edit"], edit → ["edit"], str_replace_editor → ["str_replace_editor"], apply_patch → [] (the host gate owns apply_patch); the mode-to-visible mapping is exercised in routing/visibility tests.</Criterion>
+          <Criterion>chat.message sets tools[name]=false for every edit tool in ["hashline_edit","edit","str_replace_editor"] not in the mode's visible set, and never sets tools[apply_patch]; the built-in edit remains visible for mode `edit` (no tools[edit]=false) and is hidden for str_replace_editor/hashline_edit modes.</Criterion>
+          <Criterion>hashline-edit.test.ts visibility expectations update: deepseek → { hashline_edit:false, edit:false } (unchanged), qwen/glm → { hashline_edit:false, str_replace_editor:false } (unchanged), minimax → { edit:false, str_replace_editor:false } (unchanged), gpt → { hashline_edit:false, edit:false, str_replace_editor:false } (unchanged); the routing-config override test and any apply_patch assertions stay consistent with the new vocabulary.</Criterion>
+          <Criterion>tool.execute.before rejects only plugin-tool calls (hashline_edit/str_replace_editor) for sessions whose routed mode targets a different tool, and never blocks tool "edit" or "apply_patch".</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Docs and durable state: README routing section, graph, and verification updated</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README per-model editing bullets and the HashlineEditPlugin/routing sections describe the four native modes (apply_patch | edit | str_replace_editor | hashline_edit), the default table (deepseek→str_replace_editor, kimi/qwen/glm→edit, gpt/codex→apply_patch, default→hashline_edit), and that the built-in host edit serves the edit cohort; replace/passthrough wording is removed.</Criterion>
+          <Criterion>.grace/graph/main.xml M-PLUGIN-HASHLINE-EDIT purpose/paths reflect two registered tools (hashline_edit, str_replace_editor), the native routing vocabulary, and host-owned edit/apply_patch; no module ownership or dependency claims go stale.</Criterion>
+          <Criterion>.grace/verification/main.xml V-M-PLUGIN-HASHLINE-EDIT test-file list drops replace-engine.test.ts and the scenario/expected text describe the four-value routing and host-edit cohort.</Criterion>
+          <Criterion>opencode.test.ts expectedPlugins materialization assertions still pass with the new default routing table (materializeHashlineEditEntry true-path includes the new table).</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts src/lib/plugin-toggle-config.test.ts</Command>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Smoke verification: host built-in edit serves the edit cohort end to end</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>On a scratch project with the plugin enabled and routing default table, a qwen/glm-routed session exposes only the built-in edit (hashline_edit/str_replace_editor hidden), read output carries no hash anchors, and an oldString/newString edit applies through the host with camelCase args and no line duplication.</Criterion>
+          <Criterion>A deepseek-routed session exposes only str_replace_editor; a gpt/codex-routed session exposes only the host apply_patch; an unmatched model exposes only hashline_edit with anchored read output.</Criterion>
+          <Criterion>Smoke findings (tools visible per cohort, edit applied, no duplication, no anchor leakage into the edit cohort) are recorded as evidence in the execution summary.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.test.ts src/plugins/hashline-edit.routing.test.ts</Command>
+          <Command>bun run build</Command>
+          <Command>manual smoke session on a scratch project with the built plugin</Command>
+        </Verification>
+      </T-005>
+    </ImplementationPlan>
+  </C-EDIT-NATIVE-ROUTING>
+</GraceChangePlan>

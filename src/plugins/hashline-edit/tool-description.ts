@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
 // VERSION: 0.9.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Provide the LLM-facing tool descriptions for the hash-anchored edit tool and the replace-profile edit tool.
-//   SCOPE: Stable instructions for read-then-edit workflow, three-part anchor usage, unified replace operation choice, literal payload semantics, stale-anchor recovery, and replace-profile exact-match semantics.
+//   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit tool.
+//   SCOPE: Stable instructions for read-then-edit workflow, three-part anchor usage, unified replace operation choice, literal payload semantics, and stale-anchor recovery.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -11,11 +11,10 @@
 //
 // START_MODULE_MAP
 //   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `hashline_edit` tool.
-//   REPLACE_EDIT_DESCRIPTION - LLM-facing description for the replace-profile `edit` tool.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.9.0 - Documented mandatory three-part anchors and unified replace with optional end for hashline, and added the replace-profile edit description.]
+//   LAST_CHANGE: [v0.9.0 - Documented mandatory three-part anchors and unified replace with optional end for hashline; removed the replace-profile edit description (the host built-in edit serves the edit cohort).]
 // END_CHANGE_SUMMARY
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 
@@ -108,23 +107,3 @@ Everything else is applied literally — no merging, splitting, or indentation f
 
 Recovery:
 - If you get a hash mismatch error, copy the updated anchors shown in that error or re-read the file before retrying.`;
-
-export const REPLACE_EDIT_DESCRIPTION = `Edit a file by replacing an exact text span with new text (oldString/newString).
-
-<must>
-1. READ FIRST: Read the target file before editing. Edits against a file that was never read, or that changed since the last read, are rejected.
-2. oldString MUST be the exact literal text to replace, including whitespace and indentation. Copy it from the Read output (without the line-number prefix).
-3. oldString must match exactly ONE place. If it appears more than once, add surrounding lines to make it unique, or set replaceAll to change every occurrence.
-4. newString is the exact replacement text. It must differ from oldString.
-5. To create a new file, call edit on a missing path with an empty oldString and the full file content as newString.
-6. LITERAL APPLICATION: no merging, indentation fixing, or content rewriting is applied. Limited visible fallbacks exist only for typography (unicode confusables) and trailing whitespace; each is reported as a Warning.
-</must>
-
-<params>
-filePath (or file_path): absolute path to the file.
-oldString (or old_string): exact text to replace; empty only when creating a missing file.
-newString (or new_string): replacement text.
-replaceAll (or replace_all): optional, replace every occurrence instead of requiring a unique match.
-</params>
-
-A successful result includes a bounded diff (@@ block) and a +A/-R stat line; verify it matches your intent before moving on.`;
