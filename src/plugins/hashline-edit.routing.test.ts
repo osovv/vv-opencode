@@ -82,13 +82,24 @@ describe("hashline routing config", () => {
 
   test("parseRoutingConfig rejects invalid modes, non-object rules, empty patterns, and non-object config", () => {
     expect(() => parseRoutingConfig({ default: "patch" })).toThrow(/must be one of/);
-    expect(() => parseRoutingConfig({ default: "replace" })).toThrow(/must be one of/);
-    expect(() => parseRoutingConfig({ default: "passthrough" })).toThrow(/must be one of/);
     expect(() => parseRoutingConfig({ rules: ["deepseek"] })).toThrow(/rules must be an object/);
     expect(() => parseRoutingConfig({ rules: { "": "edit" } })).toThrow(/non-empty/);
     expect(() => parseRoutingConfig({ rules: { deepseek: "patch" } })).toThrow(/must be one of/);
-    expect(() => parseRoutingConfig({ rules: { deepseek: "replace" } })).toThrow(/must be one of/);
     expect(() => parseRoutingConfig("hashline_edit")).toThrow(/must be an object/);
+  });
+
+  test("legacy routing values normalize to the canonical vocabulary", () => {
+    const parsed = parseRoutingConfig({
+      default: "passthrough",
+      rules: { glm: "replace", qwen: "replace", gpt: "passthrough", minimax: "hashline" },
+    });
+    expect(parsed.default).toBe("edit");
+    expect(parsed.rules).toEqual([
+      { pattern: "glm", mode: "edit" },
+      { pattern: "qwen", mode: "edit" },
+      { pattern: "gpt", mode: "edit" },
+      { pattern: "minimax", mode: "hashline_edit" },
+    ]);
   });
 
   test("parseHashlineEditPluginEntry resolves the boolean-or-object union", () => {

@@ -251,7 +251,10 @@
                       "apply_patch",
                       "edit",
                       "str_replace_editor",
-                      "hashline_edit"
+                      "hashline_edit",
+                      "hashline",
+                      "replace",
+                      "passthrough"
                     ]
                   },
                   "rules": {
@@ -265,7 +268,10 @@
                         "apply_patch",
                         "edit",
                         "str_replace_editor",
-                        "hashline_edit"
+                        "hashline_edit",
+                        "hashline",
+                        "replace",
+                        "passthrough"
                       ]
                     }
                   }

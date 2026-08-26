@@ -361,14 +361,30 @@ export const VVOC_CONFIG_SCHEMA = {
                 properties: {
                   default: {
                     type: "string",
-                    enum: ["apply_patch", "edit", "str_replace_editor", "hashline_edit"],
+                    enum: [
+                      "apply_patch",
+                      "edit",
+                      "str_replace_editor",
+                      "hashline_edit",
+                      "hashline",
+                      "replace",
+                      "passthrough",
+                    ],
                   },
                   rules: {
                     type: "object",
                     propertyNames: { minLength: 1 },
                     additionalProperties: {
                       type: "string",
-                      enum: ["apply_patch", "edit", "str_replace_editor", "hashline_edit"],
+                      enum: [
+                        "apply_patch",
+                        "edit",
+                        "str_replace_editor",
+                        "hashline_edit",
+                        "hashline",
+                        "replace",
+                        "passthrough",
+                      ],
                     },
                   },
                 },

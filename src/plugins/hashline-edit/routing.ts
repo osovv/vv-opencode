@@ -32,6 +32,16 @@ export const EDIT_MODES = ["apply_patch", "edit", "str_replace_editor", "hashlin
 
 export type EditMode = (typeof EDIT_MODES)[number];
 
+// Legacy pre-1.3.6-rc.4 routing values accepted for backward compatibility and
+// normalized to the canonical vocabulary. `passthrough` meant "leave the host
+// editing path in charge", which the canonical `edit` (and the host apply_patch
+// gate for gpt/codex cohorts) now expresses.
+const LEGACY_MODE_ALIASES: Record<string, EditMode> = {
+  hashline: "hashline_edit",
+  replace: "edit",
+  passthrough: "edit",
+};
+
 export interface RoutingRule {
   pattern: string;
   mode: EditMode;
@@ -55,8 +65,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseEditMode(value: unknown, where: string): EditMode {
-  if (typeof value === "string" && (EDIT_MODES as readonly string[]).includes(value)) {
-    return value as EditMode;
+  if (typeof value === "string") {
+    if ((EDIT_MODES as readonly string[]).includes(value)) {
+      return value as EditMode;
+    }
+    const legacy = LEGACY_MODE_ALIASES[value];
+    if (legacy !== undefined) {
+      return legacy;
+    }
   }
   throw new Error(
     `hashline-edit routing: ${where} must be one of ${EDIT_MODES.join(", ")}; got ${JSON.stringify(value)}`,

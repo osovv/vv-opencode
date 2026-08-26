@@ -223,6 +223,42 @@ describe("plugins union parsing and schema", () => {
     expect(validateVvocConfigDocument(valid)).toEqual([]);
   });
 
+  test("schema accepts legacy hashline-edit routing values from pre-rc.4 configs", () => {
+    const legacy = JSON.parse(
+      docWithPlugins({
+        "hashline-edit": {
+          enabled: false,
+          routing: {
+            default: "passthrough",
+            rules: {
+              deepseek: "str_replace_editor",
+              kimi: "replace",
+              qwen: "replace",
+              glm: "passthrough",
+              gpt: "passthrough",
+              codex: "passthrough",
+            },
+          },
+        },
+      }),
+    );
+    expect(validateVvocConfigDocument(legacy)).toEqual([]);
+
+    const parsed = parseVvocConfigText(
+      docWithPlugins({
+        "hashline-edit": {
+          enabled: false,
+          routing: { default: "passthrough", rules: { qwen: "replace" } },
+        },
+      }),
+      "test",
+    );
+    expect(parsed.plugins["hashline-edit"]).toEqual({
+      enabled: false,
+      routing: { default: "passthrough", rules: { qwen: "replace" } },
+    });
+  });
+
   test("schema accepts tool-history-compaction recent-window and saved-output keys", () => {
     const valid = JSON.parse(
       docWithPlugins({
