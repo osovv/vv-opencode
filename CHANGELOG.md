@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.5 (2026-08-26)</small>
+
+### Summary
+
+This release fixes a backward-compatibility regression in the hashline-edit plugin's routing configuration. The previous release candidate narrowed the accepted routing values, which caused vvoc.json configs created by older releases — containing legacy values like hashline, replace, or passthrough — to fail strict schema validation and break vvoc sync after upgrading. Now those legacy values are accepted as aliases and normalized at parse time to the canonical vocabulary (hashline becomes hashline_edit, while replace and passthrough become edit), with schema v3 and the embedded config schema updated to accept them. As a result, existing configs validate and sync cleanly after an upgrade without rewriting user values.
+
+* fix(hashline-edit): accept legacy routing values from pre-rc.4 configs ([13a69f4](https://github.com/osovv/vv-opencode/commit/13a69f4))
+
 ## <small>1.3.6-rc.4 (2026-08-26)</small>
 
 ### Summary
