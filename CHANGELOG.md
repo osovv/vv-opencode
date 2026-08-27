@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.6 (2026-08-27)</small>
+
+### Summary
+
+Version 1.3.6-rc.6 makes Hashline Edit tool routing more predictable by selecting the edit mode from the session model ID only, removing the previous providerID matching pass. Edit format is now treated purely as a property of the model, which eliminates a subtle precedence bug where a provider-level rule could shadow a more specific model-level rule regardless of declaration order, causing sessions to receive an unexpected editing tool. The default routing table is unchanged—deepseek, kimi, qwen, glm, and gpt/codex models still resolve to their usual editing tools—so existing setups behave the same while users with overlapping provider/model patterns now get deterministic, sensible routing, and every session still sees exactly one editing tool.
+
+* feat(hashline-edit): route edit modes by modelID only ([2382afd](https://github.com/osovv/vv-opencode/commit/2382afd))
+
 ## <small>1.3.6-rc.5 (2026-08-26)</small>
 
 ### Summary
