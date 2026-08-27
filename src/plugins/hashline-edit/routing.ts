@@ -2,7 +2,7 @@
 // VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define edit-mode routing configuration and resolve the active edit mode for a session model.
-//   SCOPE: EditMode vocabulary, strict routing config parsing with the default routing table, plugin entry union resolution, and case-insensitive provider-then-model substring matching.
+//   SCOPE: EditMode vocabulary, strict routing config parsing with the default routing table, plugin entry union resolution, and case-insensitive modelID substring matching.
 //   DEPENDS: [src/lib/plugin-toggle-config.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -18,7 +18,7 @@
 //   parseRoutingConfig - Strictly parse an unknown routing value into a RoutingConfig or throw.
 //   HashlineEditPluginSettings - Resolved enabled flag and routing config for the hashline-edit plugin entry.
 //   parseHashlineEditPluginEntry - Resolve the plugins["hashline-edit"] boolean-or-object union into enabled flag and routing config.
-//   resolveEditMode - Resolve the active edit mode for a provider/model pair against a routing config.
+//   resolveEditMode - Resolve the active edit mode for a session modelID against a routing config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -130,25 +130,22 @@ export function parseHashlineEditPluginEntry(raw: unknown): HashlineEditPluginSe
 // END_BLOCK_PARSE
 
 // START_BLOCK_RESOLVE
+// Rules match the session modelID only (case-insensitive substring, first
+// match wins). Provider IDs are deliberately not matched: edit format is a
+// property of the model, and provider prefixes would only add surprising
+// precedence between overlapping rules.
 export function resolveEditMode(
   config: RoutingConfig,
   model: { providerID?: string; modelID?: string } | undefined,
 ): EditMode {
-  if (!model) {
+  if (!model?.modelID) {
     return config.default;
   }
-  const providerID = model.providerID?.toLowerCase();
-  const modelID = model.modelID?.toLowerCase();
+  const modelID = model.modelID.toLowerCase();
 
   for (const rule of config.rules) {
     const pattern = rule.pattern.toLowerCase();
-    if (providerID !== undefined && providerID.includes(pattern)) {
-      return rule.mode;
-    }
-  }
-  for (const rule of config.rules) {
-    const pattern = rule.pattern.toLowerCase();
-    if (modelID !== undefined && modelID.includes(pattern)) {
+    if (modelID.includes(pattern)) {
       return rule.mode;
     }
   }

@@ -953,9 +953,10 @@ describe("HashlineEditPlugin routing", () => {
         before({ tool: "edit", sessionID: "session-1", callID: "call-1" } as never, {} as never),
       ).resolves.toBeUndefined();
 
-      // The edit cohort (kimi) keeps the built-in edit visible and hides the
-      // plugin profiles; its read output carries no hash anchors.
-      const kimiMessage = userMessage({ providerID: "kimi-for-coding", modelID: "k3" });
+      // The edit cohort (kimi-k3 modelID contains "kimi") keeps the built-in
+      // edit visible and hides the plugin profiles; its read output carries no
+      // hash anchors.
+      const kimiMessage = userMessage({ providerID: "kimi-for-coding", modelID: "kimi-k3" });
       await hook_call(chatHook, "session-1", kimiMessage);
       expect(kimiMessage.tools).toEqual({
         hashline_edit: false,

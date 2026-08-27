@@ -432,7 +432,7 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 - `str_replace_editor` — the plugin's DeepSeek dsh contract (`view`/`create`/`str_replace`/`insert`) with exact-verbatim matching.
 - `hashline_edit` — the plugin's hash-anchored tool with `LINE#HASH#ANCHOR` references and anchored read output (default for unmatched models).
 
-The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwen`, and `glm` to `edit`, and `gpt`/`codex` to `apply_patch`; everything else stays on `hashline_edit`. Patterns match case-insensitively against the session `providerID` first, then `modelID`; the first matching rule wins. For every mode the plugin hides the other edit tools from the model — including the host `edit` for the `str_replace_editor`/`hashline_edit` cohorts — so each session sees exactly one editing tool.
+The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwen`, and `glm` to `edit`, and `gpt`/`codex` to `apply_patch`; everything else stays on `hashline_edit`. Patterns match case-insensitively as substrings of the session `modelID` only; the first matching rule wins. For every mode the plugin hides the other edit tools from the model — including the host `edit` for the `str_replace_editor`/`hashline_edit` cohorts — so each session sees exactly one editing tool.
 
 `vvoc sync` and `vvoc init` write this default table into `vvoc.json` so it is visible and editable. Materialization is conservative: a routing value you have changed is never overwritten; the table is only filled in where it is missing. Override routing in `vvoc.json` (schema v3) — the `plugins["hashline-edit"]` entry accepts a boolean or an object:
 

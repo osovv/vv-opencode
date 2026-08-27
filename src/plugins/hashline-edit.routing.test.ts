@@ -35,7 +35,10 @@ describe("hashline routing config", () => {
       }),
     ).toBe("str_replace_editor");
     expect(
-      resolveEditMode(DEFAULT_ROUTING_CONFIG, { providerID: "kimi-for-coding", modelID: "k3" }),
+      resolveEditMode(DEFAULT_ROUTING_CONFIG, {
+        providerID: "kimi-for-coding",
+        modelID: "kimi-k3",
+      }),
     ).toBe("edit");
     expect(
       resolveEditMode(DEFAULT_ROUTING_CONFIG, {
@@ -135,13 +138,14 @@ describe("hashline routing config", () => {
 });
 
 describe("hashline routing resolution", () => {
-  test("matches providerID before modelID across rule order", () => {
+  test("matches modelID only; providerID never participates", () => {
     const config = parseRoutingConfig({
       rules: { specialmodel: "edit", zai: "str_replace_editor" },
     });
-    // Provider-level rule wins even though the model-level pattern is listed first.
-    expect(resolveEditMode(config, { providerID: "zai", modelID: "specialmodel-x" })).toBe(
-      "str_replace_editor",
+    // Only modelID substring matching applies: a providerID that contains a
+    // rule pattern does not route the session.
+    expect(resolveEditMode(config, { providerID: "zai", modelID: "unrelated-model" })).toBe(
+      "hashline_edit",
     );
     expect(resolveEditMode(config, { providerID: "other", modelID: "specialmodel-x" })).toBe(
       "edit",
