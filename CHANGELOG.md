@@ -1,3 +1,11 @@
+## <small>1.3.6-rc.7 (2026-08-29)</small>
+
+### Summary
+
+This release introduces deterministic, host-side verification for spec-package artifacts with a new COMPONENT identity format: spec, plan, and design-context components now share element-name identities across documents, fields are unified to snake_case, and the plan-subset-of-spec traceability rule is enforced mechanically rather than left to convention. A new strict lint engine checks well-formedness, template contracts, identity uniqueness, references, and lifecycle-aware severity, with results cached content-addressed under the XDG cache home. Users get a new `vvoc lint` command that targets files, packages, or whole specs trees with stable exit codes plus strict, JSON, no-cache, and archive flags (archived packages are skipped by default), and a new SpecGuardPlugin that appends lint verdicts to reads of active artifacts and validates writes through the same cache, defaulting to warn mode while enforce only refuses ERROR-severity writes so in-progress draft composition is never blocked and internal failures degrade fail-open. Schema v3, plugin toggles, exports, templates, skills, and README stay synchronized with the new format and command.
+
+* feat(spec-lint): add COMPONENT identity format, vvoc lint, and spec-guard ([a28cde6](https://github.com/osovv/vv-opencode/commit/a28cde6))
+
 ## <small>1.3.6-rc.6 (2026-08-27)</small>
 
 ### Summary
