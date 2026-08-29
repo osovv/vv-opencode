@@ -125,12 +125,20 @@ Use the installed CLI's `--help` for current arguments rather than guessing synt
 
 ## GRACE CLI Checks
 
-- `bunx @osovv/grace-cli@rc lint --path .` validates GRACE grammar, routed projections,
+- Invoke the installed stable `grace` binary directly; do not default to
+  `bunx`, `npx`, or the `rc` dist-tag. If it is missing, install it with
+  `bun add -g @osovv/grace-cli`.
+- `grace lint --path .` validates GRACE grammar, routed projections,
   assertions, lifecycle locations, and scope overlaps.
-- `bunx @osovv/grace-cli@rc status --path .` summarizes durable and operational GRACE
+- `grace status --path .` summarizes durable and operational GRACE
   health.
-- Run both whenever `.grace` artifacts change; treat failures as blockers rather than
-  editing XML until it merely parses.
+- Assertion phases: active-baseline preflight is
+  `grace lint --path . --assertions current` (only before observed writes);
+  selected baseline/target and the final execution gate run with
+  `--change C-<ID> --assertions baseline|target|final` plus `--run-commands`
+  externally, never nested inside plan assertions.
+- Run lint and status whenever `.grace` artifacts change; treat failures as
+  blockers rather than editing XML until it merely parses.
 
 ## Standard Change Workflow
 
@@ -264,8 +272,8 @@ bun run check                       # typecheck + lint + fmt check + all tests
 bun run build                       # regenerate dist/ from source
 bun run pack:check                  # build, import public exports, dry-run npm pack
 bun run release:check               # package/schema/release consistency
-bunx @osovv/grace-cli@rc lint --path .
-bunx @osovv/grace-cli@rc status --path .
+grace lint --path .
+grace status --path .
 ```
 
 Choose checks by impact; do not run heavyweight release gates for a trivial isolated
