@@ -1,3 +1,12 @@
+## <small>1.3.6-rc.8 (2026-08-29)</small>
+
+### Summary
+
+This release fixes a reliability issue in the spec-guard plugin and corrects the documented GRACE CLI workflow. Read-path validation previously linted the tool's rendered output, which hosts may decorate with envelope tags and line-number prefixes, causing false well-formedness errors on valid spec files; read verdicts are now derived from the actual artifact file on disk, so validation results are accurate and independent of host rendering. In addition, the agent documentation now directs users to invoke the installed stable `grace` binary directly rather than the stale `rc` dist-tag, ensuring linting and status checks run against the correct validator version.
+
+* docs(agents): invoke the installed grace binary instead of the stale rc tag ([8e59a00](https://github.com/osovv/vv-opencode/commit/8e59a00))
+* fix(spec-guard): derive read verdicts from the artifact file, not the tool rendering ([ea8bd52](https://github.com/osovv/vv-opencode/commit/ea8bd52))
+
 ## <small>1.3.6-rc.7 (2026-08-29)</small>
 
 ### Summary
