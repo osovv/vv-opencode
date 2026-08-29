@@ -34,13 +34,13 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 <rule>Load the plan template from references/plan-template.xml. Fill every element.</rule>
 <rule>The top-level &lt;status&gt; element is the plan lifecycle status and MUST be one of: draft, approved, applied.</rule>
 <rule>When first saving the plan, set the top-level status to &lt;status&gt;draft&lt;/status&gt;. Only change it to approved after the user explicitly reads/reviews and approves the final plan. Never set the top-level status to applied yourself; applied is reserved for vv-execute after successful execution.</rule>
-<rule>The plan contains two major sections: architecture (modules, contracts, dependencies) and tasks (implementation steps with code snippets).</rule>
-<rule>Architecture section uses child tags: module, name, purpose, file (path, role), contract, depends_on (module).</rule>
+<rule>The plan contains two major sections: architecture (components, contracts, dependencies) and tasks (implementation steps with code snippets).</rule>
+<rule>Architecture maps the spec's components. Each architecture element reuses the exact COMPONENT-UPPER-SLUG identity declared in spec.xml: &lt;COMPONENT-CACHE-STORE&gt;…&lt;/COMPONENT-CACHE-STORE&gt;. Plan components are always a subset of spec components — a plan module without a spec component does not exist. Architecture child tags: name (display name from the spec), purpose, file (path, role), contract, depends_on (bare component slug). Do NOT add a child id element.</rule>
 <rule>Tasks are grouped into wave elements whose identity is the element name: &lt;WAVE-1&gt;, &lt;WAVE-2&gt;, … Each wave contains a &lt;goal&gt; and its tasks.</rule>
 <rule>A task's identity is its element name in the TASK-T-NNN pattern: &lt;TASK-T-001&gt;…&lt;/TASK-T-001&gt;. The identity repeats on both boundaries so long blocks stay addressable. Tasks use child tags: title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command). Do NOT add a child id element — the element name is the single authoritative identity. Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.</rule>
-<rule>Every XML element is named for grep extraction. Use: `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for dependency graph.</rule>
+<rule>Every XML element is named for grep extraction. Use: `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for dependency graph, `grep '&lt;COMPONENT-' plan.xml` for the component map.</rule>
 <rule>Populate the &lt;spec&gt; element with the path to the spec.xml this plan implements.</rule>
-<rule>If a design-context.xml was found and read as explanatory context, populate the &lt;design-context&gt; element with the path to design-context.xml so execution tools and reviewers can locate it.</rule>
+<rule>If a design-context.xml was found and read as explanatory context, populate the &lt;design_context&gt; element with the path to design-context.xml so execution tools and reviewers can locate it.</rule>
 <location>Save plan.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/plan.xml</location>
 </plan_document_format>
 
@@ -142,7 +142,7 @@ export type CacheStoreOptions = {
 <forbidden>XML attributes in any tag — use child elements only</forbidden>
 <forbidden>Code outside CDATA — all snippets must be wrapped in CDATA sections</forbidden>
 <forbidden>Numbered criterion tags — use plain &lt;criterion&gt;, not numbered variants</forbidden>
-<forbidden>Generic &lt;task&gt; or &lt;wave&gt; elements with child id/num elements — identity belongs in the element name: &lt;TASK-T-NNN&gt;, &lt;WAVE-N&gt;</forbidden>
+<forbidden>Generic &lt;task&gt;, &lt;wave&gt;, or &lt;module&gt; elements with child id/num elements — identity belongs in the element name: &lt;TASK-T-NNN&gt;, &lt;WAVE-N&gt;, &lt;COMPONENT-UPPER-SLUG&gt;</forbidden>
 </no_placeholders>
 
 <self_review>
@@ -152,7 +152,7 @@ export type CacheStoreOptions = {
 <check>Type consistency: Do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
 <rule>Fix issues inline as you find them. No second review pass needed — just fix and continue.</rule>
 <check>Format compliance: Are there zero XML attributes? Is every snippet in CDATA? Is every task a &lt;TASK-T-NNN&gt; element with identity in the element name and no child id element?</check>
-<check>Architecture presence: Does the plan have an architecture section with modules, contracts, and dependency graph?</check>
+<check>Architecture presence: Does the plan have an architecture section with components, contracts, and dependency graph? Does every &lt;COMPONENT-UPPER-SLUG&gt; element exist in the spec's components section — plan components are a subset of spec components?</check>
 </self_review>
 
 <execution_handoff>
@@ -167,6 +167,6 @@ export type CacheStoreOptions = {
 </execution_handoff>
 
 <task>
-Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/&lt;id&gt;/spec.xml and verify its top-level status is approved. Check whether a sibling design-context.xml exists; if so, read it as explanatory context only (it does NOT override spec.xml). Load the plan template from references/plan-template.xml, populate &lt;spec&gt; and optionally &lt;design-context&gt; paths, map the architecture (modules, contracts, dependencies), write detailed tasks with code snippets in CDATA, apply self-review, save the plan as .vvoc/specs/&lt;id&gt;/plan.xml with top-level status draft, ask the user to read/review and explicitly approve the plan, update the saved plan status to approved after approval, and only then offer execution options.
+Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/&lt;id&gt;/spec.xml and verify its top-level status is approved. Check whether a sibling design-context.xml exists; if so, read it as explanatory context only (it does NOT override spec.xml). Load the plan template from references/plan-template.xml, populate &lt;spec&gt; and optionally &lt;design_context&gt; paths, map the architecture (spec components as COMPONENT-UPPER-SLUG elements, contracts, dependencies), write detailed tasks with code snippets in CDATA, apply self-review, save the plan as .vvoc/specs/&lt;id&gt;/plan.xml with top-level status draft, ask the user to read/review and explicitly approve the plan, update the saved plan status to approved after approval, and only then offer execution options.
 </task>
 </skill>

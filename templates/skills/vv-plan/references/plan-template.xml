@@ -1,6 +1,6 @@
 <plan>
   <spec></spec>
-  <design-context></design-context>  <!-- optional, populated when sibling file exists -->
+  <design_context></design_context>  <!-- optional, populated when sibling file exists -->
   <created></created>
   <status>draft</status>
 
@@ -12,7 +12,14 @@
   </meta>
 
   <architecture>
-    <module>
+    <!--
+      Architecture maps the spec's components. Each element reuses the
+      exact COMPONENT-UPPER-SLUG identity declared in spec.xml — plan
+      components are always a subset of spec components. The child
+      <name> element repeats the spec's display name. depends_on holds
+      bare component slugs declared in this plan or the spec.
+    -->
+    <COMPONENT-EXAMPLE>
       <name></name>
       <purpose></purpose>
       <file>
@@ -21,10 +28,8 @@
       </file>
       <contract>
       </contract>
-      <depends_on>
-        <module></module>
-      </depends_on>
-    </module>
+      <depends_on></depends_on>
+    </COMPONENT-EXAMPLE>
   </architecture>
 
   <tasks>

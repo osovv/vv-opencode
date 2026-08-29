@@ -4,8 +4,8 @@
 // VERSION: 0.2.10
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble and run the vvoc CLI entrypoint.
-//   SCOPE: Package version lookup, top-level command registration, and main command execution.
-//   DEPENDS: [citty, src/commands/analytics.ts, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
+//   SCOPE: Package version lookup, top-level command registration including the lint command, and main command execution.
+//   DEPENDS: [citty, src/commands/analytics.ts, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/lint.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Registered the analytics command in the CLI tree.]
+//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Registered the lint command in the CLI tree.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
@@ -29,6 +29,7 @@ import guardian from "./commands/guardian.js";
 import init from "./commands/init.js";
 import install from "./commands/install.js";
 import launch from "./commands/launch.js";
+import lint from "./commands/lint.js";
 import orchestration from "./commands/orchestration.js";
 import patchProvider from "./commands/patch-provider.js";
 import preset from "./commands/preset.js";
@@ -59,6 +60,7 @@ const main = defineCommand({
     init,
     install,
     launch,
+    lint,
     orchestration,
     "patch-provider": patchProvider,
     preset,

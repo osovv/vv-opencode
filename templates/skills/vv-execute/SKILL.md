@@ -38,11 +38,15 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
 </helper>
 <helper name="architecture">
   <command>sed -n '/&lt;architecture&gt;/,/&lt;\/architecture&gt;/p' PLAN_PATH</command>
-  <purpose>Extract full architecture section with modules, files, contracts</purpose>
+  <purpose>Extract full architecture section with components, files, contracts</purpose>
 </helper>
 <helper name="module-list">
-  <command>sed -n '/&lt;architecture&gt;/,/&lt;\/architecture&gt;/p' PLAN_PATH | grep '&lt;name&gt;'</command>
-  <purpose>List all module names</purpose>
+  <command>grep '&lt;COMPONENT-' PLAN_PATH</command>
+  <purpose>List all architecture component identities (COMPONENT-UPPER-SLUG element names, mirrored from spec.xml)</purpose>
+</helper>
+<helper name="extract-component">
+  <command>sed -n '/&lt;COMPONENT-UPPER-SLUG&gt;/,/&lt;\/COMPONENT-UPPER-SLUG&gt;/p' PLAN_PATH</command>
+  <purpose>Extract one full architecture component by slug (replace COMPONENT-UPPER-SLUG with the actual element name, e.g. COMPONENT-CACHE-STORE)</purpose>
 </helper>
 <helper name="list-tasks">
   <command>grep '&lt;TASK-T-' PLAN_PATH</command>
@@ -107,6 +111,7 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
   <check>Each task element name matches the TASK-T-NNN pattern and the task has non-empty &lt;title&gt; and &lt;file&gt;. There is no child id element — identity lives in the element name.</check>
   <check>Each task has &lt;snippet&gt; (may be empty but must exist)</check>
   <check>Each task has &lt;acceptance&gt; with at least one &lt;criterion&gt;</check>
+  <check>Plan architecture components use COMPONENT-UPPER-SLUG element names and every component exists in the linked spec's components section — plan components are a subset of spec components</check>
   <action>If any check fails, stop and report the issue with line numbers. Do not proceed with broken plan.</action>
 </step>
 <step name="assess-complexity">

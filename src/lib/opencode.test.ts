@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Expected the materialized peak-hours plugin entry in canonical sync writes.]
+//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Expected the materialized spec-guard plugin entry in canonical sync writes.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -56,6 +56,7 @@ import {
   materializeHashlineEditEntry,
   materializeToolHistoryCompactionEntry,
   materializePeakHoursEntry,
+  materializeSpecGuardEntry,
 } from "./plugin-toggle-config.js";
 import {
   createDefaultVvocConfig,
@@ -853,6 +854,7 @@ describe("canonical vvoc config helpers", () => {
       expectedPlugins["hashline-edit"] = materializeHashlineEditEntry(true);
       expectedPlugins["tool-history-compaction"] = materializeToolHistoryCompactionEntry(true);
       expectedPlugins["peak-hours"] = materializePeakHoursEntry(true);
+      expectedPlugins["spec-guard"] = materializeSpecGuardEntry(true);
       expect(created?.plugins).toEqual(expectedPlugins);
     } finally {
       await rm(configHome, { recursive: true, force: true });

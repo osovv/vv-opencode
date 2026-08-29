@@ -22,7 +22,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   OPENCODE_CONFIG_ENV,
@@ -302,5 +302,22 @@ describe("config layer resolution", () => {
       "VVOC_CONFIG_ALREADY_LOADED",
     );
     await expect(first).resolves.toMatchObject({ source: { kind: "default" } });
+  });
+});
+
+describe("getCacheHome", () => {
+  test("respects an explicit override, then XDG_CACHE_HOME, then the home fallback", async () => {
+    const { getCacheHome } = await import("./vvoc-paths.js");
+    expect(getCacheHome("/custom/cache")).toBe("/custom/cache");
+    const prev = process.env.XDG_CACHE_HOME;
+    try {
+      process.env.XDG_CACHE_HOME = "/xdg/cache";
+      expect(getCacheHome()).toBe("/xdg/cache");
+      delete process.env.XDG_CACHE_HOME;
+      expect(getCacheHome()).toBe(join(homedir(), ".cache"));
+    } finally {
+      if (prev === undefined) delete process.env.XDG_CACHE_HOME;
+      else process.env.XDG_CACHE_HOME = prev;
+    }
   });
 });

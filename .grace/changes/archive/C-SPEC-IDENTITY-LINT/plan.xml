@@ -1,0 +1,346 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-SPEC-IDENTITY-LINT>
+    <IntentSummary>Define the new .vvoc artifact format with element-name component identity shared between spec and plan documents, then build deterministic host-side verification on the existing htmlparser2 dependency: a pure strict lint engine, a content-addressed cache under XDG_CACHE_HOME with a new getCacheHome helper, a vvoc lint CLI command with stable exit codes and flags, a spec-guard plugin annotating reads and validating writes of active spec-package XML, conservative spec-guard config materialization behind strict schema v3, synchronized templates, skills, README, and GRACE graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-COMMANDS</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-CONFIG-LAYERS</Value>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>M-PLUGIN-TOGGLE-CONFIG</Value>
+        <Value>V-M-CLI-COMMANDS</Value>
+        <Value>V-M-CLI-CONFIG</Value>
+        <Value>V-M-CONFIG-LAYERS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-PLUGIN-TOGGLE-CONFIG</Value>
+        <Value>templates/skills/vv-spec/references/spec-template.xml</Value>
+        <Value>templates/skills/vv-spec/references/design-context-template.xml</Value>
+        <Value>templates/skills/vv-plan/references/plan-template.xml</Value>
+        <Value>templates/skills/vv-spec/SKILL.md</Value>
+        <Value>templates/skills/vv-plan/SKILL.md</Value>
+        <Value>templates/skills/vv-execute/SKILL.md</Value>
+        <Value>src/cli.ts</Value>
+        <Value>src/lib/vvoc-paths.ts</Value>
+        <Value>src/lib/config-layers.test.ts</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>src/lib/plugin-toggle-config.test.ts</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>src/lib/vvoc-config.test.ts</Value>
+        <Value>src/lib/opencode.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/plugins/web-tools/html-markdown.ts</Value>
+        <Value>src/index.ts</Value>
+        <Value>package.json</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/index.xml</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/index.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+        <Value>.grace/context/requirements.xml</Value>
+      </MustExist>
+      <MustContain>
+        <File>package.json</File>
+        <Text>htmlparser2</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/web-tools/html-markdown.ts</File>
+        <Text>htmlparser2</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-spec/references/spec-template.xml</File>
+        <Text>&lt;component&gt;</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-spec/references/design-context-template.xml</File>
+        <Text>&lt;item&gt;</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-plan/references/plan-template.xml</File>
+        <Text>TASK-T-001</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-plan/SKILL.md</File>
+        <Text>TASK-T-NNN</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-SPEC-LINT</Module>
+        <Module>M-PLUGIN-SPEC-GUARD</Module>
+        <Module>M-CLI-COMMANDS</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-CONFIG-LAYERS</Module>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/lib/spec-lint.ts</Value>
+        <Value>src/lib/spec-lint.test.ts</Value>
+        <Value>src/lib/spec-lint-cache.ts</Value>
+        <Value>src/lib/spec-lint-cache.test.ts</Value>
+        <Value>src/commands/lint.ts</Value>
+        <Value>src/commands/lint.test.ts</Value>
+        <Value>src/plugins/spec-guard/index.ts</Value>
+        <Value>src/plugins/spec-guard/index.test.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>templates/skills/vv-spec/references/spec-template.xml</File>
+        <Text>COMPONENT-</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-plan/references/plan-template.xml</File>
+        <Text>COMPONENT-</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-spec/references/design-context-template.xml</File>
+        <Text>deferred_decision</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-spec/SKILL.md</File>
+        <Text>COMPONENT-</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-plan/SKILL.md</File>
+        <Text>COMPONENT-</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-execute/SKILL.md</File>
+        <Text>COMPONENT-</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/spec-lint.ts</File>
+        <Text>LINT_VERSION</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-paths.ts</File>
+        <Text>getCacheHome</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/cli.ts</File>
+        <Text>lint</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>spec-guard</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>spec-guard</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>spec-guard</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>SpecGuardPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>./plugins/spec-guard</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>vvoc lint</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>spec-guard</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/commands/lint.test.ts src/plugins/spec-guard/index.test.ts</Command>
+        <Command>bun test src/lib/config-layers.test.ts src/lib/plugin-toggle-config.test.ts src/lib/vvoc-config.test.ts src/lib/opencode.test.ts src/lib/managed-skills.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-SPEC-LINT />
+        <M-PLUGIN-SPEC-GUARD />
+        <M-CLI-COMMANDS />
+        <M-CLI-CONFIG />
+        <M-CONFIG-LAYERS />
+        <M-CLI-MANAGED-SKILLS />
+        <M-PLUGIN-TOGGLE-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-SPEC-LINT />
+        <V-M-PLUGIN-SPEC-GUARD />
+        <V-M-CLI-COMMANDS />
+        <V-M-CLI-CONFIG />
+        <V-M-CONFIG-LAYERS />
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-SPEC-IDENTITY-LINT/plan.xml</File>
+      <File>src/commands/plugin-toggle.test.ts</File>
+      <File>templates/skills/vv-spec/references/spec-template.xml</File>
+      <File>templates/skills/vv-spec/references/design-context-template.xml</File>
+      <File>templates/skills/vv-spec/SKILL.md</File>
+      <File>templates/skills/vv-plan/references/plan-template.xml</File>
+      <File>templates/skills/vv-plan/SKILL.md</File>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>src/lib/spec-lint.ts</File>
+      <File>src/lib/spec-lint.test.ts</File>
+      <File>src/lib/spec-lint-cache.ts</File>
+      <File>src/lib/spec-lint-cache.test.ts</File>
+      <File>src/lib/vvoc-paths.ts</File>
+      <File>src/lib/config-layers.test.ts</File>
+      <File>src/commands/lint.ts</File>
+      <File>src/commands/lint.test.ts</File>
+      <File>src/cli.ts</File>
+      <File>src/plugins/spec-guard/index.ts</File>
+      <File>src/plugins/spec-guard/index.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/index.ts</File>
+      <File>package.json</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/context/requirements.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Define the new artifact format in templates, skills, and README.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>spec-template.xml components become COMPONENT-UPPER-SLUG identity elements each with a non-empty name display child, responsibility, and bare-slug depends_on references, and every field name is snake_case (tech_stack, data_flow, error_handling, non_goals, depends_on).</Criterion>
+          <Criterion>plan-template.xml architecture uses the same COMPONENT-UPPER-SLUG identity elements as the spec with purpose, file path and role, contract, and bare-slug depends_on, the design-context path element becomes design_context, and the tasks section stays on TASK-T-NNN and WAVE-N with snake_case fields.</Criterion>
+          <Criterion>design-context-template.xml renames the deferred item element to deferred_decision and keeps all other sections unchanged in snake_case.</Criterion>
+          <Criterion>vv-spec SKILL.md teaches component identity in element names, slug rules uppercase alphanumeric hyphen-separated unique per document, snake_case fields, and the no-attributes rule; vv-plan SKILL.md teaches that plan architecture components reuse the exact spec component identities so plan components are always a subset of spec components; vv-execute SKILL.md grep helpers gain COMPONENT- examples beside the existing TASK- helpers.</Criterion>
+          <Criterion>README documents the element-name identity convention, the snake_case field rule, the plan-subset-of-spec invariant, and updated grep examples.</Criterion>
+          <Criterion>Managed skill loader tests still pass and installed managed skill copies are byte-identical to templates after the local sync step.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Implement the pure strict lint engine on htmlparser2 xmlMode.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/lib/spec-lint.ts is dependency-pure beyond htmlparser2, exports a LINT_VERSION constant, verdict and finding types with severity error or warning, and a lint function over in-memory artifact inputs plus package-level inputs for cross-file rules, with no filesystem access.</Criterion>
+          <Criterion>A strict stack validator on the htmlparser2 xmlMode event stream proves well-formedness: balanced tags, single root, stray top-level content, and unclosed elements each yield an ERROR finding carrying file and line.</Criterion>
+          <Criterion>Format rules reject any XML attribute, any element outside the template contract per artifact type detected by root element, and non-CDATA code snippets.</Criterion>
+          <Criterion>Identity rules validate COMPONENT-UPPER-SLUG charset and uniqueness, TASK-T-NNN and WAVE-N patterns, and bare-slug depends_on references resolving to declared components or tasks.</Criterion>
+          <Criterion>The cross-file rule verifies every plan architecture component exists in the referenced spec and the lifecycle rule checks status vocabulary plus plan-requires-approved-spec, with lifecycle-aware severity where draft incompleteness yields no ERROR while approved or applied documents with empty required sections do.</Criterion>
+          <Criterion>Package layout checks validate the date-prefixed slug form, reserved slug rejection, and archive detection for skip decisions.</Criterion>
+          <Criterion>Deterministic table-driven tests cover every rule with a fixture corpus including valid documents, each violation class, entity and CDATA edge cases, and the draft versus approved severity shift.</Criterion>
+          <Criterion>The module carries complete MODULE_CONTRACT, MODULE_MAP, block anchors, and LINKS referencing M-SPEC-LINT.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/spec-lint.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Add the cache home helper and the content-addressed lint cache.</Title>
+        <DependsOn>
+          <Task>T-002</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vvoc-paths.ts exports getCacheHome resolving XDG_CACHE_HOME with the same fallback pattern as the existing config and data helpers.</Criterion>
+          <Criterion>src/lib/spec-lint-cache.ts keys entries on sha256 hashes of every input artifact plus LINT_VERSION, stores verdicts under XDG_CACHE_HOME/vvoc/lint/cache.json through an injectable cache root, layers an in-memory map over lazy disk load with pruning of vanished paths, and exposes a bypass flag.</Criterion>
+          <Criterion>Editing one input artifact content changes its hash and invalidates dependent verdicts, including the spec hash inside a plan cache key, while unchanged inputs hit the cache.</Criterion>
+          <Criterion>Deterministic tests with temp directories and injected clocks prove hit, invalidation, pruning, lintVersion bump invalidation, and bypass behavior without touching the real cache home.</Criterion>
+          <Criterion>Edited contracts, maps, and anchors stay accurate in both touched lib files and config-layers tests cover getCacheHome.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/spec-lint-cache.test.ts src/lib/config-layers.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Wire the spec-guard config surface, schema, exports, and registration.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>plugin-toggle-config.ts adds the spec-guard toggle with an all-true default and conservative materialization expanding boolean or missing entries to mode warn while never overwriting user-provided mode values.</Criterion>
+          <Criterion>The embedded strict schema in vvoc-config.ts and schemas/vvoc/v3.json gain the spec-guard plugin arm accepting boolean or an object with mode warn or enforce and no other keys, rejecting unknown modes and unknown object keys, while existing arms stay unchanged and both schema sources remain exactly equivalent.</Criterion>
+          <Criterion>package.json exports the ./plugins/spec-guard subpath, src/index.ts exports SpecGuardPlugin, and opencode.ts registers the plugin conservatively beside existing plugin registrations with idempotent sync materialization.</Criterion>
+          <Criterion>Focused tests prove materialization conservatism for undefined, boolean, and user-edited entries, schema acceptance and rejection, embedded and file schema equivalence, plugin registration idempotence, and public export importability.</Criterion>
+          <Criterion>Edited contracts, maps, change summaries, and anchors remain accurate in every touched file.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/plugin-toggle-config.test.ts src/lib/vvoc-config.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Implement the spec-guard plugin read and write hooks.</Title>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/spec-guard/index.ts resolves the startup vvoc snapshot, honors the spec-guard toggle, and annotates reads of active .vvoc XML files by appending a bounded lint verdict to the tool output.</Criterion>
+          <Criterion>Reads of archived package files and non-.vvoc paths append nothing, and annotation behavior is identical in warn and enforce modes.</Criterion>
+          <Criterion>tool.execute.after validates post-write state of .vvoc XML files through the cache-backed engine; warn mode appends the verdict and enforce mode fails the tool call only when ERROR-severity findings exist, never for warning-only or clean states.</Criterion>
+          <Criterion>Lint engine or cache failures degrade to silent no-op with a warning log so the guard never breaks tool execution.</Criterion>
+          <Criterion>Hook-level deterministic tests with injected lint results and temp package fixtures prove read annotation, archive silence, warn append, enforce failure on ERROR, enforce pass on warning-only, and disabled-toggle no-hook cases.</Criterion>
+          <Criterion>The plugin carries complete MODULE_CONTRACT, MODULE_MAP, block anchors, and LINKS referencing M-PLUGIN-SPEC-GUARD.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/spec-guard/index.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Implement the vvoc lint command and CLI registration.</Title>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/commands/lint.ts accepts a file, package directory, or specs tree target, detects artifact type by root element, applies lifecycle-aware severity, and skips archived packages by default with a visible skipped count.</Criterion>
+          <Criterion>Flags --strict, --format json, and --no-cache behave as specified: strict escalates warnings to exit failure, json emits one parseable verdict object per run, no-cache bypasses the cache, and exit codes are zero without errors and one with errors.</Criterion>
+          <Criterion>The command is registered in src/cli.ts with help text and integrates the cache-backed engine so repeated runs reuse verdicts.</Criterion>
+          <Criterion>Deterministic tests with temp package fixtures prove exit codes, flag behavior, per-class error messages with file and line, archive skipping and --archive inclusion, and clean runs over the shipped reference templates.</Criterion>
+          <Criterion>Edited contracts, maps, and anchors stay accurate in both touched files.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/lint.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Synchronize README, GRACE graph, verification, and requirements projections.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents the vvoc lint command with flags and exit codes, the spec-guard plugin with warn and enforce modes and restart requirement, and the artifact format conventions.</Criterion>
+          <Criterion>.grace/graph gains M-SPEC-LINT and M-PLUGIN-SPEC-GUARD with paths, dependencies, and verification links, and updated purposes for M-CLI-COMMANDS, M-CLI-CONFIG, M-CONFIG-LAYERS, M-CLI-MANAGED-SKILLS, and M-PLUGIN-TOGGLE-CONFIG.</Criterion>
+          <Criterion>.grace/verification gains V-M-SPEC-LINT and V-M-PLUGIN-SPEC-GUARD entries with deterministic commands and updates affected existing entries.</Criterion>
+          <Criterion>.grace/context/requirements.xml reflects the spec-package format and verification capability if its current content covers either.</Criterion>
+          <Criterion>grace lint and grace status report zero findings after the durable updates.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bunx @osovv/grace-cli@rc lint --path .</Command>
+          <Command>bunx @osovv/grace-cli@rc status --path .</Command>
+        </Verification>
+      </T-007>
+    </ImplementationPlan>
+  </C-SPEC-IDENTITY-LINT>
+</GraceChangePlan>

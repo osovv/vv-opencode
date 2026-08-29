@@ -1,10 +1,10 @@
 // FILE: src/lib/vvoc-paths.ts
-// VERSION: 0.5.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Resolve vvoc and OpenCode config/data roots from XDG and canonical project-local conventions.
-//   SCOPE: XDG config/data home lookup, canonical global and project config path derivation, managed agent/skills directory resolution, and deterministic project data directory naming.
+//   PURPOSE: Resolve vvoc and OpenCode config/data/cache roots from XDG and canonical project-local conventions.
+//   SCOPE: XDG config/data/cache home lookup, canonical global and project config path derivation, managed agent/skills directory resolution, and deterministic project data directory naming.
 //   DEPENDS: [node:os, node:path, node:crypto]
-//   LINKS: [M-CONFIG-LAYERS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN]
+//   LINKS: [M-CONFIG-LAYERS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN, M-SPEC-LINT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -13,6 +13,7 @@
 //   VVOC_DIRECTORY_NAME - Project-local vvoc directory name.
 //   getConfigHome - Resolves the effective XDG config home.
 //   getDataHome - Resolves the effective XDG data home.
+//   getCacheHome - Resolves the effective XDG cache home.
 //   getGlobalOpencodeDir - Resolves the global OpenCode config directory.
 //   VVOC_CONFIG_FILE_NAME - Canonical vvoc config file name.
 //   getGlobalVvocDir - Resolves the global vvoc config directory.
@@ -28,7 +29,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Added canonical project .opencode and .vvoc/vvoc.json helpers and removed legacy root OpenCode path semantics.]
+//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Added getCacheHome for the content-addressed spec lint cache under XDG_CACHE_HOME.]
 // END_CHANGE_SUMMARY
 
 import { homedir } from "node:os";
@@ -60,6 +61,18 @@ export function getDataHome(dataHomeOverride?: string): string {
   }
 
   return join(homedir(), ".local", "share");
+}
+
+export function getCacheHome(cacheHomeOverride?: string): string {
+  if (typeof cacheHomeOverride === "string" && cacheHomeOverride.trim()) {
+    return cacheHomeOverride.trim();
+  }
+
+  if (typeof process.env.XDG_CACHE_HOME === "string" && process.env.XDG_CACHE_HOME.trim()) {
+    return process.env.XDG_CACHE_HOME.trim();
+  }
+
+  return join(homedir(), ".cache");
 }
 
 export function getGlobalOpencodeDir(configHomeOverride?: string): string {

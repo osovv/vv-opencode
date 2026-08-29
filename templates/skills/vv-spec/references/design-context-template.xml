@@ -40,11 +40,11 @@
     </assumption>
   </assumptions>
   <deferred>
-    <item>
+    <deferred_decision>
       <decision></decision>
       <why_deferred></why_deferred>
       <revisit_trigger></revisit_trigger>
-    </item>
+    </deferred_decision>
   </deferred>
   <scenarios>
     <scenario>

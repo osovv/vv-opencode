@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Covered peak-hours schema acceptance, rejection, and file schema parity.]
+//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Covered spec-guard schema acceptance, rejection, boolean form, and file schema parity.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -362,8 +362,24 @@ describe("plugins union parsing and schema", () => {
   test("schema accepts boolean and absent peak-hours entries for backward compatibility", () => {
     const booleanForm = JSON.parse(docWithPlugins({ "peak-hours": false }));
     expect(validateVvocConfigDocument(booleanForm)).toEqual([]);
-
     const absent = JSON.parse(docWithPlugins({ guardian: true }));
     expect(validateVvocConfigDocument(absent)).toEqual([]);
+  });
+
+  test("schema accepts a valid spec-guard entry and rejects malformed ones", () => {
+    const valid = JSON.parse(docWithPlugins({ "spec-guard": { enabled: true, mode: "enforce" } }));
+    expect(validateVvocConfigDocument(valid)).toEqual([]);
+
+    const warnOnly = JSON.parse(docWithPlugins({ "spec-guard": { mode: "warn" } }));
+    expect(validateVvocConfigDocument(warnOnly)).toEqual([]);
+
+    const booleanForm = JSON.parse(docWithPlugins({ "spec-guard": true }));
+    expect(validateVvocConfigDocument(booleanForm)).toEqual([]);
+
+    const badMode = JSON.parse(docWithPlugins({ "spec-guard": { mode: "strict" } }));
+    expect(validateVvocConfigDocument(badMode).length).toBeGreaterThan(0);
+
+    const unknownKey = JSON.parse(docWithPlugins({ "spec-guard": { severity: true } }));
+    expect(validateVvocConfigDocument(unknownKey).length).toBeGreaterThan(0);
   });
 });

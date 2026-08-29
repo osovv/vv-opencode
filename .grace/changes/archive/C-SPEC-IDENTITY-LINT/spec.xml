@@ -1,0 +1,65 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-SPEC-IDENTITY-LINT>
+    <Summary>Move .vvoc spec-package artifacts to element-name identity for addressable entities shared across spec and plan documents, and add deterministic host-side format verification: a vvoc lint CLI command, a spec-guard plugin that annotates reads and validates writes of active .vvoc XML files, and a content-addressed lint cache under the XDG cache home.</Summary>
+    <Problem>Spec-package markup encodes component identity in child name strings with generic closing tags, so cross-document traceability between spec components and plan architecture modules relies on prose-name coincidence, violating the project's own XML prompting principles outside the already-fixed tasks and waves sections. Every format rule lives only as prose inside managed skill instructions, nothing validates .vvoc artifacts programmatically, and models — especially small executor models — cannot be relied upon to invoke validation tooling themselves, so format drift is caught only by reader attention if at all.</Problem>
+    <Goals>
+      <Goal>Define the new artifact format: COMPONENT-UPPER-SLUG identity elements for spec components and plan architecture modules sharing one identity space, bare-slug depends_on references, snake_case field names throughout spec, plan, and design-context templates, a design_context path element in plan.xml, and a deferred_decision element in design-context.xml, with templates, managed skill instructions, and README synchronized.</Goal>
+      <Goal>Ship a vvoc lint command that accepts a file, a package directory, or a specs tree, detects artifact type by root element, applies lifecycle-aware severity, and exposes stable exit codes with --strict, --format json, --no-cache, and --archive flags, skipping archived packages by default with a visible skip note.</Goal>
+      <Goal>Ship a spec-guard plugin that appends lint verdicts to reads of active .vvoc XML files, validates post-write state through tool.execute.after, defaults to materialized warn mode, and supports opt-in enforce mode that fails a tool call only when its result contains ERROR-severity violations.</Goal>
+      <Goal>Build the lint engine on the existing htmlparser2 dependency in xmlMode with a strict stack validator and rules for well-formedness, the attribute ban, the template contract, slug validity and uniqueness, reference integrity, plan-components-subset-of-spec-components, lifecycle vocabulary, and package layout.</Goal>
+      <Goal>Persist lint results in a content-addressed cache under XDG_CACHE_HOME/vvoc/lint with a new getCacheHome helper, cache keys covering every input content hash plus a lintVersion constant, an in-memory layer backed by a disk layer with lazy pruning, and a --no-cache bypass.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>In-progress document composition and editing must never be broken: no mode may block legitimate incremental draft work, only ERROR-severity violations may fail a write in enforce mode, and draft-status structural incompleteness is never an ERROR.</Constraint>
+      <Constraint>Artifacts remain attribute-free XML with child elements only, and model-facing skill helpers remain grep/sed-only with no xmllint or XPath usage.</Constraint>
+      <Constraint>The plugin operates on the startup config snapshot like every other vvoc plugin, config writes stay conservative and idempotent, and the canonical schema stays strict v3 that fails loudly on invalid input.</Constraint>
+      <Constraint>Archived packages are immutable history: never modified, never linted by default, and never annotated on read.</Constraint>
+      <Constraint>No new runtime dependencies are introduced; htmlparser2 is already a package dependency.</Constraint>
+      <Constraint>The command exit-code contract is stable for scripting: zero without errors, one with errors, and --strict escalates warnings to failure.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Do not implement --fix or any automatic repair of spec-package artifacts.</NonGoal>
+      <NonGoal>Do not adopt xmllint, XPath, or any external XML tooling for models or for the linter itself.</NonGoal>
+      <NonGoal>Do not modify .grace artifacts or grace-cli behavior; GRACE documents keep their own format and validation path.</NonGoal>
+      <NonGoal>Do not retroactively rewrite, relint by default, or migrate archived spec packages.</NonGoal>
+      <NonGoal>Do not build a TUI surface for lint results.</NonGoal>
+      <NonGoal>Do not judge semantic correctness of requirements, plans, or design context beyond the declared structural rules.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>The shipped reference templates spec-template.xml, plan-template.xml, and design-context-template.xml pass vvoc lint with zero ERROR findings in their draft-status skeleton form.</Criterion>
+      <Criterion>A complete valid package in the new format lints clean with exit code zero across file, package, and tree invocation targets.</Criterion>
+      <Criterion>Each violation class — malformed XML, any XML attribute, any element outside the template contract, invalid or duplicate COMPONENT slug, dangling depends_on slug, plan architecture component absent from the spec, dangling task_id reference, unknown lifecycle or task status — produces a specific ERROR message carrying the file path and line number.</Criterion>
+      <Criterion>Lifecycle-aware severity holds: a draft-status document with empty or partially filled fields yields no ERROR, while the same document content marked approved yields ERROR findings for empty required sections.</Criterion>
+      <Criterion>--strict escalates warnings to exit failure, --format json emits one parseable verdict object per run, --no-cache bypasses all cached results, the default run skips archived packages with a visible skipped count, and --archive includes them.</Criterion>
+      <Criterion>Cache behavior is content-addressed: a second run over unchanged inputs reports cache hits, editing spec.xml content invalidates the dependent plan verdict because the spec hash is part of the plan cache key, and a lintVersion bump invalidates every entry.</Criterion>
+      <Criterion>Reading an active .vvoc XML file appends the lint verdict to the tool output, reading an archived file appends nothing, and both behaviors hold in warn and enforce modes.</Criterion>
+      <Criterion>A write whose resulting file state contains ERROR-severity violations fails the tool call in enforce mode and appends a warning verdict in warn mode; writes leaving clean or warning-only state never fail in either mode.</Criterion>
+      <Criterion>Strict schema v3 accepts plugins spec-guard as boolean or object with mode warn or enforce, sync materializes the default enabled-with-warn entry without overwriting user edits, and the plugin toggle surface includes spec-guard.</Criterion>
+      <Criterion>Managed skills vv-spec, vv-plan, and vv-execute teach the new format with element-name component identity, bare-slug references, snake_case fields, and updated grep examples, their loader tests pass, and README documents the format, the command, and the plugin.</Criterion>
+      <Criterion>Repository verification gates pass: targeted lint and plugin tests, bun run check, build, pack surface checks where exports change, and GRACE lint with zero findings after graph and verification projections are updated.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-COMMANDS />
+      <M-CLI-CONFIG />
+      <M-CONFIG-LAYERS />
+      <M-CLI-MANAGED-SKILLS />
+      <M-PLUGIN-TOGGLE-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/spec-lint.test.ts src/commands/lint.test.ts src/plugins/spec-guard.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/lib/vvoc-config.test.ts src/lib/plugin-toggle-config.test.ts src/lib/managed-skills.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bunx @osovv/grace-cli@rc lint --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic fixtures prove the severity model, per-class error messages with positions, exit-code and flag behavior, content-addressed cache invalidation, read and write plugin hook behavior across warn and enforce modes, strict schema acceptance and conservative materialization of the spec-guard default, template compliance of the shipped skeletons, synchronized managed skills and README, and clean GRACE state after graph and verification updates. The grace lint run before implementation serves only as the active-baseline check.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The htmlparser2 xmlMode event stream plus an in-repo strict stack validator is sufficient for all declared rules; an early spike against a live spec.xml with entities, CDATA, and a broken tag verifies this before the engine is built out.</Assumption>
+      <Assumption>tool.execute.after provides enough context to identify the written file path, following the existing hashline-edit usage pattern.</Assumption>
+      <Assumption>Appending verdict text to read tool results does not break tool result contracts, following the existing output-mutation precedent in secrets-redaction.</Assumption>
+      <Assumption>Naming is settled as the vvoc lint command, the spec-guard plugin, and src/lib/spec-lint.ts as the engine module.</Assumption>
+      <Assumption>Spec-package files remain small enough that content hashing is effectively free relative to parsing, so the cache is a correctness and noise discipline rather than a performance rescue.</Assumption>
+      <Assumption>The user approved warn as the materialized plugin default, enforce blocking only ERROR-severity states, and archive exclusion from both read annotation and default linting.</Assumption>
+    </Assumptions>
+  </C-SPEC-IDENTITY-LINT>
+</GraceChangeSpec>

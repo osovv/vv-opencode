@@ -1,10 +1,10 @@
 // FILE: src/lib/plugin-toggle-config.ts
-// VERSION: 1.4.0
+// VERSION: 1.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define canonical plugin toggle names, default-all-true values, and a pure plugin-enabled helper for loaded vvoc config snapshots.
-//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, default tool-history-compaction entry, revision-dated default peak-hours schedules and entry, conservative plugin entry materialization, pure toggle checks, and the toggle config type.
+//   SCOPE: Plugin name constants, default config builder, default hashline edit-routing table, default tool-history-compaction entry, revision-dated default peak-hours schedules and entry, default spec-guard entry, conservative plugin entry materialization, pure toggle checks, and the toggle config type.
 //   DEPENDS: [none]
-//   LINKS: [M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG, M-PEAK-HOURS-SCHEDULES]
+//   LINKS: [M-PLUGIN-TOGGLE-CONFIG, M-CLI-CONFIG, M-PEAK-HOURS-SCHEDULES, M-PLUGIN-SPEC-GUARD]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -20,15 +20,17 @@
 //   DEFAULT_PEAK_HOURS_SCHEDULES_REVISION - Revision date of the built-in peak-hours schedule data.
 //   DEFAULT_PEAK_HOURS_SCHEDULES - Revision-dated built-in provider peak windows for the peak-hours plugin.
 //   DEFAULT_PEAK_HOURS_ENTRY - Default materializable config entry for the peak-hours plugin.
+//   DEFAULT_SPEC_GUARD_ENTRY - Default materializable config entry for the spec-guard plugin.
 //   materializeHashlineEditEntry - Expand the hashline-edit entry so the routing table is present without overwriting user values.
 //   materializeToolHistoryCompactionEntry - Expand the tool-history-compaction entry so the compaction config is present without overwriting user values.
 //   materializePeakHoursEntry - Expand the peak-hours entry so defaults are present without overwriting user values.
+//   materializeSpecGuardEntry - Expand the spec-guard entry so the warn default is present without overwriting user values.
 //   isPluginEnabled - Returns whether the named plugin is enabled in a loaded vvoc config object.
 //   isVvocPluginEnabled - Alias for isPluginEnabled with explicit vvoc naming.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added the peak-hours toggle name, revision-dated default schedules, and conservative entry materialization.]
+//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Added the spec-guard toggle name, warn-mode default entry, and conservative entry materialization.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -44,6 +46,7 @@ export const PLUGIN_TOGGLE_NAMES = [
   "tool-history-compaction",
   "analytics",
   "peak-hours",
+  "spec-guard",
 ] as const;
 
 export type VvocPluginEntryConfig = {
@@ -131,6 +134,17 @@ export const DEFAULT_PEAK_HOURS_ENTRY = {
   schedules: DEFAULT_PEAK_HOURS_SCHEDULES,
 } as const;
 // END_BLOCK_PEAK_HOURS_DEFAULTS
+
+// START_BLOCK_SPEC_GUARD_DEFAULTS
+// Default entry for the spec-guard plugin: annotation on reads and post-write
+// validation run in warn mode, which appends verdicts but never fails a tool
+// call. enforce is the explicit user opt-in that fails writes with
+// ERROR-severity lint findings.
+export const DEFAULT_SPEC_GUARD_ENTRY = {
+  enabled: true,
+  mode: "warn",
+} as const;
+// END_BLOCK_SPEC_GUARD_DEFAULTS
 
 // START_BLOCK_DEFAULT_CONFIG
 export function createDefaultPluginToggleConfig(): VvocPluginToggleConfig {
@@ -271,6 +285,31 @@ export function materializePeakHoursEntry(
   };
 }
 // END_BLOCK_PEAK_HOURS_MATERIALIZE
+
+// START_BLOCK_SPEC_GUARD_MATERIALIZE
+/**
+ * Materialize the spec-guard plugin entry so the mode is always present in
+ * vvoc.json. Conservative: user values are never overwritten. Boolean or
+ * missing entries expand to the full default warn entry; object entries keep
+ * their enabled flag and mode when present, filling mode with the warn
+ * default only when it is absent.
+ */
+export function materializeSpecGuardEntry(
+  current: boolean | VvocPluginEntryConfig | undefined,
+): VvocPluginEntryConfig {
+  if (current === undefined || typeof current === "boolean") {
+    return {
+      enabled: current === undefined ? true : current,
+      mode: DEFAULT_SPEC_GUARD_ENTRY.mode,
+    };
+  }
+
+  return {
+    enabled: current.enabled ?? true,
+    mode: current.mode ?? DEFAULT_SPEC_GUARD_ENTRY.mode,
+  };
+}
+// END_BLOCK_SPEC_GUARD_MATERIALIZE
 
 // START_CONTRACT: isPluginEnabled
 //   PURPOSE: Return whether the named plugin is enabled in an already-loaded vvoc config.

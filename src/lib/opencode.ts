@@ -65,7 +65,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Materialized the conservative peak-hours plugin entry during install, init, and sync writes.]
+//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Materialized the conservative spec-guard plugin entry during install, init, and sync writes.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify, parse, type ParseError } from "jsonc-parser";
@@ -118,6 +118,7 @@ import {
   materializeHashlineEditEntry,
   materializeToolHistoryCompactionEntry,
   materializePeakHoursEntry,
+  materializeSpecGuardEntry,
 } from "./plugin-toggle-config.js";
 import {
   getConfigHome,
@@ -1003,6 +1004,7 @@ export async function syncVvocConfig(
     nextConfig.plugins["tool-history-compaction"],
   );
   nextConfig.plugins["peak-hours"] = materializePeakHoursEntry(nextConfig.plugins["peak-hours"]);
+  nextConfig.plugins["spec-guard"] = materializeSpecGuardEntry(nextConfig.plugins["spec-guard"]);
   return writeResolvedVvocConfig(paths.vvocConfigPath, currentText, nextConfig);
 }
 

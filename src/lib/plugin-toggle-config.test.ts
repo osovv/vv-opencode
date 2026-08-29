@@ -28,10 +28,12 @@ import {
   materializeHashlineEditEntry,
   materializeToolHistoryCompactionEntry,
   materializePeakHoursEntry,
+  materializeSpecGuardEntry,
   DEFAULT_HASHLINE_EDIT_ROUTING,
   DEFAULT_TOOL_HISTORY_COMPACTION_ENTRY,
   DEFAULT_PEAK_HOURS_SCHEDULES,
   DEFAULT_PEAK_HOURS_ENTRY,
+  DEFAULT_SPEC_GUARD_ENTRY,
 } from "./plugin-toggle-config.js";
 // END_BLOCK_IMPORT_HELPERS
 
@@ -39,7 +41,7 @@ const WEB_TOOLS_PLUGIN_NAME = "web-tools";
 
 // START_BLOCK_CONSTANTS_TEST
 describe("PLUGIN_TOGGLE_NAMES", () => {
-  test("contains exactly the 9 vvoc-managed plugins", () => {
+  test("contains exactly the vvoc-managed plugins", () => {
     expect(PLUGIN_TOGGLE_NAMES).toEqual([
       "guardian",
       "hashline-edit",
@@ -52,11 +54,12 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "tool-history-compaction",
       "analytics",
       "peak-hours",
+      "spec-guard",
     ]);
   });
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(11);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(12);
   });
 });
 // END_BLOCK_CONSTANTS_TEST
@@ -281,3 +284,38 @@ describe("materializePeakHoursEntry", () => {
   });
 });
 // END_BLOCK_PEAK_HOURS_MATERIALIZE_TESTS
+
+// START_BLOCK_SPEC_GUARD_MATERIALIZE_TESTS
+describe("materializeSpecGuardEntry", () => {
+  test("expands undefined and boolean entries to the default warn entry", () => {
+    expect(materializeSpecGuardEntry(undefined)).toEqual({ ...DEFAULT_SPEC_GUARD_ENTRY });
+    expect(materializeSpecGuardEntry(false)).toEqual({
+      ...DEFAULT_SPEC_GUARD_ENTRY,
+      enabled: false,
+    });
+  });
+
+  test("never overwrites a user-provided mode", () => {
+    expect(materializeSpecGuardEntry({ mode: "enforce" })).toEqual({
+      enabled: true,
+      mode: "enforce",
+    });
+    expect(materializeSpecGuardEntry({ enabled: false, mode: "warn" })).toEqual({
+      enabled: false,
+      mode: "warn",
+    });
+  });
+
+  test("fills an absent mode with the warn default", () => {
+    expect(materializeSpecGuardEntry({ enabled: true })).toEqual({
+      enabled: true,
+      mode: "warn",
+    });
+  });
+
+  test("includes spec-guard in the canonical toggle list", () => {
+    expect(PLUGIN_TOGGLE_NAMES).toContain("spec-guard");
+    expect(createDefaultPluginToggleConfig()["spec-guard"]).toBe(true);
+  });
+});
+// END_BLOCK_SPEC_GUARD_MATERIALIZE_TESTS

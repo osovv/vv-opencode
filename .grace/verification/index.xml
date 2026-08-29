@@ -24,6 +24,8 @@
         <V-M-PEAK-HOURS-SCHEDULES />
         <V-M-PLUGIN-PEAK-HOURS />
         <V-M-TUI-PEAK-HOURS-BANNER />
+        <V-M-SPEC-LINT />
+        <V-M-PLUGIN-SPEC-GUARD />
         <V-M-WEB-CONFIG />
         <V-M-WEB-HTTP />
         <V-M-WEB-SEARCH-SERVICE />

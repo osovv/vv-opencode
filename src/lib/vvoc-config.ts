@@ -454,6 +454,16 @@ export const VVOC_CONFIG_SCHEMA = {
             },
             additionalProperties: false,
           },
+          {
+            type: "object",
+            description:
+              "spec-guard plugin entry: enabled plus lint enforcement mode warn or enforce.",
+            properties: {
+              enabled: { type: "boolean" },
+              mode: { type: "string", enum: ["warn", "enforce"] },
+            },
+            additionalProperties: false,
+          },
         ],
       },
     },

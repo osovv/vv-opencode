@@ -146,12 +146,13 @@ All artifacts for one feature live together:
 
 Package ids are date-prefixed (`YYYY-MM-DD-<slug>`, for example `2026-06-24-cache-store`) so active packages sort by creation date; the prefix is date-only, never a full timestamp. Spec and plan lifecycle runs through a top-level status: `draft` while being written, `approved` after explicit user approval, `applied` after successful execution. `vv-execute` archives applied packages by moving the whole directory to `.vvoc/specs/archive/YYYY-MM-DD-<slug>-<timestamp>/`.
 
-Specs and plans are XML, so requirements, tasks, acceptance criteria, and dependencies stay grep-able. Task and wave identity lives in unique element names (`<TASK-T-001>…</TASK-T-001>`, `<WAVE-1>…</WAVE-1>`), so grep/sed extraction stays exact without a separate query language:
+Specs and plans are XML, so requirements, tasks, acceptance criteria, and dependencies stay grep-able. Identity lives in unique element names — tasks and waves as `<TASK-T-001>…</TASK-T-001>` and `<WAVE-1>…</WAVE-1>`, spec and plan components as `<COMPONENT-CACHE-STORE>…</COMPONENT-CACHE-STORE>` — so grep/sed extraction stays exact without a separate query language. Field names use snake_case; component references are bare slugs; plan architecture components always reuse the exact identities declared in spec.xml, so a plan component without a spec component is a lint error, not a convention breach:
 
 ```bash
 grep '<TASK-T-' .vvoc/specs/*/plan.xml      # task ids
 grep '<criterion>' .vvoc/specs/*/plan.xml   # acceptance criteria
 grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
+grep '<COMPONENT-' .vvoc/specs/*/*.xml      # component map across spec and plan
 ```
 
 `vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute`, `vv-reflect`, and `vv-handoff` are available as managed skills for plan execution, durable repository memory, and end-of-session handoff notes.
@@ -160,7 +161,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 
 ## What's inside
 
-### The eleven plugins
+### The twelve plugins
 
 | Plugin | What it does |
 |---|---|
@@ -174,6 +175,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 | **ToolHistoryCompactionPlugin** | Shrinks the context replayed to the model by compacting old tool outputs non-destructively, without touching on-disk history. |
 | **AnalyticsPlugin** | Local-only token and cache telemetry per model step, a live `cache NN%` indicator in the TUI, and `vvoc analytics cache-hit-rate` for retrospective comparison. |
 | **PeakHoursPlugin** | Warns or blocks models whose provider is in peak-priced hours right now, suggests connected off-peak providers, and shows a persistent orange banner in the TUI. |
+| **SpecGuardPlugin** | Deterministic host-side verification of spec-package artifacts: annotates reads with lint verdicts and validates writes; in enforce mode refuses writes that would break the format. |
 | **ContextTuiPlugin** | The `/context` inspector: an honest, scrollable TUI dialog showing context-window usage by category, tool, and MCP server. |
 
 ### Managed agents
@@ -540,6 +542,34 @@ Config lives in `vvoc.json` under `plugins["peak-hours"]` and is conservatively 
 ```
 
 Windows use `HH:MM` in an explicit timezone (default UTC), may cross midnight (`"start": "22:00", "end": "02:00"`), and accept an optional `days` restriction (0=Sunday … 6=Saturday, default all days). A provider entry may override the global mode with `"mode": "hard"`. Set the top-level `"mode": "hard"` to enforce blocking everywhere, or `"enabled": false` to disable the plugin entirely. Changes require an OpenCode restart, like other runtime plugin settings.
+
+### Spec lint and spec-guard
+
+The spec-package format is verified by deterministic host-side tooling, not by model discipline: models keep grep/sed as their query layer, and `vvoc lint` plus `SpecGuardPlugin` enforce the invariants in code.
+
+```bash
+vvoc lint                                    # lint .vvoc/specs (active packages only)
+vvoc lint .vvoc/specs/2026-08-24-cache/      # one package directory
+vvoc lint .vvoc/specs/2026-08-24-cache/plan.xml   # one file (its sibling spec joins for cross-file rules)
+vvoc lint --archive                          # include archived packages for migration audits
+vvoc lint --strict                           # exit 1 on warnings, not only errors
+vvoc lint --format json --no-cache           # one JSON verdict object; bypass the cache
+```
+
+The engine checks well-formedness, the attribute ban, the template contract per artifact type, `COMPONENT-UPPER-SLUG` / `TASK-T-NNN` / `WAVE-N` identity patterns and uniqueness, reference integrity (component slugs, task ids), the **plan-components-subset-of-spec-components** rule, lifecycle vocabulary, and package layout. Severity is lifecycle-aware: a `draft` document may have empty sections mid-interview and is never an error; `approved`/`applied` documents must be complete. Exit codes are stable for scripts: `0` without errors, `1` with errors, `--strict` escalates warnings. Results are cached content-addressed under `$XDG_CACHE_HOME/vvoc/lint/` — a verdict is recomputed whenever any input byte or the lint rule version changes.
+
+`SpecGuardPlugin` brings the same verdicts into the session:
+
+- **reads**: reading an active `spec.xml` / `plan.xml` / `design-context.xml` appends a bounded `[spec-guard]` verdict to the tool result, so agents see drift before trusting the file; archived files are never annotated;
+- **writes**: `warn` (default) appends the verdict after a write; `enforce` additionally refuses writes whose result would contain ERROR-severity findings — incremental draft editing is never blocked, because draft incompleteness is never an error.
+
+```json
+"plugins": {
+  "spec-guard": { "enabled": true, "mode": "warn" }
+}
+```
+
+Conservatively materialized by `vvoc sync`/`init`; `enforce` blocks only ERROR states; internal failures degrade to a warning log and never break a tool call. Changes require an OpenCode restart, like other runtime plugin settings.
 
 ### Web tools
 
