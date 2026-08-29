@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Initial plugin: read verdict injection, post-write validation, warn default, ERROR-only enforce.]
+//   LAST_CHANGE: [DIRECT-FIX - Read-path verdicts now derive from the artifact file on disk instead of the tool's rendered output, whose envelope tags and line prefixes are host-specific.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -252,8 +252,10 @@ export function createSpecGuardPlugin(
           const currentMode = deps.mode();
 
           if (input.tool === "read") {
-            // The read tool result carries the file content; lint it without reading the filesystem again.
-            const { verdict, cached } = await lintSpecGuardFile(deps, path, output.output);
+            // Lint the file from disk, never the tool's rendered output: read
+            // tool results are host-specific renderings (line-number prefixes,
+            // envelope tags), so the verdict must derive from the artifact bytes.
+            const { verdict, cached } = await lintSpecGuardFile(deps, path);
             output.output = `${output.output}\n\n${formatSpecGuardVerdict(verdict, cached)}`;
             return;
           }

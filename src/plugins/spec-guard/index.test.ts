@@ -92,6 +92,21 @@ describe("read annotation", () => {
     expect(output.output).toContain("spec OK");
   });
 
+  test("derives the read verdict from the file on disk, not the tool rendering", async () => {
+    const file = ".vvoc/specs/2026-08-29-cache/spec.xml";
+    const { hooks } = await makePlugin("warn", { [file]: VALID_SPEC });
+    // Hosts may render read results with envelope tags and line prefixes; the
+    // verdict must still describe the artifact, never the rendering.
+    const rendered = `<path>${file}</path>\n<type>file</type>\n<content>\n1: <spec>\n2:   <status>draft</status>\n</content>`;
+    const output = { title: "read", output: rendered, metadata: {} };
+    await hooks["tool.execute.after"]!(
+      { tool: "read", sessionID: "s", callID: "c", args: { filePath: file } },
+      output,
+    );
+    expect(output.output).toContain("spec OK");
+    expect(output.output).not.toContain("xml.content-after-root");
+  });
+
   test("appends nothing for archived files or foreign paths", async () => {
     const { hooks } = await makePlugin("warn", {
       ".vvoc/specs/archive/2026-08-29-cache-1/spec.xml": VALID_SPEC,
