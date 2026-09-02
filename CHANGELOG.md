@@ -1,3 +1,11 @@
+## <small>1.3.6 (2026-09-02)</small>
+
+### Summary
+
+This release fixes the peak-hours plugin so its default soft mode no longer injects a cost notice into the system prompt. Previously, requests made during configured peak windows had a soft notice appended to the system prompt to warn about elevated pricing; now soft mode is fully pass-through so the plugin never mutates messages or their system prompts. Users still see the persistent orange TUI banner with the peak window, elevated-pricing warning, and off-peak provider suggestions, and the hard-block behavior that rejects peak-hour requests with a clear error remains unchanged. The result keeps system prompts clean and untouched during peak hours while keeping peak-cost awareness visible in the interface.
+
+* fix(peak-hours): stop injecting the soft notice into the system prompt ([d82f99b](https://github.com/osovv/vv-opencode/commit/d82f99b))
+
 ## <small>1.3.6-rc.8 (2026-08-29)</small>
 
 ### Summary
