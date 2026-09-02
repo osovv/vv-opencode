@@ -1,8 +1,8 @@
 // FILE: src/plugins/peak-hours/index.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify peak-hours plugin gating, soft notes, hard blocks, grace, exemptions, suggestions, and fail-open behavior.
-//   SCOPE: Disabled entry no-hook behavior, soft system-note injection with dedupe, hard blocking text with dynamic suggestions and all-peak degradation, session-age and parentID grace, internal and subagent-like exemptions, per-provider mode overrides, and lookup-failure fail-open.
+//   PURPOSE: Verify peak-hours plugin gating, hard blocks, grace, exemptions, suggestions, soft pass-through, and fail-open behavior.
+//   SCOPE: Disabled entry no-hook behavior, soft pass-through without server-side message mutation, hard blocking text with dynamic suggestions and all-peak degradation, session-age and parentID grace, internal and subagent-like exemptions, per-provider mode overrides, and lookup-failure fail-open.
 //   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/peak-hours/index.ts, src/lib/peak-hours.ts]
 //   LINKS: [M-PLUGIN-PEAK-HOURS, V-M-PLUGIN-PEAK-HOURS]
 //   ROLE: TEST
@@ -15,20 +15,17 @@
 //   baseEntry - Fully seeded entry fixture for dependency injection.
 //   makeDeps - Builds injectable dependencies with captured logs.
 //   makePlugin - Builds the plugin hooks with the given dependency overrides.
-//   makeIO - Builds chat.message input and mutable output for one message.
 //   makeParamsIO - Builds chat.params input and output for one LLM request.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added hook-level deterministic coverage for the peak-hours server plugin.]
+//   LAST_CHANGE: [DIRECT-FIX - Replaced soft system-note coverage with soft pass-through and chat.params no-op coverage after removing the chat.message injection.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { Plugin } from "@opencode-ai/plugin";
 import {
-  appendSystemNote,
   buildHardBlockMessage,
-  buildSoftSystemNote,
   createPeakHoursPlugin,
   type PeakHoursPluginDependencies,
 } from "./index.js";
@@ -81,27 +78,6 @@ async function makePlugin(
   return { plugin: plugin as Awaited<ReturnType<Plugin>>, logs };
 }
 
-function makeIO(options: { agent?: string; providerID?: string; sessionID?: string } = {}) {
-  const input = {
-    sessionID: options.sessionID ?? "ses_1",
-    agent: options.agent ?? "build",
-    model: options.providerID
-      ? { providerID: options.providerID, modelID: "some-model" }
-      : undefined,
-  };
-  const output = {
-    message: {
-      agent: options.agent ?? "build",
-      ...(options.providerID
-        ? { model: { providerID: options.providerID, modelID: "some-model" } }
-        : {}),
-      system: undefined as string | undefined,
-    },
-    parts: [],
-  };
-  return { input, output };
-}
-
 /** chat.params-shaped input for the hard-block hook. */
 function makeParamsIO(options: { agent?: string; providerID?: string; sessionID?: string } = {}) {
   const input = {
@@ -125,9 +101,9 @@ describe("PeakHoursPlugin gating", () => {
     expect(plugin.config).toBeUndefined();
   });
 
-  test("registers the chat.message, chat.params, and config hooks when enabled", async () => {
+  test("registers the chat.params and config hooks when enabled", async () => {
     const { plugin } = await makePlugin();
-    expect(typeof plugin["chat.message"]).toBe("function");
+    expect(plugin["chat.message"]).toBeUndefined();
     expect(typeof plugin["chat.params"]).toBe("function");
     expect(typeof plugin.config).toBe("function");
   });
@@ -142,14 +118,6 @@ describe("PeakHoursPlugin hard mode", () => {
       /PEAK_HOURS_BLOCK: provider "deepseek" is in peak hours until 10:00 UTC \(about 3 h\).*z-ai, qwen, openai/s,
     );
     expect(logs.some((entry) => entry.message.includes("hard block applied"))).toBe(true);
-  });
-
-  test("chat.message never throws in hard mode and adds no note", async () => {
-    const { plugin } = await makePlugin();
-    const { input, output } = makeIO({ providerID: "deepseek" });
-
-    await expect(plugin["chat.message"]!(input as never, output as never)).resolves.toBeUndefined();
-    expect(output.message.system).toBeUndefined();
   });
 
   test("degrades to an all-peak message when every connected provider is peak-active", async () => {
@@ -241,53 +209,39 @@ describe("PeakHoursPlugin grace and exemptions", () => {
 describe("PeakHoursPlugin no-op paths", () => {
   test("ignores providers without schedules", async () => {
     const { plugin } = await makePlugin();
-    const { input, output } = makeIO({ providerID: "openai" });
+    const { input, output } = makeParamsIO({ providerID: "openai" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toBeUndefined();
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 
-  test("ignores messages without a model", async () => {
+  test("ignores requests without a model", async () => {
     const { plugin } = await makePlugin();
-    const { input, output } = makeIO({});
+    const { input, output } = makeParamsIO({});
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toBeUndefined();
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 
   test("ignores providers outside their windows", async () => {
     const { plugin } = await makePlugin({
       now: () => new Date("2026-08-21T12:00:00.000Z"),
     });
-    const { input, output } = makeIO({ providerID: "deepseek" });
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-    expect(output.message.system).toBeUndefined();
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 });
 
 describe("PeakHoursPlugin soft mode", () => {
-  test("appends the bounded notice once with provider and window end", async () => {
+  test("registers no chat.message hook so nothing is injected into the system prompt", async () => {
     const { plugin } = await makePlugin({ entry: baseEntry({ mode: "soft" }) });
-    const { input, output } = makeIO({ providerID: "deepseek" });
-
-    await plugin["chat.message"]!(input as never, output as never);
-    await plugin["chat.message"]!(input as never, output as never);
-
-    expect(output.message.system).toContain('<peak_hours_notice>Provider "deepseek"');
-    expect(output.message.system).toContain("until 10:00 UTC");
-    expect(output.message.system?.match(/<peak_hours_notice>/g)).toHaveLength(1);
+    expect(plugin["chat.message"]).toBeUndefined();
   });
 
-  test("preserves existing system text", async () => {
+  test("lets a peak-provider LLM request through in chat.params without throwing", async () => {
     const { plugin } = await makePlugin({ entry: baseEntry({ mode: "soft" }) });
-    const { input, output } = makeIO({ providerID: "deepseek" });
-    output.message.system = "Existing guidance.";
+    const { input, output } = makeParamsIO({ providerID: "deepseek" });
 
-    await plugin["chat.message"]!(input as never, output as never);
-
-    expect(output.message.system).toContain("Existing guidance.");
-    expect(output.message.system).toContain("<peak_hours_notice>");
+    await expect(plugin["chat.params"]!(input as never, output as never)).resolves.toBeUndefined();
   });
 });
 
@@ -313,31 +267,5 @@ describe("message builders", () => {
     );
     expect(message).toContain("until 10:00 UTC (about 2 h 5 min)");
     expect(message).toContain("z-ai, qwen");
-  });
-
-  test("buildSoftSystemNote stays bounded and tagged", () => {
-    const note = buildSoftSystemNote("deepseek", {
-      providerKey: "deepseek",
-      providerID: "deepseek",
-      window: {
-        startMinutes: 360,
-        endMinutes: 600,
-        crossMidnight: false,
-        tz: "UTC",
-        days: [0, 1, 2, 3, 4, 5, 6],
-      },
-      endsAt: new Date("2026-08-21T10:00:00.000Z"),
-      startedAt: new Date("2026-08-21T06:00:00.000Z"),
-      minutesRemaining: 180,
-    });
-    expect(note.startsWith("<peak_hours_notice>")).toBe(true);
-    expect(note.endsWith("</peak_hours_notice>")).toBe(true);
-    expect(note.length).toBeLessThan(300);
-  });
-
-  test("appendSystemNote never duplicates the notice", () => {
-    const first = appendSystemNote(undefined, "<peak_hours_notice>a</peak_hours_notice>");
-    const second = appendSystemNote(first, "<peak_hours_notice>a</peak_hours_notice>");
-    expect(second).toBe(first);
   });
 });

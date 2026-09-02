@@ -513,7 +513,7 @@ Several providers (DeepSeek, Z.AI, Qwen) bill higher rates during daily or weekd
 
 Behavior per mode:
 
-- **soft** (default): the message goes through, the model receives a one-line cost notice, and the TUI shows a persistent orange banner in the bottom slot: `⚠ PEAK deepseek until 10:00 UTC · elevated pricing · off-peak now: z-ai, qwen`.
+- **soft** (default): the message goes through and the TUI shows a persistent orange banner in the bottom slot: `⚠ PEAK deepseek until 10:00 UTC · elevated pricing · off-peak now: z-ai, qwen`.
 - **hard**: the LLM request is rejected with the window end, the wait time, and the connected providers that are currently outside peak (`PEAK_HOURS_BLOCK: provider "deepseek" is in peak hours until 10:00 UTC (about 3 h). … Connected providers outside peak hours right now: z-ai, qwen. …`). The block fires in `chat.params`, after the message is stored: your message stays in the session history and the block renders as a regular error entry, not a dropped message.
 
 Nothing already in flight is ever killed:

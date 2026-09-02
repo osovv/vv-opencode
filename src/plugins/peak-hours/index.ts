@@ -1,8 +1,8 @@
 // FILE: src/plugins/peak-hours/index.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Warn or block LLM requests whose model provider is in configured peak hours, with dynamic off-peak provider suggestions and session-age plus subagent grace.
-//   SCOPE: Startup vvoc snapshot resolution and peak-hours entry parsing, internal and subagent-like agent exemptions, persisted-session grace lookup, connected provider enumeration with bounded fallback, soft system-note injection through chat.message, hard blocking through a chat.params error raised after the user message is persisted, and fail-open degradation.
+//   PURPOSE: Block LLM requests whose model provider is in configured peak hours in hard mode, with dynamic off-peak provider suggestions and session-age plus subagent grace; soft mode never mutates messages.
+//   SCOPE: Startup vvoc snapshot resolution and peak-hours entry parsing, internal and subagent-like agent exemptions, persisted-session grace lookup, connected provider enumeration with bounded fallback, hard blocking through a chat.params error raised after the user message is persisted, soft pass-through without any server-side message mutation, and fail-open degradation.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/managed-agents.ts, src/lib/peak-hours.ts]
 //   LINKS: [M-PLUGIN-PEAK-HOURS, M-PEAK-HOURS-SCHEDULES, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
@@ -13,14 +13,12 @@
 //   PeakHoursPluginDependencies - Injectable clock, entry, session, provider, and logging dependencies for focused tests.
 //   SessionGraceInfo - Persisted session fields used for grace decisions.
 //   buildHardBlockMessage - Composes the blocking error text with window end, wait, and suggestions.
-//   buildSoftSystemNote - Composes the bounded model-facing peak notice.
-//   appendSystemNote - Appends the notice once without duplicating it.
 //   createPeakHoursPlugin - Builds the peak-hours server plugin with injectable dependencies.
 //   PeakHoursPlugin - Default production peak-hours server plugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Moved the hard block to chat.params so blocked messages persist in session history with a proper error part.]
+//   LAST_CHANGE: [DIRECT-FIX - Removed the soft-mode chat.message system-note injection so soft mode passes messages through untouched; peak cost state stays visible through the TUI banner only.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -47,7 +45,6 @@ const BUILT_IN_SUBAGENTS = ["general"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
 
 const PEAK_HOURS_SERVICE = "peak-hours";
-const PEAK_HOURS_NOTE_TAG = "<peak_hours_notice>";
 const PROVIDER_CACHE_TTL_MS = 10 * 60 * 1_000;
 const PROVIDER_FETCH_TIMEOUT_MS = 5_000;
 const MAX_LOG_TEXT_CHARS = 500;
@@ -122,37 +119,6 @@ export function buildHardBlockMessage(
     );
   }
   return lines.join(" ");
-}
-
-// START_CONTRACT: buildSoftSystemNote
-//   PURPOSE: Compose the bounded model-facing notice for soft mode.
-//   INPUTS: { providerID: string - peak provider id; peak: ActivePeak - active window hit }
-//   OUTPUTS: { string - single-line tagged system notice }
-//   SIDE_EFFECTS: none
-//   LINKS: formatPeakEndTime
-// END_CONTRACT: buildSoftSystemNote
-export function buildSoftSystemNote(providerID: string, peak: ActivePeak): string {
-  const until = formatPeakEndTime(peak.endsAt);
-  return `${PEAK_HOURS_NOTE_TAG}Provider "${providerID}" is in peak hours until ${until}; pricing is elevated. Keep responses focused and avoid unnecessary verbosity.</${PEAK_HOURS_NOTE_TAG.slice(1)}`;
-}
-
-// START_CONTRACT: appendSystemNote
-//   PURPOSE: Append the peak notice to an existing system prompt exactly once.
-//   INPUTS: { existingSystem: string | undefined - current system prompt; note: string - composed notice }
-//   OUTPUTS: { string - system prompt with the notice appended at most once }
-//   SIDE_EFFECTS: none
-//   LINKS: buildSoftSystemNote
-// END_CONTRACT: appendSystemNote
-export function appendSystemNote(existingSystem: string | undefined, note: string): string {
-  if (typeof existingSystem === "string" && existingSystem.includes(PEAK_HOURS_NOTE_TAG)) {
-    return existingSystem;
-  }
-  const parts: string[] = [];
-  if (typeof existingSystem === "string" && existingSystem.trim()) {
-    parts.push(existingSystem.trim());
-  }
-  parts.push(note);
-  return parts.join("\n\n");
 }
 
 // START_BLOCK_DEFAULT_DEPENDENCIES
@@ -240,13 +206,14 @@ type PeakDecision = {
 /**
  * Builds the peak-hours OpenCode server plugin.
  *
- * chat.message applies the soft system notice; chat.params enforces the hard
- * block by throwing after the user message is persisted, so OpenCode renders
- * the block as a standard message error part with dynamic off-peak suggestions
- * instead of dropping the message. Internal agents, subagent agents, sessions
- * with a parentID, and sessions created before the active window start are
- * never hard-blocked. Schedule and lookup failures degrade to soft or no-op
- * and never block.
+ * Soft mode is pass-through: the server plugin never mutates the message or
+ * its system prompt, and peak cost state stays visible only through the TUI
+ * banner. chat.params enforces the hard block by throwing after the user
+ * message is persisted, so OpenCode renders the block as a standard message
+ * error part with dynamic off-peak suggestions instead of dropping the
+ * message. Internal agents, subagent agents, sessions with a parentID, and
+ * sessions created before the active window start are never hard-blocked.
+ * Schedule and lookup failures degrade to soft or no-op and never block.
  */
 export function createPeakHoursPlugin(
   dependencies: Partial<PeakHoursPluginDependencies> = {},
@@ -355,30 +322,6 @@ export function createPeakHoursPlugin(
     return {
       config: async (config) => {
         syncConfiguredSubagents((config.agent ?? {}) as Record<string, unknown>, knownSubagents);
-      },
-      "chat.message": async (input, output) => {
-        const agent = output.message.agent ?? input.agent;
-        const providerID = input.model?.providerID ?? output.message.model?.providerID;
-        if (!providerID) return;
-
-        const decision = await resolvePeakDecision({
-          agent,
-          providerID,
-          sessionID: input.sessionID,
-        });
-        // Hard mode blocks later in chat.params, after the message is persisted.
-        if (!decision || decision.mode !== "soft") return;
-
-        output.message.system = appendSystemNote(
-          output.message.system,
-          buildSoftSystemNote(providerID, decision.peak),
-        );
-        await deps.log("info", "peak-hours soft notice applied", {
-          providerID,
-          providerKey: decision.peak.providerKey,
-          until: formatPeakEndTime(decision.peak.endsAt),
-          sessionID: input.sessionID,
-        });
       },
       "chat.params": async (input) => {
         const providerID = input.model?.providerID;
