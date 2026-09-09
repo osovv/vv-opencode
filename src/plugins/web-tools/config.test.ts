@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify runtime web config and credential resolution plus the git-tracked apiKey warning helper.
-//   SCOPE: Provider defaults, explicit Z.AI region handling, environment-over-config precedence, credential source reporting, native credential freedom, and git-tracked warning behavior with an injected command runner.
+//   SCOPE: Provider defaults, explicit Z.AI region handling, environment-over-config precedence, config apiKey ${VAR} placeholder substitution with unset-reference warnings, credential source reporting, native credential freedom, and git-tracked warning behavior with an injected command runner.
 //   DEPENDS: [bun:test, src/plugins/web-tools/config.ts, src/lib/vvoc-config.ts, src/lib/config-layers.ts]
 //   LINKS: [M-WEB-CONFIG, V-M-WEB-CONFIG]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered both Z.AI regions, shared environment precedence, and fail-closed missing regions.]
+//   LAST_CHANGE: [direct fix - Covered ${VAR} placeholder substitution in web apiKey fields and unset-reference warnings.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -126,6 +126,85 @@ describe("resolveWebRuntimeConfig", () => {
       value: "fetch-config",
       source: "config",
     });
+  });
+
+  test("config apiKey ${VAR} placeholder resolves from the environment", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot(
+        {
+          search: {
+            provider: "zai",
+            region: "international",
+            apiKey: "${VVOC_WEB_SEARCH_API_KEY}",
+          },
+          fetch: { provider: "zai", region: "international", apiKey: "${VVOC_WEB_FETCH_API_KEY}" },
+        },
+        { kind: "global" },
+      ),
+      {
+        VVOC_WEB_SEARCH_API_KEY: "search-key-from-env",
+        VVOC_WEB_FETCH_API_KEY: "fetch-key-from-env",
+      },
+    );
+    expect(resolved.search.credential).toEqual({
+      value: "search-key-from-env",
+      source: "config",
+    });
+    expect(resolved.fetch.provider === "zai" && resolved.fetch.credential).toEqual({
+      value: "fetch-key-from-env",
+      source: "config",
+    });
+    expect(resolved.warnings).toEqual([]);
+  });
+
+  test("canonical environment variable wins over a config apiKey placeholder", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot(
+        { search: { provider: "zai", region: "china", apiKey: "${VVOC_WEB_SEARCH_API_KEY}" } },
+        {
+          kind: "global",
+        },
+      ),
+      { ZAI_API_KEY: "canonical-env", VVOC_WEB_SEARCH_API_KEY: "placeholder-env" },
+    );
+    expect(resolved.search.credential).toEqual({ value: "canonical-env", source: "env" });
+    expect(resolved.warnings).toEqual([]);
+  });
+
+  test("placeholder referencing an unset variable yields no credential and a value-free warning", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot({ search: { provider: "exa", apiKey: "${VVOC_MISSING_KEY}" } }, { kind: "global" }),
+      {},
+    );
+    expect(resolved.search.credential).toBeUndefined();
+    expect(resolved.warnings).toHaveLength(1);
+    const warning = resolved.warnings[0]!;
+    expect(warning).toContain("web.search.apiKey");
+    expect(warning).toContain("VVOC_MISSING_KEY");
+    expect(warning).not.toContain("${VVOC_MISSING_KEY}");
+    expect(warning).not.toContain("$");
+  });
+
+  test("partially resolving placeholder keeps the partial credential and still warns", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot(
+        { fetch: { provider: "spider", apiKey: "prefix-${SPIDER_SET}-${SPIDER_UNSET}" } },
+        { kind: "global" },
+      ),
+      { SPIDER_SET: "middle" },
+    );
+    expect(resolved.fetch.credential).toEqual({ value: "prefix-middle-", source: "config" });
+    expect(resolved.warnings[0]).toContain("web.fetch.apiKey");
+    expect(resolved.warnings[0]).toContain("SPIDER_UNSET");
+  });
+
+  test("literal config apiKey produces no placeholder warnings", () => {
+    const resolved = resolveWebRuntimeConfig(
+      snapshot({ search: { provider: "exa", apiKey: "sk-literal" } }, { kind: "global" }),
+      {},
+    );
+    expect(resolved.search.credential).toEqual({ value: "sk-literal", source: "config" });
+    expect(resolved.warnings).toEqual([]);
   });
 
   test("zai fails closed when an in-memory config omits its required region", () => {

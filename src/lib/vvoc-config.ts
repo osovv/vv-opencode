@@ -287,6 +287,13 @@ const ZAI_REGION_REQUIREMENT = Object.fromEntries([
   ["then", { required: ["region"] }],
 ]);
 
+const WEB_API_KEY_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  description:
+    "Provider API key. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup.",
+};
+
 const WEB_CONFIG_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -297,7 +304,7 @@ const WEB_CONFIG_SCHEMA = {
       properties: {
         provider: { type: "string", enum: [...WEB_SEARCH_PROVIDERS] },
         region: { type: "string", enum: [...WEB_REGIONS] },
-        apiKey: { type: "string", minLength: 1 },
+        apiKey: WEB_API_KEY_SCHEMA,
       },
       allOf: [ZAI_REGION_REQUIREMENT],
     },
@@ -307,7 +314,7 @@ const WEB_CONFIG_SCHEMA = {
       properties: {
         provider: { type: "string", enum: [...WEB_FETCH_PROVIDERS] },
         region: { type: "string", enum: [...WEB_REGIONS] },
-        apiKey: { type: "string", minLength: 1 },
+        apiKey: WEB_API_KEY_SCHEMA,
       },
       allOf: [ZAI_REGION_REQUIREMENT],
     },

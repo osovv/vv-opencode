@@ -447,7 +447,8 @@
             },
             "apiKey": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "description": "Provider API key. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup."
             }
           },
           "allOf": [
@@ -491,7 +492,8 @@
             },
             "apiKey": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "description": "Provider API key. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup."
             }
           },
           "allOf": [

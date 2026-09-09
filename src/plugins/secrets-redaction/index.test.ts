@@ -2,7 +2,7 @@
 // VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Behavioral tests for the SecretsRedactionPlugin hook pipeline.
-//   SCOPE: chat message redaction including configured web apiKey values, tool-part state redaction, text completion restore, and tool arg restore.
+//   SCOPE: chat message redaction including configured and placeholder-resolved web apiKey values, tool-part state redaction, text completion restore, and tool arg restore.
 //   DEPENDS: bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, index
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Covered exact-value redaction and deduplication for configured web apiKey fields.]
+//   LAST_CHANGE: [direct fix - Covered placeholder-resolved web apiKey redaction rules and message-flow redaction of resolved values.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -216,6 +216,43 @@ describe("SecretsRedactionPlugin", () => {
     const empty = createDefaultVvocConfig();
     empty.web = { search: { apiKey: "" }, fetch: {} };
     expect(webApiKeyKeywordRules(empty)).toEqual([]);
+  });
+
+  test("web apiKey rules resolve ${VAR} placeholders from the environment", () => {
+    const config = createDefaultVvocConfig();
+    config.web = {
+      search: { apiKey: "${VVOC_TEST_SEARCH_KEY}" },
+      fetch: { apiKey: "${VVOC_TEST_UNSET_KEY}" },
+    };
+    expect(webApiKeyKeywordRules(config, { VVOC_TEST_SEARCH_KEY: "resolved-search-key" })).toEqual([
+      { value: "resolved-search-key", category: "WEB_API_KEY" },
+    ]);
+  });
+
+  test("redacts the resolved value of a placeholder web apiKey, not the placeholder text", async () => {
+    const realKey = "resolved-placeholder-key-789";
+    process.env.VVOC_TEST_WEB_PLACEHOLDER_KEY = realKey;
+    try {
+      const plugin = await createPlugin({
+        search: { provider: "exa", apiKey: "${VVOC_TEST_WEB_PLACEHOLDER_KEY}" },
+      });
+      const output = {
+        messages: [
+          {
+            info: { role: "user" },
+            parts: [{ type: "text", text: `key=${realKey} raw=\${VVOC_TEST_WEB_PLACEHOLDER_KEY}` }],
+          },
+        ],
+      };
+
+      await plugin["experimental.chat.messages.transform"]?.({} as never, output as never);
+      const text = (output.messages[0]!.parts[0] as { text: string }).text;
+      expect(text).not.toContain(realKey);
+      expect(text).toContain("${VVOC_TEST_WEB_PLACEHOLDER_KEY}");
+      expect(text).toMatch(/__VVOC_SECRET_WEB_API_KEY_[0-9a-f]{12}__/);
+    } finally {
+      delete process.env.VVOC_TEST_WEB_PLACEHOLDER_KEY;
+    }
   });
 
   test("restores placeholders in assistant text completion output", async () => {

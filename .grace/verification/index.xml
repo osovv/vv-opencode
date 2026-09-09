@@ -11,6 +11,7 @@
         <V-M-CLI-MANAGED-SKILLS />
         <V-M-CLI-AGENT-MODELS />
         <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-ENV-SUBSTITUTION />
         <V-M-CLI-COMMANDS />
         <V-M-CLI-GUARDIAN />
         <V-M-PLUGIN-MODEL-ROLES />
