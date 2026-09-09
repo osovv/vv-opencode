@@ -1,3 +1,11 @@
+## <small>1.3.7 (2026-09-09)</small>
+
+### Summary
+
+Release 1.3.7 fixes environment variable handling for web provider API credentials. Previously, ${VAR} placeholders in the web.search.apiKey or web.fetch.apiKey config values were passed to providers as literal strings, causing authentication failures even when the referenced environment variable contained a valid key. Configured apiKey values now support ${VAR} substitution resolved from the OpenCode process environment at startup, with canonical variables such as ZAI_API_KEY still taking precedence over config values, and a safe startup warning is emitted whenever a placeholder references an unset or empty variable. The new shared substitution helper also feeds the secrets-redaction plugin, so redaction rules are built from the resolved real key value rather than the placeholder text, meaning the actual credential is protected in provider-bound message flows instead of just the literal placeholder.
+
+* fix(web-tools): resolve ${VAR} env placeholders in web apiKey credentials ([f9ac6ee](https://github.com/osovv/vv-opencode/commit/f9ac6ee))
+
 ## <small>1.3.6 (2026-09-02)</small>
 
 ### Summary
