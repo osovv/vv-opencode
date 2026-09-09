@@ -1,7 +1,7 @@
 // FILE: src/plugins/web-tools/providers/brave.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.0.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the Brave Web Search adapter request shape, freshness mapping, normalization, and error mapping.
+//   PURPOSE: Verify the Brave Web Search adapter request shape, freshness mapping, normalization, zero-result envelopes, and error mapping.
 //   SCOPE: Deterministic tests using injected fetch implementations; no real network I/O and no credential leakage.
 //   DEPENDS: [bun:test, src/plugins/web-tools/providers/brave.ts]
 //   LINKS: [M-WEB-BRAVE, V-M-WEB-BRAVE]
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.0.0 - Initial coverage for the Brave Web Search adapter.]
+//   LAST_CHANGE: [2026-09-09 direct fix - Added regression coverage: zero-result 200 envelopes without web resolve to empty results, alien 200 envelopes still fail closed.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -89,6 +89,30 @@ describe("searchBrave", () => {
   test("an empty web.results array resolves to an empty array", async () => {
     const fetchImpl: FetchLike = async () => jsonResponse({ web: { results: [] } });
     expect(await searchBrave(input(), fetchImpl)).toEqual([]);
+  });
+
+  test("a zero-result 200 envelope without web resolves to an empty array", async () => {
+    // Recorded live 2026-09-09: Brave returns HTTP 200 with no `web` field for
+    // zero-result queries (query.bad_results true, empty mixed).
+    const fetchImpl: FetchLike = async () =>
+      jsonResponse({
+        type: "search",
+        query: {
+          original: "q",
+          bad_results: true,
+          more_results_available: false,
+        },
+        mixed: { type: "mixed", main: [], top: [], side: [] },
+      });
+    expect(await searchBrave(input(), fetchImpl)).toEqual([]);
+  });
+
+  test("a 200 envelope without web, query, or mixed still raises BAD_RESPONSE", async () => {
+    const fetchImpl: FetchLike = async () => jsonResponse({ error: "unrecognized" });
+    await expect(searchBrave(input(), fetchImpl)).rejects.toMatchObject({
+      provider: "brave",
+      code: "BAD_RESPONSE",
+    });
   });
 
   test("status 401 raises AUTH_FAILED naming brave", async () => {

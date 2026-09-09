@@ -1,8 +1,8 @@
 // FILE: src/plugins/web-tools/providers/brave.ts
-// VERSION: 1.0.0
+// VERSION: 1.0.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Call the Brave Web Search endpoint directly and normalize web results for the web_search tool.
-//   SCOPE: Brave request construction with X-Subscription-Token auth, count and freshness mapping, moderate safe search, and web result normalization.
+//   SCOPE: Brave request construction with X-Subscription-Token auth, count and freshness mapping, moderate safe search, web result normalization, and zero-result 200 envelopes without a web field resolving to empty results.
 //   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-BRAVE, M-WEB-HTTP, M-WEB-SEARCH-SERVICE]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.0.0 - Initial Brave Web Search adapter.]
+//   LAST_CHANGE: [2026-09-09 direct fix - Zero-result Brave 200 envelopes without a web field now resolve to empty results instead of BAD_RESPONSE.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -71,12 +71,18 @@ function parseBraveResults(bytes: Uint8Array): WebSearchResult[] {
   const web = isPlainObject(parsed) ? parsed.web : undefined;
   const results =
     isPlainObject(web) && Array.isArray(web.results) ? (web.results as unknown[]) : undefined;
-  if (!results) {
-    throw new WebProviderError("brave", "BAD_RESPONSE", "unexpected brave response envelope");
+  if (results) {
+    return results
+      .map(normalizeBraveResult)
+      .filter((result): result is WebSearchResult => result !== undefined);
   }
-  return results
-    .map(normalizeBraveResult)
-    .filter((result): result is WebSearchResult => result !== undefined);
+  // Brave answers zero-result queries with HTTP 200 and no `web` field at all
+  // (observed 2026-09-09: query.bad_results true, empty mixed). Recognize that
+  // envelope as an empty result set instead of a protocol error.
+  if (isPlainObject(parsed) && (isPlainObject(parsed.query) || isPlainObject(parsed.mixed))) {
+    return [];
+  }
+  throw new WebProviderError("brave", "BAD_RESPONSE", "unexpected brave response envelope");
 }
 // END_BLOCK_HELPERS
 
