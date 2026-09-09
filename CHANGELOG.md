@@ -1,3 +1,11 @@
+## <small>1.3.8 (2026-09-09)</small>
+
+### Summary
+
+Version 1.3.8 fixes a Brave Web Search integration issue where queries returning zero results caused a spurious tool error instead of cleanly reporting no matches. Brave responds to such queries with HTTP 200 and omits the usual results field, which the parser previously rejected as a malformed response. The search adapter now recognizes that zero-result envelope as a legitimate empty result set, so web_search returns an empty result instead of failing, while genuinely unrecognized responses still fail closed to preserve safety. This eliminates confusing errors during legitimate searches that simply have no web results.
+
+* fix(web-tools): treat zero-result brave envelopes as empty results ([291b989](https://github.com/osovv/vv-opencode/commit/291b989))
+
 ## <small>1.3.7 (2026-09-09)</small>
 
 ### Summary
