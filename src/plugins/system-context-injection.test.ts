@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated the PluginInput fixture for OpenCode 1.18.2 experimental workspace registration.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated to per-profile controller-policy isolation coverage.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -181,6 +181,15 @@ describe("SystemContextInjectionPlugin", () => {
           "selectively delegate bounded repository search",
         ],
       },
+      {
+        profile: "delegated",
+        expected: "Keep architecture, important code reading, task contracts",
+        absent: [
+          "Work directly in the current session",
+          "selectively delegate bounded repository search",
+          "Use the full tracked implementation and review workflow",
+        ],
+      },
     ];
 
     for (const { profile, expected, absent } of cases) {
@@ -197,7 +206,7 @@ describe("SystemContextInjectionPlugin", () => {
       expect(systemText).toContain("<working_state>");
       expect(systemText).toContain(expected);
       for (const inactive of absent) expect(systemText).not.toContain(inactive);
-      for (const profileName of ["single-session", "balanced", "orchestrated"]) {
+      for (const profileName of ["single-session", "balanced", "orchestrated", "delegated"]) {
         expect(systemText).not.toContain(profileName);
       }
     }

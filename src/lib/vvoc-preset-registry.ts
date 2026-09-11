@@ -1,5 +1,5 @@
 // FILE: src/lib/vvoc-preset-registry.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical built-in vvoc preset registry from a single internal source of truth.
 //   SCOPE: Built-in preset name ordering, role and orchestration definitions, and built-in preset-name detection.
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.6 - vv-osovv-flash smart switches to the deepseek/vv-deepseek-v4-flash-max reasoning-effort alias.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added vv-astra-solo (single-session) and vv-astra-workers (delegated) with explicit-reasoning aliases.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -118,6 +118,27 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       reviewer: "zai-coding-plan/glm-5.2",
     },
     orchestration: { profile: "single-session" },
+  },
+  "vv-astra-solo": {
+    description: "Astra-primary solo stack with Spark fast and GLM-5.3 review.",
+    agents: {
+      default: "openai/vv-codex-gpt-6-astra-max",
+      fast: "openai/vv-codex-gpt-5.3-codex-spark-medium",
+      smart: "openai/vv-codex-gpt-6-astra-max",
+      reviewer: "zai-coding-plan/vv-glm-5.3-high",
+    },
+    orchestration: { profile: "single-session" },
+  },
+  "vv-astra-workers": {
+    description:
+      "Astra-architecture delegated stack with DeepSeek Flash workers and GLM-5.3 review.",
+    agents: {
+      default: "deepseek/vv-deepseek-flash-high",
+      fast: "openai/vv-codex-gpt-5.3-codex-spark-medium",
+      smart: "openai/vv-codex-gpt-6-astra-max",
+      reviewer: "zai-coding-plan/vv-glm-5.3-high",
+    },
+    orchestration: { profile: "delegated" },
   },
 } as const satisfies Record<string, BuiltinVvocPresetDefinition>;
 

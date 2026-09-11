@@ -1,20 +1,20 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.5.1
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance.
-//   SCOPE: work_item_open/list/close registration, tracked launch validation, result normalization and repair, round aggregation with bounded excerpts, implementation round limits, persistence, and profile-selected chat.message guidance.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts]
-//   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW
+//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools, host-call-bound attempts, and checkpoint reviewer linkage.
+//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization, tracked launch validation with delegated barriers and overlapping-write gates, result normalization and repair, callID-bound delegated attempt results and checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
+//   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   WorkflowPlugin - Registers workflow work-item tools, tracked task protocol enforcement, and primary-session workflow guidance injection.
+//   WorkflowPlugin - Registers workflow work-item tools, delegated control tools under the delegated profile, tracked task protocol enforcement with callID-bound delegated attempts and checkpoint linkage, and primary-session workflow guidance injection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.1 - Fixed session.deleted cleanup to read the session id from properties.info.id (per the SDK event shape), drop the in-memory store, and remove a duplicate directory deletion.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated control tools with root-session authorization, callID-bound attempts, checkpoint reviewer linkage, barrier gates, and checked persistence.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -42,14 +42,29 @@ import {
   type WorkItemStore,
 } from "./state.js";
 import {
+  applyDelegatedResult,
+  beginDelegatedLaunch,
+  revertInFlightDelegatedLaunches,
+} from "./delegated.js";
+import {
+  checkpointBarrierUnsatisfied,
+  findOverlappingInFlightReview,
+  recordCheckpointReviewerLaunch,
+  recordCheckpointReviewerResult,
+} from "./checkpoints.js";
+import type { DelegatedPlanRun } from "./checkpoints.js";
+import {
   getAllowedNextAgents,
   getAttemptedImplementationRound,
+  getReviewerRoleForAgent,
   shouldBlockRound,
 } from "./transitions.js";
 import {
   createWorkItemCloseTool,
+  createWorkItemDecideTool,
   createWorkItemListTool,
   createWorkItemOpenTool,
+  createWorkCheckpointTool,
 } from "./tooling.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
 import { loadVvocConfig } from "../../lib/config-layers.js";
@@ -60,9 +75,10 @@ import {
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import {
   deleteWorkflowSessionDir,
-  hydrateWorkflowState,
-  snapshotWorkflowState,
+  hydrateWorkflowStateChecked,
+  snapshotWorkflowStateChecked,
 } from "./persistence.js";
+import { loadApprovedDelegatedPlan } from "./checkpoint-io.js";
 
 const z = tool.schema;
 
@@ -96,6 +112,29 @@ stops, validate delegated results yourself, run fresh verification, and close co
 </workflow_protocol>
 `.trim();
 
+const DELEGATED_WORKFLOW_SYSTEM_INSTRUCTION = `
+<workflow_protocol>
+Delegated execution mechanics are available in this session. Open implementation tasks with
+work_item_open using mode "delegated" and an empty requiredReviewers array, then dispatch exactly
+one vv-implementer per task with a bounded task packet and the returned VVOC_WORK_ITEM_ID. Let the
+worker complete its local edit, test, and fix cycle before it reports.
+
+A DONE worker result waits in awaiting_acceptance: it never closes the work item and the worker
+never accepts its own result. Inspect the changed code and evidence yourself, then call
+work_item_decide with the attempt number to accept or request changes. DONE_WITH_CONCERNS requires
+an explicit concerns disposition. Controller retries are bounded to one correction attempt before
+explicit recovery; BLOCKED and NEEDS_CONTEXT remain hard stops.
+
+Register an approved plan once with work_checkpoint register, start each declared review checkpoint
+only after its prerequisite tasks are accepted, and run the due checkpoint before dependent waves.
+A checkpoint passes only when every declared reviewer passes against the pinned snapshot; a closed
+review-only FAIL report is a findings result, not approval. Do not write source files yourself:
+delegate implementation edits, including fixes requested by reviewers, through bounded task
+packets, while keeping planning artifacts, acceptance decisions, and verification commands in this
+session.
+</workflow_protocol>
+`.trim();
+
 /** Returns the exact workflow instruction compatible with one resolved policy. */
 function getWorkflowSystemInstruction(policy: ResolvedOrchestrationPolicy): string {
   switch (policy.workflowGuidance) {
@@ -105,6 +144,8 @@ function getWorkflowSystemInstruction(policy: ResolvedOrchestrationPolicy): stri
       return SELECTIVE_WORKFLOW_SYSTEM_INSTRUCTION;
     case "tracked":
       return workflowSystemInstructionTemplate.trim();
+    case "delegated":
+      return DELEGATED_WORKFLOW_SYSTEM_INSTRUCTION;
   }
 }
 
@@ -256,39 +297,148 @@ function createHardStopMessage(options: {
   ].join("\n");
 }
 
-export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
+export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) => {
   const vvoc = await loadVvocConfig({ cwd: directory });
   if (!isVvocPluginEnabled(vvoc.config, "workflow")) return {};
-  const workflowSystemInstruction = getWorkflowSystemInstruction(
-    resolveOrchestrationPolicy(vvoc.config),
-  );
+  const resolvedPolicy = resolveOrchestrationPolicy(vvoc.config);
+  const workflowSystemInstruction = getWorkflowSystemInstruction(resolvedPolicy);
+  const delegatedProfileActive = resolvedPolicy.profile === "delegated";
+  const trustedWorkspaceRoot = worktree || directory;
 
   // START_BLOCK_PERSISTENCE_SETUP
   // Each session (main or subagent) gets its own isolated store.
   // This prevents subagent tool calls from interfering with the main session's work items.
+  // Hydration uses the checked loader: invalid persisted state is tracked so new
+  // control transactions and snapshot writes fail closed instead of silently
+  // resetting a malformed run.
   const stores = new Map<string, WorkItemStore>();
+  const invalidHydrationSessions = new Set<string>();
 
   function getOrCreateStore(sessionId: string): WorkItemStore {
     let store = stores.get(sessionId);
     if (!store) {
-      const hydrated = hydrateWorkflowState(sessionId);
-      store = createWorkItemStore(hydrated);
+      const hydrated = hydrateWorkflowStateChecked(sessionId);
+      if (hydrated.status === "valid") {
+        store = createWorkItemStore(hydrated.data);
+        // A freshly hydrated session crossed a process-restart boundary: any
+        // persisted in-flight delegated attempt can never receive its host
+        // callback again, so reclaim it without consuming the attempt budget.
+        const reclaimed = revertInFlightDelegatedLaunches(store.getStoreData(), sessionId);
+        if (reclaimed.reverted > 0) {
+          void client.app
+            .log({
+              body: {
+                service: "workflow",
+                level: "info",
+                message:
+                  "[workflow][hydration][BLOCK_RECLAIM_ATTEMPTS] orphaned in-flight delegated attempts reverted",
+                extra: { sessionID: sessionId, workItemIds: reclaimed.workItemIds },
+              },
+            })
+            .catch(() => undefined);
+        }
+      } else {
+        if (hydrated.status === "invalid") {
+          invalidHydrationSessions.add(sessionId);
+        }
+        store = createWorkItemStore();
+      }
       stores.set(sessionId, store);
     }
     return store;
   }
 
-  function snapshotSession(sessionId: string): void {
+  function snapshotSession(sessionId: string): { ok: boolean; error?: string } {
     const store = stores.get(sessionId);
-    if (store) {
-      try {
-        snapshotWorkflowState(sessionId, store.getStoreData());
-      } catch {
-        // Snapshot failures are non-blocking
-      }
+    if (!store) return { ok: true };
+    if (invalidHydrationSessions.has(sessionId)) {
+      return {
+        ok: false,
+        error: `persisted workflow state for session ${sessionId} is invalid; refusing to overwrite it`,
+      };
     }
+    const result = snapshotWorkflowStateChecked(sessionId, store.getStoreData());
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
   }
   // END_BLOCK_PERSISTENCE_SETUP
+
+  // START_BLOCK_DELEGATED_AUTHORIZATION
+  // New control mutations require the primary vv-controller session: the calling
+  // agent must be vv-controller, the session must be a root session (no
+  // parentID), and the ToolContext workspace must match the plugin's trusted
+  // directory/worktree. None of this identity comes from tool arguments.
+  async function assertPrimaryControllerMutation(
+    agent: string | undefined,
+    sessionId: string,
+    contextWorkspace: { directory?: string; worktree?: string },
+    toolName: string,
+  ): Promise<void> {
+    if (!canUseWorkflowTools(agent)) {
+      throw new Error(
+        `CONTROL_DENIED: ${toolName} is only available to ${WORKFLOW_CONTROLLER_AGENT} sessions. Current agent: ${agent?.trim() || "unknown-agent"}.`,
+      );
+    }
+    if (
+      contextWorkspace.worktree !== undefined &&
+      contextWorkspace.worktree !== worktree &&
+      contextWorkspace.worktree !== trustedWorkspaceRoot
+    ) {
+      throw new Error(
+        `CONTROL_DENIED: ${toolName} workspace ${contextWorkspace.worktree} does not match the trusted plugin workspace.`,
+      );
+    }
+    if (
+      contextWorkspace.worktree === undefined &&
+      contextWorkspace.directory !== undefined &&
+      contextWorkspace.directory !== directory
+    ) {
+      throw new Error(
+        `CONTROL_DENIED: ${toolName} directory ${contextWorkspace.directory} does not match the trusted plugin directory.`,
+      );
+    }
+    if (invalidHydrationSessions.has(sessionId)) {
+      throw new Error(
+        `CONTROL_DENIED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
+      );
+    }
+
+    let parentID: string | undefined;
+    try {
+      const response = await client.session.get({ path: { id: sessionId } });
+      if (!response.data) {
+        throw new Error("missing session payload");
+      }
+      parentID = response.data.parentID;
+    } catch (error) {
+      throw new Error(
+        `CONTROL_DENIED: ${toolName} requires root-session identity for ${sessionId}, which could not be verified: ${(error as Error).message}`,
+      );
+    }
+    if (parentID !== undefined && parentID !== null && parentID !== "") {
+      throw new Error(
+        `CONTROL_DENIED: ${toolName} may only run in the root session; session ${sessionId} is a child of ${parentID}.`,
+      );
+    }
+  }
+  // END_BLOCK_DELEGATED_AUTHORIZATION
+
+  // START_BLOCK_CHECKPOINT_LINKAGE
+  /** Find the in-flight checkpoint generation whose linked review item matches. */
+  function findCheckpointByReviewItem(
+    sessionId: string,
+    reviewWorkItemId: string,
+  ): { run: DelegatedPlanRun; checkpointId: string } | undefined {
+    for (const run of getOrCreateStore(sessionId).getStoreData().planRuns.values()) {
+      if (run.sessionId !== sessionId) continue;
+      for (const checkpoint of run.checkpoints.values()) {
+        if (checkpoint.currentReview?.reviewWorkItemId === reviewWorkItemId) {
+          return { run, checkpointId: checkpoint.checkpointId };
+        }
+      }
+    }
+    return undefined;
+  }
+  // END_BLOCK_CHECKPOINT_LINKAGE
 
   // START_BLOCK_PLUGIN_ENTRY
   // Tool wrappers still need a store reference for description/args shape
@@ -297,6 +447,8 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
   const workItemOpenTool = createWorkItemOpenTool(dummyStore);
   const workItemListTool = createWorkItemListTool(dummyStore);
   const workItemCloseTool = createWorkItemCloseTool(dummyStore);
+  const workItemDecideTool = createWorkItemDecideTool(dummyStore);
+  const workCheckpointTool = createWorkCheckpointTool(dummyStore);
 
   return {
     tool: {
@@ -309,6 +461,9 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
               title: z.string(),
               mode: z.string(),
               requiredReviewers: z.array(z.string()),
+              writeScope: z.array(z.string()).optional(),
+              planRunId: z.string().optional(),
+              planTaskId: z.string().optional(),
             }),
           ),
         },
@@ -354,6 +509,95 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           return stringifyToolOutput(closed);
         },
       }),
+      // The delegated control tools are registered only under the delegated
+      // startup profile; other profiles keep their current tool-schema footprint.
+      ...(delegatedProfileActive
+        ? {
+            work_item_decide: tool({
+              description: workItemDecideTool.description,
+              args: {
+                workItemId: z.string(),
+                attempt: z.number().int().min(1),
+                decision: z.enum(["accept", "request_changes", "rework"]),
+                rationale: z.string(),
+                evidence: z.array(z.string()),
+                concernsDisposition: z.string().optional(),
+                runId: z.string().optional(),
+                checkpointId: z.string().optional(),
+              },
+              async execute(args, context) {
+                // Resolve the store first so invalid persisted state is detected
+                // before the authorization check reports it as a control denial.
+                const sessionStore = getOrCreateStore(context.sessionID);
+                await assertPrimaryControllerMutation(
+                  context.agent,
+                  context.sessionID,
+                  { directory: context.directory, worktree: context.worktree },
+                  "work_item_decide",
+                );
+                const decided = workItemDecideTool.execute(
+                  args,
+                  { sessionId: context.sessionID },
+                  sessionStore,
+                );
+                if (decided.ok) {
+                  const persisted = snapshotSession(context.sessionID);
+                  if (!persisted.ok) {
+                    throw new Error(
+                      `PERSISTENCE_FAILED: decision applied in memory but could not be persisted: ${persisted.error}`,
+                    );
+                  }
+                }
+                return stringifyToolOutput(decided);
+              },
+            }),
+            work_checkpoint: tool({
+              description: workCheckpointTool.description,
+              args: {
+                action: z.enum(["register", "start", "verify"]),
+                planPath: z.string().optional(),
+                runId: z.string().optional(),
+                checkpointId: z.string().optional(),
+                complete: z.boolean().optional(),
+              },
+              async execute(args, context) {
+                // Resolve the store first so invalid persisted state is detected
+                // before the authorization check reports it as a control denial.
+                const sessionStore = getOrCreateStore(context.sessionID);
+                await assertPrimaryControllerMutation(
+                  context.agent,
+                  context.sessionID,
+                  { directory: context.directory, worktree: context.worktree },
+                  "work_checkpoint",
+                );
+                const toolContext = {
+                  sessionId: context.sessionID,
+                  workspaceRoot: trustedWorkspaceRoot,
+                  loadPlan: async (planPath: string, workspaceRoot: string) => {
+                    const loaded = await loadApprovedDelegatedPlan({ workspaceRoot, planPath });
+                    return loaded.ok
+                      ? loaded.plan
+                      : { loadError: `${loaded.code}: ${loaded.message}` };
+                  },
+                };
+                const result = await workCheckpointTool.execute(
+                  { ...args },
+                  toolContext,
+                  sessionStore,
+                );
+                if (result.ok) {
+                  const persisted = snapshotSession(context.sessionID);
+                  if (!persisted.ok) {
+                    throw new Error(
+                      `PERSISTENCE_FAILED: checkpoint change applied in memory but could not be persisted: ${persisted.error}`,
+                    );
+                  }
+                }
+                return stringifyToolOutput(result);
+              },
+            }),
+          }
+        : {}),
     },
     "tool.execute.before": async (input, output) => {
       if (input.tool !== "task") {
@@ -471,6 +715,90 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           `${INVALID_NEXT_AGENT_MARKER} LAUNCH_REJECTED_INVALID_TRANSITION: ${workItem.workItemId} in state ${workItem.state} only allows ${launched.allowedAgents.join(", ") || "no tracked agent"}. ${launched.message}`,
         );
       }
+
+      // START_BLOCK_DELEGATED_LAUNCH_BINDING
+      // Delegated implementer launches consume a callID-bound attempt after the
+      // checkpoint barrier and overlapping-write gates pass. Reviewer launches
+      // on a checkpoint-linked review item bind their call identity to the
+      // current generation.
+      if (workItem.mode === "delegated" && subagentType === "vv-implementer") {
+        const data = sessionStore.getStoreData();
+        const planRunId = workItem.delegated?.planRunId;
+        if (planRunId) {
+          const run = data.planRuns.get(planRunId);
+          const binding = run
+            ? [...run.tasks.values()].find((task) => task.workItemId === workItem.workItemId)
+            : undefined;
+          const taskDefinition = run?.definition.tasks.find(
+            (task) => task.taskId === binding?.taskId,
+          );
+          if (run && taskDefinition) {
+            const barrier = checkpointBarrierUnsatisfied(data, planRunId, taskDefinition.wave);
+            if (barrier.ok && barrier.blockers.length > 0) {
+              throw new Error(
+                `LAUNCH_REJECTED_CHECKPOINT_BARRIER: ${workItem.workItemId} is in wave ${taskDefinition.wave} blocked by unpassed checkpoint(s) ${barrier.blockers.join(", ")}.`,
+              );
+            }
+          }
+          const overlapping = findOverlappingInFlightReview(
+            data,
+            planRunId,
+            workItem.delegated?.writeScope ?? [],
+          );
+          if (overlapping) {
+            throw new Error(
+              `LAUNCH_REJECTED_OVERLAPPING_REVIEW: declared write scope overlaps checkpoint ${overlapping} currently in review.`,
+            );
+          }
+        }
+        const delegatedLaunch = beginDelegatedLaunch(sessionStore, {
+          sessionId: input.sessionID,
+          workItemId: workItem.workItemId,
+          callId: input.callID,
+        });
+        if (!delegatedLaunch.ok) {
+          await client.app.log({
+            body: {
+              service: "workflow",
+              level: "warn",
+              message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
+              extra: {
+                sessionID: input.sessionID,
+                agent: subagentType,
+                workItemId: workItem.workItemId,
+                reason: delegatedLaunch.errorCode,
+              },
+            },
+          });
+          throw new Error(
+            `LAUNCH_REJECTED_DELEGATED_${delegatedLaunch.errorCode}: ${delegatedLaunch.message}`,
+          );
+        }
+      } else {
+        const reviewerRole = getReviewerRoleForAgent(subagentType);
+        if (reviewerRole) {
+          const linked = findCheckpointByReviewItem(input.sessionID, workItem.workItemId);
+          if (linked) {
+            const bound = recordCheckpointReviewerLaunch(sessionStore, {
+              runId: linked.run.runId,
+              checkpointId: linked.checkpointId,
+              reviewer: reviewerRole,
+              callId: input.callID,
+            });
+            if (!bound.ok) {
+              revertReviewerLaunch(sessionStore, {
+                sessionId: input.sessionID,
+                workItemId: workItem.workItemId,
+                agent: subagentType,
+              });
+              throw new Error(
+                `LAUNCH_REJECTED_CHECKPOINT_REVIEW: ${bound.errorCode}: ${bound.message}`,
+              );
+            }
+          }
+        }
+      }
+      // END_BLOCK_DELEGATED_LAUNCH_BINDING
 
       snapshotSession(input.sessionID);
 
@@ -666,6 +994,116 @@ export const WorkflowPlugin: Plugin = async ({ client, directory }) => {
           ].join("\n"),
         );
       }
+
+      // START_BLOCK_DELEGATED_RESULT_BINDING
+      // Delegated implementer results apply to their matching callID-bound
+      // attempt; reviewer results on checkpoint-linked review items are
+      // recorded into the current generation before the legacy round applies.
+      if (current.mode === "delegated" && subagentType === "vv-implementer") {
+        const appliedDelegated = applyDelegatedResult(sessionStore, {
+          sessionId: input.sessionID,
+          workItemId: parsed.value.workItemId,
+          callId: input.callID,
+          resultStatus: parsed.value.status as
+            | "DONE"
+            | "DONE_WITH_CONCERNS"
+            | "NEEDS_CONTEXT"
+            | "BLOCKED",
+          resultExcerpt,
+        });
+        if (!appliedDelegated.ok) {
+          await client.app.log({
+            body: {
+              service: "workflow",
+              level: "warn",
+              message: "[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error",
+              extra: {
+                sessionID: input.sessionID,
+                agent: subagentType,
+                workItemId: parsed.value.workItemId,
+                reason: appliedDelegated.errorCode,
+              },
+            },
+          });
+          throw new Error(
+            [
+              `RESULT_PROTOCOL_ERROR: ${appliedDelegated.message}`,
+              formatResultExcerptForError(resultExcerpt),
+            ].join("\n"),
+          );
+        }
+
+        await client.app.log({
+          body: {
+            service: "workflow",
+            level: "info",
+            message: "[workflow][stateTransition][BLOCK_TRANSITION_STATE] state transitioned",
+            extra: {
+              sessionID: input.sessionID,
+              agent: subagentType,
+              workItemId: parsed.value.workItemId,
+              fromState: appliedDelegated.fromState,
+              toState: appliedDelegated.toState,
+              mode: "delegated",
+              attempt: appliedDelegated.attempt,
+            },
+          },
+        });
+
+        snapshotSession(input.sessionID);
+
+        if (
+          appliedDelegated.record.state === "needs_context" ||
+          appliedDelegated.record.state === "blocked"
+        ) {
+          throw new Error(
+            createHardStopMessage({
+              record: appliedDelegated.record,
+              triggeringAgent: subagentType,
+              triggeringStatus: parsed.value.status,
+              triggeringExcerpt: resultExcerpt,
+            }),
+          );
+        }
+        return;
+      }
+
+      const reviewerRoleForCheckpoint = getReviewerRoleForAgent(subagentType);
+      if (reviewerRoleForCheckpoint) {
+        const linked = findCheckpointByReviewItem(input.sessionID, parsed.value.workItemId);
+        if (linked) {
+          const recorded = recordCheckpointReviewerResult(sessionStore, {
+            runId: linked.run.runId,
+            checkpointId: linked.checkpointId,
+            reviewer: reviewerRoleForCheckpoint,
+            callId: input.callID,
+            status: parsed.value.status as "PASS" | "FAIL" | "NEEDS_CONTEXT",
+          });
+          if (!recorded.ok) {
+            await client.app.log({
+              body: {
+                service: "workflow",
+                level: "warn",
+                message: "[workflow][resultParsing][BLOCK_PARSE_RESULT] protocol error",
+                extra: {
+                  sessionID: input.sessionID,
+                  agent: subagentType,
+                  workItemId: parsed.value.workItemId,
+                  reason: recorded.errorCode,
+                },
+              },
+            });
+            revertLaunch();
+            throw new Error(
+              [
+                `RESULT_PROTOCOL_ERROR: checkpoint ${linked.checkpointId} rejected the reviewer result: ${recorded.message}`,
+                formatResultExcerptForError(resultExcerpt),
+              ].join("\n"),
+            );
+          }
+        }
+      }
+      // END_BLOCK_DELEGATED_RESULT_BINDING
 
       const applied = applyTrackedResult(sessionStore, {
         sessionId: input.sessionID,

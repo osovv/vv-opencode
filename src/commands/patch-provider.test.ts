@@ -83,7 +83,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(resolvePatchProviderPreset("deepseek")).toMatchObject({
       kind: "provider-object",
       providerID: "deepseek",
-      summary: "provider.deepseek.models.vv-deepseek-v4-flash-max patched",
+      summary: "provider.deepseek.models.vv-deepseek flash aliases patched",
     });
     const value = JSON.parse(
       JSON.stringify(
@@ -96,18 +96,73 @@ describe("resolvePatchProviderPreset", () => {
       input: ["text"],
       output: ["text"],
     });
+    expect(value.models["vv-deepseek-flash-high"]).toMatchObject({
+      id: "deepseek-flash",
+      limit: { context: 1000000, output: 384000 },
+    });
+    expect(value.models["vv-deepseek-flash-high"].options.reasoningEffort).toBe("high");
+    expect(value.models["vv-deepseek-flash-high"].modalities).toEqual({
+      input: ["text"],
+      output: ["text"],
+    });
   });
-  test("codex patch includes the vv-codex-gpt-5.6-luna-low alias", () => {
+
+  test("returns the built-in zai alias patch with full GLM-5.3 high", () => {
+    expect(resolvePatchProviderPreset("zai")).toMatchObject({
+      kind: "provider-object",
+      providerID: "zai-coding-plan",
+      summary: "provider.zai-coding-plan.models.vv-glm-5.3-high patched",
+    });
+    const value = JSON.parse(
+      JSON.stringify(
+        (resolvePatchProviderPreset("zai") as { value: Record<string, unknown> }).value,
+      ),
+    );
+    expect(value.models["vv-glm-5.3-high"]).toMatchObject({
+      id: "glm-5.3",
+      limit: { context: 1000000, output: 131072 },
+    });
+    expect(value.models["vv-glm-5.3-high"].options.reasoningEffort).toBe("high");
+    expect(value.models["vv-glm-5.3-high"].modalities).toEqual({
+      input: ["text"],
+      output: ["text"],
+    });
+  });
+  test("codex patch includes the vv-codex-gpt-6-astra-max and Spark medium aliases", () => {
     const value = JSON.parse(
       JSON.stringify(
         (resolvePatchProviderPreset("codex") as { value: Record<string, unknown> }).value,
       ),
     );
-    expect(value.models["vv-codex-gpt-5.6-luna-low"]).toMatchObject({
-      id: "gpt-5.6-luna",
-      limit: { input: 272000, context: 400000, output: 128000 },
+    expect(value.models["vv-codex-gpt-6-astra-max"]).toMatchObject({
+      id: "gpt-6-astra",
+      limit: { context: 400000, input: 272000, output: 128000 },
     });
-    expect(value.models["vv-codex-gpt-5.6-luna-low"].options.reasoningEffort).toBe("low");
+    expect(value.models["vv-codex-gpt-6-astra-max"].options).toMatchObject({
+      reasoningEffort: "max",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    });
+
+    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"]).toMatchObject({
+      id: "gpt-5.3-codex-spark",
+      limit: { context: 128000, input: 100000, output: 32000 },
+    });
+    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"].options).toMatchObject({
+      reasoningEffort: "medium",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    });
+    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"].modalities).toEqual({
+      input: ["text"],
+      output: ["text"],
+    });
+    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"].variants).toEqual({
+      none: { disabled: true },
+      low: { disabled: true },
+      high: { disabled: true },
+      max: { disabled: true },
+    });
   });
 
   test("returns the built-in openai alias patch (compatibility)", () => {
@@ -122,7 +177,7 @@ describe("resolvePatchProviderPreset", () => {
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba, zai. Compatibility aliases: openai",
     );
   });
 });
@@ -413,9 +468,11 @@ describe("applyPatchProviderPreset", () => {
         "deepseek",
         "kimi",
         "alibaba",
+        "zai",
       ]);
       expect(results.map((entry) => entry.result.action)).toEqual([
         "created",
+        "updated",
         "updated",
         "updated",
         "updated",

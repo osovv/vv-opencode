@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Added launch to top-level completion output.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the zai patch preset to patch-provider completions.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -51,7 +51,15 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 const VVOC_CONFIG_COMMANDS = ["validate"];
 const VVOC_ORCHESTRATION_COMMANDS = ["show", "set"] as const;
 const VVOC_ORCHESTRATION_PROFILES = [...ORCHESTRATION_PROFILE_NAMES];
-const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "codex", "deepseek", "kimi", "alibaba", "all"];
+const VVOC_PATCH_PROVIDER_PRESETS = [
+  "stepfun-ai",
+  "codex",
+  "deepseek",
+  "kimi",
+  "alibaba",
+  "zai",
+  "all",
+];
 const VVOC_PRESET_COMMANDS = ["list", "show"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_ROLE_COMMANDS = ["set", "unset", "list"];

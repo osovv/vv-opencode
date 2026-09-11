@@ -1,10 +1,10 @@
 // FILE: src/lib/spec-lint.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Pure strict linter for .vvoc spec-package XML artifacts (spec.xml, plan.xml, design-context.xml) enforcing the element-name identity format.
-//   SCOPE: Strict well-formedness validation over the htmlparser2 xmlMode event stream, template-contract checks per artifact kind, component/task/wave identity rules, reference integrity, lifecycle-aware severity, plan-subset-of-spec cross-file checking, and package layout checks. No filesystem access — callers pass artifact contents.
+//   PURPOSE: Pure strict linter for .vvoc spec-package XML artifacts (spec.xml, plan.xml, design-context.xml) enforcing the element-name identity format and delegated execution/checkpoint contracts.
+//   SCOPE: Strict well-formedness validation over the htmlparser2 xmlMode event stream, template-contract checks per artifact kind, component/task/wave/checkpoint identity rules, reference integrity, lifecycle-aware severity, plan-subset-of-spec cross-file checking, delegated execution and review-checkpoint validation with typed extraction, and package layout checks. No filesystem access — callers pass artifact contents.
 //   DEPENDS: [htmlparser2]
-//   LINKS: [M-SPEC-LINT, M-PLUGIN-SPEC-GUARD, M-CLI-COMMANDS]
+//   LINKS: [M-SPEC-LINT, M-PLUGIN-SPEC-GUARD, M-CLI-COMMANDS, M-WORKFLOW-CHECKPOINTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,6 +17,14 @@
 //   SpecLintVerdict - Per-artifact lint result with kind, ok flag, and findings.
 //   SpecLintArtifactInput - One artifact to lint identified by a file label and raw content.
 //   SpecLintOptions - Options for lint runs (skipCrossFile for single-file contexts).
+//   DelegatedReviewer - Canonical delegated checkpoint reviewer roles (spec, code).
+//   DelegatedTaskDefinition - Typed delegated obligation for one declared plan task.
+//   DelegatedCheckpointDefinition - Typed delegated obligation for one declared review checkpoint.
+//   DelegatedPlanDefinition - Typed obligations extracted from a delegated execution section.
+//   DelegatedPlanExtractionResult - Success payload or error list returned by delegated extraction.
+//   DeclaredScopePathResult - Normalized workspace-relative path or a rejection reason.
+//   normalizeDeclaredScopePath - Text-level canonical normalization for declared scope file paths.
+//   extractDelegatedPlanDefinition - Strictly extract and validate typed delegated obligations from plan content.
 //   parseSpecXml - Strict xmlMode parse producing a positioned element tree or well-formedness findings.
 //   lintSpecArtifacts - Lint a set of artifacts together, applying cross-file rules between plans and specs.
 //   detectSpecArtifactKind - Map a root element name onto an artifact kind.
@@ -24,13 +32,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Initial engine: strict stack validation, template contracts, identity rules, references, lifecycle severity, cross-file subset check, layout checks.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the delegated execution section, review-checkpoint vocabulary, scope-path normalization, typed extractDelegatedPlanDefinition, and bumped LINT_VERSION to 2.]
 // END_CHANGE_SUMMARY
 
 import { Tokenizer, type TokenizerCallbacks } from "htmlparser2";
 
 // START_BLOCK_PUBLIC_TYPES
-export const LINT_VERSION = 1;
+export const LINT_VERSION = 2;
 
 export type SpecLintArtifactKind = "spec" | "plan" | "design-context";
 
@@ -82,12 +90,17 @@ const IDENTITY_PATTERNS = {
   component: /^COMPONENT-[A-Z0-9]+(-[A-Z0-9]+)*$/,
   task: /^TASK-T-\d{3,}$/,
   wave: /^WAVE-\d+$/,
+  checkpoint: /^CHECKPOINT-R-\d{3,}$/,
 } as const;
 
 const TASK_ID_REF = /^T-\d{3,}$/;
 
 const DOC_STATUSES = new Set(["draft", "approved", "applied"]);
 const TASK_STATUSES = new Set(["pending", "in_progress", "done", "skipped"]);
+
+const EXECUTION_MODES = new Set(["inline", "classic", "delegated"]);
+const CHECKPOINT_KINDS = new Set(["milestone", "final"]);
+const DELEGATED_REVIEWERS = new Set(["spec", "code"]);
 
 const RESERVED_PACKAGE_SLUGS = new Set(["draft", "archive", "template", "plan", "spec", "vvoc"]);
 
@@ -344,10 +357,23 @@ const SPEC_CONTRACT: Record<string, ChildRule> = {
 const COMPONENT_CHILDREN = ["name", "responsibility", "depends_on"] as const;
 
 const PLAN_CONTRACT: Record<string, ChildRule> = {
-  plan: { names: ["spec", "design_context", "created", "status", "meta", "architecture", "tasks"] },
+  plan: {
+    names: [
+      "spec",
+      "design_context",
+      "created",
+      "status",
+      "meta",
+      "architecture",
+      "tasks",
+      "execution",
+    ],
+  },
   meta: { names: ["summary", "waves", "affected_modules", "complexity"] },
   architecture: { identity: "component" },
   tasks: { identity: "wave" },
+  execution: { names: ["mode", "review_checkpoints"] },
+  review_checkpoints: { identity: "checkpoint" },
 };
 
 const TASK_CHILDREN = [
@@ -359,12 +385,27 @@ const TASK_CHILDREN = [
   "snippet",
   "acceptance",
   "verification",
+  "write_scope",
 ] as const;
 const TASK_DEPENDS_CHILDREN = ["task_id"] as const;
 const ACCEPTANCE_CHILDREN = ["criterion"] as const;
 const VERIFICATION_CHILDREN = ["command"] as const;
 const WAVE_CHILDREN = ["goal"] as const;
 const PLAN_FILE_CHILDREN = ["path", "role"] as const;
+const TASK_WRITE_SCOPE_CHILDREN = ["file"] as const;
+
+const CHECKPOINT_CHILDREN = [
+  "kind",
+  "after_wave",
+  "covers",
+  "scope",
+  "reviewers",
+  "acceptance",
+  "verification",
+] as const;
+const CHECKPOINT_COVERS_CHILDREN = ["task_id"] as const;
+const CHECKPOINT_SCOPE_CHILDREN = ["file"] as const;
+const CHECKPOINT_REVIEWERS_CHILDREN = ["reviewer"] as const;
 
 const DESIGN_CONTEXT_CONTRACT: Record<string, ChildRule> = {
   "design-context": {
@@ -414,6 +455,654 @@ function nonEmpty(node: XmlNode | undefined): boolean {
   return textOf(node) !== "";
 }
 // END_BLOCK_TREE_HELPERS
+
+// START_BLOCK_DELEGATED_TYPES
+/** Canonical reviewer roles accepted inside a delegated checkpoint's reviewer set. */
+export type DelegatedReviewer = "spec" | "code";
+
+/** Typed delegated obligation for one declared plan task. */
+export interface DelegatedTaskDefinition {
+  /** Canonical task id used by depends_on and checkpoint coverage (e.g. "T-001"). */
+  taskId: string;
+  /** Declaring identity element name (e.g. "TASK-T-001"). */
+  taskElement: string;
+  /** Declaring wave id in document order (e.g. "WAVE-1"). */
+  wave: string;
+  /** Normalized workspace-relative write scope files declared for the task. */
+  writeScope: string[];
+}
+
+/** Typed delegated obligation for one declared review checkpoint. */
+export interface DelegatedCheckpointDefinition {
+  /** Declared checkpoint identity (e.g. "CHECKPOINT-R-001"). */
+  checkpointId: string;
+  kind: "milestone" | "final";
+  /** Wave barrier that must be accepted before the checkpoint may start. */
+  afterWave: string;
+  /** Canonical task ids covered by the checkpoint. */
+  covers: string[];
+  /** Normalized workspace-relative files reviewed by the checkpoint. */
+  scope: string[];
+  /** Declared reviewer roles; every role must pass for the checkpoint to pass. */
+  reviewers: DelegatedReviewer[];
+  /** Acceptance criterion texts recorded in the plan. */
+  acceptance: string[];
+  /** Verification command texts recorded in the plan. */
+  verification: string[];
+}
+
+/** Typed obligations extracted from a plan's delegated execution section. */
+export interface DelegatedPlanDefinition {
+  mode: "delegated";
+  /** Declared wave ids in document order. */
+  waves: string[];
+  tasks: DelegatedTaskDefinition[];
+  checkpoints: DelegatedCheckpointDefinition[];
+}
+
+/** Either a typed delegated definition or the collected validation errors. */
+export type DelegatedPlanExtractionResult =
+  | { ok: true; definition: DelegatedPlanDefinition }
+  | { ok: false; errors: string[] };
+
+/** Normalized workspace-relative path, or the reason a declared path is malformed. */
+export type DeclaredScopePathResult = { ok: true; path: string } | { ok: false; reason: string };
+// END_BLOCK_DELEGATED_TYPES
+
+// START_BLOCK_SCOPE_PATH_NORMALIZATION
+/**
+ * Text-level canonical normalization for declared scope paths. The linter and
+ * the runtime snapshot fingerprint share this representation so a plan that
+ * lints clean cannot declare paths the runtime normalizer rejects on sight.
+ * Filesystem-specific checks (existence, symlinks, regular files) stay in the
+ * runtime normalizer; this function is deliberately pure.
+ */
+export function normalizeDeclaredScopePath(raw: string): DeclaredScopePathResult {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { ok: false, reason: "empty path" };
+  if (trimmed.includes("\\")) return { ok: false, reason: "backslash separator" };
+  if (trimmed.startsWith("/")) return { ok: false, reason: "absolute path" };
+  if (/^[A-Za-z]:/.test(trimmed)) return { ok: false, reason: "drive-absolute path" };
+  if (trimmed.startsWith("~")) return { ok: false, reason: "home-relative path" };
+  if (/[*?[\]]/.test(trimmed)) return { ok: false, reason: "wildcard characters" };
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) return { ok: false, reason: "control characters" };
+  const segments = trimmed.split("/");
+  for (const segment of segments) {
+    if (segment === "") return { ok: false, reason: "empty path segment" };
+    if (segment === "." || segment === "..") return { ok: false, reason: "traversal segment" };
+  }
+  return { ok: true, path: segments.join("/") };
+}
+// END_BLOCK_SCOPE_PATH_NORMALIZATION
+
+// START_BLOCK_DELEGATED_FACTS
+interface DelegatedTaskFactsEntry {
+  taskElement: string;
+  taskId: string;
+  wave: string;
+  line: number;
+  writeScope: string[];
+  writeScopeDeclared: boolean;
+  writeScopeDuplicates: string[];
+  primaryFile: string;
+}
+
+interface DelegatedTaskFacts {
+  waveOrder: string[];
+  tasks: DelegatedTaskFactsEntry[];
+  duplicateTaskElements: string[];
+}
+
+/**
+ * Collect wave order and per-task delegated facts with a standalone walk so
+ * lintPlan's main task validation and extractDelegatedPlanDefinition share one
+ * interpretation of the declared task/write-scope vocabulary.
+ */
+function collectDelegatedTaskFacts(root: XmlNode): DelegatedTaskFacts {
+  const waveOrder: string[] = [];
+  const tasks: DelegatedTaskFactsEntry[] = [];
+  const duplicateTaskElements: string[] = [];
+  const seenTasks = new Set<string>();
+
+  const tasksNode = child(root, "tasks");
+  if (!tasksNode) return { waveOrder, tasks, duplicateTaskElements };
+
+  for (const wave of tasksNode.children) {
+    if (!IDENTITY_PATTERNS.wave.test(wave.name)) continue;
+    if (!waveOrder.includes(wave.name)) waveOrder.push(wave.name);
+    for (const task of wave.children) {
+      if (!IDENTITY_PATTERNS.task.test(task.name)) continue;
+      if (seenTasks.has(task.name)) {
+        duplicateTaskElements.push(task.name);
+        continue;
+      }
+      seenTasks.add(task.name);
+      const writeScopeNode = child(task, "write_scope");
+      const writeScope: string[] = [];
+      const writeScopeDuplicates: string[] = [];
+      if (writeScopeNode) {
+        for (const fileNode of writeScopeNode.children) {
+          if (fileNode.name !== "file") continue;
+          const normalized = normalizeDeclaredScopePath(textOf(fileNode));
+          if (!normalized.ok) continue;
+          if (writeScope.includes(normalized.path)) {
+            // Duplicate write-scope entries are rejected by the lint rules;
+            // here the duplicate is recorded so the rule can point at it.
+            if (!writeScopeDuplicates.includes(normalized.path)) {
+              writeScopeDuplicates.push(normalized.path);
+            }
+            continue;
+          }
+          writeScope.push(normalized.path);
+        }
+      }
+      tasks.push({
+        taskElement: task.name,
+        taskId: task.name.slice("TASK-".length),
+        wave: wave.name,
+        line: task.line,
+        writeScope,
+        writeScopeDeclared: writeScopeNode !== undefined,
+        writeScopeDuplicates,
+        primaryFile: (() => {
+          const normalized = normalizeDeclaredScopePath(textOf(child(task, "file")));
+          return normalized.ok ? normalized.path : "";
+        })(),
+      });
+    }
+  }
+
+  return { waveOrder, tasks, duplicateTaskElements };
+}
+// END_BLOCK_DELEGATED_FACTS
+
+// START_BLOCK_DELEGATED_VALIDATION
+/** Emit write-scope obligations for every declared delegated task. */
+function lintDelegatedWriteScopes(
+  facts: DelegatedTaskFacts,
+  completeness: boolean,
+  findings: SpecLintFinding[],
+  file: string,
+): void {
+  for (const task of facts.tasks) {
+    if (task.writeScopeDuplicates.length > 0) {
+      findings.push({
+        severity: "error",
+        rule: "execution.scope_path",
+        message: `task ${task.taskId} declares write_scope path ${JSON.stringify(task.writeScopeDuplicates[0])} more than once; the runtime normalizer rejects duplicate scope entries`,
+        file,
+        line: task.line,
+      });
+      continue;
+    }
+    if (!task.writeScopeDeclared || task.writeScope.length === 0) {
+      findings.push({
+        severity: completeness ? "error" : "warning",
+        rule: "lifecycle.required",
+        message: `task ${task.taskId} declares no write_scope; delegated tasks must list their workspace-relative write scope`,
+        file,
+        line: task.line,
+      });
+      continue;
+    }
+    if (task.primaryFile && !task.writeScope.includes(task.primaryFile)) {
+      findings.push({
+        severity: "error",
+        rule: "execution.write_scope",
+        message: `task ${task.taskId} write_scope does not include its primary file ${task.primaryFile}`,
+        file,
+        line: task.line,
+      });
+    }
+  }
+}
+
+/**
+ * Validate the optional <execution> section. Structural violations of declared
+ * content (unknown modes/children, duplicate identities, dangling references,
+ * future-wave coverage, multiple or misplaced finals, incomplete declared
+ * coverage) are always errors; presence obligations for approved/applied plans
+ * escalate from draft warnings.
+ */
+function lintExecutionSection(
+  root: XmlNode,
+  file: string,
+  facts: DelegatedTaskFacts,
+  completeness: boolean,
+  findings: SpecLintFinding[],
+): void {
+  const executionNode = child(root, "execution");
+  if (!executionNode) return;
+  checkChildren(executionNode, PLAN_CONTRACT.execution, file, findings);
+
+  const mode = textOf(child(executionNode, "mode"));
+  if (!EXECUTION_MODES.has(mode)) {
+    findings.push({
+      severity: "error",
+      rule: "execution.mode",
+      message: `execution mode "${mode}" is not one of inline, classic, delegated`,
+      file,
+      line: child(executionNode, "mode")?.line ?? executionNode.line,
+    });
+  }
+
+  const reviewCheckpointsNode = child(executionNode, "review_checkpoints");
+  if (reviewCheckpointsNode && mode !== "delegated") {
+    findings.push({
+      severity: "error",
+      rule: "execution.checkpoints_mode",
+      message: `review_checkpoints are only valid with execution mode delegated, not "${mode}"`,
+      file,
+      line: reviewCheckpointsNode.line,
+    });
+    return;
+  }
+  if (mode !== "delegated") return;
+  if (!reviewCheckpointsNode) {
+    findings.push({
+      severity: completeness ? "error" : "warning",
+      rule: "lifecycle.required",
+      message: `delegated execution declares no review_checkpoints; the plan is ${completeness ? "approved or applied" : "draft"} and must declare its checkpoint obligations`,
+      file,
+      line: executionNode.line,
+    });
+    // Task write-scope obligations still apply even without declared checkpoints.
+    lintDelegatedWriteScopes(facts, completeness, findings, file);
+    return;
+  }
+
+  checkChildren(reviewCheckpointsNode, PLAN_CONTRACT.review_checkpoints, file, findings);
+
+  const obligation = (message: string, line: number, rule = "lifecycle.required"): void => {
+    findings.push({
+      severity: completeness ? "error" : "warning",
+      rule,
+      message,
+      file,
+      line,
+    });
+  };
+
+  const waveIndex = new Map(facts.waveOrder.map((wave, index) => [wave, index] as const));
+  const taskById = new Map(facts.tasks.map((task) => [task.taskId, task] as const));
+
+  const seenCheckpoints = new Set<string>();
+  const validCheckpoints: Array<{
+    node: XmlNode;
+    id: string;
+    kind: string;
+    afterWave: string;
+    covers: string[];
+    scope: string[];
+    reviewers: string[];
+  }> = [];
+
+  for (const checkpoint of reviewCheckpointsNode.children) {
+    if (!IDENTITY_PATTERNS.checkpoint.test(checkpoint.name)) {
+      findings.push({
+        severity: "error",
+        rule: "identity.pattern",
+        message: `checkpoint element <${checkpoint.name}> does not match the CHECKPOINT-R-NNN pattern`,
+        file,
+        line: checkpoint.line,
+      });
+      continue;
+    }
+    if (seenCheckpoints.has(checkpoint.name)) {
+      findings.push({
+        severity: "error",
+        rule: "identity.duplicate",
+        message: `checkpoint ${checkpoint.name} is declared more than once`,
+        file,
+        line: checkpoint.line,
+      });
+      continue;
+    }
+    seenCheckpoints.add(checkpoint.name);
+    checkChildren(checkpoint, { names: CHECKPOINT_CHILDREN }, file, findings);
+
+    const kind = textOf(child(checkpoint, "kind"));
+    if (!CHECKPOINT_KINDS.has(kind)) {
+      findings.push({
+        severity: "error",
+        rule: "execution.checkpoint_kind",
+        message: `checkpoint ${checkpoint.name} kind "${kind}" is not one of milestone, final`,
+        file,
+        line: child(checkpoint, "kind")?.line ?? checkpoint.line,
+      });
+    }
+
+    const afterWaveNode = child(checkpoint, "after_wave");
+    const afterWave = textOf(afterWaveNode);
+    let afterWaveKnown = false;
+    if (!IDENTITY_PATTERNS.wave.test(afterWave) || !waveIndex.has(afterWave)) {
+      findings.push({
+        severity: "error",
+        rule: "ref.dangling",
+        message: `checkpoint ${checkpoint.name} after_wave "${afterWave}" is not a declared wave in this plan`,
+        file,
+        line: afterWaveNode?.line ?? checkpoint.line,
+      });
+    } else {
+      afterWaveKnown = true;
+    }
+
+    const coversNode = child(checkpoint, "covers");
+    const covers: string[] = [];
+    if (coversNode) {
+      checkChildren(coversNode, { names: CHECKPOINT_COVERS_CHILDREN }, file, findings);
+      for (const taskRef of coversNode.children) {
+        if (taskRef.name !== "task_id") continue;
+        const value = textOf(taskRef);
+        if (!TASK_ID_REF.test(value) || !taskById.has(value)) {
+          findings.push({
+            severity: "error",
+            rule: "ref.dangling",
+            message: `checkpoint ${checkpoint.name} covers task_id "${value}" which is not a declared task in this plan`,
+            file,
+            line: taskRef.line,
+          });
+          continue;
+        }
+        covers.push(value);
+        const coveredTask = taskById.get(value);
+        if (
+          kind === "milestone" &&
+          afterWaveKnown &&
+          coveredTask &&
+          (waveIndex.get(coveredTask.wave) ?? -1) > (waveIndex.get(afterWave) ?? -1)
+        ) {
+          findings.push({
+            severity: "error",
+            rule: "execution.future_coverage",
+            message: `checkpoint ${checkpoint.name} (milestone after ${afterWave}) covers ${value} from a later wave ${coveredTask.wave}`,
+            file,
+            line: taskRef.line,
+          });
+        }
+      }
+    }
+
+    const scopeNode = child(checkpoint, "scope");
+    const scope: string[] = [];
+    if (scopeNode) {
+      checkChildren(scopeNode, { names: CHECKPOINT_SCOPE_CHILDREN }, file, findings);
+      for (const fileNode of scopeNode.children) {
+        if (fileNode.name !== "file") continue;
+        const normalized = normalizeDeclaredScopePath(textOf(fileNode));
+        if (!normalized.ok) {
+          findings.push({
+            severity: "error",
+            rule: "execution.scope_path",
+            message: `checkpoint ${checkpoint.name} declares a malformed scope path (${normalized.reason}): ${JSON.stringify(textOf(fileNode))}`,
+            file,
+            line: fileNode.line,
+          });
+          continue;
+        }
+        if (scope.includes(normalized.path)) {
+          findings.push({
+            severity: "error",
+            rule: "execution.scope_path",
+            message: `checkpoint ${checkpoint.name} declares scope path ${JSON.stringify(normalized.path)} more than once; the runtime normalizer rejects duplicate scope entries`,
+            file,
+            line: fileNode.line,
+          });
+          continue;
+        }
+        scope.push(normalized.path);
+      }
+    }
+
+    const reviewersNode = child(checkpoint, "reviewers");
+    const reviewers: string[] = [];
+    if (reviewersNode) {
+      checkChildren(reviewersNode, { names: CHECKPOINT_REVIEWERS_CHILDREN }, file, findings);
+      for (const reviewerNode of reviewersNode.children) {
+        if (reviewerNode.name !== "reviewer") continue;
+        const value = textOf(reviewerNode);
+        if (!DELEGATED_REVIEWERS.has(value)) {
+          findings.push({
+            severity: "error",
+            rule: "execution.reviewer",
+            message: `checkpoint ${checkpoint.name} reviewer "${value}" is not one of spec, code`,
+            file,
+            line: reviewerNode.line,
+          });
+          continue;
+        }
+        if (reviewers.includes(value)) {
+          findings.push({
+            severity: "error",
+            rule: "execution.reviewer_duplicate",
+            message: `checkpoint ${checkpoint.name} declares reviewer "${value}" more than once`,
+            file,
+            line: reviewerNode.line,
+          });
+          continue;
+        }
+        reviewers.push(value);
+      }
+    }
+
+    const acceptanceNode = child(checkpoint, "acceptance");
+    if (acceptanceNode)
+      checkChildren(acceptanceNode, { names: ACCEPTANCE_CHILDREN }, file, findings);
+    const verificationNode = child(checkpoint, "verification");
+    if (verificationNode)
+      checkChildren(verificationNode, { names: VERIFICATION_CHILDREN }, file, findings);
+
+    if (covers.length === 0) {
+      obligation(
+        `checkpoint ${checkpoint.name} covers no tasks; delegated checkpoints must list covered task_ids`,
+        coversNode?.line ?? checkpoint.line,
+      );
+    }
+    if (scope.length === 0) {
+      obligation(
+        `checkpoint ${checkpoint.name} declares an empty scope; delegated checkpoints must list reviewed files`,
+        scopeNode?.line ?? checkpoint.line,
+      );
+    }
+    if (reviewers.length === 0) {
+      obligation(
+        `checkpoint ${checkpoint.name} declares no reviewers; delegated checkpoints require a non-empty spec/code reviewer set`,
+        reviewersNode?.line ?? checkpoint.line,
+      );
+    }
+    if (!acceptanceNode || children(acceptanceNode, "criterion").length === 0) {
+      obligation(
+        `checkpoint ${checkpoint.name} has no acceptance criteria`,
+        acceptanceNode?.line ?? checkpoint.line,
+      );
+    }
+    if (!verificationNode || children(verificationNode, "command").length === 0) {
+      obligation(
+        `checkpoint ${checkpoint.name} has no verification commands`,
+        verificationNode?.line ?? checkpoint.line,
+      );
+    }
+
+    validCheckpoints.push({
+      node: checkpoint,
+      id: checkpoint.name,
+      kind,
+      afterWave,
+      covers,
+      scope,
+      reviewers,
+    });
+  }
+
+  // Delegated task write-scope obligations.
+  lintDelegatedWriteScopes(facts, completeness, findings, file);
+
+  const finals = validCheckpoints.filter((c) => c.kind === "final");
+  if (finals.length > 1) {
+    for (const final of finals.slice(1)) {
+      findings.push({
+        severity: "error",
+        rule: "execution.final_count",
+        message: `checkpoint ${final.id} is an additional final checkpoint; exactly one final checkpoint is allowed`,
+        file,
+        line: final.node.line,
+      });
+    }
+  }
+
+  const declaredCheckpointCount = reviewCheckpointsNode.children.filter((c) =>
+    IDENTITY_PATTERNS.checkpoint.test(c.name),
+  ).length;
+  if (finals.length === 0 && declaredCheckpointCount > 0) {
+    obligation(
+      "delegated execution declares no final checkpoint; exactly one final checkpoint is required",
+      reviewCheckpointsNode.line,
+      "execution.final_count",
+    );
+  }
+
+  if (finals.length === 1) {
+    const finalCheckpoint = finals[0];
+    const lastWave = facts.waveOrder[facts.waveOrder.length - 1];
+    if (
+      lastWave &&
+      finalCheckpoint.afterWave !== lastWave &&
+      waveIndex.has(finalCheckpoint.afterWave)
+    ) {
+      findings.push({
+        severity: "error",
+        rule: "execution.final_wave",
+        message: `final checkpoint ${finalCheckpoint.id} must sit after the last declared wave ${lastWave}, not ${finalCheckpoint.afterWave}`,
+        file,
+        line: finalCheckpoint.node.line,
+      });
+    }
+
+    for (const task of facts.tasks) {
+      if (!finalCheckpoint.covers.includes(task.taskId)) {
+        findings.push({
+          severity: "error",
+          rule: "execution.final_coverage",
+          message: `final checkpoint ${finalCheckpoint.id} does not cover task ${task.taskId}; the final checkpoint must cover every declared task`,
+          file,
+          line: finalCheckpoint.node.line,
+        });
+      }
+    }
+
+    const declaredWriteScopes = new Set(facts.tasks.flatMap((task) => task.writeScope));
+    for (const scopeFile of declaredWriteScopes) {
+      if (!finalCheckpoint.scope.includes(scopeFile)) {
+        findings.push({
+          severity: "error",
+          rule: "execution.final_scope",
+          message: `final checkpoint ${finalCheckpoint.id} scope does not cover declared task write scope file ${scopeFile}`,
+          file,
+          line: finalCheckpoint.node.line,
+        });
+      }
+    }
+  }
+}
+// END_BLOCK_DELEGATED_VALIDATION
+
+// START_BLOCK_DELEGATED_EXTRACTION
+/**
+ * Strictly extract typed delegated obligations from plan content. Returns
+ * ok:false with every validation message when the plan does not declare a
+ * structurally complete and valid delegated execution section, so runtime
+ * registration and lint share one contract instead of two interpretations.
+ */
+export function extractDelegatedPlanDefinition(
+  planContent: string,
+  file = "plan.xml",
+): DelegatedPlanExtractionResult {
+  const parsed = parseSpecXml(planContent, file);
+  const parseErrors = parsed.findings
+    .filter((f) => f.severity === "error")
+    .map((f) => `${file}: ${f.message}`);
+  if (!parsed.root || parseErrors.length > 0) {
+    return {
+      ok: false,
+      errors: parseErrors.length > 0 ? parseErrors : [`${file}: document has no root element`],
+    };
+  }
+  if (parsed.root.name !== "plan") {
+    return { ok: false, errors: [`${file}: root element <${parsed.root.name}> is not a plan`] };
+  }
+
+  const facts = collectDelegatedTaskFacts(parsed.root);
+  if (facts.duplicateTaskElements.length > 0) {
+    return {
+      ok: false,
+      errors: facts.duplicateTaskElements.map(
+        (name) => `${file}: task ${name} is declared more than once`,
+      ),
+    };
+  }
+
+  const findings: SpecLintFinding[] = [];
+  lintExecutionSection(parsed.root, file, facts, true, findings);
+  const errors = findings.filter((f) => f.severity === "error").map((f) => `${file}: ${f.message}`);
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  const executionNode = child(parsed.root, "execution");
+  if (!executionNode || textOf(child(executionNode, "mode")) !== "delegated") {
+    return { ok: false, errors: [`${file}: plan does not declare execution mode delegated`] };
+  }
+
+  const reviewCheckpointsNode = child(executionNode, "review_checkpoints");
+  if (!reviewCheckpointsNode) {
+    return { ok: false, errors: [`${file}: delegated execution declares no review_checkpoints`] };
+  }
+
+  const checkpoints: DelegatedCheckpointDefinition[] = [];
+  for (const checkpoint of reviewCheckpointsNode.children) {
+    if (!IDENTITY_PATTERNS.checkpoint.test(checkpoint.name)) continue;
+    const fileTexts = (container: string): string[] => {
+      const node = child(checkpoint, container);
+      return node ? children(node, "file").map((entry) => textOf(entry)) : [];
+    };
+    const childTexts = (container: string, entry: string): string[] => {
+      const node = child(checkpoint, container);
+      return node ? children(node, entry).map((item) => textOf(item)) : [];
+    };
+    checkpoints.push({
+      checkpointId: checkpoint.name,
+      kind: textOf(child(checkpoint, "kind")) === "final" ? "final" : "milestone",
+      afterWave: textOf(child(checkpoint, "after_wave")),
+      covers: childTexts("covers", "task_id"),
+      scope: fileTexts("scope").map((raw) => {
+        const normalized = normalizeDeclaredScopePath(raw);
+        return normalized.ok ? normalized.path : raw;
+      }),
+      reviewers: childTexts("reviewers", "reviewer").map((value) => {
+        return value === "spec" ? ("spec" as const) : ("code" as const);
+      }),
+      acceptance: childTexts("acceptance", "criterion"),
+      verification: childTexts("verification", "command"),
+    });
+  }
+
+  return {
+    ok: true,
+    definition: {
+      mode: "delegated",
+      waves: facts.waveOrder,
+      tasks: facts.tasks.map((task) => ({
+        taskId: task.taskId,
+        taskElement: task.taskElement,
+        wave: task.wave,
+        writeScope: [...task.writeScope],
+      })),
+      checkpoints,
+    },
+  };
+}
+// END_BLOCK_DELEGATED_EXTRACTION
 
 // START_BLOCK_CONTRACT_CHECKS
 /** Report children that are neither allowed fixed names nor valid identity elements. */
@@ -792,6 +1481,9 @@ function lintPlan(
         const verificationNode = child(task, "verification");
         if (verificationNode)
           checkChildren(verificationNode, { names: VERIFICATION_CHILDREN }, file, findings);
+        const writeScopeNode = child(task, "write_scope");
+        if (writeScopeNode)
+          checkChildren(writeScopeNode, { names: TASK_WRITE_SCOPE_CHILDREN }, file, findings);
 
         const taskStatusNode = child(task, "status");
         const taskStatus = textOf(taskStatusNode);
@@ -920,6 +1612,9 @@ function lintPlan(
       });
     }
   }
+
+  // Optional execution section: delegated/classic/inline intent and checkpoints.
+  lintExecutionSection(root, file, collectDelegatedTaskFacts(root), completeness, findings);
 
   // Cross-file: plan components are a subset of spec components.
   if (!options.skipCrossFile) {

@@ -48,7 +48,8 @@
           "enum": [
             "single-session",
             "balanced",
-            "orchestrated"
+            "orchestrated",
+            "delegated"
           ]
         }
       }
@@ -216,7 +217,8 @@
                 "enum": [
                   "single-session",
                   "balanced",
-                  "orchestrated"
+                  "orchestrated",
+                  "delegated"
                 ]
               }
             }

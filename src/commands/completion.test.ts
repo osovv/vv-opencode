@@ -137,10 +137,10 @@ test("completion scripts - contain patch-provider presets", () => {
   expect(generateZshCompletion()).toContain("_vvoc_patch_provider_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_patch_provider_cmds");
   expect(generateBashCompletion()).toContain(
-    'local commands="stepfun-ai codex deepseek kimi alibaba all"',
+    'local commands="stepfun-ai codex deepseek kimi alibaba zai all"',
   );
-  expect(generateZshCompletion()).toContain("stepfun-ai codex deepseek kimi alibaba all");
-  expect(generateFishCompletion()).toContain("echo stepfun-ai codex deepseek kimi alibaba all");
+  expect(generateZshCompletion()).toContain("stepfun-ai codex deepseek kimi alibaba zai all");
+  expect(generateFishCompletion()).toContain("echo stepfun-ai codex deepseek kimi alibaba zai all");
 });
 
 test("completion scripts - contain preset commands and default preset names", () => {
@@ -150,13 +150,13 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain(
-    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen",
+    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateZshCompletion()).toContain(
-    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen",
+    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateFishCompletion()).toContain(
-    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen",
+    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
 });
 
@@ -168,14 +168,14 @@ test("completion scripts - contain orchestration commands and profile values", (
   expect(bash).toContain("_vvoc_orchestration_commands");
   expect(bash).toContain("orchestration:set");
   expect(bash).toContain('local commands="show set"');
-  expect(bash).toContain('local commands="single-session balanced orchestrated"');
+  expect(bash).toContain('local commands="single-session balanced orchestrated delegated"');
 
   expect(zsh).toContain("_vvoc_orchestration_cmds");
   expect(zsh).toContain("show set");
-  expect(zsh).toContain("single-session balanced orchestrated");
+  expect(zsh).toContain("single-session balanced orchestrated delegated");
 
   expect(fish).toContain("__vvoc_orchestration_cmds");
   expect(fish).toContain("__vvoc_orchestration_profiles");
   expect(fish).toContain("echo show set");
-  expect(fish).toContain("echo single-session balanced orchestrated");
+  expect(fish).toContain("echo single-session balanced orchestrated delegated");
 });

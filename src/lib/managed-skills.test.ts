@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-usage-analytics-skill - Added vvoc-usage-analytics template, reference, and registration coverage.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated vocabulary, control-tool, checkpoint, and linter-fixture coverage to the managed skill contract tests.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -46,16 +46,80 @@ describe("managed workflow skill prompts", () => {
 
     expect(frontmatter).toContain("name: vv-execute");
     expect(frontmatter).toContain("choose an execution mode with the user");
-    for (const hiddenTerm of ["inline", "classic", "subagent-driven", "current-session"]) {
+    for (const hiddenTerm of [
+      "inline",
+      "classic",
+      "delegated",
+      "subagent-driven",
+      "current-session",
+    ]) {
       expect(frontmatter).not.toContain(hiddenTerm);
     }
 
     expect(body).toContain("Supported modes:");
     expect(body).toContain("classic:");
     expect(body).toContain("inline:");
+    expect(body).toContain("delegated:");
     expect(body).toContain("make the user explicitly choose an execution mode");
     expect(body).toContain("Do not mutate files until the execution mode is explicit");
     expect(body).toContain("If the user did not specify a mode, stop and ask them to choose");
+  });
+
+  test("vv-execute reuses explicit intent, uses one mode vocabulary, and respects semantic roles", async () => {
+    const template = await loadManagedSkillTemplate("vv-execute");
+    const { body } = splitFrontmatter(template);
+
+    expect(body).toContain("already stated explicitly is reused; do not ask for it again");
+    expect(body).toContain("stop and ask for one explicit decision before any writes");
+    expect(body).toContain("work_checkpoint");
+    expect(body).toContain("work_item_decide");
+    expect(body).toContain("awaiting_acceptance");
+    expect(body).toContain("complete: true");
+    expect(body).toContain("two-attempt budget");
+    expect(body).toContain("decision rework");
+    expect(body).toContain(
+      "do not update approved plan XML task or lifecycle statuses during execution",
+    );
+    expect(body).not.toContain("Review tasks (spec-reviewer, code-reviewer) → smart role");
+    expect(body).not.toContain(
+      "Integration tasks (multi-file, coordination, state management) → smart role",
+    );
+    expect(body).toContain("do not suggest escalating to the smart model for routine work");
+    expect(body).toContain("a closed review-only FAIL report is a findings result, never approval");
+    expect(body).toContain("NEEDS_CONTEXT and BLOCKED from a worker are hard stops");
+  });
+
+  test("vv-plan declares execution intent, write scopes, and checkpoint planning", async () => {
+    const template = await loadManagedSkillTemplate("vv-plan");
+    const { body } = splitFrontmatter(template);
+
+    expect(body).toContain("inline, classic, or delegated");
+    expect(body).toContain("review_checkpoints");
+    expect(body).toContain("CHECKPOINT-R-NNN");
+    expect(body).toContain("write_scope");
+    expect(body).toContain("focused code review at meaningful intermediate milestones");
+    expect(body).toContain("cover every declared task");
+    expect(body).toContain("explicit agreed amendment");
+
+    const { loadManagedSkillReference } = await import("./managed-skills.js");
+    const planTemplate = await loadManagedSkillReference("vv-plan", "plan-template.xml");
+    expect(planTemplate).toContain("review_checkpoints");
+    expect(planTemplate).toContain("<write_scope>");
+    const withoutComments = planTemplate.replace(/<!--[\s\S]*?-->/g, "");
+    expect(withoutComments).not.toContain("<execution>");
+    expect(withoutComments).not.toContain("review_checkpoints");
+  });
+
+  test("a rendered delegated plan fixture lints clean through the actual linter", async () => {
+    const { lintSpecArtifacts } = await import("./spec-lint.js");
+    const spec = `<spec><status>approved</status><goal>g</goal><architecture>a</architecture><tech_stack>t</tech_stack><components><COMPONENT-A><name>A</name><responsibility>r</responsibility><depends_on></depends_on></COMPONENT-A></components><data_flow>d</data_flow><error_handling>e</error_handling><testing><strategy>s</strategy><coverage>c</coverage></testing><non_goals><non_goal>n</non_goal></non_goals></spec>`;
+    const plan = `<plan><spec>spec.xml</spec><created>2026-09-11</created><status>approved</status><meta><summary>s</summary><waves>1</waves><affected_modules>src/a.ts</affected_modules><complexity>low</complexity></meta><architecture><COMPONENT-A><name>A</name><purpose>p</purpose><file><path>src/a.ts</path><role>implementation</role></file><contract>c</contract><depends_on></depends_on></COMPONENT-A></architecture><tasks><WAVE-1><goal>g</goal><TASK-T-001><title>t</title><file>src/a.ts</file><status>pending</status><description>d</description><depends_on></depends_on><acceptance><criterion>c</criterion></acceptance><verification><command>none</command></verification><write_scope><file>src/a.ts</file></write_scope></TASK-T-001></WAVE-1></tasks><execution><mode>delegated</mode><review_checkpoints><CHECKPOINT-R-001><kind>final</kind><after_wave>WAVE-1</after_wave><covers><task_id>T-001</task_id></covers><scope><file>src/a.ts</file></scope><reviewers><reviewer>code</reviewer></reviewers><acceptance><criterion>c</criterion></acceptance><verification><command>none</command></verification></CHECKPOINT-R-001></review_checkpoints></execution></plan>`;
+    const verdicts = lintSpecArtifacts([
+      { file: "spec.xml", content: spec },
+      { file: "plan.xml", content: plan },
+    ]);
+    expect(verdicts.map((verdict) => verdict.ok)).toEqual([true, true]);
+    expect(verdicts[1].findings).toEqual([]);
   });
 
   test("vv-review remains reviewer-based, findings-only, and never delegates to implementers", async () => {
@@ -70,6 +134,8 @@ describe("managed workflow skill prompts", () => {
     expect(body).toContain("Findings are the FINAL output");
     expect(body).toContain("do NOT implement fixes");
     expect(body).toContain("do NOT delegate to implementers");
+    expect(body).toContain("never satisfies the checkpoint");
+    expect(body).toContain("work_checkpoint verify");
   });
 
   test("managed skill text lookup prefers project and falls back to global", async () => {

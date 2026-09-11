@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added focused regression coverage for the orchestration profile domain.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Extended profile coverage to the delegated policy and its workflow guidance.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -30,7 +30,12 @@ import {
 // START_BLOCK_PROFILE_DOMAIN_TESTS
 describe("orchestration profile domain", () => {
   test("uses stable profile names and balanced backward-compatible default", () => {
-    expect(ORCHESTRATION_PROFILE_NAMES).toEqual(["single-session", "balanced", "orchestrated"]);
+    expect(ORCHESTRATION_PROFILE_NAMES).toEqual([
+      "single-session",
+      "balanced",
+      "orchestrated",
+      "delegated",
+    ]);
     expect(DEFAULT_ORCHESTRATION_PROFILE).toBe("balanced");
     expect(createOrchestrationConfig()).toEqual({ profile: "balanced" });
     expect(resolveOrchestrationPolicy({}).profile).toBe("balanced");
@@ -38,12 +43,14 @@ describe("orchestration profile domain", () => {
 
   test("strictly parses supported values and rejects blank or unknown values", () => {
     expect(parseOrchestrationProfile(" single-session ", "test parse")).toBe("single-session");
+    expect(parseOrchestrationProfile(" delegated ", "test parse")).toBe("delegated");
 
     for (const value of ["", "   ", "unknown", undefined]) {
       expect(() => parseOrchestrationProfile(value, "test parse")).toThrow("test parse");
       expect(() => parseOrchestrationProfile(value, "test parse")).toThrow("single-session");
       expect(() => parseOrchestrationProfile(value, "test parse")).toThrow("balanced");
       expect(() => parseOrchestrationProfile(value, "test parse")).toThrow("orchestrated");
+      expect(() => parseOrchestrationProfile(value, "test parse")).toThrow("delegated");
     }
   });
 
@@ -105,6 +112,25 @@ describe("resolved orchestration policies", () => {
     expect(
       resolveOrchestrationPolicy({ orchestration: { profile: "orchestrated" } }).workflowGuidance,
     ).toBe("tracked");
+    expect(
+      resolveOrchestrationPolicy({ orchestration: { profile: "delegated" } }).workflowGuidance,
+    ).toBe("delegated");
+  });
+
+  test("delegated keeps architecture, acceptance, and verification in the primary session", () => {
+    const context = resolveOrchestrationPolicy({
+      orchestration: { profile: "delegated" },
+    }).controllerSystemContext;
+
+    expect(context).toContain("Keep architecture, important code reading, task contracts");
+    expect(context).toContain("Delegate source implementation, tests, runtime configuration");
+    expect(context).toContain("One active implementation worker is the");
+    expect(context).toContain("explicitly accept each completed attempt or request changes");
+    expect(context).toContain("Spend independent review at declared plan checkpoints");
+    expect(context).toContain("Do not write complete implementation");
+    expect(context).toContain("do not bypass the delegation policy by rewriting source through");
+    expect(context).toContain("planning artifacts under their");
+    expect(context).toContain("execute verification commands");
   });
 });
 // END_BLOCK_CONCRETE_POLICY_TESTS

@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.11.0 - Added coverage that current v3 validation requires the plugins section.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated root and preset profile validation coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -107,6 +107,35 @@ test("validateVvocConfigContent - invalid root orchestration profile reports exa
 
   expect(result.valid).toBe(false);
   expect(result.errors.some((error) => error.includes("/orchestration/profile"))).toBe(true);
+});
+
+test("validateVvocConfigContent - delegated root and preset orchestration profiles pass", () => {
+  const config = createDefaultVvocConfig();
+  const rootResult = validateVvocConfigContent(
+    JSON.stringify({
+      ...config,
+      orchestration: { profile: "delegated" },
+    }),
+    FP,
+  );
+  expect(rootResult.valid).toBe(true);
+  expect(rootResult.errors).toHaveLength(0);
+
+  const presetResult = validateVvocConfigContent(
+    JSON.stringify({
+      ...config,
+      presets: {
+        ...config.presets,
+        custom: {
+          agents: { default: "openai/gpt-5.4" },
+          orchestration: { profile: "delegated" },
+        },
+      },
+    }),
+    FP,
+  );
+  expect(presetResult.valid).toBe(true);
+  expect(presetResult.errors).toHaveLength(0);
 });
 
 test("validateVvocConfigContent - invalid preset orchestration profile reports exact path", () => {

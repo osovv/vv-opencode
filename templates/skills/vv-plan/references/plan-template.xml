@@ -52,7 +52,52 @@
         <verification>
           <command></command>
         </verification>
+        <!--
+          write_scope is required for delegated plans: the worker's bounded
+          editing territory and the checkpoint fingerprint input. It must
+          include the task's primary <file> above.
+        -->
+        <write_scope>
+          <file></file>
+        </write_scope>
       </TASK-T-001>
     </WAVE-1>
   </tasks>
+
+  <!--
+    Optional execution section. Omit it entirely for legacy plans; a plan
+    without <execution> keeps its existing meaning. For delegated execution
+    declare the full checkpoint vocabulary:
+
+    <execution>
+      <mode>delegated</mode>
+      <review_checkpoints>
+        <CHECKPOINT-R-001>
+          <kind>milestone|final</kind>
+          <after_wave>WAVE-N</after_wave>
+          <covers>
+            <task_id>T-001</task_id>
+          </covers>
+          <scope>
+            <file>workspace/relative/path.ts</file>
+          </scope>
+          <reviewers>
+            <reviewer>spec|code</reviewer>
+          </reviewers>
+          <acceptance>
+            <criterion></criterion>
+          </acceptance>
+          <verification>
+            <command></command>
+          </verification>
+        </CHECKPOINT-R-001>
+      </review_checkpoints>
+    </execution>
+
+    Rules: exactly one final checkpoint after the last wave covering every
+    declared task and every task write scope; milestones cover only tasks of
+    waves up to and including after_wave; reviewer sets are explicit spec/code
+    choices — code review at meaningful intermediate milestones by default,
+    spec plus code at the final checkpoint.
+  -->
 </plan>

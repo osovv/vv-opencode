@@ -21,12 +21,17 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PRESET-ORCHESTRATION-PROFILES - Added the profile domain and concrete prompt policies without depending on VvocConfig.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the delegated profile with worker-owned implementation, controller acceptance, and checkpoint review guidance.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_PROFILE_TYPES
 /** Supported orchestration profiles in stable CLI/schema order. */
-export const ORCHESTRATION_PROFILE_NAMES = ["single-session", "balanced", "orchestrated"] as const;
+export const ORCHESTRATION_PROFILE_NAMES = [
+  "single-session",
+  "balanced",
+  "orchestrated",
+  "delegated",
+] as const;
 
 /** One supported preset-controlled orchestration profile. */
 export type OrchestrationProfile = (typeof ORCHESTRATION_PROFILE_NAMES)[number];
@@ -40,7 +45,7 @@ export type OrchestrationConfig = {
 export type ResolvedOrchestrationPolicy = Readonly<{
   profile: OrchestrationProfile;
   controllerSystemContext: string;
-  workflowGuidance: "review-only" | "selective" | "tracked";
+  workflowGuidance: "review-only" | "selective" | "tracked" | "delegated";
 }>;
 
 /** Backward-compatible profile used when an old valid v3 document omits orchestration. */
@@ -73,6 +78,26 @@ respect bounded review rounds, and treat BLOCKED and NEEDS_CONTEXT as hard stops
 identity stable through implementation, review, verification, and close.
 `.trim();
 
+const DELEGATED_CONTROLLER_SYSTEM_CONTEXT = `
+Keep architecture, important code reading, task contracts, acceptance decisions, and final
+synthesis in this primary session. Delegate source implementation, tests, runtime configuration
+changes, formatting, lint fixes, and reviewer-requested implementation changes to implementation
+workers, including small mechanical fixes.
+
+You may author specifications, plans, and explicitly requested planning artifacts under their
+existing approval lifecycle, and you may execute verification commands, including commands that
+produce ordinary generated verification or build outputs. Do not write complete implementation
+bodies inside task packets and do not bypass the delegation policy by rewriting source through
+shell commands.
+
+Send each worker one bounded task packet and let it complete its local edit, test, and fix cycle
+before reporting a concise result with evidence references. One active implementation worker is the
+default; any parallel work requires explicitly disjoint approved scopes. Read the material changed
+code and evidence yourself, then explicitly accept each completed attempt or request changes with
+bounded rationale. Spend independent review at declared plan checkpoints instead of after every
+task, and treat BLOCKED and NEEDS_CONTEXT as hard stops.
+`.trim();
+
 const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestrationPolicy>> =
   Object.freeze({
     "single-session": Object.freeze({
@@ -89,6 +114,11 @@ const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestra
       profile: "orchestrated",
       controllerSystemContext: ORCHESTRATED_CONTROLLER_SYSTEM_CONTEXT,
       workflowGuidance: "tracked",
+    }),
+    delegated: Object.freeze({
+      profile: "delegated",
+      controllerSystemContext: DELEGATED_CONTROLLER_SYSTEM_CONTEXT,
+      workflowGuidance: "delegated",
     }),
   });
 // END_BLOCK_CONCRETE_POLICIES

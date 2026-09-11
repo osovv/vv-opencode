@@ -119,6 +119,32 @@ describe("managed agent prompts", () => {
     expect(template).toContain("reviewer feedback becomes conflicting, ambiguous, or repetitive");
   });
 
+  test("vv-implementer template carries the delegated worker contract", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-implementer");
+    expect(template).toContain("declares a write scope, edit only those files");
+    expect(template).toContain(
+      "complete your own local edit, test, and fix cycle before reporting",
+    );
+    expect(template).toContain("fix your own lint, type, and test failures first");
+    expect(template).toContain("Returning DONE reports a completed attempt. It is not acceptance");
+    expect(template).toContain("explicitly decides");
+    expect(template).toContain("an attempt counter or rework authorization in the packet");
+    expect(template).toContain("Reference evidence by path and command output");
+  });
+
+  test("reviewer templates judge pinned snapshots without claiming task acceptance", async () => {
+    const specTemplate = await loadManagedAgentPromptTemplate("vv-spec-reviewer");
+    const codeTemplate = await loadManagedAgentPromptTemplate("vv-code-reviewer");
+
+    for (const template of [specTemplate, codeTemplate]) {
+      expect(template).toContain("pins a review snapshot or covered scope");
+      expect(template).toContain("not task acceptance");
+      expect(template).not.toContain("accept the task");
+    }
+    expect(specTemplate).toContain("say so explicitly instead of guessing which revision to judge");
+    expect(codeTemplate).toContain("instead of reviewing a moving tree");
+  });
+
   test("loads bundled vv-reviewer templates with strict top-block protocol", async () => {
     const specTemplate = await loadManagedAgentPromptTemplate("vv-spec-reviewer");
     const codeTemplate = await loadManagedAgentPromptTemplate("vv-code-reviewer");

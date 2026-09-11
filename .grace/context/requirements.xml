@@ -81,7 +81,7 @@
       <Name>WorkItemTracking</Name>
       <Action>Controller opens, lists, or closes explicit workflow work items.</Action>
       <Goal>Replace free-form multi-agent loops with explicit work-item identity, mode, required reviewers, lifecycle state, and review-round metadata.</Goal>
-      <Acceptance>work_item_open requires stable keys, title, mode, and required reviewers; repeated matching opens are idempotent; list returns state; close succeeds only when the item is ready to close.</Acceptance>
+      <Acceptance>work_item_open requires stable keys, title, mode, and required reviewers; delegated mode requires an explicitly empty reviewer array plus a declared write scope; repeated matching opens are idempotent; list returns state, delegated acceptance metadata, and registered plan-run views; close succeeds only when the item is ready to close.</Acceptance>
       <RelatedFlow>DF-WORKFLOW-TOOLS</RelatedFlow>
     </UC-009>
     <UC-010>
@@ -109,9 +109,23 @@
       <Name>LoopGateAndHardStops</Name>
       <Action>A tracked implementation and review cycle repeats or a hard-stop status appears.</Action>
       <Goal>Prevent review churn and unsafe continuation by using explicit counters and hard-stop states.</Goal>
-      <Acceptance>Rounds one and two are allowed, round three is rejected with next-action guidance, NEEDS_CONTEXT and BLOCKED always return control to the main session or user, and no semantic similarity heuristics are used.</Acceptance>
+      <Acceptance>Rounds one and two are allowed, round three is rejected with next-action guidance, NEEDS_CONTEXT and BLOCKED always return control to the main session or user, delegated retries use an independent two-attempt budget extended only by authorized rework, and no semantic similarity heuristics are used.</Acceptance>
       <RelatedFlow>DF-LOOP-GATE</RelatedFlow>
     </UC-013>
+    <UC-013A>
+      <Name>DelegatedAcceptance</Name>
+      <Action>The primary controller decides a completed delegated worker attempt.</Action>
+      <Goal>Separate implementation ownership from controller acceptance so ordinary tasks need no reviewer dispatch while acceptance stays explicit, auditable, and bound to the current attempt.</Goal>
+      <Acceptance>A DONE worker parks its item in awaiting_acceptance and never closes or self-accepts it; only the primary root vv-controller session accepts or requests changes with bounded rationale, evidence, and an explicit concerns disposition; stale, duplicate, wrong-attempt, wrong-mode, and unauthorized decisions fail without mutation; checkpoint-authorized rework reopens an accepted task without resetting attempt history.</Acceptance>
+      <RelatedFlow>DF-DELEGATED-ACCEPTANCE</RelatedFlow>
+    </UC-013A>
+    <UC-013B>
+      <Name>ReviewCheckpoints</Name>
+      <Action>The controller registers an approved delegated plan and runs its declared review checkpoints.</Action>
+      <Goal>Spend independent review at meaningful milestones and one final gate instead of after every mechanical task, derived from the approved plan rather than model-supplied lists.</Goal>
+      <Acceptance>Registration validates the approved plan and linked spec, binds content hashes and the trusted workspace root, and is idempotent or explicitly drifting; a checkpoint starts only after its covered tasks are accepted, opens exactly the declared reviewer set against a pinned fingerprint, and passes only when every declared reviewer passes for that snapshot; failed, stale, and stopped checkpoints stay visible gates; the final checkpoint seals the run only after complete current coverage with fresh verification.</Acceptance>
+      <RelatedFlow>DF-REVIEW-CHECKPOINTS</RelatedFlow>
+    </UC-013B>
     <UC-014>
       <Name>WorkflowAndSystemGuidance</Name>
       <Action>An eligible primary OpenCode session starts while vv-opencode plugins are active.</Action>

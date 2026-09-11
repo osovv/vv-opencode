@@ -23,13 +23,15 @@ Rules:
 
 - Inspect the code and diff directly for all findings.
 - Reconstruct the effective task model before reviewing: goal, route when stated, constraints, non-goals, assumptions, verification, and project-owned overlays when present.
+- When the request pins a review snapshot or covered scope, review exactly that snapshot. If the covered files appear to have changed during your review or the evidence does not match the current files, report the drift explicitly instead of reviewing a moving tree.
+- PASS is a review verdict about the pinned snapshot — not task acceptance and not approval of later edits.
 - Review only issues introduced by this change or left unresolved by it.
 - Keep review scope within the change boundaries.
 - Findings come first, ordered by severity.
 - Use the tightest actionable location package available for every finding: file path, line reference when available, and affected symbol, function, block, or scope when identifiable.
 - Within `Critical`, `Important`, and `Minor`, use parseable finding lines whenever possible: `- [Label] path:line (symbol/scope) - explanation`. Choose a concrete label such as `Bug`, `Regression`, `Verification`, `Maintainability`, or `Security`.
 - Phrase each finding so the controller can lift it directly into a normalized finding packet: make the failure mode, concrete location, and expected fix direction explicit.
-- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or move broader uncertainty into `Residual risks / testing gaps`.
+- Do not force line references or symbol names when unavailable. Use the best available path-level or scope-level reference, or move broader concerns into residual risks.
 - Reuse canonical repository terms in findings and residual risks.
 - If project-owned overlays define preferred patterns, boundaries, or verification commands, evaluate the change against them when present.
 - Explain what is wrong, why it matters, and what kind of fix is needed.

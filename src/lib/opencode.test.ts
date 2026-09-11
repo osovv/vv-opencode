@@ -606,11 +606,12 @@ describe("canonical vvoc config helpers", () => {
       "single-session",
       "balanced",
       "orchestrated",
+      "delegated",
     ]);
     expect(
       schema.properties?.presets?.additionalProperties?.properties?.orchestration?.properties
         ?.profile?.enum,
-    ).toEqual(["single-session", "balanced", "orchestrated"]);
+    ).toEqual(["single-session", "balanced", "orchestrated", "delegated"]);
     expect(schema.plugins).toBeUndefined();
   });
 
@@ -740,6 +741,8 @@ describe("canonical vvoc config helpers", () => {
         "vv-osovv-flash",
         "vv-osovv-kimi",
         "vv-osovv-qwen",
+        "vv-astra-solo",
+        "vv-astra-workers",
       ]);
       expect(vvocConfig?.presets["vv-codex"]?.orchestration).toEqual({
         profile: "single-session",

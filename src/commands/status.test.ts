@@ -197,6 +197,37 @@ test("effective status reports the profile from the selected project source", as
   }
 });
 
+test("effective status displays the delegated orchestration profile", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-status-delegated-config-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-status-delegated-project-"));
+  const initialCwd = process.cwd();
+
+  try {
+    const globalPaths = await resolvePaths({
+      scope: "global",
+      cwd: projectDir,
+      configDir: configHome,
+    });
+    const globalConfig = createDefaultVvocConfig();
+    globalConfig.orchestration = { profile: "delegated" };
+    await mkdir(dirname(globalPaths.vvocConfigPath), { recursive: true });
+    await writeFile(globalPaths.vvocConfigPath, renderVvocConfig(globalConfig), "utf8");
+
+    process.chdir(projectDir);
+    const stdout = await captureStdout(async () => {
+      await (
+        statusCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
+      ).run({ args: { scope: "effective", "config-dir": configHome } });
+    });
+
+    expect(stdout).toContain("Orchestration profile: delegated");
+  } finally {
+    process.chdir(initialCwd);
+    await rm(configHome, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 async function captureStdout(fn: () => Promise<void>): Promise<string> {
   const chunks: string[] = [];
   const originalConsoleLog = console.log;

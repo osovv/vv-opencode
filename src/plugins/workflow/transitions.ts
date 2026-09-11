@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Replaced sequential reviewer transitions with record-aware explicit review-round launch policy and mode-specific collect-all aggregation.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Allowed vv-implementer launches for delegated items in open/awaiting_implementer states.]
 // END_CHANGE_SUMMARY
 
 import type { TrackedAgentName } from "./protocol.js";
@@ -81,7 +81,7 @@ export function hasNeedsContextResult(round: ReviewRound): boolean {
 // END_CONTRACT: getAllowedNextAgents
 export function getAllowedNextAgents(record: WorkItemRecord): TrackedAgentName[] {
   if (
-    record.mode === "implementation" &&
+    (record.mode === "implementation" || record.mode === "delegated") &&
     (record.state === "open" || record.state === "awaiting_implementer")
   ) {
     return ["vv-implementer"];

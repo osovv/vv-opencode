@@ -38,6 +38,8 @@ describe("preset helpers", () => {
       "vv-osovv-flash",
       "vv-osovv-kimi",
       "vv-osovv-qwen",
+      "vv-astra-solo",
+      "vv-astra-workers",
     ]);
   });
 
@@ -57,6 +59,8 @@ describe("preset helpers", () => {
       "vv-osovv-flash": "single-session",
       "vv-osovv-kimi": "single-session",
       "vv-osovv-qwen": "single-session",
+      "vv-astra-solo": "single-session",
+      "vv-astra-workers": "delegated",
     });
   });
 
@@ -66,6 +70,8 @@ describe("preset helpers", () => {
     );
     expect(presets).toEqual([
       "vv-alibaba",
+      "vv-astra-solo",
+      "vv-astra-workers",
       "vv-codex",
       "vv-deepseek",
       "vv-kimi",
@@ -106,6 +112,26 @@ describe("preset helpers", () => {
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"smart": "deepseek/vv-deepseek-v4-flash-max"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
+  });
+
+  test("formatPreset renders the vv-astra-solo explicit-reasoning assignments", () => {
+    const resolved = resolvePreset("vv-astra-solo", createDefaultVvocConfig().presets);
+    const output = formatPreset(resolved.name, resolved.preset);
+    expect(output).toContain('"default": "openai/vv-codex-gpt-6-astra-max"');
+    expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.3-codex-spark-medium"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
+    expect(output).toContain("single-session");
+  });
+
+  test("formatPreset renders the vv-astra-workers delegated assignments", () => {
+    const resolved = resolvePreset("vv-astra-workers", createDefaultVvocConfig().presets);
+    const output = formatPreset(resolved.name, resolved.preset);
+    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-high"');
+    expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.3-codex-spark-medium"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
+    expect(output).toContain("delegated");
   });
 });
 
@@ -189,7 +215,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-alibaba, vv-codex, vv-deepseek, vv-kimi, vv-osovv-flash, vv-osovv-kimi, vv-osovv-qwen, vv-osovv-sol, vv-zai",
+        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-flash, vv-osovv-kimi, vv-osovv-qwen, vv-osovv-sol, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });

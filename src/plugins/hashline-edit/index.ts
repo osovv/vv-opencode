@@ -18,8 +18,8 @@
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
-import { dirname, resolve } from "node:path";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { findFirstChangedLine, summarizeEditDiff } from "./diff-summary.js";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";

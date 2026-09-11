@@ -1,10 +1,10 @@
 // FILE: src/plugins/workflow/state.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, and collect-all review rounds.
-//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, close gating, and review-round helpers.
-//   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts]
-//   LINKS: M-WORKFLOW-STATE, M-WORKFLOW-PROTOCOL, M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-STATE
+//   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, collect-all review rounds, and delegated attempts awaiting controller acceptance.
+//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata including the delegated mode with explicitly empty reviewers, declared write scopes and plan bindings, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, delegated attempt bookkeeping, close gating, and review-round helpers.
+//   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/delegated.ts (types only)]
+//   LINKS: M-WORKFLOW-STATE, M-WORKFLOW-PROTOCOL, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-DELEGATED, V-M-WORKFLOW-STATE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -22,7 +22,7 @@
 //   createWorkflowResultExcerpt - Creates deterministic bounded result excerpts.
 //   ReviewRoundResult - Stored result payload for one reviewer in a review round.
 //   ReviewRound - Explicit current-round reviewer progress and results.
-//   WorkItemState - Allowed lifecycle states for a tracked work item.
+//   WorkItemState - Allowed lifecycle states for a tracked work item, including awaiting_acceptance.
 //   WorkItemRecord - Canonical in-memory and persisted state record for a work item.
 //   OpenWorkItemInput - Required input fields for idempotent work-item creation.
 //   OpenWorkItemResult - Success or validation result returned by work-item creation.
@@ -34,6 +34,8 @@
 //   WorkItemStoreData - Snapshot shape used by workflow persistence.
 //   WorkItemStore - Store interface exposing open, launch, result, list, close, and snapshot operations.
 //   createWorkItemStore - Creates a new scoped in-memory work-item store.
+//   createRecordLookupKey - Session-scoped record map key shared with delegated helpers.
+//   cloneRecord - Deep clone of one work-item record shared with delegated helpers.
 //   openWorkItem - Creates or returns an existing work item by idempotency key.
 //   beginTrackedLaunch - Validates tracked launch and marks reviewers in flight.
 //   revertReviewerLaunch - Reverts an in-flight reviewer launch back to pending after a failed tracked result.
@@ -45,10 +47,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Added revertReviewerLaunch so a failed tracked result returns an in-flight reviewer to pending instead of stranding the work item in REVIEWER_ALREADY_IN_FLIGHT.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the delegated mode with explicitly empty reviewers, declared write scopes, plan bindings, and the awaiting_acceptance state.]
 // END_CHANGE_SUMMARY
 
 import type { ParsedResultBlock, TrackedAgentName } from "./protocol.js";
+import type { DelegatedWorkItemState } from "./delegated.js";
+import type { DelegatedPlanRun } from "./checkpoints.js";
+import { normalizeDeclaredScopePath } from "../../lib/spec-lint.js";
 import {
   getAllowedNextAgents,
   getReviewerRoleForAgent,
@@ -57,7 +62,7 @@ import {
   resolveCompletedRoundState,
 } from "./transitions.js";
 
-export const WORK_ITEM_MODES = ["implementation", "review_only"] as const;
+export const WORK_ITEM_MODES = ["implementation", "review_only", "delegated"] as const;
 export type WorkItemMode = (typeof WORK_ITEM_MODES)[number];
 
 export const REVIEWER_ROLES = ["spec", "code"] as const;
@@ -102,6 +107,7 @@ export type WorkItemState =
   | "open"
   | "awaiting_implementer"
   | "awaiting_reviews"
+  | "awaiting_acceptance"
   | "needs_context"
   | "blocked"
   | "ready_to_close"
@@ -123,6 +129,8 @@ export type WorkItemRecord = {
   createdAt: string;
   updatedAt: string;
   closedAt?: string;
+  /** Delegated-mode attempt ledger, decisions, and acceptance history. */
+  delegated?: DelegatedWorkItemState;
 };
 
 export type OpenWorkItemInput = {
@@ -131,6 +139,12 @@ export type OpenWorkItemInput = {
   title: string;
   mode: WorkItemMode;
   requiredReviewers: ReviewerRole[];
+  /** Delegated-only declared workspace-relative write scope. */
+  writeScope?: readonly string[];
+  /** Delegated-only optional plan-run binding (both fields together or neither). */
+  planRunId?: string;
+  /** Delegated-only canonical plan task id bound to the plan run. */
+  planTaskId?: string;
 };
 
 export type OpenWorkItemResult =
@@ -210,6 +224,8 @@ export type WorkItemStoreData = {
   nextId: number;
   records: Map<string, WorkItemRecord>;
   keyIndexBySession: Map<string, Map<string, string>>;
+  /** Registered delegated plan runs; empty until work_checkpoint register runs. */
+  planRuns: Map<string, DelegatedPlanRun>;
 };
 
 export type WorkItemStore = {
@@ -244,6 +260,9 @@ function createRecordLookupKey(sessionId: string, workItemId: string): string {
   return `${sessionId}::${workItemId}`;
 }
 
+/** Session-scoped record map key shared with delegated-mode helpers. */
+export { createRecordLookupKey };
+
 function cloneExcerpt(excerpt: WorkflowResultExcerpt): WorkflowResultExcerpt {
   return { ...excerpt };
 }
@@ -275,14 +294,38 @@ function cloneRound(round: ReviewRound): ReviewRound {
   };
 }
 
+function cloneDelegatedState(state: DelegatedWorkItemState): DelegatedWorkItemState {
+  return {
+    ...state,
+    writeScope: [...state.writeScope],
+    attempts: state.attempts.map((attempt) => ({
+      ...attempt,
+      ...(attempt.resultExcerpt ? { resultExcerpt: cloneExcerpt(attempt.resultExcerpt) } : {}),
+    })),
+    decisions: state.decisions.map((decision) => ({
+      ...decision,
+      evidence: [...decision.evidence],
+    })),
+    acceptances: state.acceptances.map((acceptance) => ({
+      ...acceptance,
+      evidence: [...acceptance.evidence],
+    })),
+    reworkHistory: state.reworkHistory.map((rework) => ({ ...rework })),
+  };
+}
+
 function cloneRecord(record: WorkItemRecord): WorkItemRecord {
   return {
     ...record,
     requiredReviewers: [...record.requiredReviewers],
     ...(record.currentRound ? { currentRound: cloneRound(record.currentRound) } : {}),
     ...(record.resultExcerpt ? { resultExcerpt: cloneExcerpt(record.resultExcerpt) } : {}),
+    ...(record.delegated ? { delegated: cloneDelegatedState(record.delegated) } : {}),
   };
 }
+
+/** Deep clone of one work-item record shared with delegated-mode helpers. */
+export { cloneRecord };
 
 // START_CONTRACT: createWorkflowResultExcerpt
 //   PURPOSE: Create a deterministic bounded recovery excerpt from tracked result text.
@@ -373,8 +416,92 @@ function openWorkItemInStore(
   store: WorkItemStoreData,
   input: OpenWorkItemInput,
 ): OpenWorkItemResult {
-  const requiredReviewers = canonicalizeReviewers(input.requiredReviewers);
-  if (!requiredReviewers) {
+  if (!(WORK_ITEM_MODES as readonly string[]).includes(input.mode)) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message: `INVALID_INPUT: mode must be one of ${WORK_ITEM_MODES.join(", ")}`,
+    };
+  }
+
+  let delegatedState: DelegatedWorkItemState | undefined;
+  if (input.mode === "delegated") {
+    if (input.requiredReviewers.length !== 0) {
+      return {
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message:
+          "INVALID_INPUT: delegated mode requires an explicitly empty requiredReviewers array",
+      };
+    }
+    if (
+      (!input.planRunId && input.planTaskId) ||
+      (input.planRunId && !input.planTaskId) ||
+      (input.planRunId !== undefined && input.planRunId.trim() === "") ||
+      (input.planTaskId !== undefined && input.planTaskId.trim() === "")
+    ) {
+      return {
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message: "INVALID_INPUT: planRunId and planTaskId must be provided together and non-empty",
+      };
+    }
+    if (!Array.isArray(input.writeScope) || input.writeScope.length === 0) {
+      return {
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message:
+          "INVALID_INPUT: delegated mode requires a non-empty declared writeScope of workspace-relative files",
+      };
+    }
+    const normalizedScope: string[] = [];
+    const seenScope = new Set<string>();
+    for (const declared of input.writeScope) {
+      const normalized = normalizeDeclaredScopePath(String(declared));
+      if (!normalized.ok) {
+        return {
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: `INVALID_INPUT: delegated writeScope path ${JSON.stringify(String(declared))} is malformed (${normalized.reason})`,
+        };
+      }
+      if (seenScope.has(normalized.path)) {
+        return {
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: `INVALID_INPUT: delegated writeScope path ${JSON.stringify(normalized.path)} is declared more than once`,
+        };
+      }
+      seenScope.add(normalized.path);
+      normalizedScope.push(normalized.path);
+    }
+    delegatedState = {
+      writeScope: normalizedScope,
+      ...(input.planRunId && input.planTaskId
+        ? { planRunId: input.planRunId, planTaskId: input.planTaskId }
+        : {}),
+      attempts: [],
+      decisions: [],
+      acceptances: [],
+      reworkHistory: [],
+    };
+  } else {
+    if (
+      input.writeScope !== undefined ||
+      input.planRunId !== undefined ||
+      input.planTaskId !== undefined
+    ) {
+      return {
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message: `INVALID_INPUT: writeScope and plan bindings are only valid for delegated mode, not ${input.mode}`,
+      };
+    }
+  }
+
+  const requiredReviewers =
+    input.mode === "delegated" ? [] : canonicalizeReviewers(input.requiredReviewers);
+  if (input.mode !== "delegated" && !requiredReviewers) {
     return {
       ok: false,
       errorCode: "INVALID_INPUT",
@@ -399,7 +526,19 @@ function openWorkItemInStore(
     } else if (
       existing.title !== input.title ||
       existing.mode !== input.mode ||
-      !sameReviewerSet(existing.requiredReviewers, requiredReviewers)
+      !sameReviewerSet(
+        existing.requiredReviewers,
+        input.mode === "delegated" ? [] : (requiredReviewers as ReviewerRole[]),
+      ) ||
+      (input.mode === "delegated" &&
+        (existing.delegated?.planRunId ?? undefined) !==
+          (delegatedState?.planRunId ?? undefined)) ||
+      (input.mode === "delegated" &&
+        (existing.delegated?.planTaskId ?? undefined) !==
+          (delegatedState?.planTaskId ?? undefined)) ||
+      (input.mode === "delegated" &&
+        JSON.stringify(existing.delegated?.writeScope ?? []) !==
+          JSON.stringify(delegatedState?.writeScope ?? []))
     ) {
       return {
         ok: false,
@@ -426,11 +565,12 @@ function openWorkItemInStore(
     key: input.key,
     title: input.title,
     mode: input.mode,
-    requiredReviewers,
+    requiredReviewers: input.mode === "delegated" ? [] : (requiredReviewers as ReviewerRole[]),
     state: input.mode === "review_only" ? "awaiting_reviews" : "open",
     ...(input.mode === "review_only"
-      ? { currentRound: createReviewRound(requiredReviewers, 1, now) }
+      ? { currentRound: createReviewRound(requiredReviewers as ReviewerRole[], 1, now) }
       : {}),
+    ...(delegatedState ? { delegated: delegatedState } : {}),
     completedReviewRoundCount: 0,
     specReviewCount: 0,
     codeReviewCount: 0,
@@ -857,11 +997,13 @@ export function createWorkItemStore(hydrateData?: WorkItemStoreData | null): Wor
         nextId: hydrateData.nextId,
         records: new Map(hydrateData.records),
         keyIndexBySession: new Map(hydrateData.keyIndexBySession),
+        planRuns: new Map(hydrateData.planRuns ?? []),
       }
     : {
         nextId: 1,
         records: new Map(),
         keyIndexBySession: new Map(),
+        planRuns: new Map(),
       };
 
   return {

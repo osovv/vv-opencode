@@ -369,17 +369,35 @@ vvoc preset vv-osovv-sol
 vvoc preset vv-osovv-flash
 vvoc preset vv-osovv-kimi
 vvoc preset vv-osovv-qwen
+vvoc preset vv-astra-solo
+vvoc preset vv-astra-workers
+
+# Install the explicit-reasoning provider aliases the Astra presets use
+vvoc patch-provider codex     # vv-codex-gpt-6-astra-max + vv-codex-gpt-5.3-codex-spark-medium (+ existing aliases)
+vvoc patch-provider deepseek  # vv-deepseek-flash-high (+ existing alias)
+vvoc patch-provider zai       # vv-glm-5.3-high
+vvoc patch-provider all       # every patch above in one run
 ```
 
 Built-in role IDs: `default`, `smart`, `fast`, `reviewer`, plus any custom lowercase-hyphenated IDs. Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed on every `vvoc install`/`vvoc sync`; user-defined presets are preserved as-is.
 
+The two Astra presets pin explicit reasoning-effort aliases:
+
+| Preset | default | smart | fast | reviewer | Profile |
+|---|---|---|---|---|---|
+| `vv-astra-solo` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-5.3-codex-spark-medium` | `zai-coding-plan/vv-glm-5.3-high` | single-session |
+| `vv-astra-workers` | `deepseek/vv-deepseek-flash-high` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-5.3-codex-spark-medium` | `zai-coding-plan/vv-glm-5.3-high` | delegated |
+
+New aliases bind API model IDs to explicit efforts (`gpt-6-astra` → max, `gpt-5.3-codex-spark` → medium with unsupported inherited effort variants disabled, `deepseek-flash` → high, `glm-5.3` → high) and keep the established OpenAI reasoning-summary and encrypted-reasoning options. Spark and GLM-5.3 are advertised conservatively as text-only. The shared `fast` role also serves `explore`, Guardian, and `small_model` — Spark availability for those consumers is not verified until you use it. Real model access, review quality, latency, and Astra-token savings are unmeasured: metadata here describes provider capability and pricing boundaries, not benchmarked behavior, and credentialed smoke runs would require separate authorization.
+
 ### Orchestration profiles
 
-Three concrete policies control how vv-controller delegates work at runtime:
+Four concrete policies control how vv-controller delegates work at runtime:
 
 - `single-session` — vv-controller performs exploration, investigation, planning, implementation, and verification directly. Independent reviewer subagents remain available when the user explicitly requests review or when a materially risky completed change benefits from independent cross-model evaluation.
 - `balanced` — vv-controller keeps architecture, critical reading, and final synthesis in the primary session and may selectively delegate bounded search, investigation, mechanical implementation, or review when that is the lightest safe route. Delegation is optional, not mechanically mandatory.
 - `orchestrated` — vv-controller uses the full tracked implementer/reviewer workflow with explicit work items, required reviewers, bounded rounds, and hard stops.
+- `delegated` — implementation is delegated to workers while the primary session keeps architecture, important code reading, task contracts, explicit acceptance, and final synthesis. Source edits, tests, config changes, formatting, lint fixes, and reviewer-requested fixes — including small mechanical ones — go to workers through bounded task packets. Independent review happens at declared plan checkpoints instead of after every task; `BLOCKED` and `NEEDS_CONTEXT` remain hard stops.
 
 Pick a profile explicitly or let a built-in preset select one:
 
@@ -399,12 +417,14 @@ Built-in presets declare an orchestration mapping:
 | `vv-osovv-flash` | single-session |
 | `vv-osovv-kimi` | single-session |
 | `vv-osovv-qwen` | single-session |
+| `vv-astra-solo` | single-session |
+| `vv-astra-workers` | delegated |
 | `vv-zai` | balanced |
 | `vv-deepseek` | balanced |
 
 Applying a built-in preset changes both model roles and the root orchestration profile atomically. A custom user-defined preset without an orchestration section preserves the current root profile. `vvoc status` reports the profile resolved from the selected vvoc source; effective status with no config files reports `balanced`.
 
-Profiles are enforced through the concrete policy injected into vv-controller at startup — the model only receives its active work instructions and never sees inactive profile alternatives. The first version does not disable tools, change permissions, or block subagent types; the policy is prompt-driven, and asynchronous vv-execute classic mode remains available through that skill's explicit inline/classic selection. Profile changes take effect after an OpenCode restart, like all vvoc config changes.
+Profiles are enforced through the concrete policy injected into vv-controller at startup — the model only receives its active work instructions and never sees inactive profile alternatives. The policy is behavioral, not a filesystem sandbox: the delegated profile instructs the controller not to write source files (and not to bypass that via shell rewrites), while runtime authorization genuinely enforces acceptance and checkpoint operations. Asynchronous vv-execute classic mode remains available through that skill's explicit inline/classic/delegated selection. Profile changes take effect after an OpenCode restart, like all vvoc config changes.
 
 ### Workflow work items
 
@@ -424,6 +444,26 @@ Workflow work items are opened with explicit intent. For implementation loops, c
 ```
 
 For review-only reports, use `"mode": "review_only"`. In review-only mode, reviewer `FAIL` is a completed finding result: required reviewers are collected independently, parallel `spec` and `code` reviewers may both return `FAIL`, and the item does not route to `vv-implementer` unless the user explicitly requests fixes.
+
+#### Delegated execution and review checkpoints
+
+Under the `delegated` profile the workflow plugin also registers two control tools — `work_item_decide` and `work_checkpoint` — for the primary vv-controller session only (child sessions, untrusted workspaces, and unverifiable session identity are denied).
+
+Delegated tasks are opened with `"mode": "delegated"`, an explicitly empty `requiredReviewers` array, and a declared `writeScope` of workspace-relative files. One worker (`vv-implementer`) is launched per task with a bounded packet; attempts are bound to the host call identity, so stale or duplicate callbacks fail without side effects. A `DONE` worker parks the item in `awaiting_acceptance` — it never closes the item and the worker never accepts its own result. The controller explicitly decides with `work_item_decide`:
+
+- `accept` (with rationale and evidence references) records controller acceptance and reaches `ready_to_close`. Acceptance is recorded distinctly from an independent reviewer `PASS`.
+- `request_changes` returns the task to the implementation path. Controller-directed retries are bounded to an initial attempt plus one correction; re-deciding or reopening never resets that budget. `DONE_WITH_CONCERNS` requires an explicit `concernsDisposition`.
+- `rework` reopens an accepted task only when a failed checkpoint from the same registered run covers it, preserving acceptance history and granting exactly one additional attempt.
+
+Independent review happens at checkpoints declared in the plan. An approved delegated plan carries an `<execution><mode>delegated</mode>` section with `<review_checkpoints>` (`CHECKPOINT-R-NNN` identities, each with kind, wave barrier, covered tasks, reviewed scope files, reviewer set, acceptance criteria, and verification commands) and per-task `<write_scope>` lists. `work_checkpoint` handles three actions:
+
+- `register` — loads an approved active plan plus its linked approved spec, fully lints them, and binds the run to their content hashes and the canonical workspace root. Re-registering identical inputs is idempotent; changed approved inputs are explicit plan drift, never a progress reset.
+- `start` — after every covered task is accepted, captures a SHA-256 fingerprint over the checkpoint scope (file contents, existence, mode bits, and covered accepted attempts) and opens exactly the declared reviewer set as an ordinary `review_only` item. Writes overlapping an in-flight checkpoint scope are refused.
+- `verify` — derives `passed`, `failed`, `stale`, or `stopped` from the recorded reviewer results plus freshly recomputed fingerprints and approval hashes. A checkpoint passes only when every declared reviewer passes for the pinned snapshot; a closed review-only `FAIL` report is findings, not approval; edits during review make the generation stale. The final checkpoint seals the run only via `verify` with `complete: true` after every task is accepted, every earlier checkpoint passed, and the complete declared write scope is covered with fresh verification.
+
+Passed milestones stay historical: later planned edits are covered by later checkpoints or the final gate, not by an old approval. Hard stops (`BLOCKED`, `NEEDS_CONTEXT`) are never reset or bypassed by acceptance or checkpoint handling. Checkpoint state persists per session and survives restarts; a persisted `PASS` is not fresh evidence until `verify` recomputes current hashes.
+
+Plans without an `<execution>` section keep their legacy meaning; executing them with different acceptance or review obligations requires an explicit agreed plan amendment, and archived plans are never rewritten. In a deterministic dispatch-count scenario, a twenty-task plan with two intermediate code-review checkpoints and one final spec+code checkpoint needs exactly four initial reviewer launches instead of forty — that is a property of the declared checkpoint policy, not a wall-clock or model-quality benchmark.
 
 ### Edit format routing
 

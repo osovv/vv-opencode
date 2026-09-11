@@ -1,10 +1,10 @@
 // FILE: src/commands/patch-provider.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
-//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider`, and CLI output.
+//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (codex, deepseek, kimi, alibaba, zai), and CLI output.
 //   DEPENDS: [citty, src/lib/opencode.ts]
-//   LINKS: M-CLI-PATCH-PROVIDER, M-CLI-CONFIG
+//   LINKS: M-CLI-PATCH-PROVIDER, M-CLI-COMPLETION, M-CLI-CONFIG
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.6 - Added the deepseek alias patch (vv-deepseek-v4-flash-max) and official modalities across all patched models.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added Astra max and Spark medium codex aliases, DeepSeek Flash high, and the zai GLM-5.3 high patch with explicit Spark variant disabling.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -149,6 +149,54 @@ const OPENAI_PATCH = {
         include: ["reasoning.encrypted_content"],
       },
     },
+    "vv-codex-gpt-6-astra-max": {
+      name: "VV Codex GPT-6 Astra Max",
+      id: "gpt-6-astra",
+      variants: {},
+      limit: {
+        context: 400000,
+        input: 272000,
+        output: 128000,
+      },
+      modalities: {
+        input: ["text", "image", "pdf"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "max",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
+    "vv-codex-gpt-5.3-codex-spark-medium": {
+      name: "VV Codex GPT-5.3 Codex Spark Medium",
+      id: "gpt-5.3-codex-spark",
+      // The catalog auto-generates effort variants for this base model; the
+      // cited public description supports medium only, so inherited efforts are
+      // explicitly disabled instead of relying on variants: {} suppression.
+      variants: {
+        none: { disabled: true },
+        low: { disabled: true },
+        high: { disabled: true },
+        max: { disabled: true },
+      },
+      limit: {
+        context: 128000,
+        input: 100000,
+        output: 32000,
+      },
+      modalities: {
+        input: ["text"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "medium",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
   },
 } as const satisfies Record<string, unknown>;
 
@@ -215,6 +263,45 @@ const DEEPSEEK_PATCH = {
         reasoningEffort: "max",
       },
     },
+    "vv-deepseek-flash-high": {
+      name: "VV DeepSeek Flash High",
+      id: "deepseek-flash",
+      variants: {},
+      limit: {
+        context: 1000000,
+        output: 384000,
+      },
+      modalities: {
+        input: ["text"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "high",
+      },
+    },
+  },
+} as const satisfies Record<string, unknown>;
+
+const ZAI_PATCH = {
+  models: {
+    "vv-glm-5.3-high": {
+      name: "VV GLM-5.3 High",
+      id: "glm-5.3",
+      variants: {},
+      limit: {
+        context: 1000000,
+        output: 131072,
+      },
+      modalities: {
+        input: ["text"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "high",
+      },
+    },
   },
 } as const satisfies Record<string, unknown>;
 
@@ -235,7 +322,7 @@ const PATCH_PROVIDER_PRESETS = {
     kind: "provider-object",
     providerID: "deepseek",
     value: DEEPSEEK_PATCH,
-    summary: "provider.deepseek.models.vv-deepseek-v4-flash-max patched",
+    summary: "provider.deepseek.models.vv-deepseek flash aliases patched",
   },
   kimi: {
     kind: "provider-object",
@@ -248,6 +335,12 @@ const PATCH_PROVIDER_PRESETS = {
     providerID: "alibaba-token-plan",
     value: ALIBABA_PATCH,
     summary: "provider.alibaba-token-plan.models.vv-qwen3.8-max-xhigh patched",
+  },
+  zai: {
+    kind: "provider-object",
+    providerID: "zai-coding-plan",
+    value: ZAI_PATCH,
+    summary: "provider.zai-coding-plan.models.vv-glm-5.3-high patched",
   },
 } as const satisfies Record<string, PatchPreset>;
 

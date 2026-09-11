@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.3 - Added missing-blank-line repair guidance while preserving fail-closed duplicate-field handling.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Denied the two new delegated control tools during format-only repair sessions.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -55,7 +55,9 @@ const FORMAT_ONLY_REPAIR_DISABLED_TOOLS: Readonly<Record<string, boolean>> = {
   multi_tool_use: false,
   read: false,
   task: false,
+  work_checkpoint: false,
   work_item_close: false,
+  work_item_decide: false,
   work_item_list: false,
   work_item_open: false,
   write: false,

@@ -1,0 +1,112 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-DELEGATED-WORKFLOW-ASTRA-PRESETS>
+    <Summary>Add delegated implementation with explicit controller acceptance and milestone-level independent review, integrate that policy into managed planning and execution, and provide Astra solo and worker presets with explicit reasoning aliases.</Summary>
+    <Problem>The user relies on single-session orchestration because the current tracked implementation workflow is too rigid and slow for ordinary tasks. Every successful tracked implementer result requires independent review before its work item can close, and the classic execution skill requires both spec and code reviewers per task. The desired workflow delegates implementation to a cheaper worker, keeps architecture and task acceptance in Astra's primary session, and spends independent review latency at meaningful milestones rather than every mechanical subtask.</Problem>
+    <Goals>
+      <Goal>Separate implementation ownership, controller acceptance, and independent review cadence without weakening the existing strict workflow.</Goal>
+      <Goal>Reduce Astra's mechanical implementation turns and context pollution while retaining critical reading, evidence-based acceptance, and responsibility for the integrated result.</Goal>
+      <Goal>Make the delegated mode a coherent public contract across orchestration profiles, workflow tools and persistence, managed plan artifacts, execution guidance, validation, and documentation.</Goal>
+      <Goal>Use independent review from a different model family than both Astra and the default implementation worker.</Goal>
+      <Goal>Add exactly two built-in presets, vv-astra-solo and vv-astra-workers, with provider aliases that explicitly set the intended reasoning effort.</Goal>
+      <Goal>Demonstrate reduced mandatory reviewer dispatch count deterministically without claiming an unmeasured wall-clock or model-quality improvement.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Preserve the existing single-session, balanced, and orchestrated profile policies and the absent-profile default of balanced. Existing presets keep their current role and profile assignments.</Constraint>
+      <Constraint>Keep the four built-in model roles default, smart, fast, and reviewer and their current agent bindings. Do not silently introduce model escalation, fallback, or per-agent model overrides.</Constraint>
+      <Constraint>Existing implementation and review_only work items retain explicit intent, non-empty required reviewers, collect-all review behavior, stable identity, and their current close semantics. Controller acceptance must be an explicit new path, never an inferred consequence of missing reviewers.</Constraint>
+      <Constraint>Preserve fail-closed tracked result parsing, bounded recovery excerpts, session isolation, and hard stops for BLOCKED and NEEDS_CONTEXT. Neither controller acceptance nor checkpoint handling may reset or bypass a hard stop.</Constraint>
+      <Constraint>Resolve the orchestration policy from the startup snapshot. Model-role assignments and profile changes still require an OpenCode restart.</Constraint>
+      <Constraint>Use existing repository patterns and dependencies. Runtime workflow data stays under the existing XDG_DATA_HOME/vvoc/workflow/sessionId location; approved plans are not transient execution-state stores.</Constraint>
+      <Constraint>Do not change user-owned installed configuration, globally installed agents or skills, credentials, current session policy, or provider billing settings during this repository change.</Constraint>
+      <Constraint>Keep managed writes conservative, scoped, and idempotent. Preserve unrelated provider models, root role references, custom presets, comments, and tuple options.</Constraint>
+      <Constraint>This change is governed by this GRACE specification and a subsequently approved GraceChangePlan. Product plan-format changes apply to the repository's shipped vvoc templates and linter, not to the externally installed GRACE skill format.</Constraint>
+      <Constraint>Archived change bundles remain immutable. No commit, release, package publication, or credentialed model benchmark is implied by approval of this specification.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Do not replace the existing workflow engine, introduce a general-purpose plan scheduler, or create a distributed multi-agent execution platform.</NonGoal>
+      <NonGoal>Do not add automatic parallel writers, worktree management, speculative implementation, background review of a moving working tree, or automatic model selection by perceived task difficulty.</NonGoal>
+      <NonGoal>Do not implement a filesystem security boundary preventing every possible controller write. Delegated implementation ownership is a prompt policy; acceptance permissions and workflow state transitions are runtime-enforced contracts.</NonGoal>
+      <NonGoal>Do not make every task require two independent reviewers, make every wave a review checkpoint, or reinterpret a closed review-only findings report as a passing approval.</NonGoal>
+      <NonGoal>Do not require full implementation bodies in plans or have Astra generate complete patches merely for a worker to apply.</NonGoal>
+      <NonGoal>Do not redesign Guardian, add a separate fast role for each consumer, or certify Spark's risk-assessment quality from metadata or mocked tests.</NonGoal>
+      <NonGoal>Do not build a performance benchmarking platform or promise a fixed token, latency, or quality improvement for these model combinations.</NonGoal>
+      <NonGoal>Do not repair unrelated historical documentation, archived assertions, or the installed GRACE CLI as part of the workflow implementation.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: Add delegated as an explicit orchestration profile accepted by config parsing, the canonical v3 schema, scoped CLI operations, preset application, status output, and shell completion. Unknown explicit profiles still fail without fallback.</Criterion>
+      <Criterion>AC-02: The delegated controller policy keeps architecture, important code reading, task contracts, acceptance, and final synthesis in the primary session. Source implementation, tests, runtime configuration changes, formatting, lint fixes, and reviewer-requested implementation changes are delegated to workers, including small mechanical fixes.</Criterion>
+      <Criterion>AC-03: The controller may author spec, plan, and explicitly requested planning artifacts under their existing approval lifecycle, and execute verification commands, including commands that produce ordinary generated verification or build outputs. It does not generate complete implementation bodies in task packets or bypass the delegation policy through shell-based source rewrites.</Criterion>
+      <Criterion>AC-04: The delegated policy uses bounded task packets, lets the worker complete its local edit/test/fix cycle before reporting, and returns concise results with evidence references. One active implementation worker is the initial default; any parallel work requires explicitly disjoint approved scopes.</Criterion>
+      <Criterion>AC-05: Workflow tooling provides an explicit controller-accepted implementation path. A successful worker result waits for controller acceptance rather than creating an independent reviewer round. The worker cannot accept its own result, and the work item cannot close merely because the worker returned DONE.</Criterion>
+      <Criterion>AC-06: The primary vv-controller can explicitly accept the current completed implementation attempt or request changes with bounded rationale and verification evidence references. Decisions are bound to the current work item and attempt; stale, duplicate, cross-session, premature, unauthorized, and wrong-mode decisions fail without mutating state.</Criterion>
+      <Criterion>AC-07: Accepting a task records controller acceptance distinctly from independent reviewer PASS. Requesting changes returns it to the implementation path. DONE_WITH_CONCERNS requires an explicit controller disposition rather than automatic acceptance.</Criterion>
+      <Criterion>AC-08: Controller-directed implementation retries are bounded independently of reviewer-round counters. The new path allows an initial implementation and one correction attempt before requiring explicit recovery, matching the existing two-round safety budget. Reopening the same stable key or resubmitting a decision cannot reset that budget.</Criterion>
+      <Criterion>AC-09: Existing strict implementation work items cannot be completed by the new controller-acceptance operation. Existing review_only FAIL remains a completed findings result, and required reviewer aggregation and hard stops retain their existing meaning.</Criterion>
+      <Criterion>AC-10: Independent review checkpoints have explicit identity, covered tasks, review scope, required reviewer roles, acceptance expectations, and a reviewed snapshot or revision identity. They are separate from ordinary task acceptance. Unknown task references, invalid reviewer sets, and incomplete prerequisite task acceptance prevent a checkpoint from being treated as satisfied.</Criterion>
+      <Criterion>AC-11: A checkpoint is passing only when every declared reviewer passes for its identified scope and pinned snapshot. Closing a review_only item whose reviewers returned FAIL does not satisfy a checkpoint. A result for a different snapshot or content changed during the review cannot satisfy the current checkpoint barrier. A passed milestone remains historical evidence; later planned edits are not covered by its old approval and must receive coverage at a subsequent checkpoint or the final checkpoint.</Criterion>
+      <Criterion>AC-12: Checkpoint registration, review linkage, and satisfaction state are exposed through workflow tooling and survive session persistence. Only the primary controller can register or bind checkpoint coverage; subagents cannot manufacture passing coverage for their own changes. Failed, incomplete, or stale required checkpoints remain visible as outstanding completion gates.</Criterion>
+      <Criterion>AC-13: Managed delegated execution requires every declared checkpoint to have passed its applicable barrier and the final checkpoint to cover the complete current planned result with fresh verification before reporting the plan complete or archiving it. Later planned edits do not force automatic reruns of all historical milestones; their coverage is checked at subsequent milestones and at the final gate. A failed checkpoint routes confirmed implementation fixes to workers without automatically restarting reviews of unrelated tasks or weakening approved requirements.</Criterion>
+      <Criterion>AC-14: Plans support explicit delegated execution intent and review checkpoints without replacing existing COMPONENT, WAVE, or TASK identities. Checkpoints reference canonical task IDs and identify reviewers, scope, and expected evidence. Milestones reflect contract or integration boundaries rather than a fixed task-count interval.</Criterion>
+      <Criterion>AC-15: The default planning recommendation is focused code review at meaningful intermediate milestones and spec plus code review at the final checkpoint. The exact reviewer set and milestones are explicit in the approved plan, not a hard-coded pair imposed on every task. Additional review is justified by risk or new evidence and is recorded explicitly.</Criterion>
+      <Criterion>AC-16: Extend spec-package linting to validate the new execution and checkpoint vocabulary, identity uniqueness, task references, reviewer sets, and delegated final coverage. Preserve existing draft-versus-approved completeness behavior, attribute-free XML, package layout, and plan-component subset rules. Invalidate cached verdicts when the rule set changes.</Criterion>
+      <Criterion>AC-17: Existing plans without delegated execution or checkpoint sections remain valid and are not silently reinterpreted. Executing such a plan with different acceptance or review obligations requires an explicit agreed plan amendment before writes; archived plans are never rewritten.</Criterion>
+      <Criterion>AC-18: Align vv-plan, vv-execute, vv-review, and relevant agent guidance on one execution vocabulary and the distinction between task acceptance and independent review. In delegated execution, worker and reviewer model selection respects their semantic roles rather than suggesting smart/Astra for integration implementation or routine reviews.</Criterion>
+      <Criterion>AC-19: An already explicit, approved execution choice is not asked for again. Missing or conflicting plan, user, and active-profile intent stops before writes for clarification. New delegated progress and checkpoint results live in runtime state and task tracking, not by mutating approved XML task or lifecycle statuses during execution.</Criterion>
+      <Criterion>AC-20: Valid pre-change persisted workflow records hydrate with their original review requirements intact. New controller-acceptance and checkpoint records round-trip without losing decisions, attempt identity, coverage, evidence references, or invalidation state. Malformed new state cannot be interpreted as accepted or reviewed.</Criterion>
+      <Criterion>AC-21: Add vv-astra-solo with default and smart set to openai/vv-codex-gpt-6-astra-max, fast set to openai/vv-codex-gpt-5.3-codex-spark-medium, reviewer set to zai-coding-plan/vv-glm-5.3-high, and orchestration profile single-session.</Criterion>
+      <Criterion>AC-22: Add vv-astra-workers with default set to deepseek/vv-deepseek-flash-high, smart set to openai/vv-codex-gpt-6-astra-max, fast set to openai/vv-codex-gpt-5.3-codex-spark-medium, reviewer set to zai-coding-plan/vv-glm-5.3-high, and orchestration profile delegated.</Criterion>
+      <Criterion>AC-23: Extend provider patches additively: codex installs the Astra max and Spark medium aliases, deepseek installs the deepseek-flash high alias, and a zai patch installs the glm-5.3 high alias under zai-coding-plan. The all patch includes the new provider patch; existing patch aliases and model definitions remain supported.</Criterion>
+      <Criterion>AC-24: New aliases explicitly bind API model IDs gpt-6-astra, gpt-5.3-codex-spark, deepseek-flash, and glm-5.3 to reasoning efforts max, medium, high, and high respectively. Preserve the established OpenAI reasoning-summary and encrypted-reasoning-content options. Do not substitute old DeepSeek V4 IDs or GLM Flash for the requested models.</Criterion>
+      <Criterion>AC-25: New model metadata is conservative and grounded in provider capability and pricing boundaries. Astra uses context 400000, input 272000, output 128000; Spark uses context 128000, input 100000, output 32000; DeepSeek Flash uses context 1000000 and output 384000; GLM-5.3 uses context 1000000 and output 131072. Spark and GLM-5.3 are not advertised as image/video/PDF models. Unsupported reasoning levels must not be introduced by the new aliases. Reconcile fresh contradictory provider evidence before implementation rather than silently changing these values.</Criterion>
+      <Criterion>AC-26: Preset seeding, managed refresh, listing, display, atomic role/profile application, and deterministic completion order include the two new presets without replacing custom presets or changing the root active model/profile on sync. The initial four-role bindings remain unchanged, including the shared fast consumers explore, Guardian, and small_model.</Criterion>
+      <Criterion>AC-27: Update README and owned GRACE current-state projections during the approved implementation lifecycle to describe delegated behavior, required acceptance evidence, milestone completion, backward compatibility, alias setup, and restart behavior. Documentation distinguishes a behavioral no-implementation policy from a technical write prohibition.</Criterion>
+      <Criterion>AC-28: Add a deterministic scenario with twenty controller-accepted tasks, two intermediate code-review checkpoints, and one final spec/code checkpoint. The ordinary tasks require no independent reviewer dispatches, while the declared checkpoints require exactly four initial reviewer launches; failed or stale checkpoints cannot be reported as passing. This is a dispatch-count scenario, not a wall-clock benchmark.</Criterion>
+      <Criterion>AC-29: Add negative coverage for worker self-acceptance, acceptance of the wrong attempt, duplicate decisions, retry-budget exhaustion, hard-stop bypass, dangling checkpoint coverage, checkpoint FAIL mistaken for PASS, stale review evidence, malformed persisted state, and regressions to existing strict and review-only workflows. Plugin integration fixtures use the actual pinned OpenCode SDK shapes.</Criterion>
+      <Criterion>AC-30: Validation reports distinguish repository correctness, provider metadata compatibility, and actual model behavior. Credentialed smoke runs or comparative evaluations require separate explicit authorization. Without them, Spark availability/Guardian judgment, reviewer defect detection, provider latency, and real Astra-token savings remain unverified and are reported as such.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-ORCHESTRATION-PROFILES />
+      <M-CLI-ORCHESTRATION />
+      <M-WORKFLOW-PROTOCOL />
+      <M-WORKFLOW-STATE />
+      <M-WORKFLOW-TRANSITIONS />
+      <M-WORKFLOW-TOOLING />
+      <M-WORKFLOW-PERSISTENCE />
+      <M-PLUGIN-WORKFLOW />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-CLI-MANAGED-AGENTS />
+      <M-CLI-MANAGED-SKILLS />
+      <M-SPEC-LINT />
+      <M-PLUGIN-SPEC-GUARD />
+      <M-VVOC-PRESET-REGISTRY />
+      <M-CLI-PRESET />
+      <M-CLI-PATCH-PROVIDER />
+      <M-CLI-COMPLETION />
+      <M-CLI-CONFIG />
+      <M-CLI-CONFIG-VALIDATE />
+      <M-PLUGIN-CONTEXT-TUI />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/workflow.test.ts src/lib/orchestration.test.ts src/plugins/system-context-injection.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/commands/patch-provider.test.ts src/commands/preset.test.ts src/commands/completion.test.ts src/commands/orchestration.test.ts src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic coverage proves controller acceptance, checkpoint integrity, persistence compatibility, and the four-reviewer-dispatch twenty-task scenario without invoking remote models.</ExpectedEvidence>
+      <ExpectedEvidence>The implementation plan records behavior-sensitive baselines and selected target/final gates. GRACE lifecycle commands run as outer gates, never inside MustPassCommand assertions.</ExpectedEvidence>
+      <ExpectedEvidence>One final independent review round evaluates the completed change, rather than imposing two review agents on every implementation subtask. Confirmed findings are validated and corrected directly in the current controller session under its existing single-session policy.</ExpectedEvidence>
+      <ExpectedEvidence>Before execution, resolve or explicitly obtain a user decision on the pre-existing GRACE 4.0.7 navigation/module-health assertion error recorded in design-context.xml. Do not alter archived bundles merely to make the navigation check pass.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>Approval is requested for the concrete new profile name delegated, the model/effort assignments, controller acceptance semantics, and checkpoint obligations in this draft; the earlier conversation approved the direction, not an implementation plan.</Assumption>
+      <Assumption>The no-implementation rule for the primary controller is initially prompt-enforced. Runtime authorization applies to acceptance and checkpoint operations, not to a new all-tools filesystem sandbox.</Assumption>
+      <Assumption>The user's GLM subscription makes review-token cost secondary to elapsed time. Full GLM-5.3 high is therefore the starting reviewer configuration; high versus max review quality and latency are not established by this specification.</Assumption>
+      <Assumption>Spark medium is the proposed shared fast assignment, subject to explicit acknowledgment that Guardian also consumes that role and that live model judgment and account availability are not yet verified. This change does not silently replace it with Luna.</Assumption>
+      <Assumption>This session remains single-session during development. New profile behavior takes effect only in a future session after an explicit configuration change and restart.</Assumption>
+    </Assumptions>
+  </C-DELEGATED-WORKFLOW-ASTRA-PRESETS>
+</GraceChangeSpec>

@@ -1,0 +1,1160 @@
+// FILE: src/plugins/workflow.delegated.test.ts
+// VERSION: 1.0.0
+// START_MODULE_CONTRACT
+//   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, barrier gates, persistence failures, and legacy-profile isolation.
+//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, and old-profile regressions.
+//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
+//   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW]
+//   ROLE: TEST
+//   MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   ROOT_SESSION - Stable root session identifier shared by delegated plugin fixtures.
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   previousDataHome - Preserves the caller's data-home environment for cleanup.
+//   dataHome - Isolated per-process XDG data home for persistence fixtures.
+//   cleanupPaths - Tracks temporary workspaces for cleanup after each test.
+//   StubSession - Minimal session stub shape with an optional parentID.
+//   DelegatedPluginHarness - Captured plugin hooks, tools, logs, and workspace paths for one delegated fixture.
+//   writeProfile - Writes an isolated orchestration profile fixture.
+//   specXml - Renders the approved spec fixture for the task pipeline.
+//   PlanTaskInput - Task index and wave pairing used by the plan builder.
+//   planXml - Renders the approved delegated plan fixture with waves and checkpoints.
+//   buildDelegatedWorkspace - Writes an approved spec/plan package and scope files for one harness.
+//   createStubToolContext - Builds an SDK-shaped ToolContext stub bound to the harness workspace.
+//   createDelegatedPluginHarness - Creates an isolated delegated-profile plugin harness bound to a temporary workspace.
+//   parseToolJson - Parses structured tool output into typed payloads.
+//   registerPlan - Registers the fixture plan through the real work_checkpoint tool.
+//   taskWorkItemId - Resolves the bound work-item id for one plan task through work_item_list.
+//   launchTask - Drives the tool.execute.before hook for one tracked launch.
+//   finishTask - Drives the tool.execute.after hook for one tracked result.
+//   decide - Calls work_item_decide with a stub controller context.
+//   driveAcceptedTask - Runs one delegated task from launch to controller acceptance through hooks and tools.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial delegated plugin-integration coverage including the twenty-task/four-reviewer scenario.]
+// END_CHANGE_SUMMARY
+
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
+import type { OrchestrationProfile } from "../lib/orchestration.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
+import { WorkflowPlugin } from "./workflow/index.js";
+import { deleteWorkflowSessionDir } from "./workflow/persistence.js";
+import type { ParsedResultBlock } from "./workflow/protocol.js";
+
+const ROOT_SESSION = "ses_delegated_root";
+const previousConfigHome = process.env.XDG_CONFIG_HOME;
+let previousDataHome: string | undefined;
+let dataHome: string;
+
+const cleanupPaths: string[] = [];
+
+type StubSession = { parentID?: string };
+
+interface DelegatedPluginHarness {
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
+  logs: string[];
+  workspaceRoot: string;
+  planPath: string;
+  sessions: Map<string, StubSession>;
+  sessionGetFails: boolean;
+}
+
+beforeEach(() => {
+  resetVvocConfigForTests();
+  previousDataHome = process.env.XDG_DATA_HOME;
+  dataHome = `/tmp/vvoc-delegated-data-${process.pid}`;
+  rmSync(dataHome, { recursive: true, force: true });
+  mkdirSync(dataHome, { recursive: true });
+  process.env.XDG_DATA_HOME = dataHome;
+  process.env.XDG_CONFIG_HOME = `/tmp/vvoc-delegated-empty-config-${process.pid}`;
+  rmSync(process.env.XDG_CONFIG_HOME, { recursive: true, force: true });
+});
+
+afterEach(async () => {
+  resetVvocConfigForTests();
+  rmSync(`/tmp/vvoc-delegated-empty-config-${process.pid}`, { recursive: true, force: true });
+  await deleteWorkflowSessionDir(ROOT_SESSION);
+  if (previousDataHome !== undefined) {
+    process.env.XDG_DATA_HOME = previousDataHome;
+  } else {
+    delete process.env.XDG_DATA_HOME;
+  }
+  if (previousConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = previousConfigHome;
+  }
+  while (cleanupPaths.length > 0) {
+    const path = cleanupPaths.pop();
+    if (path) rmSync(path, { recursive: true, force: true });
+  }
+});
+
+function writeProfile(profile: OrchestrationProfile): void {
+  const configHome = process.env.XDG_CONFIG_HOME;
+  if (!configHome) throw new Error("XDG_CONFIG_HOME required");
+  const config = createDefaultVvocConfig();
+  config.orchestration = { profile };
+  const configDir = join(configHome, "vvoc");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "vvoc.json"), renderVvocConfig(config), "utf8");
+}
+
+function specXml(taskCount: number): string {
+  return `<spec><status>approved</status><goal>Deliver ${taskCount} delegated tasks.</goal><architecture>Pipeline of independent tasks.</architecture><tech_stack>TypeScript.</tech_stack><components>
+    <COMPONENT-TASK-PIPELINE>
+      <name>Task Pipeline</name>
+      <responsibility>Deliver ${taskCount} bounded delegated tasks.</responsibility>
+      <depends_on></depends_on>
+    </COMPONENT-TASK-PIPELINE>
+  </components><data_flow>Tasks flow through the delegated loop.</data_flow><error_handling>Fail closed.</error_handling><testing><strategy>Unit tests per task.</strategy><coverage>All task files.</coverage></testing><non_goals><non_goal>No scheduler.</non_goal></non_goals></spec>`;
+}
+
+interface PlanTaskInput {
+  index: number;
+  wave: number;
+}
+
+function planXml(
+  taskCount: number,
+  checkpointWaves: number[],
+  taskWave: (index: number) => number,
+): string {
+  const waves = new Map<number, number[]>();
+  for (const task of Array.from(
+    { length: taskCount },
+    (_, index): PlanTaskInput => ({ index: index + 1, wave: taskWave(index + 1) }),
+  )) {
+    const bucket = waves.get(task.wave) ?? [];
+    bucket.push(task.index);
+    waves.set(task.wave, bucket);
+  }
+  const maxWave = Math.max(...checkpointWaves);
+  const waveBlocks = [...waves.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([wave, indices]) => {
+      const tasks = indices
+        .map((index) => {
+          const id = String(index).padStart(3, "0");
+          return `      <TASK-T-${id}>
+        <title>Task ${index}</title>
+        <file>src/tasks/task-${id}.ts</file>
+        <status>pending</status>
+        <description>Deliver task ${index}.</description>
+        <depends_on></depends_on>
+        <acceptance>
+          <criterion>Task ${index} test passes</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test src/tasks/task-${id}.test.ts</command>
+        </verification>
+        <write_scope>
+          <file>src/tasks/task-${id}.ts</file>
+          <file>src/tasks/task-${id}.test.ts</file>
+        </write_scope>
+      </TASK-T-${id}>`;
+        })
+        .join("\n");
+      return `    <WAVE-${wave}>\n      <goal>Wave ${wave}.</goal>\n${tasks}\n    </WAVE-${wave}>`;
+    })
+    .join("\n");
+
+  const allTaskIds = Array.from(
+    { length: taskCount },
+    (_, index) => `T-${String(index + 1).padStart(3, "0")}`,
+  );
+  const checkpoints: string[] = [];
+  checkpointWaves.forEach((wave, index) => {
+    const isFinal = wave === maxWave;
+    const id = String(index + 1).padStart(3, "0");
+    const coveredTasks = isFinal
+      ? allTaskIds
+      : allTaskIds.filter((taskId) => {
+          const taskNumber = Number(taskId.slice("T-".length));
+          return taskWave(taskNumber) <= wave;
+        });
+    const covers = coveredTasks
+      .map((taskId) => `          <task_id>${taskId}</task_id>`)
+      .join("\n");
+    const scope = coveredTasks
+      .flatMap((taskId) => {
+        const taskNumber = Number(taskId.slice("T-".length));
+        const id = String(taskNumber).padStart(3, "0");
+        return [
+          `          <file>src/tasks/task-${id}.ts</file>`,
+          `          <file>src/tasks/task-${id}.test.ts</file>`,
+        ];
+      })
+      .join("\n");
+    const reviewers = isFinal ? ["spec", "code"] : ["code"];
+    checkpoints.push(`      <CHECKPOINT-R-${id}>
+        <kind>${isFinal ? "final" : "milestone"}</kind>
+        <after_wave>WAVE-${wave}</after_wave>
+        <covers>
+${covers}
+        </covers>
+        <scope>
+${scope}
+        </scope>
+        <reviewers>
+${reviewers.map((reviewer) => `          <reviewer>${reviewer}</reviewer>`).join("\n")}
+        </reviewers>
+        <acceptance>
+          <criterion>Checkpoint ${id} reviewed</criterion>
+        </acceptance>
+        <verification>
+          <command>bun test</command>
+        </verification>
+      </CHECKPOINT-R-${id}>`);
+  });
+
+  return `<plan><spec>spec.xml</spec><created>2026-09-11</created><status>approved</status>
+  <meta><summary>${taskCount} delegated tasks.</summary><waves>${maxWave}</waves><affected_modules>src/tasks</affected_modules><complexity>medium</complexity></meta>
+  <architecture><COMPONENT-TASK-PIPELINE><name>Task Pipeline</name><purpose>Deliver tasks.</purpose><file><path>src/tasks</path><role>implementation</role></file><contract>deliver.</contract><depends_on></depends_on></COMPONENT-TASK-PIPELINE></architecture>
+  <tasks>
+${waveBlocks}
+  </tasks>
+  <execution><mode>delegated</mode>
+    <review_checkpoints>
+${checkpoints.join("\n")}
+    </review_checkpoints>
+  </execution>
+</plan>`;
+}
+
+async function buildDelegatedWorkspace(
+  taskCount: number,
+  checkpointWaves: number[],
+  taskWave: (index: number) => number,
+): Promise<{ workspaceRoot: string; planPath: string }> {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "vvoc-delegated-ws-"));
+  cleanupPaths.push(workspaceRoot);
+  const pkgDir = join(workspaceRoot, ".vvoc", "specs", "2026-09-11-delegated");
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(join(pkgDir, "spec.xml"), specXml(taskCount), "utf8");
+  writeFileSync(join(pkgDir, "plan.xml"), planXml(taskCount, checkpointWaves, taskWave), "utf8");
+  mkdirSync(join(workspaceRoot, "src", "tasks"), { recursive: true });
+  for (let index = 1; index <= taskCount; index++) {
+    const id = String(index).padStart(3, "0");
+    writeFileSync(
+      join(workspaceRoot, "src", "tasks", `task-${id}.ts`),
+      `export const task${index} = true;\n`,
+      "utf8",
+    );
+    writeFileSync(
+      join(workspaceRoot, "src", "tasks", `task-${id}.test.ts`),
+      `test("task ${index}", () => {});\n`,
+      "utf8",
+    );
+  }
+  return { workspaceRoot, planPath: join(pkgDir, "plan.xml") };
+}
+
+function createStubToolContext(
+  harness: DelegatedPluginHarness,
+  sessionID: string,
+  agent = "vv-controller",
+) {
+  return {
+    sessionID,
+    messageID: "message-1",
+    agent,
+    directory: harness.workspaceRoot,
+    worktree: harness.workspaceRoot,
+    abort: new AbortController().signal,
+    metadata: () => undefined,
+    ask: async () => undefined,
+  };
+}
+
+async function createDelegatedPluginHarness(
+  workspaceRoot: string,
+  profile: OrchestrationProfile = "delegated",
+): Promise<DelegatedPluginHarness> {
+  resetVvocConfigForTests();
+  writeProfile(profile);
+  const logs: string[] = [];
+  const sessions = new Map<string, StubSession>();
+  const harness: DelegatedPluginHarness = {
+    logs,
+    workspaceRoot,
+    planPath: "",
+    sessions,
+    sessionGetFails: false,
+    plugin: undefined as never,
+  };
+  const plugin = await WorkflowPlugin({
+    client: {
+      app: {
+        log: async (payload: { body?: { message?: string } }) => {
+          const message = payload.body?.message;
+          if (typeof message === "string") logs.push(message);
+        },
+      },
+      session: {
+        get: async (options: { path: { id: string } }) => {
+          if (harness.sessionGetFails) {
+            throw new Error("session service unavailable");
+          }
+          const stub = sessions.get(options.path.id) ?? {};
+          return { data: { id: options.path.id, parentID: stub.parentID, title: "stub" } };
+        },
+        prompt: async () => ({ data: undefined, error: { message: "prompt unavailable" } }),
+      },
+    } as never,
+    project: {} as never,
+    directory: workspaceRoot,
+    worktree: workspaceRoot,
+    experimental_workspace: { register: () => undefined },
+    serverUrl: new URL("http://localhost"),
+    $: {} as never,
+  });
+  harness.plugin = plugin;
+  return harness;
+}
+
+function parseToolJson<T>(value: unknown): T {
+  const text =
+    typeof value === "string"
+      ? value
+      : value &&
+          typeof value === "object" &&
+          typeof (value as { output?: unknown }).output === "string"
+        ? (value as { output: string }).output
+        : "{}";
+  return JSON.parse(text) as T;
+}
+
+async function registerPlan(
+  harness: DelegatedPluginHarness,
+  planPath: string,
+  sessionID = ROOT_SESSION,
+): Promise<string> {
+  const registeredRaw = await harness.plugin.tool?.work_checkpoint?.execute(
+    { action: "register", planPath } as never,
+    createStubToolContext(harness, sessionID) as never,
+  );
+  const registered = parseToolJson<{ ok: boolean; runId?: string; message?: string }>(
+    registeredRaw ?? "{}",
+  );
+  if (!registered.ok || !registered.runId) throw new Error(registered.message ?? "register failed");
+  return registered.runId;
+}
+
+async function taskWorkItemId(
+  harness: DelegatedPluginHarness,
+  runId: string,
+  taskId: string,
+  sessionID = ROOT_SESSION,
+): Promise<string> {
+  const listedRaw = await harness.plugin.tool?.work_item_list?.execute(
+    { includeClosed: true },
+    createStubToolContext(harness, sessionID) as never,
+  );
+  const listed = parseToolJson<{
+    planRuns?: Array<{ runId: string; tasks: Array<{ taskId: string; workItemId: string }> }>;
+  }>(listedRaw ?? "{}");
+  const run = listed.planRuns?.find((entry) => entry.runId === runId);
+  const binding = run?.tasks.find((task) => task.taskId === taskId);
+  if (!binding) throw new Error(`missing binding for ${taskId}`);
+  return binding.workItemId;
+}
+
+async function launchTask(
+  harness: DelegatedPluginHarness,
+  sessionID: string,
+  callId: string,
+  subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
+  workItemId: string,
+): Promise<void> {
+  await harness.plugin["tool.execute.before"]?.(
+    { tool: "task", sessionID, callID: callId } as never,
+    {
+      args: {
+        subagent_type: subagentType,
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
+      },
+    } as never,
+  );
+}
+
+async function finishTask(
+  harness: DelegatedPluginHarness,
+  sessionID: string,
+  callId: string,
+  subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
+  workItemId: string,
+  status: ParsedResultBlock["status"],
+  body = "Done.",
+): Promise<void> {
+  const route = subagentType === "vv-implementer" ? "\nVVOC_ROUTE: change_with_review" : "";
+  await harness.plugin["tool.execute.after"]?.(
+    {
+      tool: "task",
+      sessionID,
+      callID: callId,
+      args: {
+        subagent_type: subagentType,
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
+      },
+    } as never,
+    {
+      title: "task",
+      output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: ${status}${route}\n\n${body}`,
+      metadata: {},
+    } as never,
+  );
+}
+
+async function decide(
+  harness: DelegatedPluginHarness,
+  input: {
+    workItemId: string;
+    attempt: number;
+    decision: "accept" | "request_changes" | "rework";
+    rationale: string;
+    evidence: string[];
+    concernsDisposition?: string;
+    runId?: string;
+    checkpointId?: string;
+  },
+  sessionID = ROOT_SESSION,
+  agent = "vv-controller",
+): Promise<Record<string, unknown>> {
+  const raw = await harness.plugin.tool?.work_item_decide?.execute(
+    input as never,
+    createStubToolContext(harness, sessionID, agent) as never,
+  );
+  return parseToolJson<Record<string, unknown>>(raw ?? "{}");
+}
+
+async function driveAcceptedTask(
+  harness: DelegatedPluginHarness,
+  runId: string,
+  taskId: string,
+  sessionID = ROOT_SESSION,
+): Promise<void> {
+  const workItemId = await taskWorkItemId(harness, runId, taskId, sessionID);
+  await launchTask(harness, sessionID, `call-${taskId}-launch`, "vv-implementer", workItemId);
+  await finishTask(
+    harness,
+    sessionID,
+    `call-${taskId}-launch`,
+    "vv-implementer",
+    workItemId,
+    "DONE",
+  );
+  const accepted = await decide(harness, {
+    workItemId,
+    attempt: 1,
+    decision: "accept",
+    rationale: "Diff matches the task contract.",
+    evidence: ["src/tasks"],
+  });
+  if (accepted.ok !== true) throw new Error(String(accepted.message ?? "accept failed"));
+}
+
+// START_BLOCK_AUTHORIZATION_TESTS
+describe("delegated control-tool authorization", () => {
+  test("registers control tools only under the delegated profile", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const delegatedHarness = await createDelegatedPluginHarness(workspaceRoot, "delegated");
+    expect(delegatedHarness.plugin.tool?.work_item_decide).toBeDefined();
+    expect(delegatedHarness.plugin.tool?.work_checkpoint).toBeDefined();
+
+    const balancedHarness = await createDelegatedPluginHarness(workspaceRoot, "balanced");
+    expect(balancedHarness.plugin.tool?.work_item_decide).toBeUndefined();
+    expect(balancedHarness.plugin.tool?.work_checkpoint).toBeUndefined();
+    expect(balancedHarness.plugin.tool?.work_item_open).toBeDefined();
+  });
+
+  test("denies self-acceptance, child sessions, unknown session data, and untrusted workspaces", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    await launchTask(harness, ROOT_SESSION, "call-auth-1", "vv-implementer", workItemId);
+    await finishTask(harness, ROOT_SESSION, "call-auth-1", "vv-implementer", workItemId, "DONE");
+
+    const selfAcceptance = await harness.plugin.tool?.work_item_decide
+      ?.execute(
+        {
+          workItemId,
+          attempt: 1,
+          decision: "accept",
+          rationale: "Self acceptance from the worker session.",
+          evidence: ["diff"],
+        } as never,
+        createStubToolContext(harness, ROOT_SESSION, "vv-implementer") as never,
+      )
+      .catch((error: Error) => error.message);
+    expect(String(selfAcceptance)).toContain("CONTROL_DENIED");
+
+    harness.sessions.set(ROOT_SESSION, { parentID: "ses_parent" });
+    const deniedChild = await harness.plugin.tool?.work_item_decide
+      ?.execute(
+        {
+          workItemId,
+          attempt: 1,
+          decision: "accept",
+          rationale: "Child controller attempt.",
+          evidence: ["diff"],
+        } as never,
+        createStubToolContext(harness, ROOT_SESSION, "vv-controller") as never,
+      )
+      .catch((error: Error) => error.message);
+    expect(String(deniedChild)).toContain("root session");
+    harness.sessions.delete(ROOT_SESSION);
+
+    harness.sessionGetFails = true;
+    const unknownSession = await harness.plugin.tool?.work_item_decide
+      ?.execute(
+        {
+          workItemId,
+          attempt: 1,
+          decision: "accept",
+          rationale: "Unknown identity.",
+          evidence: ["diff"],
+        } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )
+      .catch((error: Error) => error.message);
+    expect(String(unknownSession)).toContain("could not be verified");
+    harness.sessionGetFails = false;
+
+    const untrusted = {
+      ...createStubToolContext(harness, ROOT_SESSION),
+      worktree: "/tmp/untrusted-workspace",
+    };
+    const deniedWorkspace = await harness.plugin.tool?.work_checkpoint
+      ?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        untrusted as never,
+      )
+      .catch((error: Error) => error.message);
+    expect(String(deniedWorkspace)).toContain("does not match the trusted plugin workspace");
+  });
+
+  test("invalid persisted state denies new control mutations instead of resetting", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const firstHarness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(firstHarness, planPath);
+    expect(runId).toBeTruthy();
+
+    // Corrupt the persisted snapshot on disk; a fresh plugin instance must fail
+    // closed on control mutations instead of silently restarting the run.
+    const statePath = join(dataHome, "vvoc", "workflow", ROOT_SESSION, "workflow-state.json");
+    expect(existsSync(statePath)).toBe(true);
+    writeFileSync(statePath, "{ not valid json", "utf8");
+
+    const secondHarness = await createDelegatedPluginHarness(workspaceRoot);
+    const denied = await secondHarness.plugin.tool?.work_checkpoint
+      ?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(secondHarness, ROOT_SESSION) as never,
+      )
+      .catch((error: Error) => error.message);
+    expect(String(denied)).toContain("invalid");
+  });
+});
+// END_BLOCK_AUTHORIZATION_TESTS
+
+// START_BLOCK_DELEGATED_FLOW_TESTS
+describe("delegated attempt flow through plugin hooks", () => {
+  test("DONE waits for acceptance, stale callbacks fail, and accept closes the loop", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+
+    await launchTask(harness, ROOT_SESSION, "call-flow-1", "vv-implementer", workItemId);
+
+    const stale = finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-stale",
+      "vv-implementer",
+      workItemId,
+      "DONE",
+    ).catch((error: Error) => error.message);
+    await expect(stale).resolves.toContain("STALE_CALLBACK");
+
+    await finishTask(harness, ROOT_SESSION, "call-flow-1", "vv-implementer", workItemId, "DONE");
+    const listedAfterDone = parseToolJson<{
+      items: Array<{ state: string; delegated?: { accepted: boolean } }>;
+    }>(
+      (await harness.plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(listedAfterDone.items[0]?.state).toBe("awaiting_acceptance");
+    expect(listedAfterDone.items[0]?.delegated?.accepted).toBe(false);
+
+    const closedBypass = await harness.plugin.tool?.work_item_close
+      ?.execute({ workItemId } as never, createStubToolContext(harness, ROOT_SESSION) as never)
+      .catch((error: unknown) => error);
+    const closedParsed =
+      typeof closedBypass === "string"
+        ? parseToolJson<{ ok: boolean; message?: string }>(closedBypass)
+        : closedBypass;
+    expect(
+      typeof closedParsed === "string" ? closedParsed : JSON.stringify(closedParsed),
+    ).toContain("READY_TO_CLOSE_REQUIRED");
+
+    const accepted = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Verified the implementation and tests.",
+      evidence: ["src/tasks/task-001.ts"],
+    });
+    expect(accepted.ok).toBe(true);
+    if (accepted.ok !== true) return;
+    expect(accepted.state).toBe("ready_to_close");
+  });
+
+  test("barriers block dependent-wave launches until the milestone passes", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(2, [1, 2], (index) =>
+      index === 1 ? 1 : 2,
+    );
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const t1 = await taskWorkItemId(harness, runId, "T-001");
+    const t2 = await taskWorkItemId(harness, runId, "T-002");
+
+    const blocked = launchTask(harness, ROOT_SESSION, "call-t2-early", "vv-implementer", t2).catch(
+      (error: Error) => error.message,
+    );
+    await expect(blocked).resolves.toContain("LAUNCH_REJECTED_CHECKPOINT_BARRIER");
+
+    await launchTask(harness, ROOT_SESSION, "call-t1-1", "vv-implementer", t1);
+    await finishTask(harness, ROOT_SESSION, "call-t1-1", "vv-implementer", t1, "DONE");
+    await decide(harness, {
+      workItemId: t1,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Wave 1 accepted.",
+      evidence: ["src/tasks/task-001.ts"],
+    });
+
+    const startRaw = await harness.plugin.tool?.work_checkpoint?.execute(
+      { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const started = parseToolJson<{
+      ok: boolean;
+      reviewWorkItemId?: string;
+      reviewersToLaunch?: string[];
+      message?: string;
+    }>(startRaw ?? "{}");
+    expect(started.ok).toBe(true);
+    if (!started.ok || !started.reviewWorkItemId) return;
+    expect(started.reviewersToLaunch).toEqual(["code"]);
+
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-rv-code",
+      "vv-code-reviewer",
+      started.reviewWorkItemId,
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-rv-code",
+      "vv-code-reviewer",
+      started.reviewWorkItemId,
+      "PASS",
+    );
+
+    const verifyRaw = await harness.plugin.tool?.work_checkpoint?.execute(
+      { action: "verify", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const verified = parseToolJson<{ ok: boolean; outcome?: string }>(verifyRaw ?? "{}");
+    expect(verified.ok).toBe(true);
+    if (verified.ok !== true) return;
+    expect(verified.outcome).toBe("passed");
+
+    await launchTask(harness, ROOT_SESSION, "call-t2-1", "vv-implementer", t2);
+    const listed = parseToolJson<{ items: Array<{ workItemId: string; state: string }> }>(
+      (await harness.plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(listed.items.find((item) => item.workItemId === t2)?.state).toBe("awaiting_implementer");
+  });
+
+  test("mutated approved plan content is explicit drift at checkpoint verify", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    await driveAcceptedTask(harness, runId, "T-001");
+    await harness.plugin.tool?.work_checkpoint?.execute(
+      { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+
+    writeFileSync(
+      planPath,
+      readFileSync(planPath, "utf8").replace("<waves>1</waves>", "<waves>9</waves>"),
+      "utf8",
+    );
+    const verifyRaw = await harness.plugin.tool?.work_checkpoint?.execute(
+      { action: "verify", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const verified = parseToolJson<{ ok: boolean; errorCode?: string; message?: string }>(
+      verifyRaw ?? "{}",
+    );
+    expect(verified.ok).toBe(false);
+    if (verified.ok) return;
+    expect(verified.errorCode).toBe("PLAN_DRIFT");
+  });
+
+  test("content changed during review makes the checkpoint stale instead of passing", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(2, [1, 2], (index) => index);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    await driveAcceptedTask(harness, runId, "T-001");
+
+    const started = parseToolJson<{ ok: boolean; reviewWorkItemId?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok || !started.reviewWorkItemId) return;
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-stale-code",
+      "vv-code-reviewer",
+      started.reviewWorkItemId,
+    );
+
+    writeFileSync(
+      join(workspaceRoot, "src", "tasks", "task-001.ts"),
+      "export const task1 = 'changed during review';\n",
+      "utf8",
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-stale-code",
+      "vv-code-reviewer",
+      started.reviewWorkItemId,
+      "PASS",
+    );
+
+    const verified = parseToolJson<{ ok: boolean; outcome?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(verified.outcome).toBe("stale");
+  });
+
+  test("failed final checkpoint authorizes bounded rework and completion through the tools", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(2, [2], (index) => index);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    await driveAcceptedTask(harness, runId, "T-001");
+    await driveAcceptedTask(harness, runId, "T-002");
+
+    const started = parseToolJson<{ ok: boolean; reviewWorkItemId?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok || !started.reviewWorkItemId) return;
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fail-spec",
+      "vv-spec-reviewer",
+      started.reviewWorkItemId,
+    );
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fail-code",
+      "vv-code-reviewer",
+      started.reviewWorkItemId,
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fail-spec",
+      "vv-spec-reviewer",
+      started.reviewWorkItemId,
+      "FAIL",
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fail-code",
+      "vv-code-reviewer",
+      started.reviewWorkItemId,
+      "PASS",
+    );
+
+    const failed = parseToolJson<{ ok: boolean; outcome?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(failed.outcome).toBe("failed");
+
+    // A closed review-only FAIL report never satisfies the completion gate.
+    const closedReport = parseToolJson<{ ok: boolean }>(
+      (await harness.plugin.tool?.work_item_close?.execute(
+        { workItemId: started.reviewWorkItemId } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(closedReport.ok).toBe(true);
+    const prematureComplete = parseToolJson<{ ok: boolean; errorCode?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-001", complete: true } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(prematureComplete.ok).toBe(false);
+
+    // Rework the covered accepted task, correct it, re-accept, and complete.
+    const t2 = await taskWorkItemId(harness, runId, "T-002");
+    const reworked = await decide(harness, {
+      workItemId: t2,
+      attempt: 1,
+      decision: "rework",
+      rationale: "Spec review found a missing branch.",
+      evidence: ["review findings"],
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+    });
+    expect(reworked.ok).toBe(true);
+
+    await launchTask(harness, ROOT_SESSION, "call-t2-fix", "vv-implementer", t2);
+    await finishTask(harness, ROOT_SESSION, "call-t2-fix", "vv-implementer", t2, "DONE");
+    const corrected = await decide(harness, {
+      workItemId: t2,
+      attempt: 2,
+      decision: "accept",
+      rationale: "Correction verified.",
+      evidence: ["src/tasks/task-002.ts"],
+    });
+    expect(corrected.ok).toBe(true);
+
+    const restarted = parseToolJson<{ ok: boolean; reviewWorkItemId?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(restarted.ok).toBe(true);
+    if (!restarted.ok || !restarted.reviewWorkItemId) return;
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fix-spec",
+      "vv-spec-reviewer",
+      restarted.reviewWorkItemId,
+    );
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fix-code",
+      "vv-code-reviewer",
+      restarted.reviewWorkItemId,
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fix-spec",
+      "vv-spec-reviewer",
+      restarted.reviewWorkItemId,
+      "PASS",
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-fix-code",
+      "vv-code-reviewer",
+      restarted.reviewWorkItemId,
+      "PASS",
+    );
+
+    const sealed = parseToolJson<{ ok: boolean; sealedRun?: boolean }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-001", complete: true } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(sealed.ok).toBe(true);
+    if (!sealed.ok) return;
+    expect(sealed.sealedRun).toBe(true);
+  });
+
+  test("a fresh plugin instance resumes a hydrated unfinished run", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const firstHarness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(firstHarness, planPath);
+    await driveAcceptedTask(firstHarness, runId, "T-001");
+    await firstHarness.plugin.tool?.work_checkpoint?.execute(
+      { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+      createStubToolContext(firstHarness, ROOT_SESSION) as never,
+    );
+
+    const secondHarness = await createDelegatedPluginHarness(workspaceRoot);
+    const started = parseToolJson<{ ok: boolean; reviewWorkItemId?: string; errorCode?: string }>(
+      (await secondHarness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(secondHarness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(started.ok).toBe(false);
+    if (started.ok) return;
+    expect(started.errorCode).toBe("ALREADY_IN_REVIEW");
+  });
+
+  test("an attempt orphaned by a restart is reclaimed at hydration without consuming budget", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const firstHarness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(firstHarness, planPath);
+    const workItemId = await taskWorkItemId(firstHarness, runId, "T-001");
+    await launchTask(firstHarness, ROOT_SESSION, "call-orphan", "vv-implementer", workItemId);
+
+    // A fresh plugin instance simulates the restart: the persisted in-flight
+    // attempt's host call can never arrive, so hydration reclaims it.
+    const secondHarness = await createDelegatedPluginHarness(workspaceRoot);
+    await launchTask(secondHarness, ROOT_SESSION, "call-reclaimed", "vv-implementer", workItemId);
+    await finishTask(
+      secondHarness,
+      ROOT_SESSION,
+      "call-reclaimed",
+      "vv-implementer",
+      workItemId,
+      "DONE",
+    );
+    const accepted = await decide(secondHarness, {
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Reclaimed attempt verified.",
+      evidence: ["src/tasks/task-001.ts"],
+    });
+    expect(accepted.ok).toBe(true);
+
+    const listed = parseToolJson<{
+      items: Array<{ workItemId: string; delegated?: { attempts: number; accepted: boolean } }>;
+    }>(
+      (await secondHarness.plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        createStubToolContext(secondHarness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.attempts).toBe(1);
+    expect(item?.delegated?.accepted).toBe(true);
+  });
+});
+// END_BLOCK_DELEGATED_FLOW_TESTS
+
+// START_BLOCK_TWENTY_TASK_SCENARIO
+describe("twenty tasks require four reviewer launches", () => {
+  test("controller acceptance replaces per-task reviews and checkpoints use four reviewer dispatches", async () => {
+    // Twenty tasks across four waves; milestones after waves 2 and 3 (code only),
+    // and a final checkpoint after wave 4 (spec plus code).
+    const taskCount = 20;
+    const checkpointWaves = [2, 3, 4];
+    const taskWave = (index: number): number => Math.min(4, Math.ceil(index / 5));
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(
+      taskCount,
+      checkpointWaves,
+      taskWave,
+    );
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+
+    let reviewerLaunches = 0;
+    const originalBefore = harness.plugin["tool.execute.before"];
+    expect(originalBefore).toBeDefined();
+    if (!originalBefore) return;
+    const countingBefore: typeof originalBefore = async (input, output) => {
+      const args = output as { args?: { subagent_type?: string } };
+      if (
+        input.tool === "task" &&
+        (args?.args?.subagent_type === "vv-spec-reviewer" ||
+          args?.args?.subagent_type === "vv-code-reviewer")
+      ) {
+        reviewerLaunches += 1;
+      }
+      await originalBefore(input, output);
+    };
+    harness.plugin["tool.execute.before"] = countingBefore;
+
+    // Ordinary tasks in waves 1 and 2: accept each without any reviewer dispatch.
+    for (let index = 1; index <= 10; index++) {
+      const taskId = `T-${String(index).padStart(3, "0")}`;
+      await driveAcceptedTask(harness, runId, taskId);
+    }
+    expect(reviewerLaunches).toBe(0);
+
+    // Milestone after wave 2: one code reviewer.
+    const milestone2 = parseToolJson<{ ok: boolean; reviewWorkItemId?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(milestone2.ok).toBe(true);
+    if (!milestone2.ok || !milestone2.reviewWorkItemId) return;
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-m2-code",
+      "vv-code-reviewer",
+      milestone2.reviewWorkItemId,
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-m2-code",
+      "vv-code-reviewer",
+      milestone2.reviewWorkItemId,
+      "PASS",
+    );
+    const milestone2Verify = parseToolJson<{ ok: boolean; outcome?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(milestone2Verify.outcome).toBe("passed");
+
+    // Wave 3 tasks become launchable only after the milestone barrier passed.
+    for (let index = 11; index <= 15; index++) {
+      const taskId = `T-${String(index).padStart(3, "0")}`;
+      await driveAcceptedTask(harness, runId, taskId);
+    }
+    expect(reviewerLaunches).toBe(1);
+
+    // Milestone after wave 3: one code reviewer.
+    const milestone3 = parseToolJson<{ ok: boolean; reviewWorkItemId?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-002" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(milestone3.ok).toBe(true);
+    if (!milestone3.ok || !milestone3.reviewWorkItemId) return;
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-m3-code",
+      "vv-code-reviewer",
+      milestone3.reviewWorkItemId,
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-m3-code",
+      "vv-code-reviewer",
+      milestone3.reviewWorkItemId,
+      "PASS",
+    );
+    const milestone3Verify = parseToolJson<{ ok: boolean; outcome?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-002" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(milestone3Verify.outcome).toBe("passed");
+
+    // Wave 4 tasks after the second milestone barrier.
+    for (let index = 16; index <= 20; index++) {
+      const taskId = `T-${String(index).padStart(3, "0")}`;
+      await driveAcceptedTask(harness, runId, taskId);
+    }
+    expect(reviewerLaunches).toBe(2);
+
+    // Final checkpoint: spec plus code reviewers, then complete.
+    const finalStart = parseToolJson<{ ok: boolean; reviewWorkItemId?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "start", runId, checkpointId: "CHECKPOINT-R-003" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(finalStart.ok).toBe(true);
+    if (!finalStart.ok || !finalStart.reviewWorkItemId) return;
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-final-spec",
+      "vv-spec-reviewer",
+      finalStart.reviewWorkItemId,
+    );
+    await launchTask(
+      harness,
+      ROOT_SESSION,
+      "rv-final-code",
+      "vv-code-reviewer",
+      finalStart.reviewWorkItemId,
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-final-spec",
+      "vv-spec-reviewer",
+      finalStart.reviewWorkItemId,
+      "PASS",
+    );
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "rv-final-code",
+      "vv-code-reviewer",
+      finalStart.reviewWorkItemId,
+      "PASS",
+    );
+
+    const sealed = parseToolJson<{ ok: boolean; outcome?: string; sealedRun?: boolean }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-003", complete: true } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(sealed.ok).toBe(true);
+    if (!sealed.ok) return;
+    expect(sealed.sealedRun).toBe(true);
+
+    // Two milestones used one reviewer each; the final used two: exactly four.
+    expect(reviewerLaunches).toBe(4);
+
+    // A failed or stale checkpoint cannot be reported as passing after sealing.
+    const reverify = parseToolJson<{ ok: boolean; outcome?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId, checkpointId: "CHECKPOINT-R-003" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(reverify.outcome).toBe("already-passed");
+  });
+});
+// END_BLOCK_TWENTY_TASK_SCENARIO

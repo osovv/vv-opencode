@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Classified web_search and web_fetch as vvoc-managed tools.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Classified the delegated control tools as vvoc-managed.]
 // END_CHANGE_SUMMARY
 
 import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2";
@@ -57,6 +57,8 @@ const VVOC_TOOL_IDS = new Set([
   "work_item_open",
   "work_item_list",
   "work_item_close",
+  "work_item_decide",
+  "work_checkpoint",
   "web_search",
   "web_fetch",
 ]);

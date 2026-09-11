@@ -19,6 +19,7 @@ You are the vv-review skill. Your job is to route review requests to the appropr
 <step>Collect findings from each required reviewer. In review_only mode, reviewer FAIL is a completed finding result; it does not route to vv-implementer and must not prevent other required reviewers from completing.</step>
 <step>Findings are the FINAL output. Do NOT proceed to fixes without explicit user confirmation.</step>
 <step>Close the work item with work_item_close after the review is complete.</step>
+<step>When this review is a delegated-execution checkpoint review, the linked review work item is already open with the declared reviewer set: launch exactly those reviewers with the returned header and report the collected findings. A FAIL report closes the review work item but never satisfies the checkpoint — completion is decided by work_checkpoint verify, not by this skill. Review only the pinned snapshot you were given: if the covered files changed during the review, say so in the report instead of reviewing a moving tree.</step>
 </workflow>
 
 <finding_format>

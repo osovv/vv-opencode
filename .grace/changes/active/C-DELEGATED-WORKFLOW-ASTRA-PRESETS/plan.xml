@@ -1,0 +1,470 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-DELEGATED-WORKFLOW-ASTRA-PRESETS>
+    <IntentSummary>Implement the approved delegated-workflow specification as an additive controller-acceptance path, an approved-plan-backed checkpoint registry, compatible persistence and managed execution contracts, and two explicit-reasoning Astra presets. Preserve existing strict and review-only workflows and keep all installed user configuration untouched.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-ORCHESTRATION-PROFILES</Value>
+        <Value>M-WORKFLOW-STATE</Value>
+        <Value>M-WORKFLOW-TOOLING</Value>
+        <Value>M-WORKFLOW-PERSISTENCE</Value>
+        <Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>M-SPEC-LINT</Value>
+        <Value>M-VVOC-PRESET-REGISTRY</Value>
+        <Value>src/plugins/workflow.test.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/commands/patch-provider.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>export const ORCHESTRATION_PROFILE_NAMES = ["single-session", "balanced", "orchestrated"] as const;</Text></MustContain>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>workflowGuidance: "review-only" | "selective" | "tracked";</Text></MustContain>
+      <MustNotContain><File>schemas/vvoc/v3.json</File><Text>"delegated"</Text></MustNotContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>export const WORK_ITEM_MODES = ["implementation", "review_only"] as const;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>requiredReviewers must be a non-empty canonical set of spec/code reviewers</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>state: "awaiting_reviews",</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/transitions.ts</File><Text>return record.mode === "review_only" ? "ready_to_close" : "awaiting_implementer";</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>requiredReviewers must be a non-empty array containing unique spec/code reviewers</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>return agentName === WORKFLOW_CONTROLLER_AGENT;</Text></MustContain>
+      <MustNotContain><File>src/plugins/workflow/index.ts</File><Text>work_item_decide</Text></MustNotContain>
+      <MustContain><File>src/plugins/workflow/persistence.ts</File><Text>version: 1;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/persistence.ts</File><Text>record.requiredReviewers.length &gt; 0</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/repair.ts</File><Text>work_item_open: false,</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>export const LINT_VERSION = 1;</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>plan: { names: ["spec", "design_context", "created", "status", "meta", "architecture", "tasks"] },</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>A DONE implementer moves the work item to awaiting_reviews</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>Review tasks (spec-reviewer, code-reviewer) → smart role</Text></MustContain>
+      <MustContain><File>templates/skills/vv-plan/SKILL.md</File><Text>The plan contains exact file paths, interface signatures with JSDoc behavior descriptions</Text></MustContain>
+      <MustContain><File>templates/skills/vv-plan/references/plan-template.xml</File><Text>&lt;TASK-T-001&gt;</Text></MustContain>
+      <MustNotContain><File>src/lib/vvoc-preset-registry.ts</File><Text>"vv-astra-workers"</Text></MustNotContain>
+      <MustContain><File>src/commands/patch-provider.ts</File><Text>"vv-codex-gpt-5.6-luna-low"</Text></MustContain>
+      <MustContain><File>src/commands/completion.ts</File><Text>const VVOC_PATCH_PROVIDER_PRESETS = ["stepfun-ai", "codex", "deepseek", "kimi", "alibaba", "all"];</Text></MustContain>
+      <MustContain><File>src/tui/context/analyze.ts</File><Text>"work_item_close",</Text></MustContain>
+      <MustContain><File>README.md</File><Text>Three concrete policies control how vv-controller delegates work at runtime:</Text></MustContain>
+      <MustContain><File>.grace/context/requirements.xml</File><Text>work_item_open requires stable keys, title, mode, and required reviewers</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/workflow.test.ts src/lib/orchestration.test.ts src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/lib/managed-skills.test.ts</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-ORCHESTRATION-PROFILES</Module>
+        <Module>M-WORKFLOW-DELEGATED</Module>
+        <Module>M-WORKFLOW-SNAPSHOTS</Module>
+        <Module>M-WORKFLOW-CHECKPOINTS</Module>
+        <Module>M-WORKFLOW-STATE</Module>
+        <Module>M-WORKFLOW-TRANSITIONS</Module>
+        <Module>M-WORKFLOW-TOOLING</Module>
+        <Module>M-WORKFLOW-PERSISTENCE</Module>
+        <Module>M-PLUGIN-WORKFLOW</Module>
+        <Module>M-SPEC-LINT</Module>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+        <Module>M-VVOC-PRESET-REGISTRY</Module>
+        <Module>M-CLI-PATCH-PROVIDER</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/plugins/workflow/delegated.ts</Value>
+        <Value>src/plugins/workflow/delegated.test.ts</Value>
+        <Value>src/plugins/workflow/snapshots.ts</Value>
+        <Value>src/plugins/workflow/snapshots.test.ts</Value>
+        <Value>src/plugins/workflow/checkpoints.ts</Value>
+        <Value>src/plugins/workflow/checkpoints.test.ts</Value>
+        <Value>src/plugins/workflow/checkpoint-io.ts</Value>
+        <Value>src/plugins/workflow/checkpoint-io.test.ts</Value>
+        <Value>src/plugins/workflow/persistence.test.ts</Value>
+        <Value>src/plugins/workflow.delegated.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>"delegated"</Text></MustContain>
+      <MustContain><File>schemas/vvoc/v3.json</File><Text>"delegated"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>awaiting_acceptance</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/delegated.ts</File><Text>decideDelegatedWorkItem</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoints.ts</File><Text>registerDelegatedPlan</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoint-io.ts</File><Text>loadApprovedDelegatedPlan</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/snapshots.ts</File><Text>captureWorkflowSnapshot</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>work_item_decide</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>work_checkpoint</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/repair.ts</File><Text>work_item_decide: false</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/repair.ts</File><Text>work_checkpoint: false</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/persistence.ts</File><Text>version: 2</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>extractDelegatedPlanDefinition</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>review_checkpoints</Text></MustContain>
+      <MustNotContain><File>src/lib/spec-lint.ts</File><Text>export const LINT_VERSION = 1;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-plan/references/plan-template.xml</File><Text>review_checkpoints</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>work_item_decide</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>work_checkpoint</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-execute/SKILL.md</File><Text>Review tasks (spec-reviewer, code-reviewer) → smart role</Text></MustNotContain>
+      <MustContain><File>src/lib/vvoc-preset-registry.ts</File><Text>"vv-astra-solo"</Text></MustContain>
+      <MustContain><File>src/lib/vvoc-preset-registry.ts</File><Text>"vv-astra-workers"</Text></MustContain>
+      <MustContain><File>src/commands/patch-provider.ts</File><Text>"vv-codex-gpt-6-astra-max"</Text></MustContain>
+      <MustContain><File>src/commands/patch-provider.ts</File><Text>"vv-codex-gpt-5.3-codex-spark-medium"</Text></MustContain>
+      <MustContain><File>src/commands/patch-provider.ts</File><Text>"vv-deepseek-flash-high"</Text></MustContain>
+      <MustContain><File>src/commands/patch-provider.ts</File><Text>"vv-glm-5.3-high"</Text></MustContain>
+      <MustContain><File>src/tui/context/analyze.ts</File><Text>"work_item_decide"</Text></MustContain>
+      <MustContain><File>src/tui/context/analyze.ts</File><Text>"work_checkpoint"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow.delegated.test.ts</File><Text>twenty tasks require four reviewer launches</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vv-astra-workers</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow/delegated.test.ts src/plugins/workflow/snapshots.test.ts src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/checkpoint-io.test.ts src/plugins/workflow/persistence.test.ts</Command>
+        <Command>bun test src/lib/orchestration.test.ts src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/system-context-injection.test.ts src/tui/context/analyze.test.ts</Command>
+        <Command>bun test src/commands/patch-provider.test.ts src/commands/preset.test.ts src/commands/completion.test.ts src/commands/orchestration.test.ts src/commands/config-validate.test.ts src/commands/status.test.ts src/lib/opencode.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run release:check</Command>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-ORCHESTRATION-PROFILES />
+        <M-CLI-ORCHESTRATION />
+        <M-WORKFLOW-DELEGATED />
+        <M-WORKFLOW-SNAPSHOTS />
+        <M-WORKFLOW-CHECKPOINTS />
+        <M-WORKFLOW-STATE />
+        <M-WORKFLOW-TRANSITIONS />
+        <M-WORKFLOW-TOOLING />
+        <M-WORKFLOW-PERSISTENCE />
+        <M-WORKFLOW-REPAIR />
+        <M-PLUGIN-WORKFLOW />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-CLI-MANAGED-AGENTS />
+        <M-CLI-MANAGED-SKILLS />
+        <M-SPEC-LINT />
+        <M-PLUGIN-SPEC-GUARD />
+        <M-VVOC-PRESET-REGISTRY />
+        <M-CLI-PRESET />
+        <M-CLI-PATCH-PROVIDER />
+        <M-CLI-COMPLETION />
+        <M-CLI-CONFIG />
+        <M-CLI-CONFIG-VALIDATE />
+        <M-PLUGIN-CONTEXT-TUI />
+        <DF-WORKFLOW-TOOLS />
+        <DF-LAUNCH-ENFORCEMENT />
+        <DF-RESULT-PARSING />
+        <DF-LOOP-GATE />
+        <DF-WORKFLOW-GUIDANCE />
+        <DF-WORKFLOW-PERSISTENCE />
+        <DF-ORCHESTRATION-PROFILE />
+        <DF-PRESET-SWITCH />
+        <DF-DELEGATED-ACCEPTANCE />
+        <DF-REVIEW-CHECKPOINTS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-ORCHESTRATION-PROFILES />
+        <V-M-CLI-ORCHESTRATION />
+        <V-M-WORKFLOW-DELEGATED />
+        <V-M-WORKFLOW-SNAPSHOTS />
+        <V-M-WORKFLOW-CHECKPOINTS />
+        <V-M-WORKFLOW-STATE />
+        <V-M-WORKFLOW-TRANSITIONS />
+        <V-M-WORKFLOW-TOOLING />
+        <V-M-WORKFLOW-PERSISTENCE />
+        <V-M-WORKFLOW-REPAIR />
+        <V-M-PLUGIN-WORKFLOW />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-CLI-MANAGED-AGENTS />
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-SPEC-LINT />
+        <V-M-PLUGIN-SPEC-GUARD />
+        <V-M-VVOC-PRESET-REGISTRY />
+        <V-M-CLI-PRESET />
+        <V-M-CLI-PATCH-PROVIDER />
+        <V-M-CLI-COMPLETION />
+        <V-M-CLI-CONFIG />
+        <V-M-CLI-CONFIG-VALIDATE />
+        <V-M-PLUGIN-CONTEXT-TUI />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-DELEGATED-WORKFLOW-ASTRA-PRESETS/spec.xml</File>
+      <File>.grace/changes/active/C-DELEGATED-WORKFLOW-ASTRA-PRESETS/plan.xml</File>
+      <File>.grace/changes/active/C-DELEGATED-WORKFLOW-ASTRA-PRESETS/design-context.xml</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>README.md</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>src/lib/orchestration.ts</File>
+      <File>src/lib/orchestration.test.ts</File>
+      <File>src/lib/spec-lint.ts</File>
+      <File>src/lib/spec-lint.test.ts</File>
+      <File>src/lib/spec-lint-cache.test.ts</File>
+      <File>src/lib/managed-agents.test.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/vvoc-preset-registry.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/commands/patch-provider.ts</File>
+      <File>src/commands/patch-provider.test.ts</File>
+      <File>src/commands/preset.test.ts</File>
+      <File>src/commands/completion.ts</File>
+      <File>src/commands/completion.test.ts</File>
+      <File>src/commands/orchestration.test.ts</File>
+      <File>src/commands/config-validate.test.ts</File>
+      <File>src/commands/status.test.ts</File>
+      <File>src/plugins/workflow/index.ts</File>
+      <File>src/plugins/workflow/state.ts</File>
+      <File>src/plugins/workflow/transitions.ts</File>
+      <File>src/plugins/workflow/tooling.ts</File>
+      <File>src/plugins/workflow/persistence.ts</File>
+      <File>src/plugins/workflow/repair.ts</File>
+      <File>src/plugins/workflow/delegated.ts</File>
+      <File>src/plugins/workflow/delegated.test.ts</File>
+      <File>src/plugins/workflow/snapshots.ts</File>
+      <File>src/plugins/workflow/snapshots.test.ts</File>
+      <File>src/plugins/workflow/checkpoints.ts</File>
+      <File>src/plugins/workflow/checkpoints.test.ts</File>
+      <File>src/plugins/workflow/checkpoint-io.ts</File>
+      <File>src/plugins/workflow/checkpoint-io.test.ts</File>
+      <File>src/plugins/workflow/persistence.test.ts</File>
+      <File>src/plugins/workflow.test.ts</File>
+      <File>src/plugins/workflow.delegated.test.ts</File>
+      <File>src/plugins/system-context-injection.test.ts</File>
+      <File>src/tui/context/analyze.ts</File>
+      <File>src/tui/context/analyze.test.ts</File>
+      <File>templates/agents/vv-implementer.md</File>
+      <File>templates/agents/vv-spec-reviewer.md</File>
+      <File>templates/agents/vv-code-reviewer.md</File>
+      <File>templates/skills/vv-plan/SKILL.md</File>
+      <File>templates/skills/vv-plan/references/plan-template.xml</File>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>templates/skills/vv-review/SKILL.md</File>
+    </ObservedWriteScope>
+    <PlanningNotes>
+      <Note>This plan implements sibling spec.xml, approved explicitly by the user on 2026-09-11. The user also authorized a later implementation commit. This completed plan remains draft until explicitly approved; the recommended execution mode is sequential in the current primary session.</Note>
+      <Note>Preflight evidence: grace lint --path . --assertions current reports zero errors and warnings; the baseline leaf suite has 92 passing tests across five existing files, and bun run typecheck passes. Persistence tests currently live inside src/plugins/workflow.test.ts; the separately listed persistence.test.ts target will be newly created, not assumed to exist.</Note>
+      <Note>The installed GRACE 4.0.7 module-navigation/module-health assertion error remains a pre-existing blocker requiring resolution or explicit user disposition before execution. Do not change archived assertions or replace the installed CLI within this plan. Approval of this plan alone must not be interpreted as silently waiving that diagnostic.</Note>
+      <Note>Before observed implementation writes, run grace lint --path . --change C-DELEGATED-WORKFLOW-ASTRA-PRESETS --assertions baseline --run-commands. After observed and durable changes, run the selected target assertion check externally and the final assertion gate with --run-commands. The target check need not duplicate the final command run. No GRACE lifecycle command is nested in a MustPassCommand.</Note>
+      <Note>Baselines inspect behavior-sensitive mode vocabularies, reviewer/close behavior, schema exclusions, parser contracts, and model aliases. Existing documents are not protected only by existence assertions. Target commands additionally verify behavior and new test-file existence prevents Bun silently skipping a misspelled new test path.</Note>
+      <Note>Preserve the existing two work-item modes; add mode delegated with an explicitly empty requiredReviewers array and a new awaiting_acceptance state. Missing reviewers never opt into delegated mode. Standalone bounded delegated tasks remain possible without requiring a plan package for every small task.</Note>
+      <Note>Managed delegated plans use a separate DelegatedPlanRun registry inside the same session store. The registry owns task-to-work-item mappings, declared checkpoint definitions, review-generation links, historical results, and current completion evidence. Independent review launches reuse ordinary review_only work items, so their existing FAIL-as-findings semantics remain intact.</Note>
+      <Note>Add two public tools, work_item_decide and work_checkpoint. work_item_decide accepts workItemId, attempt, decision accept or request_changes, rationale, evidence references, and an explicit concernsDisposition for DONE_WITH_CONCERNS. A separate rework action on the same tool handles later checkpoint findings without overwriting the original acceptance event.</Note>
+      <Note>Advertise the two new control tools and delegated-specific open arguments only under the delegated startup profile. Other profiles keep their current tool-schema footprint and policies. Refuse delegated control mutation outside that profile rather than silently switching policy; changing profile still requires restart.</Note>
+      <Note>Rework requires a failed checkpoint from the same registered run that covers the accepted task and current accepted attempt. It can reopen that delegated item, including an individually closed item while its plan is still unfinished, without resetting the two-attempt budget. Preserve the historical acceptance, revoke only its current applicability, reject duplicate rework and exhausted budgets, and never reopen blocked/needs_context items or completed plan runs.</Note>
+      <Note>work_checkpoint has register, start, and verify actions. Register takes an approved active vvoc planPath, reads and validates the linked approved spec and plan, binds their content hashes and canonical workspace root, and atomically creates the run, its delegated task records, and checkpoint declarations. It does not dispatch agents or execute verification commands. Re-registering identical inputs is idempotent; changed approved inputs are explicit plan drift, not permission to reset an existing run.</Note>
+      <Note>Start takes runId and checkpointId, verifies prerequisite acceptance and the declared wave boundary, captures the current scope fingerprint plus accepted task attempts, and opens exactly the declared review_only reviewer set. Verify consumes recorded reviewer results, recomputes the fingerprint and approval-input hashes, and derives passed, failed, stale, or stopped status. An explicit complete: true request is permitted only for the final checkpoint and seals the run only after all current completion conditions pass. Callers cannot submit a boolean declaring a checkpoint passed.</Note>
+      <Note>Plan registration derives obligations from the validated file, not a model-supplied list that could omit a checkpoint. Starting dependent-wave tasks is refused while an earlier declared checkpoint barrier is unsatisfied. The final verification result is complete only when all declared tasks are accepted, all prior milestone barriers passed, and the final checkpoint covers current task attempts and the complete declared write scope.</Note>
+      <Note>Implementation attempts are bound to the host tool.execute.before/after callID. The model-visible result header remains unchanged. Refuse duplicate in-flight launches and stale result callbacks, consume at most two implementation attempts, and bind decisions to the completed attempt. Format-only repair stays inside its original attempt and receives no new control tools.</Note>
+      <Note>New control operations require context.agent equal to vv-controller and a matching root Session response with no parentID. Use pinned SDK ToolContext and PluginInput directory/worktree fields, not an agent name or root path provided in tool arguments. Missing or failing session-identity evidence denies new control mutations. Existing mode behavior is preserved.</Note>
+      <Note>Use explicit normalized workspace-relative file lists for task write scopes and checkpoint scopes in this version, not new runtime glob syntax. Reject absolute paths, traversal, wildcard paths, duplicate aliases, symlinks or symlink ancestors, non-regular existing entries, and paths outside the trusted workspace. Missing files are represented explicitly so creations and deletions change the fingerprint.</Note>
+      <Note>captureWorkflowSnapshot uses Node SHA-256 over canonical ordered paths, existence markers, file bytes, relevant file-mode metadata, and covered accepted attempt identities. Stream file contents; do not execute commands, copy entire repositories, or add worktrees. Check at checkpoint start, reviewer launch/result boundaries, and final verification. This detects observed snapshot drift; it is not a filesystem lock against arbitrary external writers.</Note>
+      <Note>Reject declared delegated writes that overlap an in-flight checkpoint scope. Historical passed milestones remain historical: later planned edits are reviewed by subsequent milestones and the final checkpoint. A final checkpoint's persisted PASS is not fresh evidence after restart or subsequent writes until verify recomputes current hashes.</Note>
+      <Note>Rechecking a previously passed non-final milestone may report that its snapshot is no longer current, but must not erase its historical barrier success or automatically reopen it. Final PASS and sealed-run completion are distinct: an ordinary verify call does not prevent bounded corrective work before an explicit successful final complete request.</Note>
+      <Note>The product XML extension is an optional execution section with mode inline, classic, or delegated. Delegated execution contains review_checkpoints with unique CHECKPOINT-R-NNN elements. Each checkpoint has kind milestone or final, after_wave referencing WAVE-N, covers/task_id references, scope/file entries, reviewers/reviewer entries, acceptance/criterion entries, and verification/command entries. Task write_scope/file lists are required for delegated plans and include each task's primary file.</Note>
+      <Note>For delegated plans, enforce exactly one final checkpoint after the last wave, complete final task coverage, and scope coverage of all declared task write scopes. Milestones cannot cover future-wave tasks. The existing component, wave, and task identities remain unchanged. Legacy plans without execution retain their meaning; adding a new execution policy to an approved legacy plan needs explicit amendment.</Note>
+      <Note>Extend the existing spec-lint engine with typed extractDelegatedPlanDefinition output so runtime registration and validation share one contract rather than separate XML interpretations. The I/O adapter loads actual sibling files and runs cross-file validation; the linter itself remains filesystem-free. Increment LINT_VERSION so cached old verdicts cannot validate new policy silently.</Note>
+      <Note>Persist version 2 with legacy work-item records, delegated attempt/decision records, and plan-run/checkpoint data. Read valid version 1 conservatively with an empty plan-run registry. Keep the existing nullable hydration helper for compatibility, but provide a checked loader for the plugin to distinguish missing data from invalid new state rather than silently restarting an invalid run.</Note>
+      <Note>New controller mutations are staged and committed only after validation; checked persistence failures must be surfaced rather than acknowledged as durable acceptance. Keep legacy helper failure behavior compatible, use a bounded atomic temporary-file replacement for new snapshots, and avoid replacing an in-memory store reference across an await in a way that loses concurrent callback updates.</Note>
+      <Note>Bound control text to a non-empty rationale of at most 2000 characters and one to eight non-empty evidence references of at most 512 characters each; bound concerns disposition to 2000 characters. Evidence references are inert strings, not commands executed by workflow tooling. Preserve the existing 500-character recovery-excerpt policy for worker/reviewer output.</Note>
+      <Note>Managed execution vocabulary becomes inline, classic, and delegated. An explicit approved plan/user choice is reused when compatible with the active session policy; missing or conflicting intent is clarified before writes. This does not change the separately installed GRACE skill approval or mode-selection rules governing this implementation session.</Note>
+      <Note>Provider aliases use the exact approved model IDs, efforts, and limits. The fetched OpenCode config schema supports provider.models options, modalities, limits, and variants entries with disabled flags. Explicitly disable unsupported inherited Spark variants rather than treating variants: {} as disabling automatically generated variants. User-owned agent overrides are not clobbered.</Note>
+      <Note>Only repair.ts control-tool denial entries and /context native-tool attribution change outside the core new path. They are required integrations of the new tools, not a broader repair, Guardian, TUI, or role-system redesign. New helper files get their own module contracts and three new graph owners.</Note>
+      <Note>All listed scopes are literal file paths. Durable reconciliation is centralized in T-011 after observed behavior verifies. The package version, changelog, release scripts, installed config, global skills, and archived changes are outside implementation write scope. Approved plan assertions/scopes/tasks are never refreshed in place during execution.</Note>
+      <Note>One final independent review round is scheduled after the feature and its evidence are complete. Fix confirmed findings directly within the approved scope and rerun relevant gates. A materially new scope or contradicted contract requires rerouting, not speculative expansion of this plan.</Note>
+      <Note>The user-authorized implementation commit is made after final verification and diff review, without a push or release. Explicit GRACE apply confirmation is still required before marking documents applied and archiving; do not equate a Git commit with lifecycle apply.</Note>
+    </PlanningNotes>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Add the delegated profile and startup guidance without changing legacy policies.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>In src/lib/orchestration.ts append delegated to the canonical profile list and add its concrete controller policy and workflowGuidance value. Update only the matching guidance branch in workflow/index.ts so typecheck remains valid before later tool integration.</Criterion>
+          <Criterion>Update both orchestration enums in schemas/vvoc/v3.json. Reuse the existing dynamic vvoc-config schema and CLI/completion resolution rather than adding a second profile registry.</Criterion>
+          <Criterion>Policy text specifies worker-owned implementation, controller-owned architecture and acceptance, checkpoint review, bounded packets, one active worker by default, and no source-writing workaround through shell commands. Planning-artifact authoring and verification remain allowed.</Criterion>
+          <Criterion>Tests cover all four profiles, unchanged absent default and old policies, invalid values, isolated startup injection, scoped CLI/config validation, status display, and completion. Update local contracts and summaries before behavior edits. Covers AC-01 through AC-04 and AC-19.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/orchestration.test.ts src/plugins/system-context-injection.test.ts src/commands/orchestration.test.ts src/commands/config-validate.test.ts src/commands/status.test.ts src/commands/completion.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Define and validate delegated plan execution, scopes, and checkpoint coverage.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Extend src/lib/spec-lint.ts with the product XML contract in PlanningNotes, typed delegated task/checkpoint definitions, and extractDelegatedPlanDefinition. Keep parsing and validation pure and reuse the same validated representation for later runtime registration.</Criterion>
+          <Criterion>Reject unknown modes/children, duplicate identities, missing or malformed scope paths, dangling task/wave refs, invalid or duplicate reviewers, future-wave coverage, missing final review, multiple final checkpoints, and incomplete final scope/task coverage.</Criterion>
+          <Criterion>Require populated delegated execution obligations for approved/applied plans while preserving draft completeness warnings. Preserve existing layout, CDATA, lifecycle, dependency, and component-subset checks and legacy plans without execution sections.</Criterion>
+          <Criterion>Increment LINT_VERSION and strengthen spec-lint and cache tests to prove old cached results are not reused under the new rule set. Non-empty full implementation snippets are not required for a valid delegated task. Covers AC-14 through AC-17.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Add conservative file-scope normalization and deterministic snapshot fingerprints.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create src/plugins/workflow/snapshots.ts and snapshots.test.ts under M-WORKFLOW-SNAPSHOTS. Export a pure scope normalizer and captureWorkflowSnapshot using the trusted workspace root and explicit file paths.</Criterion>
+          <Criterion>Canonical hashing is order-independent for equivalent declarations and changes for content edits, creation, deletion, relevant mode changes, or a changed covered acceptance attempt. It does not change solely for mtime changes or unrelated files.</Criterion>
+          <Criterion>Reject traversal, absolute/wildcard inputs, duplicate path aliases, symlinks including ancestor symlinks, unsupported filesystem entries, root mismatch, unreadable files, and observed concurrent reads that cannot yield a coherent fingerprint. Represent absent paths explicitly and stream regular file content.</Criterion>
+          <Criterion>No commands or network calls are made and no source or snapshot-copy directories are created. Tests use isolated temporary roots and actual filesystem mutations. Covers snapshot portions of AC-10, AC-11, AC-13, and AC-29.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/snapshots.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Implement delegated work-item attempts and explicit controller decisions.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create delegated.ts and delegated.test.ts under M-WORKFLOW-DELEGATED. Extend state.ts and transitions.ts additively with mode delegated, awaiting_acceptance, declared write scope, optional plan binding, a host-call-bound attempt ledger, and controller decision history.</Criterion>
+          <Criterion>Only explicit delegated mode accepts requiredReviewers: []; the old modes keep non-empty reviewer requirements. A standalone delegated task does not require a plan package. Invalid mixed fields and legacy/new intent mismatches fail before mutation.</Criterion>
+          <Criterion>At launch allocate attempt one or two and bind callID; block another in-flight implementation. Apply only a matching completed call's result. DONE waits for acceptance; DONE_WITH_CONCERNS retains its status and bounded excerpt; hard stops remain hard stops. Malformed completed delegated output never yields acceptance and requires explicit recovery if bounded format repair fails.</Criterion>
+          <Criterion>Implement decideDelegatedWorkItem: accept records evidence and reaches ready_to_close, request_changes returns the first completed attempt to implementation, and exhaustion blocks further automatic attempts. Validate attempt, state, evidence bounds, and concerns disposition; reject duplicates and wrong-mode decisions without mutation.</Criterion>
+          <Criterion>Define a guarded rework reducer preserving prior acceptance history and consumed attempts. The caller must supply validated checkpoint-failure authorization before reopening an accepted delegated item; blocked/needs_context records cannot be reopened. Legacy review counters, close logic, and result headers are unchanged. Covers AC-05 through AC-09 and AC-29.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/delegated.test.ts src/plugins/workflow.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Implement approved-plan registration and checkpoint state independently of review-only closure.</Title>
+        <DependsOn>T-002, T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create checkpoints.ts, checkpoint-io.ts, and their tests under M-WORKFLOW-CHECKPOINTS. Extend WorkItemStoreData with an initialized plan-run registry. Keep domain transitions separate from approved-file loading and fingerprint I/O.</Criterion>
+          <Criterion>loadApprovedDelegatedPlan safely loads an active project-local vvoc plan and its linked approved spec, runs full cross-file lint, extracts typed obligations, and records canonical paths, workspace, and content hashes. Reject archives, unresolved or escaping refs, non-approved inputs, and incompatible modes.</Criterion>
+          <Criterion>registerDelegatedPlan stages and atomically registers all declared tasks and checkpoints without launching agents. Bind unique canonical task IDs to stable delegated work-item IDs; identical registration is idempotent, while changed plan/spec hashes or conflicting definitions produce explicit drift errors without resetting progress.</Criterion>
+          <Criterion>Starting a due checkpoint requires the declared wave's prerequisite tasks and covered attempts to be accepted, captures a fresh fingerprint, and opens the exact declared reviewer set through a new linked review_only work item. Bind review work item, generation, and reviewer call identities to that checkpoint.</Criterion>
+          <Criterion>Derive checkpoint outcome from linked recorded reviewer statuses and fresh fingerprint comparison, never from work-item closure or a supplied PASS flag. Retain historical milestones even when their old snapshots are no longer current; require their historical barrier success before dependent-wave launches. Final complete: true requires complete latest task/attempt/scope coverage and seals the run only after fresh verification.</Criterion>
+          <Criterion>Reject overlapping declared writes during in-flight review. Allow one checkpoint correction/review retry without resetting attempt histories. Authorize rework only for a covered accepted task in the same unfinished run after a settled failed checkpoint; a hard stop cannot authorize rework. Exhaustion requires explicit recovery.</Criterion>
+          <Criterion>Tests cover partial registration rollback, unknown refs, missing prerequisites, skipped checkpoint attempts, FAIL then close, review-only NEEDS_CONTEXT, old-generation callbacks, edits between start/result/verify, preserved historical milestones, final drift after restart, and plan/spec mutation. Covers AC-10 through AC-13, AC-17, and AC-29.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/checkpoint-io.test.ts src/plugins/workflow/delegated.test.ts src/plugins/workflow.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Persist the new acceptance and checkpoint state with explicit recovery boundaries.</Title>
+        <DependsOn>T-004, T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Extend persistence.ts and add persistence.test.ts. Write version 2 snapshots containing work items and plan runs, with an atomic temporary-file replacement. Hydrate valid version 1 as legacy records with no synthesized acceptance or checkpoint approval.</Criterion>
+          <Criterion>Validate new mode-specific fields, attempt sequencing and budgets, actor-independent stored decision shapes, task bindings, review generations, checkpoint links, cross-session/root mismatches, and historical versus current approval state. Reject missing or contradictory new data.</Criterion>
+          <Criterion>Keep the existing nullable hydration API compatible and add a checked loader/snapshot path for runtime integration that distinguishes missing, valid, and invalid state and surfaces I/O failures. Do not silently reset a malformed version 2 run to an empty valid run.</Criterion>
+          <Criterion>Round-trip accepted tasks, reworked histories, incomplete reviews, FAIL reports, passed historical milestones, final fingerprints, hard stops, and bounded excerpts. A persisted PASS still requires a fresh final snapshot check. Original persistence scenarios in workflow.test.ts pass. Covers AC-20 and persistence portions of AC-06 through AC-13.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/persistence.test.ts src/plugins/workflow.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Wire primary-only tools, host call identity, checkpoint gates, and tool integrations.</Title>
+        <DependsOn>T-001, T-004, T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Extend tooling.ts and workflow/index.ts with work_item_decide and work_checkpoint using the contracts in PlanningNotes, exposing the new control schemas only under the delegated startup profile. Extend work_item_open validation for explicit standalone delegated tasks and work_item_list output with mode-specific acceptance and registered-plan/checkpoint metadata while preserving existing item fields and other profiles' tool-schema footprint.</Criterion>
+          <Criterion>Authorize new control mutations using actual ToolContext.agent and client.session.get root-session metadata; bind workspace to PluginInput/ToolContext, not tool arguments. Reject child sessions named vv-controller, missing identity, untrusted roots, and cross-session item/run IDs without side effects.</Criterion>
+          <Criterion>Wire callID into delegated launch/result transitions and registered checkpoint reviewer generations. Recheck scope and current state across asynchronous boundaries. Enforce declared checkpoint barriers and overlapping-write exclusions before consuming a new attempt.</Criterion>
+          <Criterion>Integrate checked persistence so failed new control transactions are not returned as durable success. Use staged fresh state and synchronous commit boundaries without dropping intervening updates. Preserve legacy tool behavior and generic review_only FAIL semantics.</Criterion>
+          <Criterion>Add the two tool IDs to repair.ts's disabled-tool map and /context's VVOC_TOOL_IDS. Update source-local contracts/maps/summaries and focused attribution tests; make no broader tool-policy or TUI changes.</Criterion>
+          <Criterion>Add workflow.delegated.test.ts with actual pinned SDK-shaped stubs for ToolContext, Session, PluginInput, and before/after hooks. Cover unauthorized self-acceptance, unknown root-session data, stale call IDs, invalid new state, source drift, failed persistence, close bypass, and old-profile regressions. Covers AC-05 through AC-13, AC-20, and AC-29.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/tui/context/analyze.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run build</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Align managed planning, execution, and review guidance with the new runtime contract.</Title>
+        <DependsOn>T-002, T-007</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update vv-plan/SKILL.md and its plan-template.xml for execution intent, explicit task write scopes, optional meaningful milestone checkpoints, and a complete final checkpoint. Keep contract-level snippets and avoid full implementation bodies.</Criterion>
+          <Criterion>Update vv-execute/SKILL.md to use inline/classic/delegated consistently, reuse explicit compatible approved intent, and ask only for missing/conflicting execution decisions. In delegated mode register the approved plan once, dispatch bounded tasks, inspect relevant code/evidence, decide acceptance, and run the due checkpoint before dependent work.</Criterion>
+          <Criterion>Specify local worker test/fix loops, targeted parent acceptance, guarded checkpoint rework, two-attempt budgets, hard stops, and final fresh checkpoint verification with explicit complete: true. Keep progress out of approved XML until legitimate final lifecycle transitions; do not treat closed FAIL reports as passing reviews or reset state under new keys to evade limits.</Criterion>
+          <Criterion>Remove contradictory smart-model routing and hard-stop redispatch advice. Keep semantic model bindings, explicit commit authorization, standalone vv-review findings-only behavior, and existing classic required-review behavior intact.</Criterion>
+          <Criterion>Update only relevant implementation/reviewer agent guidance for declared scopes, current attempts, snapshot-aware review, concise evidence, and the distinction between DONE, controller acceptance, and review PASS. Keep primary policy injection out of generic agent metadata.</Criterion>
+          <Criterion>Managed-agent/skill tests assert the new contract, consistent mode handoff, no repeated choice when already explicit, role bindings, unchanged discovery isolation, and valid rendered plan fixtures through the actual linter. Covers AC-02 through AC-04 and AC-13 through AC-19.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/spec-lint.test.ts src/plugins/system-context-injection.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Add explicit-reasoning provider aliases and the two Astra presets.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Extend patch-provider.ts additively with codex Astra max and Spark medium aliases, deepseek Flash high, and a zai patch for full GLM-5.3 high. Include zai in all and shell completion without changing existing patches, provider IDs, base URLs, root role refs, or unrelated user entries.</Criterion>
+          <Criterion>Use the four exact alias names, API IDs, efforts, and limits from AC-21 through AC-25. Preserve OpenAI reasoningSummary/include options, set conservative text-only Spark/GLM modalities, and disable unsupported inherited Spark effort variants using the schema-supported disabled flag. Do not hard-code unrelated promotional pricing.</Criterion>
+          <Criterion>Add vv-astra-solo and vv-astra-workers to the canonical registry, using single-session and delegated respectively. Preserve existing presets, deterministic ordering, and all four role bindings; the shared fast role still includes Guardian.</Criterion>
+          <Criterion>Tests prove alias ID/options/limits/modalities, scoped conservative/idempotent patching, all-patch inclusion, preset display/application, invalid-input atomicity, seeding and managed refresh without activation, custom-preset preservation, and completion. No credentialed model calls or installed configuration writes occur. Covers AC-21 through AC-26 and AC-30.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/patch-provider.test.ts src/commands/preset.test.ts src/commands/completion.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run build</Command>
+        </Verification>
+      </T-009>
+      <T-010>
+        <Title>Prove the complete twenty-task path and its failure boundaries through runtime integration.</Title>
+        <DependsOn>T-007, T-008, T-009</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>In workflow.delegated.test.ts add the exact named scenario twenty tasks require four reviewer launches. Generate a valid approved spec/plan fixture with twenty tasks, two intermediate code checkpoints, and final spec/code; register it through the real tool wrapper and execute the simulated host hooks.</Criterion>
+          <Criterion>Prove each task can be accepted without reviewer dispatch, the next appropriate task can run, premature close/next-wave bypass fails, and exactly four initial reviewer launches satisfy the declared checkpoint policy. Do not conflate a model's mock output with evidence about real model quality or elapsed time.</Criterion>
+          <Criterion>Exercise a checkpoint failure followed by bounded rework of an already accepted task, a historical milestone followed by planned edits, changed files during review, changed final content after a prior PASS, and a process-style hydrate/resume. Show that each outcome preserves the intended barrier and current coverage.</Criterion>
+          <Criterion>Prove no omitted checkpoint, altered plan/spec, malformed persisted record, forged actor, old call ID, duplicate decision, or closed review-only FAIL produces overall completion. Existing strict/classic/single-session behavior remains covered by its original tests. Covers AC-28 through AC-30 and cross-component acceptance.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow/persistence.test.ts src/lib/spec-lint.test.ts src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-010>
+      <T-011>
+        <Title>Document the public behavior and reconcile durable ownership and verification centrally.</Title>
+        <DependsOn>T-010</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update README with all four profiles, controller acceptance versus independent review, the real new tool/plan contracts, checkpoint snapshot boundaries and hard stops, compatible legacy execution, exact alias setup commands, preset mappings, and restart requirements.</Criterion>
+          <Criterion>State that no-edit delegation is behavioral rather than a filesystem sandbox; Spark also serves Guardian; actual model access, review quality, and performance remain unmeasured unless separately authorized. Explain twenty tasks/four initial reviews as a deterministic scenario, not a speed guarantee.</Criterion>
+          <Criterion>Add graph/index ownership for M-WORKFLOW-DELEGATED, M-WORKFLOW-SNAPSHOTS, and M-WORKFLOW-CHECKPOINTS, with their actual source/test paths, imports, and V-M owners. Update the existing affected modules and data flows, including new DF-DELEGATED-ACCEPTANCE and DF-REVIEW-CHECKPOINTS, without rewriting unrelated architecture.</Criterion>
+          <Criterion>Update verification/index and main with all new suites, the twenty-task scenario, negative security/state cases, legacy compatibility, and existing appropriate command gates. Reconcile requirements.xml's work-item/plan use cases without altering unrelated historical context or archived bundles.</Criterion>
+          <Criterion>Review every modified source/test contract, map, block pair, and LAST_CHANGE summary. No manual dist changes, schema/package version bump, installed configuration change, or unapproved scope expansion is present. Covers AC-27 and durable aspects of all affected behavior.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run grace:check</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run release:check</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-011>
+      <T-012>
+        <Title>Run final evidence, obtain one independent review round, and create the authorized implementation commit.</Title>
+        <DependsOn>T-011</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Run the selected target assertion check and the selected final GRACE assertion gate externally; the final gate's --run-commands supplies fresh evidence for all target leaf commands without a redundant manual duplicate. Resolve or obtain explicit disposition of the recorded navigation/module-health problem before execution; do not waive any new lint/assertion/test failure.</Criterion>
+          <Criterion>Open one review_only work item with required spec and code reviewers for the completed change. Collect the complete round, personally validate findings, fix confirmed issues directly within the approved scope, and rerun fresh relevant gates. Hard-stop results are surfaced rather than retried automatically.</Criterion>
+          <Criterion>Before committing, inspect git status, the full intended diff, and git log --oneline -10. Stage only intended approved-scope files, exclude credentials/generated output/unrelated user changes, and create the user-authorized conventional implementation commit. Do not push, release, skip hooks, or amend a failed commit.</Criterion>
+          <Criterion>Report the commit and criterion-level outcome with remaining live-model/performance limits. Request explicit GRACE apply confirmation after fresh end-state evidence; keep the bundle active and approved until that confirmation rather than marking it applied or archiving it autonomously. Covers AC-30 and the approved verification intent.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run release:check</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-012>
+    </ImplementationPlan>
+    <SpecCoverage>
+      <Coverage>AC-01: T-001, T-009, T-011.</Coverage>
+      <Coverage>AC-02, AC-03, AC-04: T-001, T-008.</Coverage>
+      <Coverage>AC-05, AC-06, AC-07, AC-08, AC-09: T-004, T-006, T-007, T-010.</Coverage>
+      <Coverage>AC-10, AC-11, AC-12: T-002, T-003, T-005, T-006, T-007, T-010.</Coverage>
+      <Coverage>AC-13: T-005, T-007, T-008, T-010.</Coverage>
+      <Coverage>AC-14, AC-15, AC-16, AC-17: T-002, T-005, T-008.</Coverage>
+      <Coverage>AC-18, AC-19: T-001, T-008.</Coverage>
+      <Coverage>AC-20: T-006, T-007, T-010.</Coverage>
+      <Coverage>AC-21, AC-22, AC-23, AC-24, AC-25, AC-26: T-009.</Coverage>
+      <Coverage>AC-27: T-011.</Coverage>
+      <Coverage>AC-28: T-010.</Coverage>
+      <Coverage>AC-29: T-003, T-004, T-005, T-006, T-007, T-010.</Coverage>
+      <Coverage>AC-30: T-009, T-010, T-011, T-012.</Coverage>
+    </SpecCoverage>
+  </C-DELEGATED-WORKFLOW-ASTRA-PRESETS>
+</GraceChangePlan>

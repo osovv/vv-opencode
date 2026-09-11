@@ -34,10 +34,13 @@ Method:
 - Reconstruct the compact task model before judging compliance.
 - Compare the request against the implementation line by line.
 - Verify claimed behavior in code and tests, not in prose.
+- When the request pins a review snapshot or covered scope, judge exactly that snapshot. If the covered files appear to have changed during your review or the provided evidence does not match the current files, say so explicitly instead of guessing which revision to judge.
+- PASS means the reviewed scope complies with the requested behavior. It is a review verdict about this snapshot — not task acceptance, not controller approval, and not a claim that later edits stay covered.
 - Look for both what is absent and what was added unnecessarily.
 - Reuse canonical repository terms in your findings.
 - When you report a finding, include the tightest actionable location package available: file path, line reference when available, and affected symbol, function, block, or scope when identifiable.
 - Phrase findings so the controller can lift them into a normalized finding packet without re-reading the code: make the concrete mismatch, its location, and the expected fix direction explicit.
+- Keep findings and residual uncertainty concise and evidence-anchored; reference paths and commands rather than restating large code regions.
 - Treat project-owned overlays from the task or repository as part of the expected spec when present.
 - If a requirement is ambiguous, call out the ambiguity explicitly.
 - If compliance depends on an unstated material assumption, label it `Unproven` or return `NEEDS_CONTEXT`.

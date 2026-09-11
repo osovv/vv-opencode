@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Initial cache hit, invalidation, bypass, pruning, and corruption tests.]
+//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added an old-version disk cache rejection test for the LINT_VERSION 2 rule-set bump.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -147,6 +147,41 @@ describe("createSpecLintCache", () => {
     const root = await tempRoot();
     const cache = await createSpecLintCache({ cacheRoot: root });
     await cache.lint([{ file: "spec.xml", content: validSpec }]);
+    const raw = JSON.parse(await readFile(cache.cacheFilePath, "utf8"));
+    expect(raw.version).toBe(LINT_VERSION);
+  });
+
+  test("an old-version disk cache is rejected instead of reused after a rule-set bump", async () => {
+    const root = await tempRoot();
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(root, { recursive: true });
+    const oldKey = computeSpecLintCacheKey([{ file: "spec.xml", content: validSpec }], 1);
+    await writeFile(
+      join(root, "cache.json"),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          [oldKey]: {
+            savedAt: 1,
+            inputs: ["spec.xml"],
+            verdicts: [
+              {
+                version: 1,
+                file: "spec.xml",
+                kind: "spec",
+                ok: true,
+                findings: [],
+              },
+            ],
+          },
+        },
+      }),
+      "utf8",
+    );
+    const cache = await createSpecLintCache({ cacheRoot: root });
+    const result = await cache.lint([{ file: "spec.xml", content: validSpec }]);
+    expect(result.hit).toBe(false);
+    expect(result.verdicts[0].version).toBe(LINT_VERSION);
     const raw = JSON.parse(await readFile(cache.cacheFilePath, "utf8"));
     expect(raw.version).toBe(LINT_VERSION);
   });

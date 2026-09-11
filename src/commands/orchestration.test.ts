@@ -83,7 +83,7 @@ describe("orchestration show", () => {
 
 describe("orchestration set", () => {
   test("bootstraps canonical v3 config and supports all profile values", async () => {
-    for (const profile of ["single-session", "balanced", "orchestrated"] as const) {
+    for (const profile of ["single-session", "balanced", "orchestrated", "delegated"] as const) {
       const configHome = await mkdtemp(join(tmpdir(), `vvoc-orchestration-set-${profile}-`));
       try {
         const result = await setOrchestrationProfile(profile, { configDir: configHome });

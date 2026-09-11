@@ -37,12 +37,21 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 <rule>The plan contains two major sections: architecture (components, contracts, dependencies) and tasks (implementation steps with code snippets).</rule>
 <rule>Architecture maps the spec's components. Each architecture element reuses the exact COMPONENT-UPPER-SLUG identity declared in spec.xml: &lt;COMPONENT-CACHE-STORE&gt;…&lt;/COMPONENT-CACHE-STORE&gt;. Plan components are always a subset of spec components — a plan module without a spec component does not exist. Architecture child tags: name (display name from the spec), purpose, file (path, role), contract, depends_on (bare component slug). Do NOT add a child id element.</rule>
 <rule>Tasks are grouped into wave elements whose identity is the element name: &lt;WAVE-1&gt;, &lt;WAVE-2&gt;, … Each wave contains a &lt;goal&gt; and its tasks.</rule>
-<rule>A task's identity is its element name in the TASK-T-NNN pattern: &lt;TASK-T-001&gt;…&lt;/TASK-T-001&gt;. The identity repeats on both boundaries so long blocks stay addressable. Tasks use child tags: title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command). Do NOT add a child id element — the element name is the single authoritative identity. Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.</rule>
+<rule>A task's identity is its element name in the TASK-T-NNN pattern: &lt;TASK-T-001&gt;…&lt;/TASK-T-001&gt;. The identity repeats on both boundaries so long blocks stay addressable. Tasks use child tags: title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command), and optionally write_scope (file). Do NOT add a child id element — the element name is the single authoritative identity. Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.</rule>
 <rule>Every XML element is named for grep extraction. Use: `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for dependency graph, `grep '&lt;COMPONENT-' plan.xml` for the component map.</rule>
 <rule>Populate the &lt;spec&gt; element with the path to the spec.xml this plan implements.</rule>
 <rule>If a design-context.xml was found and read as explanatory context, populate the &lt;design_context&gt; element with the path to design-context.xml so execution tools and reviewers can locate it.</rule>
 <location>Save plan.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/plan.xml</location>
 </plan_document_format>
+
+<execution_intent>
+<rule>Ask the user which execution intent the plan should declare — inline, classic, or delegated — while the plan is being drafted, and record it in an &lt;execution&gt; section with a &lt;mode&gt; child. If the user has no preference, omit the section entirely; a plan without &lt;execution&gt; keeps its legacy meaning and is never silently reinterpreted.</rule>
+<rule>Delegated plans MUST declare the full vocabulary the runtime registers: a &lt;review_checkpoints&gt; container with unique CHECKPOINT-R-NNN elements. Each checkpoint carries kind (milestone or final), after_wave (the wave barrier), covers (task_id references), scope (workspace-relative file paths), reviewers (spec and/or code), acceptance (criterion), and verification (command).</rule>
+<rule>Delegated tasks MUST declare a &lt;write_scope&gt; with at least the task's primary &lt;file&gt;; the write scope is the worker's bounded editing territory and the checkpoint's fingerprint input.</rule>
+<rule>Milestones reflect contract or integration boundaries — not a fixed task-count interval. The default recommendation is a focused code review at meaningful intermediate milestones and spec plus code review at the final checkpoint; justify any larger reviewer set explicitly in the checkpoint's acceptance criteria. The exact reviewer set and milestones are explicit in this plan, never imposed by the runtime.</rule>
+<rule>The final checkpoint MUST sit after the last wave, cover every declared task, and its scope MUST cover every task write scope, so the complete current result receives fresh review before completion.</rule>
+<rule>Review coverage is not retroactive: later planned edits are covered by later checkpoints or the final checkpoint, not by an earlier milestone's approval. Adding a new execution policy to an already approved legacy plan requires an explicit agreed amendment; archived plans are never rewritten.</rule>
+</execution_intent>
 
 <snippet_format>
 <rule>Every task contains a &lt;snippet&gt; element wrapped in CDATA. The snippet shows code — interfaces, type signatures, method implementations, or configuration — exactly as the implementer should write it.</rule>
@@ -160,8 +169,9 @@ export type CacheStoreOptions = {
 <rule>After saving, present the plan file path and ask the user to read/review the plan and explicitly approve it. Do NOT offer execution options until the user approves the plan.</rule>
 <rule>If the user requests changes, keep the plan status as draft, make the changes, re-run self-review, save the updated plan, and ask for approval again.</rule>
 <rule>After explicit user approval, update the saved plan file so the top-level status is &lt;status&gt;approved&lt;/status&gt;.</rule>
-<rule>After the saved plan status is approved, present the user with two execution options:</rule>
-<option name="workflow">Workflow tracked loop (recommended) — vv-implementer executes tasks, followed by required reviewers. Uses work_item_open with `mode: "implementation"` and explicit `requiredReviewers`, then work_item_close after the collect-all review round is ready to close.</option>
+<rule>After the saved plan status is approved, present the user with the execution options:</rule>
+<option name="workflow">Workflow tracked loop — vv-implementer executes tasks, followed by required reviewers per task. Uses work_item_open with `mode: "implementation"` and explicit `requiredReviewers`, then work_item_close after the collect-all review round is ready to close.</option>
+<option name="delegated">Delegated execution — workers implement bounded task packets, the controller accepts each attempt explicitly, and independent review happens at the plan's declared review checkpoints. Requires the delegated &lt;execution&gt; section with write scopes and checkpoints.</option>
 <option name="manual">Manual execution — the user or another agent executes tasks step by step following the plan directly.</option>
 <rule>Wait for the user's choice. Do NOT start implementation.</rule>
 </execution_handoff>
