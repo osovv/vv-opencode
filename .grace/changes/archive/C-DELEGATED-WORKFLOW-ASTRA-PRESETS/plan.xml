@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-DELEGATED-WORKFLOW-ASTRA-PRESETS>
     <IntentSummary>Implement the approved delegated-workflow specification as an additive controller-acceptance path, an approved-plan-backed checkpoint registry, compatible persistence and managed execution contracts, and two explicit-reasoning Astra presets. Preserve existing strict and review-only workflows and keep all installed user configuration untouched.</IntentSummary>
     <BaselineAssertions>

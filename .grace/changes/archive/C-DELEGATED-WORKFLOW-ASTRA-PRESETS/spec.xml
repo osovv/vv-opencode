@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-DELEGATED-WORKFLOW-ASTRA-PRESETS>
     <Summary>Add delegated implementation with explicit controller acceptance and milestone-level independent review, integrate that policy into managed planning and execution, and provide Astra solo and worker presets with explicit reasoning aliases.</Summary>
     <Problem>The user relies on single-session orchestration because the current tracked implementation workflow is too rigid and slow for ordinary tasks. Every successful tracked implementer result requires independent review before its work item can close, and the classic execution skill requires both spec and code reviewers per task. The desired workflow delegates implementation to a cheaper worker, keeps architecture and task acceptance in Astra's primary session, and spends independent review latency at meaningful milestones rather than every mechanical subtask.</Problem>
