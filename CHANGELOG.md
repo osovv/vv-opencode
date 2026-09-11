@@ -1,3 +1,14 @@
+## <small>1.4.1 (2026-09-11)</small>
+
+### Summary
+
+Version 1.4.1 corrects the GPT-6 Astra alias limits to the official 1.05M context, 922K input, and 128K output contract, so patched sessions no longer compact roughly 500K tokens earlier than the model actually supports. The built-in preset registry is refreshed with DeepSeek Flash Max and GLM-5.3 Max/Flash Max role assignments, new vv-osovv-ds and vv-osovv-zai presets, and Luna Low in place of the legacy Spark alias, while retired presets, custom presets, and active role or profile settings are preserved across install and sync. Delegated workflow handling now records a confirmed foreground worker launch failure as a distinct failed attempt with bounded evidence, keeping the item retryable against the same two-attempt budget instead of stranding an in-flight attempt until restart. The release also archives the applied delegated-workflow and Astra-presets change bundle and checkpoints foreground failure-recovery work, which remains unfinished pending review fixes.
+
+* fix(patch-provider): correct GPT-6 Astra alias limits to official 1.05M/922K/128K contract ([cd2610d](https://github.com/osovv/vv-opencode/commit/cd2610d)), closes [PR#33972](https://github.com/PR/issues/33972)
+* chore(grace): archive C-DELEGATED-WORKFLOW-ASTRA-PRESETS as applied ([5fabfb9](https://github.com/osovv/vv-opencode/commit/5fabfb9))
+* chore(workflow): checkpoint foreground failure recovery ([7a1c29c](https://github.com/osovv/vv-opencode/commit/7a1c29c))
+* feat(presets): refresh role assignments and provider aliases ([2bbfa70](https://github.com/osovv/vv-opencode/commit/2bbfa70))
+
 ## 1.4.0 (2026-09-11)
 
 ### Summary
