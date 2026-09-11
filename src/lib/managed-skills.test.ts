@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-skills.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation, vv-execute explicit mode choice, vv-review findings-only routing, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
+//   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated vocabulary, control-tool, checkpoint, and linter-fixture coverage to the managed skill contract tests.]
+//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added vv-spec/vv-plan/vv-execute/vv-review correctness-obligation coverage: ambiguity resolution, preserved-property criteria, complete bounded packets, evidence sufficiency, and honest no-findings reporting.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -63,6 +63,69 @@ describe("managed workflow skill prompts", () => {
     expect(body).toContain("make the user explicitly choose an execution mode");
     expect(body).toContain("Do not mutate files until the execution mode is explicit");
     expect(body).toContain("If the user did not specify a mode, stop and ask them to choose");
+  });
+
+  test("vv-execute carries correctness obligations across execution modes", async () => {
+    const template = await loadManagedSkillTemplate("vv-execute");
+    const { body } = splitFrontmatter(template);
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(body).not.toContain(
+      "The implementer receives ONLY the task's contract + criteria + files",
+    );
+    expect(normalized).toContain(
+      "The implementer receives the task's contract + criteria + files plus the material dependencies, affected consumers, and diagnostic scenarios the controller already knows",
+    );
+    expect(normalized).toContain(
+      "&lt;dependencies&gt;...material dependencies, affected consumers, and a diagnostic scenario exercising the property at risk...&lt;/dependencies&gt;",
+    );
+    expect(normalized).toContain(
+      "Does the check actually exercise the changed behavior at the level the risk arises, or is it a green general check that cannot reach the changed path?",
+    );
+    expect(normalized).toContain("Acceptance requires evidence sufficiency");
+    expect(normalized).toContain(
+      "never let a stated concern substitute for an unverified material condition of the change",
+    );
+    expect(normalized).toContain(
+      "verification commands, and the material dependencies and diagnostic scenario the controller knows",
+    );
+  });
+
+  test("vv-spec resolves ambiguity from evidence and captures preserved properties", async () => {
+    const template = await loadManagedSkillTemplate("vv-spec");
+    const { body } = splitFrontmatter(template);
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(body).not.toContain("If so, pick one interpretation and make it explicit.");
+    expect(normalized).toContain(
+      "Resolve repository-answerable engineering ambiguity from the established code and contracts",
+    );
+    expect(normalized).toContain(
+      "a genuine business-semantics fork goes to the user as an explicit question — never silently pick a business interpretation",
+    );
+    expect(normalized).toContain(
+      "capture the material properties that must be preserved — existing behavior, contracts, and consumers the change must not break",
+    );
+  });
+
+  test("vv-plan criteria cover preserved properties and risk-level verification", async () => {
+    const template = await loadManagedSkillTemplate("vv-plan");
+    const { body } = splitFrontmatter(template);
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(body).toContain(
+      "Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.",
+    );
+    expect(normalized).toContain(
+      "Derive acceptance criteria and verification commands from the spec contract and the directly affected consumers, not from a preferred implementation",
+    );
+    expect(normalized).toContain(
+      "Criteria cover the material properties that must be preserved and the interactions with the consumers the change touches",
+    );
+    expect(normalized).toContain("Choose verification at the level where the risk arises");
+    expect(normalized).toContain(
+      "do not present a general check that cannot reach the changed path as evidence for a material criterion",
+    );
   });
 
   test("vv-execute reuses explicit intent, uses one mode vocabulary, and respects semantic roles", async () => {
@@ -125,6 +188,7 @@ describe("managed workflow skill prompts", () => {
   test("vv-review remains reviewer-based, findings-only, and never delegates to implementers", async () => {
     const template = await loadManagedSkillTemplate("vv-review");
     const { body } = splitFrontmatter(template);
+    const normalized = body.replace(/\s+/g, " ");
 
     expect(body).toContain("review_only");
     expect(body).toContain("work_item_open");
@@ -136,6 +200,15 @@ describe("managed workflow skill prompts", () => {
     expect(body).toContain("do NOT delegate to implementers");
     expect(body).toContain("never satisfies the checkpoint");
     expect(body).toContain("work_checkpoint verify");
+    expect(normalized).toContain(
+      '"no findings" means no defect was discovered within the reviewed scope, not a guarantee of correctness',
+    );
+    expect(normalized).toContain(
+      "Note material verification gaps and what the review could not establish",
+    );
+    expect(normalized).toContain(
+      "do not turn an empty findings list into a completion or correctness claim",
+    );
   });
 
   test("managed skill text lookup prefers project and falls back to global", async () => {

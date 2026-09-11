@@ -1,0 +1,235 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-CORRECTNESS-OBLIGATIONS-PROMPTS>
+    <IntentSummary>Apply the approved prompt-only correctness-obligations package as one coordinated instruction/test change, synchronize its existing durable descriptions, and verify the complete result before the requested local commit. No evaluation harness or runtime workflow changes are included.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value>
+        <Value>M-CLI-MANAGED-AGENTS</Value>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value>
+        <Value>V-M-CLI-MANAGED-AGENTS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/plugins/system-context-injection/index.ts</Value>
+        <Value>src/plugins/system-context-injection.test.ts</Value>
+        <Value>src/lib/managed-agents.test.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>templates/agents/vv-controller.md</Value>
+        <Value>templates/agents/vv-implementer.md</Value>
+        <Value>templates/agents/vv-code-reviewer.md</Value>
+        <Value>templates/agents/vv-spec-reviewer.md</Value>
+        <Value>templates/agents/investigator.md</Value>
+        <Value>templates/skills/vv-spec/SKILL.md</Value>
+        <Value>templates/skills/vv-plan/SKILL.md</Value>
+        <Value>templates/skills/vv-execute/SKILL.md</Value>
+        <Value>templates/skills/vv-review/SKILL.md</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/system-context-injection/index.ts</File>
+        <Text>A material assumption is one that affects behavior, scope, API shape, schema, UX, data meaning, or verification.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-controller.md</File>
+        <Text>Before editing, understand the relevant local contract, nearby tests, and surrounding code.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-implementer.md</File>
+        <Text>Hyperfocus on the assigned scope.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-implementer.md</File>
+        <Text>Widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-code-reviewer.md</File>
+        <Text>If no issues are found, keep `VVOC_STATUS: PASS`</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-spec-reviewer.md</File>
+        <Text>If compliance depends on an unstated material assumption, label it `Unproven` or return `NEEDS_CONTEXT`.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/investigator.md</File>
+        <Text>Trace the failing data flow or control flow back toward the source.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-spec/SKILL.md</File>
+        <Text>If so, pick one interpretation and make it explicit.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-plan/SKILL.md</File>
+        <Text>Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-execute/SKILL.md</File>
+        <Text>The implementer receives ONLY the task's contract + criteria + files</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/skills/vv-review/SKILL.md</File>
+        <Text>Findings are the FINAL output. Do NOT proceed to fixes without explicit user confirmation.</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>The policy is behavioral, not a filesystem sandbox</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module>
+        <Module>M-CLI-MANAGED-AGENTS</Module>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain>
+        <File>src/plugins/system-context-injection/index.ts</File>
+        <Text>&lt;correctness_obligations&gt;</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-controller.md</File>
+        <Text>correctness obligations</Text>
+      </MustContain>
+      <MustContain>
+        <File>templates/agents/vv-code-reviewer.md</File>
+        <Text>material verification gap</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>templates/agents/vv-code-reviewer.md</File>
+        <Text>If no issues are found, keep `VVOC_STATUS: PASS`</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>templates/agents/vv-implementer.md</File>
+        <Text>Hyperfocus on the assigned scope.</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>templates/agents/vv-implementer.md</File>
+        <Text>Widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence.</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>templates/skills/vv-spec/SKILL.md</File>
+        <Text>If so, pick one interpretation and make it explicit.</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>templates/skills/vv-execute/SKILL.md</File>
+        <Text>The implementer receives ONLY the task's contract + criteria + files</Text>
+      </MustNotContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>correctness obligations</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/system-context-injection.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>The approved specification records the user's explicit approval of the preceding file-by-file design. This completed plan is initially draft and requires separate approval before implementation.</Note>
+      <Note>Recommended execution is sequential with one active implementation worker. T-001 and T-002 have different bounded editing territories; their dependency expresses that durable descriptions must match the accepted instruction change, not a request for parallel execution.</Note>
+      <Note>All important architecture reading, task contracts, acceptance decisions, and final synthesis remain in the primary session. Delegate implementation, tests, formatting, and durable projection edits through bounded task packets; do not mutate approved spec/plan content during execution.</Note>
+      <Note>Declare one final independent spec/code review checkpoint R-001 after T-001 and T-002 are accepted, covering their complete combined write scope and the approved spec/plan. No per-file or extra model-evaluation review rounds are requested. Pin the reviewed state and preserve the active session's authorization and checkpoint rules.</Note>
+      <Note>Execution preflight must establish compatibility between this GRACE artifact and the active delegated checkpoint mechanism before observed writes. The repository checkpoint-io adapter currently accepts a root plan element, not GraceChangePlan. Do not silently translate the normative plan, create a second approval authority, bypass required checkpoint registration, or change the runtime to work around an incompatible installed tool; stop and surface that blocker if it applies.</Note>
+      <Note>The stable terminology used by mechanical assertions is correctness obligations, material verification gap, and the correctness_obligations instruction block. These anchors locate policy text; deterministic tests and human review must assess the complete neighboring contract rather than infer semantic adequacy from a keyword alone.</Note>
+      <Note>Read-only impact inspection includes managed loaders, orchestration policy selection, workflow result parsing, spec linting, and existing XML references. These files are not editing territory and must not change without an explicit scope decision.</Note>
+      <Note>The assertions deliberately include old policy content, not only file existence, to detect behavior-sensitive drift before editing. Test files are governed by the fresh contract/test inspection in T-001 and the target command gates.</Note>
+      <Note>Behavioral improvement remains unmeasured. No provider calls, benchmark harness, private scenario import, structured observation journal, or extra work for the user is part of verification.</Note>
+      <Note>Lifecycle files listed in ObservedWriteScope are controller-owned planning/apply artifacts only. Their final applied/archive transition requires the existing explicit apply confirmation after fresh end-state evidence, not worker edits or transient status updates.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-CLI-MANAGED-AGENTS />
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-CLI-MANAGED-AGENTS />
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/system-context-injection/index.ts</File>
+      <File>src/plugins/system-context-injection.test.ts</File>
+      <File>src/lib/managed-agents.test.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>templates/agents/vv-controller.md</File>
+      <File>templates/agents/vv-implementer.md</File>
+      <File>templates/agents/vv-code-reviewer.md</File>
+      <File>templates/agents/vv-spec-reviewer.md</File>
+      <File>templates/agents/investigator.md</File>
+      <File>templates/skills/vv-spec/SKILL.md</File>
+      <File>templates/skills/vv-plan/SKILL.md</File>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>templates/skills/vv-review/SKILL.md</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-CORRECTNESS-OBLIGATIONS-PROMPTS/spec.xml</File>
+      <File>.grace/changes/active/C-CORRECTNESS-OBLIGATIONS-PROMPTS/plan.xml</File>
+    </ObservedWriteScope>
+    <StaleStateWarnings>
+      <Warning>Before editing, rerun the selected baseline and inspect current contracts, tests, and approved scopes. Baseline drift or incompatible execution tooling is a stop, not permission to reinterpret this plan.</Warning>
+      <Warning>The runtime must remain unchanged outside instruction strings and associated source-local contract comments. Do not fix the separately noticed final-checkpoint freshness issue in this package.</Warning>
+      <Warning>Keep universal guidance out of managed subagent injection; their role templates receive their own bounded responsibilities. Preserve the controller's profile-neutral contract and do not insert inactive orchestration alternatives into it.</Warning>
+      <Warning>Replace contradictory no-findings/PASS and search-boundary rules, including conflicting later instructions in the same file. Do not merely append a stronger paragraph while keeping an unconditional contradictory command.</Warning>
+      <Warning>Material verification gaps must be specific and actionable. Do not block work for unspecified missing tests, mandate duplicate full-suite runs by every reviewer, or introduce automatic user-risk-acceptance bypasses.</Warning>
+      <Warning>After observed writes, use selected target/final assertions, not assertions current. GRACE lifecycle checks run externally and never inside MustPassCommand.</Warning>
+    </StaleStateWarnings>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Update the ten instruction surfaces, existing contract tests, and user-facing guidance as one coherent prompt-only package.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write scope is exactly the fourteen non-GRACE files listed in ObservedWriteScope: the system-context source and test, two managed contract test files, five agent templates, four skill templates, and README. Read current file-local contracts and update their responsibility/change descriptions before behavioral text and test edits.</Criterion>
+          <Criterion>Add a compact correctness_obligations block to universal primary guidance. It covers contract-grounded preserved properties, bounded consumer investigation, write/impact/verification scope separation, diagnostic counterexamples, independent test expectations, risk-appropriate verification, and honest distinction between inspection, reasoning, and executed checks.</Criterion>
+          <Criterion>Update controller, implementer, code reviewer, spec reviewer, and investigator responsibilities exactly as the approved specification requires. Replace conflicting scope restrictions and unconditional no-findings/PASS rules. Keep existing headers, allowed statuses, permissions, profile neutrality, concise result structures, and hard-stop behavior.</Criterion>
+          <Criterion>Update vv-spec, vv-plan, vv-execute, and vv-review instructions to carry the same obligations through existing sections and all supported execution modes. Resolve source-answerable questions without burdening the user, never invent business semantics, never rewrite approved artifacts silently, and never equate textual concern disposition with a successful check.</Criterion>
+          <Criterion>Document only the new behavioral guidance and its limits in README, including ordinary sync/restart use and the fact that prompt-contract checks are not model evaluation. Do not change CLI behavior or claim runtime-enforced correctness.</Criterion>
+          <Criterion>Strengthen existing tests to check policy delivery, removed conflicting directives, meaningful role/skill contract slices, preserved exact top-block protocols, source-grounded fixture shapes, primary/profile isolation, and duplicate prevention. No new test infrastructure, model calls, or arbitrary test-count requirements.</Criterion>
+          <Criterion>Return concise evidence identifying relevant test commands and observed results, material limitations, and the exact edited files. Do not commit, alter durable projections, or edit the approved lifecycle package in this task.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/system-context-injection.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+          <Command>bun run grace:check</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Synchronize only the three owned durable graph and verification descriptions after the prompt package is accepted.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write scope is limited to .grace/graph/main.xml and .grace/verification/main.xml, and only the three declared module/verification anchors. Apply centrally under controller coordination after T-001 acceptance, through a bounded worker rather than concurrent projection writers.</Criterion>
+          <Criterion>Graph descriptions truthfully name the new prompt-level correctness, scope, and acceptance responsibilities without adding modules, changing dependencies, or claiming new runtime enforcement.</Criterion>
+          <Criterion>Verification descriptions cover the actual updated deterministic tests, preserved protocol/injection boundaries, and the explicit absence of live model evaluation. Keep existing applicable commands and update only required scenario/expected text.</Criterion>
+          <Criterion>Do not edit context artifacts, index ownership, unrelated anchors, archived bundles, or the approved spec/plan. Return exact changed anchors and fresh validation evidence.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Run the declared final review and fresh end-state gates, then complete the approved lifecycle and requested local commit.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>This is a controller-owned verification and acceptance task, not permission for direct source edits. Inspect every material changed instruction and its tests personally; any confirmed correction is delegated within the affected task's existing scope and retry policy.</Criterion>
+          <Criterion>At final checkpoint R-001, obtain spec and code review of the pinned combined T-001/T-002 result, with no later edits treated as covered by an earlier verdict. Verify obligations, evidence sufficiency, semantic consistency, unchanged runtime logic/protocols, and the absence of accidental broadening or new ceremony.</Criterion>
+          <Criterion>Run targeted tests and the complete check/build gates freshly. Run selected target/final GRACE validation externally with command evidence as required; all required reviewer and lifecycle gates must be satisfied before a completion claim.</Criterion>
+          <Criterion>After successful end-state verification, obtain the required explicit apply confirmation, then mark and archive the approved bundle without overwriting history. Do not treat transient execution progress as XML lifecycle changes.</Criterion>
+          <Criterion>Before the requested local commit, inspect git status, full intended diff, and git log --oneline -10; stage only the intended source, tests, documentation, and lifecycle artifacts. Match repository commit style, do not amend or push, and inspect post-commit status.</Criterion>
+          <Criterion>Report the commit identifier, scope delivered, fresh product-check evidence, and the deliberately unmeasured edge: real agent effectiveness during subsequent ordinary use. Do not report the prompt-only intervention as mechanical proof of correctness.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/system-context-injection.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>grace lint --path . --change C-CORRECTNESS-OBLIGATIONS-PROMPTS --assertions final --run-commands</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-003>
+    </ImplementationPlan>
+  </C-CORRECTNESS-OBLIGATIONS-PROMPTS>
+</GraceChangePlan>

@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection.test.ts
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify universal primary guidance and startup-selected concrete vv-controller orchestration policy injection.
-//   SCOPE: Per-profile controller context, primary isolation, explore guidance, known subagent exclusion, duplicate prevention, and startup snapshot stability.
+//   PURPOSE: Verify universal primary guidance, including correctness obligations, and startup-selected concrete vv-controller orchestration policy injection.
+//   SCOPE: Correctness-obligations delivery, per-profile controller context, primary isolation, explore guidance, known subagent exclusion, duplicate prevention, and startup snapshot stability.
 //   DEPENDS: [bun:test, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated to per-profile controller-policy isolation coverage.]
+//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added correctness_obligations delivery coverage: preserved properties, scope separation, diagnostic counterexample, and evidence-based acceptance wording.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -100,6 +100,7 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).toContain("<reroute_on_evidence>");
     expect(systemText).toContain("<semantic_continuity>");
     expect(systemText).toContain("<assumption_discipline>");
+    expect(systemText).toContain("<correctness_obligations>");
     expect(systemText).toContain("<anti_drift_budget>");
     expect(systemText).toContain("<project_overlays>");
     expect(systemText).toContain("<editing_workflow>");
@@ -112,6 +113,48 @@ describe("SystemContextInjectionPlugin", () => {
     expect(systemText).not.toContain("Use the full tracked implementation and review workflow");
     expect(systemText.replace(/\s+/g, " ")).toContain(
       "prefer the `edit` tool over shell-based rewrites when it is available.",
+    );
+  });
+
+  test("delivers correctness obligations with scope separation and evidence wording", async () => {
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const output = createOutput("build");
+
+    await plugin["chat.message"]?.(
+      {
+        sessionID: "session-1",
+        agent: undefined,
+      } as never,
+      output as never,
+    );
+
+    const normalized = (output.message.system ?? "").replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "For behavior changes, run a compact correctness cycle before reporting done",
+    );
+    expect(normalized).toContain(
+      "Separate write scope (what you may edit), impact scope (behavior that could change), and verification scope (what you actually check).",
+    );
+    expect(normalized).toContain(
+      "Investigating directly affected consumers to understand impact is required; broadening writes beyond the approved scope is not",
+    );
+    expect(normalized).toContain(
+      "challenge at least one material assumption with a diagnostic counterexample",
+    );
+    expect(normalized).toContain("Choose verification at the level where the risk arises");
+    expect(normalized).toContain(
+      "Derive test expectations from the contract and the request, not from the implementation's current output",
+    );
+    expect(normalized).toContain(
+      "ground mocks in the dependency's established contract rather than in whatever makes the change pass",
+    );
+    expect(normalized).toContain("The absence of a discovered defect is not proof of correctness");
+    expect(normalized).toContain(
+      "an unverified material condition is reported as remaining uncertainty, never presented as a passed check",
+    );
+    expect(normalized).toContain(
+      "Unrelated informational or trivial documentation work needs none of this ceremony",
     );
   });
 
@@ -147,6 +190,7 @@ describe("SystemContextInjectionPlugin", () => {
 
     expect(systemText).toContain("Existing system context.");
     expect(systemText.match(/<working_state>/g)).toHaveLength(1);
+    expect(systemText.match(/<correctness_obligations>/g)).toHaveLength(1);
     expect(systemText.match(/<repository_memory>/g)).toHaveLength(1);
     expect(systemText.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
   });
@@ -301,6 +345,7 @@ describe("SystemContextInjectionPlugin", () => {
       "Default output: a short summary plus a compact, prioritized list of relevant paths with why they matter and line references or anchors when useful.",
     );
     expect(systemText).not.toContain("<working_state>");
+    expect(systemText).not.toContain("<correctness_obligations>");
     expect(systemText).not.toContain("Work directly in the current session");
   });
 

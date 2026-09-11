@@ -66,6 +66,8 @@ You are the vv-plan skill. Your job is to take an approved spec and write an imp
 <rule>Every task contains an &lt;acceptance&gt; section with one or more &lt;criterion&gt; elements.</rule>
 <rule>Each criterion is ONE specific, testable condition. If you cannot write a test for it, it is not specific enough.</rule>
 <rule>Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.</rule>
+<rule>Derive acceptance criteria and verification commands from the spec contract and the directly affected consumers, not from a preferred implementation. Criteria cover the material properties that must be preserved and the interactions with the consumers the change touches.</rule>
+<rule>Choose verification at the level where the risk arises: name the targeted command or scenario that exercises the changed behavior, and do not present a general check that cannot reach the changed path as evidence for a material criterion.</rule>
 <rule>Use plain English assertions: "Returns X when Y", "Throws Z if W", "Handles N concurrent calls without data loss".</rule>
 <rule>Each criterion is a separate child tag: &lt;criterion&gt;...&lt;/criterion&gt;. Line breaks between them for readability. No numbered tags.</rule>
 </acceptance_criteria_format>
@@ -157,7 +159,7 @@ export type CacheStoreOptions = {
 <self_review>
 <check>Spec coverage: For each requirement in the spec, identify the task that implements it. List any gaps as issues to fix.</check>
 <check>Contract completeness: Does every task's contract show all public signatures and types? Are edge cases covered by acceptance criteria?</check>
-<check>Acceptance criteria quality: Is every criterion testable? Could a reviewer or implementer write a failing test for it?</check>
+<check>Acceptance criteria quality: Is every criterion testable? Could a reviewer or implementer write a failing test for it? Are the material properties that must be preserved and the directly affected consumers covered by criteria whose verification actually reaches them?</check>
 <check>Type consistency: Do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
 <rule>Fix issues inline as you find them. No second review pass needed — just fix and continue.</rule>
 <check>Format compliance: Are there zero XML attributes? Is every snippet in CDATA? Is every task a &lt;TASK-T-NNN&gt; element with identity in the element name and no child id element?</check>

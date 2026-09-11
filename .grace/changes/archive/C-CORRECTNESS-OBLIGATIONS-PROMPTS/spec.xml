@@ -1,0 +1,59 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-CORRECTNESS-OBLIGATIONS-PROMPTS>
+    <Summary>Strengthen prompt-level correctness obligations, impact investigation, verification selection, and evidence-based acceptance across existing managed agents and skills.</Summary>
+    <Problem>Existing instructions emphasize bounded edits, fresh checks, and workflow compliance but permit symptom-only verification, implementation-shaped test expectations, overly narrow investigation, and reviewer PASS verdicts with material verification gaps. The user approved a coordinated prompt-only intervention for ordinary use over approximately one to three weeks, without building an evaluation harness.</Problem>
+    <Goals>
+      <Goal>Have agents derive material preserved properties from the request and established contracts, distinguish write scope from impact and verification scope, and investigate directly affected consumers without broadening edits.</Goal>
+      <Goal>Choose diagnostic counterexamples and verification at the level where the risk arises, with expectations independent of the proposed implementation and mocks grounded in established dependency contracts.</Goal>
+      <Goal>Require controller acceptance and reviewer verdicts to distinguish no discovered defect from sufficient support for material correctness claims.</Goal>
+      <Goal>Carry these obligations through existing controller, implementer, reviewer, investigator, spec, plan, execute, and review instructions without imposing a new ceremony on small changes.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Change only instruction strings in src/plugins/system-context-injection/index.ts, the five approved agent templates, the four approved skill templates, their existing contract tests, README, and corresponding GRACE projections.</Constraint>
+      <Constraint>Keep instructions in English and preserve profile-neutral controller guidance, startup policy selection, subagent exclusion from universal injection, managed names, permissions, role assignment, result headers, allowed statuses, and existing approval and hard-stop boundaries.</Constraint>
+      <Constraint>Keep the runtime workflow, checkpoint scheduling, retry budgets, evidence representation, XML formats, configuration schemas, public exports, and installation mechanics unchanged.</Constraint>
+      <Constraint>Reuse existing task packets, acceptance and verification sections, result bodies, and review checkpoints; do not require separate correctness documents, fixed test quotas, exhaustive repository scans, or additional reviewer launches.</Constraint>
+      <Constraint>Derived engineering obligations must be grounded in authoritative sources; ambiguous business semantics or changes to approved scope require an explicit decision rather than silent expansion.</Constraint>
+      <Constraint>User-approved residual risk must not be represented as a successful check or used to bypass BLOCKED, NEEDS_CONTEXT, permissions, approved plans, or required checkpoints.</Constraint>
+      <Constraint>Preserve file-local contracts, maps, semantic anchors, and change summaries; update durable graph and verification descriptions only for the affected prompt contracts.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No eval harness, live model benchmark, A/B infrastructure, mandatory observation journal, new agent, new skill, or standalone risk-profile library.</NonGoal>
+      <NonGoal>No typed execution records, new workflow tools or statuses, persistence migration, runtime enforcement changes, or unrelated checkpoint defect fix.</NonGoal>
+      <NonGoal>No changes to user-owned AGENTS.md, externally installed skills, active runtime configuration, model presets, or global installations.</NonGoal>
+      <NonGoal>No guarantee that agents will follow the instructions or that fewer defects will be missed; ordinary product contract tests are not evidence of model-quality improvement.</NonGoal>
+      <NonGoal>No release, version bump, publishing, or push; the user requested a local commit after implementation and verification.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>Universal primary guidance applies a compact correctness cycle to behavior changes: target effect, preserved properties, affected consumers, a diagnostic challenge to a material assumption, suitable verification, observed result, and remaining uncertainty. It distinguishes write, impact, and verification scope and does not require this ceremony for unrelated informational or trivial documentation work.</Criterion>
+      <Criterion>The controller derives engineering obligations, supplies material dependencies and diagnostic scenarios when handing off work, challenges incomplete task framing, and ties substantive completion claims to relevant observed evidence rather than DONE, green general checks, or reviewer agreement alone.</Criterion>
+      <Criterion>The implementer no longer receives an ambiguous prohibition on necessary impact investigation. It preserves bounded writes, uses contract-derived expectations and realistic mocks, checks relevant neighboring variants of a confirmed defect when practical, and does not hide an unverified condition of the fix behind DONE_WITH_CONCERNS.</Criterion>
+      <Criterion>The code reviewer independently reconstructs expected properties and examines affected consumers. PASS requires no blocking findings and sufficient evidence for material claims in reviewed scope; FAIL covers a concrete defect or a material verification gap; NEEDS_CONTEXT covers missing context that prevents safe judgment. A verification finding identifies the property, its relevance, the evidence limitation, and the smallest useful check.</Criterion>
+      <Criterion>The spec reviewer distinguishes compliance from evidential support, does not PASS a material Unproven condition, surfaces necessary correctness conditions omitted from the specification without inventing business requirements, and preserves its distinct compliance-focused role.</Criterion>
+      <Criterion>The investigator reports the violated property, supporting diagnostic scenario, and directly affected variants or consumers alongside the root cause, using the existing result structure and without mandating an investigation dispatch.</Criterion>
+      <Criterion>vv-spec, vv-plan, vv-execute, and vv-review preserve correctness obligations and evidence limitations across their existing stages. Repository-answerable engineering questions are not offloaded to the user; plan acceptance and checkpoint scope account for relevant interactions; all execution modes use evidence sufficiency; review summaries do not turn no findings into an unsupported completion claim.</Criterion>
+      <Criterion>Existing contradictory directions are replaced or qualified rather than left beside the new rules. Runtime headers, status enums, hard stops, approved artifact boundaries, scope restrictions, and profile isolation remain intact.</Criterion>
+      <Criterion>Existing managed-agent, managed-skill, and system-context tests assert delivery and coherent instruction contracts, absence of superseded directions, and preserved protocol and injection boundaries. Tests make no claim to execute or evaluate agents.</Criterion>
+      <Criterion>README and the three owning graph and verification entries describe the prompt-level guidance and its limits accurately. README retains the existing update/sync and restart model without claiming mechanical correctness enforcement.</Criterion>
+      <Criterion>Targeted contract tests, bun run check, bun run build, and the required GRACE lifecycle checks pass with fresh evidence before completion and the requested local commit.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-CLI-MANAGED-AGENTS />
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/system-context-injection.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Controller inspection and a bounded final spec/code review establish consistency with the approved prompt-only contract. Deterministic tests establish instruction delivery and retained compatibility, not behavioral effectiveness. No source edits occur outside the approved observed scope.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user's explicit approval of the preceding file-by-file proposal authorizes this design and the final local commit; the implementation plan remains a separate lifecycle artifact.</Assumption>
+      <Assumption>Behavioral effectiveness will remain unmeasured by this change. The user intends ordinary use over approximately one to three weeks and is not required to collect structured observations.</Assumption>
+      <Assumption>The system-context change is text-only: existing plugin hooks, filters, configuration reads, and orchestration policies do not need modification.</Assumption>
+    </Assumptions>
+  </C-CORRECTNESS-OBLIGATIONS-PROMPTS>
+</GraceChangeSpec>

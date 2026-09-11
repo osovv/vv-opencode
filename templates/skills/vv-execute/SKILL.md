@@ -162,7 +162,7 @@ Do not mutate files until the execution mode is explicit. In classic mode, deleg
 </pre-execution>
 
 <classic-workflow>
-<principle>Use this workflow only when execution mode is classic. Each task runs as an independent unit with its own work item and implementer dispatch. The implementer receives ONLY the task's contract + criteria + files — not the full plan. This keeps context lean and focused.</principle>
+<principle>Use this workflow only when execution mode is classic. Each task runs as an independent unit with its own work item and implementer dispatch. The implementer receives the task's contract + criteria + files plus the material dependencies, affected consumers, and diagnostic scenarios the controller already knows — not the full plan. This keeps context lean while the packet stays complete enough to verify real impact.</principle>
 
 <step name="extract">
 Use extract-task to pull the full task content. Collect:
@@ -180,6 +180,7 @@ Build the vv-implementer assignment. The packet must contain:
   &lt;goal&gt;Implement &lt;component&gt; per spec and plan&lt;/goal&gt;
   &lt;contract&gt;...task's code snippet...&lt;/contract&gt;
   &lt;acceptance&gt;...task's criteria...&lt;/acceptance&gt;
+  &lt;dependencies&gt;...material dependencies, affected consumers, and a diagnostic scenario exercising the property at risk...&lt;/dependencies&gt;
   &lt;verification&gt;Run the tests, verify all criteria pass&lt;/verification&gt;
 &lt;/assignment&gt;
 </format>
@@ -213,6 +214,7 @@ The implementer writes code, runs tests, and returns a status. This controller v
 Run the acceptance criteria. For each criterion:
 - Can you point to a test that proves it?
 - Does the test pass?
+- Does the check actually exercise the changed behavior at the level the risk arises, or is it a green general check that cannot reach the changed path?
 - Did the implementer miss any edge cases?
 
 If all criteria pass → proceed to review.
@@ -268,14 +270,14 @@ Register the approved plan exactly once with work_checkpoint (action register) u
 </step>
 
 <step name="dispatch-task">
-For the next dependency-ready task, dispatch one bounded vv-implementer packet using the task's registered work item: VVOC_WORK_ITEM_ID header, the task's contract-level snippet, acceptance criteria, declared write scope, and verification commands. One active implementation worker is the default. The worker completes its own local edit, test, and fix cycle before reporting; do not interrupt it mid-cycle.
+For the next dependency-ready task, dispatch one bounded vv-implementer packet using the task's registered work item: VVOC_WORK_ITEM_ID header, the task's contract-level snippet, acceptance criteria, declared write scope, verification commands, and the material dependencies and diagnostic scenario the controller knows. One active implementation worker is the default. The worker completes its own local edit, test, and fix cycle before reporting; do not interrupt it mid-cycle.
 </step>
 
 <step name="decide-acceptance">
 A DONE worker result parks the item in awaiting_acceptance. It is not accepted and cannot close by itself. Inspect the material changed code and evidence yourself, then call work_item_decide:
-- accept with rationale and evidence references when the result matches the task contract.
+- accept with rationale and evidence references when the result matches the task contract and the evidence actually exercises the task's material claims.
 - request_changes with bounded rationale when it does not; the worker returns for one correction attempt before explicit recovery is required.
-DONE_WITH_CONCERNS requires an explicit concernsDisposition — never auto-accept it. Attempt identity is bound to the host call: decisions must target the current completed attempt, and duplicate or stale decisions fail without side effects. The two-attempt budget (initial plus one correction) never resets on retries or re-decisions; only a failed checkpoint's explicit rework authorization grants exactly one more attempt.
+Acceptance requires evidence sufficiency: a DONE report plus green general checks that never reach the changed behavior is not acceptance. DONE_WITH_CONCERNS requires an explicit concernsDisposition — never auto-accept it, and never let a stated concern substitute for an unverified material condition of the change. Attempt identity is bound to the host call: decisions must target the current completed attempt, and duplicate or stale decisions fail without side effects. The two-attempt budget (initial plus one correction) never resets on retries or re-decisions; only a failed checkpoint's explicit rework authorization grants exactly one more attempt.
 </step>
 
 <step name="hard-stops">
@@ -323,6 +325,7 @@ Apply the smallest correct change that satisfies the task contract and acceptanc
 Run the acceptance criteria for the task or wave. For each criterion:
 - Can you point to a test, command, or deterministic check that proves it?
 - Does the check pass?
+- Does the check actually exercise the changed behavior at the level the risk arises, or is it a green general check that cannot reach the changed path?
 - Did the inline implementation miss any edge cases?
 
 If criteria fail with a clear local cause, fix and rerun verification.

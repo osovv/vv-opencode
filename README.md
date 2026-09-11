@@ -169,7 +169,7 @@ grep '<COMPONENT-' .vvoc/specs/*/*.xml      # component map across spec and plan
 | **ModelRolesPlugin** | Semantic model roles (`vv-role:smart`, `vv-role:fast`, …) instead of hardcoded model IDs in agents, subagents, and commands — resolved per machine or project at startup. |
 | **GuardianPlugin** | Keeps long or AFK runs moving by auto-approving routine low-risk permission requests; anything risky stays in OpenCode's normal manual approval flow. |
 | **HashlineEditPlugin** | Routes each model to exactly one native edit tool (host `edit` for GLM/Qwen/Kimi, host `apply_patch` for GPT, `str_replace_editor` for DeepSeek, `hashline_edit` for unmatched models) and hides the other edit tools per session. |
-| **SystemContextInjectionPlugin** | Injects the work policy selected by the orchestration profile into vv-controller at startup, plus skill discovery; subagents stay unpolluted. |
+| **SystemContextInjectionPlugin** | Injects universal guidance — including correctness obligations for behavior changes — plus the work policy selected by the orchestration profile into vv-controller at startup, and registers skill discovery; subagents stay unpolluted. |
 | **SecretsRedactionPlugin** | Redacts tokens, keys, emails, and other sensitive values before messages reach the model, restoring them only where local execution needs the originals. |
 | **WebToolsPlugin** | Two provider-neutral tools — `web_search` and `web_fetch` — over Exa, Brave, Z.AI, native retrieval, or Spider, with permission checks and normalized output. |
 | **ToolHistoryCompactionPlugin** | Shrinks the context replayed to the model by compacting old tool outputs non-destructively, without touching on-disk history. |
@@ -191,6 +191,8 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 | `vv-code-reviewer` | Looks for bugs, regressions, maintainability risks, and missing tests |
 | `investigator` | Finds the root cause first when behavior is unclear or a failure needs diagnosis |
 | `guardian` | Supports GuardianPlugin by reviewing permission requests and auto-approving only routine low-risk ones |
+
+Managed prompts and the universal guidance injected into primary sessions carry explicit correctness obligations. For behavior changes, agents derive the material properties that must be preserved from the request and established contracts, separate write scope from impact and verification scope, investigate directly affected consumers, challenge a material assumption with a diagnostic counterexample, and choose verification at the level the risk arises. Controllers tie completion claims to observed evidence rather than status markers; reviewers distinguish no discovered defect from sufficient support for a material claim and can fail a change for a material verification gap. These obligations are prompt-level guidance only: `vvoc install` / `vvoc sync` deliver the current wording, changes take effect after an OpenCode restart like all vvoc config changes, and the bundled contract tests check instruction delivery and wording — they do not evaluate or guarantee how a real model behaves.
 
 ### Managed skills
 

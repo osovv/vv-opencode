@@ -23,6 +23,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <principle>Before asking the user, check whether the question can be answered by exploring the codebase. If the answer exists in existing code, patterns, configs, or docs, explore first and present what you found. Only ask the user when the codebase cannot answer.</principle>
 <principle>Resolve dependencies in order. Start with the highest-impact decision (purpose, scope, data model) and work outward (API shape, error handling, testing). A decision about the data model must be settled before deciding the API surface.</principle>
 <principle>Understand the full landscape: purpose, constraints, success criteria, non-goals, edge cases, existing code patterns.</principle>
+<principle>While walking components and data flow, capture the material properties that must be preserved — existing behavior, contracts, and consumers the change must not break — so testing and error handling can demand their verification instead of covering only the new happy path.</principle>
 <principle>When the decision tree reaches a fork (2-3 viable approaches), present all options with trade-offs. Lead with your recommendation and explain why. The user picks one — that closes the fork and the tree continues from that branch.</principle>
 <principle>When presenting design sections, do it one section at a time. After each section: "Does this look right?" If yes, move to the next. If no, resolve concerns before continuing.</principle>
 <principle>Cover every section of the spec template: goal, architecture, tech_stack, components, data_flow, error_handling, testing, non_goals. The roadmap shown at the start IS the coverage checklist. A section is "closed" only when its template element is fully decidable.</principle>
@@ -82,7 +83,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <check>Placeholder scan: Any TBD, TODO, incomplete sections, or vague requirements? Fix them.</check>
 <check>Internal consistency: Do any sections contradict each other? Does the architecture match the component descriptions?</check>
 <check>Scope check: Is this focused enough for a single implementation plan, or does it need decomposition into sub-projects?</check>
-<check>Ambiguity check: Could any requirement be interpreted two different ways? If so, pick one interpretation and make it explicit.</check>
+<check>Ambiguity check: Could any requirement be interpreted two different ways? Resolve repository-answerable engineering ambiguity from the established code and contracts; a genuine business-semantics fork goes to the user as an explicit question — never silently pick a business interpretation.</check>
 <rule>Fix issues inline. No need to re-review — just fix and move on.</rule>
 </self_review>
 

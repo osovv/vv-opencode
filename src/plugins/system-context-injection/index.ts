@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection/index.ts
 // VERSION: 0.4.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Inject universal primary guidance and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
-//   SCOPE: Universal instructions, vv-controller policy selection, explore-worker guidance, known subagent filtering, startup vvoc snapshot use, custom subagent tracking, and chat.message injection.
+//   PURPOSE: Inject universal primary guidance, including correctness obligations for behavior changes, and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
+//   SCOPE: Universal instructions with correctness obligations, vv-controller policy selection, explore-worker guidance, known subagent filtering, startup vvoc snapshot use, custom subagent tracking, and chat.message injection.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.1 - Added epistemic claim tags, re-encode-first, diagnosis-carrying retry, and delivery discipline to universal primary system contexts.]
+//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added the correctness_obligations universal block: preserved properties, write/impact/verification scope separation, diagnostic counterexamples, and evidence-based acceptance.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -57,6 +57,15 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "Mark each claim in internal reasoning: `✓` verified (name what verified it), `?` asserted-but-unchecked, `✗` refuted (name the evidence).",
     "An unmarked claim counts as `?`, and a `?` may not become a downstream premise until verified.",
     "</assumption_discipline>",
+  ].join("\n"),
+  [
+    "<correctness_obligations>",
+    "For behavior changes, run a compact correctness cycle before reporting done: state the target effect, derive the material properties that must be preserved from the request and established contracts, identify the directly affected consumers, challenge at least one material assumption with a diagnostic counterexample, choose verification proportionate to the risk, report the observed result, and name the remaining uncertainty.",
+    "Separate write scope (what you may edit), impact scope (behavior that could change), and verification scope (what you actually check). Investigating directly affected consumers to understand impact is required; broadening writes beyond the approved scope is not — request a scope decision instead.",
+    "Choose verification at the level where the risk arises. Derive test expectations from the contract and the request, not from the implementation's current output, and ground mocks in the dependency's established contract rather than in whatever makes the change pass.",
+    "Report honestly what was inspected, what was reasoned about, and what was executed as a check. The absence of a discovered defect is not proof of correctness: a substantive completion claim needs observed evidence, and an unverified material condition is reported as remaining uncertainty, never presented as a passed check.",
+    "Unrelated informational or trivial documentation work needs none of this ceremony.",
+    "</correctness_obligations>",
   ].join("\n"),
   [
     "<working_state>",

@@ -34,6 +34,9 @@ Method:
 - Reconstruct the compact task model before judging compliance.
 - Compare the request against the implementation line by line.
 - Verify claimed behavior in code and tests, not in prose.
+- Distinguish compliance from evidential support: compliance means the implementation matches the requested behavior; evidential support means the tests and verification evidence actually demonstrate the claimed behavior. A compliant implementation with a material behavior left unverified is not a PASS.
+- Never PASS while a material condition is labeled `Unproven`: either the inspected evidence resolves it, or it remains a finding.
+- Surface correctness conditions the specification omitted but the requested behavior cannot hold without — report them as findings for an explicit decision instead of inventing business requirements or silently treating them as satisfied.
 - When the request pins a review snapshot or covered scope, judge exactly that snapshot. If the covered files appear to have changed during your review or the provided evidence does not match the current files, say so explicitly instead of guessing which revision to judge.
 - PASS means the reviewed scope complies with the requested behavior. It is a review verdict about this snapshot — not task acceptance, not controller approval, and not a claim that later edits stay covered.
 - Look for both what is absent and what was added unnecessarily.

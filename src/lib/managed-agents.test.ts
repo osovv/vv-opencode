@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.test.ts
 // VERSION: 0.5.3
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify vvoc-managed agent prompt template loading and scoped runtime lookup.
-//   SCOPE: Bundled template reads, profile-neutral controller invariants, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
+//   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
+//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership, bounded implementer impact investigation, evidence-based reviewer verdicts, investigator property reporting, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.3 - Added coverage for lightweight XML-like assignment packet tags and header-first reviewer-finding containers in workflow-managed prompts.]
+//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added correctness-leadership, bounded impact investigation, material verification gap, evidential support, and violated-property coverage; superseded search-boundary and unconditional no-findings PASS directions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -96,6 +96,22 @@ describe("managed agent prompts", () => {
     }
   });
 
+  test("vv-controller template carries profile-neutral correctness leadership", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const normalized = template.replace(/\s+/g, " ");
+
+    expect(template).toContain("<correctness_leadership>");
+    expect(normalized).toContain("Treat correctness obligations as yours to enforce");
+    expect(normalized).toContain("Challenge incomplete task framing before handing work off");
+    expect(normalized).toContain("material dependencies and at least one diagnostic scenario");
+    expect(normalized).toContain(
+      "distinguish no discovered defect from sufficient support for a material claim",
+    );
+    expect(normalized).toContain(
+      "Tie substantive completion claims to observed evidence that actually exercises the changed behavior",
+    );
+  });
+
   test("loads bundled vv-implementer template with strict top-block protocol", async () => {
     const template = await loadManagedAgentPromptTemplate("vv-implementer");
     expect(template).toStartWith("---\n");
@@ -112,11 +128,37 @@ describe("managed agent prompts", () => {
     expect(template).toContain("Prefer semantically meaningful identifiers");
     expect(template).toContain("Do not make silent material assumptions");
     expect(template).toContain("start from the provided file paths, line refs, symbols or scopes");
-    expect(template).toContain(
-      "Widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence",
-    );
     expect(template).toContain("Treat a normalized finding packet as the starting map");
     expect(template).toContain("reviewer feedback becomes conflicting, ambiguous, or repetitive");
+  });
+
+  test("vv-implementer template permits bounded impact investigation inside bounded writes", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-implementer");
+    const normalized = template.replace(/\s+/g, " ");
+
+    expect(template).not.toContain("Hyperfocus on the assigned scope.");
+    expect(template).not.toContain(
+      "Widen search only when the packet is incomplete, inconsistent, or contradicted by fresh evidence",
+    );
+    expect(normalized).toContain("Keep writes within the assigned scope");
+    expect(normalized).toContain(
+      "Investigating directly affected consumers — callers, variants, and contracts your change touches — is part of the task, not a scope violation",
+    );
+    expect(normalized).toContain("Bound investigation to impact, not to the packet");
+    expect(normalized).toContain(
+      "checking relevant neighboring variants of a confirmed defect when practical",
+    );
+    expect(normalized).toContain(
+      "If the required fix crosses the assigned write scope, stop and report instead of widening writes",
+    );
+    expect(normalized).toContain(
+      "Derive test expectations from the task contract, the request, and established behavior — never from your implementation's current output",
+    );
+    expect(normalized).toContain("Ground mocks in the dependency's established contract");
+    expect(normalized).toContain(
+      "Never use DONE_WITH_CONCERNS to hide an unverified condition of your fix",
+    );
+    expect(normalized).toContain("the smallest check that would verify it");
   });
 
   test("vv-implementer template carries the delegated worker contract", async () => {
@@ -179,14 +221,69 @@ describe("managed agent prompts", () => {
     expect(codeTemplate).toContain("If a concern lacks a concrete failure mode");
   });
 
+  test("code reviewer template binds verdicts to evidence and material verification gaps", async () => {
+    const codeTemplate = await loadManagedAgentPromptTemplate("vv-code-reviewer");
+    const normalized = codeTemplate.replace(/\s+/g, " ");
+
+    expect(codeTemplate).not.toContain("If no issues are found, keep `VVOC_STATUS: PASS`");
+    expect(normalized).toContain(
+      "Reconstruct the expected properties independently from the request, contracts, and surrounding code",
+    );
+    expect(normalized).toContain(
+      "Examine the consumers the change touches within the reviewed scope",
+    );
+    expect(normalized).toContain(
+      "PASS requires no blocking findings and sufficient evidence for the material correctness claims in the reviewed scope",
+    );
+    expect(normalized).toContain("FAIL covers a concrete defect or a material verification gap");
+    expect(normalized).toContain("no discovered defect is not proof of correctness");
+    expect(normalized).toContain(
+      "When context you need for a safe verdict is missing, use `VVOC_STATUS: NEEDS_CONTEXT` and state exactly what is missing",
+    );
+    expect(normalized).toContain(
+      "a material verification gap is not a residual risk — report it as a Verification finding",
+    );
+    expect(normalized).toContain(
+      "identifies the property at stake, why it is relevant, the evidence limitation, and the smallest useful check that would close it",
+    );
+    expect(normalized).toContain(
+      "do not demand unspecified missing tests or require a duplicate full-suite run to state one",
+    );
+  });
+
+  test("spec reviewer template separates compliance from evidential support", async () => {
+    const specTemplate = await loadManagedAgentPromptTemplate("vv-spec-reviewer");
+    const normalized = specTemplate.replace(/\s+/g, " ");
+
+    expect(normalized).toContain("Distinguish compliance from evidential support");
+    expect(normalized).toContain(
+      "A compliant implementation with a material behavior left unverified is not a PASS",
+    );
+    expect(normalized).toContain("Never PASS while a material condition is labeled `Unproven`");
+    expect(normalized).toContain(
+      "correctness conditions the specification omitted but the requested behavior cannot hold without",
+    );
+    expect(normalized).toContain(
+      "report them as findings for an explicit decision instead of inventing business requirements",
+    );
+  });
+
   test("loads bundled investigator template with investigation status protocol", async () => {
     const template = await loadManagedAgentPromptTemplate("investigator");
+    const normalized = template.replace(/\s+/g, " ");
+
     expect(template).toContain("Status: REPRODUCED | PARTIAL | NOT_REPRODUCED | NEEDS_CONTEXT");
     expect(template).toContain("Recommended route:");
     expect(template).toContain("project-owned overlays");
     expect(template).toContain("Assumptions / missing evidence:");
     expect(template).toContain("Likely root cause:");
     expect(template).toContain("Next best step:");
+    expect(normalized).toContain("Name the violated property explicitly");
+    expect(normalized).toContain("Anchor the root cause in a supporting diagnostic scenario");
+    expect(normalized).toContain(
+      "report directly affected variants or consumers where the same root cause plausibly produces the same violation",
+    );
+    expect(normalized).toContain("Deliver these through the existing result structure");
   });
 
   test("prefers project managed prompt over global prompt", async () => {

@@ -32,6 +32,9 @@ Rules:
 - Reuse stable repository vocabulary. If the repository already has a canonical term, keep it.
 - If the task context or repository provides project-owned overlays such as architecture notes, boundaries, preferred patterns, verification commands, or examples, treat them as investigation constraints.
 - If a test fails, explain why it fails before considering code changes.
+- Name the violated property explicitly: which expected behavior or established contract was broken, not just the symptom.
+- Anchor the root cause in a supporting diagnostic scenario — the reproduction or experiment that demonstrates the violation — and report directly affected variants or consumers where the same root cause plausibly produces the same violation.
+- Deliver these through the existing result structure: the violated property in `Observed`, the diagnostic scenario in `Strongest evidence`, and the affected variants or consumers alongside `Likely root cause`.
 - If you cannot reproduce the issue, say so clearly and report what evidence is missing.
 - Do not make silent material assumptions about environment, data shape, expected behavior, or verification.
 - If new evidence changes the safest route, say so explicitly.
