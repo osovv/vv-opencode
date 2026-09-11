@@ -1,3 +1,11 @@
+## 1.4.0 (2026-09-11)
+
+### Summary
+
+Version 1.4.0 introduces a delegated execution workflow alongside two new Astra presets, making it possible to run ordinary implementation work with fewer slow independent-review barriers without weakening acceptance or auditability. A new delegated orchestration profile keeps architecture, important code reading, task contracts, explicit acceptance, and final synthesis in the primary controller session while workers own implementation, tests, formatting, and reviewer-requested fixes through bounded task packets. Delegated work items now carry declared write scopes, host-callID-bound attempts, a two-attempt budget, and explicit accept, request_changes, or checkpoint-authorized rework decisions, so a worker returning DONE parks its item in awaiting_acceptance instead of closing or self-accepting it, while BLOCKED and NEEDS_CONTEXT remain hard stops. Independent review moves to declared plan checkpoints: work_checkpoint register loads and lints an approved plan and its linked spec with content-hash binding, start captures a fresh scope fingerprint and opens exactly the declared reviewer set, and verify derives passed, failed, stale, or stopped outcomes from recorded results and recomputed hashes, with wave barriers, overlapping-write exclusions, and final sealing via complete: true. Spec linting gains delegated execution and review-checkpoint validation (LINT_VERSION 2), workflow state persists as version 2 with conservative version 1 hydration and atomic writes, and the vv-astra-solo and vv-astra-workers presets plus codex Astra max, Spark medium, DeepSeek Flash high, and zai GLM-5.3 high provider aliases make explicit-reasoning setups directly applicable. Documentation, managed skills, and reviewer guidance were updated so the inline, classic, and delegated vocabulary stays consistent, and a deterministic twenty-task scenario with two milestone checkpoints plus a final spec/code checkpoint requires exactly four initial reviewer launches rather than forty.
+
+* feat(workflow): add delegated execution, review checkpoints, and astra presets ([709d41b](https://github.com/osovv/vv-opencode/commit/709d41b))
+
 ## <small>1.3.8 (2026-09-09)</small>
 
 ### Summary
