@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Delegated work-item attempt ledger and explicit controller acceptance decisions with a checkpoint-authorized rework path.
-//   SCOPE: Delegated attempt allocation bound to host callIDs, call-bound result application, bounded controller decisions (accept / request_changes with rationale, evidence, and concerns disposition), acceptance history with rework revocation, and the two-attempt budget extended only by authorized rework. Pure domain transitions over WorkItemStoreData; no tool, session, or filesystem authorization here.
+//   SCOPE: Delegated attempt allocation bound to host callIDs with per-session callID uniqueness, call-bound result application, call-bound host-terminal launch failure recorded as a distinct failed attempt (bounded evidence, no budget refund, no state advance), bounded controller decisions (accept / request_changes with rationale, evidence, and concerns disposition), acceptance history with rework revocation, and the two-attempt budget extended only by authorized rework. Pure domain transitions over WorkItemStoreData; no tool, session, or filesystem authorization here.
 //   DEPENDS: [src/plugins/workflow/protocol.ts (types), src/plugins/workflow/state.ts (types and shared helpers), src/plugins/workflow/transitions.ts]
 //   LINKS: [M-WORKFLOW-DELEGATED, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-CHECKPOINTS, V-M-WORKFLOW-DELEGATED]
 //   ROLE: RUNTIME
@@ -15,8 +15,8 @@
 //   DELEGATED_EVIDENCE_MAX_CHARS - Maximum accepted single evidence-reference length.
 //   DELEGATED_EVIDENCE_MAX_REFS - Maximum accepted evidence-reference count.
 //   DelegatedImplementerStatus - Implementer result statuses recordable on an attempt.
-//   DelegatedAttemptStatus - Attempt lifecycle statuses (in_flight, completed).
 //   DelegatedAttempt - One host-callID-bound implementation attempt.
+//   DelegatedAttemptStatus - Attempt lifecycle statuses (in_flight, completed, failed).
 //   DelegatedDecisionRecord - One recorded controller decision bound to an attempt.
 //   DelegatedAcceptanceRecord - One acceptance with optional later revocation.
 //   DelegatedReworkRecord - One checkpoint-authorized rework event.
@@ -40,6 +40,10 @@
 //   revertInFlightDelegatedLaunches - Reclaim attempts orphaned by a process restart boundary.
 //   applyDelegatedResult - Apply one implementer result to its matching in-flight attempt.
 //   applyDelegatedResultInStore - Store-level delegated result application.
+//   ApplyDelegatedLaunchFailureInput - Call-bound host-terminal launch-failure payload.
+//   ApplyDelegatedLaunchFailureResult - Host-terminal launch-failure outcome.
+//   applyDelegatedLaunchFailure - Record a confirmed host-terminal launch failure on its matching in-flight attempt.
+//   applyDelegatedLaunchFailureInStore - Store-level failed-attempt transition.
 //   decideDelegatedWorkItem - Record an explicit controller accept/request_changes decision.
 //   decideDelegatedWorkItemInStore - Store-level controller decision.
 //   reworkDelegatedWorkItem - Reopen an accepted item under validated checkpoint-failure authorization.
@@ -47,7 +51,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial module: callID-bound attempts, two-attempt budget, explicit acceptance decisions, and guarded rework.]
+//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Record confirmed host-terminal launch failures as distinct failed attempts, enforce per-session callID uniqueness across items, and keep failed attempts out of acceptance decisions.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -73,7 +77,7 @@ export type DelegatedImplementerStatus =
   | "NEEDS_CONTEXT"
   | "BLOCKED";
 
-export type DelegatedAttemptStatus = "in_flight" | "completed";
+export type DelegatedAttemptStatus = "in_flight" | "completed" | "failed";
 
 export interface DelegatedAttempt {
   attempt: number;
@@ -82,6 +86,8 @@ export interface DelegatedAttempt {
   status: DelegatedAttemptStatus;
   resultStatus?: DelegatedImplementerStatus;
   resultExcerpt?: WorkflowResultExcerpt;
+  /** Bounded host wrapper error for a confirmed host-terminal launch failure. */
+  failureExcerpt?: WorkflowResultExcerpt;
   completedAt?: string;
 }
 
@@ -243,7 +249,8 @@ export type BeginDelegatedLaunchResult =
         | "WRONG_MODE"
         | "INVALID_STATE"
         | "ATTEMPT_IN_FLIGHT"
-        | "ATTEMPTS_EXHAUSTED";
+        | "ATTEMPTS_EXHAUSTED"
+        | "CALL_ID_REUSED";
       message: string;
     };
 
@@ -259,6 +266,37 @@ function findRecord(
   workItemId: string,
 ): WorkItemRecord | undefined {
   return store.records.get(createRecordLookupKey(sessionId, workItemId));
+}
+
+type DelegatedCallIdBinding =
+  | { kind: "none" }
+  | { kind: "unique"; record: WorkItemRecord; attempt: DelegatedAttempt; lookupKey: string }
+  | { kind: "ambiguous" };
+
+/**
+ * Resolve the single delegated attempt that owns one host callID within a
+ * parent session. Ambiguous pre-existing histories fail closed instead of
+ * selecting one so an old event can never affect a newer attempt.
+ */
+function findDelegatedCallIdBinding(
+  store: WorkItemStoreData,
+  sessionId: string,
+  callId: string,
+): DelegatedCallIdBinding {
+  const matches: Array<{ record: WorkItemRecord; attempt: DelegatedAttempt; lookupKey: string }> =
+    [];
+  for (const [lookupKey, record] of store.records) {
+    if (record.sessionId !== sessionId || record.mode !== "delegated" || !record.delegated)
+      continue;
+    for (const attempt of record.delegated.attempts) {
+      if (attempt.callId === callId) {
+        matches.push({ record, attempt, lookupKey });
+      }
+    }
+  }
+  if (matches.length === 0) return { kind: "none" };
+  if (matches.length > 1) return { kind: "ambiguous" };
+  return { kind: "unique", ...matches[0]! };
 }
 
 // START_CONTRACT: beginDelegatedLaunch
@@ -327,6 +365,18 @@ export function beginDelegatedLaunchInStore(
       ok: false,
       errorCode: "ATTEMPTS_EXHAUSTED",
       message: `ATTEMPTS_EXHAUSTED: ${input.workItemId} consumed ${delegated.attempts.length} of ${delegatedAttemptBudget(delegated)} allowed attempts; explicit recovery or checkpoint-authorized rework is required`,
+    };
+  }
+
+  // A host callID is a single-shot identity within a parent session. Reusing it
+  // for a new attempt — in this item or any other — would let a delayed event
+  // from the old call affect the new attempt, so fail closed instead.
+  const callIdBinding = findDelegatedCallIdBinding(store, input.sessionId, callId);
+  if (callIdBinding.kind !== "none") {
+    return {
+      ok: false,
+      errorCode: "CALL_ID_REUSED",
+      message: `CALL_ID_REUSED: callID ${callId} is already bound to a delegated attempt in session ${input.sessionId}`,
     };
   }
 
@@ -479,6 +529,155 @@ export function applyDelegatedResultInStore(
     toState: nextState,
     attempt: inFlight.attempt,
     resultStatus: input.resultStatus,
+  };
+}
+
+export type ApplyDelegatedLaunchFailureResult =
+  | {
+      ok: true;
+      record: WorkItemRecord;
+      fromState: WorkItemState;
+      toState: WorkItemState;
+      attempt: number;
+      consumedAttempts: number;
+      attemptBudget: number;
+      retryAllowed: boolean;
+    }
+  | {
+      ok: false;
+      errorCode:
+        | "WORK_ITEM_NOT_FOUND"
+        | "WORK_ITEM_ALREADY_CLOSED"
+        | "WRONG_MODE"
+        | "INVALID_STATE"
+        | "AMBIGUOUS_CALL_ID"
+        | "STALE_CALLBACK";
+      message: string;
+    };
+
+export interface ApplyDelegatedLaunchFailureInput {
+  sessionId: string;
+  workItemId: string;
+  callId: string;
+  failureExcerpt: WorkflowResultExcerpt;
+}
+
+// START_CONTRACT: applyDelegatedLaunchFailure
+//   PURPOSE: Record a confirmed host-terminal launch failure on its matching in-flight attempt without advancing the item lifecycle.
+//   INPUTS: { store: WorkItemStore - backing store, input: ApplyDelegatedLaunchFailureInput - call-bound host wrapper error evidence }
+//   OUTPUTS: { ApplyDelegatedLaunchFailureResult - failed attempt with remaining budget or a coded rejection }
+//   SIDE_EFFECTS: [Marks the matching in-flight attempt failed and consumes one attempt from the existing budget]
+//   LINKS: [M-WORKFLOW-DELEGATED, M-WORKFLOW-STATE]
+// END_CONTRACT: applyDelegatedLaunchFailure
+export function applyDelegatedLaunchFailure(
+  store: WorkItemStore,
+  input: ApplyDelegatedLaunchFailureInput,
+): ApplyDelegatedLaunchFailureResult {
+  return applyDelegatedLaunchFailureInStore(store.getStoreData(), input);
+}
+
+export function applyDelegatedLaunchFailureInStore(
+  store: WorkItemStoreData,
+  input: ApplyDelegatedLaunchFailureInput,
+): ApplyDelegatedLaunchFailureResult {
+  const existing = findRecord(store, input.sessionId, input.workItemId);
+  if (!existing) {
+    return {
+      ok: false,
+      errorCode: "WORK_ITEM_NOT_FOUND",
+      message: `WORK_ITEM_NOT_FOUND: no work item ${input.workItemId} for session ${input.sessionId}`,
+    };
+  }
+  if (existing.state === "closed") {
+    return {
+      ok: false,
+      errorCode: "WORK_ITEM_ALREADY_CLOSED",
+      message: `WORK_ITEM_ALREADY_CLOSED: ${input.workItemId} is already closed`,
+    };
+  }
+  if (existing.mode !== "delegated" || !existing.delegated) {
+    return {
+      ok: false,
+      errorCode: "WRONG_MODE",
+      message: `WRONG_MODE: ${input.workItemId} is ${existing.mode}, not delegated`,
+    };
+  }
+  // A host-terminal launch failure is only meaningful while the item is still
+  // waiting for its implementer. Any other lifecycle state means a different
+  // transition got there first, so fail closed.
+  if (existing.state !== "awaiting_implementer") {
+    return {
+      ok: false,
+      errorCode: "INVALID_STATE",
+      message: `INVALID_STATE: ${input.workItemId} is ${existing.state}, not awaiting_implementer`,
+    };
+  }
+
+  const callIdBinding = findDelegatedCallIdBinding(store, input.sessionId, input.callId);
+  if (callIdBinding.kind === "ambiguous") {
+    return {
+      ok: false,
+      errorCode: "AMBIGUOUS_CALL_ID",
+      message: `AMBIGUOUS_CALL_ID: callID ${input.callId} is bound to more than one delegated attempt in session ${input.sessionId}`,
+    };
+  }
+  if (
+    callIdBinding.kind === "unique" &&
+    (callIdBinding.record.workItemId !== input.workItemId ||
+      callIdBinding.record.sessionId !== input.sessionId)
+  ) {
+    return {
+      ok: false,
+      errorCode: "STALE_CALLBACK",
+      message: `STALE_CALLBACK: ${input.callId} is bound to ${callIdBinding.record.workItemId}, not ${input.workItemId}`,
+    };
+  }
+
+  const inFlight = existing.delegated.attempts.find(
+    (attempt) => attempt.status === "in_flight" && attempt.callId === input.callId,
+  );
+  if (!inFlight) {
+    return {
+      ok: false,
+      errorCode: "STALE_CALLBACK",
+      message: `STALE_CALLBACK: ${input.callId} does not match an in-flight attempt for ${input.workItemId}`,
+    };
+  }
+
+  const now = toIsoNow();
+  const updated: WorkItemRecord = {
+    ...existing,
+    // Failed attempts never advance the lifecycle: the item stays waiting at
+    // the launch gate so an explicit controller retry can consume the
+    // remaining budget, and two failures naturally exhaust it.
+    state: "awaiting_implementer",
+    delegated: {
+      ...existing.delegated,
+      attempts: existing.delegated.attempts.map((attempt) =>
+        attempt.attempt === inFlight.attempt
+          ? {
+              ...attempt,
+              status: "failed" as const,
+              failureExcerpt: input.failureExcerpt,
+              completedAt: now,
+            }
+          : attempt,
+      ),
+    },
+    updatedAt: now,
+  };
+  store.records.set(createRecordLookupKey(input.sessionId, input.workItemId), updated);
+
+  const attemptBudget = delegatedAttemptBudget(updated.delegated as DelegatedWorkItemState);
+  return {
+    ok: true,
+    record: cloneRecord(updated),
+    fromState: existing.state,
+    toState: "awaiting_implementer",
+    attempt: inFlight.attempt,
+    consumedAttempts: updated.delegated?.attempts.length ?? 0,
+    attemptBudget,
+    retryAllowed: (updated.delegated?.attempts.length ?? 0) < attemptBudget,
   };
 }
 

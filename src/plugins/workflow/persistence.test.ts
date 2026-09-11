@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Deterministic tests for workflow state persistence version 2: delegated and plan-run round-trips, legacy version 1 hydration, strict rejection of malformed state, atomic writes, and surfaced I/O failures.
-//   SCOPE: Round-trip of accepted tasks, rework histories, in-flight and awaiting-acceptance attempts, incomplete reviews, FAIL reports, passed historical milestones, hard stops, and bounded excerpts; version 1 conservative hydration with original review requirements; tamper rejection without silent resets; checked loader triage; atomic replacement and failure surfacing.
+//   SCOPE: Round-trip of accepted tasks, rework histories, in-flight and awaiting-acceptance attempts, failed attempts with bounded host failure evidence, incomplete reviews, FAIL reports, passed historical milestones, hard stops, and bounded excerpts; version 1 conservative hydration with original review requirements; tamper rejection without silent resets; checked loader triage; atomic replacement and failure surfacing.
 //   DEPENDS: [bun:test, node:fs, node:fs/promises, node:path, node:os, src/lib/vvoc-paths.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
@@ -18,11 +18,12 @@
 //   statePath - Resolves the persisted workflow-state.json path for the session.
 //   registerRun - Registers the fixture plan and returns its run id.
 //   taskWorkItemId - Resolves the bound work-item id for one plan task.
+//   launchSequence - Monotonic suffix that keeps each delegated callID unique per session.
 //   acceptTask - Drives one delegated task to an accepted state.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial version 2 persistence coverage.]
+//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added failed-attempt persistence coverage: round-trip of failed attempts with bounded evidence, restart reclamation retaining failures, acceptance rejection, and malformed failed-record rejection.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -39,9 +40,11 @@ import {
   verifyDelegatedCheckpoint,
 } from "./checkpoints.js";
 import {
+  applyDelegatedLaunchFailure,
   applyDelegatedResult,
   beginDelegatedLaunch,
   decideDelegatedWorkItem,
+  revertInFlightDelegatedLaunches,
 } from "./delegated.js";
 import {
   getWorkflowSessionDir,
@@ -50,7 +53,7 @@ import {
   snapshotWorkflowState,
   snapshotWorkflowStateChecked,
 } from "./persistence.js";
-import { createWorkItemStore, type WorkItemStore } from "./state.js";
+import { createWorkItemStore, createWorkflowResultExcerpt, type WorkItemStore } from "./state.js";
 
 const SESSION = "session-persist-v2";
 const createdRoots: string[] = [];
@@ -132,6 +135,10 @@ function taskWorkItemId(runId: string, taskId: string): string {
   return binding.workItemId;
 }
 
+// CallIDs are single-shot identities within a session, so every test launch
+// needs a distinct value even when it targets the same task across runs.
+let launchSequence = 0;
+
 async function acceptTask(
   runId: string,
   taskId: string,
@@ -139,16 +146,17 @@ async function acceptTask(
   attempt = 1,
 ): Promise<void> {
   const workItemId = taskWorkItemId(runId, taskId);
+  const callId = `call-${taskId}-${callSuffix}-${++launchSequence}`;
   const launched = beginDelegatedLaunch(store, {
     sessionId: SESSION,
     workItemId,
-    callId: `call-${taskId}-${callSuffix}`,
+    callId,
   });
   if (!launched.ok) throw new Error(launched.message);
   const applied = applyDelegatedResult(store, {
     sessionId: SESSION,
     workItemId,
-    callId: `call-${taskId}-${callSuffix}`,
+    callId,
     resultStatus: "DONE",
   });
   if (!applied.ok) throw new Error(applied.message);
@@ -291,6 +299,125 @@ describe("version 2 round-trips", () => {
   });
 });
 // END_BLOCK_ROUNDTRIP_TESTS
+
+// START_BLOCK_FAILED_ATTEMPT_PERSISTENCE_TESTS
+describe("failed delegated attempts persist and stay non-acceptable", () => {
+  function failureExcerpt(text: string) {
+    return createWorkflowResultExcerpt({ text, source: "normalized_output" })!;
+  }
+
+  test("a failed attempt round-trips with bounded evidence and cannot be accepted", async () => {
+    const { runId } = await registerRun("failed-roundtrip");
+    const workItemId = taskWorkItemId(runId, "T-001");
+    const callId = "call-failed-roundtrip";
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId });
+    const applied = applyDelegatedLaunchFailure(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId,
+      failureExcerpt: failureExcerpt(
+        "Subagent failed (task_id: ses_child_1): unknown provider for model deepseek-flash",
+      ),
+    });
+    expect(applied.ok).toBe(true);
+
+    const snapshot = snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+    expect(snapshot.ok).toBe(true);
+    const hydrated = hydrateWorkflowStateChecked(SESSION);
+    expect(hydrated.status).toBe("valid");
+    if (hydrated.status !== "valid") return;
+    const record = hydrated.data.records.get(`${SESSION}::${workItemId}`);
+    expect(record?.state).toBe("awaiting_implementer");
+    expect(record?.delegated?.attempts[0]?.status).toBe("failed");
+    expect(record?.delegated?.attempts[0]?.failureExcerpt?.text).toContain("unknown provider");
+    expect(record?.delegated?.attempts[0]?.resultStatus).toBeUndefined();
+
+    const restored = createWorkItemStore(hydrated.data);
+    const decision = decideDelegatedWorkItem(restored, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Cannot accept a failed attempt.",
+      evidence: ["diff"],
+    });
+    expect(decision.ok).toBe(false);
+  });
+
+  test("restart reclamation drops in-flight attempts without losing failed ones", async () => {
+    const { runId } = await registerRun("failed-reclaim");
+    const failedId = taskWorkItemId(runId, "T-001");
+    const orphanId = taskWorkItemId(runId, "T-002");
+    beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId: failedId,
+      callId: "call-failed-reclaim",
+    });
+    applyDelegatedLaunchFailure(store, {
+      sessionId: SESSION,
+      workItemId: failedId,
+      callId: "call-failed-reclaim",
+      failureExcerpt: failureExcerpt("Subagent failed (task_id: ses_child_2): provider error"),
+    });
+    beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId: orphanId,
+      callId: "call-orphan-reclaim",
+    });
+
+    snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+    const hydrated = hydrateWorkflowStateChecked(SESSION);
+    expect(hydrated.status).toBe("valid");
+    if (hydrated.status !== "valid") return;
+    const reclaimed = revertInFlightDelegatedLaunches(hydrated.data, SESSION);
+    expect(reclaimed.workItemIds).toContain(orphanId);
+
+    const failedRecord = hydrated.data.records.get(`${SESSION}::${failedId}`);
+    expect(failedRecord?.delegated?.attempts[0]?.status).toBe("failed");
+    const orphanRecord = hydrated.data.records.get(`${SESSION}::${orphanId}`);
+    expect(orphanRecord?.delegated?.attempts).toHaveLength(0);
+  });
+
+  test("malformed failed attempt records are rejected", async () => {
+    const { runId } = await registerRun("failed-malformed");
+    const workItemId = taskWorkItemId(runId, "T-001");
+    const callId = "call-failed-malformed";
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId });
+    applyDelegatedLaunchFailure(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId,
+      failureExcerpt: failureExcerpt("Subagent failed (task_id: ses_child_3): provider error"),
+    });
+    snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+
+    const persisted = JSON.parse(readFileSync(statePath(), "utf-8"));
+    const delegated = persisted.records.find(
+      (record: { mode?: string }) => record.mode === "delegated",
+    );
+    delete delegated.delegated.attempts[0].failureExcerpt;
+    writeFileSync(statePath(), JSON.stringify(persisted, null, 2), "utf-8");
+    const missing = hydrateWorkflowStateChecked(SESSION);
+    expect(missing.status).toBe("invalid");
+    if (missing.status !== "invalid") return;
+    expect(missing.errors.join("\n")).toContain("bounded failure excerpt");
+
+    // Restore the valid snapshot from the untouched in-memory store, then make
+    // a failed attempt contradictory by also carrying a success result.
+    snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+    const persistedSecond = JSON.parse(readFileSync(statePath(), "utf-8"));
+    const delegatedSecond = persistedSecond.records.find(
+      (record: { mode?: string }) => record.mode === "delegated",
+    );
+    delegatedSecond.delegated.attempts[0].resultStatus = "DONE";
+    writeFileSync(statePath(), JSON.stringify(persistedSecond, null, 2), "utf-8");
+    const contradictory = hydrateWorkflowStateChecked(SESSION);
+    expect(contradictory.status).toBe("invalid");
+    if (contradictory.status !== "invalid") return;
+    expect(contradictory.errors.join("\n")).toContain("must not carry a resultStatus");
+  });
+});
+// END_BLOCK_FAILED_ATTEMPT_PERSISTENCE_TESTS
 
 // START_BLOCK_LEGACY_TESTS
 describe("version 1 legacy hydration", () => {

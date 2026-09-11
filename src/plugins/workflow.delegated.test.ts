@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, barrier gates, persistence failures, and legacy-profile isolation.
-//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, and old-profile regressions.
+//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, event-hook host-terminal launch failures with sticky exclusions and persistence recovery, and old-profile regressions.
 //   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
@@ -28,13 +28,20 @@
 //   registerPlan - Registers the fixture plan through the real work_checkpoint tool.
 //   taskWorkItemId - Resolves the bound work-item id for one plan task through work_item_list.
 //   launchTask - Drives the tool.execute.before hook for one tracked launch.
+//   launchTaskWithArgs - Drives the before hook with extra SDK-shaped launch arguments.
 //   finishTask - Drives the tool.execute.after hook for one tracked result.
+//   taskToolPart - Builds a real SDK-shaped ToolPart for one parent task call.
+//   taskPartUpdated - Wraps a ToolPart in a real message.part.updated event.
+//   runningState - Builds a real SDK-shaped running ToolState with host metadata.
+//   errorState - Builds a real SDK-shaped error ToolState with a host error.
+//   emitPart - Delivers one message.part.updated event through the plugin event hook.
+//   listItems - Reads the current work-item list through the real tool.
 //   decide - Calls work_item_decide with a stub controller context.
 //   driveAcceptedTask - Runs one delegated task from launch to controller acceptance through hooks and tools.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial delegated plugin-integration coverage including the twenty-task/four-reviewer scenario.]
+//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added event-hook coverage proving confirmed foreground task failures record a failed attempt without an after hook, consume budget, refuse mismatched/metadata-excluded variants, and retry safely after persistence recovery, using real SDK part shapes.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -42,11 +49,17 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+  EventMessagePartUpdated,
+  ToolPart,
+  ToolStateError,
+  ToolStateRunning,
+} from "@opencode-ai/sdk";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { WorkflowPlugin } from "./workflow/index.js";
-import { deleteWorkflowSessionDir } from "./workflow/persistence.js";
+import { deleteWorkflowSessionDir, getWorkflowSessionDir } from "./workflow/persistence.js";
 import type { ParsedResultBlock } from "./workflow/protocol.js";
 
 const ROOT_SESSION = "ses_delegated_root";
@@ -383,6 +396,67 @@ async function launchTask(
         prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
       },
     } as never,
+  );
+}
+
+async function launchTaskWithArgs(
+  harness: DelegatedPluginHarness,
+  sessionID: string,
+  callId: string,
+  subagentType: string,
+  prompt: string,
+  extraArgs: Record<string, unknown>,
+): Promise<void> {
+  await harness.plugin["tool.execute.before"]?.(
+    { tool: "task", sessionID, callID: callId } as never,
+    { args: { subagent_type: subagentType, prompt, ...extraArgs } } as never,
+  );
+}
+
+function runningState(metadata: Record<string, unknown>, start = 1): ToolStateRunning {
+  return { status: "running", input: {}, metadata, time: { start } };
+}
+
+function errorState(error: string, metadata: Record<string, unknown>): ToolStateError {
+  return { status: "error", input: {}, error, metadata, time: { start: 1, end: 2 } };
+}
+
+function taskToolPart(
+  parentSessionId: string,
+  callId: string,
+  state: ToolStateRunning | ToolStateError,
+): ToolPart {
+  return {
+    id: `part-${callId}`,
+    sessionID: parentSessionId,
+    messageID: "message-1",
+    type: "tool",
+    callID: callId,
+    tool: "task",
+    state,
+  };
+}
+
+function taskPartUpdated(part: ToolPart): EventMessagePartUpdated {
+  return { type: "message.part.updated", properties: { part } };
+}
+
+async function emitPart(harness: DelegatedPluginHarness, part: ToolPart): Promise<void> {
+  await harness.plugin.event?.({ event: taskPartUpdated(part) } as never);
+}
+
+async function listItems(harness: DelegatedPluginHarness) {
+  return parseToolJson<{
+    items: Array<{
+      workItemId: string;
+      state: string;
+      delegated?: { attempts: number; inFlightAttempt: boolean; accepted: boolean };
+    }>;
+  }>(
+    (await harness.plugin.tool?.work_item_list?.execute(
+      { includeClosed: true },
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    )) ?? "{}",
   );
 }
 
@@ -975,6 +1049,420 @@ describe("delegated attempt flow through plugin hooks", () => {
   });
 });
 // END_BLOCK_DELEGATED_FLOW_TESTS
+
+// START_BLOCK_DELEGATED_FAILURE_EVENTS
+describe("confirmed host-terminal launch failures through the event hook", () => {
+  const CHILD = "ses_delegated_child";
+
+  async function harnessWithTask(): Promise<{
+    harness: DelegatedPluginHarness;
+    workItemId: string;
+  }> {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    return { harness, workItemId };
+  }
+
+  function foregroundMetadata(child = CHILD): Record<string, unknown> {
+    return { parentSessionId: ROOT_SESSION, sessionId: child, model: {} };
+  }
+
+  test("records a failed attempt without an after hook and allows an explicit retry", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-ev-1", "vv-implementer", workItemId);
+
+    const metadata = foregroundMetadata();
+    await emitPart(harness, taskToolPart(ROOT_SESSION, "call-ev-1", runningState(metadata)));
+    await emitPart(
+      harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-ev-1",
+        errorState(
+          `Subagent failed (task_id: ${CHILD}): unknown provider for model deepseek-flash`,
+          metadata,
+        ),
+      ),
+    );
+
+    const afterFailure = await listItems(harness);
+    const failedItem = afterFailure.items.find((item) => item.workItemId === workItemId);
+    expect(failedItem?.state).toBe("awaiting_implementer");
+    expect(failedItem?.delegated?.inFlightAttempt).toBe(false);
+    expect(failedItem?.delegated?.attempts).toBe(1);
+
+    // The item is retryable without a process restart and consumes the second
+    // attempt rather than resetting the budget.
+    await launchTask(harness, ROOT_SESSION, "call-ev-2", "vv-implementer", workItemId);
+    const afterRetry = await listItems(harness);
+    const retriedItem = afterRetry.items.find((item) => item.workItemId === workItemId);
+    expect(retriedItem?.delegated?.attempts).toBe(2);
+    expect(retriedItem?.delegated?.inFlightAttempt).toBe(true);
+  });
+
+  test("a direct terminal error event carrying metadata is consumed", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-direct", "vv-implementer", workItemId);
+    await emitPart(
+      harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-direct",
+        errorState(`Subagent failed (task_id: ${CHILD}): transport failure`, foregroundMetadata()),
+      ),
+    );
+
+    const listed = await listItems(harness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(1);
+  });
+
+  test("two failures exhaust the budget and do not authorize acceptance", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    for (const [index, child] of [CHILD, "ses_delegated_child_2"].entries()) {
+      const callId = `call-budget-${index + 1}`;
+      await launchTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId);
+      await emitPart(
+        harness,
+        taskToolPart(
+          ROOT_SESSION,
+          callId,
+          errorState(
+            `Subagent failed (task_id: ${child}): provider error`,
+            foregroundMetadata(child),
+          ),
+        ),
+      );
+    }
+
+    const exhausted = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-budget-3",
+      "vv-implementer",
+      workItemId,
+    ).catch((error: Error) => error.message);
+    expect(String(exhausted)).toContain("ATTEMPTS_EXHAUSTED");
+
+    const decision = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Cannot accept a failed attempt.",
+      evidence: ["diff"],
+    });
+    expect(decision.ok).toBe(false);
+  });
+
+  test("mismatched parent, replaced child, and unknown callIDs never mutate", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-mismatch", "vv-implementer", workItemId);
+
+    await emitPart(
+      harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-mismatch",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, {
+          parentSessionId: "ses_other_parent",
+          sessionId: CHILD,
+        }),
+      ),
+    );
+    let listed = await listItems(harness);
+    expect(listed.items.find((i) => i.workItemId === workItemId)?.delegated?.inFlightAttempt).toBe(
+      true,
+    );
+
+    // Bind one child, then a replacement child identity taints the binding.
+    await emitPart(
+      harness,
+      taskToolPart(ROOT_SESSION, "call-mismatch", runningState(foregroundMetadata())),
+    );
+    await emitPart(
+      harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-mismatch",
+        errorState(
+          "Subagent failed (task_id: ses_delegated_child_other): provider error",
+          foregroundMetadata("ses_delegated_child_other"),
+        ),
+      ),
+    );
+    listed = await listItems(harness);
+    expect(listed.items.find((i) => i.workItemId === workItemId)?.delegated?.inFlightAttempt).toBe(
+      true,
+    );
+
+    // An unknown callID has no live binding and cannot affect the item.
+    await emitPart(
+      harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-unknown",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    listed = await listItems(harness);
+    expect(listed.items.find((i) => i.workItemId === workItemId)?.delegated?.inFlightAttempt).toBe(
+      true,
+    );
+  });
+
+  test("after-hook entry, background, promotion, interruption, and resume all stay blocked", async () => {
+    // After-hook entry before a protocol failure latches the ambiguous path.
+    const afterHook = await harnessWithTask();
+    await launchTask(
+      afterHook.harness,
+      ROOT_SESSION,
+      "call-after",
+      "vv-implementer",
+      afterHook.workItemId,
+    );
+    await afterHook.harness.plugin["tool.execute.after"]?.(
+      {
+        tool: "task",
+        sessionID: ROOT_SESSION,
+        callID: "call-after",
+        args: {
+          subagent_type: "vv-implementer",
+          prompt: `VVOC_WORK_ITEM_ID: ${afterHook.workItemId}`,
+        },
+      } as never,
+      { title: "task", output: 42, metadata: {} } as never,
+    ).catch(() => undefined);
+    await emitPart(
+      afterHook.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-after",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(afterHook.harness)).items.find((i) => i.workItemId === afterHook.workItemId)
+        ?.delegated?.inFlightAttempt,
+    ).toBe(true);
+
+    // Requested background launch is ineligible from the start.
+    const background = await harnessWithTask();
+    await launchTaskWithArgs(
+      background.harness,
+      ROOT_SESSION,
+      "call-bg",
+      "vv-implementer",
+      `VVOC_WORK_ITEM_ID: ${background.workItemId}`,
+      { background: true },
+    );
+    await emitPart(
+      background.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-bg",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(background.harness)).items.find(
+        (i) => i.workItemId === background.workItemId,
+      )?.delegated?.inFlightAttempt,
+    ).toBe(true);
+
+    // A host subtask launch always carries a command key (undefined here).
+    const subtask = await harnessWithTask();
+    await launchTaskWithArgs(
+      subtask.harness,
+      ROOT_SESSION,
+      "call-subtask",
+      "vv-implementer",
+      `VVOC_WORK_ITEM_ID: ${subtask.workItemId}`,
+      { command: undefined },
+    );
+    await emitPart(
+      subtask.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-subtask",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(subtask.harness)).items.find((i) => i.workItemId === subtask.workItemId)
+        ?.delegated?.inFlightAttempt,
+    ).toBe(true);
+
+    // Promotion metadata replacement taints a foreground launch.
+    const promotion = await harnessWithTask();
+    await launchTask(
+      promotion.harness,
+      ROOT_SESSION,
+      "call-promote",
+      "vv-implementer",
+      promotion.workItemId,
+    );
+    await emitPart(
+      promotion.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-promote",
+        runningState({
+          parentSessionId: ROOT_SESSION,
+          sessionId: CHILD,
+          background: true,
+          jobId: CHILD,
+        }),
+      ),
+    );
+    await emitPart(
+      promotion.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-promote",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(promotion.harness)).items.find((i) => i.workItemId === promotion.workItemId)
+        ?.delegated?.inFlightAttempt,
+    ).toBe(true);
+
+    // Interruption metadata taints a foreground launch.
+    const interrupted = await harnessWithTask();
+    await launchTask(
+      interrupted.harness,
+      ROOT_SESSION,
+      "call-int",
+      "vv-implementer",
+      interrupted.workItemId,
+    );
+    await emitPart(
+      interrupted.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-int",
+        runningState({
+          parentSessionId: ROOT_SESSION,
+          sessionId: CHILD,
+          interrupted: true,
+        }),
+      ),
+    );
+    await emitPart(
+      interrupted.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-int",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(interrupted.harness)).items.find(
+        (i) => i.workItemId === interrupted.workItemId,
+      )?.delegated?.inFlightAttempt,
+    ).toBe(true);
+
+    // A later task launch that resumes the same child invalidates exclusivity,
+    // even when the resuming launch itself is untracked.
+    const resumed = await harnessWithTask();
+    await launchTask(
+      resumed.harness,
+      ROOT_SESSION,
+      "call-resume",
+      "vv-implementer",
+      resumed.workItemId,
+    );
+    await emitPart(
+      resumed.harness,
+      taskToolPart(ROOT_SESSION, "call-resume", runningState(foregroundMetadata())),
+    );
+    await launchTaskWithArgs(
+      resumed.harness,
+      ROOT_SESSION,
+      "call-resume-job",
+      "explore",
+      "resume child",
+      { task_id: CHILD },
+    );
+    await emitPart(
+      resumed.harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-resume",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(resumed.harness)).items.find((i) => i.workItemId === resumed.workItemId)
+        ?.delegated?.inFlightAttempt,
+    ).toBe(true);
+  });
+
+  test("a second child prompt invalidates fresh-exclusive eligibility", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-reprompt", "vv-implementer", workItemId);
+    await emitPart(
+      harness,
+      taskToolPart(ROOT_SESSION, "call-reprompt", runningState(foregroundMetadata())),
+    );
+    const userMessage = (id: string) => ({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: { id, sessionID: CHILD, role: "user" },
+        },
+      },
+    });
+    await harness.plugin.event?.(userMessage("msg-child-1") as never);
+    await harness.plugin.event?.(userMessage("msg-child-2") as never);
+    await emitPart(
+      harness,
+      taskToolPart(
+        ROOT_SESSION,
+        "call-reprompt",
+        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+      ),
+    );
+    expect(
+      (await listItems(harness)).items.find((i) => i.workItemId === workItemId)?.delegated
+        ?.inFlightAttempt,
+    ).toBe(true);
+  });
+
+  test("a checked snapshot failure keeps the retry blocked until a later event succeeds", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-persist", "vv-implementer", workItemId);
+
+    const statePath = join(getWorkflowSessionDir(ROOT_SESSION), "workflow-state.json");
+    const metadata = foregroundMetadata();
+    const errorEvent = taskToolPart(
+      ROOT_SESSION,
+      "call-persist",
+      errorState(`Subagent failed (task_id: ${CHILD}): provider error`, metadata),
+    );
+
+    // Force the checked snapshot write to fail by occupying the state path.
+    rmSync(statePath, { force: true });
+    mkdirSync(statePath, { recursive: true });
+    await emitPart(harness, errorEvent);
+    let listed = await listItems(harness);
+    expect(listed.items.find((i) => i.workItemId === workItemId)?.delegated?.inFlightAttempt).toBe(
+      true,
+    );
+
+    // After I/O recovery the same authoritative event applies idempotently.
+    rmSync(statePath, { recursive: true, force: true });
+    await emitPart(harness, errorEvent);
+    listed = await listItems(harness);
+    const item = listed.items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(1);
+  });
+});
+// END_BLOCK_DELEGATED_FAILURE_EVENTS
 
 // START_BLOCK_TWENTY_TASK_SCENARIO
 describe("twenty tasks require four reviewer launches", () => {

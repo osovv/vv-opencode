@@ -7,7 +7,8 @@
 //     planRuns) as serializable JSON. Version 2 snapshots additionally persist
 //     delegated attempts, decisions, acceptances, rework history, and registered
 //     plan runs with checkpoint generations through an atomic temporary-file
-//     replacement. Version 1 files hydrate conservatively as legacy records with
+//     replacement, including failed attempts carrying bounded host failure
+//     evidence. Version 1 files hydrate conservatively as legacy records with
 //     an empty plan-run registry and never synthesize acceptance or approval.
 //     Strict validation rejects malformed or contradictory new state instead of
 //     silently restarting a run. A checked loader distinguishes missing, valid,
@@ -35,7 +36,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added version 2 snapshots with delegated records and plan runs, strict validation, atomic writes, and a checked loader.]
+//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Version 2 validation accepts failed delegated attempts with bounded failure evidence and rejects contradictory failed/completed/in-flight attempt payloads.]
 // END_CHANGE_SUMMARY
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -283,7 +284,11 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
     }
     if (attempt.status === "in_flight") {
       inFlight += 1;
-      if (attempt.resultStatus !== undefined || attempt.completedAt !== undefined) {
+      if (
+        attempt.resultStatus !== undefined ||
+        attempt.completedAt !== undefined ||
+        attempt.failureExcerpt !== undefined
+      ) {
         errors.push(
           `${record.workItemId}: in-flight attempt ${attempt.attempt} must not carry a result`,
         );
@@ -299,12 +304,37 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
           `${record.workItemId}: completed attempt ${attempt.attempt} requires completedAt`,
         );
       }
+      if (attempt.failureExcerpt !== undefined) {
+        errors.push(
+          `${record.workItemId}: completed attempt ${attempt.attempt} must not carry a failure excerpt`,
+        );
+      }
+    } else if (attempt.status === "failed") {
+      if (typeof attempt.completedAt !== "string") {
+        errors.push(`${record.workItemId}: failed attempt ${attempt.attempt} requires completedAt`);
+      }
+      if (attempt.resultStatus !== undefined) {
+        errors.push(
+          `${record.workItemId}: failed attempt ${attempt.attempt} must not carry a resultStatus`,
+        );
+      }
+      if (
+        attempt.failureExcerpt === undefined ||
+        !isWorkflowResultExcerpt(attempt.failureExcerpt)
+      ) {
+        errors.push(
+          `${record.workItemId}: failed attempt ${attempt.attempt} requires a bounded failure excerpt`,
+        );
+      }
     } else {
       errors.push(
         `${record.workItemId}: attempt ${attempt.attempt} has invalid status ${attempt.status}`,
       );
     }
-    if (attempt.resultExcerpt !== undefined && !isWorkflowResultExcerpt(attempt.resultExcerpt)) {
+    if (
+      attempt.resultExcerpt !== undefined &&
+      (attempt.status !== "completed" || !isWorkflowResultExcerpt(attempt.resultExcerpt))
+    ) {
       errors.push(`${record.workItemId}: attempt ${attempt.attempt} carries a malformed excerpt`);
     }
   });

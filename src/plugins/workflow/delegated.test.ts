@@ -17,12 +17,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial delegated-mode domain coverage including rework and legacy isolation.]
+//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added failed-attempt transition coverage: bounded host failure evidence, consumed budget, retry gating, callID reuse rejection, ambiguous-history fail-closed, and acceptance rejection.]
 // END_CHANGE_SUMMARY
 
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createWorkItemStore, type WorkItemStore } from "./state.js";
+import { createWorkItemStore, createWorkflowResultExcerpt, type WorkItemStore } from "./state.js";
 import {
+  applyDelegatedLaunchFailure,
   applyDelegatedResult,
   beginDelegatedLaunch,
   currentDelegatedAcceptance,
@@ -599,3 +600,173 @@ describe("checkpoint-authorized rework", () => {
   });
 });
 // END_BLOCK_REWORK_TESTS
+
+// START_BLOCK_FAILED_ATTEMPT_TESTS
+describe("confirmed host-terminal launch failures", () => {
+  function failAttempt(workItemId: string, callId: string, text?: string) {
+    return applyDelegatedLaunchFailure(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId,
+      failureExcerpt: createWorkflowResultExcerpt({
+        text:
+          text ??
+          "Subagent failed (task_id: ses_child_1): unknown provider for model deepseek-flash",
+        source: "normalized_output",
+      })!,
+    });
+  }
+
+  test("records a failed attempt, consumes one attempt, and keeps the item retryable", () => {
+    const opened = openDelegated();
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-fail-1" });
+
+    const failed = failAttempt(workItemId, "call-fail-1");
+    expect(failed.ok).toBe(true);
+    if (!failed.ok) return;
+    expect(failed.toState).toBe("awaiting_implementer");
+    expect(failed.attempt).toBe(1);
+    expect(failed.consumedAttempts).toBe(1);
+    expect(failed.attemptBudget).toBe(2);
+    expect(failed.retryAllowed).toBe(true);
+
+    const record = store.getWorkItem(SESSION, workItemId);
+    expect(record?.state).toBe("awaiting_implementer");
+    expect(record?.delegated?.attempts[0]?.status).toBe("failed");
+    expect(record?.delegated?.attempts[0]?.failureExcerpt?.text).toContain("unknown provider");
+    expect(record?.delegated?.attempts[0]?.completedAt).toBeDefined();
+    expect(record?.delegated?.attempts[0]?.resultStatus).toBeUndefined();
+
+    const retry = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-fail-2",
+    });
+    expect(retry.ok).toBe(true);
+    if (retry.ok) expect(retry.attempt).toBe(2);
+  });
+
+  test("two failures exhaust the normal budget without authorizing acceptance", () => {
+    const opened = openDelegated();
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-two-1" });
+    failAttempt(workItemId, "call-two-1");
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-two-2" });
+    const second = failAttempt(workItemId, "call-two-2");
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.retryAllowed).toBe(false);
+
+    const third = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-two-3",
+    });
+    expect(third.ok).toBe(false);
+    if (!third.ok) expect(third.errorCode).toBe("ATTEMPTS_EXHAUSTED");
+
+    const decision = decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Accept a failed attempt.",
+      evidence: ["diff"],
+    });
+    expect(decision.ok).toBe(false);
+    expect(store.getWorkItem(SESSION, workItemId)?.state).toBe("awaiting_implementer");
+  });
+
+  test("rejects reused callIDs across attempts and items and stale failures", () => {
+    const first = openDelegated({ key: "reuse-first" });
+    const second = openDelegated({ key: "reuse-second" });
+    if (!first.ok || !second.ok) throw new Error("open failed");
+    const firstId = first.record.workItemId;
+    const secondId = second.record.workItemId;
+
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId: firstId, callId: "call-reuse" });
+    failAttempt(firstId, "call-reuse");
+
+    const sameItem = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId: firstId,
+      callId: "call-reuse",
+    });
+    expect(sameItem.ok).toBe(false);
+    if (!sameItem.ok) expect(sameItem.errorCode).toBe("CALL_ID_REUSED");
+
+    const crossItem = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId: secondId,
+      callId: "call-reuse",
+    });
+    expect(crossItem.ok).toBe(false);
+    if (!crossItem.ok) expect(crossItem.errorCode).toBe("CALL_ID_REUSED");
+
+    beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId: secondId,
+      callId: "call-second",
+    });
+    const stale = failAttempt(secondId, "call-unknown");
+    expect(stale.ok).toBe(false);
+    if (!stale.ok) expect(stale.errorCode).toBe("STALE_CALLBACK");
+  });
+
+  test("ambiguous pre-existing callID histories fail closed", () => {
+    const first = openDelegated({ key: "amb-first" });
+    const second = openDelegated({ key: "amb-second" });
+    if (!first.ok || !second.ok) throw new Error("open failed");
+    const firstId = first.record.workItemId;
+    const secondId = second.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId: firstId, callId: "call-amb" });
+
+    // Simulate a pre-existing persisted history that bound the same callID to
+    // a second item before the uniqueness guard existed.
+    const data = store.getStoreData();
+    const lookupKey = `${SESSION}::${secondId}`;
+    const record = data.records.get(lookupKey);
+    if (!record?.delegated) throw new Error("missing delegated record");
+    data.records.set(lookupKey, {
+      ...record,
+      delegated: {
+        ...record.delegated,
+        attempts: [
+          {
+            attempt: 1,
+            callId: "call-amb",
+            launchedAt: new Date().toISOString(),
+            status: "in_flight",
+          },
+        ],
+      },
+    });
+
+    const ambiguous = failAttempt(firstId, "call-amb");
+    expect(ambiguous.ok).toBe(false);
+    if (!ambiguous.ok) expect(ambiguous.errorCode).toBe("AMBIGUOUS_CALL_ID");
+    expect(store.getWorkItem(SESSION, firstId)?.delegated?.attempts[0]?.status).toBe("in_flight");
+  });
+
+  test("a failure against a no-longer-waiting item is refused without mutation", () => {
+    const opened = openDelegated({ key: "wrong-state" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-ws" });
+    applyDelegatedResult(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-ws",
+      resultStatus: "DONE",
+    });
+
+    const refused = failAttempt(workItemId, "call-ws");
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.errorCode).toBe("INVALID_STATE");
+    expect(store.getWorkItem(SESSION, workItemId)?.state).toBe("awaiting_acceptance");
+  });
+});
+// END_BLOCK_FAILED_ATTEMPT_TESTS

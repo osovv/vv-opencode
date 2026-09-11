@@ -2,7 +2,7 @@
 // VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools, host-call-bound attempts, and checkpoint reviewer linkage.
-//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization, tracked launch validation with delegated barriers and overlapping-write gates, result normalization and repair, callID-bound delegated attempt results and checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance.
+//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and repair, callID-bound delegated attempt results and checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
 //   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
@@ -10,11 +10,11 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   WorkflowPlugin - Registers workflow work-item tools, delegated control tools under the delegated profile, tracked task protocol enforcement with callID-bound delegated attempts and checkpoint linkage, and primary-session workflow guidance injection.
+//   WorkflowPlugin - Registers workflow work-item tools, delegated control tools under the delegated profile, tracked task protocol enforcement with callID-bound delegated attempts, checkpoint linkage, and live host-call failure bindings, and primary-session workflow guidance injection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated control tools with root-session authorization, callID-bound attempts, checkpoint reviewer linkage, barrier gates, and checked persistence.]
+//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added live host-call launch bindings so a confirmed foreground vv-implementer task failure is recorded as a failed delegated attempt instead of stranding inFlightAttempt until restart, with sticky exclusions for background/resume/cancellation/after-hook paths and staged checked persistence before retry is exposed.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -31,6 +31,7 @@ import {
 } from "./protocol.js";
 import {
   applyTrackedResult,
+  createRecordLookupKey,
   createWorkflowResultExcerpt,
   beginTrackedLaunch,
   createWorkItemStore,
@@ -42,6 +43,7 @@ import {
   type WorkItemStore,
 } from "./state.js";
 import {
+  applyDelegatedLaunchFailure,
   applyDelegatedResult,
   beginDelegatedLaunch,
   revertInFlightDelegatedLaunches,
@@ -179,6 +181,77 @@ function readTaskPrompt(args: unknown): string {
 
   return value;
 }
+
+// START_BLOCK_DELEGATED_FAILURE_BINDING_TYPES
+/**
+ * Live, in-memory binding from one host task call to the delegated attempt it
+ * allocated. Only confirmed foreground failures consume it; every other path
+ * latches it ineligible so ambiguous events fail closed.
+ */
+interface DelegatedLaunchBinding {
+  sessionId: string;
+  callId: string;
+  workItemId: string;
+  attempt: number;
+  /** Fresh-exclusive foreground eligibility; once false it stays false. */
+  eligible: boolean;
+  ineligibleReason?: string;
+  /** Latched at the first line of a task after hook, before parsing or repair. */
+  afterHookEntered: boolean;
+  /** Child session observed from host metadata, used to detect resume/share. */
+  childSessionId?: string;
+  /** True once a failure was durably applied or the event was refused for good. */
+  settled: boolean;
+}
+
+interface DelegatedLaunchEligibility {
+  eligible: boolean;
+  reason?: string;
+  resumedTaskId?: string;
+}
+
+function delegatedLaunchBindingKey(sessionId: string, callId: string): string {
+  return `${sessionId}::${callId}`;
+}
+
+/**
+ * Read the launch-critical task arguments that decide fresh-exclusive
+ * eligibility. Background, resume, and command/subtask launches are excluded;
+ * contradictory non-boolean or non-string values also fail closed.
+ */
+function readDelegatedLaunchEligibility(args: unknown): DelegatedLaunchEligibility {
+  if (!args || typeof args !== "object") {
+    return { eligible: false, reason: "missing_launch_args" };
+  }
+  const record = args as Record<string, unknown>;
+  if ("background" in record && record.background !== false) {
+    return { eligible: false, reason: "requested_background" };
+  }
+  if ("task_id" in record && record.task_id !== undefined) {
+    const taskId = record.task_id;
+    if (typeof taskId !== "string" || taskId.trim() === "") {
+      return { eligible: false, reason: "invalid_task_id" };
+    }
+    return { eligible: false, reason: "resume_task_id", resumedTaskId: taskId.trim() };
+  }
+  // The host subtask path always supplies a `command` key (even when its value
+  // is undefined), and a slash-command launch always supplies a value, so key
+  // presence alone is the reliable command/subtask exclusion.
+  if ("command" in record) {
+    const command = record.command;
+    if (command !== undefined && command !== null && typeof command !== "string") {
+      return { eligible: false, reason: "invalid_command" };
+    }
+    return { eligible: false, reason: "command_or_subtask_launch" };
+  }
+  return { eligible: true };
+}
+
+/** Exact current-host wrapper that precedes a returned child task error. */
+function delegatedHostFailurePrefix(childSessionId: string): string {
+  return `Subagent failed (task_id: ${childSessionId}): `;
+}
+// END_BLOCK_DELEGATED_FAILURE_BINDING_TYPES
 
 function canUseWorkflowTools(agentName: string | undefined): boolean {
   return agentName === WORKFLOW_CONTROLLER_AGENT;
@@ -361,6 +434,241 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
     return result.ok ? { ok: true } : { ok: false, error: result.error };
   }
   // END_BLOCK_PERSISTENCE_SETUP
+
+  // START_BLOCK_DELEGATED_FAILURE_BINDING
+  // Live host-call bindings let the plugin consume confirmed host-terminal
+  // failures of foreground vv-implementer tasks without hydrating a store from
+  // an event. Every exclusion is sticky: once a binding is tainted it can never
+  // authorize a failure transition.
+  const delegatedLaunchBindings = new Map<string, DelegatedLaunchBinding>();
+  const resumedChildSessions = new Set<string>();
+  const childPromptMessageIds = new Map<string, Set<string>>();
+
+  function taintDelegatedLaunchBinding(binding: DelegatedLaunchBinding, reason: string): void {
+    if (binding.eligible) {
+      binding.eligible = false;
+      binding.ineligibleReason = reason;
+    }
+  }
+
+  function taintBindingsForChild(childSessionId: string, reason: string): void {
+    for (const binding of delegatedLaunchBindings.values()) {
+      if (binding.childSessionId === childSessionId) taintDelegatedLaunchBinding(binding, reason);
+    }
+  }
+
+  /**
+   * Track distinct user-prompt message ids per session: a child session
+   * prompted with more than one distinct message is shared or resumed, so it
+   * can no longer be a fresh-exclusive child.
+   */
+  function observeChildPrompt(sessionId: string, messageId: string | undefined): void {
+    if (!messageId) return;
+    let messageIds = childPromptMessageIds.get(sessionId);
+    if (!messageIds) {
+      messageIds = new Set<string>();
+      childPromptMessageIds.set(sessionId, messageIds);
+    }
+    if (messageIds.has(messageId)) return;
+    messageIds.add(messageId);
+    if (messageIds.size > 1) {
+      resumedChildSessions.add(sessionId);
+      taintBindingsForChild(sessionId, "child_reprompted");
+    }
+  }
+
+  function observeTaskLaunchArgs(args: unknown): void {
+    const launch = readDelegatedLaunchEligibility(args);
+    if (!launch.resumedTaskId) return;
+    resumedChildSessions.add(launch.resumedTaskId);
+    taintBindingsForChild(launch.resumedTaskId, "child_resumed");
+  }
+
+  function observeAfterHookEntry(sessionId: string, callId: string): void {
+    const binding = delegatedLaunchBindings.get(delegatedLaunchBindingKey(sessionId, callId));
+    if (binding) {
+      binding.afterHookEntered = true;
+    }
+  }
+
+  function observeAfterHookMetadata(sessionId: string, callId: string, metadata: unknown): void {
+    const binding = delegatedLaunchBindings.get(delegatedLaunchBindingKey(sessionId, callId));
+    if (!binding || !metadata || typeof metadata !== "object") return;
+    const record = metadata as Record<string, unknown>;
+    const child = record.sessionId;
+    if (typeof child === "string" && child.trim() !== "") {
+      if (binding.childSessionId === undefined) {
+        binding.childSessionId = child;
+      } else if (binding.childSessionId !== child) {
+        taintDelegatedLaunchBinding(binding, "metadata_child_replaced");
+      }
+    }
+    if (record.background === true) taintDelegatedLaunchBinding(binding, "metadata_background");
+    if (typeof record.jobId === "string" && record.jobId !== "") {
+      taintDelegatedLaunchBinding(binding, "metadata_job");
+    }
+    if (record.interrupted === true) taintDelegatedLaunchBinding(binding, "metadata_interrupted");
+  }
+
+  /**
+   * Stage the failed-attempt transition, persist a checked snapshot of the
+   * staged state, and only then commit it in memory. There is no async yield
+   * between the final identity/exclusion check and the commit; a checked write
+   * failure leaves the live in-flight attempt (and retry block) intact.
+   */
+  function commitDelegatedLaunchFailure(
+    sessionId: string,
+    binding: DelegatedLaunchBinding,
+    failureExcerpt: WorkflowResultExcerpt,
+  ): void {
+    const liveStore = stores.get(sessionId);
+    if (!liveStore || invalidHydrationSessions.has(sessionId)) return;
+    const liveData = liveStore.getStoreData();
+    const stagedStore = createWorkItemStore(liveData);
+    const applied = applyDelegatedLaunchFailure(stagedStore, {
+      sessionId,
+      workItemId: binding.workItemId,
+      callId: binding.callId,
+      failureExcerpt,
+    });
+    if (!applied.ok) {
+      // Stale, duplicate, or already-transitioned: settle without mutation.
+      binding.settled = true;
+      return;
+    }
+
+    const stagedData = stagedStore.getStoreData();
+    const persisted = snapshotWorkflowStateChecked(sessionId, stagedData);
+    if (!persisted.ok) {
+      // Keep the live in-flight attempt and evidence so an unpersisted retry
+      // is never authorized; a later authoritative event can retry safely.
+      void client.app
+        .log({
+          body: {
+            service: "workflow",
+            level: "error",
+            message: "[workflow][delegatedFailure][BLOCK_DELEGATED_FAILURE] persistence failed",
+            extra: {
+              sessionID: sessionId,
+              workItemId: binding.workItemId,
+              attempt: binding.attempt,
+              error: persisted.error.slice(0, 300),
+            },
+          },
+        })
+        .catch(() => undefined);
+      return;
+    }
+
+    const lookupKey = createRecordLookupKey(sessionId, binding.workItemId);
+    const committed = stagedData.records.get(lookupKey);
+    if (!committed) return;
+    liveData.records.set(lookupKey, committed);
+    binding.settled = true;
+    void client.app
+      .log({
+        body: {
+          service: "workflow",
+          level: "warn",
+          message:
+            "[workflow][delegatedFailure][BLOCK_DELEGATED_FAILURE] host-terminal launch failure recorded",
+          extra: {
+            sessionID: sessionId,
+            workItemId: binding.workItemId,
+            attempt: applied.attempt,
+            consumedAttempts: applied.consumedAttempts,
+            attemptBudget: applied.attemptBudget,
+            retryAllowed: applied.retryAllowed,
+          },
+        },
+      })
+      .catch(() => undefined);
+  }
+
+  function handleDelegatedPartUpdated(properties: Record<string, unknown>): void {
+    const part = properties.part as
+      | {
+          type?: unknown;
+          tool?: unknown;
+          sessionID?: unknown;
+          callID?: unknown;
+          state?: unknown;
+        }
+      | undefined;
+    if (!part || typeof part !== "object") return;
+    if (part.type !== "tool" || part.tool !== "task") return;
+    const parentSessionId = typeof part.sessionID === "string" ? part.sessionID : undefined;
+    const callId = typeof part.callID === "string" ? part.callID : undefined;
+    if (!parentSessionId || !callId) return;
+    const binding = delegatedLaunchBindings.get(delegatedLaunchBindingKey(parentSessionId, callId));
+    if (!binding) return;
+
+    const state = part.state as
+      | { status?: unknown; error?: unknown; metadata?: unknown }
+      | undefined;
+    if (!state || typeof state !== "object") return;
+    const isError = state.status === "error";
+    const metadata =
+      state.metadata && typeof state.metadata === "object"
+        ? (state.metadata as Record<string, unknown>)
+        : undefined;
+
+    if (!metadata) {
+      // A non-error part may simply not carry metadata yet; an error without
+      // metadata can never be bound and is latched blocked to stay fail-closed.
+      if (isError) taintDelegatedLaunchBinding(binding, "metadata_missing_on_error");
+      return;
+    }
+
+    const metaParent = metadata.parentSessionId;
+    const metaChild = metadata.sessionId;
+    if (metaParent !== parentSessionId) {
+      taintDelegatedLaunchBinding(binding, "metadata_parent_mismatch");
+      return;
+    }
+    if (typeof metaChild !== "string" || metaChild.trim() === "") {
+      taintDelegatedLaunchBinding(binding, "metadata_child_missing");
+      return;
+    }
+    if (binding.childSessionId === undefined) {
+      binding.childSessionId = metaChild;
+    } else if (binding.childSessionId !== metaChild) {
+      taintDelegatedLaunchBinding(binding, "metadata_child_replaced");
+      return;
+    }
+
+    if (metadata.background === true) {
+      taintDelegatedLaunchBinding(binding, "metadata_background");
+      return;
+    }
+    if (typeof metadata.jobId === "string" && metadata.jobId !== "") {
+      taintDelegatedLaunchBinding(binding, "metadata_job");
+      return;
+    }
+    if (metadata.interrupted === true) {
+      taintDelegatedLaunchBinding(binding, "metadata_interrupted");
+      return;
+    }
+    if (resumedChildSessions.has(metaChild)) {
+      taintDelegatedLaunchBinding(binding, "child_resumed");
+      return;
+    }
+    if (binding.afterHookEntered || !binding.eligible || binding.settled) return;
+    if (!isError) return;
+
+    const error = state.error;
+    if (typeof error !== "string") return;
+    if (!error.startsWith(delegatedHostFailurePrefix(metaChild))) return;
+
+    const failureExcerpt = createWorkflowResultExcerpt({
+      text: error,
+      source: "normalized_output",
+    });
+    if (!failureExcerpt) return;
+    if (!stores.has(parentSessionId) || invalidHydrationSessions.has(parentSessionId)) return;
+    commitDelegatedLaunchFailure(parentSessionId, binding, failureExcerpt);
+  }
+  // END_BLOCK_DELEGATED_FAILURE_BINDING
 
   // START_BLOCK_DELEGATED_AUTHORIZATION
   // New control mutations require the primary vv-controller session: the calling
@@ -604,6 +912,10 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         return;
       }
 
+      // Observe resume identities from every task launch, including untracked
+      // ones, before any early return so a resumed child cannot stay eligible.
+      observeTaskLaunchArgs(output.args);
+
       const subagentType = readTaskSubagentType(output.args);
       if (!isTrackedSubagent(subagentType)) {
         return;
@@ -774,6 +1086,20 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
             `LAUNCH_REJECTED_DELEGATED_${delegatedLaunch.errorCode}: ${delegatedLaunch.message}`,
           );
         }
+        // Bind the successful launch so a later confirmed host-terminal error
+        // for this exact call can be consumed as a failed attempt. Eligibility
+        // captures background/resume/command exclusions up front.
+        const eligibility = readDelegatedLaunchEligibility(output.args);
+        delegatedLaunchBindings.set(delegatedLaunchBindingKey(input.sessionID, input.callID), {
+          sessionId: input.sessionID,
+          callId: input.callID,
+          workItemId: workItem.workItemId,
+          attempt: delegatedLaunch.attempt,
+          eligible: eligibility.eligible,
+          ineligibleReason: eligibility.reason,
+          afterHookEntered: false,
+          settled: false,
+        });
       } else {
         const reviewerRole = getReviewerRoleForAgent(subagentType);
         if (reviewerRole) {
@@ -820,6 +1146,13 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       });
     },
     "tool.execute.after": async (input, output) => {
+      // Latch the ambiguous after-hook path synchronously before any logging,
+      // parsing, or repair so a later error event for this call cannot be
+      // classified as a terminal launch failure.
+      if (input.tool === "task") {
+        observeAfterHookEntry(input.sessionID, input.callID);
+        observeAfterHookMetadata(input.sessionID, input.callID, output?.metadata);
+      }
       if (input.tool !== "task") {
         return;
       }
@@ -1177,8 +1510,36 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       );
     },
     event: async (input) => {
-      const eventType = (input.event as { type?: string }).type;
-      const properties = (input.event as { properties?: Record<string, unknown> }).properties ?? {};
+      const event = input.event as { type?: string; properties?: Record<string, unknown> };
+      const eventType = event.type;
+      const properties = event.properties ?? {};
+
+      // message.part.updated identifies its session through properties.part,
+      // not properties.sessionID, and must never hydrate a store.
+      if (eventType === "message.part.updated") {
+        handleDelegatedPartUpdated(properties);
+        return;
+      }
+
+      // A child session that receives more than one user prompt has been
+      // resumed or re-prompted and is no longer a fresh-exclusive child.
+      if (eventType === "message.updated") {
+        const messageInfo = properties.info as
+          | { id?: unknown; sessionID?: unknown; role?: unknown }
+          | undefined;
+        if (
+          messageInfo &&
+          messageInfo.role === "user" &&
+          typeof messageInfo.sessionID === "string"
+        ) {
+          observeChildPrompt(
+            messageInfo.sessionID,
+            typeof messageInfo.id === "string" ? messageInfo.id : undefined,
+          );
+        }
+        return;
+      }
+
       const info = properties.info as { id?: string } | undefined;
       const eventSessionId = (properties.sessionID as string | undefined) ?? info?.id;
 
@@ -1192,6 +1553,13 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       }
 
       if (eventType === "session.deleted") {
+        for (const [key, binding] of delegatedLaunchBindings) {
+          if (binding.sessionId === eventSessionId) {
+            delegatedLaunchBindings.delete(key);
+          }
+        }
+        childPromptMessageIds.delete(eventSessionId);
+        resumedChildSessions.delete(eventSessionId);
         stores.delete(eventSessionId);
         await deleteWorkflowSessionDir(eventSessionId);
         await client.app.log({
