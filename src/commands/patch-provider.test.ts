@@ -166,7 +166,7 @@ describe("resolvePatchProviderPreset", () => {
     );
     expect(value.models["vv-codex-gpt-6-astra-max"]).toMatchObject({
       id: "gpt-6-astra",
-      limit: { context: 400000, input: 272000, output: 128000 },
+      limit: { context: 1050000, input: 922000, output: 128000 },
     });
     expect(value.models["vv-codex-gpt-6-astra-max"].options).toMatchObject({
       reasoningEffort: "max",

@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Added the deepseek vv-deepseek-flash-max image-capable max alias plus the zai vv-glm-5.3-max and vv-glm-5.3-flash-max aliases, and widened the zai patch summary to cover every alias.]
+//   LAST_CHANGE: [direct fix - Corrected vv-codex-gpt-6-astra-max limits to the official GPT-6 Astra contract (context 1050000, input 922000, output 128000) instead of the GPT-5.6-family 400000/272000 values that only apply post-PR#33972.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -153,9 +153,12 @@ const OPENAI_PATCH = {
       name: "VV Codex GPT-6 Astra Max",
       id: "gpt-6-astra",
       variants: {},
+      // GPT-6 Astra keeps its own official contract (1.05M context / 922K
+      // input / 128K output per OpenAI model docs, Sept 2026); only the
+      // GPT-5.6 family was capped to 272K input by Codex PR#33972.
       limit: {
-        context: 400000,
-        input: 272000,
+        context: 1050000,
+        input: 922000,
         output: 128000,
       },
       modalities: {
