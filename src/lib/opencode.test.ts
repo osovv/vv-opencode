@@ -1,5 +1,5 @@
 // FILE: src/lib/opencode.test.ts
-// VERSION: 1.4.1
+// VERSION: 1.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode runtime/TUI config mutation and canonical vvoc config path/helpers.
 //   SCOPE: Runtime/TUI plugin specifier writes and legacy migration, OpenCode host compatibility, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, inspection, and scope-aware path resolution behavior.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Expected the materialized spec-guard plugin entry in canonical sync writes.]
+//   LAST_CHANGE: [direct fix - Asserted the refreshed built-in preset keys/values and added coverage that retired saved presets, custom presets, and the active role/profile survive sync idempotently.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -737,9 +737,8 @@ describe("canonical vvoc config helpers", () => {
         "vv-deepseek",
         "vv-kimi",
         "vv-alibaba",
-        "vv-osovv-sol",
-        "vv-osovv-flash",
-        "vv-osovv-kimi",
+        "vv-osovv-ds",
+        "vv-osovv-zai",
         "vv-osovv-qwen",
         "vv-astra-solo",
         "vv-astra-workers",
@@ -828,11 +827,106 @@ describe("canonical vvoc config helpers", () => {
       expect(synced?.presets["vv-deepseek"]?.description).toBe(
         "Starter DeepSeek role assignments for built-in vvoc roles.",
       );
-      expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-v4-flash");
-      expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/deepseek-v4-flash");
+      expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/vv-deepseek-flash-max");
+      expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/vv-deepseek-flash-max");
       expect(synced?.presets["vv-deepseek"]?.orchestration).toEqual({ profile: "balanced" });
-      expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5-turbo");
+      expect(synced?.presets["vv-zai"]?.agents.default).toBe(
+        "zai-coding-plan/vv-glm-5.3-flash-max",
+      );
       expect(synced?.plugins["secrets-redaction"]).toBe(false);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("syncVvocConfig preserves retired saved presets, custom presets, and active role/profile", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-retired-presets-"));
+
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const defaults = createDefaultVvocConfig();
+      const retiredPresets = {
+        "vv-osovv-sol": {
+          description: "saved retired sol preset",
+          agents: {
+            default: "deepseek/deepseek-v4-flash",
+            smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
+          },
+          orchestration: { profile: "single-session" },
+        },
+        "vv-osovv-flash": {
+          description: "saved retired flash preset",
+          agents: { default: "deepseek/deepseek-v4-flash" },
+        },
+        "vv-osovv-kimi": {
+          description: "saved retired kimi preset",
+          agents: {
+            default: "deepseek/deepseek-v4-flash",
+            smart: "kimi-for-coding/vv-kimi-k3-max",
+          },
+        },
+      } as const;
+      const savedConfig = {
+        ...defaults,
+        orchestration: { profile: "single-session" },
+        roles: {
+          ...defaults.roles,
+          default: "deepseek/deepseek-v4-flash",
+          custom: "openai/gpt-5.4-mini",
+        },
+        presets: {
+          ...defaults.presets,
+          ...retiredPresets,
+          custom: {
+            description: "user preset",
+            agents: { custom: "openai/gpt-5.4-mini" },
+            orchestration: { profile: "orchestrated" },
+          },
+        },
+      };
+
+      await mkdir(join(configHome, "vvoc"), { recursive: true });
+      await writeFile(paths.vvocConfigPath, `${JSON.stringify(savedConfig, null, 2)}\n`, "utf8");
+
+      const first = await syncVvocConfig(paths);
+      expect(first.action).toBe("updated");
+      const firstText = await readFile(paths.vvocConfigPath, "utf8");
+      expect(firstText).toContain("vv-osovv-sol");
+      expect(firstText).toContain("vv-osovv-flash");
+      expect(firstText).toContain("vv-osovv-kimi");
+      const synced = JSON.parse(firstText) as ReturnType<typeof createDefaultVvocConfig>;
+
+      expect(synced.presets["vv-osovv-sol"]).toEqual(retiredPresets["vv-osovv-sol"]);
+      expect(synced.presets["vv-osovv-flash"]).toEqual(retiredPresets["vv-osovv-flash"]);
+      expect(synced.presets["vv-osovv-kimi"]).toEqual(retiredPresets["vv-osovv-kimi"]);
+      expect(synced.presets.custom).toEqual({
+        description: "user preset",
+        agents: { custom: "openai/gpt-5.4-mini" },
+        orchestration: { profile: "orchestrated" },
+      });
+      expect(synced.roles.default).toBe("deepseek/deepseek-v4-flash");
+      expect(synced.roles.custom).toBe("openai/gpt-5.4-mini");
+      expect(synced.orchestration).toEqual({ profile: "single-session" });
+      expect(synced.presets["vv-osovv-ds"]).toBeDefined();
+      expect(synced.presets["vv-osovv-zai"]).toBeDefined();
+      expect(synced.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/vv-glm-5.3-flash-max");
+
+      // The first write materializes boolean plugin toggles into objects; the
+      // next writes must then settle to byte-identical output.
+      await syncVvocConfig(paths);
+      const settledText = await readFile(paths.vvocConfigPath, "utf8");
+      const repeated = await syncVvocConfig(paths);
+      expect(repeated.action).toBe("kept");
+      expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(settledText);
+      const settled = JSON.parse(settledText) as ReturnType<typeof createDefaultVvocConfig>;
+      expect(settled.presets["vv-osovv-sol"]).toEqual(retiredPresets["vv-osovv-sol"]);
+      expect(settled.presets.custom).toEqual(synced.presets.custom);
+      expect(settled.roles.default).toBe("deepseek/deepseek-v4-flash");
+      expect(settled.orchestration).toEqual({ profile: "single-session" });
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

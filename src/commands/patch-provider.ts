@@ -1,5 +1,5 @@
 // FILE: src/commands/patch-provider.ts
-// VERSION: 0.9.0
+// VERSION: 0.10.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
 //   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (codex, deepseek, kimi, alibaba, zai), and CLI output.
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added Astra max and Spark medium codex aliases, DeepSeek Flash high, and the zai GLM-5.3 high patch with explicit Spark variant disabling.]
+//   LAST_CHANGE: [direct fix - Added the deepseek vv-deepseek-flash-max image-capable max alias plus the zai vv-glm-5.3-max and vv-glm-5.3-flash-max aliases, and widened the zai patch summary to cover every alias.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -263,6 +263,23 @@ const DEEPSEEK_PATCH = {
         reasoningEffort: "max",
       },
     },
+    "vv-deepseek-flash-max": {
+      name: "VV DeepSeek Flash Max",
+      id: "deepseek-flash",
+      variants: {},
+      limit: {
+        context: 1000000,
+        output: 384000,
+      },
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "max",
+      },
+    },
     "vv-deepseek-flash-high": {
       name: "VV DeepSeek Flash High",
       id: "deepseek-flash",
@@ -300,6 +317,40 @@ const ZAI_PATCH = {
       reasoning: true,
       options: {
         reasoningEffort: "high",
+      },
+    },
+    "vv-glm-5.3-max": {
+      name: "VV GLM-5.3 Max",
+      id: "glm-5.3",
+      variants: {},
+      limit: {
+        context: 1000000,
+        output: 131072,
+      },
+      modalities: {
+        input: ["text"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "max",
+      },
+    },
+    "vv-glm-5.3-flash-max": {
+      name: "VV GLM-5.3 Flash Max",
+      id: "glm-5.3-flash",
+      variants: {},
+      limit: {
+        context: 1000000,
+        output: 131072,
+      },
+      modalities: {
+        input: ["text", "image", "video", "pdf"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "max",
       },
     },
   },
@@ -340,7 +391,7 @@ const PATCH_PROVIDER_PRESETS = {
     kind: "provider-object",
     providerID: "zai-coding-plan",
     value: ZAI_PATCH,
-    summary: "provider.zai-coding-plan.models.vv-glm-5.3-high patched",
+    summary: "provider.zai-coding-plan.models vv-glm-5.3 high/max/flash-max aliases patched",
   },
 } as const satisfies Record<string, PatchPreset>;
 

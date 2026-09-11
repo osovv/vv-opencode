@@ -1,5 +1,5 @@
 // FILE: src/commands/patch-provider.test.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PATCH-PROVIDER - global OpenCode patch presets.
 //   SCOPE: Preset validation plus global OpenCode provider and provider-specific patch application without root model rewrites.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.6 - Added the deepseek alias patch tests and official modalities across all patched models.]
+//   LAST_CHANGE: [direct fix - Covered the deepseek Flash Max image alias and the zai GLM-5.3 max/flash-max aliases, including idempotent writes, root/sibling preservation, and all-preset installation.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -79,7 +79,7 @@ describe("resolvePatchProviderPreset", () => {
     expect(value.models["vv-qwen3.8-max-xhigh"].options.reasoningEffort).toBe("xhigh");
   });
 
-  test("returns the built-in deepseek alias patch", () => {
+  test("returns the built-in deepseek alias patch with the max image alias and preserved old aliases", () => {
     expect(resolvePatchProviderPreset("deepseek")).toMatchObject({
       kind: "provider-object",
       providerID: "deepseek",
@@ -90,6 +90,16 @@ describe("resolvePatchProviderPreset", () => {
         (resolvePatchProviderPreset("deepseek") as { value: Record<string, unknown> }).value,
       ),
     );
+    expect(value.models["vv-deepseek-flash-max"]).toMatchObject({
+      id: "deepseek-flash",
+      limit: { context: 1000000, output: 384000 },
+    });
+    expect(value.models["vv-deepseek-flash-max"].options.reasoningEffort).toBe("max");
+    expect(value.models["vv-deepseek-flash-max"].reasoning).toBe(true);
+    expect(value.models["vv-deepseek-flash-max"].modalities).toEqual({
+      input: ["text", "image"],
+      output: ["text"],
+    });
     expect(value.models["vv-deepseek-v4-flash-max"].id).toBe("deepseek-v4-flash");
     expect(value.models["vv-deepseek-v4-flash-max"].options.reasoningEffort).toBe("max");
     expect(value.models["vv-deepseek-v4-flash-max"].modalities).toEqual({
@@ -107,11 +117,11 @@ describe("resolvePatchProviderPreset", () => {
     });
   });
 
-  test("returns the built-in zai alias patch with full GLM-5.3 high", () => {
+  test("returns the built-in zai alias patch with full GLM-5.3 high, max, and flash-max", () => {
     expect(resolvePatchProviderPreset("zai")).toMatchObject({
       kind: "provider-object",
       providerID: "zai-coding-plan",
-      summary: "provider.zai-coding-plan.models.vv-glm-5.3-high patched",
+      summary: "provider.zai-coding-plan.models vv-glm-5.3 high/max/flash-max aliases patched",
     });
     const value = JSON.parse(
       JSON.stringify(
@@ -125,6 +135,26 @@ describe("resolvePatchProviderPreset", () => {
     expect(value.models["vv-glm-5.3-high"].options.reasoningEffort).toBe("high");
     expect(value.models["vv-glm-5.3-high"].modalities).toEqual({
       input: ["text"],
+      output: ["text"],
+    });
+    expect(value.models["vv-glm-5.3-max"]).toMatchObject({
+      id: "glm-5.3",
+      limit: { context: 1000000, output: 131072 },
+    });
+    expect(value.models["vv-glm-5.3-max"].reasoning).toBe(true);
+    expect(value.models["vv-glm-5.3-max"].options.reasoningEffort).toBe("max");
+    expect(value.models["vv-glm-5.3-max"].modalities).toEqual({
+      input: ["text"],
+      output: ["text"],
+    });
+    expect(value.models["vv-glm-5.3-flash-max"]).toMatchObject({
+      id: "glm-5.3-flash",
+      limit: { context: 1000000, output: 131072 },
+    });
+    expect(value.models["vv-glm-5.3-flash-max"].reasoning).toBe(true);
+    expect(value.models["vv-glm-5.3-flash-max"].options.reasoningEffort).toBe("max");
+    expect(value.models["vv-glm-5.3-flash-max"].modalities).toEqual({
+      input: ["text", "image", "video", "pdf"],
       output: ["text"],
     });
   });
@@ -432,10 +462,32 @@ describe("applyPatchProviderPreset", () => {
     }
   });
 
-  test("writes the global deepseek alias patch idempotently", async () => {
+  test("writes the global deepseek alias patch idempotently and preserves root fields and siblings", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
+      const configPath = join(configHome, "opencode", "opencode.json");
+      await mkdir(join(configHome, "opencode"), { recursive: true });
+      await writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            provider: {
+              deepseek: {
+                models: {
+                  existing: { name: "Existing DeepSeek" },
+                },
+              },
+            },
+            model: "vv-role:default",
+            small_model: "vv-role:fast",
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
       const first = await applyPatchProviderPreset("deepseek", {
         cwd: "/workspace/project",
         configDir: configHome,
@@ -444,11 +496,87 @@ describe("applyPatchProviderPreset", () => {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
-      expect(first.result.action).toBe("created");
+      const parsed = JSON.parse(await readFile(configPath, "utf8")) as {
+        model?: string;
+        small_model?: string;
+        provider?: Record<string, { models?: Record<string, { name?: string }> }>;
+      };
+
+      expect(first.result.action).toBe("updated");
       expect(second.result.action).toBe("kept");
-      expect(content).toContain("vv-deepseek-v4-flash-max");
-      expect(content).toContain("deepseek-v4-flash");
+      expect(parsed.model).toBe("vv-role:default");
+      expect(parsed.small_model).toBe("vv-role:fast");
+      expect(parsed.provider?.deepseek?.models?.existing).toEqual({ name: "Existing DeepSeek" });
+      expect(parsed.provider?.deepseek?.models?.["vv-deepseek-v4-flash-max"]?.name).toBe(
+        "VV DeepSeek V4 Flash Max",
+      );
+      expect(parsed.provider?.deepseek?.models?.["vv-deepseek-flash-max"]?.name).toBe(
+        "VV DeepSeek Flash Max",
+      );
+      expect(parsed.provider?.deepseek?.models?.["vv-deepseek-flash-high"]?.name).toBe(
+        "VV DeepSeek Flash High",
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("writes the global zai alias patch idempotently and preserves root fields and siblings", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
+
+    try {
+      const configPath = join(configHome, "opencode", "opencode.json");
+      await mkdir(join(configHome, "opencode"), { recursive: true });
+      await writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            provider: {
+              "zai-coding-plan": {
+                models: {
+                  existing: { name: "Existing ZAI" },
+                },
+              },
+            },
+            model: "vv-role:default",
+            small_model: "vv-role:fast",
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const first = await applyPatchProviderPreset("zai", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const second = await applyPatchProviderPreset("zai", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const parsed = JSON.parse(await readFile(configPath, "utf8")) as {
+        model?: string;
+        small_model?: string;
+        provider?: Record<string, { models?: Record<string, { name?: string }> }>;
+      };
+
+      expect(first.result.action).toBe("updated");
+      expect(second.result.action).toBe("kept");
+      expect(parsed.model).toBe("vv-role:default");
+      expect(parsed.small_model).toBe("vv-role:fast");
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.existing).toEqual({
+        name: "Existing ZAI",
+      });
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-high"]?.name).toBe(
+        "VV GLM-5.3 High",
+      );
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-max"]?.name).toBe(
+        "VV GLM-5.3 Max",
+      );
+      expect(parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-flash-max"]?.name).toBe(
+        "VV GLM-5.3 Flash Max",
+      );
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -478,6 +606,31 @@ describe("applyPatchProviderPreset", () => {
         "updated",
         "updated",
       ]);
+
+      const parsed = JSON.parse(
+        await readFile(join(configHome, "opencode", "opencode.json"), "utf8"),
+      ) as {
+        provider?: Record<
+          string,
+          { models?: Record<string, { options?: { reasoningEffort?: string } }> }
+        >;
+      };
+      expect(
+        parsed.provider?.deepseek?.models?.["vv-deepseek-flash-max"]?.options?.reasoningEffort,
+      ).toBe("max");
+      expect(
+        parsed.provider?.deepseek?.models?.["vv-deepseek-flash-high"]?.options?.reasoningEffort,
+      ).toBe("high");
+      expect(
+        parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-max"]?.options?.reasoningEffort,
+      ).toBe("max");
+      expect(
+        parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-flash-max"]?.options
+          ?.reasoningEffort,
+      ).toBe("max");
+      expect(
+        parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-high"]?.options?.reasoningEffort,
+      ).toBe("high");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

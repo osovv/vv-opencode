@@ -1,5 +1,5 @@
 // FILE: src/commands/preset.test.ts
-// VERSION: 0.4.6
+// VERSION: 0.5.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Built-in profile mappings, preset rendering, atomic role/profile application, no-opencode rewrite guarantees, section preservation, invalid-write safety, and CLI output paths.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.4 - Dropped vv-minimax and updated vv-zai fast/vision plus vv-osovv and vv-osovv-cheap vision role assertions.]
+//   LAST_CHANGE: [direct fix - Reworked preset assertions to the approved 10-preset order and DeepSeek Flash Max / GLM-5.3 Max / GLM-5.3 Flash Max role matrix, replaced the Astra fast assignments with Luna Low, added an over-all-assignments guard that no shipped preset selects the legacy Spark alias, and kept retired-name absence plus restored custom/retired saved-preset survival.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -34,13 +34,122 @@ describe("preset helpers", () => {
       "vv-deepseek",
       "vv-kimi",
       "vv-alibaba",
-      "vv-osovv-sol",
-      "vv-osovv-flash",
-      "vv-osovv-kimi",
+      "vv-osovv-ds",
+      "vv-osovv-zai",
       "vv-osovv-qwen",
       "vv-astra-solo",
       "vv-astra-workers",
     ]);
+  });
+
+  test("createDefaultVvocConfig omits the retired osovv presets", () => {
+    const presets = createDefaultVvocConfig().presets;
+    expect(presets["vv-osovv-sol"]).toBeUndefined();
+    expect(presets["vv-osovv-flash"]).toBeUndefined();
+    expect(presets["vv-osovv-kimi"]).toBeUndefined();
+  });
+
+  test("built-in presets expose the approved exact role matrix", () => {
+    const presets = createDefaultVvocConfig().presets;
+    expect(
+      Object.fromEntries(
+        Object.entries(presets).map(([name, preset]) => [
+          name,
+          {
+            default: preset.agents.default,
+            fast: preset.agents.fast,
+            smart: preset.agents.smart,
+            reviewer: preset.agents.reviewer,
+            profile: preset.orchestration?.profile,
+          },
+        ]),
+      ),
+    ).toEqual({
+      "vv-codex": {
+        default: "openai/vv-codex-gpt-5.6-terra-high",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
+        reviewer: "openai/vv-codex-gpt-5.6-sol-xhigh",
+        profile: "single-session",
+      },
+      "vv-zai": {
+        default: "zai-coding-plan/vv-glm-5.3-flash-max",
+        fast: "zai-coding-plan/vv-glm-5.3-flash-max",
+        smart: "zai-coding-plan/vv-glm-5.3-max",
+        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        profile: "balanced",
+      },
+      "vv-deepseek": {
+        default: "deepseek/vv-deepseek-flash-max",
+        fast: "deepseek/vv-deepseek-flash-max",
+        smart: "deepseek/vv-deepseek-flash-max",
+        reviewer: "deepseek/vv-deepseek-flash-max",
+        profile: "balanced",
+      },
+      "vv-kimi": {
+        default: "kimi-for-coding/k3",
+        fast: "kimi-for-coding/kimi-for-coding-highspeed",
+        smart: "kimi-for-coding/vv-kimi-k3-max",
+        reviewer: "kimi-for-coding/kimi-for-coding",
+        profile: "single-session",
+      },
+      "vv-alibaba": {
+        default: "alibaba-token-plan/qwen3.8-max",
+        fast: "alibaba-token-plan/deepseek-v4-flash",
+        smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
+        reviewer: "alibaba-token-plan/glm-5.2",
+        profile: "single-session",
+      },
+      "vv-osovv-ds": {
+        default: "deepseek/vv-deepseek-flash-max",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "deepseek/vv-deepseek-flash-max",
+        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        profile: "single-session",
+      },
+      "vv-osovv-zai": {
+        default: "deepseek/vv-deepseek-flash-max",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "zai-coding-plan/vv-glm-5.3-max",
+        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        profile: "single-session",
+      },
+      "vv-osovv-qwen": {
+        default: "deepseek/vv-deepseek-flash-max",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
+        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        profile: "delegated",
+      },
+      "vv-astra-solo": {
+        default: "openai/vv-codex-gpt-6-astra-max",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "openai/vv-codex-gpt-6-astra-max",
+        reviewer: "zai-coding-plan/vv-glm-5.3-high",
+        profile: "single-session",
+      },
+      "vv-astra-workers": {
+        default: "deepseek/vv-deepseek-flash-high",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "openai/vv-codex-gpt-6-astra-max",
+        reviewer: "zai-coding-plan/vv-glm-5.3-high",
+        profile: "delegated",
+      },
+    });
+  });
+
+  test("no shipped preset assignment selects the legacy Spark alias", () => {
+    const presets = createDefaultVvocConfig().presets;
+    const shippedAssignments = Object.entries(presets).flatMap(([presetName, preset]) =>
+      Object.entries(preset.agents).flatMap(([roleId, modelSelection]) =>
+        modelSelection === undefined ? [] : [{ presetName, roleId, modelSelection }],
+      ),
+    );
+    expect(shippedAssignments.length).toBeGreaterThan(0);
+    const sparkAssignments = shippedAssignments.filter(({ modelSelection }) =>
+      modelSelection.includes("gpt-5.3-codex-spark"),
+    );
+    expect(sparkAssignments).toEqual([]);
   });
 
   test("built-in presets expose the approved orchestration mapping", () => {
@@ -55,10 +164,9 @@ describe("preset helpers", () => {
       "vv-deepseek": "balanced",
       "vv-kimi": "single-session",
       "vv-alibaba": "single-session",
-      "vv-osovv-sol": "single-session",
-      "vv-osovv-flash": "single-session",
-      "vv-osovv-kimi": "single-session",
-      "vv-osovv-qwen": "single-session",
+      "vv-osovv-ds": "single-session",
+      "vv-osovv-zai": "single-session",
+      "vv-osovv-qwen": "delegated",
       "vv-astra-solo": "single-session",
       "vv-astra-workers": "delegated",
     });
@@ -75,10 +183,9 @@ describe("preset helpers", () => {
       "vv-codex",
       "vv-deepseek",
       "vv-kimi",
-      "vv-osovv-flash",
-      "vv-osovv-kimi",
+      "vv-osovv-ds",
       "vv-osovv-qwen",
-      "vv-osovv-sol",
+      "vv-osovv-zai",
       "vv-zai",
     ]);
   });
@@ -96,22 +203,32 @@ describe("preset helpers", () => {
     expect(output).toContain('"reviewer": "openai/vv-codex-gpt-5.6-sol-xhigh"');
   });
 
-  test("formatPreset renders all four vv-osovv-sol role assignments", () => {
-    const resolved = resolvePreset("vv-osovv-sol", createDefaultVvocConfig().presets);
+  test("formatPreset renders all four vv-osovv-ds role assignments", () => {
+    const resolved = resolvePreset("vv-osovv-ds", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
+    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-max"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
-    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
+    expect(output).toContain('"smart": "deepseek/vv-deepseek-flash-max"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
   });
 
-  test("formatPreset renders all four vv-osovv-flash role assignments", () => {
-    const resolved = resolvePreset("vv-osovv-flash", createDefaultVvocConfig().presets);
+  test("formatPreset renders all four vv-osovv-zai role assignments", () => {
+    const resolved = resolvePreset("vv-osovv-zai", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "deepseek/deepseek-v4-flash"');
+    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-max"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
-    expect(output).toContain('"smart": "deepseek/vv-deepseek-v4-flash-max"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.2"');
+    expect(output).toContain('"smart": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+  });
+
+  test("formatPreset renders the vv-osovv-qwen delegated assignments", () => {
+    const resolved = resolvePreset("vv-osovv-qwen", createDefaultVvocConfig().presets);
+    const output = formatPreset(resolved.name, resolved.preset);
+    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-max"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
+    expect(output).toContain('"smart": "alibaba-token-plan/vv-qwen3.8-max-xhigh"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain("delegated");
   });
 
   test("formatPreset renders the vv-astra-solo explicit-reasoning assignments", () => {
@@ -119,7 +236,7 @@ describe("preset helpers", () => {
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "openai/vv-codex-gpt-6-astra-max"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.3-codex-spark-medium"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
     expect(output).toContain("single-session");
   });
@@ -129,7 +246,7 @@ describe("preset helpers", () => {
     const output = formatPreset(resolved.name, resolved.preset);
     expect(output).toContain('"default": "deepseek/vv-deepseek-flash-high"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.3-codex-spark-medium"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
     expect(output).toContain("delegated");
   });
@@ -215,7 +332,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-flash, vv-osovv-kimi, vv-osovv-qwen, vv-osovv-sol, vv-zai",
+        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-ds, vv-osovv-qwen, vv-osovv-zai, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -502,9 +619,9 @@ describe("applyPreset", () => {
         "Restart OpenCode to apply the changed roles or orchestration profile.",
       );
       const vvocConfig = await readVvocConfig(paths);
-      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5-turbo");
-      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.2");
-      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-4.7");
+      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/vv-glm-5.3-flash-max");
+      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/vv-glm-5.3-max");
+      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/vv-glm-5.3-flash-max");
       expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
     } finally {
       await rm(configHome, { recursive: true, force: true });

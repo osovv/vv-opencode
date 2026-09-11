@@ -227,7 +227,7 @@ Skills are loaded by OpenCode at session start through `config.skills.paths` (re
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
 | `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
-| `vvoc patch-provider stepfun-ai\|codex\|deepseek\|kimi\|alibaba\|all` | Patch OpenCode providers; `codex` adds subscription-safe OpenAI aliases (also accepts `openai`), `deepseek`/`kimi`/`alibaba` add vv- reasoning-effort aliases, `all` patches every provider at once |
+| `vvoc patch-provider stepfun-ai\|codex\|deepseek\|kimi\|alibaba\|zai\|all` | Patch OpenCode providers; `codex` adds subscription-safe OpenAI aliases (also accepts `openai`), `deepseek`/`kimi`/`alibaba`/`zai` add vv- reasoning-effort aliases, `all` patches every provider at once |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade the global package and run follow-up sync; sync failure is reported as a partial upgrade |
 | `vvoc analytics cache-hit-rate` | Aggregate persisted cache hit rate by day, week, month, session, model, provider, project, vvoc version, or OpenCode version |
@@ -354,10 +354,10 @@ vvoc role list
 vvoc role list --scope effective
 
 # Assign models to roles
-vvoc role set default deepseek/deepseek-v4-flash
-vvoc role set smart openai/vv-codex-gpt-5.6-sol-xhigh
+vvoc role set default deepseek/vv-deepseek-flash-max
+vvoc role set smart zai-coding-plan/vv-glm-5.3-max
 vvoc role set fast openai/vv-codex-gpt-5.6-luna-low
-vvoc role set reviewer zai-coding-plan/glm-5.2 --scope project
+vvoc role set reviewer zai-coding-plan/vv-glm-5.3-max --scope project
 
 # Switch provider presets
 vvoc preset vv-codex
@@ -365,30 +365,39 @@ vvoc preset vv-zai
 vvoc preset vv-deepseek
 vvoc preset vv-kimi
 vvoc preset vv-alibaba
-vvoc preset vv-osovv-sol
-vvoc preset vv-osovv-flash
-vvoc preset vv-osovv-kimi
+vvoc preset vv-osovv-ds
+vvoc preset vv-osovv-zai
 vvoc preset vv-osovv-qwen
 vvoc preset vv-astra-solo
 vvoc preset vv-astra-workers
 
-# Install the explicit-reasoning provider aliases the Astra presets use
-vvoc patch-provider codex     # vv-codex-gpt-6-astra-max + vv-codex-gpt-5.3-codex-spark-medium (+ existing aliases)
-vvoc patch-provider deepseek  # vv-deepseek-flash-high (+ existing alias)
-vvoc patch-provider zai       # vv-glm-5.3-high
+# Install the explicit-reasoning provider aliases
+vvoc patch-provider codex     # vv-codex-gpt-6-astra-max (+ vv-codex-gpt-5.3-codex-spark-medium legacy alias + existing aliases)
+vvoc patch-provider deepseek  # vv-deepseek-flash-max (+ vv-deepseek-v4-flash-max, vv-deepseek-flash-high)
+vvoc patch-provider zai       # vv-glm-5.3-max + vv-glm-5.3-flash-max (+ vv-glm-5.3-high)
 vvoc patch-provider all       # every patch above in one run
 ```
 
-Built-in role IDs: `default`, `smart`, `fast`, `reviewer`, plus any custom lowercase-hyphenated IDs. Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed on every `vvoc install`/`vvoc sync`; user-defined presets are preserved as-is.
+Built-in role IDs: `default`, `smart`, `fast`, `reviewer`, plus any custom lowercase-hyphenated IDs. Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed from the shipped registry as part of the other work `vvoc install` and `vvoc sync` already do; neither command activates a preset or writes the active roles or orchestration profile on its own — that only happens when you run `vvoc preset <name>`.
 
-The two Astra presets pin explicit reasoning-effort aliases:
+Every shipped preset declares an explicit role matrix and orchestration profile:
 
-| Preset | default | smart | fast | reviewer | Profile |
+| Preset | default | fast | smart | reviewer | Profile |
 |---|---|---|---|---|---|
-| `vv-astra-solo` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-5.3-codex-spark-medium` | `zai-coding-plan/vv-glm-5.3-high` | single-session |
-| `vv-astra-workers` | `deepseek/vv-deepseek-flash-high` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-5.3-codex-spark-medium` | `zai-coding-plan/vv-glm-5.3-high` | delegated |
+| `vv-codex` | `openai/vv-codex-gpt-5.6-terra-high` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-5.6-sol-xhigh` | `openai/vv-codex-gpt-5.6-sol-xhigh` | single-session |
+| `vv-zai` | `zai-coding-plan/vv-glm-5.3-flash-max` | `zai-coding-plan/vv-glm-5.3-flash-max` | `zai-coding-plan/vv-glm-5.3-max` | `zai-coding-plan/vv-glm-5.3-max` | balanced |
+| `vv-deepseek` | `deepseek/vv-deepseek-flash-max` | `deepseek/vv-deepseek-flash-max` | `deepseek/vv-deepseek-flash-max` | `deepseek/vv-deepseek-flash-max` | balanced |
+| `vv-kimi` | `kimi-for-coding/k3` | `kimi-for-coding/kimi-for-coding-highspeed` | `kimi-for-coding/vv-kimi-k3-max` | `kimi-for-coding/kimi-for-coding` | single-session |
+| `vv-alibaba` | `alibaba-token-plan/qwen3.8-max` | `alibaba-token-plan/deepseek-v4-flash` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `alibaba-token-plan/glm-5.2` | single-session |
+| `vv-osovv-ds` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `deepseek/vv-deepseek-flash-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
+| `vv-osovv-zai` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `zai-coding-plan/vv-glm-5.3-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
+| `vv-osovv-qwen` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `zai-coding-plan/vv-glm-5.3-max` | delegated |
+| `vv-astra-solo` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | single-session |
+| `vv-astra-workers` | `deepseek/vv-deepseek-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | delegated |
 
-New aliases bind API model IDs to explicit efforts (`gpt-6-astra` → max, `gpt-5.3-codex-spark` → medium with unsupported inherited effort variants disabled, `deepseek-flash` → high, `glm-5.3` → high) and keep the established OpenAI reasoning-summary and encrypted-reasoning options. Spark and GLM-5.3 are advertised conservatively as text-only. The shared `fast` role also serves `explore`, Guardian, and `small_model` — Spark availability for those consumers is not verified until you use it. Real model access, review quality, latency, and Astra-token savings are unmeasured: metadata here describes provider capability and pricing boundaries, not benchmarked behavior, and credentialed smoke runs would require separate authorization.
+`vv-osovv-ds` replaces the former `vv-osovv-flash` offering and `vv-osovv-zai` is new; `vv-osovv-sol`, `vv-osovv-flash`, and `vv-osovv-kimi` are no longer shipped. A retired preset definition already present in a saved `vvoc.json` is preserved in place rather than migrated or removed across `vvoc install`/`vvoc sync`; delete it manually if you no longer want it. No automatic provider migration or legacy-name cleanup runs, and applying a preset changes only the roles and profile it declares.
+
+The explicit-reasoning aliases bind API model IDs to fixed efforts in the patched OpenCode provider entries. `deepseek-flash` is available as `vv-deepseek-flash-max` (effort `max`, image input) and the older `vv-deepseek-flash-high` (`high`, text-only); `vv-deepseek-v4-flash-max` remains text-only. On `zai-coding-plan`, `glm-5.3` is available as `vv-glm-5.3-high` and `vv-glm-5.3-max` (both text-only) and `glm-5.3-flash` as `vv-glm-5.3-flash-max` (text, image, video, and PDF input). The codex aliases keep the established OpenAI reasoning-summary and encrypted-reasoning options. `vv-codex-gpt-5.3-codex-spark-medium` is retained only for backward compatibility with manual configurations that already reference it: it is legacy/manual compatibility, keeps its disabled inherited effort variants, and is advertised conservatively as text-only, and no shipped preset selects it. The shared `fast` role also serves `explore`, Guardian, and `small_model` — availability for those consumers is not verified until you use it. Real model access, review quality, latency, and Astra-token savings are unmeasured: metadata here describes provider capability and pricing boundaries, not benchmarked behavior, and credentialed smoke runs would require separate authorization.
 
 ### Orchestration profiles
 
@@ -413,12 +422,11 @@ Built-in presets declare an orchestration mapping:
 | `vv-codex` | single-session |
 | `vv-kimi` | single-session |
 | `vv-alibaba` | single-session |
-| `vv-osovv-sol` | single-session |
-| `vv-osovv-flash` | single-session |
-| `vv-osovv-kimi` | single-session |
-| `vv-osovv-qwen` | single-session |
+| `vv-osovv-ds` | single-session |
+| `vv-osovv-zai` | single-session |
 | `vv-astra-solo` | single-session |
 | `vv-astra-workers` | delegated |
+| `vv-osovv-qwen` | delegated |
 | `vv-zai` | balanced |
 | `vv-deepseek` | balanced |
 

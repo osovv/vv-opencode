@@ -1,5 +1,5 @@
 // FILE: src/commands/completion.test.ts
-// VERSION: 0.4.13
+// VERSION: 0.4.14
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
 //   SCOPE: Bash, zsh, and fish completion generation including orchestration commands/profiles, patch-provider presets, preset names, and role flows.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.13 - Added regression coverage for canonical built-in preset-name completion output across shells.]
+//   LAST_CHANGE: [direct fix - Updated completion preset names to the shipped registry and added regression coverage that retired osovv presets are absent from every shell.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -150,14 +150,26 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain(
-    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateZshCompletion()).toContain(
-    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateFishCompletion()).toContain(
-    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-sol vv-osovv-flash vv-osovv-kimi vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
+});
+
+test("completion scripts - omit every retired osovv preset", () => {
+  for (const output of [
+    generateBashCompletion(),
+    generateZshCompletion(),
+    generateFishCompletion(),
+  ]) {
+    expect(output).not.toContain("vv-osovv-sol");
+    expect(output).not.toContain("vv-osovv-flash");
+    expect(output).not.toContain("vv-osovv-kimi");
+  }
 });
 
 test("completion scripts - contain orchestration commands and profile values", () => {

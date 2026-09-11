@@ -1,5 +1,5 @@
 // FILE: src/commands/init.test.ts
-// VERSION: 0.10.1
+// VERSION: 0.10.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-INIT - interactive project initialization.
 //   SCOPE: Non-interactive init path, local project runtime/TUI config layers, managed agent/skill/plan scaffolding, canonical config scaffolding, global side-effect guards, and idempotent re-run handling.
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added project-local TUI registration and idempotence expectations.]
+//   LAST_CHANGE: [direct fix - Seeded-config assertion follows the shipped vv-osovv-ds preset name.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -129,7 +129,7 @@ describe("init scenarios", () => {
       expect(vvocConfig.presets["vv-codex"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-zai"]?.agents.default).toBeDefined();
       expect(vvocConfig.presets["vv-deepseek"]?.agents.default).toBeDefined();
-      expect(vvocConfig.presets["vv-osovv-sol"]?.agents.default).toBeDefined();
+      expect(vvocConfig.presets["vv-osovv-ds"]?.agents.default).toBeDefined();
     } finally {
       rmSync(configHome, { recursive: true, force: true });
       rmSync(tmpDir, { recursive: true, force: true });

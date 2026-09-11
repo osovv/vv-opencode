@@ -1,5 +1,5 @@
 // FILE: src/lib/vvoc-preset-registry.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical built-in vvoc preset registry from a single internal source of truth.
 //   SCOPE: Built-in preset name ordering, role and orchestration definitions, and built-in preset-name detection.
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added vv-astra-solo (single-session) and vv-astra-workers (delegated) with explicit-reasoning aliases.]
+//   LAST_CHANGE: [direct fix - Retired vv-osovv-sol/flash/kimi from the shipped registry, added vv-osovv-ds and vv-osovv-zai, moved vv-zai, vv-deepseek, and vv-osovv-qwen to the approved DeepSeek Flash Max / GLM-5.3 Max / GLM-5.3 Flash Max role matrix, and replaced the Astra fast assignments with Luna Low so no shipped preset selects the legacy Spark alias.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -42,20 +42,20 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
   "vv-zai": {
     description: "Starter ZAI role assignments for built-in vvoc roles.",
     agents: {
-      default: "zai-coding-plan/glm-5-turbo",
-      fast: "zai-coding-plan/glm-4.7",
-      smart: "zai-coding-plan/glm-5.2",
-      reviewer: "zai-coding-plan/glm-5.2",
+      default: "zai-coding-plan/vv-glm-5.3-flash-max",
+      fast: "zai-coding-plan/vv-glm-5.3-flash-max",
+      smart: "zai-coding-plan/vv-glm-5.3-max",
+      reviewer: "zai-coding-plan/vv-glm-5.3-max",
     },
     orchestration: { profile: "balanced" },
   },
   "vv-deepseek": {
     description: "Starter DeepSeek role assignments for built-in vvoc roles.",
     agents: {
-      default: "deepseek/deepseek-v4-flash",
-      fast: "deepseek/deepseek-v4-flash",
-      smart: "deepseek/deepseek-v4-pro",
-      reviewer: "deepseek/deepseek-v4-pro",
+      default: "deepseek/vv-deepseek-flash-max",
+      fast: "deepseek/vv-deepseek-flash-max",
+      smart: "deepseek/vv-deepseek-flash-max",
+      reviewer: "deepseek/vv-deepseek-flash-max",
     },
     orchestration: { profile: "balanced" },
   },
@@ -79,51 +79,42 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     },
     orchestration: { profile: "single-session" },
   },
-  "vv-osovv-sol": {
-    description: "Personal osovv stack with codex sol smart (deepseek + openai + zai).",
+  "vv-osovv-ds": {
+    description:
+      "Personal osovv stack with DeepSeek Flash default and smart (deepseek + openai + zai).",
     agents: {
-      default: "deepseek/deepseek-v4-flash",
+      default: "deepseek/vv-deepseek-flash-max",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
-      smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
-      reviewer: "zai-coding-plan/glm-5.2",
+      smart: "deepseek/vv-deepseek-flash-max",
+      reviewer: "zai-coding-plan/vv-glm-5.3-max",
     },
     orchestration: { profile: "single-session" },
   },
-  "vv-osovv-flash": {
-    description: "Personal osovv stack with deepseek v4 flash smart (deepseek + openai + zai).",
+  "vv-osovv-zai": {
+    description: "Personal osovv stack with GLM-5.3 smart (deepseek + openai + zai).",
     agents: {
-      default: "deepseek/deepseek-v4-flash",
+      default: "deepseek/vv-deepseek-flash-max",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
-      smart: "deepseek/vv-deepseek-v4-flash-max",
-      reviewer: "zai-coding-plan/glm-5.2",
-    },
-    orchestration: { profile: "single-session" },
-  },
-  "vv-osovv-kimi": {
-    description: "Personal osovv stack with kimi k3 smart (deepseek + openai + kimi + zai).",
-    agents: {
-      default: "deepseek/deepseek-v4-flash",
-      fast: "openai/vv-codex-gpt-5.6-luna-low",
-      smart: "kimi-for-coding/vv-kimi-k3-max",
-      reviewer: "zai-coding-plan/glm-5.2",
+      smart: "zai-coding-plan/vv-glm-5.3-max",
+      reviewer: "zai-coding-plan/vv-glm-5.3-max",
     },
     orchestration: { profile: "single-session" },
   },
   "vv-osovv-qwen": {
     description: "Personal osovv stack with qwen3.8 smart (deepseek + openai + qwen + zai).",
     agents: {
-      default: "deepseek/deepseek-v4-flash",
+      default: "deepseek/vv-deepseek-flash-max",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
-      reviewer: "zai-coding-plan/glm-5.2",
+      reviewer: "zai-coding-plan/vv-glm-5.3-max",
     },
-    orchestration: { profile: "single-session" },
+    orchestration: { profile: "delegated" },
   },
   "vv-astra-solo": {
-    description: "Astra-primary solo stack with Spark fast and GLM-5.3 review.",
+    description: "Astra-primary solo stack with Luna fast and GLM-5.3 review.",
     agents: {
       default: "openai/vv-codex-gpt-6-astra-max",
-      fast: "openai/vv-codex-gpt-5.3-codex-spark-medium",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "openai/vv-codex-gpt-6-astra-max",
       reviewer: "zai-coding-plan/vv-glm-5.3-high",
     },
@@ -134,7 +125,7 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       "Astra-architecture delegated stack with DeepSeek Flash workers and GLM-5.3 review.",
     agents: {
       default: "deepseek/vv-deepseek-flash-high",
-      fast: "openai/vv-codex-gpt-5.3-codex-spark-medium",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "openai/vv-codex-gpt-6-astra-max",
       reviewer: "zai-coding-plan/vv-glm-5.3-high",
     },
