@@ -1,3 +1,12 @@
+## <small>1.4.2 (2026-09-11)</small>
+
+### Summary
+
+This release strengthens the reliability of vvoc's managed prompts and workflow recovery. Managed agents, skills, and the universal guidance injected into primary sessions now carry explicit correctness obligations: for behavior changes, agents derive the material properties that must be preserved, separate write scope from impact and verification scope, investigate directly affected consumers, challenge a material assumption with a diagnostic counterexample, and choose verification at the level where the risk arises, while controllers and reviewers distinguish "no defect discovered" from sufficient evidence and can fail a change for a material verification gap. In addition, when a tracked subagent returns a malformed result, the workflow plugin now performs at most one bounded continuation in the same child session without a tools override, preserving that session's persisted permissions and requiring a truthful post-continuation status, while explicit BLOCKED or NEEDS_CONTEXT output still fails closed. Together these changes make agent verification more honest and keep workflow recovery from silently altering permissions.
+
+* feat(prompts): add correctness obligations to managed agents, skills, and universal guidance ([6f2dd21](https://github.com/osovv/vv-opencode/commit/6f2dd21))
+* fix(workflow): preserve permissions during result continuation ([5342a31](https://github.com/osovv/vv-opencode/commit/5342a31))
+
 ## <small>1.4.1 (2026-09-11)</small>
 
 ### Summary
