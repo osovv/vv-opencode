@@ -2,8 +2,8 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol parsing, result excerpts, repair guidance, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
-//   DEPENDS: [bun:test, node:fs, node:path, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
+//   SCOPE: Protocol parsing, result excerpts, bounded continuation guidance and host-permission preservation, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
+//   DEPENDS: [bun:test, node:fs, node:path, @opencode-ai/sdk, @opencode-ai/sdk/v2/types, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PERSISTENCE, V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW, V-M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -12,29 +12,51 @@
 // START_MODULE_MAP
 //   ListedPluginItems - Parsed work_item_list payload used by plugin integration tests.
 //   SESSION_ID - Stable session identifier shared by workflow fixtures.
-//   WorkflowPluginHarness - Captured workflow plugin hooks and logs for one fixture.
+//   WorkflowPluginHarness - Captured workflow plugin hooks, logs, and recorded prompt calls for one fixture.
 //   createToolContext - Builds a workflow tool execution context.
-//   createWorkflowPluginHarness - Creates an isolated workflow plugin harness.
+//   createWorkflowPluginHarness - Creates an isolated workflow plugin harness with optional scripted continuation responses.
 //   finishPluginTask - Completes a tracked plugin task with a strict result block.
 //   finishPluginTaskWithRawOutput - Completes a tracked plugin task with raw output.
 //   launchPluginTask - Launches one tracked task through plugin hooks.
 //   listPluginItems - Lists and parses plugin work items.
 //   openItem - Opens one work item against an in-memory store.
 //   openPluginWorkItem - Opens one work item through the plugin tool.
+//   openAndLaunchImplementer - Opens an implementation item and launches one vv-implementer task.
 //   parseToolJson - Parses structured workflow tool output.
 //   previousConfigHome - Preserves the caller's config-home environment for cleanup.
 //   result - Builds a strict tracked result block.
+//   wrapTaskElement - Wraps tracked output in an OpenCode task-element envelope.
 //   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
 //   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
+//   SessionPromptCall - SDK-derived session.prompt request accepted by the host-contract double.
+//   SessionPromptResponse - SDK-derived session.prompt response with a valid assistant message and text part.
+//   SessionPromptError - SDK-derived session.prompt error consumed by continuation.
+//   SessionPromptConsumedResult - Narrowed SDK session.prompt data/error boundary consumed by continuation.
+//   SessionPromptMutation - Session mutation API names tracked by the host-contract double.
+//   HostPermissionDouble - Captured host-contract double client, recorded calls, mutation counts, and persisted rules.
+//   PromptScriptEntry - Scripted harness continuation outcome: text response, error, or thrown failure.
+//   assistantMessage - Builds a valid SDK AssistantMessage fixture for one session.
+//   textPart - Builds a valid SDK TextPart response fixture.
+//   sessionPromptResponse - Builds a valid SDK session.prompt response fixture.
+//   firstPromptText - Extracts the first text-part input from a recorded prompt call.
+//   createHostPermissionDouble - Models the confirmed host rule-replacement semantics for prompt `tools` and counts session mutations.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Updated PluginInput and structured ToolResult fixtures for OpenCode 1.18.2.]
+//   LAST_CHANGE: [direct fix bounded result continuation - Added SDK-derived prompt/permission fixtures and coverage that the truthful-status continuation prompt, a later ordinary child prompt, and explicit malformed hard-stop suppression all preserve persistent permissions without session mutations.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type {
+  AssistantMessage,
+  OpencodeClient,
+  SessionPromptErrors,
+  SessionPromptResponses,
+  TextPart,
+} from "@opencode-ai/sdk";
+import type { PermissionRule } from "@opencode-ai/sdk/v2/types";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
@@ -51,7 +73,12 @@ import {
   validateStatusForAgent,
   type ParsedResultBlock,
 } from "./workflow/protocol.js";
-import { buildTrackedResultRepairPrompt, unwrapResumableTaskResult } from "./workflow/repair.js";
+import {
+  attemptTrackedResultRepair,
+  buildTrackedResultRepairPrompt,
+  hasExplicitHardStopStatus,
+  unwrapResumableTaskResult,
+} from "./workflow/repair.js";
 import {
   applyTrackedResult,
   beginTrackedLaunch,
@@ -199,11 +226,197 @@ describe("workflow repair", () => {
     expect(prompt).toContain(
       "Move all findings, questions, or result body text below a blank line",
     );
-    expect(prompt).toContain("same VVOC_STATUS");
-    expect(prompt).toContain("same VVOC_ROUTE");
+    expect(prompt).toContain("Preserve the same work item identity");
+    expect(prompt).toContain("truthfully reflects the result after this continuation");
+    expect(prompt).toContain("If the honest outcome is BLOCKED or NEEDS_CONTEXT");
     expect(prompt).toContain(
-      "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: <allowed status>\n\n<brief result handoff>",
+      "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: <truthful status>\n\n<brief result handoff>",
     );
+    expect(prompt).not.toContain("same VVOC_STATUS");
+  });
+
+  test("continuation prompt permits bounded same-session work without tool denial", () => {
+    const prompt = buildTrackedResultRepairPrompt({
+      agent: "vv-implementer",
+      workItemId: "wi-1",
+      malformedOutput: "I have started implementing; tests are next.",
+      parseErrorCode: "UNEXPECTED_TOP_BLOCK_LINE",
+      parseErrorMessage: "UNEXPECTED_TOP_BLOCK_LINE: strict top block contains a non-protocol line",
+    });
+
+    expect(prompt).toContain("bounded continuation in the same session");
+    expect(prompt).toContain("currently permitted tools");
+    expect(prompt).toContain("original assignment, role, and write scope");
+    expect(prompt).toContain("without repeating completed work");
+    expect(prompt).toContain("BLOCKED or NEEDS_CONTEXT");
+    expect(prompt).not.toContain("Do not call tools");
+    expect(prompt).not.toContain("do not perform implementation or review");
+    expect(prompt).not.toContain("Repair only the response format");
+    expect(prompt).not.toContain("Keep the same underlying outcome");
+  });
+
+  test("continuation prompt does not freeze a missing or outdated status or route", () => {
+    const prompt = buildTrackedResultRepairPrompt({
+      agent: "vv-implementer",
+      workItemId: "wi-1",
+      malformedOutput: "VVOC_WORK_ITEM_ID: wi-1\nFindings: blocked on a missing API contract.",
+      parseErrorCode: "MISSING_STATUS",
+      parseErrorMessage: "MISSING_STATUS: strict top block must include VVOC_STATUS",
+    });
+
+    expect(prompt).toContain("do not freeze a missing or outdated status from before it");
+    expect(prompt).toContain("report that status explicitly in the corrected response");
+    expect(prompt).toContain("VVOC_STATUS: <truthful status>");
+    expect(prompt).toContain("VVOC_ROUTE: <route consistent with the original assignment>");
+    expect(prompt).not.toContain("<existing route>");
+    expect(prompt).not.toContain("same VVOC_STATUS");
+  });
+
+  test("explicit malformed hard-stop status lines are detected for suppression", () => {
+    expect(hasExplicitHardStopStatus("VVOC_STATUS: BLOCKED")).toBe(true);
+    expect(
+      hasExplicitHardStopStatus(
+        "preamble\nVVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: NEEDS_CONTEXT\nbody without separator",
+      ),
+    ).toBe(true);
+    expect(hasExplicitHardStopStatus("VVOC_STATUS: DONE")).toBe(false);
+    expect(hasExplicitHardStopStatus("The worker was blocked by a missing API contract.")).toBe(
+      false,
+    );
+  });
+
+  test("host permission double replaces persistent rules when prompt tools is nonempty", async () => {
+    const host = createHostPermissionDouble({
+      rules: [
+        { permission: "edit", action: "ask", pattern: "src/**" },
+        { permission: "bash", action: "deny", pattern: "*" },
+      ],
+    });
+
+    await host.client.session.prompt({
+      path: { id: "ses_old_defect" },
+      body: {
+        tools: { edit: false, write: false },
+        parts: [{ type: "text", text: "Old defect probe." }],
+      },
+    });
+
+    expect(host.getRules()).toEqual([
+      { permission: "edit", action: "deny", pattern: "*" },
+      { permission: "write", action: "deny", pattern: "*" },
+    ]);
+  });
+
+  test("continuation and a later ordinary child prompt preserve persistent permissions", async () => {
+    const persistentRules: PermissionRule[] = [
+      { permission: "edit", action: "ask", pattern: "src/plugins/**" },
+      { permission: "bash", action: "deny", pattern: "rm *" },
+      { permission: "read", action: "allow", pattern: "*" },
+      { permission: "webfetch", action: "allow", pattern: "*" },
+      { permission: "work_item_decide", action: "deny", pattern: "*" },
+    ];
+    const host = createHostPermissionDouble({
+      rules: persistentRules,
+      promptResult: () => ({
+        data: sessionPromptResponse(
+          "ses_same_child",
+          `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nFinished the original task.`,
+        ),
+      }),
+    });
+
+    const repairOptions = {
+      client: host.client as never,
+      directory: "/tmp/project",
+      taskId: "ses_same_child",
+      agent: "vv-implementer" as const,
+      workItemId: "wi-1",
+      malformedOutput: "I have started implementing; tests are next.",
+      parseErrorCode: "UNEXPECTED_TOP_BLOCK_LINE" as const,
+      parseErrorMessage: "UNEXPECTED_TOP_BLOCK_LINE: strict top block contains a non-protocol line",
+    };
+
+    expect(host.getRules()).toEqual(persistentRules);
+
+    const continued = await attemptTrackedResultRepair(repairOptions);
+    expect(continued).toContain("VVOC_STATUS: DONE");
+    const continuationCall = host.calls[0];
+    expect(continuationCall?.path.id).toBe("ses_same_child");
+    expect(continuationCall?.body?.agent).toBe("vv-implementer");
+    expect(continuationCall?.body?.tools).toBeUndefined();
+    expect(continuationCall?.body !== undefined && "tools" in continuationCall.body).toBe(false);
+    expect(host.getRules()).toEqual(persistentRules);
+
+    // A later ORDINARY prompt to the same child carries a normal work prompt
+    // with no repair system instruction and no tools override.
+    await host.client.session.prompt({
+      path: { id: "ses_same_child" },
+      body: {
+        agent: "vv-implementer",
+        parts: [{ type: "text", text: "Continue the original assignment." }],
+      },
+    });
+    const ordinaryCall = host.calls[1];
+    expect(ordinaryCall?.path.id).toBe("ses_same_child");
+    expect(ordinaryCall?.body?.agent).toBe("vv-implementer");
+    expect(ordinaryCall?.body?.system).toBeUndefined();
+    expect(ordinaryCall?.body?.tools).toBeUndefined();
+    expect(ordinaryCall?.body !== undefined && "tools" in ordinaryCall.body).toBe(false);
+
+    expect(host.calls).toHaveLength(2);
+    expect(host.getRules()).toEqual(persistentRules);
+    // Normal repository permissions remain available and inherited deny rules stay effective.
+    expect(host.getRules()).toContainEqual({ permission: "read", action: "allow", pattern: "*" });
+    expect(host.getRules()).toContainEqual({
+      permission: "edit",
+      action: "ask",
+      pattern: "src/plugins/**",
+    });
+    expect(host.getRules()).toContainEqual({
+      permission: "work_item_decide",
+      action: "deny",
+      pattern: "*",
+    });
+    expect(host.mutationCalls).toEqual({ create: 0, fork: 0, update: 0, restore: 0 });
+  });
+
+  test("continuation failures do not mutate persistent permissions", async () => {
+    const persistentRules: PermissionRule[] = [
+      { permission: "edit", action: "allow", pattern: "src/**" },
+      { permission: "bash", action: "ask", pattern: "*" },
+    ];
+    const repairOptions = (client: unknown) => ({
+      client: client as never,
+      directory: "/tmp/project",
+      taskId: "ses_same_child",
+      agent: "vv-implementer" as const,
+      workItemId: "wi-1",
+      malformedOutput: "plain progress",
+      parseErrorCode: "MISSING_ROUTE" as const,
+      parseErrorMessage: "MISSING_ROUTE: vv-implementer output must include VVOC_ROUTE",
+    });
+
+    const errorHost = createHostPermissionDouble({
+      rules: persistentRules,
+      promptResult: () => ({
+        data: undefined,
+        error: { name: "BadRequest", data: { message: "rejected" } },
+      }),
+    });
+    expect(await attemptTrackedResultRepair(repairOptions(errorHost.client))).toBeUndefined();
+
+    const throwHost = createHostPermissionDouble({
+      rules: persistentRules,
+      promptResult: () => {
+        throw new Error("aborted");
+      },
+    });
+    expect(await attemptTrackedResultRepair(repairOptions(throwHost.client))).toBeUndefined();
+
+    expect(errorHost.getRules()).toEqual(persistentRules);
+    expect(throwHost.getRules()).toEqual(persistentRules);
+    expect(errorHost.mutationCalls).toEqual({ create: 0, fork: 0, update: 0, restore: 0 });
+    expect(throwHost.mutationCalls).toEqual({ create: 0, fork: 0, update: 0, restore: 0 });
   });
 });
 
@@ -664,7 +877,10 @@ describe("workflow tooling", () => {
 type WorkflowPluginHarness = {
   plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
   logs: string[];
+  promptCalls: SessionPromptCall[];
 };
+
+type PromptScriptEntry = string | { error: string } | { throws: string };
 
 function writeWorkflowProfile(profile: OrchestrationProfile): void {
   const configHome = process.env.XDG_CONFIG_HOME;
@@ -678,9 +894,12 @@ function writeWorkflowProfile(profile: OrchestrationProfile): void {
 
 function createWorkflowPluginHarness(
   profile?: OrchestrationProfile,
+  options?: { promptResponses?: PromptScriptEntry[] },
 ): Promise<WorkflowPluginHarness> {
   if (profile) writeWorkflowProfile(profile);
   const logs: string[] = [];
+  const promptCalls: SessionPromptCall[] = [];
+  const pendingPromptResponses = [...(options?.promptResponses ?? [])];
   return WorkflowPlugin({
     client: {
       app: {
@@ -690,7 +909,26 @@ function createWorkflowPluginHarness(
         },
       },
       session: {
-        prompt: async () => ({ data: undefined, error: { message: "prompt unavailable" } }),
+        prompt: async (call: SessionPromptCall): Promise<SessionPromptConsumedResult> => {
+          promptCalls.push(call);
+          const entry = pendingPromptResponses.shift();
+          if (entry === undefined) {
+            return {
+              data: undefined,
+              error: { name: "BadRequest", data: { message: "prompt unavailable" } },
+            };
+          }
+          if (typeof entry === "string") {
+            return { data: sessionPromptResponse(call.path.id, entry) };
+          }
+          if ("throws" in entry) {
+            throw new Error(entry.throws);
+          }
+          return {
+            data: undefined,
+            error: { name: "BadRequest", data: { message: entry.error } },
+          };
+        },
       },
     } as never,
     project: {} as never,
@@ -699,7 +937,7 @@ function createWorkflowPluginHarness(
     experimental_workspace: { register: () => undefined },
     serverUrl: new URL("http://localhost"),
     $: {} as never,
-  }).then((plugin) => ({ plugin, logs }));
+  }).then((plugin) => ({ plugin, logs, promptCalls }));
 }
 
 describe("workflow plugin integration", () => {
@@ -718,6 +956,21 @@ describe("workflow plugin integration", () => {
       "session-reviewer-needs-context-excerpt",
       "session-guidance",
       "session-tool-denied",
+      "session-protocol-continuation",
+      "session-protocol-continuation-element",
+      "session-protocol-continuation-hard-stop-result",
+      "session-hard-stop-missing-blank",
+      "session-hard-stop-preamble",
+      "session-hard-stop-element",
+      "session-continuation-rejected",
+      "session-continuation-thrown",
+      "session-continuation-malformed",
+      "session-continuation-empty",
+      "session-continuation-mismatch",
+      "session-continuation-bad-status",
+      "session-continuation-missing-route",
+      "session-valid-result",
+      "session-valid-hard-stop",
     ]) {
       await deleteWorkflowSessionDir(sessionID);
     }
@@ -743,6 +996,21 @@ describe("workflow plugin integration", () => {
       "session-reviewer-needs-context-excerpt",
       "session-guidance",
       "session-tool-denied",
+      "session-protocol-continuation",
+      "session-protocol-continuation-element",
+      "session-protocol-continuation-hard-stop-result",
+      "session-hard-stop-missing-blank",
+      "session-hard-stop-preamble",
+      "session-hard-stop-element",
+      "session-continuation-rejected",
+      "session-continuation-thrown",
+      "session-continuation-malformed",
+      "session-continuation-empty",
+      "session-continuation-mismatch",
+      "session-continuation-bad-status",
+      "session-continuation-missing-route",
+      "session-valid-result",
+      "session-valid-hard-stop",
     ]) {
       await deleteWorkflowSessionDir(sessionID);
     }
@@ -852,6 +1120,255 @@ describe("workflow plugin integration", () => {
         ),
       ),
     ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+  });
+
+  test("incomplete wrapped output continues the same child once and applies the corrected result", async () => {
+    const { plugin, promptCalls, logs } = await createWorkflowPluginHarness(undefined, {
+      promptResponses: [
+        `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nFinished the original task and reran its checks.`,
+      ],
+    });
+    const sessionID = "session-protocol-continuation";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
+
+    await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
+    await finishPluginTaskWithRawOutput(
+      plugin,
+      sessionID,
+      "impl",
+      "vv-implementer",
+      workItemId,
+      wrapTaskResult(
+        "ses_continuation_child",
+        "I have started implementing; I still need to run the focused tests.",
+      ),
+    );
+
+    expect(promptCalls).toHaveLength(1);
+    const call = promptCalls[0];
+    expect(call?.path.id).toBe("ses_continuation_child");
+    expect(call?.body?.agent).toBe("vv-implementer");
+    expect(call?.body?.tools).toBeUndefined();
+    expect(call?.body !== undefined && "tools" in call.body).toBe(false);
+    expect(firstPromptText(call)).toContain(
+      "I have started implementing; I still need to run the focused tests.",
+    );
+    expect(logs).toContain(
+      "[workflow][resultParsing][BLOCK_PARSE_RESULT] bounded continuation attempted",
+    );
+
+    const listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("awaiting_reviews");
+    expect(listed.items[0]?.currentRound).toBeDefined();
+    expect(logs).toContain("[workflow][resultParsing][BLOCK_PARSE_RESULT] result parsed");
+  });
+
+  test("task-element wrapped output also continues the same child once", async () => {
+    const { plugin, promptCalls } = await createWorkflowPluginHarness(undefined, {
+      promptResponses: [
+        `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nCompleted via element continuation.`,
+      ],
+    });
+    const sessionID = "session-protocol-continuation-element";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
+    await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
+    await finishPluginTaskWithRawOutput(
+      plugin,
+      sessionID,
+      "impl",
+      "vv-implementer",
+      workItemId,
+      wrapTaskElement("ses_element_child", "Plain progress without a protocol header."),
+    );
+
+    expect(promptCalls).toHaveLength(1);
+    expect(promptCalls[0]?.path.id).toBe("ses_element_child");
+    const listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("awaiting_reviews");
+  });
+
+  test("valid tracked results and valid hard stops never continue the child", async () => {
+    const { plugin, promptCalls } = await createWorkflowPluginHarness();
+
+    const resultSession = "session-valid-result";
+    const resultItem = await openAndLaunchImplementer(plugin, resultSession);
+    await finishPluginTask(plugin, resultSession, "impl", "vv-implementer", resultItem, "DONE");
+    expect((await listPluginItems(plugin, resultSession)).items[0]?.state).toBe("awaiting_reviews");
+
+    const hardStopSession = "session-valid-hard-stop";
+    const hardStopItem = await openAndLaunchImplementer(plugin, hardStopSession);
+    await expect(
+      finishPluginTask(
+        plugin,
+        hardStopSession,
+        "impl",
+        "vv-implementer",
+        hardStopItem,
+        "BLOCKED",
+        "Valid hard stop body.",
+      ),
+    ).rejects.toThrow("RESULT_HARD_STOP");
+
+    expect(promptCalls).toHaveLength(0);
+  });
+
+  test("malformed explicit hard-stop statuses never continue the child", async () => {
+    const { plugin, promptCalls } = await createWorkflowPluginHarness();
+    const cases: Array<{
+      sessionID: string;
+      raw: (workItemId: string) => string;
+      excerpt: string;
+    }> = [
+      {
+        sessionID: "session-hard-stop-missing-blank",
+        raw: (workItemId) =>
+          wrapTaskResult(
+            "ses_hard_stop_missing_blank",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: BLOCKED\nNeed a product decision.`,
+          ),
+        excerpt: "Need a product decision.",
+      },
+      {
+        sessionID: "session-hard-stop-preamble",
+        raw: (workItemId) =>
+          wrapTaskResult(
+            "ses_hard_stop_preamble",
+            `Preamble before the header\nVVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: NEEDS_CONTEXT\nNeed more context.`,
+          ),
+        excerpt: "Need more context.",
+      },
+      {
+        sessionID: "session-hard-stop-element",
+        raw: (workItemId) =>
+          wrapTaskElement(
+            "ses_hard_stop_element",
+            `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: BLOCKED\nBlocked on the missing API.`,
+          ),
+        excerpt: "Blocked on the missing API.",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const workItemId = await openAndLaunchImplementer(plugin, testCase.sessionID);
+      await expect(
+        finishPluginTaskWithRawOutput(
+          plugin,
+          testCase.sessionID,
+          "impl",
+          "vv-implementer",
+          workItemId,
+          testCase.raw(workItemId),
+        ),
+      ).rejects.toThrow(testCase.excerpt);
+      expect(promptCalls).toHaveLength(0);
+    }
+  });
+
+  test("rejected, thrown, malformed, and empty continuations are not retried", async () => {
+    const cases: Array<{ sessionID: string; entry: PromptScriptEntry; excerpt: string }> = [
+      {
+        sessionID: "session-continuation-rejected",
+        entry: { error: "rejected continuation" },
+        excerpt: "Original excerpt for rejected continuation.",
+      },
+      {
+        sessionID: "session-continuation-thrown",
+        entry: { throws: "continuation aborted" },
+        excerpt: "Original excerpt for thrown continuation.",
+      },
+      {
+        sessionID: "session-continuation-malformed",
+        entry: "still malformed without a protocol header",
+        excerpt: "Original excerpt for malformed continuation.",
+      },
+      {
+        sessionID: "session-continuation-empty",
+        entry: "",
+        excerpt: "Original excerpt for empty continuation.",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { plugin, promptCalls } = await createWorkflowPluginHarness(undefined, {
+        promptResponses: [testCase.entry],
+      });
+      const workItemId = await openAndLaunchImplementer(plugin, testCase.sessionID);
+      await expect(
+        finishPluginTaskWithRawOutput(
+          plugin,
+          testCase.sessionID,
+          "impl",
+          "vv-implementer",
+          workItemId,
+          wrapTaskResult(`ses_${testCase.sessionID}`, testCase.excerpt),
+        ),
+      ).rejects.toThrow(testCase.excerpt);
+      expect(promptCalls).toHaveLength(1);
+    }
+  });
+
+  test("invalid continuation identities or statuses fail strict parsing without a second call", async () => {
+    const cases: Array<{ sessionID: string; text: string }> = [
+      {
+        sessionID: "session-continuation-mismatch",
+        text: `VVOC_WORK_ITEM_ID: wi-999\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nWrong item.`,
+      },
+      {
+        sessionID: "session-continuation-bad-status",
+        text: `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: NONSENSE\nVVOC_ROUTE: change_with_review\n\nBad status.`,
+      },
+      {
+        sessionID: "session-continuation-missing-route",
+        text: `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\n\nMissing route.`,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { plugin, promptCalls } = await createWorkflowPluginHarness(undefined, {
+        promptResponses: [testCase.text],
+      });
+      const workItemId = await openAndLaunchImplementer(plugin, testCase.sessionID);
+      await expect(
+        finishPluginTaskWithRawOutput(
+          plugin,
+          testCase.sessionID,
+          "impl",
+          "vv-implementer",
+          workItemId,
+          wrapTaskResult(
+            `ses_${testCase.sessionID}`,
+            "Original progress before invalid continuation.",
+          ),
+        ),
+      ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+      expect(promptCalls).toHaveLength(1);
+    }
+  });
+
+  test("a continuation that yields a valid hard stop is handled without a second call", async () => {
+    const { plugin, promptCalls } = await createWorkflowPluginHarness(undefined, {
+      promptResponses: [
+        `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: NEEDS_CONTEXT\nVVOC_ROUTE: change_with_review\n\nNeed a product decision before continuing.`,
+      ],
+    });
+    const sessionID = "session-protocol-continuation-hard-stop-result";
+    const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
+    await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
+
+    await expect(
+      finishPluginTaskWithRawOutput(
+        plugin,
+        sessionID,
+        "impl",
+        "vv-implementer",
+        workItemId,
+        wrapTaskResult("ses_continue_hard_stop", "plain progress without a protocol header"),
+      ),
+    ).rejects.toThrow("RESULT_HARD_STOP");
+
+    expect(promptCalls).toHaveLength(1);
+    const listed = await listPluginItems(plugin, sessionID);
+    expect(listed.items[0]?.state).toBe("needs_context");
   });
 
   test("state application errors include parsed result excerpt", async () => {
@@ -1249,6 +1766,15 @@ async function launchPluginTask(
   );
 }
 
+async function openAndLaunchImplementer(
+  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  sessionID: string,
+): Promise<string> {
+  const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
+  await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
+  return workItemId;
+}
+
 async function finishPluginTask(
   plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
   sessionID: string,
@@ -1339,4 +1865,137 @@ function wrapTaskResult(taskId: string, innerResult: string): string {
     innerResult,
     "</task_result>",
   ].join("\n");
+}
+
+function wrapTaskElement(taskId: string, innerResult: string): string {
+  return [
+    `<task id="${taskId}" state="completed">`,
+    "",
+    "<task_result>",
+    innerResult,
+    "</task_result>",
+    "</task>",
+  ].join("\n");
+}
+
+type SessionPromptCall = Parameters<OpencodeClient["session"]["prompt"]>[0];
+type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses];
+type SessionPromptError = SessionPromptErrors[keyof SessionPromptErrors];
+type SessionPromptConsumedResult =
+  | { data: SessionPromptResponse; error?: undefined }
+  | { data?: undefined; error: SessionPromptError };
+
+function assistantMessage(sessionID: string): AssistantMessage {
+  return {
+    id: `msg_${sessionID}`,
+    sessionID,
+    role: "assistant",
+    time: { created: 1 },
+    parentID: `msg_parent_${sessionID}`,
+    modelID: "deepseek-flash",
+    providerID: "deepseek",
+    mode: "build",
+    path: { cwd: "/tmp/project", root: "/tmp/project" },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  };
+}
+
+function textPart(sessionID: string, text: string): TextPart {
+  return {
+    id: `part_${sessionID}`,
+    sessionID,
+    messageID: `msg_${sessionID}`,
+    type: "text",
+    text,
+  };
+}
+
+function sessionPromptResponse(sessionID: string, text: string): SessionPromptResponse {
+  return { info: assistantMessage(sessionID), parts: [textPart(sessionID, text)] };
+}
+
+function firstPromptText(call: SessionPromptCall | undefined): string | undefined {
+  const part = call?.body?.parts?.[0];
+  return part && part.type === "text" ? part.text : undefined;
+}
+
+type SessionPromptMutation = "create" | "fork" | "update" | "restore";
+
+type HostPermissionDouble = {
+  client: {
+    app: { log: (payload: unknown) => Promise<void> };
+    session: {
+      prompt: (call: SessionPromptCall) => Promise<SessionPromptConsumedResult>;
+      create: () => Promise<never>;
+      fork: () => Promise<never>;
+      update: () => Promise<never>;
+      restore: () => Promise<never>;
+    };
+  };
+  calls: SessionPromptCall[];
+  mutationCalls: Record<SessionPromptMutation, number>;
+  getRules: () => PermissionRule[];
+};
+
+/**
+ * Deterministic double for the confirmed OpenCode host semantics: a nonempty
+ * prompt body `tools` object is materialized into {permission, action,
+ * pattern: "*"} rules and replaces the complete persisted session permission
+ * ruleset, while an omitted `tools` key leaves the persisted rules untouched.
+ * It also counts session mutation APIs so a test can prove none were called.
+ */
+function createHostPermissionDouble(options: {
+  rules: PermissionRule[];
+  promptResult?: (call: SessionPromptCall) => SessionPromptConsumedResult;
+}): HostPermissionDouble {
+  let rules = options.rules.map((rule) => ({ ...rule }));
+  const calls: SessionPromptCall[] = [];
+  const mutationCalls: Record<SessionPromptMutation, number> = {
+    create: 0,
+    fork: 0,
+    update: 0,
+    restore: 0,
+  };
+  const recordMutation = (name: SessionPromptMutation) => async (): Promise<never> => {
+    mutationCalls[name] += 1;
+    throw new Error(`unexpected session.${name} call`);
+  };
+  return {
+    client: {
+      app: { log: async () => undefined },
+      session: {
+        prompt: async (call: SessionPromptCall): Promise<SessionPromptConsumedResult> => {
+          calls.push(call);
+          const tools = call.body?.tools;
+          if (tools && Object.keys(tools).length > 0) {
+            rules = Object.entries(tools).map(([permission, enabled]) => ({
+              permission,
+              action: enabled ? ("allow" as const) : ("deny" as const),
+              pattern: "*",
+            }));
+          }
+          if (options.promptResult) {
+            return options.promptResult(call);
+          }
+          return {
+            data: undefined,
+            error: { name: "BadRequest", data: { message: "prompt unavailable" } },
+          };
+        },
+        create: recordMutation("create"),
+        fork: recordMutation("fork"),
+        update: recordMutation("update"),
+        restore: recordMutation("restore"),
+      },
+    },
+    calls,
+    mutationCalls,
+    getRules: () => rules.map((rule) => ({ ...rule })),
+  };
 }

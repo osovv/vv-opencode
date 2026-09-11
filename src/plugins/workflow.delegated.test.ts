@@ -1,9 +1,9 @@
 // FILE: src/plugins/workflow.delegated.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, barrier gates, persistence failures, and legacy-profile isolation.
-//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, event-hook host-terminal launch failures with sticky exclusions and persistence recovery, and old-profile regressions.
-//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
+//   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, barrier gates, persistence failures, same-attempt malformed-result continuation, and legacy-profile isolation.
+//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, event-hook host-terminal launch failures with sticky exclusions and persistence recovery, same-child malformed-result continuation with SDK-derived prompt fixtures that preserves the original attempt identity, and old-profile regressions.
+//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, @opencode-ai/sdk, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -16,7 +16,14 @@
 //   dataHome - Isolated per-process XDG data home for persistence fixtures.
 //   cleanupPaths - Tracks temporary workspaces for cleanup after each test.
 //   StubSession - Minimal session stub shape with an optional parentID.
-//   DelegatedPluginHarness - Captured plugin hooks, tools, logs, and workspace paths for one delegated fixture.
+//   DelegatedPluginHarness - Captured plugin hooks, tools, logs, prompt calls, and workspace paths for one delegated fixture.
+//   DelegatedSessionPromptCall - SDK-derived session.prompt request recorded for continuation assertions.
+//   DelegatedSessionPromptResponse - SDK-derived session.prompt response with a valid assistant message and text part.
+//   DelegatedSessionPromptError - SDK-derived session.prompt error consumed by continuation.
+//   DelegatedSessionPromptResult - Narrowed SDK session.prompt data/error boundary consumed by continuation.
+//   delegatedAssistantMessage - Builds a valid SDK AssistantMessage fixture for one session.
+//   delegatedTextPart - Builds a valid SDK TextPart response fixture.
+//   delegatedPromptResponse - Builds a valid SDK session.prompt response fixture.
 //   writeProfile - Writes an isolated orchestration profile fixture.
 //   specXml - Renders the approved spec fixture for the task pipeline.
 //   PlanTaskInput - Task index and wave pairing used by the plan builder.
@@ -30,6 +37,8 @@
 //   launchTask - Drives the tool.execute.before hook for one tracked launch.
 //   launchTaskWithArgs - Drives the before hook with extra SDK-shaped launch arguments.
 //   finishTask - Drives the tool.execute.after hook for one tracked result.
+//   finishTaskWithRawOutput - Drives the after hook with raw tracked task output for continuation tests.
+//   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
 //   taskToolPart - Builds a real SDK-shaped ToolPart for one parent task call.
 //   taskPartUpdated - Wraps a ToolPart in a real message.part.updated event.
 //   runningState - Builds a real SDK-shaped running ToolState with host metadata.
@@ -41,7 +50,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added event-hook coverage proving confirmed foreground task failures record a failed attempt without an after hook, consume budget, refuse mismatched/metadata-excluded variants, and retry safely after persistence recovery, using real SDK part shapes.]
+//   LAST_CHANGE: [direct fix bounded result continuation - Added delegated coverage that a malformed wrapped result continues the same child once with no tools override and no new attempt, so the controller still accepts the original attempt identity.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -50,7 +59,12 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
+  AssistantMessage,
   EventMessagePartUpdated,
+  OpencodeClient,
+  SessionPromptErrors,
+  SessionPromptResponses,
+  TextPart,
   ToolPart,
   ToolStateError,
   ToolStateRunning,
@@ -71,6 +85,51 @@ const cleanupPaths: string[] = [];
 
 type StubSession = { parentID?: string };
 
+type DelegatedSessionPromptCall = Parameters<OpencodeClient["session"]["prompt"]>[0];
+type DelegatedSessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses];
+type DelegatedSessionPromptError = SessionPromptErrors[keyof SessionPromptErrors];
+type DelegatedSessionPromptResult =
+  | { data: DelegatedSessionPromptResponse; error?: undefined }
+  | { data?: undefined; error: DelegatedSessionPromptError };
+
+function delegatedAssistantMessage(sessionID: string): AssistantMessage {
+  return {
+    id: `msg_${sessionID}`,
+    sessionID,
+    role: "assistant",
+    time: { created: 1 },
+    parentID: `msg_parent_${sessionID}`,
+    modelID: "deepseek-flash",
+    providerID: "deepseek",
+    mode: "build",
+    path: { cwd: "/tmp/project", root: "/tmp/project" },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  };
+}
+
+function delegatedTextPart(sessionID: string, text: string): TextPart {
+  return {
+    id: `part_${sessionID}`,
+    sessionID,
+    messageID: `msg_${sessionID}`,
+    type: "text",
+    text,
+  };
+}
+
+function delegatedPromptResponse(sessionID: string, text: string): DelegatedSessionPromptResponse {
+  return {
+    info: delegatedAssistantMessage(sessionID),
+    parts: [delegatedTextPart(sessionID, text)],
+  };
+}
+
 interface DelegatedPluginHarness {
   plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
   logs: string[];
@@ -78,6 +137,8 @@ interface DelegatedPluginHarness {
   planPath: string;
   sessions: Map<string, StubSession>;
   sessionGetFails: boolean;
+  promptCalls: DelegatedSessionPromptCall[];
+  promptResponses: string[];
 }
 
 beforeEach(() => {
@@ -291,17 +352,22 @@ function createStubToolContext(
 async function createDelegatedPluginHarness(
   workspaceRoot: string,
   profile: OrchestrationProfile = "delegated",
+  options?: { promptResponses?: string[] },
 ): Promise<DelegatedPluginHarness> {
   resetVvocConfigForTests();
   writeProfile(profile);
   const logs: string[] = [];
   const sessions = new Map<string, StubSession>();
+  const promptCalls: DelegatedSessionPromptCall[] = [];
+  const promptResponses = [...(options?.promptResponses ?? [])];
   const harness: DelegatedPluginHarness = {
     logs,
     workspaceRoot,
     planPath: "",
     sessions,
     sessionGetFails: false,
+    promptCalls,
+    promptResponses,
     plugin: undefined as never,
   };
   const plugin = await WorkflowPlugin({
@@ -320,7 +386,17 @@ async function createDelegatedPluginHarness(
           const stub = sessions.get(options.path.id) ?? {};
           return { data: { id: options.path.id, parentID: stub.parentID, title: "stub" } };
         },
-        prompt: async () => ({ data: undefined, error: { message: "prompt unavailable" } }),
+        prompt: async (call: DelegatedSessionPromptCall): Promise<DelegatedSessionPromptResult> => {
+          promptCalls.push(call);
+          const text = promptResponses.shift();
+          if (text === undefined) {
+            return {
+              data: undefined,
+              error: { name: "BadRequest", data: { message: "prompt unavailable" } },
+            };
+          }
+          return { data: delegatedPromptResponse(call.path.id, text) };
+        },
       },
     } as never,
     project: {} as never,
@@ -486,6 +562,38 @@ async function finishTask(
       metadata: {},
     } as never,
   );
+}
+
+async function finishTaskWithRawOutput(
+  harness: DelegatedPluginHarness,
+  sessionID: string,
+  callId: string,
+  subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
+  workItemId: string,
+  output: string,
+): Promise<void> {
+  await harness.plugin["tool.execute.after"]?.(
+    {
+      tool: "task",
+      sessionID,
+      callID: callId,
+      args: {
+        subagent_type: subagentType,
+        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
+      },
+    } as never,
+    { title: "task", output, metadata: {} } as never,
+  );
+}
+
+function wrapTaskResult(taskId: string, innerResult: string): string {
+  return [
+    `task_id: ${taskId} (for resuming to continue this task if needed)`,
+    "",
+    "<task_result>",
+    innerResult,
+    "</task_result>",
+  ].join("\n");
 }
 
 async function decide(
@@ -694,6 +802,50 @@ describe("delegated attempt flow through plugin hooks", () => {
     expect(accepted.ok).toBe(true);
     if (accepted.ok !== true) return;
     expect(accepted.state).toBe("ready_to_close");
+  });
+
+  test("a malformed wrapped result continues the same child once without a new attempt", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    harness.promptResponses.push(
+      `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nFinished the original task after continuation.`,
+    );
+
+    await launchTask(harness, ROOT_SESSION, "call-continuation", "vv-implementer", workItemId);
+    await finishTaskWithRawOutput(
+      harness,
+      ROOT_SESSION,
+      "call-continuation",
+      "vv-implementer",
+      workItemId,
+      wrapTaskResult("ses_delegated_continuation", "Plain progress without a protocol header."),
+    );
+
+    expect(harness.promptCalls).toHaveLength(1);
+    const call = harness.promptCalls[0];
+    expect(call?.path.id).toBe("ses_delegated_continuation");
+    expect(call?.body?.agent).toBe("vv-implementer");
+    expect(call?.body?.tools).toBeUndefined();
+    expect(call?.body !== undefined && "tools" in call.body).toBe(false);
+
+    const listed = await listItems(harness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("awaiting_acceptance");
+    expect(item?.delegated?.attempts).toBe(1);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+
+    // The continuation is bound to the original call identity, so the
+    // controller accepts attempt 1 rather than a silent new attempt.
+    const accepted = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Diff matches the task contract.",
+      evidence: ["src/tasks"],
+    });
+    expect(accepted.ok).toBe(true);
   });
 
   test("barriers block dependent-wave launches until the milestone passes", async () => {

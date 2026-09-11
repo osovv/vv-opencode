@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/repair.ts
 // VERSION: 0.1.2
 // START_MODULE_CONTRACT
-//   PURPOSE: Recognize resumable OpenCode task envelopes and perform one bounded tracked-result repair attempt in the same child session.
-//   SCOPE: OpenCode task envelope parsing, protocol-error-aware repair prompt construction, repaired text extraction, and same-session repair calls for tracked workflow results.
+//   PURPOSE: Recognize resumable OpenCode task envelopes and perform one bounded same-session continuation for malformed tracked outputs, letting the original subagent finish unfinished work or truthfully correct its final report.
+//   SCOPE: OpenCode task envelope parsing, protocol-error-aware continuation prompt construction that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop suppression detection, continued-output extraction, and same-session continuation calls for tracked workflow results.
 //   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-WORKFLOW-REPAIR, M-WORKFLOW-PROTOCOL, M-PLUGIN-WORKFLOW]
 //   ROLE: RUNTIME
@@ -12,13 +12,14 @@
 // START_MODULE_MAP
 //   ResumableTaskEnvelope - Recognized OpenCode resumable task wrapper metadata plus inner tracked result text.
 //   unwrapResumableTaskResult - Extracts tracked result text only from known resumable OpenCode task envelopes.
-//   buildTrackedResultRepairPrompt - Constructs the strict one-shot repair prompt for the same child session.
-//   isTrackedResultRepairEligible - Restricts one-shot repair to safe format-only protocol error classes.
-//   attemptTrackedResultRepair - Resumes the same child session once and returns repaired tracked result text when possible.
+//   buildTrackedResultRepairPrompt - Constructs the strict bounded-continuation prompt for the same child session with a truthful post-continuation status/route.
+//   hasExplicitHardStopStatus - Detects explicit BLOCKED/NEEDS_CONTEXT protocol status lines before any continuation.
+//   isTrackedResultRepairEligible - Restricts the one-shot continuation to safe protocol error classes.
+//   attemptTrackedResultRepair - Continues the same child session once and returns corrected tracked result text when possible.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Denied the two new delegated control tools during format-only repair sessions.]
+//   LAST_CHANGE: [direct fix bounded result continuation - Replaced the format-only repair prompt and disabled-tools override with one bounded same-session continuation that omits the prompt `tools` field, permits finishing original work within scope, reports a truthful post-continuation status/route instead of freezing an outdated one, and suppresses continuation for explicit malformed BLOCKED/NEEDS_CONTEXT output.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -43,25 +44,15 @@ const SAFE_TRACKED_RESULT_REPAIR_CODES: ReadonlySet<ProtocolErrorCode> = new Set
 
 const TASK_ELEMENT_OPEN_RE = /^<task\s+id="([^"]+)"\s+state="([^"]+)"\s*>$/;
 
-const FORMAT_ONLY_REPAIR_SYSTEM_PROMPT =
-  "Format-only workflow repair. Do not call tools, do not perform implementation or review work, and do not cause side effects. Return only the corrected final response text.";
+/**
+ * Conservative deterministic detector for explicit protocol hard-stop status
+ * lines. It matches only a `VVOC_STATUS:` line whose value begins with BLOCKED
+ * or NEEDS_CONTEXT, so natural-language text cannot suppress a continuation.
+ */
+const EXPLICIT_HARD_STOP_STATUS_RE = /^\s*VVOC_STATUS\s*:\s*(?:BLOCKED|NEEDS_CONTEXT)\b/;
 
-const FORMAT_ONLY_REPAIR_DISABLED_TOOLS: Readonly<Record<string, boolean>> = {
-  apply_patch: false,
-  bash: false,
-  edit: false,
-  glob: false,
-  grep: false,
-  multi_tool_use: false,
-  read: false,
-  task: false,
-  work_checkpoint: false,
-  work_item_close: false,
-  work_item_decide: false,
-  work_item_list: false,
-  work_item_open: false,
-  write: false,
-};
+const TRACKED_RESULT_CONTINUATION_SYSTEM_PROMPT =
+  "Bounded same-session workflow continuation. Preserve the original work item, assignment, role, and write scope. Finish any unfinished implementation or review work using your existing history and currently permitted tools, or, if it was already complete, correct only the final report. Report the VVOC_STATUS and VVOC_ROUTE that truthfully reflect the result after this continuation.";
 
 function parseResumableTaskEnvelope(output: string): ResumableTaskEnvelope | undefined {
   const normalizedOutput = output.replace(/\r\n/g, "\n");
@@ -195,13 +186,15 @@ export function buildTrackedResultRepairPrompt(options: {
       : "Allowed VVOC_STATUS values: PASS | FAIL | NEEDS_CONTEXT.";
   const routeGuidance =
     options.agent === "vv-implementer"
-      ? "Include `VVOC_ROUTE` in the strict top block and preserve the route that matches your prior result."
+      ? "Include `VVOC_ROUTE` in the strict top block, consistent with the original assignment; do not invent a route that conflicts with it."
       : "Do not include `VVOC_ROUTE`.";
 
   const exactFormat = [
     `VVOC_WORK_ITEM_ID: ${options.workItemId}`,
-    "VVOC_STATUS: <allowed status>",
-    ...(options.agent === "vv-implementer" ? ["VVOC_ROUTE: <existing route>"] : []),
+    "VVOC_STATUS: <truthful status>",
+    ...(options.agent === "vv-implementer"
+      ? ["VVOC_ROUTE: <route consistent with the original assignment>"]
+      : []),
     "",
     "<brief result handoff>",
   ].join("\n");
@@ -214,8 +207,10 @@ export function buildTrackedResultRepairPrompt(options: {
   return [
     `Your previous final response for ${options.workItemId} was malformed for the workflow result protocol.`,
     `Protocol error: ${options.parseErrorMessage}`,
-    "Repair only the response format. Do not do additional implementation or review work.",
-    "Keep the same underlying outcome, same work item, same VVOC_STATUS, and same VVOC_ROUTE when a route applies.",
+    "This is a bounded continuation in the same session. Preserve the same work item identity and the original assignment, role, and write scope, and use your existing history and currently permitted tools.",
+    "Finish any unfinished implementation or review work from that original assignment; if it was already complete, correct only the final report without repeating completed work, inventing evidence, or misrepresenting the established outcome.",
+    "Report the VVOC_STATUS that truthfully reflects the result after this continuation; do not freeze a missing or outdated status from before it.",
+    "If the honest outcome is BLOCKED or NEEDS_CONTEXT, report that status explicitly in the corrected response instead of continuing.",
     statusGuidance,
     routeGuidance,
     ...(missingBodySeparatorGuidance ? [missingBodySeparatorGuidance] : []),
@@ -226,6 +221,13 @@ export function buildTrackedResultRepairPrompt(options: {
     options.malformedOutput.trim() || "<empty>",
     ">>>",
   ].join("\n");
+}
+
+export function hasExplicitHardStopStatus(output: string): boolean {
+  return output
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .some((line) => EXPLICIT_HARD_STOP_STATUS_RE.test(line));
 }
 
 export function isTrackedResultRepairEligible(code: ProtocolErrorCode): boolean {
@@ -260,8 +262,7 @@ export async function attemptTrackedResultRepair(options: {
       },
       body: {
         agent: options.agent,
-        system: FORMAT_ONLY_REPAIR_SYSTEM_PROMPT,
-        tools: FORMAT_ONLY_REPAIR_DISABLED_TOOLS,
+        system: TRACKED_RESULT_CONTINUATION_SYSTEM_PROMPT,
         parts: [
           {
             type: "text",

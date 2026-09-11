@@ -2,7 +2,7 @@
 // VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools, host-call-bound attempts, and checkpoint reviewer linkage.
-//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and repair, callID-bound delegated attempt results and checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance.
+//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results and checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
 //   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
@@ -14,12 +14,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added live host-call launch bindings so a confirmed foreground vv-implementer task failure is recorded as a failed delegated attempt instead of stranding inFlightAttempt until restart, with sticky exclusions for background/resume/cancellation/after-hook paths and staged checked persistence before retry is exposed.]
+//   LAST_CHANGE: [direct fix bounded result continuation - Replaced format-only repair wiring with one bounded same-session continuation that sends no prompt `tools` override, preserves persistent session permissions, and suppresses continuation for explicit malformed BLOCKED/NEEDS_CONTEXT output while keeping strict reparse and the original protocol-error excerpt path.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
 import {
   attemptTrackedResultRepair,
+  hasExplicitHardStopStatus,
   isTrackedResultRepairEligible,
   unwrapResumableTaskResult,
 } from "./repair.js";
@@ -1217,12 +1218,18 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         expectedWorkItemId: header.value,
       });
       if (!parsed.ok) {
-        if (unwrapped.envelope && isTrackedResultRepairEligible(parsed.error.code)) {
+        const explicitHardStop = hasExplicitHardStopStatus(unwrapped.normalizedOutput);
+        if (
+          unwrapped.envelope &&
+          isTrackedResultRepairEligible(parsed.error.code) &&
+          !explicitHardStop
+        ) {
           await client.app.log({
             body: {
               service: "workflow",
               level: "info",
-              message: "[workflow][resultParsing][BLOCK_PARSE_RESULT] repair attempted",
+              message:
+                "[workflow][resultParsing][BLOCK_PARSE_RESULT] bounded continuation attempted",
               extra: {
                 sessionID: input.sessionID,
                 agent: subagentType,
