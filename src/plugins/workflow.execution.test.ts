@@ -15,6 +15,7 @@
 //   store - Fresh work-item store created before each test.
 //   task - Builds a valid task contract.
 //   acceptTask - Drives one delegated task through launch, DONE, and controller acceptance.
+//   recordTrackedReviewer - Drives a linked review_only work item through the tracked launch/result pipeline.
 //   registerConversation - Registers a conversation-scoped execution with one task.
 //   callSequence - Monotonic suffix that keeps delegated callIDs unique per session.
 // END_MODULE_MAP
@@ -100,6 +101,28 @@ function acceptTask(workItemId: string): void {
   expect(decided.ok).toBe(true);
 }
 
+/** Drive a linked review_only work item through the tracked launch/result pipeline. */
+function recordTrackedReviewer(
+  reviewWorkItemId: string,
+  reviewer: "spec" | "code",
+  status: "PASS" | "FAIL" | "NEEDS_CONTEXT",
+): void {
+  const agent = reviewer === "spec" ? "vv-spec-reviewer" : "vv-code-reviewer";
+  callSequence += 1;
+  const launched = store.beginTrackedLaunch({
+    sessionId: SESSION,
+    workItemId: reviewWorkItemId,
+    agent,
+  });
+  expect(launched.ok).toBe(true);
+  const applied = store.applyTrackedResult({
+    sessionId: SESSION,
+    workItemId: reviewWorkItemId,
+    result: { agent, workItemId: reviewWorkItemId, status, route: "review", body: "reviewed" },
+  });
+  expect(applied.ok).toBe(true);
+}
+
 function registerConversation(executionKey: string, tasks: WorkflowTaskContract[] = [task()]) {
   return registerExecutionInStore(store.getStoreData(), {
     sessionId: SESSION,
@@ -155,13 +178,13 @@ describe("conversation-scoped path", () => {
     });
     expect(started.ok).toBe(true);
     if (!started.ok) return;
+    recordTrackedReviewer(started.reviewWorkItemId, "code", "PASS");
 
     const inProgress = recordGenericReviewerResultInStore(store.getStoreData(), {
       sessionId: SESSION,
       runId: registered.runId,
       checkpointId: "review-T-100",
       reviewer: "code",
-      status: "PASS",
     });
     expect(inProgress.ok).toBe(true);
     if (!inProgress.ok) return;
@@ -186,17 +209,19 @@ describe("conversation-scoped path", () => {
     if (!registered.ok) return;
     const binding = registered.execution.tasks.get("T-100")!;
     acceptTask(binding.workItemId);
-    startGenericCheckpointInStore(store.getStoreData(), {
+    const started = startGenericCheckpointInStore(store.getStoreData(), {
       sessionId: SESSION,
       runId: registered.runId,
       checkpointId: "review-T-100",
     });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    recordTrackedReviewer(started.reviewWorkItemId, "code", "FAIL");
     const failed = recordGenericReviewerResultInStore(store.getStoreData(), {
       sessionId: SESSION,
       runId: registered.runId,
       checkpointId: "review-T-100",
       reviewer: "code",
-      status: "FAIL",
     });
     expect(failed.ok).toBe(true);
     if (!failed.ok) return;
@@ -427,9 +452,10 @@ describe("tool-layer reachability", () => {
     )) as Record<string, unknown>;
     expect(started.ok).toBe(true);
     expect(started.reviewersToLaunch).toEqual(["code"]);
+    recordTrackedReviewer(String(started.reviewWorkItemId), "code", "PASS");
 
     const reviewed = (await checkpointTool.execute(
-      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code", status: "PASS" },
+      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code" },
       { sessionId: SESSION, workspaceRoot: WORKSPACE },
       store,
     )) as Record<string, unknown>;
@@ -541,13 +567,14 @@ describe("tool-layer reachability", () => {
     acceptTask(view.tasks.find((entry) => entry.taskId === "T-100")!.workItemId);
 
     const checkpointTool = createWorkCheckpointTool(store);
-    await checkpointTool.execute(
+    const started = (await checkpointTool.execute(
       { action: "start", runId, checkpointId: "review-T-100" },
       { sessionId: SESSION, workspaceRoot: WORKSPACE },
       store,
-    );
+    )) as Record<string, unknown>;
+    recordTrackedReviewer(String(started.reviewWorkItemId), "code", "FAIL");
     await checkpointTool.execute(
-      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code", status: "FAIL" },
+      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code" },
       { sessionId: SESSION, workspaceRoot: WORKSPACE },
       store,
     );
@@ -600,13 +627,14 @@ describe("tool-layer reachability", () => {
     for (const entry of view.tasks) acceptTask(entry.workItemId);
 
     const checkpointTool = createWorkCheckpointTool(store);
-    await checkpointTool.execute(
+    const started = (await checkpointTool.execute(
       { action: "start", runId, checkpointId: "review-T-100" },
       { sessionId: SESSION, workspaceRoot: WORKSPACE },
       store,
-    );
+    )) as Record<string, unknown>;
+    recordTrackedReviewer(String(started.reviewWorkItemId), "code", "PASS");
     await checkpointTool.execute(
-      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code", status: "PASS" },
+      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code" },
       { sessionId: SESSION, workspaceRoot: WORKSPACE },
       store,
     );
@@ -617,6 +645,302 @@ describe("tool-layer reachability", () => {
     )) as Record<string, unknown>;
     expect(completed.ok).toBe(true);
     expect(completed.reviewStatus).toBe("controller_accepted");
+  });
+
+  test("a generic review cannot be settled from an asserted status", async () => {
+    const openTool = createWorkItemOpenTool(store);
+    const opened = openTool.execute(
+      {
+        items: [
+          {
+            key: "assert-task",
+            title: "Assert task",
+            mode: "delegated",
+            taskId: "T-100",
+            requiredReviewers: ["code"],
+            writeScope: ["src/lib/a.ts"],
+            acceptanceCriteria: ["Task works."],
+          },
+        ],
+        execution: {
+          executionKey: "assert-run",
+          source: { kind: "conversation-scoped" },
+          goal: "Reject asserted review.",
+          boundary: { files: ["src/lib/a.ts"], directories: [] },
+        },
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    ) as Record<string, unknown>;
+    expect(opened.ok).toBe(true);
+    const runId = String(opened.runId);
+    const view = opened.execution as { tasks: Array<{ taskId: string; workItemId: string }> };
+    acceptTask(view.tasks.find((entry) => entry.taskId === "T-100")!.workItemId);
+
+    const checkpointTool = createWorkCheckpointTool(store);
+    const started = (await checkpointTool.execute(
+      { action: "start", runId, checkpointId: "review-T-100" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(started.ok).toBe(true);
+    // No reviewer result was recorded on the linked review work item, so an
+    // asserted status must not settle the generation.
+    const asserted = (await checkpointTool.execute(
+      { action: "review", runId, checkpointId: "review-T-100", reviewer: "code" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(asserted.ok).toBe(false);
+    expect(asserted.errorCode).toBe("INVALID_INPUT");
+  });
+
+  test("a reviewer NEEDS_CONTEXT settles as a recoverable stop, not a consumed generation", async () => {
+    const openTool = createWorkItemOpenTool(store);
+    const opened = openTool.execute(
+      {
+        items: [
+          {
+            key: "needs-context-task",
+            title: "Needs context task",
+            mode: "delegated",
+            taskId: "T-100",
+            requiredReviewers: ["spec", "code"],
+            writeScope: ["src/lib/a.ts"],
+            acceptanceCriteria: ["Task works."],
+          },
+        ],
+        execution: {
+          executionKey: "needs-context-run",
+          source: { kind: "conversation-scoped" },
+          goal: "Stop on reviewer NEEDS_CONTEXT.",
+          boundary: { files: ["src/lib/a.ts"], directories: [] },
+        },
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    ) as Record<string, unknown>;
+    expect(opened.ok).toBe(true);
+    const runId = String(opened.runId);
+    const view = opened.execution as { tasks: Array<{ taskId: string; workItemId: string }> };
+    acceptTask(view.tasks.find((entry) => entry.taskId === "T-100")!.workItemId);
+
+    const checkpointTool = createWorkCheckpointTool(store);
+    const started = (await checkpointTool.execute(
+      { action: "start", runId, checkpointId: "review-T-100" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(started.ok).toBe(true);
+    recordTrackedReviewer(String(started.reviewWorkItemId), "spec", "NEEDS_CONTEXT");
+
+    const stopped = (await checkpointTool.execute(
+      { action: "review", runId, checkpointId: "review-T-100", reviewer: "spec" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(stopped.ok).toBe(true);
+    expect(stopped.outcome).toBe("stopped");
+
+    const restartWhileStopped = (await checkpointTool.execute(
+      { action: "start", runId, checkpointId: "review-T-100" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(restartWhileStopped.ok).toBe(false);
+
+    // A stopped generation recovers cost-free, without an authority unit.
+    const resumed = (await checkpointTool.execute(
+      {
+        action: "recover",
+        runId,
+        checkpointId: "review-T-100",
+        recoveryId: "needs-context-recover",
+        diagnosis: "Reviewer requested context.",
+        changedCondition: "Context added to the review packet.",
+        verification: [],
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(resumed.ok).toBe(true);
+    expect(resumed.kind).toBe("resume");
+
+    const restarted = (await checkpointTool.execute(
+      { action: "start", runId, checkpointId: "review-T-100" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(restarted.ok).toBe(true);
+    // The resumed generation must use a fresh review work item and be able to
+    // pass with real reviewer results.
+    expect(restarted.reviewWorkItemId).not.toBe(started.reviewWorkItemId);
+    recordTrackedReviewer(String(restarted.reviewWorkItemId), "spec", "PASS");
+    recordTrackedReviewer(String(restarted.reviewWorkItemId), "code", "PASS");
+    const settled = (await checkpointTool.execute(
+      { action: "verify", runId, checkpointId: "review-T-100" },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(settled.ok).toBe(true);
+    expect(settled.outcome).toBe("passed");
+  });
+
+  test("authority actions are reachable for a native-package execution", async () => {
+    const data = store.getStoreData();
+    const now = new Date().toISOString();
+    data.planRuns.set("run-native-auth", {
+      runId: "run-native-auth",
+      sessionId: SESSION,
+      planPath: `${WORKSPACE}/.vvoc/specs/2026-01-01-native/plan.xml`,
+      specPath: `${WORKSPACE}/.vvoc/specs/2026-01-01-native/spec.xml`,
+      workspaceRoot: WORKSPACE,
+      planSha256: "plan-hash",
+      specSha256: "spec-hash",
+      definition: {
+        mode: "delegated",
+        waves: ["WAVE-1"],
+        tasks: [
+          {
+            taskId: "T-001",
+            taskElement: "TASK-T-001",
+            wave: "WAVE-1",
+            writeScope: ["src/lib/a.ts"],
+          },
+        ],
+        checkpoints: [
+          {
+            checkpointId: "CHECKPOINT-R-001",
+            kind: "final",
+            afterWave: "WAVE-1",
+            covers: ["T-001"],
+            scope: ["src/lib/a.ts"],
+            reviewers: ["code"],
+            acceptance: [],
+            verification: [],
+          },
+        ],
+      },
+      registeredAt: now,
+      status: "active",
+      tasks: new Map([["T-001", { taskId: "T-001", workItemId: "wi-native" }]]),
+      checkpoints: new Map(),
+    });
+    ensureNativeExecutions(data);
+
+    const checkpointTool = createWorkCheckpointTool(store, {
+      lookupAuthorityMessage: async () => ({
+        messageId: "msg-native",
+        sessionId: SESSION,
+        role: "user",
+        createdMs: 2_000,
+        ignored: false,
+        syntheticOnly: false,
+        textParts: ["finish"],
+      }),
+    });
+    const authorized = (await checkpointTool.execute(
+      {
+        action: "authorize",
+        runId: "run-native-auth",
+        authorityId: "auth-native",
+        messageId: "msg-native",
+        stages: ["implementation"],
+        decisionScope: "finish",
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(authorized.ok).toBe(true);
+    expect(findExecution(store.getStoreData(), "run-native-auth")?.authority).toHaveLength(1);
+  });
+
+  test("an exhausted generic checkpoint recovers under a recorded advance unit", async () => {
+    const openTool = createWorkItemOpenTool(store);
+    const opened = openTool.execute(
+      {
+        items: [
+          {
+            key: "checkpoint-advance",
+            title: "Checkpoint advance",
+            mode: "delegated",
+            taskId: "T-100",
+            requiredReviewers: ["code"],
+            writeScope: ["src/lib/a.ts"],
+            acceptanceCriteria: ["Task works."],
+          },
+        ],
+        execution: {
+          executionKey: "checkpoint-advance-run",
+          source: { kind: "conversation-scoped" },
+          goal: "Exhaust the checkpoint.",
+          boundary: { files: ["src/lib/a.ts"], directories: [] },
+        },
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    ) as Record<string, unknown>;
+    expect(opened.ok).toBe(true);
+    const runId = String(opened.runId);
+    const view = opened.execution as { tasks: Array<{ taskId: string; workItemId: string }> };
+    acceptTask(view.tasks.find((entry) => entry.taskId === "T-100")!.workItemId);
+
+    const checkpointTool = createWorkCheckpointTool(store, {
+      lookupAuthorityMessage: async () => ({
+        messageId: "msg-cp",
+        sessionId: SESSION,
+        role: "user",
+        createdMs: 1_000,
+        ignored: false,
+        syntheticOnly: false,
+        textParts: ["finish"],
+      }),
+    });
+    for (let generation = 0; generation < 2; generation += 1) {
+      const started = (await checkpointTool.execute(
+        { action: "start", runId, checkpointId: "review-T-100" },
+        { sessionId: SESSION, workspaceRoot: WORKSPACE },
+        store,
+      )) as Record<string, unknown>;
+      expect(started.ok).toBe(true);
+      recordTrackedReviewer(String(started.reviewWorkItemId), "code", "FAIL");
+      await checkpointTool.execute(
+        { action: "review", runId, checkpointId: "review-T-100", reviewer: "code" },
+        { sessionId: SESSION, workspaceRoot: WORKSPACE },
+        store,
+      );
+    }
+    await checkpointTool.execute(
+      {
+        action: "authorize",
+        runId,
+        authorityId: "auth-cp",
+        messageId: "msg-cp",
+        stages: ["verification"],
+        decisionScope: "finish",
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    );
+    const recovered = (await checkpointTool.execute(
+      {
+        action: "recover",
+        runId,
+        checkpointId: "review-T-100",
+        recoveryId: "cp-recover",
+        diagnosis: "Both ordinary generations failed.",
+        changedCondition: "Coverage narrowed to the changed file.",
+        verification: [],
+        authorityId: "auth-cp",
+      },
+      { sessionId: SESSION, workspaceRoot: WORKSPACE },
+      store,
+    )) as Record<string, unknown>;
+    expect(recovered.ok).toBe(true);
+    expect(recovered.kind).toBe("advance_grant");
+    const execution = findExecution(store.getStoreData(), runId)!;
+    expect(execution.reserveDebits).toHaveLength(1);
+    expect(execution.reserveDebits[0]?.targetKind).toBe("checkpoint");
   });
 
   test("a pre-stop advance authority grants one bounded continuation through the decide tool", async () => {

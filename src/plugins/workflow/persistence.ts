@@ -1028,6 +1028,103 @@ function validateWorkflowExecution(
   if (!Array.isArray(candidate.reserveDebits)) {
     errors.push(`execution ${candidate.runId} requires a reserveDebits array`);
   }
+
+  // Deep authority/debit/approval consistency: cross-record totals, exact
+  // bindings, and replay-unique identities within one execution.
+  const authorityIds = new Set<string>();
+  let grantedUnits = 0;
+  for (const authority of candidate.authority as unknown as Array<Record<string, unknown>>) {
+    if (!authority || typeof authority !== "object") {
+      errors.push(`execution ${candidate.runId} has a malformed authority record`);
+      continue;
+    }
+    const authorityId = authority.authorityId;
+    if (!isNonEmptyString(authorityId) || authorityIds.has(authorityId)) {
+      errors.push(`execution ${candidate.runId} requires unique authority ids`);
+      continue;
+    }
+    authorityIds.add(authorityId);
+    if (authority.runId !== candidate.runId) {
+      errors.push(`authority ${authorityId} does not belong to execution ${candidate.runId}`);
+    }
+    if (!isNonEmptyString(authority.grantedByMessageId)) {
+      errors.push(`authority ${authorityId} lacks its granting message identity`);
+    }
+    if (!Number.isInteger(authority.initialUnits) || (authority.initialUnits as number) < 1) {
+      errors.push(`authority ${authorityId} requires a positive initial reserve`);
+    } else {
+      grantedUnits += authority.initialUnits as number;
+    }
+    if (!Array.isArray(authority.extensions) || !Array.isArray(authority.revocations)) {
+      errors.push(`authority ${authorityId} requires extension and revocation arrays`);
+    } else {
+      for (const extension of authority.extensions as Array<Record<string, unknown>>) {
+        if (!Number.isInteger(extension.units) || (extension.units as number) < 1) {
+          errors.push(`authority ${authorityId} has an invalid extension`);
+        } else {
+          grantedUnits += extension.units as number;
+        }
+      }
+    }
+  }
+  const debitIds = new Set<string>();
+  let consumedUnits = 0;
+  for (const debit of candidate.reserveDebits as unknown as Array<Record<string, unknown>>) {
+    if (!debit || typeof debit !== "object") {
+      errors.push(`execution ${candidate.runId} has a malformed reserve debit`);
+      continue;
+    }
+    const recoveryId = debit.recoveryId;
+    if (!isNonEmptyString(recoveryId) || debitIds.has(recoveryId)) {
+      errors.push(`execution ${candidate.runId} requires unique reserve debit ids`);
+      continue;
+    }
+    debitIds.add(recoveryId);
+    if (!authorityIds.has(debit.authorityId as string)) {
+      errors.push(`reserve debit ${recoveryId} references an unknown authority`);
+    }
+    if (!Number.isInteger(debit.units) || (debit.units as number) < 1) {
+      errors.push(`reserve debit ${recoveryId} requires a positive unit count`);
+    } else {
+      consumedUnits += debit.units as number;
+    }
+  }
+  if (consumedUnits > grantedUnits) {
+    errors.push(`execution ${candidate.runId} consumed more reserve units than were granted`);
+  }
+  const approvalIds = new Set<string>();
+  for (const approval of candidate.stageApprovals as unknown as Array<Record<string, unknown>>) {
+    if (!approval || typeof approval !== "object") {
+      errors.push(`execution ${candidate.runId} has a malformed stage approval`);
+      continue;
+    }
+    if (!isNonEmptyString(approval.approvalId) || approvalIds.has(approval.approvalId)) {
+      errors.push(`execution ${candidate.runId} requires unique stage approval ids`);
+      continue;
+    }
+    approvalIds.add(approval.approvalId);
+    if (!authorityIds.has(approval.authorityId as string)) {
+      errors.push(`stage approval ${approval.approvalId} references an unknown authority`);
+    }
+  }
+  if (Array.isArray(candidate.checkpoints)) {
+    for (const [checkpointId, binding] of candidate.checkpoints as unknown as Array<
+      [string, Record<string, unknown>]
+    >) {
+      if (!binding || typeof binding !== "object") {
+        errors.push(`execution ${candidate.runId} checkpoint ${checkpointId} is malformed`);
+        continue;
+      }
+      if (binding.status === "passed") {
+        if (!Number.isInteger(binding.attempts) || (binding.attempts as number) < 1) {
+          errors.push(`passed checkpoint ${checkpointId} requires a completed generation`);
+        }
+        if (!Number.isInteger(binding.passedRevision) || (binding.passedRevision as number) < 1) {
+          errors.push(`passed checkpoint ${checkpointId} requires a passing revision`);
+        }
+      }
+    }
+  }
   return errors.length === before;
 }
 // END_BLOCK_EXECUTION_SERIALIZATION

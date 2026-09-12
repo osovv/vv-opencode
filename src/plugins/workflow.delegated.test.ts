@@ -775,6 +775,54 @@ describe("delegated control-tool authorization", () => {
     expect(parsed.runId).toBeTruthy();
   });
 
+  test("rejects a launch whose generic task dependencies are unmet", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot, "balanced");
+    const raw = await harness.plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "dep-first",
+            title: "First task",
+            mode: "delegated",
+            requiredReviewers: [],
+            taskId: "T-100",
+            writeScope: ["src/tasks"],
+            acceptanceCriteria: ["First works."],
+          },
+          {
+            key: "dep-second",
+            title: "Second task",
+            mode: "delegated",
+            requiredReviewers: [],
+            taskId: "T-200",
+            writeScope: ["src/tasks"],
+            acceptanceCriteria: ["Second works."],
+            dependsOn: ["T-100"],
+          },
+        ],
+        execution: {
+          executionKey: "dep-gate",
+          source: { kind: "conversation-scoped" },
+          goal: "Gate dependent launches.",
+          boundary: { files: ["src/tasks"], directories: [] },
+        },
+      } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const opened = parseToolJson<{
+      ok: boolean;
+      execution?: { tasks: Array<{ taskId: string; workItemId: string }> };
+    }>(raw ?? "{}");
+    expect(opened.ok).toBe(true);
+    const second = opened.execution?.tasks.find((task) => task.taskId === "T-200");
+    expect(second?.workItemId).toBeTruthy();
+
+    await expect(
+      launchTask(harness, ROOT_SESSION, "call-dep-gate", "vv-implementer", second!.workItemId),
+    ).rejects.toThrow(/LAUNCH_REJECTED_DEPENDENCY/);
+  });
+
   test("denies self-acceptance, child sessions, unknown session data, and untrusted workspaces", async () => {
     const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
     const harness = await createDelegatedPluginHarness(workspaceRoot);

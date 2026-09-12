@@ -16,6 +16,7 @@
 //   WorkflowTransactionResult - Committed result or a fail-closed persistence error.
 //   WorkflowTransactionQueue - Per-session serial queue for mutating workflow operations.
 //   cloneWorkItemStoreData - Deep clone of workflow store data for staging.
+//   fingerprintWorkItemStoreData - Deterministic content fingerprint used to detect concurrent live mutations.
 //   publishWorkItemStoreData - Synchronously replace live store data with committed staged data.
 //   runWorkflowTransaction - Serialize, stage, persist, and publish one mutation per session.
 // END_MODULE_MAP
@@ -24,6 +25,7 @@
 //   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial atomic per-session transaction boundary.]
 // END_CHANGE_SUMMARY
 
+import { createHash } from "node:crypto";
 import { cloneDelegatedPlanRun } from "./checkpoints.js";
 import { cloneWorkflowExecution } from "./execution.js";
 import { snapshotWorkflowStateChecked } from "./persistence.js";
@@ -105,6 +107,43 @@ export class WorkflowTransactionQueue {
   }
 }
 
+// START_BLOCK_STORE_FINGERPRINT
+/**
+ * Deterministic content fingerprint over the whole workflow store (Maps are
+ * serialized with sorted keys). Used to detect any concurrent live mutation —
+ * including reducers that bypass the store wrappers — so a staged transaction
+ * never publishes a stale clone over newer committed state.
+ */
+export function fingerprintWorkItemStoreData(data: WorkItemStoreData): string {
+  const normalized = {
+    nextId: data.nextId,
+    records: [...data.records.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    keyIndexBySession: [...data.keyIndexBySession.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([sessionId, index]) => [
+        sessionId,
+        [...index.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      ]),
+    planRuns: [...data.planRuns.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    executions: [...data.executions.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    messageClaims: [...data.messageClaims.entries()].sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    ),
+  };
+  const serialized = JSON.stringify(normalized, (_key, value) => {
+    if (value instanceof Map) {
+      return Object.fromEntries(
+        [...value.entries()].sort(([a], [b]) =>
+          String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0,
+        ),
+      );
+    }
+    return value;
+  });
+  return createHash("sha256").update(serialized).digest("hex");
+}
+// END_BLOCK_STORE_FINGERPRINT
+
 // START_CONTRACT: runWorkflowTransaction
 //   PURPOSE: Serialize, stage, persist, and synchronously publish one workflow mutation.
 //   INPUTS: { options: queue, sessionId, getData, persist?, operation }
@@ -121,11 +160,21 @@ export async function runWorkflowTransaction<T>(options: {
 }): Promise<WorkflowTransactionResult<T>> {
   const { queue, sessionId, getData } = options;
   return queue.run(sessionId, async () => {
+    const liveBefore = fingerprintWorkItemStoreData(getData());
     const staged = cloneWorkItemStoreData(getData());
     const mutation = await options.operation(staged);
     if (mutation.skipPersist === true) {
       // Validation failed: persist nothing and publish nothing.
       return { ok: true, result: mutation.result };
+    }
+    if (fingerprintWorkItemStoreData(getData()) !== liveBefore) {
+      // A concurrent mutation (including reducers that bypass the store
+      // wrappers) advanced live state while this operation was staged. Refuse
+      // to persist or publish the stale clone; the caller can retry.
+      return {
+        ok: false,
+        error: "concurrent workflow mutation detected; retry the operation",
+      };
     }
     const persist = options.persist ?? snapshotWorkflowStateChecked;
     const persisted = await persist(sessionId, staged);

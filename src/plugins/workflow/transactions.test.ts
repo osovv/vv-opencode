@@ -140,6 +140,35 @@ describe("workflow transactions", () => {
     expect(order).toEqual([1, 2]);
   });
 
+  test("aborts and publishes nothing when live state changes during the operation", async () => {
+    const store = createWorkItemStore();
+    addStandaloneItem(store, "existing");
+    const queue = new WorkflowTransactionQueue();
+    const live = store.getStoreData();
+    const before = live.records.size;
+
+    const result = await runWorkflowTransaction({
+      queue,
+      sessionId: SESSION,
+      getData: () => live,
+      persist: async () => ({ ok: true }),
+      operation: (staged) => {
+        // Simulate a concurrent reducer that bypasses the store wrappers by
+        // mutating live data directly (e.g. a hook-driven settlement).
+        const template = [...live.records.values()][0]!;
+        live.records.set(`${SESSION}::wi-99`, { ...template, workItemId: "wi-99" });
+        return { result: "stale-clone" };
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain("concurrent workflow mutation");
+    // The concurrent mutation is preserved and the stale clone was not published.
+    expect(live.records.size).toBe(before + 1);
+    expect(live.records.get(`${SESSION}::wi-99`)).toBeDefined();
+  });
+
   test("applies a custom commit callback instead of the staged snapshot when provided", async () => {
     const store = createWorkItemStore();
     addStandaloneItem(store, "custom");

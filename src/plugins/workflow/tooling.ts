@@ -65,7 +65,6 @@ import {
   completeExecutionInStore,
   findExecution,
   getExecutionView,
-  recordGenericReviewerLaunchInStore,
   recordGenericReviewerResultInStore,
   recoverGenericCheckpointInStore,
   putAuthorityInStore,
@@ -88,6 +87,7 @@ import type {
   WorkflowAuthorityStage,
   WorkflowExecutionBoundary,
   WorkflowExecutionSource,
+  WorkflowReserveDebit,
   WorkflowReviewer,
   WorkflowTaskContract,
 } from "../../lib/workflow-contract.js";
@@ -202,10 +202,8 @@ export type CheckpointArgs = {
   amendmentId?: string;
   rationale?: string;
   startFingerprint?: string;
-  /** Generic reviewer result recording. */
+  /** Generic reviewer result recording (status is read from the linked round). */
   reviewer?: string;
-  status?: string;
-  callId?: string;
   /** Advance authority inputs. */
   authorityId?: string;
   messageId?: string;
@@ -852,6 +850,17 @@ export function createWorkItemDecideTool(
               message: `AUTHORITY_NOT_FOUND: no recorded authority ${authorityId} for ${advanceRunId}`,
             };
           }
+          // Scope binding: the recovered item must be a task of the execution
+          // whose reserve funds the recovery.
+          if (![...execution.tasks.values()].some((task) => task.workItemId === workItemId)) {
+            return {
+              tool: "work_item_decide",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: "INVALID_INPUT",
+              message: `INVALID_INPUT: work item ${workItemId} is not a task of execution ${advanceRunId}`,
+            };
+          }
           const proposed = proposeReserveDebit({
             authority,
             debits: execution.reserveDebits,
@@ -859,16 +868,10 @@ export function createWorkItemDecideTool(
             targetKind: "task",
             targetId: workItemId,
           });
-          if (!proposed.ok) {
-            return {
-              tool: "work_item_decide",
-              sessionId: context.sessionId,
-              ok: false,
-              errorCode: proposed.code,
-              message: proposed.message,
-            };
-          }
-          advanceGrantApproved = true;
+          // A failed proposal only means no advance unit is available; the
+          // recovery may still be a cost-free resume or use an ordinary
+          // allowance, so let the domain reducer decide.
+          advanceGrantApproved = proposed.ok;
         }
         const recovered = await recoverDelegatedWorkItem(s, {
           sessionId: context.sessionId,
@@ -1117,6 +1120,8 @@ async function executeGenericCheckpoint(options: {
         action: "start",
         checkpointId,
         generation: started.checkpoint.currentReview?.generation,
+        reviewWorkItemId: started.reviewWorkItemId,
+        header: started.header,
         reviewersToLaunch: started.reviewers,
         coveredAttemptIds: started.coveredAttemptIds,
       };
@@ -1135,17 +1140,7 @@ async function executeGenericCheckpoint(options: {
         };
       }
       const reviewer = coerceNonEmptyString(args.reviewer);
-      if (!reviewer) {
-        const view = getExecutionView(execution);
-        return {
-          ...base,
-          ok: true,
-          action: "verify",
-          checkpointId,
-          checkpoint: view.checkpoints.find((entry) => entry.checkpointId === checkpointId),
-        };
-      }
-      if (reviewer !== "spec" && reviewer !== "code") {
+      if (reviewer !== undefined && reviewer !== "spec" && reviewer !== "code") {
         return {
           ...base,
           ok: false,
@@ -1153,34 +1148,13 @@ async function executeGenericCheckpoint(options: {
           message: "reviewer must be spec or code",
         };
       }
-      const status = coerceNonEmptyString(args.status);
-      if (status !== "PASS" && status !== "FAIL" && status !== "NEEDS_CONTEXT") {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "status must be PASS, FAIL, or NEEDS_CONTEXT",
-        };
-      }
-      const callId = coerceNonEmptyString(args.callId);
-      if (callId) {
-        const bound = recordGenericReviewerLaunchInStore(data, {
-          sessionId,
-          runId,
-          checkpointId,
-          reviewer,
-          callId,
-        });
-        if (!bound.ok) {
-          return { ...base, ok: false, errorCode: bound.errorCode, message: bound.message };
-        }
-      }
+      // The reviewer status is read from the linked review_only work item's
+      // recorded round; callers cannot assert a reviewer outcome directly.
       const recorded = recordGenericReviewerResultInStore(data, {
         sessionId,
         runId,
         checkpointId,
-        reviewer,
-        status,
+        ...(reviewer ? { reviewer } : {}),
       });
       if (!recorded.ok) {
         return { ...base, ok: false, errorCode: recorded.errorCode, message: recorded.message };
@@ -1190,7 +1164,7 @@ async function executeGenericCheckpoint(options: {
         ok: true,
         action: args.action,
         checkpointId,
-        reviewer,
+        ...(reviewer ? { reviewer } : {}),
         outcome: recorded.outcome,
         checkpointStatus: recorded.checkpoint.status,
       };
@@ -1204,33 +1178,48 @@ async function executeGenericCheckpoint(options: {
         typeof args.changedCondition === "string" ? args.changedCondition : "";
       const verification = stringList(args.verification);
       const authorityId = coerceNonEmptyString(args.authorityId);
-      if (!checkpointId || !recoveryId || !authorityId) {
+      if (!checkpointId || !recoveryId) {
         return {
           ...base,
           ok: false,
           errorCode: "INVALID_INPUT",
-          message:
-            "generic checkpoint recovery requires checkpointId, recoveryId, and an authorityId",
+          message: "generic checkpoint recovery requires checkpointId and recoveryId",
         };
       }
-      const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
-      if (!authority) {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "AUTHORITY_NOT_FOUND",
-          message: `AUTHORITY_NOT_FOUND: no recorded authority ${authorityId}`,
-        };
-      }
-      const proposed = proposeReserveDebit({
-        authority,
-        debits: execution.reserveDebits,
-        recoveryId,
-        targetKind: "checkpoint",
-        targetId: checkpointId,
-      });
-      if (!proposed.ok) {
-        return { ...base, ok: false, errorCode: proposed.code, message: proposed.message };
+      const checkpointBinding = execution.checkpoints.get(checkpointId);
+      const stopped = checkpointBinding?.stoppedAtGeneration !== undefined;
+      // Validate and reserve the advance unit BEFORE mutating the checkpoint,
+      // so a failed debit can never leave a granted generation behind.
+      let reservedDebit: WorkflowReserveDebit | undefined;
+      if (!stopped) {
+        if (!authorityId) {
+          return {
+            ...base,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message: "an exhausted generic checkpoint requires an authorityId to recover",
+          };
+        }
+        const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
+        if (!authority) {
+          return {
+            ...base,
+            ok: false,
+            errorCode: "AUTHORITY_NOT_FOUND",
+            message: `AUTHORITY_NOT_FOUND: no recorded authority ${authorityId}`,
+          };
+        }
+        const proposed = proposeReserveDebit({
+          authority,
+          debits: execution.reserveDebits,
+          recoveryId,
+          targetKind: "checkpoint",
+          targetId: checkpointId,
+        });
+        if (!proposed.ok) {
+          return { ...base, ok: false, errorCode: proposed.code, message: proposed.message };
+        }
+        reservedDebit = proposed.value;
       }
       const recovered = recoverGenericCheckpointInStore(data, {
         sessionId,
@@ -1240,23 +1229,19 @@ async function executeGenericCheckpoint(options: {
         diagnosis,
         changedCondition,
         verification,
+        authorityGrant: reservedDebit !== undefined,
       });
       if (!recovered.ok) {
         return { ...base, ok: false, errorCode: recovered.errorCode, message: recovered.message };
       }
-      const freshAuthority = data.executions
-        .get(runId)
-        ?.authority.find((entry) => entry.authorityId === authorityId);
-      if (freshAuthority) {
-        const debit = proposeReserveDebit({
-          authority: freshAuthority,
-          debits: data.executions.get(runId)?.reserveDebits ?? [],
-          recoveryId,
-          targetKind: "checkpoint",
-          targetId: checkpointId,
+      if (recovered.kind === "advance_grant" && reservedDebit) {
+        const stored = addReserveDebitInStore(data, {
+          sessionId,
+          runId,
+          debit: reservedDebit,
         });
-        if (debit.ok) {
-          addReserveDebitInStore(data, { sessionId, runId, debit: debit.value });
+        if (!stored.ok) {
+          return { ...base, ok: false, errorCode: stored.errorCode, message: stored.message };
         }
       }
       return {
@@ -1265,7 +1250,7 @@ async function executeGenericCheckpoint(options: {
         action: "recover",
         checkpointId,
         recoveryId,
-        kind: "advance_grant",
+        kind: recovered.kind,
         checkpointStatus: recovered.checkpoint.status,
       };
     }
@@ -1610,7 +1595,11 @@ export function createWorkCheckpointTool(
       if (genericRunId) {
         const data = s.getStoreData();
         const execution = findExecution(data, genericRunId);
-        if (execution && execution.source.kind !== "native-package") {
+        // Authority actions apply to any execution, including native runs;
+        // other generic actions stay on non-native executions.
+        const authorityAction =
+          action === "authorize" || action === "record_approval" || action === "revoke_authority";
+        if (execution && (execution.source.kind !== "native-package" || authorityAction)) {
           return executeGenericCheckpoint({
             data,
             sessionId: context.sessionId,
@@ -1729,16 +1718,9 @@ export function createWorkCheckpointTool(
             targetKind: "checkpoint",
             targetId: checkpointId,
           });
-          if (!proposed.ok) {
-            return {
-              tool: "work_checkpoint",
-              sessionId: context.sessionId,
-              ok: false,
-              errorCode: proposed.code,
-              message: proposed.message,
-            };
-          }
-          advanceGrantApproved = true;
+          // A failed proposal only means no advance unit is available; the
+          // recovery may still be a cost-free resume or an ordinary grant.
+          advanceGrantApproved = proposed.ok;
         }
         const recovered = await recoverDelegatedCheckpoint(s, {
           sessionId: context.sessionId,

@@ -1158,6 +1158,51 @@ describe("version 4 execution registry persistence", () => {
     expect(execution?.checkpoints.get("review-T-100")).toBeDefined();
   });
 
+  test("a v4 execution with a debit referencing an unknown authority is rejected", () => {
+    const registered = registerExecutionInStore(store.getStoreData(), {
+      sessionId: SESSION,
+      workspaceRoot: "/tmp/vvoc-v4-workspace",
+      executionKey: "v4-tamper",
+      source: { kind: "conversation-scoped" },
+      goal: "Tamper with authority.",
+      boundary: { files: ["src/lib/a.ts"], directories: [] },
+      tasks: [
+        {
+          contract: {
+            taskId: "T-100",
+            title: "Generic task",
+            goal: "Deliver the generic task.",
+            acceptanceCriteria: ["It works."],
+            verification: [],
+            writeScope: ["src/lib/a.ts"],
+            dependsOn: [],
+            blockedBy: [],
+            requiredReviewers: [],
+          },
+        },
+      ],
+    });
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+    snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+
+    const parsed = JSON.parse(readFileSync(statePath(), "utf-8"));
+    parsed.executions[0].reserveDebits.push({
+      recoveryId: "forged-debit",
+      authorityId: "unknown-authority",
+      targetKind: "task",
+      targetId: "T-100",
+      units: 1,
+      debitedAt: new Date().toISOString(),
+    });
+    writeFileSync(statePath(), JSON.stringify(parsed, null, 2), "utf8");
+
+    const hydrated = hydrateWorkflowStateChecked(SESSION);
+    expect(hydrated.status).toBe("invalid");
+    if (hydrated.status !== "invalid") return;
+    expect(hydrated.errors.join("\n")).toContain("unknown authority");
+  });
+
   test("a version 3 file preserves a consumed recovery record after hydration", async () => {
     const { runId } = await registerRun("v3-downgrade");
     const workItemId = taskWorkItemId(runId, "T-001");

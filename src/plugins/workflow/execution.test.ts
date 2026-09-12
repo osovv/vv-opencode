@@ -665,6 +665,7 @@ describe("atomicity and guard regressions", () => {
       checkpointId: "review-T-100",
     });
     expect(first.ok).toBe(true);
+    if (!first.ok) return;
     const second = startGenericCheckpointInStore(data, {
       sessionId: SESSION,
       runId: registered.runId,
@@ -672,12 +673,31 @@ describe("atomicity and guard regressions", () => {
     });
     expect(second.ok).toBe(false);
 
+    // Record the reviewer result through the linked review_only work item.
+    const reviewWorkItemId = first.reviewWorkItemId;
+    const launched = store.beginTrackedLaunch({
+      sessionId: SESSION,
+      workItemId: reviewWorkItemId,
+      agent: "vv-code-reviewer",
+    });
+    expect(launched.ok).toBe(true);
+    const applied = store.applyTrackedResult({
+      sessionId: SESSION,
+      workItemId: reviewWorkItemId,
+      result: {
+        agent: "vv-code-reviewer",
+        workItemId: reviewWorkItemId,
+        status: "PASS",
+        route: "review",
+        body: "reviewed",
+      },
+    });
+    expect(applied.ok).toBe(true);
     const result = recordGenericReviewerResultInStore(data, {
       sessionId: SESSION,
       runId: registered.runId,
       checkpointId: "review-T-100",
       reviewer: "code",
-      status: "PASS",
     });
     expect(result.ok).toBe(true);
     const afterPass = startGenericCheckpointInStore(data, {

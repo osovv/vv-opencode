@@ -86,6 +86,7 @@ import {
   snapshotWorkflowStateChecked,
 } from "./persistence.js";
 import { loadApprovedDelegatedPlan } from "./checkpoint-io.js";
+import { isTaskLaunchableInStore } from "./execution.js";
 import { runWorkflowTransaction, WorkflowTransactionQueue } from "./transactions.js";
 import type { AuthorityMessageSnapshot } from "./authority.js";
 
@@ -1282,8 +1283,6 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
             rationale: z.string().optional(),
             startFingerprint: z.string().optional(),
             reviewer: z.string().optional(),
-            status: z.string().optional(),
-            callId: z.string().optional(),
             authorityId: z.string().optional(),
             messageId: z.string().optional(),
             approvalId: z.string().optional(),
@@ -1418,6 +1417,44 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         throw new Error(
           `${WORK_ITEM_MISSING_MARKER} LAUNCH_REJECTED_UNKNOWN_WORK_ITEM: no open work item ${header.value} exists in this session. Use work_item_open first or check state with work_item_list.`,
         );
+      }
+
+      // Generic executions enforce declared task dependencies and checkpoint
+      // barriers at launch, not only at completion.
+      if (subagentType === "vv-implementer") {
+        const data = sessionStore.getStoreData();
+        for (const execution of data.executions.values()) {
+          if (execution.sessionId !== input.sessionID) continue;
+          const boundTask = [...execution.tasks.values()].find(
+            (binding) => binding.workItemId === workItem.workItemId,
+          );
+          if (!boundTask) continue;
+          const launchable = isTaskLaunchableInStore(data, {
+            sessionId: input.sessionID,
+            runId: execution.runId,
+            taskId: boundTask.taskId,
+          });
+          if (!launchable.ok) {
+            await client.app.log({
+              body: {
+                service: "workflow",
+                level: "warn",
+                message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] dependency gate",
+                extra: {
+                  sessionID: input.sessionID,
+                  workItemId: workItem.workItemId,
+                  runId: execution.runId,
+                  taskId: boundTask.taskId,
+                  reason: launchable.reason,
+                },
+              },
+            });
+            throw new Error(
+              `${INVALID_NEXT_AGENT_MARKER} LAUNCH_REJECTED_DEPENDENCY: task ${boundTask.taskId} cannot start yet: ${launchable.message}`,
+            );
+          }
+          break;
+        }
       }
 
       const allowedNextAgents = getAllowedNextAgents(workItem);

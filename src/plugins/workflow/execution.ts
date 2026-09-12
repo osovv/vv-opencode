@@ -45,7 +45,6 @@
 //   CompleteExecutionErrorCode - Completion rejection families.
 //   CompleteExecutionResult - Completion outcome with honest review status.
 //   startGenericCheckpointInStore - Start one generic checkpoint generation after covered tasks are accepted.
-//   recordGenericReviewerLaunchInStore - Bind one reviewer launch call to the current generation.
 //   recordGenericReviewerResultInStore - Record one reviewer outcome and settle the generation.
 //   recoverGenericCheckpointInStore - Grant one exhaustion-recovery generation under a recorded advance unit.
 //   isTaskLaunchableInStore - Whether declared dependencies and barriers allow a task launch.
@@ -125,7 +124,6 @@ export interface WorkflowCheckpointReviewState {
   startedAt: string;
   startFingerprint: string;
   coveredAttemptIds: string[];
-  reviewerCallIds: Partial<Record<WorkflowReviewer, string>>;
   results: Partial<Record<WorkflowReviewer, WorkflowCheckpointReviewerOutcome>>;
 }
 
@@ -138,7 +136,7 @@ export interface WorkflowCheckpointHistoryEntry {
 
 export interface WorkflowCheckpointRecoveryEntry {
   recoveryId: string;
-  kind: "advance_grant";
+  kind: "resume" | "advance_grant";
   diagnosis: string;
   changedCondition: string;
   verification: string[];
@@ -154,6 +152,10 @@ export interface WorkflowCheckpointBinding {
   status?: "pending" | "in_review" | "passed" | "failed";
   attempts?: number;
   passedRevision?: number;
+  /** Monotonic count of started generations (including stopped ones). */
+  starts?: number;
+  /** Set when a reviewer NEEDS_CONTEXT settled the generation as a recoverable stop. */
+  stoppedAtGeneration?: number;
   currentReview?: WorkflowCheckpointReviewState;
   history?: WorkflowCheckpointHistoryEntry[];
   recoveryHistory?: WorkflowCheckpointRecoveryEntry[];
@@ -243,7 +245,6 @@ function cloneCheckpointBinding(binding: WorkflowCheckpointBinding): WorkflowChe
           currentReview: {
             ...binding.currentReview,
             coveredAttemptIds: [...binding.currentReview.coveredAttemptIds],
-            reviewerCallIds: { ...binding.currentReview.reviewerCallIds },
             results: { ...binding.currentReview.results },
           },
         }
@@ -1504,6 +1505,10 @@ export function getExecutionView(execution: WorkflowExecutionRecord): {
     kind: string;
     covers: string[];
     requiredReviewers: string[];
+    status?: string;
+    reviewWorkItemId?: string;
+    generation?: number;
+    recoveryCount?: number;
   }>;
 } {
   return {
@@ -1527,6 +1532,14 @@ export function getExecutionView(execution: WorkflowExecutionRecord): {
       kind: binding.contract.kind,
       covers: [...binding.contract.covers],
       requiredReviewers: [...binding.contract.requiredReviewers],
+      ...(binding.status ? { status: binding.status } : {}),
+      ...(binding.currentReview
+        ? {
+            reviewWorkItemId: binding.currentReview.reviewWorkItemId,
+            generation: binding.currentReview.generation,
+          }
+        : {}),
+      ...(binding.recoveryHistory ? { recoveryCount: binding.recoveryHistory.length } : {}),
     })),
   };
 }
@@ -1619,6 +1632,8 @@ export type StartGenericCheckpointResult =
       checkpoint: WorkflowCheckpointBinding;
       reviewers: WorkflowReviewer[];
       coveredAttemptIds: string[];
+      reviewWorkItemId: string;
+      header: string;
     }
   | { ok: false; errorCode: ExecutionMutationErrorCode | "EXECUTION_INCOMPLETE"; message: string };
 
@@ -1686,10 +1701,17 @@ export function startGenericCheckpointInStore(
       message: `checkpoint ${input.checkpointId} already passed; re-review requires an explicit amendment or recovery`,
     };
   }
-  if (
-    (checkpoint.attempts ?? 0) >=
-    GENERIC_CHECKPOINT_GENERATIONS + (checkpoint.recoveryHistory?.length ?? 0)
-  ) {
+  if (checkpoint.stoppedAtGeneration !== undefined) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message: `checkpoint ${input.checkpointId} is stopped after a reviewer NEEDS_CONTEXT; recover it before starting again`,
+    };
+  }
+  const advanceGrants = (checkpoint.recoveryHistory ?? []).filter(
+    (entry) => entry.kind === "advance_grant",
+  ).length;
+  if ((checkpoint.attempts ?? 0) >= GENERIC_CHECKPOINT_GENERATIONS + advanceGrants) {
     return {
       ok: false,
       errorCode: "INVALID_INPUT",
@@ -1713,11 +1735,27 @@ export function startGenericCheckpointInStore(
     }
   }
   const covered = coveredAttemptIds(data, execution, checkpoint);
-  const generation = (checkpoint.attempts ?? 0) + 1;
-  const reviewWorkItemId = `review-${execution.runId}-${input.checkpointId}-${generation}`;
+  // Every start gets a fresh monotonic generation identity so a resumed
+  // generation never reuses the stopped review work item.
+  const generation = (checkpoint.starts ?? 0) + 1;
+  // Open a real review_only work item so reviewer results are recorded through
+  // the tracked launch/result pipeline and bound to this generation by exact
+  // work-item identity rather than asserted by the controller.
+  const opened = openWorkItemInStore(data, {
+    sessionId: input.sessionId,
+    key: `exec:${execution.executionKey}:review:${input.checkpointId}:${generation}`,
+    title: `Review ${input.checkpointId} (generation ${generation})`,
+    mode: "review_only",
+    requiredReviewers: [...checkpoint.contract.requiredReviewers],
+  });
+  if (!opened.ok) {
+    return { ok: false, errorCode: "TASK_BINDING_FAILED", message: opened.message };
+  }
+  const reviewWorkItemId = opened.record.workItemId;
   const updated: WorkflowCheckpointBinding = {
     ...checkpoint,
     status: "in_review",
+    starts: generation,
     currentReview: {
       reviewWorkItemId,
       generation,
@@ -1725,7 +1763,6 @@ export function startGenericCheckpointInStore(
       startFingerprint:
         input.startFingerprint ?? `generic:${execution.revision}:${covered.join(",")}`,
       coveredAttemptIds: covered,
-      reviewerCallIds: {},
       results: {},
     },
   };
@@ -1737,63 +1774,15 @@ export function startGenericCheckpointInStore(
     checkpoint: cloneCheckpointBinding(updated),
     reviewers: [...checkpoint.contract.requiredReviewers],
     coveredAttemptIds: covered,
+    reviewWorkItemId,
+    header: opened.header,
   };
-}
-
-/** Bind one reviewer launch call to the current generic checkpoint generation. */
-export function recordGenericReviewerLaunchInStore(
-  data: WorkItemStoreData,
-  input: {
-    sessionId: string;
-    runId: string;
-    checkpointId: string;
-    reviewer: WorkflowReviewer;
-    callId: string;
-  },
-): { ok: true } | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
-  const foundExecution = findExecution(data, input.runId);
-  // Mutate a clone so staged transactions and accidental callers never mutate
-  // shared live state before the snapshot is persisted.
-  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
-  if (!execution) {
-    return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
-  }
-  if (execution.sessionId !== input.sessionId) {
-    return {
-      ok: false,
-      errorCode: "SESSION_MISMATCH",
-      message: "execution belongs to another session",
-    };
-  }
-  const checkpoint = findCheckpoint(execution, input.checkpointId);
-  const review = checkpoint?.currentReview;
-  if (!checkpoint || !review) {
-    return {
-      ok: false,
-      errorCode: "INVALID_INPUT",
-      message: "no in-flight generic review generation",
-    };
-  }
-  if (!checkpoint.contract.requiredReviewers.includes(input.reviewer)) {
-    return {
-      ok: false,
-      errorCode: "INVALID_INPUT",
-      message: `${input.reviewer} is not required for checkpoint ${input.checkpointId}`,
-    };
-  }
-  if (typeof input.callId !== "string" || input.callId.trim() === "") {
-    return { ok: false, errorCode: "INVALID_INPUT", message: "callId must be a non-empty string" };
-  }
-  review.reviewerCallIds[input.reviewer] = input.callId;
-  execution.updatedAt = toIsoNow();
-  data.executions.set(execution.runId, execution);
-  return { ok: true };
 }
 
 export type RecordGenericReviewerResultResult =
   | {
       ok: true;
-      outcome: "in_progress" | "passed" | "failed";
+      outcome: "in_progress" | "passed" | "failed" | "stopped";
       checkpoint: WorkflowCheckpointBinding;
     }
   | { ok: false; errorCode: ExecutionMutationErrorCode; message: string };
@@ -1805,8 +1794,8 @@ export function recordGenericReviewerResultInStore(
     sessionId: string;
     runId: string;
     checkpointId: string;
-    reviewer: WorkflowReviewer;
-    status: "PASS" | "FAIL" | "NEEDS_CONTEXT";
+    /** Omit to settle every required reviewer that has a recorded result. */
+    reviewer?: WorkflowReviewer;
   },
 ): RecordGenericReviewerResultResult {
   const foundExecution = findExecution(data, input.runId);
@@ -1832,25 +1821,78 @@ export function recordGenericReviewerResultInStore(
       message: "no in-flight generic review generation",
     };
   }
-  if (!checkpoint.contract.requiredReviewers.includes(input.reviewer)) {
+  const reviewRecord = findRecord(data, input.sessionId, review.reviewWorkItemId);
+  if (!reviewRecord?.currentRound) {
     return {
       ok: false,
       errorCode: "INVALID_INPUT",
-      message: `${input.reviewer} is not required for checkpoint ${input.checkpointId}`,
+      message: `no linked review round ${review.reviewWorkItemId}`,
     };
   }
-  if (review.results[input.reviewer]) {
-    return {
-      ok: false,
-      errorCode: "INVALID_INPUT",
-      message: `${input.reviewer} already reported for generation ${review.generation}`,
+  const targets = input.reviewer ? [input.reviewer] : [...checkpoint.contract.requiredReviewers];
+  for (const reviewer of targets) {
+    if (!checkpoint.contract.requiredReviewers.includes(reviewer)) {
+      return {
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message: `${reviewer} is not required for checkpoint ${input.checkpointId}`,
+      };
+    }
+    if (review.results[reviewer]) continue;
+    // The status is read from the linked review_only work item's recorded
+    // reviewer result; a caller cannot assert a reviewer outcome directly.
+    const recorded = reviewRecord.currentRound.results[reviewer];
+    if (!recorded) {
+      if (input.reviewer) {
+        return {
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: `${reviewer} has no recorded reviewer result on ${review.reviewWorkItemId}`,
+        };
+      }
+      continue;
+    }
+    review.results[reviewer] = {
+      status: recorded.status,
+      recordedAt: recorded.completedAt,
     };
   }
-  review.results[input.reviewer] = { status: input.status, recordedAt: toIsoNow() };
 
   const allReported = checkpoint.contract.requiredReviewers.every(
     (reviewer) => review.results[reviewer] !== undefined,
   );
+
+  // A reviewer NEEDS_CONTEXT is a hard stop, not a failed generation: settle it
+  // as a recoverable "stopped" outcome without consuming a generation, matching
+  // the native checkpoint semantics.
+  const hasNeedsContext = checkpoint.contract.requiredReviewers.some(
+    (reviewer) => review.results[reviewer]?.status === "NEEDS_CONTEXT",
+  );
+  if (hasNeedsContext) {
+    const history = [...(checkpoint.history ?? [])];
+    history.push({
+      generation: review.generation,
+      outcome: "stopped",
+      fingerprint: review.startFingerprint,
+      completedAt: toIsoNow(),
+    });
+    const stopped: WorkflowCheckpointBinding = {
+      ...checkpoint,
+      status: "failed",
+      stoppedAtGeneration: review.generation,
+      currentReview: undefined,
+      history,
+    };
+    execution.checkpoints.set(input.checkpointId, stopped);
+    execution.updatedAt = toIsoNow();
+    data.executions.set(execution.runId, execution);
+    return {
+      ok: true,
+      outcome: "stopped",
+      checkpoint: cloneCheckpointBinding(stopped),
+    };
+  }
+
   if (!allReported) {
     execution.updatedAt = toIsoNow();
     data.executions.set(execution.runId, execution);
@@ -1885,7 +1927,7 @@ export function recordGenericReviewerResultInStore(
   };
 }
 
-/** Recover one exhausted generic checkpoint generation under a recorded advance unit. */
+/** Recover a stopped generic checkpoint (cost-free resume) or one exhausted generation under a recorded advance unit. */
 export function recoverGenericCheckpointInStore(
   data: WorkItemStoreData,
   input: {
@@ -1896,9 +1938,11 @@ export function recoverGenericCheckpointInStore(
     diagnosis: string;
     changedCondition: string;
     verification: string[];
+    /** True only when the transaction layer reserved one advance unit. */
+    authorityGrant?: boolean;
   },
 ):
-  | { ok: true; checkpoint: WorkflowCheckpointBinding }
+  | { ok: true; checkpoint: WorkflowCheckpointBinding; kind: "resume" | "advance_grant" }
   | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
   const found = findExecution(data, input.runId);
   const execution = found ? cloneWorkflowExecution(found) : undefined;
@@ -1942,21 +1986,32 @@ export function recoverGenericCheckpointInStore(
       message: `recovery ${input.recoveryId} is already recorded for ${input.checkpointId}`,
     };
   }
-  const budget = GENERIC_CHECKPOINT_GENERATIONS + recoveryHistory.length;
-  if ((checkpoint.attempts ?? 0) < budget) {
+  const stopped = checkpoint.stoppedAtGeneration !== undefined;
+  const advanceGrants = recoveryHistory.filter((entry) => entry.kind === "advance_grant").length;
+  const budget = GENERIC_CHECKPOINT_GENERATIONS + advanceGrants;
+  if (!stopped && (checkpoint.attempts ?? 0) < budget) {
     return {
       ok: false,
       errorCode: "INVALID_INPUT",
       message: `checkpoint ${input.checkpointId} is not exhausted; ordinary generations remain`,
     };
   }
+  if (!stopped && input.authorityGrant !== true) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message: `checkpoint ${input.checkpointId} requires one advance-authority unit to recover`,
+    };
+  }
+  const kind: "resume" | "advance_grant" = stopped ? "resume" : "advance_grant";
   const updated: WorkflowCheckpointBinding = {
     ...checkpoint,
+    ...(stopped ? { stoppedAtGeneration: undefined } : {}),
     recoveryHistory: [
       ...recoveryHistory,
       {
         recoveryId: input.recoveryId,
-        kind: "advance_grant",
+        kind,
         diagnosis: input.diagnosis.trim(),
         changedCondition: input.changedCondition.trim(),
         verification: input.verification.map((entry) => entry.trim()),
@@ -1967,7 +2022,7 @@ export function recoverGenericCheckpointInStore(
   execution.checkpoints.set(input.checkpointId, updated);
   execution.updatedAt = toIsoNow();
   data.executions.set(execution.runId, execution);
-  return { ok: true, checkpoint: cloneCheckpointBinding(updated) };
+  return { ok: true, checkpoint: cloneCheckpointBinding(updated), kind };
 }
 
 /** Whether a task's declared dependencies and barriers currently allow launch. */
