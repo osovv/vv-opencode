@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/state.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, collect-all review rounds, and delegated attempts awaiting controller acceptance.
-//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata including the delegated mode with explicitly empty reviewers, declared write scopes and plan bindings, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, delegated attempt bookkeeping, close gating, and review-round helpers.
+//   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata including the delegated mode with explicitly empty reviewers and an empty recovery history, declared write scopes and plan bindings, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, delegated attempt bookkeeping, close gating, and review-round helpers.
 //   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/delegated.ts (types only)]
 //   LINKS: M-WORKFLOW-STATE, M-WORKFLOW-PROTOCOL, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-DELEGATED, V-M-WORKFLOW-STATE
 //   ROLE: RUNTIME
@@ -47,7 +47,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the delegated mode with explicitly empty reviewers, declared write scopes, plan bindings, and the awaiting_acceptance state.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Delegated records now carry an explicit (initially empty) recovery history cloned alongside attempts, decisions, acceptances, and rework.]
 // END_CHANGE_SUMMARY
 
 import type { ParsedResultBlock, TrackedAgentName } from "./protocol.js";
@@ -301,6 +301,14 @@ function cloneDelegatedState(state: DelegatedWorkItemState): DelegatedWorkItemSt
     attempts: state.attempts.map((attempt) => ({
       ...attempt,
       ...(attempt.resultExcerpt ? { resultExcerpt: cloneExcerpt(attempt.resultExcerpt) } : {}),
+      ...(attempt.reportRejection
+        ? {
+            reportRejection: {
+              ...attempt.reportRejection,
+              excerpt: cloneExcerpt(attempt.reportRejection.excerpt),
+            },
+          }
+        : {}),
     })),
     decisions: state.decisions.map((decision) => ({
       ...decision,
@@ -311,6 +319,10 @@ function cloneDelegatedState(state: DelegatedWorkItemState): DelegatedWorkItemSt
       evidence: [...acceptance.evidence],
     })),
     reworkHistory: state.reworkHistory.map((rework) => ({ ...rework })),
+    recoveryHistory: state.recoveryHistory.map((recovery) => ({
+      ...recovery,
+      verification: [...recovery.verification],
+    })),
   };
 }
 
@@ -484,6 +496,7 @@ function openWorkItemInStore(
       decisions: [],
       acceptances: [],
       reworkHistory: [],
+      recoveryHistory: [],
     };
   } else {
     if (

@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools, host-call-bound attempts, and checkpoint reviewer linkage.
-//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results and checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance.
+//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools with bounded recovery, host-call-bound attempts, terminal report-rejection settlement, and checkpoint reviewer linkage.
+//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization and an SDK-backed read-only authorization-message lookup for user-authorized recovery, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results, terminal settlement of protocol-invalid reports as report_rejected attempts through staged persistence, checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, durably committed recovery with synchronous persist and rollback so launch permissions appear only after a durable write, checked persistence, and profile-selected chat.message guidance.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
 //   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
@@ -10,17 +10,17 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   WorkflowPlugin - Registers workflow work-item tools, delegated control tools under the delegated profile, tracked task protocol enforcement with callID-bound delegated attempts, checkpoint linkage, and live host-call failure bindings, and primary-session workflow guidance injection.
+//   WorkflowPlugin - Registers workflow work-item tools, delegated control tools under the delegated profile, tracked task protocol enforcement with callID-bound delegated attempts, bounded recovery with durable persist-and-rollback commits, terminal report-rejection settlement, checkpoint linkage, live host-call failure bindings, and primary-session workflow guidance injection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix bounded result continuation - Replaced format-only repair wiring with one bounded same-session continuation that sends no prompt `tools` override, preserves persistent session permissions, and suppresses continuation for explicit malformed BLOCKED/NEEDS_CONTEXT output while keeping strict reparse and the original protocol-error excerpt path.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added decision/checkpoint recover wiring with an SDK-backed authorization lookup and durable persist-then-rollback commits, settled terminal protocol-invalid delegated reports as report_rejected attempts, and calibrated the delegated instruction for bounded recovery and native plan registration.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
 import {
   attemptTrackedResultRepair,
-  hasExplicitHardStopStatus,
+  detectExplicitHardStopStatus,
   isTrackedResultRepairEligible,
   unwrapResumableTaskResult,
 } from "./repair.js";
@@ -45,9 +45,12 @@ import {
 } from "./state.js";
 import {
   applyDelegatedLaunchFailure,
+  applyDelegatedReportRejection,
   applyDelegatedResult,
   beginDelegatedLaunch,
   revertInFlightDelegatedLaunches,
+  summarizeDelegatedProgress,
+  type LookupRecoveryUserMessage,
 } from "./delegated.js";
 import {
   checkpointBarrierUnsatisfied,
@@ -128,10 +131,24 @@ work_item_decide with the attempt number to accept or request changes. DONE_WITH
 an explicit concerns disposition. Controller retries are bounded to one correction attempt before
 explicit recovery; BLOCKED and NEEDS_CONTEXT remain hard stops.
 
-Register an approved plan once with work_checkpoint register, start each declared review checkpoint
-only after its prerequisite tasks are accepted, and run the due checkpoint before dependent waves.
-A checkpoint passes only when every declared reviewer passes against the pinned snapshot; a closed
-review-only FAIL report is a findings result, not approval. Do not write source files yourself:
+Bounded recovery: when a delegated task stops (BLOCKED or NEEDS_CONTEXT) or exhausts its two
+ordinary attempts without acceptance, diagnose it yourself and call work_item_decide with decision
+"recover", the terminal attempt number, a diagnosis, the changed condition or approach, the
+required verification references, and a stable recoveryId. A recovery resumes the same work item
+and its ordinary budget; when a further attempt is necessary it grants exactly one. The single
+autonomous grant per target is consumed on first use, and any further unit requires a fresh
+root-user message referenced by userMessageId — the runtime verifies that message's role, session
+identity, and timing, never its wording. Recovery never accepts a result, replaces a reviewer, or
+changes declared scope. A rejected report (a worker execution that finished with a protocol-invalid
+result) is recorded with bounded diagnostics and has the same recovery path; it never becomes DONE.
+
+Register the supported approved native plan package once with work_checkpoint register (the
+spec/plan pair under .vvoc/specs/); foreign lifecycle plans are not convertible into it. Start
+each declared review checkpoint only after its prerequisite tasks are accepted, and run the due
+checkpoint before dependent waves. A checkpoint passes only when every declared reviewer passes
+against the pinned snapshot; a closed review-only FAIL report is a findings result, not approval.
+A checkpoint generation that stopped or exhausted its two ordinary generations recovers through
+work_checkpoint action "recover" with the same bounded fields. Do not write source files yourself:
 delegate implementation edits, including fixes requested by reviewers, through bounded task
 packets, while keeping planning artifacts, acceptance decisions, and verification commands in this
 session.
@@ -586,6 +603,85 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       .catch(() => undefined);
   }
 
+  /**
+   * Settle a confirmed terminal protocol-invalid delegated report: the domain
+   * reducer applies to a staged copy, the staged state persists, and only then
+   * the settled record commits to the live store, returning the settled
+   * attempt number. A failed write keeps the live in-flight attempt so an
+   * unpersisted settlement never frees a launch slot.
+   */
+  function commitDelegatedReportRejection(
+    sessionId: string,
+    workItemId: string,
+    callId: string,
+    protocolErrorCode: string,
+    excerpt: WorkflowResultExcerpt,
+    explicitHardStop: "BLOCKED" | "NEEDS_CONTEXT" | undefined,
+  ): number | undefined {
+    const liveStore = stores.get(sessionId);
+    if (!liveStore || invalidHydrationSessions.has(sessionId)) return undefined;
+    const liveData = liveStore.getStoreData();
+    const stagedStore = createWorkItemStore(liveData);
+    const applied = applyDelegatedReportRejection(stagedStore, {
+      sessionId,
+      workItemId,
+      callId,
+      protocolErrorCode,
+      excerpt,
+      ...(explicitHardStop ? { explicitHardStop } : {}),
+    });
+    if (!applied.ok) {
+      // Stale, duplicate, or already-transitioned: nothing to settle.
+      return undefined;
+    }
+
+    const stagedData = stagedStore.getStoreData();
+    const persisted = snapshotWorkflowStateChecked(sessionId, stagedData);
+    if (!persisted.ok) {
+      void client.app
+        .log({
+          body: {
+            service: "workflow",
+            level: "error",
+            message: "[workflow][reportRejection][BLOCK_REPORT_REJECTION] persistence failed",
+            extra: {
+              sessionID: sessionId,
+              workItemId,
+              attempt: applied.attempt,
+              error: persisted.error.slice(0, 300),
+            },
+          },
+        })
+        .catch(() => undefined);
+      return undefined;
+    }
+
+    const lookupKey = createRecordLookupKey(sessionId, workItemId);
+    const committed = stagedData.records.get(lookupKey);
+    if (!committed) return undefined;
+    liveData.records.set(lookupKey, committed);
+    void client.app
+      .log({
+        body: {
+          service: "workflow",
+          level: "warn",
+          message:
+            "[workflow][reportRejection][BLOCK_REPORT_REJECTION] terminal report rejected and settled",
+          extra: {
+            sessionID: sessionId,
+            workItemId,
+            attempt: applied.attempt,
+            protocolErrorCode,
+            observedHardStop: explicitHardStop,
+            consumedAttempts: applied.consumedAttempts,
+            attemptBudget: applied.attemptBudget,
+          },
+        },
+      })
+      .catch(() => undefined);
+    return applied.attempt;
+  }
+
   function handleDelegatedPartUpdated(properties: Record<string, unknown>): void {
     const part = properties.part as
       | {
@@ -731,6 +827,120 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
   }
   // END_BLOCK_DELEGATED_AUTHORIZATION
 
+  // START_BLOCK_RECOVERY_SUPPORT
+  // Read-only SDK message lookup for user-authorized recovery. Only identity
+  // and timing metadata (role, sessionID, id, time.created) are retained;
+  // message bodies never enter validation, persistence, or logs. Transport
+  // failures throw so the domain reports AUTHORIZATION_LOOKUP_FAILED instead
+  // of conflating an unreachable lookup with a nonexistent message.
+  const lookupRecoveryUserMessage: LookupRecoveryUserMessage = async (sessionId, messageId) => {
+    const response = await client.session.message({
+      path: { id: sessionId, messageID: messageId },
+      query: { directory },
+    });
+    if (response.error || !response.data) {
+      const errorName = (response.error as { name?: string } | undefined)?.name;
+      if (errorName && errorName !== "NotFound") {
+        throw new Error(`session message lookup failed: ${errorName}`);
+      }
+      return undefined;
+    }
+    const info = response.data.info as {
+      role?: string;
+      sessionID?: string;
+      id?: string;
+      time?: { created?: number };
+    };
+    return {
+      role: info.role,
+      sessionID: info.sessionID,
+      id: info.id,
+      timeCreatedMs:
+        typeof info.time?.created === "number" && Number.isFinite(info.time.created)
+          ? info.time.created
+          : undefined,
+    };
+  };
+
+  /**
+   * Execute one recovery mutation durably on the live store: the domain
+   * reducer applies to the live entry (re-prechecking after any authorization
+   * await), and the whole live store is then persisted synchronously. If the
+   * write fails, the captured prior entry is restored so no unpersisted launch
+   * permission is ever exposed — there is no await between mutation, persist,
+   * and rollback, so no concurrent actor can observe the intermediate state,
+   * and no stale whole-store snapshot can regress concurrent transitions.
+   */
+  async function executeCommittedRecovery<T>(
+    sessionId: string,
+    runRecovery: (liveStore: WorkItemStore) => Promise<T>,
+    captureRestore: () => () => void,
+    wasApplied: (result: T) => boolean,
+  ): Promise<T> {
+    const liveStore = stores.get(sessionId);
+    if (!liveStore || invalidHydrationSessions.has(sessionId)) {
+      throw new Error(
+        `CONTROL_DENIED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
+      );
+    }
+    const restore = captureRestore();
+    const result = await runRecovery(liveStore);
+    if (!wasApplied(result)) {
+      return result;
+    }
+    const persisted = snapshotWorkflowStateChecked(sessionId, liveStore.getStoreData());
+    if (!persisted.ok) {
+      restore();
+      void client.app
+        .log({
+          body: {
+            service: "workflow",
+            level: "error",
+            message: "[workflow][recovery][BLOCK_RECOVERY_COMMIT] recovery persistence failed",
+            extra: { sessionID: sessionId, error: persisted.error.slice(0, 300) },
+          },
+        })
+        .catch(() => undefined);
+      throw new Error(
+        `PERSISTENCE_FAILED: recovery applied in memory but could not be persisted and was rolled back: ${persisted.error}`,
+      );
+    }
+    return result;
+  }
+
+  /** Capture and restore one work-item record entry for recovery rollback. */
+  function captureRecordRestore(sessionId: string, workItemId: string): () => void {
+    const liveStore = stores.get(sessionId);
+    if (!liveStore) return () => undefined;
+    const liveData = liveStore.getStoreData();
+    const lookupKey = createRecordLookupKey(sessionId, workItemId);
+    const prior = liveData.records.get(lookupKey);
+    return () => {
+      if (prior) {
+        liveData.records.set(lookupKey, prior);
+      }
+    };
+  }
+
+  /** Capture and restore one checkpoint entry for recovery rollback. */
+  function captureCheckpointRestore(
+    sessionId: string,
+    runId: string,
+    checkpointId: string,
+  ): () => void {
+    const liveStore = stores.get(sessionId);
+    if (!liveStore) return () => undefined;
+    const run = liveStore.getStoreData().planRuns.get(runId);
+    if (!run) return () => undefined;
+    const priorCheckpoint = run.checkpoints.get(checkpointId);
+    return () => {
+      if (priorCheckpoint) {
+        run.checkpoints.set(checkpointId, priorCheckpoint);
+      }
+    };
+  }
+  // END_BLOCK_RECOVERY_SUPPORT
+
   // START_BLOCK_CHECKPOINT_LINKAGE
   /** Find the in-flight checkpoint generation whose linked review item matches. */
   function findCheckpointByReviewItem(
@@ -756,8 +966,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
   const workItemOpenTool = createWorkItemOpenTool(dummyStore);
   const workItemListTool = createWorkItemListTool(dummyStore);
   const workItemCloseTool = createWorkItemCloseTool(dummyStore);
-  const workItemDecideTool = createWorkItemDecideTool(dummyStore);
-  const workCheckpointTool = createWorkCheckpointTool(dummyStore);
+  const workItemDecideTool = createWorkItemDecideTool(dummyStore, {
+    lookupUserMessage: lookupRecoveryUserMessage,
+  });
+  const workCheckpointTool = createWorkCheckpointTool(dummyStore, {
+    lookupUserMessage: lookupRecoveryUserMessage,
+  });
 
   return {
     tool: {
@@ -827,12 +1041,17 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
               args: {
                 workItemId: z.string(),
                 attempt: z.number().int().min(1),
-                decision: z.enum(["accept", "request_changes", "rework"]),
-                rationale: z.string(),
-                evidence: z.array(z.string()),
+                decision: z.enum(["accept", "request_changes", "rework", "recover"]),
+                rationale: z.string().optional(),
+                evidence: z.array(z.string()).optional(),
                 concernsDisposition: z.string().optional(),
                 runId: z.string().optional(),
                 checkpointId: z.string().optional(),
+                diagnosis: z.string().optional(),
+                changedCondition: z.string().optional(),
+                verification: z.array(z.string()).optional(),
+                recoveryId: z.string().optional(),
+                userMessageId: z.string().optional(),
               },
               async execute(args, context) {
                 // Resolve the store first so invalid persisted state is detected
@@ -844,7 +1063,21 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
                   { directory: context.directory, worktree: context.worktree },
                   "work_item_decide",
                 );
-                const decided = workItemDecideTool.execute(
+                // Recovery is the only decision family that must persist
+                // before it exposes new launch permissions, so it commits
+                // durably on the live store and rolls back on write failure.
+                if (args.decision === "recover") {
+                  const workItemId = String(args.workItemId ?? "");
+                  const recovered = await executeCommittedRecovery(
+                    context.sessionID,
+                    (liveStore) =>
+                      workItemDecideTool.execute(args, { sessionId: context.sessionID }, liveStore),
+                    () => captureRecordRestore(context.sessionID, workItemId),
+                    (result) => result.ok === true,
+                  );
+                  return stringifyToolOutput(recovered);
+                }
+                const decided = await workItemDecideTool.execute(
                   args,
                   { sessionId: context.sessionID },
                   sessionStore,
@@ -863,11 +1096,16 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
             work_checkpoint: tool({
               description: workCheckpointTool.description,
               args: {
-                action: z.enum(["register", "start", "verify"]),
+                action: z.enum(["register", "start", "verify", "recover"]),
                 planPath: z.string().optional(),
                 runId: z.string().optional(),
                 checkpointId: z.string().optional(),
                 complete: z.boolean().optional(),
+                diagnosis: z.string().optional(),
+                changedCondition: z.string().optional(),
+                verification: z.array(z.string()).optional(),
+                recoveryId: z.string().optional(),
+                userMessageId: z.string().optional(),
               },
               async execute(args, context) {
                 // Resolve the store first so invalid persisted state is detected
@@ -889,6 +1127,21 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
                       : { loadError: `${loaded.code}: ${loaded.message}` };
                   },
                 };
+                // Checkpoint recovery commits durably on the live store and
+                // rolls the checkpoint entry back on write failure, so a
+                // granted generation is never exposed before its state is
+                // durably recorded.
+                if (args.action === "recover") {
+                  const runId = String(args.runId ?? "");
+                  const checkpointId = String(args.checkpointId ?? "");
+                  const recovered = await executeCommittedRecovery(
+                    context.sessionID,
+                    (liveStore) => workCheckpointTool.execute(args, toolContext, liveStore),
+                    () => captureCheckpointRestore(context.sessionID, runId, checkpointId),
+                    (result) => result.ok === true,
+                  );
+                  return stringifyToolOutput(recovered);
+                }
                 const result = await workCheckpointTool.execute(
                   { ...args },
                   toolContext,
@@ -1218,7 +1471,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         expectedWorkItemId: header.value,
       });
       if (!parsed.ok) {
-        const explicitHardStop = hasExplicitHardStopStatus(unwrapped.normalizedOutput);
+        const explicitHardStop = detectExplicitHardStopStatus(unwrapped.normalizedOutput);
         if (
           unwrapped.envelope &&
           isTrackedResultRepairEligible(parsed.error.code) &&
@@ -1282,9 +1535,69 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
           },
         });
         revertLaunch();
+
+        // A confirmed terminal delegated execution whose report stays
+        // protocol-invalid settles as a completed execution with a rejected
+        // report: never in flight, never DONE, with the observed substantive
+        // hard stop preserved and a supported recovery path remaining.
+        // Unknown (non-string) or mismatched outputs never reach here.
+        const currentForSettlement = getWorkItem(
+          getOrCreateStore(input.sessionID),
+          input.sessionID,
+          header.value,
+        );
+        const settledAttempt = (() => {
+          if (!protocolFailureExcerpt || !currentForSettlement) return undefined;
+          if (
+            currentForSettlement.state === "closed" ||
+            currentForSettlement.mode !== "delegated" ||
+            subagentType !== "vv-implementer"
+          ) {
+            return undefined;
+          }
+          if (
+            !currentForSettlement.delegated?.attempts.some(
+              (attempt) => attempt.status === "in_flight" && attempt.callId === input.callID,
+            )
+          ) {
+            return undefined;
+          }
+          const observedHardStop = detectExplicitHardStopStatus(unwrapped.normalizedOutput);
+          return commitDelegatedReportRejection(
+            input.sessionID,
+            header.value,
+            input.callID,
+            parsed.error.code,
+            protocolFailureExcerpt,
+            observedHardStop,
+          );
+        })();
+
+        const settlementLines = settledAttempt
+          ? [
+              `Report rejected: attempt ${settledAttempt} of ${header.value} settled as report_rejected with bounded diagnostics retained.`,
+              (() => {
+                const settledRecord = getWorkItem(
+                  getOrCreateStore(input.sessionID),
+                  input.sessionID,
+                  header.value,
+                );
+                const progress = settledRecord
+                  ? summarizeDelegatedProgress(settledRecord)
+                  : undefined;
+                return `Next action: ${progress?.nextAction ?? "inspect work_item_list"}${
+                  progress?.nextAction === "recover" ||
+                  progress?.nextAction === "recover_with_user_authorization"
+                    ? ' through work_item_decide decision "recover"'
+                    : ""
+                }.`;
+              })(),
+            ]
+          : [];
         throw new Error(
           [
             `RESULT_PROTOCOL_ERROR: ${parsed.error.message}`,
+            ...settlementLines,
             formatResultExcerptForError(protocolFailureExcerpt),
           ].join("\n"),
         );

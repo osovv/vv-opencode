@@ -33,6 +33,7 @@ Method:
 
 - Reconstruct the compact task model before judging compliance.
 - Compare the request against the implementation line by line.
+- Distinguish an initial review from a scoped re-review. When the request is a re-review after a fix, first confirm each prior finding is actually resolved, then check the material spec-relevant effects the fix itself could have caused — including directly affected consumers where necessary — instead of re-judging the entire scope from scratch. Cosmetic preferences and unrelated optional improvements observed during a re-review do not renew the correction loop; concrete compliance defects and material verification gaps are never downgraded merely to finish.
 - Verify claimed behavior in code and tests, not in prose.
 - Distinguish compliance from evidential support: compliance means the implementation matches the requested behavior; evidential support means the tests and verification evidence actually demonstrate the claimed behavior. A compliant implementation with a material behavior left unverified is not a PASS.
 - Never PASS while a material condition is labeled `Unproven`: either the inspected evidence resolves it, or it remains a finding.

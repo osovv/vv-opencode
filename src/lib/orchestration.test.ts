@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Extended profile coverage to the delegated policy and its workflow guidance.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added delegated-policy coverage distinguishing bounded recovery from session end and acceptance plus the native plan registration boundary.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -131,6 +131,26 @@ describe("resolved orchestration policies", () => {
     expect(context).toContain("do not bypass the delegation policy by rewriting source through");
     expect(context).toContain("planning artifacts under their");
     expect(context).toContain("execute verification commands");
+  });
+
+  test("delegated distinguishes bounded recovery from session end and acceptance", () => {
+    const context = resolveOrchestrationPolicy({
+      orchestration: { profile: "delegated" },
+    }).controllerSystemContext;
+    const normalized = context.replace(/\s+/g, " ");
+
+    expect(context).toContain("workers, including small mechanical fixes");
+    expect(normalized).toContain(
+      "work_checkpoint registration accepts only its supported approved native plan package",
+    );
+    expect(normalized).toContain("foreign lifecycle plans are not");
+    expect(normalized).toContain("diagnose a stopped or exhausted task");
+    expect(normalized).toContain("through the session's supported recovery operation");
+    expect(normalized).toContain(
+      "never an unlimited retry and never a substitute for acceptance or review",
+    );
+    expect(normalized).toContain("A stop suspends");
+    expect(normalized).toContain("it does not end the session");
   });
 });
 // END_BLOCK_CONCRETE_POLICY_TESTS

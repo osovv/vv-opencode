@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-skills.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added vv-spec/vv-plan/vv-execute/vv-review correctness-obligation coverage: ambiguity resolution, preserved-property criteria, complete bounded packets, evidence sufficiency, and honest no-findings reporting.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added vv-execute bounded recovery, native plan registration, and scoped re-review coverage; superseded the rework-only extension sentence.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -150,6 +150,55 @@ describe("managed workflow skill prompts", () => {
     expect(body).toContain("do not suggest escalating to the smart model for routine work");
     expect(body).toContain("a closed review-only FAIL report is a findings result, never approval");
     expect(body).toContain("NEEDS_CONTEXT and BLOCKED from a worker are hard stops");
+  });
+
+  test("vv-execute separates bounded recovery from acceptance and rework", async () => {
+    const template = await loadManagedSkillTemplate("vv-execute");
+    const { body } = splitFrontmatter(template);
+    const normalized = body.replace(/\s+/g, " ");
+
+    // The conflicting rework-only extension direction is replaced, not kept alongside.
+    expect(body).not.toContain(
+      "only a failed checkpoint's explicit rework authorization grants exactly one more attempt",
+    );
+
+    expect(normalized).toContain(
+      "a stopped or exhausted unaccepted task recovers through work_item_decide with decision recover",
+    );
+    expect(normalized).toContain("one autonomous grant per target");
+    expect(normalized).toContain(
+      "further units only with an explicit root-user message referenced by userMessageId",
+    );
+    expect(normalized).toContain(
+      "an accepted task covered by a failed checkpoint reopens through decision rework",
+    );
+    expect(normalized).toContain(
+      "Recovery authorizes the next bounded attempt; it never accepts a result or replaces a reviewer",
+    );
+    expect(normalized).toContain("The first needed grant is autonomous");
+    expect(normalized).toContain("it does not end the execution session");
+    expect(normalized).toContain(
+      "recovers through work_checkpoint (action recover) with the same bounded fields as task recovery",
+    );
+    expect(normalized).toContain("never seals the run — only a passing verified final review does");
+  });
+
+  test("vv-execute states the native registration boundary and scoped re-review honestly", async () => {
+    const template = await loadManagedSkillTemplate("vv-execute");
+    const { body } = splitFrontmatter(template);
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "work_checkpoint register accepts only its supported approved native plan package",
+    );
+    expect(normalized).toContain("Foreign lifecycle plan formats are not convertible into it");
+    expect(normalized).toContain("supersede or replan under this package");
+    expect(normalized).toContain(
+      "never disguise a managed reviewer as another agent to evade checkpoint enforcement",
+    );
+    expect(normalized).toContain("The repeat review is a scoped re-review");
+    expect(normalized).toContain("verifies the prior findings against the fix");
+    expect(normalized).toContain("unrelated optional improvements do not renew the loop");
   });
 
   test("vv-plan declares execution intent, write scopes, and checkpoint planning", async () => {

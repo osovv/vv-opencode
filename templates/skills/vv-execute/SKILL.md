@@ -227,7 +227,7 @@ A DONE implementer moves the work item to awaiting_reviews with a review round t
 - Dispatch vv-code-reviewer with the VVOC_WORK_ITEM_ID header and the changed code/diff.
 Collect both results.
 - Both PASS → the work item becomes ready_to_close → proceed to commit.
-- Any FAIL → the work item returns to awaiting_implementer. Re-dispatch the implementer with the normalized reviewer findings, then repeat handle-status → verify → review (bounded by the runtime review-round limit).
+- Any FAIL → the work item returns to awaiting_implementer. Re-dispatch the implementer with the normalized reviewer findings, then repeat handle-status → verify → review (bounded by the runtime review-round limit). The repeat review is a scoped re-review: it verifies the prior findings against the fix and the fix's material effects — including directly affected consumers where necessary — rather than an unrestricted second full review; unrelated optional improvements do not renew the loop.
 A reviewer returning NEEDS_CONTEXT is a hard stop: surface it to the user instead of re-dispatching.
 </step>
 
@@ -266,7 +266,7 @@ Otherwise → move to the next task in dependency order.
 <principle>Use this workflow only when execution mode is delegated. Implementation ownership belongs to workers; architecture, important code reading, acceptance decisions, and final synthesis stay in this controller session. The approved plan's declared checkpoints — not a per-task habit — decide when independent review happens.</principle>
 
 <step name="register-once">
-Register the approved plan exactly once with work_checkpoint (action register) using the plan path. Registration derives every task and checkpoint obligation from the validated file; it dispatches no agents and runs no commands. Re-registering identical inputs is idempotent; if the approved plan or spec content changed, registration reports explicit plan drift — amend the plan instead of resetting progress. Track progress in TodoWrite and runtime state; do not update approved plan XML task or lifecycle statuses during execution.
+Register the approved plan exactly once with work_checkpoint (action register) using the plan path. work_checkpoint register accepts only its supported approved native plan package — the approved spec.xml and plan.xml pair under .vvoc/specs/. Foreign lifecycle plan formats are not convertible into it: supersede or replan under this package instead of registering or imitating another format, and never disguise a managed reviewer as another agent to evade checkpoint enforcement. Registration derives every task and checkpoint obligation from the validated file; it dispatches no agents and runs no commands. Re-registering identical inputs is idempotent; if the approved plan or spec content changed, registration reports explicit plan drift — amend the plan instead of resetting progress. Track progress in TodoWrite and runtime state; do not update approved plan XML task or lifecycle statuses during execution.
 </step>
 
 <step name="dispatch-task">
@@ -277,11 +277,11 @@ For the next dependency-ready task, dispatch one bounded vv-implementer packet u
 A DONE worker result parks the item in awaiting_acceptance. It is not accepted and cannot close by itself. Inspect the material changed code and evidence yourself, then call work_item_decide:
 - accept with rationale and evidence references when the result matches the task contract and the evidence actually exercises the task's material claims.
 - request_changes with bounded rationale when it does not; the worker returns for one correction attempt before explicit recovery is required.
-Acceptance requires evidence sufficiency: a DONE report plus green general checks that never reach the changed behavior is not acceptance. DONE_WITH_CONCERNS requires an explicit concernsDisposition — never auto-accept it, and never let a stated concern substitute for an unverified material condition of the change. Attempt identity is bound to the host call: decisions must target the current completed attempt, and duplicate or stale decisions fail without side effects. The two-attempt budget (initial plus one correction) never resets on retries or re-decisions; only a failed checkpoint's explicit rework authorization grants exactly one more attempt.
+Acceptance requires evidence sufficiency: a DONE report plus green general checks that never reach the changed behavior is not acceptance. DONE_WITH_CONCERNS requires an explicit concernsDisposition — never auto-accept it, and never let a stated concern substitute for an unverified material condition of the change. Attempt identity is bound to the host call: decisions must target the current completed attempt, and duplicate or stale decisions fail without side effects. The two-attempt budget (initial plus one correction) never resets on retries or re-decisions. Two bounded paths extend work without resetting history: a stopped or exhausted unaccepted task recovers through work_item_decide with decision recover — one autonomous grant per target, further units only with an explicit root-user message referenced by userMessageId — and an accepted task covered by a failed checkpoint reopens through decision rework. Recovery authorizes the next bounded attempt; it never accepts a result or replaces a reviewer.
 </step>
 
 <step name="hard-stops">
-NEEDS_CONTEXT and BLOCKED from a worker are hard stops. Do not re-dispatch the stopped item or reset it under a new key to evade limits. Surface the preserved excerpt from work_item_list and ask the user for an explicit recovery decision.
+NEEDS_CONTEXT and BLOCKED from a worker are hard stops. Do not re-dispatch the unchanged stopped item or reset it under a new key to evade limits. Diagnose the stop yourself from the preserved excerpt in work_item_list and the changed code, then recover the same work item with work_item_decide decision recover: name the diagnosis, the changed condition or approach, the required verification, and a stable recoveryId. The first needed grant is autonomous; every further unit requires a fresh root-user message referenced by userMessageId. Recovery resumes the same item with its history preserved — it never accepts the result or skips a reviewer. A stop suspends this task; it does not end the execution session.
 </step>
 
 <step name="run-due-checkpoints">
@@ -289,6 +289,7 @@ Before starting tasks whose wave sits behind a declared checkpoint, run the due 
 - Every declared reviewer must PASS for the pinned snapshot; a closed review-only FAIL report is a findings result, never approval.
 - Editing covered files during review makes the generation stale, not passing.
 - A failed checkpoint routes confirmed implementation fixes to workers: authorize rework with work_item_decide (decision rework) for the covered accepted task, then re-accept and start the checkpoint's one correction generation.
+- A checkpoint generation that stopped (NEEDS_CONTEXT) or exhausted its two ordinary generations recovers through work_checkpoint (action recover) with the same bounded fields as task recovery. Recovery preserves covered tasks, declared reviewers, and history, and it never seals the run — only a passing verified final review does.
 - Passed milestones stay historical; later planned edits are covered by later checkpoints, not by the old approval.
 </step>
 

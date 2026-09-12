@@ -1,0 +1,133 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-WORKFLOW-BOUNDED-RECOVERY-R1>
+    <IntentSummary>Implement bounded delegated recovery through the existing control tools, record terminal report failures truthfully, calibrate managed prompts, and preserve mandatory checkpoint review. Reconcile durable state centrally, verify the combined result, then make the authorized implementation commit and RC release.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-WORKFLOW-DELEGATED</Value><Value>M-WORKFLOW-CHECKPOINTS</Value><Value>M-WORKFLOW-PERSISTENCE</Value><Value>M-WORKFLOW-TOOLING</Value><Value>M-PLUGIN-WORKFLOW</Value><Value>M-ORCHESTRATION-PROFILES</Value><Value>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value><Value>M-CLI-MANAGED-AGENTS</Value><Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/plugins/workflow/delegated.test.ts</Value><Value>src/plugins/workflow/checkpoints.test.ts</Value><Value>src/plugins/workflow/persistence.test.ts</Value><Value>src/plugins/workflow.test.ts</Value><Value>src/plugins/workflow.delegated.test.ts</Value><Value>src/lib/orchestration.test.ts</Value><Value>src/lib/managed-agents.test.ts</Value><Value>src/lib/managed-skills.test.ts</Value><Value>src/plugins/system-context-injection.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/plugins/workflow/delegated.ts</File><Text>export const DELEGATED_BASE_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/delegated.ts</File><Text>rework targets accepted items</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoints.ts</File><Text>export const MAX_CHECKPOINT_REVIEW_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoints.ts</File><Text>PREREQUISITES_NOT_ACCEPTED</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/persistence.ts</File><Text>export const PERSISTED_WORKFLOW_STATE_VERSION = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>awaiting_acceptance</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/transitions.ts</File><Text>getAllowedNextAgents</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>decision: "accept" | "request_changes" | "rework";</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>const revertLaunch = () =&gt; {</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>const explicitHardStop = hasExplicitHardStopStatus(unwrapped.normalizedOutput);</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/repair.ts</File><Text>same child session</Text></MustContain>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>workers, including small mechanical fixes.</Text></MustContain>
+      <MustContain><File>src/plugins/system-context-injection/index.ts</File><Text>Mark each claim in internal reasoning:</Text></MustContain>
+      <MustContain><File>templates/agents/vv-controller.md</File><Text>&lt;hard_stop_handoff&gt;</Text></MustContain>
+      <MustContain><File>templates/agents/vv-implementer.md</File><Text>When dispatched as a delegated worker, complete your own local edit, test, and fix cycle</Text></MustContain>
+      <MustContain><File>templates/agents/vv-code-reviewer.md</File><Text>FAIL covers a concrete defect or a material verification gap</Text></MustContain>
+      <MustContain><File>templates/agents/vv-spec-reviewer.md</File><Text>A compliant implementation with a material behavior left unverified is not a PASS.</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>only a failed checkpoint's explicit rework authorization grants exactly one more attempt.</Text></MustContain>
+      <MustContain><File>templates/skills/vv-review/SKILL.md</File><Text>Findings are the FINAL output.</Text></MustContain>
+      <MustContain><File>README.md</File><Text>`rework` reopens an accepted task only when a failed checkpoint from the same registered run covers it, preserving acceptance history and granting exactly one additional attempt.</Text></MustContain>
+      <MustPassCommand><Command>bun test src/plugins/workflow/delegated.test.ts src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/persistence.test.ts src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/orchestration.test.ts src/plugins/system-context-injection.test.ts</Command></MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-WORKFLOW-DELEGATED</Module><Module>M-WORKFLOW-CHECKPOINTS</Module><Module>M-WORKFLOW-PERSISTENCE</Module><Module>M-WORKFLOW-TOOLING</Module><Module>M-PLUGIN-WORKFLOW</Module><Module>M-ORCHESTRATION-PROFILES</Module><Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module><Module>M-CLI-MANAGED-AGENTS</Module><Module>M-CLI-MANAGED-SKILLS</Module></MustVerify>
+      <MustContain><File>src/plugins/workflow/delegated.ts</File><Text>export const DELEGATED_BASE_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoints.ts</File><Text>export const MAX_CHECKPOINT_REVIEW_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>userMessageId</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/persistence.ts</File><Text>export const PERSISTED_WORKFLOW_STATE_VERSION = 3;</Text></MustContain>
+      <MustNotContain><File>src/plugins/system-context-injection/index.ts</File><Text>Mark each claim in internal reasoning:</Text></MustNotContain>
+      <MustNotContain><File>templates/agents/vv-controller.md</File><Text>&lt;hard_stop_handoff&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-execute/SKILL.md</File><Text>only a failed checkpoint's explicit rework authorization grants exactly one more attempt.</Text></MustNotContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/workflow/delegated.test.ts src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/persistence.test.ts src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts</Command>
+        <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/orchestration.test.ts src/plugins/system-context-injection.test.ts</Command>
+        <Command>bun run check</Command><Command>bun run build</Command><Command>bun run release:check</Command><Command>bun run pack:check</Command><Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>This is the user-authorized technical replacement of the completed and approved C-WORKFLOW-BOUNDED-RECOVERY plan. The sole behavioral-baseline correction replaces a nonexistent README phrase with its actual existing rework contract. Product requirements, target assertions, implementation file scope, task acceptance, and release authorization are preserved; lifecycle identity and package paths are updated for supersession.</Note>
+      <Note>The preceding package is archived as superseded with its original assertions and scope unchanged. The two added archive paths below record only that authorized lifecycle move, not permission to retrofit historical assertions.</Note>
+      <Note>Execution compatibility is a pre-edit requirement. The active controller policy requires work_checkpoint registration for planned delegated execution, while the current checkpoint-io adapter accepts native vvoc plan XML rather than GraceChangePlan. Do not create a shadow normative plan, disguise managed agents, or change runtime/configuration to bypass the active policy. Execution requires a compatible session policy before any worker writes.</Note>
+      <Note>Use one implementation worker at a time. T-001 owns the complete runtime and persistence change, including its injected protocol text. T-002 consumes that settled recovery API to align the remaining prompts. T-003 reconciles actual accepted behavior into documentation and durable projections. These are behavioral dependencies, not an artificial scheduling chain.</Note>
+      <Note>Extend existing controls rather than adding another tool family: work_item_decide gains decision recover for a stopped or exhausted unaccepted delegated attempt; work_checkpoint gains action recover for a stopped or exhausted checkpoint generation. Both accept a diagnosis, changedCondition, verification references, a stable recoveryId, and optional userMessageId for user-authorized extensions. Existing accept, request_changes, rework, register, start, and verify behavior remains separately identifiable.</Note>
+      <Note>Recovery targets the latest terminal attempt or settled checkpoint generation. It does not interrupt live work, accept a result, satisfy a reviewer, or change declared scope. A recovery that resumes a stop with ordinary budget remaining does not manufacture additional ordinary budget. When an extra attempt is necessary, the single autonomous recovery allowance grants exactly one; a further grant requires a fresh eligible user authorization.</Note>
+      <Note>Keep existing checkpoint-authorized rework history distinct from the new recovery history. A rework remains bound to its real failed checkpoint and cannot be replayed; a recovery cannot mint such a checkpoint or use a new key to reset its own allowance. Tests must exercise interactions rather than proving only each operation in isolation.</Note>
+      <Note>The pinned SDK exposes client.session.message with path id and messageID, returning info and parts. UserMessage carries role, sessionID, id, and time.created. Validate those fields against the root session and target stop; reject missing, mismatched, synthetic-only, and reused authorization. Retain only the necessary identity and timing metadata, not message bodies. Provenance validation is not a claim that runtime understands natural-language intent.</Note>
+      <Note>Write persistence version 3 with explicit recovery and rejected-report records, while reading supported versions 1 and 2 conservatively with empty recovery histories. Do not silently downgrade snapshots, infer approvals, or treat known rejected reports as restart-orphaned work. Document that an older plugin may refuse a newer snapshot rather than reset it.</Note>
+      <Note>Declare final checkpoint R-001 after T-001 through T-003 are accepted: one spec reviewer and one code reviewer inspect the pinned combined diff, approved contract, and verification evidence. No additional per-file review loop is required. Any confirmed fix is delegated back to its original bounded write scope and invalidates the affected review snapshot.</Note>
+      <Note>All examples, diagnostic strings, test fixtures, evidence descriptions, and publication content must use synthetic values and product terminology. Do not embed external workspaces, conversations, project-specific examples, or imported transcripts.</Note>
+      <Note>GRACE lifecycle commands are external execution gates, never nested MustPassCommand values. Active current assertions run only before observed writes; use selected baseline, target, and final phases at their proper boundaries.</Note>
+      <Note>Release metadata files in ObservedWriteScope belong solely to the existing release automation after implementation verification and commit. No manual version/changelog edits and no release before a verified implementation are authorized by this plan.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-WORKFLOW-DELEGATED /><M-WORKFLOW-CHECKPOINTS /><M-WORKFLOW-PROTOCOL /><M-WORKFLOW-REPAIR /><M-WORKFLOW-STATE /><M-WORKFLOW-TRANSITIONS /><M-WORKFLOW-TOOLING /><M-WORKFLOW-PERSISTENCE /><M-PLUGIN-WORKFLOW /><M-ORCHESTRATION-PROFILES /><M-PLUGIN-SYSTEM-CONTEXT-INJECTION /><M-CLI-MANAGED-AGENTS /><M-CLI-MANAGED-SKILLS />
+        <DF-WORKFLOW-TOOLS /><DF-RESULT-PARSING /><DF-LOOP-GATE /><DF-WORKFLOW-GUIDANCE /><DF-WORKFLOW-PERSISTENCE /><DF-DELEGATED-ACCEPTANCE /><DF-REVIEW-CHECKPOINTS />
+      </GraphAnchors>
+      <VerificationAnchors><V-M-WORKFLOW-DELEGATED /><V-M-WORKFLOW-CHECKPOINTS /><V-M-WORKFLOW-PROTOCOL /><V-M-WORKFLOW-REPAIR /><V-M-WORKFLOW-STATE /><V-M-WORKFLOW-TRANSITIONS /><V-M-WORKFLOW-TOOLING /><V-M-WORKFLOW-PERSISTENCE /><V-M-PLUGIN-WORKFLOW /><V-M-ORCHESTRATION-PROFILES /><V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION /><V-M-CLI-MANAGED-AGENTS /><V-M-CLI-MANAGED-SKILLS /></VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/workflow/delegated.ts</File><File>src/plugins/workflow/delegated.test.ts</File><File>src/plugins/workflow/checkpoints.ts</File><File>src/plugins/workflow/checkpoints.test.ts</File>
+      <File>src/plugins/workflow/state.ts</File><File>src/plugins/workflow/transitions.ts</File><File>src/plugins/workflow/persistence.ts</File><File>src/plugins/workflow/persistence.test.ts</File><File>src/plugins/workflow/tooling.ts</File><File>src/plugins/workflow/index.ts</File><File>src/plugins/workflow/repair.ts</File><File>src/plugins/workflow.test.ts</File><File>src/plugins/workflow.delegated.test.ts</File>
+      <File>src/lib/orchestration.ts</File><File>src/lib/orchestration.test.ts</File><File>src/plugins/system-context-injection/index.ts</File><File>src/plugins/system-context-injection.test.ts</File><File>src/lib/managed-agents.test.ts</File><File>src/lib/managed-skills.test.ts</File>
+      <File>templates/agents/vv-controller.md</File><File>templates/agents/vv-implementer.md</File><File>templates/agents/vv-code-reviewer.md</File><File>templates/agents/vv-spec-reviewer.md</File><File>templates/skills/vv-execute/SKILL.md</File><File>templates/skills/vv-review/SKILL.md</File>
+      <File>README.md</File><File>.grace/context/requirements.xml</File><File>.grace/graph/main.xml</File><File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-WORKFLOW-BOUNDED-RECOVERY-R1/spec.xml</File><File>.grace/changes/active/C-WORKFLOW-BOUNDED-RECOVERY-R1/plan.xml</File>
+      <File>.grace/changes/archive/C-WORKFLOW-BOUNDED-RECOVERY/spec.xml</File><File>.grace/changes/archive/C-WORKFLOW-BOUNDED-RECOVERY/plan.xml</File>
+      <File>package.json</File><File>schemas/vvoc/v3.json</File><File>CHANGELOG.md</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Implement bounded recovery, terminal report-failure settlement, and durable authorization through existing workflow controls.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write scope is the thirteen workflow source/test files listed in ObservedWriteScope, and no other files. Read contracts and tests first; update local contracts and change summaries before behavior. The controller settles public API and acceptance decisions; the worker owns implementation and its complete local test/fix cycle.</Criterion>
+          <Criterion>Implement decision recover and checkpoint action recover with explicit target identity, diagnosis, changedCondition, verification references, recoveryId, and optional userMessageId. Bind each operation to the latest terminal attempt or settled generation and enforce the approved one-unit recovery policy with no repeat grants or budget reset.</Criterion>
+          <Criterion>Authorize user extensions through root-session identity checks and a read-only SDK message lookup; verify role, message/session identity, timestamp after the relevant stop, and non-reuse for the same target. Recheck target state after asynchronous validation before committing. Neither message bodies nor unbounded diagnostics enter persistence or logs.</Criterion>
+          <Criterion>After a confirmed terminal result remains protocol-invalid, settle its exact call-bound attempt with a rejected-report record and bounded excerpt. Preserve observed substantive hard stops without automatic continuation or fabricated DONE. Unknown, mismatched, and still-running host results cannot clear a live attempt.</Criterion>
+          <Criterion>Recovery and result settlement stage a new state, persist it successfully, and only then expose changed launch permissions. Persistence version 3 reads legacy supported snapshots conservatively. Strict validation, deep cloning, restart, stale callback, duplicate operation, and failed-write scenarios preserve histories and authorization boundaries.</Criterion>
+          <Criterion>Keep mandatory reviewers, accepted-task prerequisites, plan/spec hash binding, scope fingerprints, overlapping-write exclusions, final sealing, ordinary two-attempt limits, and existing checkpoint rework identity. Inspect/list output names the reason progression is paused and exposes only valid next actions.</Criterion>
+          <Criterion>Add synthetic SDK-shaped regression scenarios for two rejected attempts followed by successful pre-checkpoint recovery; second autonomous grant denial; one fresh root-user extension and replay denial; checkpoint-generation recovery; malformed hard-stop completion; same-child continuation permissions; and final completion that still refuses a skipped reviewer. Cover recovery/rework interactions and preservation of legacy modes.</Criterion>
+          <Criterion>Align the workflow plugin's injected protocol text with the implemented operations and supported native plan format. Do not add a foreign-plan adapter, new tool family, model escalation, configuration rewrite, or source behavior unrelated to this contract.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/workflow/delegated.test.ts src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/persistence.test.ts src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts</Command><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run grace:check</Command><Command>git diff --check</Command></Verification>
+      </T-001>
+      <T-002>
+        <Title>Replace conflicting managed instructions with bounded controller recovery and calibrated initial/re-review guidance.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write scope is the twelve non-workflow instruction and test files in ObservedWriteScope: orchestration source/test, system-context source/test, two managed loader test files, four agent templates, and two skill templates. Runtime workflow files, README, and durable projections belong to other tasks.</Criterion>
+          <Criterion>Keep worker-owned implementation and controller-owned diagnosis, architecture, and acceptance. A worker stop returns control for bounded diagnosis and a supported recovery operation, not automatic session termination. No instruction authorizes redispatching the unchanged stopped item or granting unlimited attempts.</Criterion>
+          <Criterion>Remove mandatory per-claim reasoning labels, duplicate stop rituals, and automatic blocker-to-handoff-file behavior. Retain explicit material assumptions, sufficient impact investigation, proportional checks, and honest uncertainty. Resolve repository-answerable technical questions without requiring a new user approval.</Criterion>
+          <Criterion>State that declared independent reviews are mandatory once selected. Distinguish initial review from checking prior findings and the fix's material effects; retain directly affected consumer inspection when necessary. Cosmetic preferences and unrelated enhancements do not extend the loop, while concrete defects and material verification gaps still block acceptance.</Criterion>
+          <Criterion>Use the exact recovery operations from T-001 and reuse an already explicit compatible execution choice. State native registration boundaries honestly, without directing foreign lifecycles through the vvoc-only adapter or suggesting untracked-agent disguises. Keep review-only requests findings-only.</Criterion>
+          <Criterion>Tests verify coherent instruction delivery, removed conflicting directions, retained review obligations, profile isolation, unchanged role assignments, and the distinction between recovery and acceptance. They must not claim to measure model quality from string-presence checks.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/orchestration.test.ts src/plugins/system-context-injection.test.ts</Command><Command>bun run typecheck</Command><Command>bun run lint</Command><Command>bun run fmt:check</Command><Command>bun run grace:check</Command><Command>git diff --check</Command></Verification>
+      </T-002>
+      <T-003>
+        <Title>Reconcile public documentation and owned GRACE projections with the accepted recovery implementation.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write scope is README.md, .grace/context/requirements.xml, .grace/graph/main.xml, and .grace/verification/main.xml. Reconcile only declared owners centrally after preceding tasks are accepted. Do not edit index ownership, unrelated modules, deployment policy, lifecycle package, or archived history.</Criterion>
+          <Criterion>Describe ordinary budgets, the single autonomous recovery allowance, later root-user extensions, report failure versus live execution, retained mandatory reviews, persistence compatibility, and restart requirements. Distinguish a successful recovery authorization from a successful implementation or passing review.</Criterion>
+          <Criterion>Update applicable work-item, result parsing, loop-gate, acceptance, checkpoint, persistence, and instruction scenarios to match actual tests and operations. Preserve canonical public terminology and add no claims of universal model improvement or foreign-lifecycle support.</Criterion>
+          <Criterion>Review every new example and publication description for product-only wording and synthetic values. Keep the exact requested release command and existing CI-gated publication mechanism unchanged.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>grace lint --path .</Command><Command>grace status --path .</Command><Command>git diff --check</Command></Verification>
+      </T-003>
+      <T-004>
+        <Title>Perform final independent review and fresh gates, complete the approved lifecycle, and make the authorized commit and RC release.</Title>
+        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The controller performs verification and acceptance only; any source/test/formatting correction returns to a worker in the relevant existing scope. At declared checkpoint R-001, obtain independent spec and code review of the pinned combined result. Do not count a findings-only FAIL or a review of a stale snapshot as approval.</Criterion>
+          <Criterion>Run all target gates freshly and the selected GRACE target/final phases externally. Verify both enforcement and reachable recovery, including the complete registered-run path with an actual required-review failure before successful completion. Do not release an implementation with a known failing mandatory gate.</Criterion>
+          <Criterion>Inspect the entire intended diff and generated publication inputs for synthetic examples and product-level wording. Inspect git status and recent commits, stage only intended changes, and make a conventional implementation commit after applicable lifecycle and review requirements are satisfied. Do not amend existing commits or include unrelated changes.</Criterion>
+          <Criterion>Once the implementation commit is verified and the worktree is clean, execute exactly bun run release:bump -- prerelease --preid rc. That automation alone may update package.json, schemas/vvoc/v3.json, and CHANGELOG.md for release metadata. Do not manually change their behavior or bypass hooks and CI.</Criterion>
+          <Criterion>Verify the publication workflow's success, exact released SHA, npm version and gitHead, RC dist-tag, annotated tag, and GitHub Release from fresh evidence. If publication fails or is partial, report the actual completed stage and preserve recovery information rather than claiming an RC exists.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun run check</Command><Command>bun run build</Command><Command>bun run release:check</Command><Command>bun run pack:check</Command><Command>grace lint --path . --change C-WORKFLOW-BOUNDED-RECOVERY-R1 --assertions final --run-commands</Command><Command>grace status --path .</Command><Command>git diff --check</Command><Command>git status --short --untracked-files=all</Command></Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-WORKFLOW-BOUNDED-RECOVERY-R1>
+</GraceChangePlan>

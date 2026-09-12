@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow.delegated.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, barrier gates, persistence failures, same-attempt malformed-result continuation, and legacy-profile isolation.
-//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, event-hook host-terminal launch failures with sticky exclusions and persistence recovery, same-child malformed-result continuation with SDK-derived prompt fixtures that preserves the original attempt identity, and old-profile regressions.
+//   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, bounded recovery, terminal report-rejection settlement, and legacy-profile isolation.
+//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify/recover through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, event-hook host-terminal launch failures with sticky exclusions and persistence recovery, same-child malformed-result continuation with SDK-derived prompt fixtures that preserves the original attempt identity, pre-checkpoint bounded recovery after exhaustion with autonomous denial and root-user message extension plus replay rejection, terminal malformed hard-stop settlement as a rejected report with a reachable recovery path, staged recovery persistence failure that keeps launches blocked, final completion refusing skipped reviewers after checkpoint recovery, and old-profile regressions.
 //   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, @opencode-ai/sdk, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
@@ -47,10 +47,12 @@
 //   listItems - Reads the current work-item list through the real tool.
 //   decide - Calls work_item_decide with a stub controller context.
 //   driveAcceptedTask - Runs one delegated task from launch to controller acceptance through hooks and tools.
+//   DelegatedUserMessageStub - Minimal SDK-shaped message snapshot served for authorization lookups.
+//   checkpointCall - Calls the work_checkpoint tool with a stub controller context.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix bounded result continuation - Added delegated coverage that a malformed wrapped result continues the same child once with no tools override and no new attempt, so the controller still accepts the original attempt identity.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added integration coverage: tool-level bounded recovery with autonomous denial and root-user message authorization plus replay rejection, terminal malformed hard-stop settlement, staged recovery persistence failure, and post-recovery final completion that still refuses skipped reviewers.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -139,6 +141,19 @@ interface DelegatedPluginHarness {
   sessionGetFails: boolean;
   promptCalls: DelegatedSessionPromptCall[];
   promptResponses: string[];
+  /** Identity/timing snapshots served by the SDK session.message stub. */
+  userMessages: Map<string, DelegatedUserMessageStub>;
+  messageLookups: string[];
+}
+
+/** Minimal SDK-shaped message snapshot served for authorization lookups. */
+interface DelegatedUserMessageStub {
+  role?: string;
+  sessionID?: string;
+  id?: string;
+  timeCreatedMs?: number;
+  /** Simulates an unreachable lookup instead of a missing message. */
+  transportError?: boolean;
 }
 
 beforeEach(() => {
@@ -360,6 +375,8 @@ async function createDelegatedPluginHarness(
   const sessions = new Map<string, StubSession>();
   const promptCalls: DelegatedSessionPromptCall[] = [];
   const promptResponses = [...(options?.promptResponses ?? [])];
+  const userMessages = new Map<string, DelegatedUserMessageStub>();
+  const messageLookups: string[] = [];
   const harness: DelegatedPluginHarness = {
     logs,
     workspaceRoot,
@@ -368,6 +385,8 @@ async function createDelegatedPluginHarness(
     sessionGetFails: false,
     promptCalls,
     promptResponses,
+    userMessages,
+    messageLookups,
     plugin: undefined as never,
   };
   const plugin = await WorkflowPlugin({
@@ -396,6 +415,31 @@ async function createDelegatedPluginHarness(
             };
           }
           return { data: delegatedPromptResponse(call.path.id, text) };
+        },
+        message: async (options: { path: { id: string; messageID: string } }) => {
+          const key = `${options.path.id}::${options.path.messageID}`;
+          messageLookups.push(key);
+          const stub = userMessages.get(key);
+          if (!stub) {
+            return {
+              data: undefined,
+              error: { name: "NotFound", data: { message: "message not found" } },
+            };
+          }
+          if (stub.transportError) {
+            throw new Error("session service unavailable");
+          }
+          return {
+            data: {
+              info: {
+                role: stub.role ?? "user",
+                sessionID: stub.sessionID ?? options.path.id,
+                id: stub.id ?? options.path.messageID,
+                time: { created: stub.timeCreatedMs ?? Date.now() },
+              },
+              parts: [],
+            },
+          };
         },
       },
     } as never,
@@ -526,7 +570,30 @@ async function listItems(harness: DelegatedPluginHarness) {
     items: Array<{
       workItemId: string;
       state: string;
-      delegated?: { attempts: number; inFlightAttempt: boolean; accepted: boolean };
+      delegated?: {
+        attempts: number;
+        inFlightAttempt: boolean;
+        accepted: boolean;
+        attemptBudget?: number;
+        remainingAttempts?: number;
+        recoveryCount?: number;
+        autonomousGrantConsumed?: boolean;
+        reportRejectionCount?: number;
+        nextAction?: string;
+      };
+    }>;
+    planRuns?: Array<{
+      runId: string;
+      checkpoints: Array<{
+        checkpointId: string;
+        status: string;
+        attempts: number;
+        generationBudget?: number;
+        remainingGenerations?: number;
+        recoveryCount?: number;
+        nextAction?: string;
+        lastOutcome?: string;
+      }>;
     }>;
   }>(
     (await harness.plugin.tool?.work_item_list?.execute(
@@ -534,6 +601,17 @@ async function listItems(harness: DelegatedPluginHarness) {
       createStubToolContext(harness, ROOT_SESSION) as never,
     )) ?? "{}",
   );
+}
+
+async function checkpointCall(
+  harness: DelegatedPluginHarness,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const raw = await harness.plugin.tool?.work_checkpoint?.execute(
+    args as never,
+    createStubToolContext(harness, ROOT_SESSION) as never,
+  );
+  return parseToolJson<Record<string, unknown>>(raw ?? "{}");
 }
 
 async function finishTask(
@@ -601,18 +679,27 @@ async function decide(
   input: {
     workItemId: string;
     attempt: number;
-    decision: "accept" | "request_changes" | "rework";
-    rationale: string;
-    evidence: string[];
+    decision: "accept" | "request_changes" | "rework" | "recover";
+    rationale?: string;
+    evidence?: string[];
     concernsDisposition?: string;
     runId?: string;
     checkpointId?: string;
+    diagnosis?: string;
+    changedCondition?: string;
+    verification?: string[];
+    recoveryId?: string;
+    userMessageId?: string;
   },
   sessionID = ROOT_SESSION,
   agent = "vv-controller",
 ): Promise<Record<string, unknown>> {
   const raw = await harness.plugin.tool?.work_item_decide?.execute(
-    input as never,
+    {
+      rationale: "",
+      evidence: [],
+      ...input,
+    } as never,
     createStubToolContext(harness, sessionID, agent) as never,
   );
   return parseToolJson<Record<string, unknown>>(raw ?? "{}");
@@ -1798,3 +1885,623 @@ describe("twenty tasks require four reviewer launches", () => {
   });
 });
 // END_BLOCK_TWENTY_TASK_SCENARIO
+
+// START_BLOCK_RECOVERY_INTEGRATION_TESTS
+describe("bounded recovery through the delegated control tools", () => {
+  test("two rejected attempts block a third, autonomous recovery grants one, and a user message extends exactly once", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+
+    for (const callId of ["call-rc-1", "call-rc-2"]) {
+      await launchTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId);
+      await finishTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId, "DONE");
+      const attempt = callId.endsWith("1") ? 1 : 2;
+      const rejected = await decide(harness, {
+        workItemId,
+        attempt,
+        decision: "request_changes",
+        rationale: "Implementation misses the declared branch.",
+        evidence: ["src/tasks/task-001.ts"],
+      });
+      expect(rejected.ok).toBe(true);
+    }
+
+    const blocked = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-rc-3",
+      "vv-implementer",
+      workItemId,
+    ).catch((error: Error) => error.message);
+    expect(String(blocked)).toContain("ATTEMPTS_EXHAUSTED");
+
+    let listed = await listItems(harness);
+    let item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.attemptBudget).toBe(2);
+    expect(item?.delegated?.remainingAttempts).toBe(0);
+    expect(item?.delegated?.nextAction).toBe("recover");
+
+    const recovered = await decide(harness, {
+      workItemId,
+      attempt: 2,
+      decision: "recover",
+      diagnosis: "Both attempts missed the same untested branch.",
+      changedCondition: "Branch inputs pinned in the task packet.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-tool-1",
+    });
+    expect(recovered.ok).toBe(true);
+    if (recovered.ok !== true) return;
+    expect(recovered.kind).toBe("autonomous_grant");
+    expect(recovered.attemptBudget).toBe(3);
+
+    await launchTask(harness, ROOT_SESSION, "call-rc-3", "vv-implementer", workItemId);
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-rc-3",
+      "vv-implementer",
+      workItemId,
+      "BLOCKED",
+    ).catch(() => "expected hard stop");
+    listed = await listItems(harness);
+    item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("blocked");
+    expect(item?.delegated?.nextAction).toBe("recover_with_user_authorization");
+
+    // A second autonomous grant is denied even under a new recoveryId.
+    const denied = await decide(harness, {
+      workItemId,
+      attempt: 3,
+      decision: "recover",
+      diagnosis: "Third attempt also stopped.",
+      changedCondition: "Another retry.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-tool-2",
+    });
+    expect(denied.ok).toBe(false);
+    if (denied.ok !== true) {
+      expect(denied.errorCode).toBe("AUTONOMOUS_GRANT_EXHAUSTED");
+    }
+
+    // A fresh root-user message authorizes exactly one further unit.
+    const messageKey = `${ROOT_SESSION}::msg_user_ext_1`;
+    harness.userMessages.set(messageKey, {
+      role: "user",
+      sessionID: ROOT_SESSION,
+      id: "msg_user_ext_1",
+      timeCreatedMs: Date.now(),
+    });
+    const authorized = await decide(harness, {
+      workItemId,
+      attempt: 3,
+      decision: "recover",
+      diagnosis: "Autonomous allowance consumed by a real stop.",
+      changedCondition: "User authorized one final bounded attempt.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-tool-3",
+      userMessageId: "msg_user_ext_1",
+    });
+    expect(authorized.ok).toBe(true);
+    if (authorized.ok !== true) return;
+    expect(authorized.kind).toBe("user_grant");
+    expect(harness.messageLookups).toContain(messageKey);
+
+    await launchTask(harness, ROOT_SESSION, "call-rc-4", "vv-implementer", workItemId);
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-rc-4",
+      "vv-implementer",
+      workItemId,
+      "BLOCKED",
+    ).catch(() => "expected hard stop");
+    const replayed = await decide(harness, {
+      workItemId,
+      attempt: 4,
+      decision: "recover",
+      diagnosis: "Another stop after the granted attempt.",
+      changedCondition: "Nothing changed without a new authorization.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-tool-4",
+      userMessageId: "msg_user_ext_1",
+    });
+    expect(replayed.ok).toBe(false);
+    if (replayed.ok !== true) {
+      expect(replayed.errorCode).toBe("AUTHORIZATION_REUSED");
+    }
+
+    // A distinct fresh message is required for any further unit.
+    const secondMessage = await decide(harness, {
+      workItemId,
+      attempt: 4,
+      decision: "recover",
+      diagnosis: "Seeking one more unit.",
+      changedCondition: "Second user decision.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-tool-5",
+      userMessageId: "msg_user_ext_2",
+    });
+    expect(secondMessage.ok).toBe(false);
+    if (secondMessage.ok !== true) {
+      expect(secondMessage.errorCode).toBe("AUTHORIZATION_NOT_FOUND");
+    }
+  });
+
+  test("recovery survives a fresh plugin instance through persistence", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const firstHarness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(firstHarness, planPath);
+    const workItemId = await taskWorkItemId(firstHarness, runId, "T-001");
+    for (const callId of ["call-persist-rec-1", "call-persist-rec-2"]) {
+      await launchTask(firstHarness, ROOT_SESSION, callId, "vv-implementer", workItemId);
+      await finishTask(firstHarness, ROOT_SESSION, callId, "vv-implementer", workItemId, "DONE");
+      await decide(firstHarness, {
+        workItemId,
+        attempt: callId.endsWith("1") ? 1 : 2,
+        decision: "request_changes",
+        rationale: "Still incomplete.",
+        evidence: ["src/tasks/task-001.ts"],
+      });
+    }
+    const recovered = await decide(firstHarness, {
+      workItemId,
+      attempt: 2,
+      decision: "recover",
+      diagnosis: "Exhausted after two corrections.",
+      changedCondition: "Packet clarified.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-persist-1",
+    });
+    expect(recovered.ok).toBe(true);
+
+    const secondHarness = await createDelegatedPluginHarness(workspaceRoot);
+    await launchTask(
+      secondHarness,
+      ROOT_SESSION,
+      "call-persist-rec-3",
+      "vv-implementer",
+      workItemId,
+    );
+    const listed = await listItems(secondHarness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.attempts).toBe(3);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+    expect(item?.delegated?.attemptBudget).toBe(3);
+  });
+
+  test("a failed recovery persistence write rolls back and keeps the exhausted state blocked", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    for (const callId of ["call-staged-1", "call-staged-2"]) {
+      await launchTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId);
+      await finishTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId, "DONE");
+      await decide(harness, {
+        workItemId,
+        attempt: callId.endsWith("1") ? 1 : 2,
+        decision: "request_changes",
+        rationale: "Incomplete.",
+        evidence: ["src/tasks/task-001.ts"],
+      });
+    }
+    // Force the staged snapshot write to fail by occupying the state path.
+    const statePath = join(getWorkflowSessionDir(ROOT_SESSION), "workflow-state.json");
+    rmSync(statePath, { recursive: true, force: true });
+    mkdirSync(statePath, { recursive: true });
+    const failed = await decide(harness, {
+      workItemId,
+      attempt: 2,
+      decision: "recover",
+      diagnosis: "Exhausted with a failing disk.",
+      changedCondition: "Recovery must wait for durable persistence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-staged-1",
+    }).catch((error: Error) => error.message);
+    expect(String(failed)).toContain("PERSISTENCE_FAILED");
+
+    // The live item is still exhausted: no unpersisted launch permission.
+    const stillBlocked = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-staged-3",
+      "vv-implementer",
+      workItemId,
+    ).catch((error: Error) => error.message);
+    expect(String(stillBlocked)).toContain("ATTEMPTS_EXHAUSTED");
+    let listed = await listItems(harness);
+    let item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.recoveryCount).toBe(0);
+
+    // After I/O recovery the same recovery applies durably.
+    rmSync(statePath, { recursive: true, force: true });
+    const retried = await decide(harness, {
+      workItemId,
+      attempt: 2,
+      decision: "recover",
+      diagnosis: "Exhausted; storage recovered.",
+      changedCondition: "Recovery can now persist.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-staged-1",
+    });
+    expect(retried.ok).toBe(true);
+    listed = await listItems(harness);
+    item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.recoveryCount).toBe(1);
+    expect(item?.delegated?.remainingAttempts).toBe(1);
+  });
+});
+
+describe("terminal report rejection and checkpoint recovery integration", () => {
+  test("a malformed hard-stop report settles as rejected without continuation and recovers", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+
+    await launchTask(harness, ROOT_SESSION, "call-hardstop", "vv-implementer", workItemId);
+    const malformed = [
+      `task_id: ses_hardstop_child (for resuming to continue this task if needed)`,
+      "",
+      "<task_result>",
+      `VVOC_WORK_ITEM_ID: ${workItemId}`,
+      "VVOC_STATUS: BLOCKED",
+      "Missing approval decision; no route line follows.",
+      "</task_result>",
+    ].join("\n");
+    const failure = finishTaskWithRawOutput(
+      harness,
+      ROOT_SESSION,
+      "call-hardstop",
+      "vv-implementer",
+      workItemId,
+      malformed,
+    ).catch((error: Error) => error.message);
+    const failureText = await failure;
+    expect(failureText).toContain("RESULT_PROTOCOL_ERROR");
+    expect(failureText).toContain("report_rejected");
+    // The explicit hard stop suppressed the bounded continuation.
+    expect(harness.promptCalls).toHaveLength(0);
+
+    const listed = await listItems(harness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("blocked");
+    expect(item?.delegated?.reportRejectionCount).toBe(1);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.nextAction).toBe("recover");
+
+    const recovered = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "Terminal report was protocol-invalid with an explicit stop.",
+      changedCondition: "Worker packet pins the exact result format.",
+      verification: ["src/tasks/task-001.ts"],
+      recoveryId: "rec-hardstop-1",
+    });
+    expect(recovered.ok).toBe(true);
+    if (recovered.ok !== true) return;
+    expect(recovered.kind).toBe("resume");
+    expect(recovered.state).toBe("awaiting_implementer");
+
+    await launchTask(harness, ROOT_SESSION, "call-hardstop-2", "vv-implementer", workItemId);
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-hardstop-2",
+      "vv-implementer",
+      workItemId,
+      "DONE",
+    );
+    const accepted = await decide(harness, {
+      workItemId,
+      attempt: 2,
+      decision: "accept",
+      rationale: "Recovered attempt satisfies the contract.",
+      evidence: ["src/tasks/task-001.ts"],
+    });
+    expect(accepted.ok).toBe(true);
+  });
+
+  test("checkpoint recovery through the tools still refuses skipped reviewers before completion", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    await launchTask(harness, ROOT_SESSION, "call-cpr-launch", "vv-implementer", workItemId);
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-cpr-launch",
+      "vv-implementer",
+      workItemId,
+      "DONE",
+    );
+    await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Task accepted before review.",
+      evidence: ["src/tasks/task-001.ts"],
+    });
+
+    // Two failing final generations exhaust the ordinary budget.
+    for (const generation of [1, 2]) {
+      const started = await checkpointCall(harness, {
+        action: "start",
+        runId,
+        checkpointId: "CHECKPOINT-R-001",
+      });
+      expect(started.ok).toBe(true);
+      if (started.ok !== true) return;
+      const reviewWorkItemId = String(started.reviewWorkItemId);
+      await launchTask(
+        harness,
+        ROOT_SESSION,
+        `call-cpr-spec-${generation}`,
+        "vv-spec-reviewer",
+        reviewWorkItemId,
+      );
+      await finishTask(
+        harness,
+        ROOT_SESSION,
+        `call-cpr-spec-${generation}`,
+        "vv-spec-reviewer",
+        reviewWorkItemId,
+        "FAIL",
+      );
+      await launchTask(
+        harness,
+        ROOT_SESSION,
+        `call-cpr-code-${generation}`,
+        "vv-code-reviewer",
+        reviewWorkItemId,
+      );
+      await finishTask(
+        harness,
+        ROOT_SESSION,
+        `call-cpr-code-${generation}`,
+        "vv-code-reviewer",
+        reviewWorkItemId,
+        "PASS",
+      );
+      const verified = await checkpointCall(harness, {
+        action: "verify",
+        runId,
+        checkpointId: "CHECKPOINT-R-001",
+      });
+      expect(verified.ok).toBe(true);
+      if (verified.ok !== true) return;
+      expect(verified.outcome).toBe("failed");
+    }
+
+    const blocked = await checkpointCall(harness, {
+      action: "start",
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+    });
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok !== true) expect(blocked.errorCode).toBe("ATTEMPTS_EXHAUSTED");
+
+    let listed = await listItems(harness);
+    const runView = listed.planRuns?.find((entry) => entry.runId === runId);
+    const checkpointView = runView?.checkpoints.find(
+      (entry) => entry.checkpointId === "CHECKPOINT-R-001",
+    );
+    expect(checkpointView?.generationBudget).toBe(2);
+    expect(checkpointView?.remainingGenerations).toBe(0);
+    expect(checkpointView?.nextAction).toBe("recover");
+
+    const recovered = await checkpointCall(harness, {
+      action: "recover",
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      diagnosis: "Both final generations failed on the same defect.",
+      changedCondition: "Defect fixed and covered by the fixture tests.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-cpr-1",
+    });
+    expect(recovered.ok).toBe(true);
+    if (recovered.ok !== true) return;
+    expect(recovered.kind).toBe("autonomous_grant");
+    expect(recovered.generationBudget).toBe(3);
+
+    // Completion still requires the full declared reviewer set: a generation
+    // with only the spec reviewer recorded cannot pass or seal.
+    const thirdStart = await checkpointCall(harness, {
+      action: "start",
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+    });
+    expect(thirdStart.ok).toBe(true);
+    if (thirdStart.ok !== true) return;
+    const thirdReview = String(thirdStart.reviewWorkItemId);
+    await launchTask(harness, ROOT_SESSION, "call-cpr-spec-3", "vv-spec-reviewer", thirdReview);
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-cpr-spec-3",
+      "vv-spec-reviewer",
+      thirdReview,
+      "PASS",
+    );
+    const skipped = await checkpointCall(harness, {
+      action: "verify",
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      complete: true,
+    });
+    expect(skipped.ok).toBe(true);
+    if (skipped.ok !== true) return;
+    expect(skipped.outcome).toBe("incomplete");
+
+    // The skipped reviewer's FAIL-less absence is not fabricated: completing
+    // the full declared set seals the run through the recovered generation.
+    await launchTask(harness, ROOT_SESSION, "call-cpr-code-3", "vv-code-reviewer", thirdReview);
+    await finishTask(
+      harness,
+      ROOT_SESSION,
+      "call-cpr-code-3",
+      "vv-code-reviewer",
+      thirdReview,
+      "PASS",
+    );
+    const sealed = await checkpointCall(harness, {
+      action: "verify",
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      complete: true,
+    });
+    expect(sealed.ok).toBe(true);
+    if (sealed.ok !== true) return;
+    expect(sealed.outcome).toBe("passed");
+    expect(sealed.sealedRun).toBe(true);
+
+    listed = await listItems(harness);
+    const sealedRun = listed.planRuns?.find((entry) => entry.runId === runId);
+    expect(sealedRun?.checkpoints[0]?.status).toBe("passed");
+  });
+
+  test("recover accepts the documented minimal shape and reports the settled attempt for repeated rejections", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+
+    // Exhaust the ordinary budget with two rejected completions.
+    for (const callId of ["call-doc-1", "call-doc-2"]) {
+      await launchTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId);
+      await finishTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId, "DONE");
+      await decide(harness, {
+        workItemId,
+        attempt: callId.endsWith("1") ? 1 : 2,
+        decision: "request_changes",
+        rationale: "Incomplete.",
+        evidence: ["src/tasks/task-001.ts"],
+      });
+    }
+
+    // The documented recover shape carries no rationale or evidence; the tool
+    // layer must accept it exactly as instructed.
+    const recovered = await decide(harness, {
+      workItemId,
+      attempt: 2,
+      decision: "recover",
+      diagnosis: "Both attempts missed the same untested branch.",
+      changedCondition: "Branch inputs pinned in the task packet.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-doc-1",
+    });
+    expect(recovered.ok).toBe(true);
+    if (recovered.ok !== true) return;
+    expect(recovered.kind).toBe("autonomous_grant");
+
+    // First malformed hard-stop report settles attempt 3 and names it.
+    await launchTask(harness, ROOT_SESSION, "call-doc-3", "vv-implementer", workItemId);
+    const firstRejection = finishTaskWithRawOutput(
+      harness,
+      ROOT_SESSION,
+      "call-doc-3",
+      "vv-implementer",
+      workItemId,
+      wrapTaskResult(
+        "ses_doc_child",
+        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: BLOCKED\nMissing approval decision with no route line.`,
+      ),
+    ).catch((error: Error) => error.message);
+    const firstText = await firstRejection;
+    expect(firstText).toContain("attempt 3 of");
+    let listed = await listItems(harness);
+    let item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("blocked");
+    expect(item?.delegated?.reportRejectionCount).toBe(1);
+    expect(item?.delegated?.nextAction).toBe("recover_with_user_authorization");
+
+    // A second rejection after recovery names the newly settled attempt, not
+    // the first report_rejected attempt in the ledger.
+    const messageKey = `${ROOT_SESSION}::msg_user_doc_1`;
+    harness.userMessages.set(messageKey, {
+      role: "user",
+      sessionID: ROOT_SESSION,
+      id: "msg_user_doc_1",
+      timeCreatedMs: Date.now(),
+    });
+    await decide(harness, {
+      workItemId,
+      attempt: 3,
+      decision: "recover",
+      diagnosis: "Terminal rejection after the granted attempt.",
+      changedCondition: "Result format pinned in the worker packet.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-doc-2",
+      userMessageId: "msg_user_doc_1",
+    });
+    await launchTask(harness, ROOT_SESSION, "call-doc-4", "vv-implementer", workItemId);
+    const secondRejection = finishTaskWithRawOutput(
+      harness,
+      ROOT_SESSION,
+      "call-doc-4",
+      "vv-implementer",
+      workItemId,
+      wrapTaskResult(
+        "ses_doc_child",
+        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: NEEDS_CONTEXT\nMissing input with no route line.`,
+      ),
+    ).catch((error: Error) => error.message);
+    const secondText = await secondRejection;
+    expect(secondText).toContain("attempt 4 of");
+    listed = await listItems(harness);
+    item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("needs_context");
+    expect(item?.delegated?.reportRejectionCount).toBe(2);
+    expect(item?.delegated?.nextAction).toBe("recover_with_user_authorization");
+  });
+
+  test("a stopping authorization lookup reports a lookup failure, not a missing message", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    for (const callId of ["call-lkf-1", "call-lkf-2"]) {
+      await launchTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId);
+      await finishTask(harness, ROOT_SESSION, callId, "vv-implementer", workItemId, "DONE");
+      await decide(harness, {
+        workItemId,
+        attempt: callId.endsWith("1") ? 1 : 2,
+        decision: "request_changes",
+        rationale: "Incomplete.",
+        evidence: ["src/tasks/task-001.ts"],
+      });
+    }
+
+    const messageKey = `${ROOT_SESSION}::msg_user_lkf_1`;
+    harness.userMessages.set(messageKey, {
+      role: "user",
+      sessionID: ROOT_SESSION,
+      id: "msg_user_lkf_1",
+      timeCreatedMs: Date.now(),
+      transportError: true,
+    });
+    const failed = await decide(harness, {
+      workItemId,
+      attempt: 2,
+      decision: "recover",
+      diagnosis: "Exhausted while the session service is unreachable.",
+      changedCondition: "Retry after the lookup transport recovers.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-lkf-1",
+      userMessageId: "msg_user_lkf_1",
+    });
+    expect(failed.ok).toBe(false);
+    if (failed.ok !== true) {
+      expect(failed.errorCode).toBe("AUTHORIZATION_LOOKUP_FAILED");
+    }
+    const listed = await listItems(harness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.recoveryCount).toBe(0);
+  });
+});
+// END_BLOCK_RECOVERY_INTEGRATION_TESTS

@@ -1,0 +1,84 @@
+<GraceChangeSpec graceVersion="4.0" status="superseded">
+  <C-WORKFLOW-BOUNDED-RECOVERY>
+    <ReplacementChange>C-WORKFLOW-BOUNDED-RECOVERY-R1</ReplacementChange>
+    <Summary>Make delegated execution recoverable and calibrate managed instructions while preserving mandatory review, explicit identity, and bounded automatic correction.</Summary>
+    <Problem>A completed worker can remain recorded as in flight when its result fails protocol validation. An unaccepted task can exhaust its implementation budget before any checkpoint exists, while the available rework operation requires an accepted task and a failed checkpoint. Managed instructions conflate stopping a worker or automatic loop with ending the entire execution session.</Problem>
+    <Goals>
+      <Goal>Preserve controller-owned architecture and acceptance, worker-owned implementation, and mandatory independent review at declared milestones and the final gate.</Goal>
+      <Goal>Provide a finite, explicit recovery path for stopped or exhausted delegated tasks and checkpoint review cycles without resetting history or fabricating acceptance.</Goal>
+      <Goal>Record confirmed worker completion independently from result-format validity, preserving bounded diagnostics and substantive stop statuses.</Goal>
+      <Goal>Reduce unnecessary approval questions, repeated broad reviews, and automatic handoff creation without weakening evidence-based completion.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Keep explicit work-item, attempt, call, run, checkpoint, and reviewer identity. Do not introduce semantic clustering, prompt similarity, embeddings, or inferred work-item identity.</Constraint>
+      <Constraint>Keep the existing two-attempt implementation budget and two-generation checkpoint review budget as the ordinary automatic limits. Recovery is a separately recorded authorization, not a reset or silent increase of those defaults.</Constraint>
+      <Constraint>Allow at most one controller-authorized additional attempt or review generation per recovery target without a new user decision. A target is one delegated work item or one declared checkpoint, not a newly chosen key for the same work.</Constraint>
+      <Constraint>Further extensions require a new explicit root-user authorization and grant one additional attempt or generation at a time. Verify the referenced message belongs to the owning root session, follows the relevant stop, and has not already authorized recovery of that target. The controller interprets the user instruction; runtime checks provenance and replay protection rather than classifying natural-language intent.</Constraint>
+      <Constraint>Recovery must name the diagnosed problem, the changed condition or approach, the retained write scope, and the required verification. It must not authorize source changes outside approved scope, a model or preset change, or skipping required reviewers.</Constraint>
+      <Constraint>BLOCKED and NEEDS_CONTEXT stop automatic progression. Preserve their recorded outcomes; only a separate authorized recovery decision can resume the affected work. Never convert these outcomes, a protocol error, or accepted residual risk into a successful check.</Constraint>
+      <Constraint>Only the authorized primary root controller may recover or accept work. Children, unverifiable identities, stale calls, duplicate grants, wrong-session references, and sealed runs must be rejected without mutation.</Constraint>
+      <Constraint>Persist recovery and terminal-result records atomically with strict validation. Existing supported snapshots must load without fabricated approvals, loss of accepted work, or automatic import of another session's records.</Constraint>
+      <Constraint>Use product-level descriptions and synthetic test data only in specifications, tests, comments, documentation, commit messages, changelog content, and release notes.</Constraint>
+      <Constraint>Do not alter user-owned configuration, model assignments, package exports, canonical vvoc config schema, or externally installed skills. Changes take effect through the existing installation, sync, and restart model.</Constraint>
+      <Constraint>Follow the existing exact-SHA CI-gated release policy. Commit implementation only after required verification, then run the user-requested command exactly: bun run release:bump -- prerelease --preid rc.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No removal of runtime enforcement, reviewer obligations, scope boundaries, or finite correction budgets.</NonGoal>
+      <NonGoal>No cross-session run adoption, automatic model escalation, new scheduler, automatic task splitting, or replacement of host execution timeouts and provider retry behavior.</NonGoal>
+      <NonGoal>No conversion of foreign planning formats into vvoc plans and no second authoritative specification or approval lifecycle.</NonGoal>
+      <NonGoal>No new evaluation platform, model benchmark, mandatory observation journal, or requirement for additional user bookkeeping.</NonGoal>
+      <NonGoal>No wholesale redesign of legacy implementation and review-only state machines; preserve their existing semantics outside explicitly shared result-handling and instruction corrections.</NonGoal>
+      <NonGoal>No release automation implementation changes, manual generated-output edits, state-file reset, or rewriting archived change bundles.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: Two rejected delegated attempts remain unaccepted and prevent an ordinary third launch. A supported root-controller recovery operation can authorize exactly one additional attempt before any checkpoint exists, preserving the same work-item and plan-task binding, all prior outcomes, and all decisions.</Criterion>
+      <Criterion>AC-02: Recovery of a valid BLOCKED or NEEDS_CONTEXT result requires an explicit diagnosis and resolution or changed approach. The previous status and explanation remain historical facts. Launching directly from the stop is still refused; recovery never directly accepts or closes the item.</Criterion>
+      <Criterion>AC-03: A checkpoint that exhausts its ordinary review generations has a corresponding bounded recovery operation. It preserves covered tasks and required reviewers and obtains a fresh snapshot for the next generation. Recovery cannot satisfy prerequisites, erase a FAIL, or seal the run without the required passing review.</Criterion>
+      <Criterion>AC-04: The first autonomous recovery grant cannot be renewed under another decision ID or key. After it is consumed, a further one-unit grant requires a distinct eligible root-user message. Invalid, stale, reused, assistant-authored, child-session, and foreign-session authorization references fail without changing counters or state.</Criterion>
+      <Criterion>AC-05: A confirmed terminal delegated task result that remains protocol-invalid is recorded as a completed execution with a rejected report and bounded diagnostic context, not as an in-flight attempt. No result failure synthesizes DONE or acceptance. Unknown or still-running host outcomes are not guessed terminal.</Criterion>
+      <Criterion>AC-06: Malformed output containing an explicit substantive hard stop does not trigger automatic implementation continuation. Its terminal execution and rejected report remain visible to the controller, with a supported recovery path. Ordinary bounded same-child continuation retains its current work identity and session permissions.</Criterion>
+      <Criterion>AC-07: Recovery transitions and terminal report failures round-trip through persistence, survive restart without losing their history, and preserve applicable prior acceptances. Persistence failure does not expose a launch authorization that was not durably recorded.</Criterion>
+      <Criterion>AC-08: Work-item and run inspection distinguish a running attempt from an exhausted budget, a substantive stop, and a rejected report. Responses expose the remaining budget and a supported next action; they do not suggest an ordinary launch that the same state will immediately reject.</Criterion>
+      <Criterion>AC-09: Declared independent reviewers remain mandatory for native registered delegated plans. Neither controller acceptance, recovery, a closed findings-only report, nor a completion claim substitutes for the required passing checkpoint and final sealing checks.</Criterion>
+      <Criterion>AC-10: Managed controller, worker, universal guidance, and execution instructions consistently distinguish worker stop, loop suspension, controller diagnosis, authorized recovery, and actual session completion. Repository-answerable technical questions stay with the controller. Handoff files are reserved for requested transfer or session end, not every failed check.</Criterion>
+      <Criterion>AC-11: Reviewer and execution instructions distinguish initial review from scoped re-review. Re-review checks prior findings and material regressions caused by the fix, including directly affected consumers where necessary. Unrelated optional improvements do not renew the correction loop, while concrete blocking defects and material verification gaps are not downgraded merely to finish.</Criterion>
+      <Criterion>AC-12: Prompt calibration replaces conflicting stop and retry directions rather than appending another overlapping policy. It removes mandatory per-claim reasoning labels and repeated ceremonial output while retaining material assumptions, relevant verification, and honest residual uncertainty. Already explicit compatible execution choices are reused.</Criterion>
+      <Criterion>AC-13: Guidance accurately states that native work_checkpoint registration requires its supported approved vvoc plan format. It does not claim foreign lifecycle support, recommend an incompatible registration, or advise disguising a managed reviewer as another agent to evade enforcement.</Criterion>
+      <Criterion>AC-14: README, owned module contracts, graph, and verification projections describe the new recovery contract and its limits. Regression fixtures and all publication inputs use synthetic names and product-level descriptions only.</Criterion>
+      <Criterion>AC-15: Deterministic integration scenarios exercise required-review rejection, bounded recovery before a checkpoint, exhaustion after the autonomous grant, root-user extension and replay rejection, terminal malformed hard stops, persistence failure, and recovery through actual final checkpoint completion. Tests separately preserve ordinary continuation permissions and legacy workflow behavior.</Criterion>
+      <Criterion>AC-16: Targeted tests, the project check, build, release consistency, package checks, and required GRACE lifecycle checks pass before the implementation commit and RC release. The published package gitHead must match the exact CI-verified release commit; publication and release finalization must be reported from fresh evidence.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-WORKFLOW-DELEGATED />
+      <M-WORKFLOW-CHECKPOINTS />
+      <M-WORKFLOW-PROTOCOL />
+      <M-WORKFLOW-REPAIR />
+      <M-WORKFLOW-STATE />
+      <M-WORKFLOW-TRANSITIONS />
+      <M-WORKFLOW-TOOLING />
+      <M-WORKFLOW-PERSISTENCE />
+      <M-PLUGIN-WORKFLOW />
+      <M-ORCHESTRATION-PROFILES />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-CLI-MANAGED-AGENTS />
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/workflow/delegated.test.ts src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/persistence.test.ts src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/orchestration.test.ts src/plugins/system-context-injection.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fault-injected SDK-shaped workflow scenarios demonstrate both enforcement and reachable recovery. Independent final spec and code review inspect the combined implementation. A final artifact and publication-input audit verifies synthetic examples and product-only descriptions. Deterministic tests do not claim to establish real-model quality or latency.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The starting automatic policy is two ordinary implementation attempts or checkpoint generations plus at most one autonomous recovery grant per target. This is a bounded initial policy, not a claim that the numbers are universally optimal.</Assumption>
+      <Assumption>The public recovery tool shape and compatible persistence representation are determined by the implementation plan after checking the pinned host SDK. Root-message provenance must be observable before committing to that authorization path.</Assumption>
+      <Assumption>Execution of this GRACE change needs a session policy compatible with its owning lifecycle. A vvoc-only checkpoint adapter must not be presented as a GRACE adapter or bypassed through an unapproved alternate protocol.</Assumption>
+      <Assumption>The user explicitly approved this specification and authorized autonomous implementation, an implementation commit, and the stated RC release command after the required gates. No further user questions are requested. A completed implementation plan remains a separate lifecycle artifact.</Assumption>
+    </Assumptions>
+  </C-WORKFLOW-BOUNDED-RECOVERY>
+</GraceChangeSpec>

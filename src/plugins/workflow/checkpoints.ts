@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/checkpoints.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Registered delegated plan runs with declared review checkpoints, generation-bound reviewer linkage, fingerprint-verified outcomes, and rework authorization.
-//   SCOPE: Atomic plan-run registration binding canonical task ids to stable delegated work items, idempotent re-registration with explicit drift rejection, checkpoint start with prerequisite acceptance and fresh fingerprints through linked review_only work items, reviewer launch/result recording bound to the current generation, verify deriving passed/failed/stale/stopped outcomes from recorded results plus recomputed fingerprints and approval-input hashes, final complete sealing, failed-checkpoint rework authorization, wave-barrier and overlapping-write gates, and read-only run views. No agent dispatch or command execution.
+//   PURPOSE: Registered delegated plan runs with declared review checkpoints, generation-bound reviewer linkage, fingerprint-verified outcomes, rework authorization, and bounded checkpoint recovery.
+//   SCOPE: Atomic plan-run registration binding canonical task ids to stable delegated work items, idempotent re-registration with explicit drift rejection, checkpoint start with prerequisite acceptance and fresh fingerprints through linked review_only work items, reviewer launch/result recording bound to the current generation, verify deriving passed/failed/stale/stopped outcomes from recorded results plus recomputed fingerprints and approval-input hashes, final complete sealing, failed-checkpoint rework authorization, bounded recovery of stopped or generation-exhausted checkpoints (settling a stopped generation as historical evidence and granting at most one additional generation per autonomous or replay-protected root-user-authorized unit), wave-barrier and overlapping-write gates, and read-only run views exposing generation budgets and supported next actions. No agent dispatch or command execution.
 //   DEPENDS: [node:crypto, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/snapshots.ts, src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED, M-WORKFLOW-SNAPSHOTS, M-WORKFLOW-STATE, M-SPEC-LINT, V-M-WORKFLOW-CHECKPOINTS]
 //   ROLE: RUNTIME
@@ -10,11 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   MAX_CHECKPOINT_REVIEW_ATTEMPTS - Maximum review generations per checkpoint (initial plus one correction).
+//   MAX_CHECKPOINT_REVIEW_ATTEMPTS - Maximum ordinary review generations per checkpoint (initial plus one correction).
 //   DelegatedReviewerOutcome - One reviewer's recorded outcome inside a generation.
 //   DelegatedCheckpointReview - Current in-flight review generation state.
 //   DelegatedCheckpointHistoryEntry - One settled generation outcome as historical evidence.
-//   DelegatedRunCheckpoint - Registered checkpoint runtime state.
+//   DelegatedCheckpointRecoveryRecord - One bounded checkpoint recovery event bound to its settled generation.
+//   DelegatedRunCheckpoint - Registered checkpoint runtime state with recovery history.
 //   DelegatedRunTask - Canonical task to work-item binding.
 //   DelegatedPlanRun - Registered plan-run registry entry.
 //   RegisterDelegatedPlanInput - Registration input carrying the loaded approved plan.
@@ -27,6 +28,12 @@
 //   VerifyDelegatedCheckpointResult - Derived verify outcome and optional sealed completion.
 //   AuthorizeReworkInput - Failed-checkpoint rework authorization request.
 //   AuthorizeReworkResult - Rework authorization outcome delegating to the guarded reducer.
+//   RecoverDelegatedCheckpointInput - Bounded checkpoint recovery request with optional user authorization.
+//   RecoverDelegatedCheckpointResult - Checkpoint recovery outcome with generation budget, or a coded rejection.
+//   checkpointRecoveryGrantCount - Number of budget-granting checkpoint recovery entries.
+//   checkpointGenerationBudget - Allowed generation count given consumed generations and recovery grants.
+//   checkpointAutonomousGrantConsumed - Whether the single autonomous checkpoint grant is already recorded.
+//   cloneDelegatedPlanRun - Deep clone of one registered run for staged persistence commits.
 //   checkpointBarrierUnsatisfied - Unsatisfied barriers blocking a wave's task launches.
 //   findOverlappingInFlightReview - In-flight checkpoint scope overlap detection for declared writes.
 //   getDelegatedRunView - Read-only run serialization for tooling output.
@@ -42,10 +49,12 @@
 //   verifyDelegatedCheckpointInStore - Store-level verify used by the plugin and tests.
 //   authorizeReworkFromFailedCheckpoint - Validate failed-checkpoint rework authorization.
 //   authorizeReworkFromFailedCheckpointInStore - Store-level rework authorization.
+//   recoverDelegatedCheckpoint - Resume a stopped generation or grant exactly one further generation after exhaustion.
+//   recoverDelegatedCheckpointInStore - Store-level guarded checkpoint recovery reducer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial registry: registration, generations, fingerprint verification, final sealing, rework authorization, and barrier gates.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added bounded checkpoint recovery: stopped generations settle as historical stopped evidence, exhausted checkpoints may grant one further generation per autonomous or root-user-authorized unit, and run views expose generation budgets and next actions.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -55,7 +64,11 @@ import { contentSha256, type LoadedDelegatedPlan } from "./checkpoint-io.js";
 import {
   currentDelegatedAcceptance,
   reworkDelegatedWorkItem,
+  validateDelegatedRecoveryInput,
   validateDelegatedWriteScope,
+  validateRecoveryUserAuthorization,
+  type DelegatedRecoveryKind,
+  type LookupRecoveryUserMessage,
 } from "./delegated.js";
 import { captureWorkflowSnapshot } from "./snapshots.js";
 import {
@@ -86,9 +99,25 @@ export interface DelegatedCheckpointReview {
 
 export interface DelegatedCheckpointHistoryEntry {
   generation: number;
-  outcome: "passed" | "failed" | "stale";
+  outcome: "passed" | "failed" | "stale" | "stopped";
   fingerprint: string;
   completedAt: string;
+}
+
+/**
+ * One bounded checkpoint recovery event. `resume` settles a stopped
+ * generation without manufacturing budget; grant kinds add exactly one
+ * generation each and stay replay-protected by recoveryId and userMessageId.
+ */
+export interface DelegatedCheckpointRecoveryRecord {
+  recoveryId: string;
+  targetGeneration: number;
+  kind: DelegatedRecoveryKind;
+  diagnosis: string;
+  changedCondition: string;
+  verification: string[];
+  recoveredAt: string;
+  userMessageId?: string;
 }
 
 export interface DelegatedRunCheckpoint {
@@ -103,6 +132,7 @@ export interface DelegatedRunCheckpoint {
   lastOutcome?: "passed" | "failed" | "stale" | "stopped" | "incomplete";
   currentReview?: DelegatedCheckpointReview;
   history: DelegatedCheckpointHistoryEntry[];
+  recoveryHistory: DelegatedCheckpointRecoveryRecord[];
 }
 
 export interface DelegatedRunTask {
@@ -163,6 +193,10 @@ function cloneCheckpoint(checkpoint: DelegatedRunCheckpoint): DelegatedRunCheckp
     scope: [...checkpoint.scope],
     reviewers: [...checkpoint.reviewers],
     history: checkpoint.history.map((entry) => ({ ...entry })),
+    recoveryHistory: checkpoint.recoveryHistory.map((recovery) => ({
+      ...recovery,
+      verification: [...recovery.verification],
+    })),
     ...(checkpoint.currentReview
       ? {
           currentReview: {
@@ -176,6 +210,11 @@ function cloneCheckpoint(checkpoint: DelegatedRunCheckpoint): DelegatedRunCheckp
   };
 }
 
+/** Deep clone of one registered run for staged persistence commits. */
+export function cloneDelegatedPlanRun(run: DelegatedPlanRun): DelegatedPlanRun {
+  return cloneRun(run);
+}
+
 function cloneRun(run: DelegatedPlanRun): DelegatedPlanRun {
   return {
     ...run,
@@ -184,6 +223,26 @@ function cloneRun(run: DelegatedPlanRun): DelegatedPlanRun {
       [...run.checkpoints].map(([id, checkpoint]) => [id, cloneCheckpoint(checkpoint)]),
     ),
   };
+}
+
+/** Count of budget-granting checkpoint recovery entries. */
+export function checkpointRecoveryGrantCount(
+  history: readonly DelegatedCheckpointRecoveryRecord[],
+): number {
+  return history.filter((entry) => entry.kind === "autonomous_grant" || entry.kind === "user_grant")
+    .length;
+}
+
+/** Allowed generation count: the ordinary maximum plus one per recovery grant. */
+export function checkpointGenerationBudget(checkpoint: DelegatedRunCheckpoint): number {
+  return MAX_CHECKPOINT_REVIEW_ATTEMPTS + checkpointRecoveryGrantCount(checkpoint.recoveryHistory);
+}
+
+/** Whether the single autonomous checkpoint grant is already recorded. */
+export function checkpointAutonomousGrantConsumed(
+  history: readonly DelegatedCheckpointRecoveryRecord[],
+): boolean {
+  return history.some((entry) => entry.kind === "autonomous_grant");
 }
 
 function waveIndexOf(run: DelegatedPlanRun, wave: string): number {
@@ -337,6 +396,7 @@ export function registerDelegatedPlanInStore(
       status: "pending",
       attempts: 0,
       history: [],
+      recoveryHistory: [],
     });
   }
 
@@ -423,6 +483,7 @@ function openInStore(
       decisions: [],
       acceptances: [],
       reworkHistory: [],
+      recoveryHistory: [],
     },
     completedReviewRoundCount: 0,
     specReviewCount: 0,
@@ -547,11 +608,11 @@ export async function startDelegatedCheckpointInStore(
       message: `ALREADY_IN_REVIEW: ${input.checkpointId} generation ${checkpoint.currentReview?.generation} is in flight`,
     };
   }
-  if (checkpoint.attempts >= MAX_CHECKPOINT_REVIEW_ATTEMPTS) {
+  if (checkpoint.attempts >= checkpointGenerationBudget(checkpoint)) {
     return {
       ok: false,
       errorCode: "ATTEMPTS_EXHAUSTED",
-      message: `ATTEMPTS_EXHAUSTED: ${input.checkpointId} consumed ${checkpoint.attempts} review generations; explicit recovery is required`,
+      message: `ATTEMPTS_EXHAUSTED: ${input.checkpointId} consumed ${checkpoint.attempts} of ${checkpointGenerationBudget(checkpoint)} allowed review generations; explicit recovery is required`,
     };
   }
 
@@ -1350,6 +1411,352 @@ export function authorizeReworkFromFailedCheckpointInStore(
   return { ok: true, reworkId: reworked.reworkId, grantedAttempts: reworked.grantedAttempts };
 }
 
+// START_CONTRACT: recoverDelegatedCheckpoint
+//   PURPOSE: Settle a stopped generation as historical evidence or grant exactly one further review generation after exhaustion, preserving covered tasks, reviewers, and history.
+//   INPUTS: { store: WorkItemStore - backing store, input: RecoverDelegatedCheckpointInput - bounded recovery payload with optional root-user authorization }
+//   OUTPUTS: { RecoverDelegatedCheckpointResult - recorded recovery with updated generation budget or a coded rejection without mutation }
+//   SIDE_EFFECTS: [Appends a checkpoint recovery record, settles a stopped generation into history, and may extend the generation budget by exactly one]
+//   LINKS: [M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED, validateRecoveryUserAuthorization]
+// END_CONTRACT: recoverDelegatedCheckpoint
+// START_BLOCK_CHECKPOINT_RECOVERY
+export type RecoverDelegatedCheckpointResult =
+  | {
+      ok: true;
+      checkpoint: DelegatedRunCheckpoint;
+      recoveryId: string;
+      kind: DelegatedRecoveryKind;
+      generationBudget: number;
+      settledStoppedGeneration?: number;
+    }
+  | {
+      ok: false;
+      errorCode:
+        | "RUN_NOT_FOUND"
+        | "SESSION_MISMATCH"
+        | "CHECKPOINT_NOT_FOUND"
+        | "RUN_SEALED"
+        | "ALREADY_PASSED"
+        | "INVALID_TARGET_STATE"
+        | "DUPLICATE_RECOVERY_ID"
+        | "INVALID_INPUT"
+        | "AUTONOMOUS_GRANT_EXHAUSTED"
+        | "AUTHORIZATION_LOOKUP_FAILED"
+        | "AUTHORIZATION_NOT_FOUND"
+        | "AUTHORIZATION_NOT_USER_MESSAGE"
+        | "AUTHORIZATION_SESSION_MISMATCH"
+        | "AUTHORIZATION_ID_MISMATCH"
+        | "AUTHORIZATION_STALE"
+        | "AUTHORIZATION_REUSED";
+      message: string;
+    };
+
+export interface RecoverDelegatedCheckpointInput {
+  sessionId: string;
+  runId: string;
+  checkpointId: string;
+  diagnosis: string;
+  changedCondition: string;
+  verification: string[];
+  recoveryId: string;
+  /** Fresh root-user message authorizing one further generation for this target. */
+  userMessageId?: string;
+  /** Read-only authorization lookup supplied by the tool layer. */
+  lookupUserMessage?: LookupRecoveryUserMessage;
+}
+
+type CheckpointRecoveryPrecheck =
+  | {
+      ok: true;
+      checkpoint: DelegatedRunCheckpoint;
+      stopped: boolean;
+      needsGrant: boolean;
+      autonomousAvailable: boolean;
+      stopTimeMs?: number;
+    }
+  | {
+      ok: false;
+      errorCode: Extract<RecoverDelegatedCheckpointResult, { ok: false }>["errorCode"];
+      message: string;
+    };
+
+/** Timestamp (epoch ms) of the most recent settled evidence in a checkpoint. */
+function checkpointStopTimeMs(checkpoint: DelegatedRunCheckpoint): number | undefined {
+  if (checkpoint.currentReview) {
+    const recorded = Object.values(checkpoint.currentReview.results)
+      .map((result) => (result ? Date.parse(result.recordedAt) : Number.NaN))
+      .filter((value) => Number.isFinite(value));
+    if (recorded.length > 0) return Math.max(...recorded);
+  }
+  const last = checkpoint.history[checkpoint.history.length - 1];
+  if (last) {
+    const parsed = Date.parse(last.completedAt);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/**
+ * Synchronous eligibility check for checkpoint recovery: a stopped generation
+ * (NEEDS_CONTEXT settled nothing) or a generation-exhausted checkpoint. Live
+ * reviews, pending checkpoints, and ordinary-budget failures are not
+ * recoverable targets.
+ */
+function precheckCheckpointRecovery(
+  data: WorkItemStoreData,
+  input: RecoverDelegatedCheckpointInput,
+): CheckpointRecoveryPrecheck {
+  const run = findRun(data, input.runId);
+  if (!run) {
+    return { ok: false, errorCode: "RUN_NOT_FOUND", message: `RUN_NOT_FOUND: ${input.runId}` };
+  }
+  if (run.sessionId !== input.sessionId) {
+    return {
+      ok: false,
+      errorCode: "SESSION_MISMATCH",
+      message: `SESSION_MISMATCH: run ${input.runId} belongs to session ${run.sessionId}`,
+    };
+  }
+  if (run.status === "sealed") {
+    return {
+      ok: false,
+      errorCode: "RUN_SEALED",
+      message: `RUN_SEALED: run ${input.runId} is complete; recovery requires a new change`,
+    };
+  }
+  const checkpoint = run.checkpoints.get(input.checkpointId);
+  if (!checkpoint) {
+    return {
+      ok: false,
+      errorCode: "CHECKPOINT_NOT_FOUND",
+      message: `CHECKPOINT_NOT_FOUND: ${input.checkpointId}`,
+    };
+  }
+  if (checkpoint.status === "passed") {
+    return {
+      ok: false,
+      errorCode: "ALREADY_PASSED",
+      message: `ALREADY_PASSED: ${input.checkpointId} passed at generation ${checkpoint.attempts}`,
+    };
+  }
+
+  const stopped =
+    checkpoint.status === "in_review" &&
+    checkpoint.lastOutcome === "stopped" &&
+    checkpoint.currentReview !== undefined;
+  const budget = checkpointGenerationBudget(checkpoint);
+  const exhausted = checkpoint.status === "failed" && checkpoint.attempts >= budget;
+  if (!stopped && !exhausted) {
+    if (checkpoint.status === "in_review") {
+      return {
+        ok: false,
+        errorCode: "INVALID_TARGET_STATE",
+        message: `INVALID_TARGET_STATE: ${input.checkpointId} generation ${checkpoint.currentReview?.generation} is live; recovery never interrupts in-flight review work`,
+      };
+    }
+    if (checkpoint.status === "failed") {
+      return {
+        ok: false,
+        errorCode: "INVALID_TARGET_STATE",
+        message: `INVALID_TARGET_STATE: ${input.checkpointId} still has ${budget - checkpoint.attempts} ordinary generation(s) available; start the next generation instead of recovering`,
+      };
+    }
+    return {
+      ok: false,
+      errorCode: "INVALID_TARGET_STATE",
+      message: `INVALID_TARGET_STATE: ${input.checkpointId} is ${checkpoint.status} and has nothing to recover`,
+    };
+  }
+  if (checkpoint.recoveryHistory.some((entry) => entry.recoveryId === input.recoveryId)) {
+    return {
+      ok: false,
+      errorCode: "DUPLICATE_RECOVERY_ID",
+      message: `DUPLICATE_RECOVERY_ID: recoveryId ${input.recoveryId} is already recorded for ${input.checkpointId}`,
+    };
+  }
+
+  return {
+    ok: true,
+    checkpoint,
+    stopped,
+    needsGrant: exhausted || checkpoint.attempts >= budget,
+    autonomousAvailable: !checkpointAutonomousGrantConsumed(checkpoint.recoveryHistory),
+    stopTimeMs: checkpointStopTimeMs(checkpoint),
+  };
+}
+
+export async function recoverDelegatedCheckpoint(
+  store: WorkItemStore,
+  input: RecoverDelegatedCheckpointInput,
+): Promise<RecoverDelegatedCheckpointResult> {
+  return recoverDelegatedCheckpointInStore(store.getStoreData(), input);
+}
+
+export async function recoverDelegatedCheckpointInStore(
+  data: WorkItemStoreData,
+  input: RecoverDelegatedCheckpointInput,
+): Promise<RecoverDelegatedCheckpointResult> {
+  const validation = validateDelegatedRecoveryInput({
+    diagnosis: input.diagnosis,
+    changedCondition: input.changedCondition,
+    verification: input.verification,
+    recoveryId: input.recoveryId,
+  });
+  if (!validation.ok) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message: `INVALID_INPUT: ${validation.message}`,
+    };
+  }
+
+  const precheck = precheckCheckpointRecovery(data, input);
+  if (!precheck.ok) {
+    return { ok: false, errorCode: precheck.errorCode, message: precheck.message };
+  }
+
+  const commitRecovery = (
+    kind: DelegatedRecoveryKind,
+    validatedMessageTimeMs?: number,
+  ): RecoverDelegatedCheckpointResult => {
+    // Re-run the synchronous eligibility check immediately before committing
+    // so an authorization await can never commit against a changed target.
+    const fresh = precheckCheckpointRecovery(data, input);
+    if (!fresh.ok) {
+      return { ok: false, errorCode: fresh.errorCode, message: fresh.message };
+    }
+    // The authorization message was timed against the pre-await stop; if the
+    // target moved to a newer generation during the await, that timing no
+    // longer authorizes this recovery.
+    if (
+      validatedMessageTimeMs !== undefined &&
+      fresh.stopTimeMs !== undefined &&
+      validatedMessageTimeMs < fresh.stopTimeMs
+    ) {
+      return {
+        ok: false,
+        errorCode: "AUTHORIZATION_STALE",
+        message: `AUTHORIZATION_STALE: message ${String(input.userMessageId)} predates the stop it must authorize`,
+      };
+    }
+    const now = toIsoNow();
+    const stoppedReview = fresh.stopped ? fresh.checkpoint.currentReview : undefined;
+    const recovery: DelegatedCheckpointRecoveryRecord = {
+      recoveryId: input.recoveryId,
+      targetGeneration: stoppedReview?.generation ?? fresh.checkpoint.attempts,
+      kind,
+      diagnosis: input.diagnosis.trim(),
+      changedCondition: input.changedCondition.trim(),
+      verification: input.verification.map((reference) => reference.trim()),
+      recoveredAt: now,
+      ...(kind === "user_grant" && input.userMessageId
+        ? { userMessageId: input.userMessageId }
+        : {}),
+    };
+
+    let updated: DelegatedRunCheckpoint;
+    if (stoppedReview) {
+      // Settle the stopped generation as historical stopped evidence. The
+      // FAIL-less stop is not converted into a failure: rework stays locked
+      // until a real failed generation exists.
+      updated = {
+        ...fresh.checkpoint,
+        status: "failed",
+        lastOutcome: "stopped",
+        currentReview: undefined,
+        history: [
+          ...fresh.checkpoint.history,
+          {
+            generation: stoppedReview.generation,
+            outcome: "stopped",
+            fingerprint: stoppedReview.startFingerprint,
+            completedAt: now,
+          },
+        ],
+        recoveryHistory: [...fresh.checkpoint.recoveryHistory, recovery],
+      };
+    } else {
+      updated = {
+        ...fresh.checkpoint,
+        recoveryHistory: [...fresh.checkpoint.recoveryHistory, recovery],
+      };
+    }
+    findRun(data, input.runId)!.checkpoints.set(input.checkpointId, updated);
+
+    const generationBudget = checkpointGenerationBudget(updated);
+    return {
+      ok: true,
+      checkpoint: cloneCheckpoint(updated),
+      recoveryId: input.recoveryId,
+      kind,
+      generationBudget,
+      ...(stoppedReview ? { settledStoppedGeneration: stoppedReview.generation } : {}),
+    };
+  };
+
+  if (!precheck.needsGrant) {
+    return commitRecovery("resume");
+  }
+
+  if (input.userMessageId !== undefined) {
+    const userMessageId = input.userMessageId.trim();
+    if (!userMessageId) {
+      return {
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message: "INVALID_INPUT: userMessageId must be a non-empty string when provided",
+      };
+    }
+    if (
+      precheck.checkpoint.recoveryHistory.some((entry) => entry.userMessageId === userMessageId)
+    ) {
+      return {
+        ok: false,
+        errorCode: "AUTHORIZATION_REUSED",
+        message: `AUTHORIZATION_REUSED: message ${userMessageId} already authorized recovery of ${input.checkpointId}; each message grants at most one unit per target`,
+      };
+    }
+    if (typeof input.lookupUserMessage !== "function") {
+      return {
+        ok: false,
+        errorCode: "AUTHORIZATION_LOOKUP_FAILED",
+        message:
+          "AUTHORIZATION_LOOKUP_FAILED: user-authorized recovery requires a read-only message lookup bound to the plugin context",
+      };
+    }
+    const authorization = await validateRecoveryUserAuthorization({
+      owningSessionId: input.sessionId,
+      userMessageId,
+      requireAfterMs: precheck.stopTimeMs,
+      lookup: input.lookupUserMessage,
+    });
+    if (!authorization.ok) {
+      return { ok: false, errorCode: authorization.errorCode, message: authorization.message };
+    }
+    // The await above is an async boundary: re-verify non-reuse before commit
+    // (the precheck inside commitRecovery covers the rest of the state).
+    const freshCheckpoint = findRun(data, input.runId)?.checkpoints.get(input.checkpointId);
+    if (freshCheckpoint?.recoveryHistory.some((entry) => entry.userMessageId === userMessageId)) {
+      return {
+        ok: false,
+        errorCode: "AUTHORIZATION_REUSED",
+        message: `AUTHORIZATION_REUSED: message ${userMessageId} already authorized recovery of ${input.checkpointId}`,
+      };
+    }
+    return commitRecovery("user_grant", authorization.timeCreatedMs);
+  }
+
+  if (precheck.autonomousAvailable) {
+    return commitRecovery("autonomous_grant");
+  }
+
+  return {
+    ok: false,
+    errorCode: "AUTONOMOUS_GRANT_EXHAUSTED",
+    message: `AUTONOMOUS_GRANT_EXHAUSTED: the single autonomous recovery grant for ${input.checkpointId} is consumed; one further generation requires a fresh root-user message referenced by userMessageId`,
+  };
+}
+// END_BLOCK_CHECKPOINT_RECOVERY
+
 // START_BLOCK_BARRIER_GATES
 /** Unsatisfied checkpoint barriers blocking task launches for the given wave, in declaration order. */
 export function checkpointBarrierUnsatisfied(
@@ -1392,6 +1799,50 @@ export function findOverlappingInFlightReview(
 // END_BLOCK_BARRIER_GATES
 
 // START_BLOCK_RUN_VIEW
+type CheckpointNextAction =
+  | "start"
+  | "collect_and_verify"
+  | "start_next_generation"
+  | "recover"
+  | "recover_with_user_authorization"
+  | "passed";
+
+function checkpointNextAction(checkpoint: DelegatedRunCheckpoint): {
+  generationBudget: number;
+  remainingGenerations: number;
+  nextAction: CheckpointNextAction;
+} {
+  const generationBudget = checkpointGenerationBudget(checkpoint);
+  const remainingGenerations = Math.max(0, generationBudget - checkpoint.attempts);
+  if (checkpoint.status === "passed") {
+    return { generationBudget, remainingGenerations, nextAction: "passed" };
+  }
+  if (checkpoint.status === "in_review") {
+    if (checkpoint.lastOutcome === "stopped") {
+      // The linked review item is hard-stopped: re-running verify is a no-op,
+      // so the supported action is bounded recovery, never collection.
+      return { generationBudget, remainingGenerations, nextAction: "recover" };
+    }
+    return { generationBudget, remainingGenerations, nextAction: "collect_and_verify" };
+  }
+  if (checkpoint.status === "pending") {
+    return { generationBudget, remainingGenerations, nextAction: "start" };
+  }
+  // Failed: suggest an ordinary next generation while budget remains, then
+  // bounded recovery, then user-authorized recovery after the autonomous
+  // grant is consumed. The suggestion never proposes a start the same state
+  // would immediately reject.
+  if (remainingGenerations > 0) {
+    return { generationBudget, remainingGenerations, nextAction: "start_next_generation" };
+  }
+  const autonomousAvailable = !checkpointAutonomousGrantConsumed(checkpoint.recoveryHistory);
+  return {
+    generationBudget,
+    remainingGenerations,
+    nextAction: autonomousAvailable ? "recover" : "recover_with_user_authorization",
+  };
+}
+
 /** Read-only run serialization for tooling output and persistence consumers. */
 export function getDelegatedRunView(
   data: WorkItemStoreData,
@@ -1413,28 +1864,35 @@ export function getDelegatedRunView(
       taskId: task.taskId,
       workItemId: task.workItemId,
     })),
-    checkpoints: [...run.checkpoints.values()].map((checkpoint) => ({
-      checkpointId: checkpoint.checkpointId,
-      kind: checkpoint.kind,
-      afterWave: checkpoint.afterWave,
-      covers: checkpoint.covers,
-      scope: checkpoint.scope,
-      reviewers: checkpoint.reviewers,
-      status: checkpoint.status,
-      attempts: checkpoint.attempts,
-      ...(checkpoint.lastOutcome ? { lastOutcome: checkpoint.lastOutcome } : {}),
-      ...(checkpoint.currentReview
-        ? {
-            currentReview: {
-              reviewWorkItemId: checkpoint.currentReview.reviewWorkItemId,
-              generation: checkpoint.currentReview.generation,
-              coveredAttemptIds: checkpoint.currentReview.coveredAttemptIds,
-              recordedReviewers: Object.keys(checkpoint.currentReview.results),
-            },
-          }
-        : {}),
-      history: checkpoint.history,
-    })),
+    checkpoints: [...run.checkpoints.values()].map((checkpoint) => {
+      const progress = checkpointNextAction(checkpoint);
+      return {
+        checkpointId: checkpoint.checkpointId,
+        kind: checkpoint.kind,
+        afterWave: checkpoint.afterWave,
+        covers: checkpoint.covers,
+        scope: checkpoint.scope,
+        reviewers: checkpoint.reviewers,
+        status: checkpoint.status,
+        attempts: checkpoint.attempts,
+        ...(checkpoint.lastOutcome ? { lastOutcome: checkpoint.lastOutcome } : {}),
+        generationBudget: progress.generationBudget,
+        remainingGenerations: progress.remainingGenerations,
+        recoveryCount: checkpointRecoveryGrantCount(checkpoint.recoveryHistory),
+        nextAction: progress.nextAction,
+        ...(checkpoint.currentReview
+          ? {
+              currentReview: {
+                reviewWorkItemId: checkpoint.currentReview.reviewWorkItemId,
+                generation: checkpoint.currentReview.generation,
+                coveredAttemptIds: checkpoint.currentReview.coveredAttemptIds,
+                recordedReviewers: Object.keys(checkpoint.currentReview.results),
+              },
+            }
+          : {}),
+        history: checkpoint.history,
+      };
+    }),
   };
 }
 // END_BLOCK_RUN_VIEW

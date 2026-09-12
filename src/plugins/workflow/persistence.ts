@@ -1,15 +1,17 @@
 // FILE: src/plugins/workflow/persistence.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Hydrate and snapshot work-item workflow state from/to per-session JSON
 //     files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.
 //   SCOPE: Read/write WorkItemStoreData (nextId, records, keyIndexBySession,
-//     planRuns) as serializable JSON. Version 2 snapshots additionally persist
-//     delegated attempts, decisions, acceptances, rework history, and registered
-//     plan runs with checkpoint generations through an atomic temporary-file
-//     replacement, including failed attempts carrying bounded host failure
-//     evidence. Version 1 files hydrate conservatively as legacy records with
-//     an empty plan-run registry and never synthesize acceptance or approval.
+//     planRuns) as serializable JSON. Version 3 snapshots additionally persist
+//     delegated and checkpoint recovery histories with replay-protected
+//     authorization references, recovery-aware attempt and generation budgets,
+//     and report_rejected attempts carrying bounded rejected-report evidence
+//     through an atomic temporary-file replacement. Version 2 files hydrate
+//     conservatively with empty recovery histories and unchanged budgets;
+//     version 1 files hydrate as legacy records with an empty plan-run
+//     registry. Neither ever synthesizes acceptance, approval, or recovery.
 //     Strict validation rejects malformed or contradictory new state instead of
 //     silently restarting a run. A checked loader distinguishes missing, valid,
 //     and invalid state and surfaces I/O failures.
@@ -36,7 +38,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Version 2 validation accepts failed delegated attempts with bounded failure evidence and rejects contradictory failed/completed/in-flight attempt payloads.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Version 3 persists recovery histories, replay-protected authorization references, recovery-aware budgets, and report_rejected attempts; versions 1 and 2 hydrate conservatively with empty recovery histories.]
 // END_CHANGE_SUMMARY
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -48,6 +50,7 @@ import type {
   DelegatedAcceptanceRecord,
   DelegatedAttempt,
   DelegatedDecisionRecord,
+  DelegatedRecoveryRecord,
   DelegatedReworkRecord,
   DelegatedWorkItemState,
 } from "./delegated.js";
@@ -56,13 +59,17 @@ import {
   DELEGATED_EVIDENCE_MAX_CHARS,
   DELEGATED_EVIDENCE_MAX_REFS,
   DELEGATED_RATIONALE_MAX_CHARS,
+  DELEGATED_RECOVERY_CODE_MAX_CHARS,
+  delegatedRecoveryGrantCount,
 } from "./delegated.js";
 import type {
   DelegatedCheckpointHistoryEntry,
+  DelegatedCheckpointRecoveryRecord,
   DelegatedCheckpointReview,
   DelegatedPlanRun,
   DelegatedRunCheckpoint,
 } from "./checkpoints.js";
+import { MAX_CHECKPOINT_REVIEW_ATTEMPTS, checkpointRecoveryGrantCount } from "./checkpoints.js";
 import type {
   ReviewerRole,
   ReviewRound,
@@ -75,14 +82,16 @@ import type {
 } from "./state.js";
 
 // START_BLOCK_SERIALIZATION_TYPES
-export const PERSISTED_WORKFLOW_STATE_VERSION = 2;
+export const PERSISTED_WORKFLOW_STATE_VERSION = 3;
 
 /**
  * JSON-serializable shape of a per-session workflow state. Version 1 legacy
- * files lack planRuns; version 2 files carry delegated and plan-run state.
+ * files lack planRuns; version 2 files carry delegated and plan-run state
+ * without recovery histories; version 3 files additionally carry recovery
+ * histories and report-rejected attempts.
  */
 export type PersistedWorkflowState = {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   updatedAt: string;
   sessionId: string;
   nextId: number;
@@ -90,7 +99,7 @@ export type PersistedWorkflowState = {
   records: WorkItemRecord[];
   /** key -> workItemId lookup for idempotent open-by-key. */
   keyIndex: Record<string, string>;
-  /** Version 2 only: registered delegated plan runs. */
+  /** Version 2 and later: registered delegated plan runs. */
   planRuns?: SerializedDelegatedPlanRun[];
 };
 
@@ -126,13 +135,19 @@ const DELEGATED_RESULT_STATUSES: ReadonlySet<string> = new Set([
   "BLOCKED",
 ]);
 
-const CHECKPOINT_OUTCOMES: ReadonlySet<string> = new Set(["passed", "failed", "stale"]);
+const CHECKPOINT_OUTCOMES: ReadonlySet<string> = new Set(["passed", "failed", "stale", "stopped"]);
 const LAST_OUTCOMES: ReadonlySet<string> = new Set([
   "passed",
   "failed",
   "stale",
   "stopped",
   "incomplete",
+]);
+const RECOVERY_KINDS: ReadonlySet<string> = new Set(["resume", "autonomous_grant", "user_grant"]);
+const TERMINAL_ATTEMPT_STATUSES: ReadonlySet<string> = new Set([
+  "completed",
+  "failed",
+  "report_rejected",
 ]);
 
 function isWorkItemMode(value: unknown): value is WorkItemMode {
@@ -247,7 +262,12 @@ function validateBoundedEvidence(
 }
 
 /** Validate the delegated-mode record extension; returns every contradiction found. */
-function validateDelegatedState(record: WorkItemRecord, sessionId: string, errors: string[]): void {
+function validateDelegatedState(
+  record: WorkItemRecord,
+  sessionId: string,
+  version: number,
+  errors: string[],
+): void {
   const delegated = record.delegated as DelegatedWorkItemState | undefined;
   if (!delegated || typeof delegated !== "object") {
     errors.push(`${record.workItemId}: delegated records require a delegated state object`);
@@ -287,7 +307,8 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
       if (
         attempt.resultStatus !== undefined ||
         attempt.completedAt !== undefined ||
-        attempt.failureExcerpt !== undefined
+        attempt.failureExcerpt !== undefined ||
+        attempt.reportRejection !== undefined
       ) {
         errors.push(
           `${record.workItemId}: in-flight attempt ${attempt.attempt} must not carry a result`,
@@ -304,18 +325,18 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
           `${record.workItemId}: completed attempt ${attempt.attempt} requires completedAt`,
         );
       }
-      if (attempt.failureExcerpt !== undefined) {
+      if (attempt.failureExcerpt !== undefined || attempt.reportRejection !== undefined) {
         errors.push(
-          `${record.workItemId}: completed attempt ${attempt.attempt} must not carry a failure excerpt`,
+          `${record.workItemId}: completed attempt ${attempt.attempt} must not carry failure or rejection evidence`,
         );
       }
     } else if (attempt.status === "failed") {
       if (typeof attempt.completedAt !== "string") {
         errors.push(`${record.workItemId}: failed attempt ${attempt.attempt} requires completedAt`);
       }
-      if (attempt.resultStatus !== undefined) {
+      if (attempt.resultStatus !== undefined || attempt.reportRejection !== undefined) {
         errors.push(
-          `${record.workItemId}: failed attempt ${attempt.attempt} must not carry a resultStatus`,
+          `${record.workItemId}: failed attempt ${attempt.attempt} must not carry a result or rejection`,
         );
       }
       if (
@@ -324,6 +345,36 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
       ) {
         errors.push(
           `${record.workItemId}: failed attempt ${attempt.attempt} requires a bounded failure excerpt`,
+        );
+      }
+    } else if (attempt.status === "report_rejected") {
+      if (version < PERSISTED_WORKFLOW_STATE_VERSION) {
+        errors.push(
+          `${record.workItemId}: report_rejected attempts require persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+        );
+      }
+      if (typeof attempt.completedAt !== "string") {
+        errors.push(
+          `${record.workItemId}: report_rejected attempt ${attempt.attempt} requires completedAt`,
+        );
+      }
+      if (attempt.resultStatus !== undefined || attempt.failureExcerpt !== undefined) {
+        errors.push(
+          `${record.workItemId}: report_rejected attempt ${attempt.attempt} must not carry a synthesized result`,
+        );
+      }
+      const rejection = attempt.reportRejection;
+      if (
+        !rejection ||
+        typeof rejection !== "object" ||
+        typeof rejection.protocolErrorCode !== "string" ||
+        rejection.protocolErrorCode.trim() === "" ||
+        rejection.protocolErrorCode.length > DELEGATED_RECOVERY_CODE_MAX_CHARS ||
+        typeof rejection.rejectedAt !== "string" ||
+        !isWorkflowResultExcerpt(rejection.excerpt)
+      ) {
+        errors.push(
+          `${record.workItemId}: report_rejected attempt ${attempt.attempt} requires a bounded rejection record`,
         );
       }
     } else {
@@ -350,9 +401,92 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
       `${record.workItemId}: rework history entries require ids and checkpoint authorization`,
     );
   }
-  if (attempts.length > DELEGATED_BASE_ATTEMPTS + delegated.reworkHistory.length) {
+
+  const recoveryHistory = delegated.recoveryHistory;
+  if (!Array.isArray(recoveryHistory)) {
+    if (version >= PERSISTED_WORKFLOW_STATE_VERSION) {
+      errors.push(`${record.workItemId}: version 3 delegated records require a recovery history`);
+    }
+  } else if (recoveryHistory.length > 0 && version < PERSISTED_WORKFLOW_STATE_VERSION) {
     errors.push(
-      `${record.workItemId}: attempts exceed the base budget plus authorized rework grants`,
+      `${record.workItemId}: recovery history requires persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+    );
+  } else {
+    const recoveryIds = new Set<string>();
+    const userMessageIds = new Set<string>();
+    let autonomousGrants = 0;
+    for (const recovery of recoveryHistory as DelegatedRecoveryRecord[]) {
+      if (!recovery.recoveryId || recoveryIds.has(recovery.recoveryId)) {
+        errors.push(
+          `${record.workItemId}: recovery entries require unique non-empty recoveryId values`,
+        );
+      }
+      recoveryIds.add(recovery.recoveryId ?? "");
+      if (!RECOVERY_KINDS.has(recovery.kind)) {
+        errors.push(`${record.workItemId}: recovery ${recovery.recoveryId} has an invalid kind`);
+      }
+      if (recovery.kind === "autonomous_grant") {
+        autonomousGrants += 1;
+      }
+      if (recovery.kind === "user_grant") {
+        if (typeof recovery.userMessageId !== "string" || recovery.userMessageId === "") {
+          errors.push(
+            `${record.workItemId}: user-grant recovery ${recovery.recoveryId} requires its authorizing message id`,
+          );
+        } else if (userMessageIds.has(recovery.userMessageId)) {
+          errors.push(
+            `${record.workItemId}: message ${recovery.userMessageId} authorized more than one recovery unit`,
+          );
+        } else {
+          userMessageIds.add(recovery.userMessageId);
+        }
+      } else if (recovery.userMessageId !== undefined) {
+        errors.push(
+          `${record.workItemId}: non-user recovery ${recovery.recoveryId} must not persist an authorization reference`,
+        );
+      }
+      if (
+        !Number.isInteger(recovery.targetAttempt) ||
+        recovery.targetAttempt < 1 ||
+        recovery.targetAttempt > attempts.length ||
+        !TERMINAL_ATTEMPT_STATUSES.has(attempts[recovery.targetAttempt - 1]?.status ?? "")
+      ) {
+        errors.push(
+          `${record.workItemId}: recovery ${recovery.recoveryId} targets a non-terminal attempt`,
+        );
+      }
+      validateDelegatedText(
+        recovery.diagnosis,
+        DELEGATED_RATIONALE_MAX_CHARS,
+        `${record.workItemId}: recovery ${recovery.recoveryId} diagnosis`,
+        errors,
+      );
+      validateDelegatedText(
+        recovery.changedCondition,
+        DELEGATED_RATIONALE_MAX_CHARS,
+        `${record.workItemId}: recovery ${recovery.recoveryId} changedCondition`,
+        errors,
+      );
+      validateBoundedEvidence(
+        recovery.verification,
+        `${record.workItemId}: recovery ${recovery.recoveryId} verification`,
+        errors,
+      );
+    }
+    if (autonomousGrants > 1) {
+      errors.push(
+        `${record.workItemId}: at most one autonomous recovery grant may be recorded per item`,
+      );
+    }
+  }
+  if (
+    attempts.length >
+    DELEGATED_BASE_ATTEMPTS +
+      delegated.reworkHistory.length +
+      delegatedRecoveryGrantCount(delegated.recoveryHistory ?? [])
+  ) {
+    errors.push(
+      `${record.workItemId}: attempts exceed the base budget plus authorized rework and recovery grants`,
     );
   }
 
@@ -469,6 +603,7 @@ function validateDelegatedState(record: WorkItemRecord, sessionId: string, error
 function isWorkItemRecord(
   value: unknown,
   sessionId: string,
+  version: number,
   errors: string[],
 ): value is WorkItemRecord {
   if (!value || typeof value !== "object") return false;
@@ -494,7 +629,7 @@ function isWorkItemRecord(
 
   if (record.mode === "delegated") {
     const recordErrors: string[] = [];
-    validateDelegatedState(record, sessionId, recordErrors);
+    validateDelegatedState(record, sessionId, version, recordErrors);
     errors.push(...recordErrors);
     return recordErrors.length === 0;
   }
@@ -516,6 +651,7 @@ function validatePlanRun(
   run: unknown,
   recordsById: Map<string, WorkItemRecord>,
   sessionId: string,
+  version: number,
   errors: string[],
 ): run is SerializedDelegatedPlanRun {
   if (!run || typeof run !== "object") {
@@ -615,8 +751,102 @@ function validatePlanRun(
           `checkpoint ${checkpoint.checkpointId} history has invalid outcome ${entry.outcome}`,
         );
       }
+      if (entry.outcome === "stopped" && version < PERSISTED_WORKFLOW_STATE_VERSION) {
+        errors.push(
+          `checkpoint ${checkpoint.checkpointId} stopped history requires persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+        );
+      }
       if (typeof entry.generation !== "number" || typeof entry.fingerprint !== "string") {
         errors.push(`checkpoint ${checkpoint.checkpointId} history entry is malformed`);
+      }
+    }
+
+    const recoveryHistory = checkpoint.recoveryHistory;
+    if (!Array.isArray(recoveryHistory)) {
+      if (version >= PERSISTED_WORKFLOW_STATE_VERSION) {
+        errors.push(
+          `checkpoint ${checkpoint.checkpointId} requires a recovery history at persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+        );
+      }
+    } else if (recoveryHistory.length > 0 && version < PERSISTED_WORKFLOW_STATE_VERSION) {
+      errors.push(
+        `checkpoint ${checkpoint.checkpointId} recovery history requires persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+      );
+    } else {
+      const recoveryIds = new Set<string>();
+      const userMessageIds = new Set<string>();
+      let autonomousGrants = 0;
+      for (const recovery of recoveryHistory as DelegatedCheckpointRecoveryRecord[]) {
+        if (!recovery.recoveryId || recoveryIds.has(recovery.recoveryId)) {
+          errors.push(
+            `checkpoint ${checkpoint.checkpointId} recovery entries require unique non-empty recoveryId values`,
+          );
+        }
+        recoveryIds.add(recovery.recoveryId ?? "");
+        if (!RECOVERY_KINDS.has(recovery.kind)) {
+          errors.push(
+            `checkpoint ${checkpoint.checkpointId} recovery ${recovery.recoveryId} has an invalid kind`,
+          );
+        }
+        if (recovery.kind === "autonomous_grant") {
+          autonomousGrants += 1;
+        }
+        if (recovery.kind === "user_grant") {
+          if (typeof recovery.userMessageId !== "string" || recovery.userMessageId === "") {
+            errors.push(
+              `checkpoint ${checkpoint.checkpointId} user-grant recovery ${recovery.recoveryId} requires its authorizing message id`,
+            );
+          } else if (userMessageIds.has(recovery.userMessageId)) {
+            errors.push(
+              `checkpoint ${checkpoint.checkpointId} message ${recovery.userMessageId} authorized more than one recovery unit`,
+            );
+          } else {
+            userMessageIds.add(recovery.userMessageId);
+          }
+        } else if (recovery.userMessageId !== undefined) {
+          errors.push(
+            `checkpoint ${checkpoint.checkpointId} non-user recovery ${recovery.recoveryId} must not persist an authorization reference`,
+          );
+        }
+        if (
+          !Number.isInteger(recovery.targetGeneration) ||
+          recovery.targetGeneration < 1 ||
+          recovery.targetGeneration > checkpoint.attempts
+        ) {
+          errors.push(
+            `checkpoint ${checkpoint.checkpointId} recovery ${recovery.recoveryId} targets an unknown generation`,
+          );
+        }
+        validateDelegatedText(
+          recovery.diagnosis,
+          DELEGATED_RATIONALE_MAX_CHARS,
+          `checkpoint ${checkpoint.checkpointId} recovery ${recovery.recoveryId} diagnosis`,
+          errors,
+        );
+        validateDelegatedText(
+          recovery.changedCondition,
+          DELEGATED_RATIONALE_MAX_CHARS,
+          `checkpoint ${checkpoint.checkpointId} recovery ${recovery.recoveryId} changedCondition`,
+          errors,
+        );
+        validateBoundedEvidence(
+          recovery.verification,
+          `checkpoint ${checkpoint.checkpointId} recovery ${recovery.recoveryId} verification`,
+          errors,
+        );
+      }
+      if (autonomousGrants > 1) {
+        errors.push(
+          `checkpoint ${checkpoint.checkpointId} has more than one autonomous recovery grant`,
+        );
+      }
+      if (
+        checkpoint.attempts >
+        MAX_CHECKPOINT_REVIEW_ATTEMPTS + checkpointRecoveryGrantCount(recoveryHistory)
+      ) {
+        errors.push(
+          `checkpoint ${checkpoint.checkpointId} generations exceed the ordinary budget plus recovery grants`,
+        );
       }
     }
     const review = checkpoint.currentReview as DelegatedCheckpointReview | undefined;
@@ -655,7 +885,7 @@ function validatePlanRun(
     }
     if (
       checkpoint.status === "failed" &&
-      !["failed", "stale"].includes(history[history.length - 1]?.outcome ?? "")
+      !["failed", "stale", "stopped"].includes(history[history.length - 1]?.outcome ?? "")
     ) {
       errors.push(`checkpoint ${checkpoint.checkpointId} failed without a failing history entry`);
     }
@@ -729,7 +959,11 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
     };
   }
 
-  if (parsed.version !== 1 && parsed.version !== PERSISTED_WORKFLOW_STATE_VERSION) {
+  if (
+    parsed.version !== 1 &&
+    parsed.version !== 2 &&
+    parsed.version !== PERSISTED_WORKFLOW_STATE_VERSION
+  ) {
     return {
       status: "invalid",
       errors: [`unsupported persisted version ${String(parsed.version)}`],
@@ -738,12 +972,13 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
   if (!Array.isArray(parsed.records)) {
     return { status: "invalid", errors: ["persisted records must be an array"] };
   }
+  const version = parsed.version;
 
   const errors: string[] = [];
   const records = new Map<string, WorkItemRecord>();
   for (const record of parsed.records) {
     const recordErrors: string[] = [];
-    if (!isWorkItemRecord(record, sessionId, recordErrors)) {
+    if (!isWorkItemRecord(record, sessionId, version, recordErrors)) {
       errors.push(
         ...(recordErrors.length > 0
           ? recordErrors
@@ -752,6 +987,16 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
             ]),
       );
       continue;
+    }
+    // Versions 1 and 2 never carried recovery histories: hydrate them
+    // conservatively with empty histories rather than inferring grants, so
+    // their original budgets stay unchanged.
+    if (
+      record.mode === "delegated" &&
+      record.delegated &&
+      version < PERSISTED_WORKFLOW_STATE_VERSION
+    ) {
+      record.delegated = { ...record.delegated, recoveryHistory: [] };
     }
     records.set(`${sessionId}::${record.workItemId}`, record);
   }
@@ -764,7 +1009,7 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
   keyIndexBySession.set(sessionId, keyIndex);
 
   const planRuns = new Map<string, DelegatedPlanRun>();
-  if (parsed.version === PERSISTED_WORKFLOW_STATE_VERSION) {
+  if (version >= 2) {
     if (!Array.isArray(parsed.planRuns)) {
       return { status: "invalid", errors: ["version 2 state requires a planRuns array"] };
     }
@@ -773,7 +1018,7 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
     );
     for (const serialized of parsed.planRuns) {
       const runErrors: string[] = [];
-      if (!validatePlanRun(serialized, recordsByBareId, sessionId, runErrors)) {
+      if (!validatePlanRun(serialized, recordsByBareId, sessionId, version, runErrors)) {
         errors.push(...runErrors);
         continue;
       }
@@ -781,7 +1026,13 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
         ...serialized,
         tasks: new Map(serialized.tasks.map((task) => [task.taskId, task])),
         checkpoints: new Map(
-          serialized.checkpoints.map((checkpoint) => [checkpoint.checkpointId, checkpoint]),
+          serialized.checkpoints.map((checkpoint) => {
+            const hydrated =
+              version < PERSISTED_WORKFLOW_STATE_VERSION
+                ? { ...checkpoint, recoveryHistory: checkpoint.recoveryHistory ?? [] }
+                : checkpoint;
+            return [hydrated.checkpointId, hydrated];
+          }),
         ),
       };
       planRuns.set(run.runId, run);
@@ -855,9 +1106,10 @@ export function snapshotWorkflowStateChecked(
     }
 
     const persisted: PersistedWorkflowState = {
-      // Version 2 carries delegated attempts, decisions, and plan runs;
-      // PERSISTED_WORKFLOW_STATE_VERSION mirrors this literal for hydration.
-      version: 2,
+      // Version 3 carries delegated and checkpoint recovery histories and
+      // report-rejected attempts; PERSISTED_WORKFLOW_STATE_VERSION mirrors
+      // this literal for hydration.
+      version: PERSISTED_WORKFLOW_STATE_VERSION,
       updatedAt: new Date().toISOString(),
       sessionId,
       nextId: data.nextId,

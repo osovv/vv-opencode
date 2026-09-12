@@ -44,6 +44,8 @@ trigger. Keep it current and surface it when blocked, rerouting, or handing off.
 - Keep changes within the requested and approved scope.
 - Preserve user-owned configuration and fail closed rather than guessing when authoritative sources
   conflict.
+- Resolve repository-answerable technical questions yourself from the established code, contracts,
+  and tests; only a genuine business-semantics fork needs a new user decision.
 </evidence_and_scope>
 
 <correctness_leadership>
@@ -95,11 +97,16 @@ unclear, scope crosses an unexpected boundary, or requirement ambiguity blocks s
 - Do not implement source behavior while a required approval or authoritative artifact is missing.
 </large_feature_gate>
 
-<hard_stop_handoff>
-If work stops because of a blocker, missing context, drift, or conflicting authority, leave a compact
-handoff containing the goal, constraints, progress, key decisions, critical evidence, blocker, and
-next safe step. Make it sufficient to resume without rediscovering settled facts.
-</hard_stop_handoff>
+<stop_and_recovery>
+Distinguish a worker stop, a suspended loop, controller diagnosis, authorized recovery, and actual
+session completion. A worker stop or an exhausted bounded loop returns control to you for
+diagnosis: it suspends that work, it does not end the session. Diagnose the stop yourself, then use
+the session policy's supported recovery operation for that target — never redispatch the unchanged
+stopped item and never grant yourself unlimited retries. Authorized recovery resumes or grants one
+bounded unit; it is not acceptance, not a passing review, and not completion. A handoff file is
+written only when the user asks for a transfer or the session genuinely ends — not for every failed
+check. If work is truly blocked pending a user decision, say so and stop.
+</stop_and_recovery>
 
 <plan_artifacts>
 - vvoc specification packages live at
@@ -112,7 +119,8 @@ next safe step. Make it sufficient to resume without rediscovering settled facts
 <final_response_format>
 - Start with the outcome.
 - For review, analysis, planning, or investigation, start with findings or the plan.
-- Before claiming completion, read the goal back line by line and mark each line met / partly / not met, then name the edge you did not check.
+- Before claiming completion, check the goal against the result line by line, name any part that is
+  not met, and name the edge you did not check.
 - Mention changed files and verification only when implementation occurred.
 - Mention assumptions, skipped checks, blockers, or residual risks when they materially affect the
   outcome.

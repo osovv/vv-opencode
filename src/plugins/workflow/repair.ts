@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/repair.ts
-// VERSION: 0.1.2
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Recognize resumable OpenCode task envelopes and perform one bounded same-session continuation for malformed tracked outputs, letting the original subagent finish unfinished work or truthfully correct its final report.
-//   SCOPE: OpenCode task envelope parsing, protocol-error-aware continuation prompt construction that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop suppression detection, continued-output extraction, and same-session continuation calls for tracked workflow results.
+//   SCOPE: OpenCode task envelope parsing, protocol-error-aware continuation prompt construction that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop status detection preserving the observed substantive stop for terminal settlement, continued-output extraction, and same-session continuation calls for tracked workflow results.
 //   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-WORKFLOW-REPAIR, M-WORKFLOW-PROTOCOL, M-PLUGIN-WORKFLOW]
 //   ROLE: RUNTIME
@@ -14,12 +14,13 @@
 //   unwrapResumableTaskResult - Extracts tracked result text only from known resumable OpenCode task envelopes.
 //   buildTrackedResultRepairPrompt - Constructs the strict bounded-continuation prompt for the same child session with a truthful post-continuation status/route.
 //   hasExplicitHardStopStatus - Detects explicit BLOCKED/NEEDS_CONTEXT protocol status lines before any continuation.
+//   detectExplicitHardStopStatus - Returns the explicit BLOCKED/NEEDS_CONTEXT status line value, if any.
 //   isTrackedResultRepairEligible - Restricts the one-shot continuation to safe protocol error classes.
 //   attemptTrackedResultRepair - Continues the same child session once and returns corrected tracked result text when possible.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix bounded result continuation - Replaced the format-only repair prompt and disabled-tools override with one bounded same-session continuation that omits the prompt `tools` field, permits finishing original work within scope, reports a truthful post-continuation status/route instead of freezing an outdated one, and suppresses continuation for explicit malformed BLOCKED/NEEDS_CONTEXT output.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added detectExplicitHardStopStatus so terminal settlement of malformed output preserves the exact observed substantive stop instead of only a boolean.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -49,7 +50,7 @@ const TASK_ELEMENT_OPEN_RE = /^<task\s+id="([^"]+)"\s+state="([^"]+)"\s*>$/;
  * lines. It matches only a `VVOC_STATUS:` line whose value begins with BLOCKED
  * or NEEDS_CONTEXT, so natural-language text cannot suppress a continuation.
  */
-const EXPLICIT_HARD_STOP_STATUS_RE = /^\s*VVOC_STATUS\s*:\s*(?:BLOCKED|NEEDS_CONTEXT)\b/;
+const EXPLICIT_HARD_STOP_STATUS_RE = /^\s*VVOC_STATUS\s*:\s*(BLOCKED|NEEDS_CONTEXT)\b/;
 
 const TRACKED_RESULT_CONTINUATION_SYSTEM_PROMPT =
   "Bounded same-session workflow continuation. Preserve the original work item, assignment, role, and write scope. Finish any unfinished implementation or review work using your existing history and currently permitted tools, or, if it was already complete, correct only the final report. Report the VVOC_STATUS and VVOC_ROUTE that truthfully reflect the result after this continuation.";
@@ -223,11 +224,21 @@ export function buildTrackedResultRepairPrompt(options: {
   ].join("\n");
 }
 
+/** Returns the explicit hard-stop status value on a protocol status line, if any. */
+export function detectExplicitHardStopStatus(
+  output: string,
+): "BLOCKED" | "NEEDS_CONTEXT" | undefined {
+  for (const line of output.replace(/\r\n/g, "\n").split("\n")) {
+    const match = EXPLICIT_HARD_STOP_STATUS_RE.exec(line);
+    if (match) {
+      return match[1] as "BLOCKED" | "NEEDS_CONTEXT";
+    }
+  }
+  return undefined;
+}
+
 export function hasExplicitHardStopStatus(output: string): boolean {
-  return output
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .some((line) => EXPLICIT_HARD_STOP_STATUS_RE.test(line));
+  return detectExplicitHardStopStatus(output) !== undefined;
 }
 
 export function isTrackedResultRepairEligible(code: ProtocolErrorCode): boolean {

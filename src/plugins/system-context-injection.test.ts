@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added correctness_obligations delivery coverage: preserved properties, scope separation, diagnostic counterexample, and evidence-based acceptance wording.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added calibrated assumption-discipline coverage: per-claim reasoning labels and the restatement ritual removed while material assumptions, repository-answerable resolution, and honest uncertainty remain.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -155,6 +155,43 @@ describe("SystemContextInjectionPlugin", () => {
     );
     expect(normalized).toContain(
       "Unrelated informational or trivial documentation work needs none of this ceremony",
+    );
+  });
+
+  test("delivers calibrated assumption discipline without per-claim reasoning labels", async () => {
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const output = createOutput("build");
+
+    await plugin["chat.message"]?.(
+      {
+        sessionID: "session-1",
+        agent: undefined,
+      } as never,
+      output as never,
+    );
+
+    const systemText = output.message.system ?? "";
+    const normalized = systemText.replace(/\s+/g, " ");
+
+    // Mandatory per-claim reasoning labels and the restatement ritual are gone.
+    expect(systemText).not.toContain("Mark each claim in internal reasoning:");
+    expect(systemText).not.toContain("`✓` verified");
+    expect(systemText).not.toContain("An unmarked claim counts as");
+    expect(normalized).not.toContain("restate the requirement in one line in your own words");
+
+    // Material assumptions, repository-answerable resolution, and honest
+    // uncertainty remain first-class.
+    expect(normalized).toContain("Do not make silent material assumptions.");
+    expect(normalized).toContain(
+      "If a material assumption is necessary, state it explicitly and carry its effect into the result report.",
+    );
+    expect(normalized).toContain("If a material assumption later becomes false, stop and reroute.");
+    expect(normalized).toContain(
+      "Resolve repository-answerable technical questions from the established code, contracts, and tests yourself",
+    );
+    expect(normalized).toContain("only a genuine business-semantics fork needs a user decision");
+    expect(normalized).toContain(
+      "an unverified material condition is named as unverified, never presented as a passed check",
     );
   });
 

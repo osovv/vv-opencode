@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/tooling.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses.
-//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, plan registration, checkpoint start/verify, and failed-checkpoint rework authorization.
+//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization including recovery-aware progress summaries; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, plan registration, checkpoint start/verify, failed-checkpoint rework authorization, and bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup.
 //   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/state.ts]
 //   LINKS: M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
@@ -12,11 +12,12 @@
 // START_MODULE_MAP
 //   WorkflowToolContext - Minimal execution context required by workflow tools.
 //   WorkflowToolDefinition - Deterministic tool definition shape with an optionally async execute handler.
+//   DelegatedControlOptions - Optional read-only authorization lookup bound to the plugin SDK client.
 //   createWorkItemOpenTool - Creates work_item_open tool wrapper around explicit openWorkItem contract including standalone delegated tasks.
-//   createWorkItemListTool - Creates work_item_list tool wrapper with mode, round metadata, delegated acceptance state, and registered plan runs.
+//   createWorkItemListTool - Creates work_item_list tool wrapper with mode, round metadata, delegated acceptance and recovery state, and registered plan runs.
 //   createWorkItemCloseTool - Creates work_item_close tool wrapper with ready_to_close gating responses.
-//   createWorkItemDecideTool - Creates work_item_decide control wrapper around decideDelegatedWorkItem and rework authorization.
-//   createWorkCheckpointTool - Creates work_checkpoint control wrapper around plan registration, checkpoint start, and verify.
+//   createWorkItemDecideTool - Creates work_item_decide control wrapper around decideDelegatedWorkItem, rework authorization, and bounded recovery.
+//   createWorkCheckpointTool - Creates work_checkpoint control wrapper around plan registration, checkpoint start, verify, and checkpoint recovery.
 //   DecideArgs - work_item_decide tool argument shape.
 //   CheckpointArgs - work_checkpoint tool argument shape.
 //   WorkCheckpointRegisterInput - Register-action input discriminator.
@@ -25,7 +26,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added delegated open validation, list metadata, and the two delegated control tool wrappers.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added decision recover and work_checkpoint action recover with bounded recovery text, stable recoveryId, optional userMessageId authorization, and recovery-aware inspection output.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -42,11 +43,18 @@ import {
 import {
   authorizeReworkFromFailedCheckpoint,
   getDelegatedRunView,
+  recoverDelegatedCheckpoint,
   registerDelegatedPlan,
   startDelegatedCheckpoint,
   verifyDelegatedCheckpoint,
 } from "./checkpoints.js";
-import { currentDelegatedAcceptance, decideDelegatedWorkItem } from "./delegated.js";
+import {
+  currentDelegatedAcceptance,
+  decideDelegatedWorkItem,
+  recoverDelegatedWorkItem,
+  summarizeDelegatedProgress,
+  type LookupRecoveryUserMessage,
+} from "./delegated.js";
 import type { LoadedDelegatedPlan } from "./checkpoint-io.js";
 
 export type WorkflowToolContext = {
@@ -58,6 +66,11 @@ export type WorkflowToolDefinition<TArgs, TResult> = {
   description: string;
   execute: (args: TArgs, context: WorkflowToolContext, store?: WorkItemStore) => TResult;
 };
+
+/** Optional read-only authorization lookup bound to the plugin SDK client. */
+export interface DelegatedControlOptions {
+  lookupUserMessage?: LookupRecoveryUserMessage;
+}
 
 type OpenInputItem = {
   key?: unknown;
@@ -84,20 +97,36 @@ type CloseArgs = {
 export type DecideArgs = {
   workItemId: string;
   attempt: number;
-  decision: "accept" | "request_changes" | "rework";
-  rationale: string;
-  evidence: string[];
+  decision: "accept" | "request_changes" | "rework" | "recover";
+  /** Required for accept, request_changes, and rework; unused by recover. */
+  rationale?: string;
+  /** Required for accept and request_changes; unused by rework and recover. */
+  evidence?: string[];
   concernsDisposition?: string;
   runId?: string;
   checkpointId?: string;
+  /** Recover-only bounded diagnosis, changed condition, and verification references. */
+  diagnosis?: string;
+  changedCondition?: string;
+  verification?: string[];
+  recoveryId?: string;
+  /** Recover-only fresh root-user message authorizing one further unit. */
+  userMessageId?: string;
 };
 
 export type CheckpointArgs = {
-  action: "register" | "start" | "verify";
+  action: "register" | "start" | "verify" | "recover";
   planPath?: string;
   runId?: string;
   checkpointId?: string;
   complete?: boolean;
+  /** Recover-only bounded diagnosis, changed condition, and verification references. */
+  diagnosis?: string;
+  changedCondition?: string;
+  verification?: string[];
+  recoveryId?: string;
+  /** Recover-only fresh root-user message authorizing one further generation. */
+  userMessageId?: string;
 };
 
 function coerceNonEmptyString(value: unknown): string | undefined {
@@ -256,9 +285,23 @@ function serializeWorkItem(record: WorkItemRecord): Record<string, unknown> {
             accepted: currentDelegatedAcceptance(record) !== undefined,
             acceptedAttempt: currentDelegatedAcceptance(record)?.attempt,
             reworkCount: record.delegated.reworkHistory.length,
+            ...serializeProgress(record),
           },
         }
       : {}),
+  };
+}
+
+/** Recovery-aware progress fields shared by work-item serialization. */
+function serializeProgress(record: WorkItemRecord): Record<string, unknown> {
+  const progress = summarizeDelegatedProgress(record);
+  return {
+    attemptBudget: progress.attemptBudget,
+    remainingAttempts: progress.remainingAttempts,
+    recoveryCount: progress.recoveryGrants,
+    autonomousGrantConsumed: progress.autonomousGrantConsumed,
+    reportRejectionCount: progress.reportRejectedAttempts,
+    nextAction: progress.nextAction,
   };
 }
 
@@ -401,20 +444,21 @@ export function createWorkItemCloseTool(
 }
 
 // START_CONTRACT: createWorkItemDecideTool
-//   PURPOSE: Build work_item_decide handler wrapping explicit controller acceptance, change requests, and checkpoint-authorized rework.
-//   INPUTS: { store: WorkItemStore - workflow in-memory store }
-//   OUTPUTS: { WorkflowToolDefinition<DecideArgs, Record<string, unknown>> - executable control tool definition }
+//   PURPOSE: Build work_item_decide handler wrapping explicit controller acceptance, change requests, checkpoint-authorized rework, and bounded recovery.
+//   INPUTS: { store: WorkItemStore - workflow in-memory store, options?: DelegatedControlOptions - optional read-only authorization lookup }
+//   OUTPUTS: { WorkflowToolDefinition<DecideArgs, Promise<Record<string, unknown>>> - async executable control tool definition }
 //   SIDE_EFFECTS: [Mutates delegated work-item state through the domain layer]
 //   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS]
 // END_CONTRACT: createWorkItemDecideTool
 export function createWorkItemDecideTool(
   store: WorkItemStore,
-): WorkflowToolDefinition<DecideArgs, Record<string, unknown>> {
+  options?: DelegatedControlOptions,
+): WorkflowToolDefinition<DecideArgs, Promise<Record<string, unknown>>> {
   return {
     name: "work_item_decide",
     description:
-      "Accept or request changes for the current completed delegated attempt, or authorize bounded rework of an accepted task from a failed checkpoint.",
-    execute: (args, context, overrideStore) => {
+      "Accept or request changes for the current completed delegated attempt, authorize bounded rework of an accepted task from a failed checkpoint, or recover a stopped or exhausted unaccepted task with a bounded diagnosis and changed condition.",
+    async execute(args, context, overrideStore) {
       const s = overrideStore ?? store;
       const workItemId = coerceNonEmptyString(args.workItemId);
       const decision = args.decision;
@@ -472,13 +516,66 @@ export function createWorkItemDecideTool(
         };
       }
 
+      if (decision === "recover") {
+        const recoveryId = coerceNonEmptyString(args.recoveryId);
+        const diagnosis = typeof args.diagnosis === "string" ? args.diagnosis : "";
+        const changedCondition =
+          typeof args.changedCondition === "string" ? args.changedCondition : "";
+        const verification = Array.isArray(args.verification) ? args.verification.map(String) : [];
+        const userMessageId = coerceNonEmptyString(args.userMessageId);
+        if (!recoveryId) {
+          return {
+            tool: "work_item_decide",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message:
+              "INVALID_INPUT: recover requires a stable recoveryId, diagnosis, changedCondition, and verification references",
+          };
+        }
+        const recovered = await recoverDelegatedWorkItem(s, {
+          sessionId: context.sessionId,
+          workItemId,
+          attempt: args.attempt,
+          diagnosis,
+          changedCondition,
+          verification,
+          recoveryId,
+          ...(userMessageId !== undefined
+            ? { userMessageId, lookupUserMessage: options?.lookupUserMessage }
+            : {}),
+        });
+        if (!recovered.ok) {
+          return {
+            tool: "work_item_decide",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: recovered.errorCode,
+            message: recovered.message,
+          };
+        }
+        return {
+          tool: "work_item_decide",
+          sessionId: context.sessionId,
+          ok: true,
+          action: "recover",
+          workItemId,
+          recoveryId: recovered.recoveryId,
+          kind: recovered.kind,
+          attemptBudget: recovered.attemptBudget,
+          remainingAttempts: recovered.remainingAttempts,
+          state: recovered.record.state,
+          nextAction: summarizeDelegatedProgress(recovered.record).nextAction,
+        };
+      }
+
       if (decision !== "accept" && decision !== "request_changes") {
         return {
           tool: "work_item_decide",
           sessionId: context.sessionId,
           ok: false,
           errorCode: "INVALID_INPUT",
-          message: "INVALID_INPUT: decision must be accept, request_changes, or rework",
+          message: "INVALID_INPUT: decision must be accept, request_changes, rework, or recover",
         };
       }
 
@@ -524,7 +621,17 @@ export interface WorkCheckpointRegisterInput {
 export type WorkCheckpointInput =
   | WorkCheckpointRegisterInput
   | { action: "start"; runId: string; checkpointId: string }
-  | { action: "verify"; runId: string; checkpointId: string; complete?: boolean };
+  | { action: "verify"; runId: string; checkpointId: string; complete?: boolean }
+  | {
+      action: "recover";
+      runId: string;
+      checkpointId: string;
+      diagnosis: string;
+      changedCondition: string;
+      verification: string[];
+      recoveryId: string;
+      userMessageId?: string;
+    };
 
 export type WorkCheckpointExecuteContext = WorkflowToolContext & {
   /** Trusted absolute workspace root used for plan loading and snapshots. */
@@ -537,19 +644,20 @@ export type WorkCheckpointExecuteContext = WorkflowToolContext & {
 };
 
 // START_CONTRACT: createWorkCheckpointTool
-//   PURPOSE: Build work_checkpoint handler wrapping plan registration, checkpoint start, and fingerprint-verified outcomes.
-//   INPUTS: { store: WorkItemStore - workflow in-memory store }
+//   PURPOSE: Build work_checkpoint handler wrapping plan registration, checkpoint start, fingerprint-verified outcomes, and bounded checkpoint recovery.
+//   INPUTS: { store: WorkItemStore - workflow in-memory store, options?: DelegatedControlOptions - optional read-only authorization lookup }
 //   OUTPUTS: { WorkflowToolDefinition<CheckpointArgs, Promise<Record<string, unknown>>> - async executable control tool definition }
 //   SIDE_EFFECTS: [Registers plan runs and mutates checkpoint state through the domain layer]
 //   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED]
 // END_CONTRACT: createWorkCheckpointTool
 export function createWorkCheckpointTool(
   store: WorkItemStore,
+  options?: DelegatedControlOptions,
 ): WorkflowToolDefinition<CheckpointArgs, Promise<Record<string, unknown>>> {
   return {
     name: "work_checkpoint",
     description:
-      "Register an approved delegated plan, start a declared review checkpoint, or verify checkpoint outcomes; verify with complete: true seals a finished final checkpoint.",
+      "Register an approved delegated plan, start a declared review checkpoint, verify checkpoint outcomes, or recover a stopped or generation-exhausted checkpoint; verify with complete: true seals a finished final checkpoint.",
     async execute(args, context, overrideStore) {
       const s = overrideStore ?? store;
       const action = args.action;
@@ -682,12 +790,68 @@ export function createWorkCheckpointTool(
         };
       }
 
+      if (action === "recover") {
+        const recoveryId = coerceNonEmptyString(args.recoveryId);
+        const diagnosis = typeof args.diagnosis === "string" ? args.diagnosis : "";
+        const changedCondition =
+          typeof args.changedCondition === "string" ? args.changedCondition : "";
+        const verification = Array.isArray(args.verification) ? args.verification.map(String) : [];
+        const userMessageId = coerceNonEmptyString(args.userMessageId);
+        if (!recoveryId) {
+          return {
+            tool: "work_checkpoint",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message:
+              "INVALID_INPUT: recover requires a stable recoveryId, diagnosis, changedCondition, and verification references",
+          };
+        }
+        const recovered = await recoverDelegatedCheckpoint(s, {
+          sessionId: context.sessionId,
+          runId,
+          checkpointId,
+          diagnosis,
+          changedCondition,
+          verification,
+          recoveryId,
+          ...(userMessageId !== undefined
+            ? { userMessageId, lookupUserMessage: options?.lookupUserMessage }
+            : {}),
+        });
+        if (!recovered.ok) {
+          return {
+            tool: "work_checkpoint",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: recovered.errorCode,
+            message: recovered.message,
+          };
+        }
+        return {
+          tool: "work_checkpoint",
+          sessionId: context.sessionId,
+          ok: true,
+          action: "recover",
+          runId,
+          checkpointId,
+          recoveryId: recovered.recoveryId,
+          kind: recovered.kind,
+          generationBudget: recovered.generationBudget,
+          ...(recovered.settledStoppedGeneration !== undefined
+            ? { settledStoppedGeneration: recovered.settledStoppedGeneration }
+            : {}),
+          checkpointStatus: recovered.checkpoint.status,
+          lastOutcome: recovered.checkpoint.lastOutcome,
+        };
+      }
+
       return {
         tool: "work_checkpoint",
         sessionId: context.sessionId,
         ok: false,
         errorCode: "INVALID_INPUT",
-        message: "INVALID_INPUT: action must be register, start, or verify",
+        message: "INVALID_INPUT: action must be register, start, verify, or recover",
       };
     },
   };

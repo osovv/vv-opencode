@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.4.2
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject universal primary guidance, including correctness obligations for behavior changes, and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
-//   SCOPE: Universal instructions with correctness obligations, vv-controller policy selection, explore-worker guidance, known subagent filtering, startup vvoc snapshot use, custom subagent tracking, and chat.message injection.
+//   SCOPE: Universal instructions with correctness obligations and material-assumption discipline, vv-controller policy selection, explore-worker guidance, known subagent filtering, startup vvoc snapshot use, custom subagent tracking, and chat.message injection.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added the correctness_obligations universal block: preserved properties, write/impact/verification scope separation, diagnostic counterexamples, and evidence-based acceptance.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Removed mandatory per-claim reasoning labels and the restatement ritual while retaining material-assumption discipline, repository-answerable question resolution, proportional verification, and honest uncertainty.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -52,10 +52,10 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "<assumption_discipline>",
     "Do not make silent material assumptions.",
     "A material assumption is one that affects behavior, scope, API shape, schema, UX, data meaning, or verification.",
-    "If a material assumption is necessary, state it explicitly.",
+    "If a material assumption is necessary, state it explicitly and carry its effect into the result report.",
     "If a material assumption later becomes false, stop and reroute.",
-    "Mark each claim in internal reasoning: `✓` verified (name what verified it), `?` asserted-but-unchecked, `✗` refuted (name the evidence).",
-    "An unmarked claim counts as `?`, and a `?` may not become a downstream premise until verified.",
+    "Resolve repository-answerable technical questions from the established code, contracts, and tests yourself; only a genuine business-semantics fork needs a user decision.",
+    "Report honest residual uncertainty: an unverified material condition is named as unverified, never presented as a passed check.",
     "</assumption_discipline>",
   ].join("\n"),
   [
@@ -70,7 +70,7 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
   [
     "<working_state>",
     "For non-trivial work, stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
-    "Before acting, restate the requirement in one line in your own words and check it against the original; a constraint dropped here wastes the downstream chain.",
+    "Check that state against the original request before and while acting; a constraint dropped early wastes the downstream chain.",
     "Keep it compact and revise it when evidence changes.",
     "Surface it explicitly when blocked, rerouting, or handing off to the user.",
     "</working_state>",

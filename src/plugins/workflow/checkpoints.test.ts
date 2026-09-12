@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/checkpoints.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Deterministic tests for registered delegated plan runs, checkpoint generations, fingerprint-verified outcomes, rework authorization, and barrier gates.
-//   SCOPE: Registration idempotency and drift, partial-binding rollback, prerequisite acceptance, generation lifecycle with reviewer bookkeeping, PASS/FAIL/stale/stopped verify outcomes, historical milestone preservation, final complete sealing, plan mutation drift, failed-checkpoint rework, and wave barriers over temporary workspace fixtures.
+//   PURPOSE: Deterministic tests for registered delegated plan runs, checkpoint generations, fingerprint-verified outcomes, rework authorization, bounded checkpoint recovery, and barrier gates.
+//   SCOPE: Registration idempotency and drift, partial-binding rollback, prerequisite acceptance, generation lifecycle with reviewer bookkeeping, PASS/FAIL/stale/stopped verify outcomes, historical milestone preservation, final complete sealing, plan mutation drift, failed-checkpoint rework, stopped-generation recovery settling historical evidence, generation-exhaustion recovery with autonomous and replay-protected root-user grants, recovery target validation, and wave barriers over temporary workspace fixtures.
 //   DEPENDS: [bun:test, node:fs/promises, node:path, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED, V-M-WORKFLOW-CHECKPOINTS]
 //   ROLE: TEST
@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial registry coverage: generations, verify outcomes, sealing, rework, and barriers.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added checkpoint recovery coverage: stopped-generation settle, exhaustion grants with autonomous denial then user authorization and replay rejection, target validation, and preserved prerequisites.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -34,8 +34,10 @@ import { loadApprovedDelegatedPlan, type LoadedDelegatedPlan } from "./checkpoin
 import {
   authorizeReworkFromFailedCheckpoint,
   checkpointBarrierUnsatisfied,
+  checkpointGenerationBudget,
   findOverlappingInFlightReview,
   getDelegatedRunView,
+  recoverDelegatedCheckpoint,
   recordCheckpointReviewerLaunch,
   recordCheckpointReviewerResult,
   registerDelegatedPlan,
@@ -46,6 +48,7 @@ import {
   applyDelegatedResult,
   beginDelegatedLaunch,
   decideDelegatedWorkItem,
+  type RecoveryUserMessageSnapshot,
 } from "./delegated.js";
 import { createWorkItemStore, type WorkItemStore } from "./state.js";
 
@@ -932,3 +935,408 @@ async function readFile(path: string): Promise<string> {
   const { readFile: read } = await import("node:fs/promises");
   return read(path, "utf8");
 }
+
+// START_BLOCK_CHECKPOINT_RECOVERY_TESTS
+describe("bounded checkpoint recovery", () => {
+  function recoveryInput(runId: string, checkpointId: string, recoveryId: string) {
+    return {
+      sessionId: SESSION,
+      runId,
+      checkpointId,
+      diagnosis: "Reviewer could not reach the pinned snapshot content.",
+      changedCondition: "Missing scope file restored before the next generation.",
+      verification: ["src/lib/cache-store.ts"],
+      recoveryId,
+    };
+  }
+
+  function checkpointOf(runId: string, checkpointId: string) {
+    return store.getStoreData().planRuns.get(runId)!.checkpoints.get(checkpointId)!;
+  }
+
+  /** Drive one full generation: start, record every reviewer outcome, verify. */
+  async function driveGeneration(
+    runId: string,
+    checkpointId: string,
+    outcomes: Array<["spec" | "code", "PASS" | "FAIL" | "NEEDS_CONTEXT"]>,
+    callSuffix: string,
+  ): Promise<void> {
+    const launched = await startDelegatedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId,
+    });
+    if (!launched.ok) throw new Error(launched.message);
+    for (const [reviewer, status] of outcomes) {
+      const callId = `call-cp-${callSuffix}-${reviewer}`;
+      const bound = recordCheckpointReviewerLaunch(store, {
+        runId,
+        checkpointId,
+        reviewer,
+        callId,
+      });
+      if (!bound.ok) throw new Error(bound.message);
+      const recorded = recordCheckpointReviewerResult(store, {
+        runId,
+        checkpointId,
+        reviewer,
+        callId,
+        status,
+      });
+      if (!recorded.ok) throw new Error(recorded.message);
+    }
+    const verified = await verifyDelegatedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId,
+    });
+    if (!verified.ok) throw new Error(verified.message);
+  }
+
+  test("a stopped generation settles as historical stopped evidence and the next generation starts", async () => {
+    const { runId } = await registerWorkspace("recover-stopped");
+    await acceptTask(runId, "T-001", "s1");
+    await driveGeneration(runId, "CHECKPOINT-R-001", [["code", "NEEDS_CONTEXT"]], "stop1");
+
+    const checkpointBefore = checkpointOf(runId, "CHECKPOINT-R-001");
+    expect(checkpointBefore.status).toBe("in_review");
+    expect(checkpointBefore.lastOutcome).toBe("stopped");
+
+    // Rework stays locked: the live stopped checkpoint is not failed.
+    const rework = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      workItemId: workItemIdForTask(runId, "T-001"),
+      reason: "Attempting rework from a stop.",
+    });
+    expect(rework.ok).toBe(false);
+    if (!rework.ok) expect(rework.errorCode).toBe("CHECKPOINT_NOT_FAILED");
+
+    const recovered = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(runId, "CHECKPOINT-R-001", "rec-cp-stop-1"),
+    );
+    expect(recovered.ok).toBe(true);
+    if (!recovered.ok) return;
+    expect(recovered.kind).toBe("resume");
+    expect(recovered.settledStoppedGeneration).toBe(1);
+    expect(recovered.generationBudget).toBe(2);
+
+    const checkpoint = checkpointOf(runId, "CHECKPOINT-R-001");
+    expect(checkpoint.status).toBe("failed");
+    expect(checkpoint.lastOutcome).toBe("stopped");
+    expect(checkpoint.history[0]?.outcome).toBe("stopped");
+    expect(checkpoint.currentReview).toBeUndefined();
+    expect(checkpoint.recoveryHistory).toHaveLength(1);
+
+    // Rework stays locked after settlement too: a stop is still not a FAIL.
+    const reworkAfter = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      workItemId: workItemIdForTask(runId, "T-001"),
+      reason: "Attempting rework from a settled stop.",
+    });
+    expect(reworkAfter.ok).toBe(false);
+    if (!reworkAfter.ok) expect(reworkAfter.errorCode).toBe("HARD_STOP_CHECKPOINT");
+
+    // The second ordinary generation captures a fresh snapshot and passes.
+    await driveGeneration(runId, "CHECKPOINT-R-001", [["code", "PASS"]], "stop2");
+    const passed = checkpointOf(runId, "CHECKPOINT-R-001");
+    expect(passed.status).toBe("passed");
+    expect(passed.history).toHaveLength(2);
+  });
+
+  test("generation exhaustion recovers once autonomously, denies renewal, and accepts one fresh user authorization", async () => {
+    const { runId } = await registerWorkspace("recover-exhausted");
+    await acceptTask(runId, "T-001", "s1");
+    await acceptTask(runId, "T-002", "s2");
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "FAIL"],
+        ["code", "PASS"],
+      ],
+      "ex1",
+    );
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "FAIL"],
+        ["code", "PASS"],
+      ],
+      "ex2",
+    );
+
+    const blocked = await startDelegatedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId: "CHECKPOINT-R-002",
+    });
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.errorCode).toBe("ATTEMPTS_EXHAUSTED");
+
+    const granted = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(runId, "CHECKPOINT-R-002", "rec-cp-ex-1"),
+    );
+    expect(granted.ok).toBe(true);
+    if (!granted.ok) return;
+    expect(granted.kind).toBe("autonomous_grant");
+    expect(granted.generationBudget).toBe(3);
+
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "FAIL"],
+        ["code", "PASS"],
+      ],
+      "ex3",
+    );
+    const denied = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(runId, "CHECKPOINT-R-002", "rec-cp-ex-2"),
+    );
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) expect(denied.errorCode).toBe("AUTONOMOUS_GRANT_EXHAUSTED");
+
+    const stopTime = Date.now() - 5_000;
+    checkpointOf(runId, "CHECKPOINT-R-002").history[2]!.completedAt = new Date(
+      stopTime,
+    ).toISOString();
+
+    const messages = new Map<string, RecoveryUserMessageSnapshot>();
+    const lookup = async (_sessionId: string, messageId: string) => messages.get(messageId);
+    const unauthorized = await recoverDelegatedCheckpoint(store, {
+      ...recoveryInput(runId, "CHECKPOINT-R-002", "rec-cp-ex-user"),
+      userMessageId: "msg_cp_auth",
+      lookupUserMessage: lookup,
+    });
+    expect(unauthorized.ok).toBe(false);
+    if (!unauthorized.ok) {
+      expect(unauthorized.errorCode).toBe("AUTHORIZATION_NOT_FOUND");
+    }
+
+    messages.set("msg_cp_auth", {
+      role: "user",
+      sessionID: SESSION,
+      id: "msg_cp_auth",
+      timeCreatedMs: Date.now(),
+    });
+    const authorized = await recoverDelegatedCheckpoint(store, {
+      ...recoveryInput(runId, "CHECKPOINT-R-002", "rec-cp-ex-user"),
+      userMessageId: "msg_cp_auth",
+      lookupUserMessage: lookup,
+    });
+    expect(authorized.ok).toBe(true);
+    if (!authorized.ok) return;
+    expect(authorized.kind).toBe("user_grant");
+    expect(authorized.generationBudget).toBe(4);
+
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "FAIL"],
+        ["code", "PASS"],
+      ],
+      "ex4",
+    );
+    const replayed = await recoverDelegatedCheckpoint(store, {
+      ...recoveryInput(runId, "CHECKPOINT-R-002", "rec-cp-ex-user2"),
+      userMessageId: "msg_cp_auth",
+      lookupUserMessage: lookup,
+    });
+    expect(replayed.ok).toBe(false);
+    if (!replayed.ok) expect(replayed.errorCode).toBe("AUTHORIZATION_REUSED");
+  });
+
+  test("recovery never satisfies prerequisites, passes checkpoints, or recovers live work", async () => {
+    const { runId } = await registerWorkspace("recover-validation");
+    // Prerequisites missing: no accepted covered task.
+    const premature = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(runId, "CHECKPOINT-R-001", "rec-cp-v1"),
+    );
+    expect(premature.ok).toBe(false);
+    if (!premature.ok) expect(premature.errorCode).toBe("INVALID_TARGET_STATE");
+
+    await acceptTask(runId, "T-001", "s1");
+    await driveGeneration(runId, "CHECKPOINT-R-001", [["code", "PASS"]], "v1");
+    const passed = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(runId, "CHECKPOINT-R-001", "rec-cp-v2"),
+    );
+    expect(passed.ok).toBe(false);
+    if (!passed.ok) expect(passed.errorCode).toBe("ALREADY_PASSED");
+
+    // An ordinary single failure still has an ordinary generation available.
+    const failing = await registerWorkspace("recover-validation-2");
+    await acceptTask(failing.runId, "T-001", "f1");
+    await driveGeneration(failing.runId, "CHECKPOINT-R-001", [["code", "FAIL"]], "f1");
+    const ordinary = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(failing.runId, "CHECKPOINT-R-001", "rec-cp-f1"),
+    );
+    expect(ordinary.ok).toBe(false);
+    if (!ordinary.ok) {
+      expect(ordinary.errorCode).toBe("INVALID_TARGET_STATE");
+      expect(ordinary.message).toContain("ordinary generation");
+    }
+    const budget = checkpointGenerationBudget(checkpointOf(failing.runId, "CHECKPOINT-R-001"));
+    expect(budget).toBe(2);
+
+    // Run views expose budgets and next actions.
+    const view = getDelegatedRunView(store.getStoreData(), failing.runId);
+    const viewCheckpoints = (view?.checkpoints ?? []) as Array<Record<string, unknown>>;
+    const viewCheckpoint = viewCheckpoints.find(
+      (entry) => entry.checkpointId === "CHECKPOINT-R-001",
+    );
+    expect(viewCheckpoint?.generationBudget).toBe(2);
+    expect(viewCheckpoint?.remainingGenerations).toBe(1);
+    expect(viewCheckpoint?.nextAction).toBe("start_next_generation");
+
+    // A live in-review generation with an ordinary pending outcome is not a
+    // recovery target.
+    const liveRun = await registerWorkspace("recover-validation-3");
+    await acceptTask(liveRun.runId, "T-001", "l1");
+    await acceptTask(liveRun.runId, "T-002", "l2");
+    const started = await startDelegatedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: liveRun.runId,
+      checkpointId: "CHECKPOINT-R-002",
+    });
+    expect(started.ok).toBe(true);
+    const live = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(liveRun.runId, "CHECKPOINT-R-002", "rec-cp-l1"),
+    );
+    expect(live.ok).toBe(false);
+    if (!live.ok) {
+      expect(live.errorCode).toBe("INVALID_TARGET_STATE");
+      expect(live.message).toContain("live");
+    }
+
+    // Duplicate recoveryId on a settled stop is refused.
+    recordCheckpointReviewerResult(store, {
+      runId: liveRun.runId,
+      checkpointId: "CHECKPOINT-R-002",
+      reviewer: "spec",
+      status: "NEEDS_CONTEXT",
+    });
+    await verifyDelegatedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: liveRun.runId,
+      checkpointId: "CHECKPOINT-R-002",
+    });
+    // A stopped live generation suggests recovery, never more collection.
+    const stoppedView = getDelegatedRunView(store.getStoreData(), liveRun.runId);
+    const stoppedCheckpoints = (stoppedView?.checkpoints ?? []) as Array<Record<string, unknown>>;
+    const stoppedCheckpoint = stoppedCheckpoints.find(
+      (entry) => entry.checkpointId === "CHECKPOINT-R-002",
+    );
+    expect(stoppedCheckpoint?.nextAction).toBe("recover");
+    expect(stoppedCheckpoint?.remainingGenerations).toBe(1);
+    // Recovery counts expose granted units, not resume bookkeeping.
+    expect(stoppedCheckpoint?.recoveryCount).toBe(0);
+    const first = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(liveRun.runId, "CHECKPOINT-R-002", "rec-cp-l2"),
+    );
+    expect(first.ok).toBe(true);
+    if (first.ok) expect(first.settledStoppedGeneration).toBe(1);
+    const settledView = getDelegatedRunView(store.getStoreData(), liveRun.runId);
+    const settledCheckpoints = (settledView?.checkpoints ?? []) as Array<Record<string, unknown>>;
+    const settledCheckpoint = settledCheckpoints.find(
+      (entry) => entry.checkpointId === "CHECKPOINT-R-002",
+    );
+    expect(settledCheckpoint?.recoveryCount).toBe(0);
+    expect(settledCheckpoint?.remainingGenerations).toBe(1);
+    expect(settledCheckpoint?.nextAction).toBe("start_next_generation");
+    await driveGeneration(liveRun.runId, "CHECKPOINT-R-002", [["spec", "NEEDS_CONTEXT"]], "l2b");
+    const duplicate = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(liveRun.runId, "CHECKPOINT-R-002", "rec-cp-l2"),
+    );
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok) expect(duplicate.errorCode).toBe("DUPLICATE_RECOVERY_ID");
+  });
+
+  test("recovery does not unlock rework from a settled stop and preserved FAIL history stays intact", async () => {
+    const { runId } = await registerWorkspace("recover-rework");
+    await acceptTask(runId, "T-001", "s1");
+    await acceptTask(runId, "T-002", "s2");
+    // Generation 1 fails for a real reason; generation 2 stops; recovery
+    // settles the stop and grants generation 3, which fails concretely.
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "FAIL"],
+        ["code", "PASS"],
+      ],
+      "rw1",
+    );
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "NEEDS_CONTEXT"],
+        ["code", "PASS"],
+      ],
+      "rw2",
+    );
+    const recovered = await recoverDelegatedCheckpoint(
+      store,
+      recoveryInput(runId, "CHECKPOINT-R-002", "rec-cp-rw1"),
+    );
+    expect(recovered.ok).toBe(true);
+    if (!recovered.ok) return;
+    // Two consumed generations mean the recovery also grants the next unit.
+    expect(recovered.kind).toBe("autonomous_grant");
+    expect(recovered.generationBudget).toBe(3);
+
+    // While the settled stop is the latest outcome, rework stays locked.
+    const locked = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId: "CHECKPOINT-R-002",
+      workItemId: workItemIdForTask(runId, "T-002"),
+      reason: "The latest settled generation stopped, it did not fail.",
+    });
+    expect(locked.ok).toBe(false);
+    if (!locked.ok) expect(locked.errorCode).toBe("HARD_STOP_CHECKPOINT");
+
+    await driveGeneration(
+      runId,
+      "CHECKPOINT-R-002",
+      [
+        ["spec", "FAIL"],
+        ["code", "PASS"],
+      ],
+      "rw3",
+    );
+    const checkpoint = checkpointOf(runId, "CHECKPOINT-R-002");
+    // The FAIL from generation 1 remains history: recovery erased nothing.
+    expect(checkpoint.history.map((entry) => entry.outcome)).toEqual([
+      "failed",
+      "stopped",
+      "failed",
+    ]);
+
+    // Rework unlocked by the latest real FAIL, still bound to its checkpoint.
+    const reworked = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId,
+      checkpointId: "CHECKPOINT-R-002",
+      workItemId: workItemIdForTask(runId, "T-002"),
+      reason: "Real failure from the latest generation.",
+    });
+    expect(reworked.ok).toBe(true);
+  });
+});
+// END_BLOCK_CHECKPOINT_RECOVERY_TESTS

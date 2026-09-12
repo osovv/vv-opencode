@@ -95,7 +95,7 @@
       <Name>TrackedResultParsing</Name>
       <Action>A tracked subagent completes and returns protocol fields.</Action>
       <Goal>Parse machine-checkable top-block results, validate work-item identity and status, update workflow state, collect reviewer results, and fail closed on malformed output.</Goal>
-      <Acceptance>Valid results update state and counters deterministically, review-only FAIL is reported as completed findings, NEEDS_CONTEXT and BLOCKED halt automation, and malformed output triggers bounded repair only when safely resumable.</Acceptance>
+      <Acceptance>Valid results update state and counters deterministically, review-only FAIL is reported as completed findings, NEEDS_CONTEXT and BLOCKED halt automation, and malformed output triggers bounded repair only when safely resumable; a confirmed terminal delegated report that stays protocol-invalid settles as a report_rejected attempt with bounded diagnostics and any observed explicit hard stop preserved, never as DONE or a live in-flight attempt, while unknown or still-running host outcomes never clear a live attempt.</Acceptance>
       <RelatedFlow>DF-RESULT-PARSING</RelatedFlow>
     </UC-011>
     <UC-012>
@@ -109,28 +109,28 @@
       <Name>LoopGateAndHardStops</Name>
       <Action>A tracked implementation and review cycle repeats or a hard-stop status appears.</Action>
       <Goal>Prevent review churn and unsafe continuation by using explicit counters and hard-stop states.</Goal>
-      <Acceptance>Rounds one and two are allowed, round three is rejected with next-action guidance, NEEDS_CONTEXT and BLOCKED always return control to the main session or user, delegated retries use an independent two-attempt budget extended only by authorized rework, and no semantic similarity heuristics are used.</Acceptance>
+      <Acceptance>Rounds one and two are allowed, round three is rejected with next-action guidance, NEEDS_CONTEXT and BLOCKED always return control to the main session or user, delegated retries use an independent two-attempt budget extended only by authorized rework or recorded one-unit recovery, stopped or exhausted items never resume through an ordinary launch, and no semantic similarity heuristics are used.</Acceptance>
       <RelatedFlow>DF-LOOP-GATE</RelatedFlow>
     </UC-013>
     <UC-013A>
       <Name>DelegatedAcceptance</Name>
       <Action>The primary controller decides a completed delegated worker attempt.</Action>
       <Goal>Separate implementation ownership from controller acceptance so ordinary tasks need no reviewer dispatch while acceptance stays explicit, auditable, and bound to the current attempt.</Goal>
-      <Acceptance>A DONE worker parks its item in awaiting_acceptance and never closes or self-accepts it; only the primary root vv-controller session accepts or requests changes with bounded rationale, evidence, and an explicit concerns disposition; stale, duplicate, wrong-attempt, wrong-mode, and unauthorized decisions fail without mutation; checkpoint-authorized rework reopens an accepted task without resetting attempt history.</Acceptance>
+      <Acceptance>A DONE worker parks its item in awaiting_acceptance and never closes or self-accepts it; only the primary root vv-controller session accepts or requests changes with bounded rationale, evidence, and an explicit concerns disposition; stale, duplicate, wrong-attempt, wrong-mode, and unauthorized decisions fail without mutation; checkpoint-authorized rework reopens an accepted task without resetting attempt history; bounded recovery of a stopped or exhausted unaccepted task records an explicit diagnosis, changed condition, and verification references and grants at most one unit — the single autonomous grant per target first, then one unit per fresh root-user message validated for role, owning-session identity, timing, and non-reuse — while a recovery authorization is never acceptance, never satisfies a reviewer, and never authorizes scope, model, or reviewer changes; work-item and run inspection exposes remaining budgets and supported next actions instead of suggesting launches the same state rejects.</Acceptance>
       <RelatedFlow>DF-DELEGATED-ACCEPTANCE</RelatedFlow>
     </UC-013A>
     <UC-013B>
       <Name>ReviewCheckpoints</Name>
       <Action>The controller registers an approved delegated plan and runs its declared review checkpoints.</Action>
       <Goal>Spend independent review at meaningful milestones and one final gate instead of after every mechanical task, derived from the approved plan rather than model-supplied lists.</Goal>
-      <Acceptance>Registration validates the approved plan and linked spec, binds content hashes and the trusted workspace root, and is idempotent or explicitly drifting; a checkpoint starts only after its covered tasks are accepted, opens exactly the declared reviewer set against a pinned fingerprint, and passes only when every declared reviewer passes for that snapshot; failed, stale, and stopped checkpoints stay visible gates; the final checkpoint seals the run only after complete current coverage with fresh verification.</Acceptance>
+      <Acceptance>Registration accepts only its supported approved native plan package, validates the approved plan and linked spec, binds content hashes and the trusted workspace root, and is idempotent or explicitly drifting; a checkpoint starts only after its covered tasks are accepted, opens exactly the declared reviewer set against a pinned fingerprint, and passes only when every declared reviewer passes for that snapshot; failed, stale, and stopped checkpoints stay visible gates; the final checkpoint seals the run only after complete current coverage with fresh verification; a stopped or generation-exhausted checkpoint recovers through a bounded operation that settles the stop as historical evidence, preserves covered tasks, reviewers, and FAIL history, and grants at most one further generation per autonomous or replay-protected root-user-authorized unit without satisfying prerequisites or sealing the run.</Acceptance>
       <RelatedFlow>DF-REVIEW-CHECKPOINTS</RelatedFlow>
     </UC-013B>
     <UC-014>
       <Name>WorkflowAndSystemGuidance</Name>
       <Action>An eligible primary OpenCode session starts while vv-opencode plugins are active.</Action>
       <Goal>Inject reusable process guidance and workflow protocol instructions into primary sessions without polluting managed subagents.</Goal>
-      <Acceptance>vv-controller and other eligible primaries receive route-selection, context-gathering, editing, repository-memory, and work-item guidance; helper primaries and known subagents are skipped.</Acceptance>
+      <Acceptance>vv-controller and other eligible primaries receive route-selection, context-gathering, editing, repository-memory, and work-item guidance with material-assumption discipline, repository-answerable question resolution, and honest residual uncertainty — without mandatory per-claim reasoning labels or restatement rituals; managed controller, worker, and reviewer instructions distinguish worker stops, loop suspension, controller diagnosis, authorized recovery, and session completion, reserve handoff files for requested transfer or session end, keep declared reviews mandatory once selected, and distinguish initial review from scoped re-review; helper primaries and known subagents are skipped.</Acceptance>
       <RelatedFlow>DF-SYSTEM-CONTEXT</RelatedFlow>
       <RelatedFlow>DF-WORKFLOW-GUIDANCE</RelatedFlow>
     </UC-014>

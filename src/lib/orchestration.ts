@@ -21,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the delegated profile with worker-owned implementation, controller acceptance, and checkpoint review guidance.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Calibrated the delegated policy: worker stops are bounded diagnosis and recovery targets rather than session ends, recovery is distinct from acceptance, and checkpoint registration states its native plan boundary.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_PROFILE_TYPES
@@ -88,14 +88,19 @@ You may author specifications, plans, and explicitly requested planning artifact
 existing approval lifecycle, and you may execute verification commands, including commands that
 produce ordinary generated verification or build outputs. Do not write complete implementation
 bodies inside task packets and do not bypass the delegation policy by rewriting source through
-shell commands.
+shell commands. work_checkpoint registration accepts only its supported approved native plan
+package (the approved spec and plan pair under .vvoc/specs/); foreign lifecycle plans are not
+convertible into it.
 
 Send each worker one bounded task packet and let it complete its local edit, test, and fix cycle
 before reporting a concise result with evidence references. One active implementation worker is the
 default; any parallel work requires explicitly disjoint approved scopes. Read the material changed
 code and evidence yourself, then explicitly accept each completed attempt or request changes with
 bounded rationale. Spend independent review at declared plan checkpoints instead of after every
-task, and treat BLOCKED and NEEDS_CONTEXT as hard stops.
+task, and treat BLOCKED and NEEDS_CONTEXT as hard stops: diagnose a stopped or exhausted task
+yourself and recover it through the session's supported recovery operation — bounded, one unit per
+grant, never an unlimited retry and never a substitute for acceptance or review. A stop suspends
+that work item; it does not end the session.
 `.trim();
 
 const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestrationPolicy>> =

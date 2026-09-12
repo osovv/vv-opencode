@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/delegated.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Deterministic tests for delegated work-item attempts and explicit controller acceptance decisions.
-//   SCOPE: Delegated open validation, callID-bound attempt allocation and results, two-attempt budgets, accept/request_changes decisions with concerns disposition, wrong-attempt and duplicate rejections, guarded checkpoint-authorized rework, and legacy-mode isolation.
+//   PURPOSE: Deterministic tests for delegated work-item attempts, bounded recovery, report-rejection settlement, and explicit controller acceptance decisions.
+//   SCOPE: Delegated open validation, callID-bound attempt allocation and results, two-attempt budgets, accept/request_changes decisions with concerns disposition, wrong-attempt and duplicate rejections, guarded checkpoint-authorized rework, recovery resume and one-unit grants with autonomous and replay-protected root-user authorization, terminal report-rejection settlement preserving hard stops, recovery and rework interaction, and legacy-mode isolation.
 //   DEPENDS: [bun:test, src/plugins/workflow/delegated.ts, src/plugins/workflow/state.ts]
 //   LINKS: [M-WORKFLOW-DELEGATED, M-WORKFLOW-STATE, V-M-WORKFLOW-DELEGATED]
 //   ROLE: TEST
@@ -17,18 +17,22 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix inFlightAttempt after failed worker launch - Added failed-attempt transition coverage: bounded host failure evidence, consumed budget, retry gating, callID reuse rejection, ambiguous-history fail-closed, and acceptance rejection.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added recovery coverage: resume without manufactured budget, one autonomous grant then denial, root-user grants with provenance and replay rejection, report-rejection settlement, and rework/recovery interaction.]
 // END_CHANGE_SUMMARY
 
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createWorkItemStore, createWorkflowResultExcerpt, type WorkItemStore } from "./state.js";
 import {
   applyDelegatedLaunchFailure,
+  applyDelegatedReportRejection,
   applyDelegatedResult,
   beginDelegatedLaunch,
   currentDelegatedAcceptance,
   decideDelegatedWorkItem,
+  recoverDelegatedWorkItem,
   reworkDelegatedWorkItem,
+  summarizeDelegatedProgress,
+  type RecoveryUserMessageSnapshot,
 } from "./delegated.js";
 
 const SESSION = "session-delegated";
@@ -770,3 +774,596 @@ describe("confirmed host-terminal launch failures", () => {
   });
 });
 // END_BLOCK_FAILED_ATTEMPT_TESTS
+
+// START_BLOCK_RECOVERY_TESTS
+describe("bounded recovery of stopped or exhausted items", () => {
+  function recoveryInput(workItemId: string, attempt: number, recoveryId: string) {
+    return {
+      sessionId: SESSION,
+      workItemId,
+      attempt,
+      diagnosis: "Missing approval decision reached the worker packet.",
+      changedCondition: "Approval decision recorded before redispatch.",
+      verification: ["src/lib/feature.ts"],
+      recoveryId,
+    };
+  }
+
+  test("two rejected attempts stay unaccepted, block a third launch, and recovery grants exactly one attempt", async () => {
+    const opened = openDelegated({ key: "exhausted" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+
+    const first = runAttempt(workItemId, "call-ex-1", "DONE");
+    expect(first.ok).toBe(true);
+    const rejectedFirst = decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      decision: "request_changes",
+      rationale: "Missing branch handling.",
+      evidence: ["diff"],
+    });
+    expect(rejectedFirst.ok).toBe(true);
+
+    const second = runAttempt(workItemId, "call-ex-2", "DONE");
+    expect(second.ok).toBe(true);
+    const rejectedSecond = decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 2,
+      decision: "request_changes",
+      rationale: "Still missing the same branch.",
+      evidence: ["diff"],
+    });
+    expect(rejectedSecond.ok).toBe(true);
+    expect(currentDelegatedAcceptance(store.getWorkItem(SESSION, workItemId)!)).toBeUndefined();
+
+    const third = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-ex-3",
+    });
+    expect(third.ok).toBe(false);
+    if (!third.ok) expect(third.errorCode).toBe("ATTEMPTS_EXHAUSTED");
+
+    const recovered = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 2, "rec-ex-1"),
+    );
+    expect(recovered.ok).toBe(true);
+    if (!recovered.ok) return;
+    expect(recovered.kind).toBe("autonomous_grant");
+    expect(recovered.attemptBudget).toBe(3);
+    expect(recovered.remainingAttempts).toBe(1);
+    // History is preserved: both decisions remain recorded facts.
+    expect(store.getWorkItem(SESSION, workItemId)?.delegated?.decisions).toHaveLength(2);
+    expect(store.getWorkItem(SESSION, workItemId)?.delegated?.attempts).toHaveLength(2);
+
+    const relaunched = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-ex-3",
+    });
+    expect(relaunched.ok).toBe(true);
+    if (!relaunched.ok) return;
+    expect(relaunched.attempt).toBe(3);
+
+    const fourth = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-ex-4",
+    });
+    expect(fourth.ok).toBe(false);
+  });
+
+  test("a stop with ordinary budget remaining resumes without manufacturing budget", async () => {
+    const opened = openDelegated({ key: "stopped" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+
+    const stopped = runAttempt(workItemId, "call-st-1", "BLOCKED");
+    expect(stopped.ok).toBe(true);
+    expect(store.getWorkItem(SESSION, workItemId)?.state).toBe("blocked");
+
+    // Launching directly from the stop stays refused before recovery.
+    const direct = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-st-2",
+    });
+    expect(direct.ok).toBe(false);
+    if (!direct.ok) expect(direct.errorCode).toBe("INVALID_STATE");
+
+    const recovered = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 1, "rec-st-1"),
+    );
+    expect(recovered.ok).toBe(true);
+    if (!recovered.ok) return;
+    expect(recovered.kind).toBe("resume");
+    expect(recovered.attemptBudget).toBe(2);
+    expect(recovered.remainingAttempts).toBe(1);
+    expect(recovered.record.state).toBe("awaiting_implementer");
+    // The stop stays a historical fact with its bounded evidence.
+    expect(recovered.record.delegated?.attempts[0]?.resultStatus).toBe("BLOCKED");
+    const withExcerpt = store.getWorkItem(SESSION, workItemId);
+    expect(withExcerpt?.delegated?.attempts[0]?.resultExcerpt ?? withExcerpt?.resultExcerpt).toBe(
+      undefined,
+    );
+  });
+
+  test("the second autonomous grant is denied regardless of recoveryId; a fresh user message grants one more and replays are refused", async () => {
+    const opened = openDelegated({ key: "grants" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+
+    // Ladder: stop, resume, stop, autonomous grant, stop — then denials and
+    // the user-authorized extension.
+    runAttempt(workItemId, "call-gr-1", "BLOCKED");
+    const resumed = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 1, "rec-gr-resume"),
+    );
+    expect(resumed.ok).toBe(true);
+    runAttempt(workItemId, "call-gr-2", "BLOCKED");
+    const granted = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 2, "rec-gr-auto"),
+    );
+    expect(granted.ok).toBe(true);
+    if (!granted.ok) return;
+
+    runAttempt(workItemId, "call-gr-3", "BLOCKED");
+
+    const denied = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 3, "rec-gr-other-key"),
+    );
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) expect(denied.errorCode).toBe("AUTONOMOUS_GRANT_EXHAUSTED");
+    // The denial changed nothing.
+    expect(store.getWorkItem(SESSION, workItemId)?.delegated?.recoveryHistory).toHaveLength(2);
+
+    const stopTime = Date.now() - 10_000;
+    store
+      .getStoreData()
+      .records.get(`${SESSION}::${workItemId}`)!.delegated!.attempts[2]!.completedAt = new Date(
+      stopTime,
+    ).toISOString();
+
+    const lookupMessages = new Map<string, RecoveryUserMessageSnapshot>();
+    const lookup = async (_sessionId: string, messageId: string) => lookupMessages.get(messageId);
+    const userGrant = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 3, "rec-gr-user"),
+      userMessageId: "msg_auth_1",
+      lookupUserMessage: lookup,
+    });
+    expect(userGrant.ok).toBe(false);
+    if (!userGrant.ok) expect(userGrant.errorCode).toBe("AUTHORIZATION_NOT_FOUND");
+
+    lookupMessages.set("msg_auth_1", {
+      role: "assistant",
+      sessionID: SESSION,
+      id: "msg_auth_1",
+      timeCreatedMs: Date.now(),
+    });
+    const assistantAuth = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 3, "rec-gr-user"),
+      userMessageId: "msg_auth_1",
+      lookupUserMessage: lookup,
+    });
+    expect(assistantAuth.ok).toBe(false);
+    if (!assistantAuth.ok) {
+      expect(assistantAuth.errorCode).toBe("AUTHORIZATION_NOT_USER_MESSAGE");
+    }
+
+    lookupMessages.set("msg_auth_1", {
+      role: "user",
+      sessionID: "ses_other_session",
+      id: "msg_auth_1",
+      timeCreatedMs: Date.now(),
+    });
+    const foreignAuth = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 3, "rec-gr-user"),
+      userMessageId: "msg_auth_1",
+      lookupUserMessage: lookup,
+    });
+    expect(foreignAuth.ok).toBe(false);
+    if (!foreignAuth.ok) {
+      expect(foreignAuth.errorCode).toBe("AUTHORIZATION_SESSION_MISMATCH");
+    }
+
+    lookupMessages.set("msg_auth_1", {
+      role: "user",
+      sessionID: SESSION,
+      id: "msg_auth_1",
+      timeCreatedMs: stopTime - 60_000,
+    });
+    const staleAuth = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 3, "rec-gr-user"),
+      userMessageId: "msg_auth_1",
+      lookupUserMessage: lookup,
+    });
+    expect(staleAuth.ok).toBe(false);
+    if (!staleAuth.ok) expect(staleAuth.errorCode).toBe("AUTHORIZATION_STALE");
+
+    lookupMessages.set("msg_auth_1", {
+      role: "user",
+      sessionID: SESSION,
+      id: "msg_auth_1",
+      timeCreatedMs: Date.now(),
+    });
+    const authorized = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 3, "rec-gr-user"),
+      userMessageId: "msg_auth_1",
+      lookupUserMessage: lookup,
+    });
+    expect(authorized.ok).toBe(true);
+    if (!authorized.ok) return;
+    expect(authorized.kind).toBe("user_grant");
+    expect(authorized.attemptBudget).toBe(4);
+
+    runAttempt(workItemId, "call-gr-4", "BLOCKED");
+    const replayed = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 4, "rec-gr-user-2"),
+      userMessageId: "msg_auth_1",
+      lookupUserMessage: lookup,
+    });
+    expect(replayed.ok).toBe(false);
+    if (!replayed.ok) expect(replayed.errorCode).toBe("AUTHORIZATION_REUSED");
+
+    const freshMessage = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 4, "rec-gr-user-3"),
+      userMessageId: "msg_auth_2",
+      lookupUserMessage: lookup,
+    });
+    expect(freshMessage.ok).toBe(false);
+    if (!freshMessage.ok) expect(freshMessage.errorCode).toBe("AUTHORIZATION_NOT_FOUND");
+  });
+
+  test("recovery targets are validated: live attempts, wrong attempts, decided items, accepted items, and duplicate ids", async () => {
+    const opened = openDelegated({ key: "targets" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-tg-live" });
+    const live = await recoverDelegatedWorkItem(store, recoveryInput(workItemId, 1, "rec-tg-1"));
+    expect(live.ok).toBe(false);
+    if (!live.ok) expect(live.errorCode).toBe("INVALID_TARGET_STATE");
+
+    applyDelegatedResult(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-tg-live",
+      resultStatus: "DONE",
+    });
+    const decided = await recoverDelegatedWorkItem(store, recoveryInput(workItemId, 1, "rec-tg-2"));
+    expect(decided.ok).toBe(false);
+    if (!decided.ok) expect(decided.errorCode).toBe("INVALID_TARGET_STATE");
+
+    decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Accepted for rework interaction checks.",
+      evidence: ["diff"],
+    });
+    const accepted = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 1, "rec-tg-3"),
+    );
+    expect(accepted.ok).toBe(false);
+    if (!accepted.ok) expect(accepted.errorCode).toBe("INVALID_TARGET_STATE");
+
+    // A wrong attempt number on a genuinely exhausted item is a mismatch.
+    const exhaustedItem = openDelegated({ key: "targets-exhausted" });
+    if (!exhaustedItem.ok) throw new Error("open failed");
+    const exhaustedId = exhaustedItem.record.workItemId;
+    for (const callId of ["call-tg-e1", "call-tg-e2"]) {
+      runAttempt(exhaustedId, callId, "DONE");
+      decideDelegatedWorkItem(store, {
+        sessionId: SESSION,
+        workItemId: exhaustedId,
+        attempt: callId.endsWith("e1") ? 1 : 2,
+        decision: "request_changes",
+        rationale: "Rejected to exhaust the ordinary budget.",
+        evidence: ["diff"],
+      });
+    }
+    const wrongAttempt = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(exhaustedId, 7, "rec-tg-4"),
+    );
+    expect(wrongAttempt.ok).toBe(false);
+    if (!wrongAttempt.ok) expect(wrongAttempt.errorCode).toBe("ATTEMPT_MISMATCH");
+
+    const matched = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(exhaustedId, 2, "rec-tg-4b"),
+    );
+    expect(matched.ok).toBe(true);
+    if (matched.ok) expect(matched.kind).toBe("autonomous_grant");
+
+    // A reused recoveryId is refused on the next eligible stop.
+    runAttempt(exhaustedId, "call-tg-e3", "BLOCKED");
+    const duplicate = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(exhaustedId, 3, "rec-tg-4b"),
+    );
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok) expect(duplicate.errorCode).toBe("DUPLICATE_RECOVERY_ID");
+
+    // Open-state item with no attempts has nothing to recover.
+    const fresh = openDelegated({ key: "fresh-target" });
+    if (!fresh.ok) throw new Error("open failed");
+    const nothing = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(fresh.record.workItemId, 1, "rec-tg-5"),
+    );
+    expect(nothing.ok).toBe(false);
+    if (!nothing.ok) expect(nothing.errorCode).toBe("INVALID_TARGET_STATE");
+
+    // Bounded text is enforced.
+    const bounded = await recoverDelegatedWorkItem(store, {
+      ...recoveryInput(workItemId, 2, "rec-tg-6"),
+      diagnosis: "",
+    });
+    expect(bounded.ok).toBe(false);
+    if (!bounded.ok) expect(bounded.errorCode).toBe("INVALID_INPUT");
+  });
+
+  test("recovery cannot reset rework identity and rework cannot consume recovery grants", async () => {
+    const opened = openDelegated({ key: "interplay" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+
+    runAttempt(workItemId, "call-ip-1", "BLOCKED");
+    const resumed = await recoverDelegatedWorkItem(store, recoveryInput(workItemId, 1, "rec-ip-1"));
+    expect(resumed.ok).toBe(true);
+    runAttempt(workItemId, "call-ip-2", "DONE");
+    decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 2,
+      decision: "accept",
+      rationale: "Accepted for the interplay fixture.",
+      evidence: ["diff"],
+    });
+    reworkDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      planRunId: "run-ip",
+      failedCheckpointId: "cp-ip-1",
+      reason: "First checkpoint failure.",
+    });
+    // While unaccepted, replaying the rework is a state rejection.
+    const reworkWhileOpen = reworkDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      planRunId: "run-ip",
+      failedCheckpointId: "cp-ip-1",
+      reason: "Replaying while not accepted.",
+    });
+    expect(reworkWhileOpen.ok).toBe(false);
+    if (!reworkWhileOpen.ok) expect(reworkWhileOpen.errorCode).toBe("INVALID_STATE");
+
+    runAttempt(workItemId, "call-ip-3", "DONE");
+    decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 3,
+      decision: "accept",
+      rationale: "Corrected after the first rework.",
+      evidence: ["diff"],
+    });
+    // Re-accepting does not reset rework identity: the same checkpoint cannot
+    // authorize a second rework.
+    const reworkAgain = reworkDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      planRunId: "run-ip",
+      failedCheckpointId: "cp-ip-1",
+      reason: "Replaying the same checkpoint.",
+    });
+    expect(reworkAgain.ok).toBe(false);
+    if (!reworkAgain.ok) expect(reworkAgain.errorCode).toBe("ALREADY_REWORKED");
+
+    reworkDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      planRunId: "run-ip",
+      failedCheckpointId: "cp-ip-2",
+      reason: "Second checkpoint failure.",
+    });
+    runAttempt(workItemId, "call-ip-4", "BLOCKED");
+    const afterRework = await recoverDelegatedWorkItem(
+      store,
+      recoveryInput(workItemId, 4, "rec-ip-2"),
+    );
+    expect(afterRework.ok).toBe(true);
+    if (!afterRework.ok) return;
+    // Two rework grants fund attempts 3 and 4; the recovery grant adds one
+    // unit without touching rework identity.
+    expect(afterRework.kind).toBe("autonomous_grant");
+    expect(afterRework.attemptBudget).toBe(5);
+
+    const progress = summarizeDelegatedProgress(store.getWorkItem(SESSION, workItemId)!);
+    expect(progress.attemptsConsumed).toBe(4);
+    expect(progress.attemptBudget).toBe(5);
+    expect(progress.remainingAttempts).toBe(1);
+    expect(progress.autonomousGrantConsumed).toBe(true);
+    expect(progress.recoveryGrants).toBe(1);
+    expect(progress.nextAction).toBe("launch_implementer");
+  });
+});
+// END_BLOCK_RECOVERY_TESTS
+
+// START_BLOCK_REPORT_REJECTION_TESTS
+describe("terminal report-rejection settlement", () => {
+  function rejectionExcerpt(text: string) {
+    return createWorkflowResultExcerpt({ text, source: "normalized_output" })!;
+  }
+
+  test("settles a call-bound in-flight attempt as report_rejected without fabricating DONE", () => {
+    const opened = openDelegated({ key: "report-rejected" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-rr-1" });
+
+    const settled = applyDelegatedReportRejection(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-rr-1",
+      protocolErrorCode: "MISSING_STATUS",
+      excerpt: rejectionExcerpt("Plain prose without a protocol header."),
+    });
+    expect(settled.ok).toBe(true);
+    if (!settled.ok) return;
+    expect(settled.attempt).toBe(1);
+    expect(settled.observedHardStop).toBeUndefined();
+    expect(settled.consumedAttempts).toBe(1);
+    expect(settled.attemptBudget).toBe(2);
+
+    const record = store.getWorkItem(SESSION, workItemId)!;
+    expect(record.state).toBe("awaiting_implementer");
+    expect(record.delegated?.attempts[0]?.status).toBe("report_rejected");
+    expect(record.delegated?.attempts[0]?.resultStatus).toBeUndefined();
+    expect(record.delegated?.attempts[0]?.reportRejection?.protocolErrorCode).toBe(
+      "MISSING_STATUS",
+    );
+
+    const decision = decideDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "A rejected report is not acceptable.",
+      evidence: ["diff"],
+    });
+    expect(decision.ok).toBe(false);
+
+    const progress = summarizeDelegatedProgress(record);
+    expect(progress.reportRejectedAttempts).toBe(1);
+    expect(progress.nextAction).toBe("launch_implementer");
+  });
+
+  test("an explicit hard stop inside malformed output is preserved, not continued", async () => {
+    const opened = openDelegated({ key: "rejected-stop" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-rr-2" });
+
+    const settled = applyDelegatedReportRejection(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-rr-2",
+      protocolErrorCode: "MISSING_ROUTE",
+      excerpt: rejectionExcerpt(
+        "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: BLOCKED\nBlocked at the missing approval gate.",
+      ),
+      explicitHardStop: "BLOCKED",
+    });
+    expect(settled.ok).toBe(true);
+    if (!settled.ok) return;
+    expect(settled.observedHardStop).toBe("BLOCKED");
+
+    const record = store.getWorkItem(SESSION, workItemId)!;
+    expect(record.state).toBe("blocked");
+    expect(record.resultExcerpt?.text).toContain("missing approval gate");
+
+    const progress = summarizeDelegatedProgress(record);
+    expect(progress.nextAction).toBe("recover");
+
+    const recovered = await recoverDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      diagnosis: "Blocked on a missing approval decision.",
+      changedCondition: "Decision recorded before redispatch.",
+      verification: ["src/lib/feature.ts"],
+      recoveryId: "rec-rr-1",
+    });
+    expect(recovered.ok).toBe(true);
+    if (!recovered.ok) return;
+    expect(recovered.kind).toBe("resume");
+    expect(recovered.record.state).toBe("awaiting_implementer");
+  });
+
+  test("stale callbacks and unknown calls never mutate the live attempt", () => {
+    const opened = openDelegated({ key: "rejected-stale" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-rr-live" });
+
+    const stale = applyDelegatedReportRejection(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-rr-other",
+      protocolErrorCode: "MISSING_STATUS",
+      excerpt: rejectionExcerpt("Mismatched call."),
+    });
+    expect(stale.ok).toBe(false);
+    if (!stale.ok) expect(stale.errorCode).toBe("STALE_CALLBACK");
+
+    const record = store.getWorkItem(SESSION, workItemId)!;
+    expect(record.delegated?.attempts[0]?.status).toBe("in_flight");
+    expect(record.state).toBe("awaiting_implementer");
+  });
+
+  test("a throwing authorization lookup fails closed as a lookup failure", async () => {
+    const opened = openDelegated({ key: "lookup-failure" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    runAttempt(workItemId, "call-lf-1", "BLOCKED");
+    await recoverDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      diagnosis: "Worker lacked the approval decision.",
+      changedCondition: "Approval decision recorded before redispatch.",
+      verification: ["src/lib/feature.ts"],
+      recoveryId: "rec-lf-resume",
+    });
+    runAttempt(workItemId, "call-lf-2", "BLOCKED");
+
+    const failed = await recoverDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 2,
+      diagnosis: "Repeated stop with the session service down.",
+      changedCondition: "Waiting for a durable authorization lookup.",
+      verification: ["src/lib/feature.ts"],
+      recoveryId: "rec-lf-user",
+      userMessageId: "msg_transport_down",
+      lookupUserMessage: async () => {
+        throw new Error("session service unavailable");
+      },
+    });
+    expect(failed.ok).toBe(false);
+    if (!failed.ok) expect(failed.errorCode).toBe("AUTHORIZATION_LOOKUP_FAILED");
+    // The denial changed no counters or state.
+    expect(store.getWorkItem(SESSION, workItemId)?.delegated?.recoveryHistory).toHaveLength(1);
+  });
+
+  test("an in-flight attempt suggests awaiting the result, never a rejected launch", () => {
+    const opened = openDelegated({ key: "in-flight-progress" });
+    if (!opened.ok) throw new Error("open failed");
+    const workItemId = opened.record.workItemId;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId: "call-ifp-1" });
+
+    const progress = summarizeDelegatedProgress(store.getWorkItem(SESSION, workItemId)!);
+    expect(progress.hasInFlightAttempt).toBe(true);
+    expect(progress.nextAction).toBe("await_result");
+    // The same state rejects an ordinary launch.
+    const rejected = beginDelegatedLaunch(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-ifp-2",
+    });
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.errorCode).toBe("ATTEMPT_IN_FLIGHT");
+  });
+});
+// END_BLOCK_REPORT_REJECTION_TESTS

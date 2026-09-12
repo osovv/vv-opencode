@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.5.3
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
-//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership, bounded implementer impact investigation, evidence-based reviewer verdicts, investigator property reporting, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
+//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership and stop/recovery distinction with reserved handoffs, bounded implementer impact investigation and worker-stop semantics, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CORRECTNESS-OBLIGATIONS-PROMPTS - Added correctness-leadership, bounded impact investigation, material verification gap, evidential support, and violated-property coverage; superseded search-boundary and unconditional no-findings PASS directions.]
+//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Calibrated stop/recovery/completion distinctions, reserved handoffs, repository-answerable questions, and scoped re-review guidance; superseded the automatic blocker-to-handoff-file direction.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -71,7 +71,7 @@ describe("managed agent prompts", () => {
     expect(template).toContain("<reroute_on_evidence>");
     expect(template).toContain("<skill_trigger_rule>");
     expect(template).toContain("<large_feature_gate>");
-    expect(template).toContain("<hard_stop_handoff>");
+    expect(template).toContain("<stop_and_recovery>");
     expect(template).toContain("<plan_artifacts>");
     expect(template).toContain("<final_response_format>");
     expect(template).toContain("Match the user's language");
@@ -94,6 +94,31 @@ describe("managed agent prompts", () => {
     ]) {
       expect(template).not.toContain(inactivePolicyTerm);
     }
+  });
+
+  test("vv-controller template distinguishes stops, recovery, and completion without automatic handoff files", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const normalized = template.replace(/\s+/g, " ");
+
+    // The automatic blocker-to-handoff-file ritual is gone.
+    expect(template).not.toContain("<hard_stop_handoff>");
+    expect(template).not.toContain("leave a compact handoff");
+
+    expect(normalized).toContain(
+      "A worker stop or an exhausted bounded loop returns control to you for diagnosis: it suspends that work, it does not end the session",
+    );
+    expect(normalized).toContain("never redispatch the unchanged stopped item");
+    expect(normalized).toContain("never grant yourself unlimited retries");
+    expect(normalized).toContain("it is not acceptance, not a passing review, and not completion");
+    expect(normalized).toContain(
+      "A handoff file is written only when the user asks for a transfer or the session genuinely ends",
+    );
+    expect(normalized).toContain(
+      "Resolve repository-answerable technical questions yourself from the established code, contracts, and tests",
+    );
+    expect(normalized).toContain(
+      "only a genuine business-semantics fork needs a new user decision",
+    );
   });
 
   test("vv-controller template carries profile-neutral correctness leadership", async () => {
@@ -172,6 +197,31 @@ describe("managed agent prompts", () => {
     expect(template).toContain("explicitly decides");
     expect(template).toContain("an attempt counter or rework authorization in the packet");
     expect(template).toContain("Reference evidence by path and command output");
+    expect(template.replace(/\s+/g, " ")).toContain(
+      "A stop is about this assignment, not the end of the session",
+    );
+  });
+
+  test("reviewer templates distinguish initial review from scoped re-review", async () => {
+    const specTemplate = await loadManagedAgentPromptTemplate("vv-spec-reviewer");
+    const codeTemplate = await loadManagedAgentPromptTemplate("vv-code-reviewer");
+
+    for (const template of [specTemplate, codeTemplate]) {
+      const normalized = template.replace(/\s+/g, " ");
+      expect(normalized).toContain("Distinguish an initial review from a scoped re-review");
+      expect(normalized).toContain("effects the fix itself could have caused");
+      expect(normalized).toContain("directly affected consumers where necessary");
+      expect(normalized).toContain(
+        "unrelated optional improvements observed during a re-review do not renew the correction loop",
+      );
+      expect(normalized).toContain("never downgraded merely to finish");
+    }
+    expect(specTemplate.replace(/\s+/g, " ")).toContain(
+      "first confirm each prior finding is actually resolved",
+    );
+    expect(codeTemplate.replace(/\s+/g, " ")).toContain(
+      "first verify each prior finding against the fix",
+    );
   });
 
   test("reviewer templates judge pinned snapshots without claiming task acceptance", async () => {
