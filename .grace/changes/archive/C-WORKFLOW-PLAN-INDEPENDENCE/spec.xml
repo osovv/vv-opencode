@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-WORKFLOW-PLAN-INDEPENDENCE>
     <Summary>Make delegated execution independent of plan documents, support controller-defined review obligations, and honor explicitly delegated autonomy without losing bounded recovery or truthful acceptance.</Summary>
     <Problem>Standalone delegated tasks can run without a plan, but checkpoint registration and run state require a native approved spec/plan pair. General controller and skill instructions still impose native document and approval ceremonies outside their intended pipeline. Recovery authorization after ordinary allowances requires a user message newer than the stop, so a prior instruction to finish autonomously cannot authorize later bounded continuation.</Problem>

@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-WORKFLOW-PLAN-INDEPENDENCE>
     <IntentSummary>Make native-package, provided-plan, and conversation-scoped delegated work use one execution contract, enforce explicitly assigned reviews without mandatory documents, and add execution-scoped advance authority with a shared finite recovery reserve. Preserve native validation, legacy work, truthful approval provenance, host permissions, and controller acceptance. This plan changes package sources and managed templates only after separate plan approval; it does not authorize a commit, installation, configuration change, or release.</IntentSummary>
     <BaselineAssertions>
