@@ -4,21 +4,26 @@
 //   PURPOSE: Hydrate and snapshot work-item workflow state from/to per-session JSON
 //     files under $XDG_DATA_HOME/vvoc/workflow/<sessionId>/workflow-state.json.
 //   SCOPE: Read/write WorkItemStoreData (nextId, records, keyIndexBySession,
-//     planRuns) as serializable JSON. Version 3 snapshots additionally persist
+//     planRuns, executions, messageClaims) as serializable JSON. Version 4
+//     snapshots additionally persist the common execution registry and
+//     session-wide root-message claims. Version 3 snapshots persist
 //     delegated and checkpoint recovery histories with replay-protected
 //     authorization references, recovery-aware attempt and generation budgets,
 //     and report_rejected attempts carrying bounded rejected-report evidence
 //     through an atomic temporary-file replacement. Version 2 files hydrate
 //     conservatively with empty recovery histories and unchanged budgets;
 //     version 1 files hydrate as legacy records with an empty plan-run
-//     registry. Neither ever synthesizes acceptance, approval, or recovery.
+//     registry. Existing native plan runs materialize a compatibility
+//     execution registry entry without inventing authority. Neither ever
+//     synthesizes acceptance, approval, or recovery.
 //     Strict validation rejects malformed or contradictory new state instead of
 //     silently restarting a run. A checked loader distinguishes missing, valid,
 //     and invalid state and surfaces I/O failures.
 //   DEPENDS: [node:fs, node:fs/promises, node:path, src/lib/vvoc-paths.ts,
+//     src/lib/workflow-contract.ts,
 //     src/plugins/workflow/checkpoints.ts (types), src/plugins/workflow/delegated.ts,
-//     src/plugins/workflow/state.ts]
-//   LINKS: M-WORKFLOW-PERSISTENCE, M-CONFIG-LAYERS, M-WORKFLOW-STATE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-WORKFLOW-PERSISTENCE
+//     src/plugins/workflow/execution.ts, src/plugins/workflow/state.ts]
+//   LINKS: M-WORKFLOW-PERSISTENCE, M-CONFIG-LAYERS, M-WORKFLOW-STATE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-EXECUTION, M-WORKFLOW-CONTRACT, V-M-WORKFLOW-PERSISTENCE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -27,6 +32,7 @@
 //   PERSISTED_WORKFLOW_STATE_VERSION - Current persisted snapshot version.
 //   PersistedWorkflowState - JSON-serializable shape of a per-session workflow state.
 //   SerializedDelegatedPlanRun - JSON form of one registered plan run.
+//   SerializedWorkflowExecution - JSON form of one common execution registry entry.
 //   HydratedWorkflowStateResult - Missing/valid/invalid triage returned by the checked loader.
 //   SnapshotWorkflowStateResult - Write outcome returned by the checked snapshot path.
 //   getWorkflowSessionDir - Resolve per-session directory path.
@@ -38,14 +44,21 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Version 3 persists recovery histories, replay-protected authorization references, recovery-aware budgets, and report_rejected attempts; versions 1 and 2 hydrate conservatively with empty recovery histories.]
+//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Version 4 persists the common execution registry and session-wide message claims while explicitly migrating v1/v2/v3 without clearing recovery, rejected-report, or stopped-generation history.]
 // END_CHANGE_SUMMARY
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { getGlobalVvocDataDir } from "../../lib/vvoc-paths.js";
-import { normalizeDeclaredScopePath } from "../../lib/spec-lint.js";
+import { normalizeDeclaredScopePath } from "../../lib/workflow-contract.js";
+import type { WorkflowMessageClaim } from "../../lib/workflow-contract.js";
+import type {
+  WorkflowCheckpointBinding,
+  WorkflowExecutionRecord,
+  WorkflowTaskBinding,
+} from "./execution.js";
+import { ensureNativeExecutions } from "./execution.js";
 import type {
   DelegatedAcceptanceRecord,
   DelegatedAttempt,
@@ -82,16 +95,20 @@ import type {
 } from "./state.js";
 
 // START_BLOCK_SERIALIZATION_TYPES
-export const PERSISTED_WORKFLOW_STATE_VERSION = 3;
+export const PERSISTED_WORKFLOW_STATE_VERSION = 4;
+
+/** Version at which delegated/checkpoint recovery histories and report rejections were introduced. */
+const RECOVERY_STATE_VERSION = 3;
 
 /**
  * JSON-serializable shape of a per-session workflow state. Version 1 legacy
  * files lack planRuns; version 2 files carry delegated and plan-run state
  * without recovery histories; version 3 files additionally carry recovery
- * histories and report-rejected attempts.
+ * histories and report-rejected attempts; version 4 adds the common execution
+ * registry together with session-wide message claims.
  */
 export type PersistedWorkflowState = {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   updatedAt: string;
   sessionId: string;
   nextId: number;
@@ -101,12 +118,22 @@ export type PersistedWorkflowState = {
   keyIndex: Record<string, string>;
   /** Version 2 and later: registered delegated plan runs. */
   planRuns?: SerializedDelegatedPlanRun[];
+  /** Version 4 and later: common execution registry entries. */
+  executions?: SerializedWorkflowExecution[];
+  /** Version 4 and later: session-wide root-message claims preventing replay. */
+  messageClaims?: WorkflowMessageClaim[];
 };
 
 /** JSON form of one registered plan run with maps flattened to arrays. */
 export type SerializedDelegatedPlanRun = Omit<DelegatedPlanRun, "tasks" | "checkpoints"> & {
   tasks: Array<{ taskId: string; workItemId: string }>;
   checkpoints: DelegatedRunCheckpoint[];
+};
+
+/** JSON form of one common execution with maps flattened to arrays. */
+export type SerializedWorkflowExecution = Omit<WorkflowExecutionRecord, "tasks" | "checkpoints"> & {
+  tasks: Array<[string, WorkflowTaskBinding]>;
+  checkpoints: Array<[string, WorkflowCheckpointBinding]>;
 };
 
 export type HydratedWorkflowStateResult =
@@ -348,9 +375,9 @@ function validateDelegatedState(
         );
       }
     } else if (attempt.status === "report_rejected") {
-      if (version < PERSISTED_WORKFLOW_STATE_VERSION) {
+      if (version < RECOVERY_STATE_VERSION) {
         errors.push(
-          `${record.workItemId}: report_rejected attempts require persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+          `${record.workItemId}: report_rejected attempts require persisted version ${RECOVERY_STATE_VERSION}`,
         );
       }
       if (typeof attempt.completedAt !== "string") {
@@ -404,12 +431,12 @@ function validateDelegatedState(
 
   const recoveryHistory = delegated.recoveryHistory;
   if (!Array.isArray(recoveryHistory)) {
-    if (version >= PERSISTED_WORKFLOW_STATE_VERSION) {
+    if (version >= RECOVERY_STATE_VERSION) {
       errors.push(`${record.workItemId}: version 3 delegated records require a recovery history`);
     }
-  } else if (recoveryHistory.length > 0 && version < PERSISTED_WORKFLOW_STATE_VERSION) {
+  } else if (recoveryHistory.length > 0 && version < RECOVERY_STATE_VERSION) {
     errors.push(
-      `${record.workItemId}: recovery history requires persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+      `${record.workItemId}: recovery history requires persisted version ${RECOVERY_STATE_VERSION}`,
     );
   } else {
     const recoveryIds = new Set<string>();
@@ -751,9 +778,9 @@ function validatePlanRun(
           `checkpoint ${checkpoint.checkpointId} history has invalid outcome ${entry.outcome}`,
         );
       }
-      if (entry.outcome === "stopped" && version < PERSISTED_WORKFLOW_STATE_VERSION) {
+      if (entry.outcome === "stopped" && version < RECOVERY_STATE_VERSION) {
         errors.push(
-          `checkpoint ${checkpoint.checkpointId} stopped history requires persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+          `checkpoint ${checkpoint.checkpointId} stopped history requires persisted version ${RECOVERY_STATE_VERSION}`,
         );
       }
       if (typeof entry.generation !== "number" || typeof entry.fingerprint !== "string") {
@@ -763,14 +790,14 @@ function validatePlanRun(
 
     const recoveryHistory = checkpoint.recoveryHistory;
     if (!Array.isArray(recoveryHistory)) {
-      if (version >= PERSISTED_WORKFLOW_STATE_VERSION) {
+      if (version >= RECOVERY_STATE_VERSION) {
         errors.push(
-          `checkpoint ${checkpoint.checkpointId} requires a recovery history at persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+          `checkpoint ${checkpoint.checkpointId} requires a recovery history at persisted version ${RECOVERY_STATE_VERSION}`,
         );
       }
-    } else if (recoveryHistory.length > 0 && version < PERSISTED_WORKFLOW_STATE_VERSION) {
+    } else if (recoveryHistory.length > 0 && version < RECOVERY_STATE_VERSION) {
       errors.push(
-        `checkpoint ${checkpoint.checkpointId} recovery history requires persisted version ${PERSISTED_WORKFLOW_STATE_VERSION}`,
+        `checkpoint ${checkpoint.checkpointId} recovery history requires persisted version ${RECOVERY_STATE_VERSION}`,
       );
     } else {
       const recoveryIds = new Set<string>();
@@ -912,6 +939,94 @@ function serializePlanRun(run: DelegatedPlanRun): SerializedDelegatedPlanRun {
   };
 }
 
+// START_BLOCK_EXECUTION_SERIALIZATION
+function serializeWorkflowExecution(
+  execution: WorkflowExecutionRecord,
+): SerializedWorkflowExecution {
+  return {
+    ...execution,
+    tasks: [...execution.tasks.entries()],
+    checkpoints: [...execution.checkpoints.entries()],
+  };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function validateWorkflowExecution(
+  candidate: SerializedWorkflowExecution,
+  sessionId: string,
+  errors: string[],
+): boolean {
+  const before = errors.length;
+  if (!isNonEmptyString(candidate.runId)) errors.push("execution requires a runId");
+  if (candidate.sessionId !== sessionId) {
+    errors.push(`execution ${candidate.runId} belongs to another session`);
+  }
+  if (!isNonEmptyString(candidate.workspaceRoot)) {
+    errors.push(`execution ${candidate.runId} requires a workspaceRoot`);
+  }
+  if (!isNonEmptyString(candidate.executionKey)) {
+    errors.push(`execution ${candidate.runId} requires an executionKey`);
+  }
+  if (!isNonEmptyString(candidate.goal)) {
+    errors.push(`execution ${candidate.runId} requires a goal`);
+  }
+  if (
+    candidate.state !== "preparing" &&
+    candidate.state !== "active" &&
+    candidate.state !== "sealed"
+  ) {
+    errors.push(`execution ${candidate.runId} has invalid state ${String(candidate.state)}`);
+  }
+  if (!Number.isInteger(candidate.revision) || candidate.revision < 1) {
+    errors.push(`execution ${candidate.runId} requires a positive revision`);
+  }
+  if (!candidate.source || typeof candidate.source !== "object") {
+    errors.push(`execution ${candidate.runId} requires a source`);
+  } else if (
+    candidate.source.kind !== "native-package" &&
+    candidate.source.kind !== "provided-plan" &&
+    candidate.source.kind !== "conversation-scoped"
+  ) {
+    errors.push(`execution ${candidate.runId} has an invalid source kind`);
+  }
+  if (
+    !candidate.boundary ||
+    !Array.isArray(candidate.boundary.files) ||
+    !Array.isArray(candidate.boundary.directories)
+  ) {
+    errors.push(`execution ${candidate.runId} requires a boundary with files and directories`);
+  }
+  if (!Array.isArray(candidate.tasks) || candidate.tasks.length === 0) {
+    errors.push(`execution ${candidate.runId} requires at least one task binding`);
+  } else {
+    const ids = new Set<string>();
+    for (const [taskId, binding] of candidate.tasks) {
+      if (ids.has(taskId)) errors.push(`execution ${candidate.runId} repeats task ${taskId}`);
+      ids.add(taskId);
+      if (!binding || binding.taskId !== taskId) {
+        errors.push(`execution ${candidate.runId} task ${taskId} binding mismatch`);
+      }
+    }
+  }
+  if (!Array.isArray(candidate.checkpoints)) {
+    errors.push(`execution ${candidate.runId} requires a checkpoints array`);
+  }
+  if (!Array.isArray(candidate.lineage)) {
+    errors.push(`execution ${candidate.runId} requires a lineage array`);
+  }
+  if (!Array.isArray(candidate.authority) || !Array.isArray(candidate.stageApprovals)) {
+    errors.push(`execution ${candidate.runId} requires authority and stageApprovals arrays`);
+  }
+  if (!Array.isArray(candidate.reserveDebits)) {
+    errors.push(`execution ${candidate.runId} requires a reserveDebits array`);
+  }
+  return errors.length === before;
+}
+// END_BLOCK_EXECUTION_SERIALIZATION
+
 /**
  * Resolve the per-session workflow data directory.
  * Path: $XDG_DATA_HOME/vvoc/workflow/<sessionId>/
@@ -962,6 +1077,7 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
   if (
     parsed.version !== 1 &&
     parsed.version !== 2 &&
+    parsed.version !== RECOVERY_STATE_VERSION &&
     parsed.version !== PERSISTED_WORKFLOW_STATE_VERSION
   ) {
     return {
@@ -991,11 +1107,7 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
     // Versions 1 and 2 never carried recovery histories: hydrate them
     // conservatively with empty histories rather than inferring grants, so
     // their original budgets stay unchanged.
-    if (
-      record.mode === "delegated" &&
-      record.delegated &&
-      version < PERSISTED_WORKFLOW_STATE_VERSION
-    ) {
+    if (record.mode === "delegated" && record.delegated && version < RECOVERY_STATE_VERSION) {
       record.delegated = { ...record.delegated, recoveryHistory: [] };
     }
     records.set(`${sessionId}::${record.workItemId}`, record);
@@ -1028,7 +1140,7 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
         checkpoints: new Map(
           serialized.checkpoints.map((checkpoint) => {
             const hydrated =
-              version < PERSISTED_WORKFLOW_STATE_VERSION
+              version < RECOVERY_STATE_VERSION
                 ? { ...checkpoint, recoveryHistory: checkpoint.recoveryHistory ?? [] }
                 : checkpoint;
             return [hydrated.checkpointId, hydrated];
@@ -1039,19 +1151,54 @@ export function hydrateWorkflowStateChecked(sessionId: string): HydratedWorkflow
     }
   }
 
+  const executions = new Map<string, WorkflowExecutionRecord>();
+  const messageClaims = new Map<string, WorkflowMessageClaim>();
+  if (version >= PERSISTED_WORKFLOW_STATE_VERSION) {
+    if (!Array.isArray(parsed.executions)) {
+      return { status: "invalid", errors: ["version 4 state requires an executions array"] };
+    }
+    for (const serialized of parsed.executions) {
+      const executionErrors: string[] = [];
+      if (!validateWorkflowExecution(serialized, sessionId, executionErrors)) {
+        errors.push(...executionErrors);
+        continue;
+      }
+      executions.set(serialized.runId, {
+        ...serialized,
+        tasks: new Map(serialized.tasks),
+        checkpoints: new Map(serialized.checkpoints),
+      });
+    }
+    for (const claim of parsed.messageClaims ?? []) {
+      if (!isNonEmptyString(claim?.messageId) || !isNonEmptyString(claim?.runId)) {
+        errors.push("message claims require messageId and runId");
+        continue;
+      }
+      if (messageClaims.has(claim.messageId)) {
+        errors.push(`message ${claim.messageId} is claimed more than once`);
+        continue;
+      }
+      messageClaims.set(claim.messageId, claim);
+    }
+  }
+
   if (errors.length > 0) {
     return { status: "invalid", errors };
   }
 
-  return {
-    status: "valid",
-    data: {
-      nextId: typeof parsed.nextId === "number" ? parsed.nextId : records.size + 1,
-      records,
-      keyIndexBySession,
-      planRuns,
-    },
+  const data: WorkItemStoreData = {
+    nextId: typeof parsed.nextId === "number" ? parsed.nextId : records.size + 1,
+    records,
+    keyIndexBySession,
+    planRuns,
+    executions,
+    messageClaims,
   };
+  // Materialize compatibility registry entries for existing native plan runs
+  // that predate the common registry; this never invents authority or alters
+  // native counters.
+  ensureNativeExecutions(data);
+  return { status: "valid", data };
 }
 
 // START_CONTRACT: hydrateWorkflowState
@@ -1105,10 +1252,22 @@ export function snapshotWorkflowStateChecked(
       }
     }
 
+    const executions: SerializedWorkflowExecution[] = [];
+    const sessionRunIds = new Set<string>();
+    for (const execution of data.executions.values()) {
+      if (execution.sessionId === sessionId) {
+        executions.push(serializeWorkflowExecution(execution));
+        sessionRunIds.add(execution.runId);
+      }
+    }
+    const messageClaims: WorkflowMessageClaim[] = [];
+    for (const claim of data.messageClaims.values()) {
+      if (sessionRunIds.has(claim.runId)) messageClaims.push(claim);
+    }
+
     const persisted: PersistedWorkflowState = {
-      // Version 3 carries delegated and checkpoint recovery histories and
-      // report-rejected attempts; PERSISTED_WORKFLOW_STATE_VERSION mirrors
-      // this literal for hydration.
+      // Version 4 adds the common execution registry and session-wide message
+      // claims on top of version 3's recovery histories and report rejections.
       version: PERSISTED_WORKFLOW_STATE_VERSION,
       updatedAt: new Date().toISOString(),
       sessionId,
@@ -1116,6 +1275,8 @@ export function snapshotWorkflowStateChecked(
       records,
       keyIndex,
       planRuns,
+      executions,
+      messageClaims,
     };
 
     const targetPath = getWorkflowStatePath(sessionId);

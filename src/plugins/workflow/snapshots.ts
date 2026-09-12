@@ -3,8 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Conservative workspace-relative file-scope normalization and deterministic content fingerprints for delegated checkpoint review barriers.
 //   SCOPE: Pure declared-path normalization against a trusted workspace root, filesystem-backed validation rejecting symlinks and unsupported entries, explicit absent-path representation, streaming SHA-256 content hashing with stability checks, and order-independent fingerprint serialization over covered acceptance attempts. No command execution, network access, or snapshot-copy directories.
-//   DEPENDS: [node:crypto, node:fs, node:fs/promises, node:path, src/lib/spec-lint.ts]
-//   LINKS: [M-WORKFLOW-SNAPSHOTS, M-WORKFLOW-CHECKPOINTS, M-SPEC-LINT, V-M-WORKFLOW-SNAPSHOTS]
+//   DEPENDS: [node:crypto, node:fs, node:fs/promises, node:path, src/lib/workflow-contract.ts]
+//   LINKS: [M-WORKFLOW-SNAPSHOTS, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-CONTRACT, V-M-WORKFLOW-SNAPSHOTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -30,7 +30,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
-import { normalizeDeclaredScopePath } from "../../lib/spec-lint.js";
+import { normalizeDeclaredScopePath } from "../../lib/workflow-contract.js";
 
 // START_BLOCK_SCOPE_TYPES
 export type WorkflowScopeNormalizationError = "ROOT_MISMATCH" | "INVALID_PATH" | "DUPLICATE_PATH";

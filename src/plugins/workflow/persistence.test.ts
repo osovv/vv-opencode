@@ -57,6 +57,7 @@ import {
   snapshotWorkflowStateChecked,
 } from "./persistence.js";
 import { createWorkItemStore, createWorkflowResultExcerpt, type WorkItemStore } from "./state.js";
+import { findExecution, registerExecutionInStore } from "./execution.js";
 
 const SESSION = "session-persist-v2";
 const createdRoots: string[] = [];
@@ -297,8 +298,9 @@ describe("version 2 round-trips", () => {
     const dirEntries = readdirSync(getWorkflowSessionDir(SESSION));
     expect(dirEntries).toEqual(["workflow-state.json"]);
     const persisted = JSON.parse(readFileSync(statePath(), "utf-8"));
-    expect(persisted.version).toBe(3);
+    expect(persisted.version).toBe(4);
     expect(Array.isArray(persisted.planRuns)).toBe(true);
+    expect(Array.isArray(persisted.executions)).toBe(true);
   });
 });
 // END_BLOCK_ROUNDTRIP_TESTS
@@ -889,11 +891,11 @@ describe("version compatibility and recovery tamper rejection", () => {
 
   test("unsupported newer versions are rejected", async () => {
     mkdirSync(getWorkflowSessionDir(SESSION), { recursive: true });
-    writeFileSync(statePath(), JSON.stringify({ version: 4, records: [], keyIndex: {} }), "utf8");
+    writeFileSync(statePath(), JSON.stringify({ version: 5, records: [], keyIndex: {} }), "utf8");
     const hydrated = hydrateWorkflowStateChecked(SESSION);
     expect(hydrated.status).toBe("invalid");
     if (hydrated.status !== "invalid") return;
-    expect(hydrated.errors.join("\n")).toContain("unsupported persisted version 4");
+    expect(hydrated.errors.join("\n")).toContain("unsupported persisted version 5");
   });
 });
 // END_BLOCK_RECOVERY_VALIDATION_TESTS
@@ -1115,3 +1117,85 @@ describe("malformed version 2 state is rejected, never silently reset", () => {
 
 // Reference the global data dir so the import is used even if paths change.
 void getGlobalVvocDataDir;
+
+// START_BLOCK_V4_EXECUTION_REGISTRY_TESTS
+describe("version 4 execution registry persistence", () => {
+  test("a generic conversation-scoped execution round-trips through snapshot and hydrate", () => {
+    const registered = registerExecutionInStore(store.getStoreData(), {
+      sessionId: SESSION,
+      workspaceRoot: "/tmp/vvoc-v4-workspace",
+      executionKey: "v4-roundtrip",
+      source: { kind: "conversation-scoped" },
+      goal: "Round-trip one execution.",
+      boundary: { files: ["src/lib/a.ts"], directories: [] },
+      tasks: [
+        {
+          contract: {
+            taskId: "T-100",
+            title: "Generic task",
+            goal: "Deliver the generic task.",
+            acceptanceCriteria: ["It works."],
+            verification: ["bun test src/lib/a.test.ts"],
+            writeScope: ["src/lib/a.ts"],
+            dependsOn: [],
+            blockedBy: [],
+            requiredReviewers: ["code"],
+          },
+        },
+      ],
+    });
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+
+    const snapshot = snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+    expect(snapshot.ok).toBe(true);
+    const hydrated = hydrateWorkflowStateChecked(SESSION);
+    expect(hydrated.status).toBe("valid");
+    if (hydrated.status !== "valid") return;
+    const execution = findExecution(hydrated.data, registered.runId);
+    expect(execution?.source.kind).toBe("conversation-scoped");
+    expect(execution?.tasks.get("T-100")?.contract.requiredReviewers).toEqual(["code"]);
+    expect(execution?.checkpoints.get("review-T-100")).toBeDefined();
+  });
+
+  test("a version 3 file preserves a consumed recovery record after hydration", async () => {
+    const { runId } = await registerRun("v3-downgrade");
+    const workItemId = taskWorkItemId(runId, "T-001");
+    const callId = `call-v3-${++launchSequence}`;
+    beginDelegatedLaunch(store, { sessionId: SESSION, workItemId, callId });
+    applyDelegatedResult(store, {
+      sessionId: SESSION,
+      workItemId,
+      callId,
+      resultStatus: "BLOCKED",
+    });
+    const granted = await recoverDelegatedWorkItem(store, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 1,
+      diagnosis: "Stopped at the gate.",
+      changedCondition: "Gate inputs recorded.",
+      verification: ["src/lib/cache-store.ts"],
+      recoveryId: "rec-v3-grant",
+    });
+    expect(granted.ok).toBe(true);
+
+    snapshotWorkflowStateChecked(SESSION, store.getStoreData());
+    const parsed = JSON.parse(readFileSync(statePath(), "utf-8"));
+    // Downgrade the snapshot: a real version 3 file predates the execution registry.
+    parsed.version = 3;
+    delete parsed.executions;
+    delete parsed.messageClaims;
+    writeFileSync(statePath(), JSON.stringify(parsed, null, 2), "utf8");
+
+    const hydrated = hydrateWorkflowStateChecked(SESSION);
+    expect(hydrated.status).toBe("valid");
+    if (hydrated.status !== "valid") return;
+    const record = hydrated.data.records.get(`${SESSION}::${workItemId}`);
+    expect(record?.delegated?.recoveryHistory).toHaveLength(1);
+    expect(record?.delegated?.recoveryHistory[0]?.recoveryId).toBe("rec-v3-grant");
+    // Native plan runs still materialize a compatibility execution entry.
+    expect(findExecution(hydrated.data, runId)?.source.kind).toBe("native-package");
+  });
+});
+// END_BLOCK_V4_EXECUTION_REGISTRY_TESTS

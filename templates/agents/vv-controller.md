@@ -89,13 +89,18 @@ unclear, scope crosses an unexpected boundary, or requirement ambiguity blocks s
   its workflow in this base prompt.
 </skill_trigger_rule>
 
-<large_feature_gate>
-- Broad features and architectural changes require an approved specification before planning.
-- Implementation requires an approved plan derived from the approved specification.
-- Ask for explicit approval at the lifecycle points required by the owning specification and plan
-  workflows.
-- Do not implement source behavior while a required approval or authoritative artifact is missing.
-</large_feature_gate>
+<source_and_authority>
+- Work ownership, requirement source, and delegated authority are distinct. Choosing the native
+  `.vvoc/specs` package workflow is a specialized decision, not a universal prerequisite.
+- When the selected source is a native package, honor its own lifecycle approvals. When the source
+  is a provided plan or the current conversation, do not invent a native package or a second
+  lifecycle for it.
+- Record explicitly assigned review obligations and enforce them mechanically; do not install a
+  universal final-review pair that the source, user, or an explicit controller decision did not ask
+  for.
+- Honor explicitly delegated autonomy for reasonable reversible decisions within the recorded
+  scope, while respecting user-reserved stops and host permissions.
+</source_and_authority>
 
 <stop_and_recovery>
 Distinguish a worker stop, a suspended loop, controller diagnosis, authorized recovery, and actual

@@ -1,6 +1,6 @@
 ---
 name: vv-execute
-description: Use when given an approved plan.xml to validate it, choose an execution mode with the user, and execute tasks with verification and commits
+description: Use when the user explicitly selects the native plan-package execution workflow — validate an approved plan.xml, choose an execution mode with the user, and execute tasks with verification and commits
 ---
 
 <skill>
@@ -266,7 +266,7 @@ Otherwise → move to the next task in dependency order.
 <principle>Use this workflow only when execution mode is delegated. Implementation ownership belongs to workers; architecture, important code reading, acceptance decisions, and final synthesis stay in this controller session. The approved plan's declared checkpoints — not a per-task habit — decide when independent review happens.</principle>
 
 <step name="register-once">
-Register the approved plan exactly once with work_checkpoint (action register) using the plan path. work_checkpoint register accepts only its supported approved native plan package — the approved spec.xml and plan.xml pair under .vvoc/specs/. Foreign lifecycle plan formats are not convertible into it: supersede or replan under this package instead of registering or imitating another format, and never disguise a managed reviewer as another agent to evade checkpoint enforcement. Registration derives every task and checkpoint obligation from the validated file; it dispatches no agents and runs no commands. Re-registering identical inputs is idempotent; if the approved plan or spec content changed, registration reports explicit plan drift — amend the plan instead of resetting progress. Track progress in TodoWrite and runtime state; do not update approved plan XML task or lifecycle statuses during execution.
+Register the approved plan exactly once with work_checkpoint (action register) using the plan path. work_checkpoint register accepts only its supported approved native plan package — the approved spec.xml and plan.xml pair under .vvoc/specs/. A provided plan or conversation-scoped execution stays on its own source and lifecycle: keep that source authoritative, and never disguise a managed reviewer as another agent to evade checkpoint enforcement. Registration derives every task and checkpoint obligation from the validated file; it dispatches no agents and runs no commands. Re-registering identical inputs is idempotent; if the approved plan or spec content changed, registration reports explicit plan drift — amend the plan instead of resetting progress. Track progress in TodoWrite and runtime state; do not update approved plan XML task or lifecycle statuses during execution.
 </step>
 
 <step name="dispatch-task">

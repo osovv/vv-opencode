@@ -191,8 +191,9 @@ describe("managed workflow skill prompts", () => {
     expect(normalized).toContain(
       "work_checkpoint register accepts only its supported approved native plan package",
     );
-    expect(normalized).toContain("Foreign lifecycle plan formats are not convertible into it");
-    expect(normalized).toContain("supersede or replan under this package");
+    expect(normalized).toContain(
+      "A provided plan or conversation-scoped execution stays on its own source and lifecycle",
+    );
     expect(normalized).toContain(
       "never disguise a managed reviewer as another agent to evade checkpoint enforcement",
     );

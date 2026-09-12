@@ -126,6 +126,20 @@
       <Acceptance>Registration accepts only its supported approved native plan package, validates the approved plan and linked spec, binds content hashes and the trusted workspace root, and is idempotent or explicitly drifting; a checkpoint starts only after its covered tasks are accepted, opens exactly the declared reviewer set against a pinned fingerprint, and passes only when every declared reviewer passes for that snapshot; failed, stale, and stopped checkpoints stay visible gates; the final checkpoint seals the run only after complete current coverage with fresh verification; a stopped or generation-exhausted checkpoint recovers through a bounded operation that settles the stop as historical evidence, preserves covered tasks, reviewers, and FAIL history, and grants at most one further generation per autonomous or replay-protected root-user-authorized unit without satisfying prerequisites or sealing the run.</Acceptance>
       <RelatedFlow>DF-REVIEW-CHECKPOINTS</RelatedFlow>
     </UC-013B>
+    <UC-013C>
+      <Name>SourceIndependentExecution</Name>
+      <Action>A controller receives requirements from a native package, a provided plan, or the current conversation.</Action>
+      <Goal>Use one validated execution contract and one review-obligation model instead of forcing native documents, a second lifecycle, or a specific planning tool.</Goal>
+      <Acceptance>Task and checkpoint contracts are validated as an exact-reference acyclic graph inside the declared boundary before any record is published; native-package, provided-plan, and conversation-scoped sources use the same registry; a provided plan stays its original source of requirements and is never converted or executed as commands; incremental tasks and checkpoints append without replaying accepted work; explicit replacement/split preserves aggregate criteria and scope and shares the parent attempt budget; required reviews come from the source, the user, or an explicit controller decision, and a task with no assigned review completes honestly as controller-accepted; a final checkpoint, when assigned, must still cover the current revision; a selected native package that fails its own validation is never silently reopened as weaker generic execution.</Acceptance>
+      <RelatedFlow>DF-WORKFLOW-EXECUTION</RelatedFlow>
+    </UC-013C>
+    <UC-013D>
+      <Name>BoundedAdvanceAuthority</Name>
+      <Action>The user explicitly authorizes autonomous completion before a later stop.</Action>
+      <Goal>Let recorded authority authorize a finite bounded continuation without weakening post-stop replay/scope validation and without promising unbounded retries.</Goal>
+      <Acceptance>Only an observable eligible root-user instruction can establish or extend authority; the grant records provenance, execution and scope boundary, delegated stages, reserved stops, and a shared three-unit recovery reserve consumed one unit per extra attempt or generation after ordinary allowances are exhausted; duplicate calls, replay under another execution key, restart, and task replacement cannot refill or duplicate the reserve; further extension requires a new eligible instruction after the authority event it extends; narrowing or revocation disables future credits without erasing history; already consumed units stay consumed; stage approvals keep truthful controller-delegated provenance, reserved stages still wait, and authority never satisfies a reviewer or converts a failed obligation into success.</Acceptance>
+      <RelatedFlow>DF-WORKFLOW-AUTHORITY</RelatedFlow>
+    </UC-013D>
     <UC-014>
       <Name>WorkflowAndSystemGuidance</Name>
       <Action>An eligible primary OpenCode session starts while vv-opencode plugins are active.</Action>
@@ -221,6 +235,9 @@
     <Constraint>Config writes must be conservative, idempotent, and strict about current schema validity before mutation.</Constraint>
     <Constraint>Role resolution must fail loudly for unknown or invalid semantic role references.</Constraint>
     <Constraint>Workflow enforcement must use explicit work-item IDs and simple counters only.</Constraint>
+    <Constraint>Execution source is explicit and singular per run: native-package, provided-plan, or conversation-scoped; a run never switches source or silently falls back from a failed native package to generic execution under the same identity.</Constraint>
+    <Constraint>Registered review obligations are enforced mechanically once assigned; no universal final-review pair is installed, and a no-review completion is reported as controller-accepted rather than independently reviewed.</Constraint>
+    <Constraint>Advance authority is finite and provenance-backed: three shared units per authorized execution, consumed one at a time after ordinary allowances, extendable only by a new eligible root-user instruction and never self-renewed; reserved stops and host permissions remain outside its scope.</Constraint>
     <Constraint>NEEDS_CONTEXT and BLOCKED are hard stops that return control to the main session or user.</Constraint>
     <Constraint>Tracked workflow subagents use vv-* names: vv-implementer, vv-spec-reviewer, and vv-code-reviewer.</Constraint>
     <Constraint>Project-owned specs and plans produced by vvoc skills live under date-prefixed package directories .vvoc/specs/YYYY-MM-DD-&lt;slug&gt;/.</Constraint>
@@ -238,6 +255,8 @@
     <Risk>Provider alias models may be required for some role assignments.</Risk>
     <Risk>LLMs may produce malformed tracked subagent protocol output.</Risk>
     <Risk>Workflow state can confuse users after process restarts, session switches, or corrupt persistence if diagnostics are weak.</Risk>
+    <Risk>A snapshot-version bump or migration could silently clear recovery histories, accepted work, or consumed authority if compatibility is not exercised explicitly.</Risk>
+    <Risk>Controller-selected review obligations can be incomplete because runtime enforces registered obligations but does not prove that every requirement was extracted or every useful review was selected.</Risk>
     <Risk>Forcing default_agent to vv-controller may surprise users who intentionally selected another default.</Risk>
     <Risk>Plugin toggles can disable critical safety or workflow behavior unless status and doctor output make that visible.</Risk>
     <Risk>Strict schema behavior can frustrate users with hand-edited configs unless errors include precise recovery steps.</Risk>

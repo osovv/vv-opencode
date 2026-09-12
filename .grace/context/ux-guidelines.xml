@@ -25,6 +25,8 @@
     <Guideline>Review workflows should report findings before fixes and should not surprise users with implementation.</Guideline>
     <Guideline>Hard stops should summarize known facts, missing context, and the next safe user action instead of continuing speculative automation.</Guideline>
     <Guideline>Stable identifiers and statuses should be preserved so long workflows can be resumed safely.</Guideline>
+    <Guideline>Completion should report honestly whether a result was controller-accepted without independent review or independently reviewed for its current scope, and should name the source the requirements came from.</Guideline>
+    <Guideline>Disclosure of a material reversible decision under delegated authority should be visible without becoming a blocking question at every fork.</Guideline>
   </WorkflowUX>
   <DocumentationAndReleaseLanguage>
     <Guideline>README examples are user-facing contracts and should remain copy-pasteable and current.</Guideline>

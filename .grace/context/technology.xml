@@ -49,7 +49,7 @@
     </Vvoc>
     <PersistedData>
       <Root>$XDG_DATA_HOME/vvoc/</Root>
-      <WorkflowState>$XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json</WorkflowState>
+      <WorkflowState>$XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json at snapshot version 4, which carries the common execution registry and session-wide message claims in addition to the version 3 work-item, delegated, checkpoint, and plan-run state.</WorkflowState>
     </PersistedData>
   </ConfigLayout>
   <Scripts>
@@ -70,7 +70,7 @@
     <ModuleLevel>bun test targeted files for lib, command, plugin, workflow, secrets, hashline, and release automation modules.</ModuleLevel>
     <WaveLevel>bun run typecheck, bun run lint, bun run fmt:check, bun test, and bun run grace:check.</WaveLevel>
     <PhaseLevel>bun run check, bun run build, bun run pack:check, and bun run release:check when release or package consistency matters.</PhaseLevel>
-    <GraceValidation>bunx @osovv/grace-cli@rc lint --path . and bunx @osovv/grace-cli@rc status --path . validate GRACE 4 artifacts.</GraceValidation>
+    <GraceValidation>grace lint --path . and grace status --path . validate GRACE 4 artifacts using the installed stable grace binary required by AGENTS.md.</GraceValidation>
   </TestingStack>
   <Observability>
     <Logger>OpenCode app log through client.app.log plus bounded plugin-specific diagnostics where applicable.</Logger>
@@ -99,7 +99,7 @@
   </PublicApi>
   <OperationalConstraints>
     <Constraint>Prefer existing project libraries and established repository patterns.</Constraint>
-    <Constraint>Use Bun commands for local project checks and bunx for grace-cli.</Constraint>
+    <Constraint>Use Bun commands for local project checks and the installed stable grace binary for GRACE lint and status, as required by AGENTS.md.</Constraint>
     <Constraint>Do not edit generated dist output manually.</Constraint>
     <Constraint>Root package exports and plugin subpath exports must stay valid unless an explicit breaking change is approved.</Constraint>
     <Constraint>OpenCode TUI integration requires OpenCode 1.18.2 or newer and a default TuiPluginModule export selected from the pinned base package registered in tui.json(c).</Constraint>

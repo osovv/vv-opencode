@@ -61,6 +61,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { DelegatedPlanDefinition, DelegatedReviewer } from "../../lib/spec-lint.js";
 import { contentSha256, type LoadedDelegatedPlan } from "./checkpoint-io.js";
+import { ensureNativeExecutions } from "./execution.js";
 import {
   currentDelegatedAcceptance,
   reworkDelegatedWorkItem,
@@ -292,7 +293,13 @@ export function registerDelegatedPlan(
   store: WorkItemStore,
   input: RegisterDelegatedPlanInput,
 ): RegisterDelegatedPlanResult {
-  return registerDelegatedPlanInStore(store.getStoreData(), input);
+  const result = registerDelegatedPlanInStore(store.getStoreData(), input);
+  if (result.ok) {
+    // Materialize the common execution registry view for existing native
+    // consumers without altering native counters, hashes, or obligations.
+    ensureNativeExecutions(store.getStoreData());
+  }
+  return result;
 }
 
 export function registerDelegatedPlanInStore(

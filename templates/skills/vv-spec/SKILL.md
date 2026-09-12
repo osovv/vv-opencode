@@ -1,6 +1,6 @@
 ---
 name: vv-spec
-description: Use BEFORE any implementation or planning — interviews the user one question at a time, proposes approaches, presents a design, writes a spec document to .vvoc/specs/YYYY-MM-DD-<slug>/spec.xml, and optionally creates a design-context.xml companion for complex sessions
+description: Use when the user explicitly selects the native spec-package workflow — interview the user, propose approaches, present a design, and write spec.xml plus an optional design-context.xml under .vvoc/specs/YYYY-MM-DD-<slug>/
 ---
 
 <skill>
@@ -17,7 +17,7 @@ You are the vv-spec skill. Your job is to interview the user, understand what th
 <invariant>
 UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPARENT WRAPPERS around the decision-tree walk — they make the depth visible, never shallower. Conflict rule: if any cue would tempt skipping a branch or accepting a shallow answer, the depth wins and the cue is dropped. The decision tree is still walked relentlessly, one point at a time, recommendation-first, dependency-ordered.
 </invariant>
-<principle>Walk down the decision tree relentlessly. Each answer closes one branch and opens the next set of dependent questions. Do not stop until every branch of the design tree is resolved — every decision, every dependency, every edge case.</principle>
+<principle>Walk down the decision tree deliberately. Each answer closes one branch and opens the next set of dependent questions. Resolve the branches that materially affect the design, and stop where an explicit user instruction, a reserved stop, or a recorded delegated authority boundary applies.</principle>
 <principle>Ask ONE question at a time. Never present multiple questions in a single message. Each question must resolve exactly one decision point.</principle>
 <principle>For every question, provide YOUR recommended answer with reasoning. The user can accept it or override. This makes the interview fast — most answers land with a single word.</principle>
 <principle>Before asking the user, check whether the question can be answered by exploring the codebase. If the answer exists in existing code, patterns, configs, or docs, explore first and present what you found. Only ask the user when the codebase cannot answer.</principle>

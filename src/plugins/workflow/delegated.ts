@@ -3,8 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Delegated work-item attempt ledger with bounded recovery, terminal report-rejection settlement, and explicit controller acceptance decisions with a checkpoint-authorized rework path.
 //   SCOPE: Delegated attempt allocation bound to host callIDs with per-session callID uniqueness, call-bound result application, call-bound host-terminal launch failure recorded as a distinct failed attempt (bounded evidence, no budget refund, no state advance), bounded controller decisions (accept / request_changes with rationale, evidence, and concerns disposition), acceptance history with rework revocation, the two-attempt budget extended only by authorized rework or one-unit recovery grants, bounded recovery of stopped or exhausted unaccepted items (diagnosis, changed condition, verification references, stable recoveryId, optional root-user message authorization validated through a read-only lookup with replay protection), call-bound settlement of confirmed terminal protocol-invalid reports as report_rejected attempts with bounded diagnostics preserved substantive hard stops, and progress summaries exposing remaining budget and supported next actions. Pure domain transitions over WorkItemStoreData; no tool, session, or filesystem authorization here.
-//   DEPENDS: [src/plugins/workflow/protocol.ts (types), src/plugins/workflow/state.ts (types and shared helpers), src/plugins/workflow/transitions.ts]
-//   LINKS: [M-WORKFLOW-DELEGATED, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-CHECKPOINTS, V-M-WORKFLOW-DELEGATED]
+//   DEPENDS: [src/plugins/workflow/protocol.ts (types), src/plugins/workflow/state.ts (types and shared helpers), src/plugins/workflow/transitions.ts, src/lib/workflow-contract.ts]
+//   LINKS: [M-WORKFLOW-DELEGATED, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-CONTRACT, V-M-WORKFLOW-DELEGATED]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -86,7 +86,7 @@ import type {
 } from "./state.js";
 import { cloneRecord, createRecordLookupKey } from "./state.js";
 import { getAllowedNextAgents } from "./transitions.js";
-import { normalizeDeclaredScopePath } from "../../lib/spec-lint.js";
+import { normalizeDeclaredScopePath } from "../../lib/workflow-contract.js";
 
 // START_BLOCK_DELEGATED_TYPES
 export const DELEGATED_BASE_ATTEMPTS = 2;

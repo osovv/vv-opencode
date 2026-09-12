@@ -1,0 +1,39 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-WORKFLOW-PLAN-INDEPENDENCE</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Delegation is a division of labor, not a planning format or a demand for maximal ceremony. The existing bounded-recovery foundation should be reused while native document loading becomes one input path into common execution. A controller can receive requirements from a native package, another document, or the current conversation. It should be able to assign meaningful reviews and act within advance user authority without losing deterministic counters or truthful acceptance.</Rationale>
+  <Alternatives>
+    <Alternative>Change only prompt wording. This helps routing and avoids unnecessary questions, but cannot remove the required planPath and native source fields from checkpoint registration or let a pre-stop authorization pass through a deliberately post-stop recovery contract. It does not meet the full requested behavior.</Alternative>
+    <Alternative>Make external and conversation-scoped work untracked. Rejected: it would lose enforcement of assigned review obligations and bounded recovery precisely where no structured source document exists.</Alternative>
+    <Alternative>Add an adapter and prompt exception for every planning tool. Rejected: it creates an unbounded compatibility catalog. The controller already interprets provided requirements; runtime needs a small format-independent execution contract.</Alternative>
+    <Alternative>Convert every source into a new native package. Rejected: it forces unwanted files and introduces a second normative source and lifecycle. Native loading should remain an optional integration benefit.</Alternative>
+    <Alternative>Require a final spec/code pair for every execution. Rejected: reviewers are selected by the source, user, or controller. Runtime enforces what was assigned, not a hidden universal pair.</Alternative>
+    <Alternative>Remove retry limits when autonomous work is requested. Rejected: authority to work without intermediate questions is not an unlimited compute budget. A shared finite reserve supports advance authorization without endless renewal.</Alternative>
+    <Alternative>Allow any earlier message through the existing post-stop authorization validator. Rejected: that would weaken replay and scope boundaries. Advance execution authority is a distinct validated record with finite consumption.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>The implementation plan chooses the smallest additive tool shape for generic execution and dynamic checkpoints. Reuse work_item_open, work_item_decide, review-only work items, and work_checkpoint where their contracts remain clear; do not add a parallel tool family merely to avoid refactoring source assumptions.</Decision>
+    <Decision>Common workflow types currently depend on native extraction types. The plan should establish a shared execution contract with the native adapter producing it, rather than teach the generic runtime to parse arbitrary documents. Exact module boundaries and persistence-version changes require focused source inspection.</Decision>
+    <Decision>The proposed three-unit reserve is deliberately execution-scoped. The plan must define atomic consumption alongside existing autonomous and checkpoint-authorized grants and prevent replay/refill through restart or explicit replacement operations. No semantic identity detection is implied.</Decision>
+    <Decision>Native approval under delegated authority must remain distinguishable from personal human review without breaking existing artifact syntax. The plan must identify the smallest truthful provenance representation and its compatibility tests.</Decision>
+    <Decision>A few optional sandbox smoke scenarios can check prompt interactions during implementation. They are not a new benchmark platform, and omitted model runs must remain an explicit verification limitation.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A user requests a bounded prototype without specification or plan files. The controller determines a small assignment in context, dispatches an implementation worker, verifies and accepts the result, and completes without creating a native package or inventing a mandatory review pair.</Scenario>
+    <Scenario>A user supplies a Markdown checklist with three related tasks. The controller registers work from that checklist, assigns a code-review checkpoint after the shared behavior changes, and completes only after that checkpoint passes. No XML conversion or extra specification is produced.</Scenario>
+    <Scenario>A controller starts one conversation-scoped task and discovers another required in-scope task. It adds the task with explicit dependencies. Existing acceptance is preserved; a review of an older scope does not automatically cover the addition.</Scenario>
+    <Scenario>A user delegates sensible defaults but reserves approval of the finished specification. The controller resolves intermediate decisions without an interview, presents the specification, and does not implement. In a separate fully authorized native execution, it can proceed through the delegated stages without claiming the user personally reviewed each generated file.</Scenario>
+    <Scenario>A user grants autonomous completion before leaving. A later task exhausts ordinary allowances. The controller diagnoses the failure and spends one recorded advance-authority unit without requesting a newer message. Replaying the grant does not refill the shared reserve, and exhaustion still prevents unbounded repetition.</Scenario>
+    <Scenario>A review was assigned and returns FAIL. Neither source switching nor advance authority makes that result PASS. The controller organizes bounded corrections; required review remains applicable to the resulting scope.</Scenario>
+    <Scenario>A user delegates implementation but reserves publication. The controller completes permitted work without publishing. An instruction to discuss an idea without files similarly remains a discussion request rather than implementation permission.</Scenario>
+    <Scenario>A selected native package fails its own validation. The controller reports or repairs that source within authority rather than silently reopening the same work as generic execution to evade the failure.</Scenario>
+  </Scenarios>
+  <RepositoryEvidence>
+    <Evidence>src/plugins/workflow/tooling.ts supports standalone delegated work items with optional planRunId/planTaskId, but work_checkpoint registration requires planPath and an approved native loader.</Evidence>
+    <Evidence>src/plugins/workflow/checkpoints.ts defines DelegatedPlanRun with required planPath, specPath, planSha256, and specSha256, and imports definition types from the native spec linter.</Evidence>
+    <Evidence>src/plugins/workflow/checkpoint-io.ts validates native XML structure and approved spec/plan lifecycle. This remains useful on the native path and is not a generic plan interpreter.</Evidence>
+    <Evidence>src/plugins/workflow/delegated.ts validates post-stop recovery authorization with a creation timestamp at or after the relevant stop. Advance authority requires a separate bounded contract rather than removing that check.</Evidence>
+    <Evidence>templates/agents/vv-controller.md still contains a general large_feature_gate. templates/skills/vv-spec/SKILL.md advertises use before any implementation/planning and mandates exhaustive interview progression; vv-plan and vv-execute contain manual stage transitions that need authority-aware scoping.</Evidence>
+    <Evidence>src/plugins/spec-guard/index.ts already limits native artifact guarding to active .vvoc/specs paths. Preserve this boundary rather than broaden the guard to unrelated documents.</Evidence>
+  </RepositoryEvidence>
+</GraceChangeDesignContext>

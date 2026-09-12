@@ -787,7 +787,7 @@ describe("extractDelegatedPlanDefinition", () => {
     expect(result.definition.mode).toBe("delegated");
     expect(result.definition.waves).toEqual(["WAVE-1", "WAVE-2"]);
     expect(result.definition.tasks).toHaveLength(2);
-    expect(result.definition.tasks[0]).toEqual({
+    expect(result.definition.tasks[0]).toMatchObject({
       taskId: "T-001",
       taskElement: "TASK-T-001",
       wave: "WAVE-1",

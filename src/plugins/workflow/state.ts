@@ -3,8 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Manage session-scoped workflow work-item state with explicit workflow intent, bounded result excerpts, collect-all review rounds, and delegated attempts awaiting controller acceptance.
 //   SCOPE: Session-scoped storage, id generation, idempotent open-by-key, explicit mode/reviewer metadata including the delegated mode with explicitly empty reviewers and an empty recovery history, declared write scopes and plan bindings, bounded recovery excerpts, launch-time in-flight tracking, result-time round aggregation, delegated attempt bookkeeping, close gating, and review-round helpers.
-//   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/delegated.ts (types only)]
-//   LINKS: M-WORKFLOW-STATE, M-WORKFLOW-PROTOCOL, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-DELEGATED, V-M-WORKFLOW-STATE
+//   DEPENDS: [src/plugins/workflow/protocol.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/delegated.ts (types only), src/lib/workflow-contract.ts]
+//   LINKS: M-WORKFLOW-STATE, M-WORKFLOW-PROTOCOL, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-DELEGATED, M-WORKFLOW-CONTRACT, V-M-WORKFLOW-STATE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -37,6 +37,7 @@
 //   createRecordLookupKey - Session-scoped record map key shared with delegated helpers.
 //   cloneRecord - Deep clone of one work-item record shared with delegated helpers.
 //   openWorkItem - Creates or returns an existing work item by idempotency key.
+//   openWorkItemInStore - Store-level open used by the common execution registry.
 //   beginTrackedLaunch - Validates tracked launch and marks reviewers in flight.
 //   revertReviewerLaunch - Reverts an in-flight reviewer launch back to pending after a failed tracked result.
 //   applyTrackedResult - Applies parsed tracked output and aggregates review rounds.
@@ -47,13 +48,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Delegated records now carry an explicit (initially empty) recovery history cloned alongside attempts, decisions, acceptances, and rework.]
+//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Store data now carries the common execution registry and session-wide message claims, and openWorkItemInStore is shared with the registry.]
 // END_CHANGE_SUMMARY
 
 import type { ParsedResultBlock, TrackedAgentName } from "./protocol.js";
 import type { DelegatedWorkItemState } from "./delegated.js";
 import type { DelegatedPlanRun } from "./checkpoints.js";
-import { normalizeDeclaredScopePath } from "../../lib/spec-lint.js";
+import type { WorkflowExecutionRecord } from "./execution.js";
+import type { WorkflowMessageClaim } from "../../lib/workflow-contract.js";
+import { normalizeDeclaredScopePath } from "../../lib/workflow-contract.js";
 import {
   getAllowedNextAgents,
   getReviewerRoleForAgent,
@@ -226,6 +229,10 @@ export type WorkItemStoreData = {
   keyIndexBySession: Map<string, Map<string, string>>;
   /** Registered delegated plan runs; empty until work_checkpoint register runs. */
   planRuns: Map<string, DelegatedPlanRun>;
+  /** Common execution registry; empty until generic work is registered. */
+  executions: Map<string, WorkflowExecutionRecord>;
+  /** Session-wide root-message claims preventing replay across executions. */
+  messageClaims: Map<string, WorkflowMessageClaim>;
 };
 
 export type WorkItemStore = {
@@ -424,7 +431,7 @@ function createLaunchError(
   };
 }
 
-function openWorkItemInStore(
+export function openWorkItemInStore(
   store: WorkItemStoreData,
   input: OpenWorkItemInput,
 ): OpenWorkItemResult {
@@ -1011,12 +1018,16 @@ export function createWorkItemStore(hydrateData?: WorkItemStoreData | null): Wor
         records: new Map(hydrateData.records),
         keyIndexBySession: new Map(hydrateData.keyIndexBySession),
         planRuns: new Map(hydrateData.planRuns ?? []),
+        executions: new Map(hydrateData.executions ?? []),
+        messageClaims: new Map(hydrateData.messageClaims ?? []),
       }
     : {
         nextId: 1,
         records: new Map(),
         keyIndexBySession: new Map(),
         planRuns: new Map(),
+        executions: new Map(),
+        messageClaims: new Map(),
       };
 
   return {

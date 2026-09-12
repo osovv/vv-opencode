@@ -3,8 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Filesystem adapter that loads and fully validates an approved active vvoc delegated plan and its linked approved spec for runtime registration.
 //   SCOPE: Trusted-root containment, regular-file and archive rejection, strict parse, lifecycle status checks, full cross-file lint through the shared engine, typed delegated extraction, and content-hash capture. Domain transitions and fingerprint capture live elsewhere.
-//   DEPENDS: [node:crypto, node:fs/promises, node:path, src/lib/spec-lint.ts]
-//   LINKS: [M-WORKFLOW-CHECKPOINTS, M-SPEC-LINT, M-WORKFLOW-DELEGATED, V-M-WORKFLOW-CHECKPOINTS]
+//   DEPENDS: [node:crypto, node:fs/promises, node:path, src/lib/spec-lint.ts, src/lib/workflow-contract.ts]
+//   LINKS: [M-WORKFLOW-CHECKPOINTS, M-SPEC-LINT, M-WORKFLOW-CONTRACT, M-WORKFLOW-DELEGATED, V-M-WORKFLOW-CHECKPOINTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -16,10 +16,11 @@
 //   LoadApprovedDelegatedPlanInput - Workspace root and plan path (absolute or root-relative).
 //   loadApprovedDelegatedPlan - Load, validate, lint, and extract one approved delegated plan package.
 //   contentSha256 - Deterministic SHA-256 over provided text.
+//   nativeExecutionSource - Map a validated native package onto the common immutable source identity.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Initial adapter: containment, archive and lifecycle rejection, full lint, typed extraction, and hashes.]
+//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Added pure native-to-common source adaptation; delegated definition types now come from the shared contract module.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -30,8 +31,11 @@ import {
   isSpecArchivePath,
   lintSpecArtifacts,
   parseSpecXml,
-  type DelegatedPlanDefinition,
 } from "../../lib/spec-lint.js";
+import type {
+  DelegatedPlanDefinition,
+  WorkflowExecutionSource,
+} from "../../lib/workflow-contract.js";
 
 // START_BLOCK_IO_TYPES
 export interface LoadedDelegatedPlan {
@@ -82,6 +86,27 @@ export function contentSha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 // END_BLOCK_HASH_HELPER
+
+// START_BLOCK_NATIVE_SOURCE_ADAPTER
+/**
+ * Convert a fully validated native package into the common immutable source
+ * identity. This is deliberately a pure mapping: native validation, lifecycle
+ * checks, and hash binding have already happened during loading, and no generic
+ * caller may invoke this to bypass them.
+ */
+export function nativeExecutionSource(
+  plan: LoadedDelegatedPlan,
+): Extract<WorkflowExecutionSource, { kind: "native-package" }> {
+  return {
+    kind: "native-package",
+    planPath: plan.planPath,
+    specPath: plan.specPath,
+    planSha256: plan.planSha256,
+    specSha256: plan.specSha256,
+    definition: plan.definition,
+  };
+}
+// END_BLOCK_NATIVE_SOURCE_ADAPTER
 
 // START_CONTRACT: loadApprovedDelegatedPlan
 //   PURPOSE: Load an active project-local approved vvoc delegated plan plus its linked approved spec, fully linted and typed.

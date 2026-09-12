@@ -10,6 +10,8 @@
   <Principle>Public CLI commands, package exports, config paths, and setup behavior are user-facing contracts; update README and current .grace artifacts when they change.</Principle>
   <Principle>Invalid existing user config should fail with clear diagnostics before mutation rather than being silently repaired.</Principle>
   <Principle>Workflow automation uses explicit work-item IDs and simple counters, not semantic clustering or fuzzy similarity.</Principle>
+  <Principle>Execution ownership, requirement source, and delegated authority are distinct: native-package, provided-plan, and conversation-scoped work share one validated execution contract without forcing native documents, and registered review obligations are enforced without inventing a universal final-review pair.</Principle>
+  <Principle>Explicit delegation permits reasonable reversible decisions inside the recorded scope while user-reserved stops, host permissions, and destructive, publication, and credential operations stay outside it; executable authority is finite, provenance-backed, and never self-renewed.</Principle>
   <Principle>NEEDS_CONTEXT and BLOCKED statuses halt automation and return control to the main session or user.</Principle>
   <Principle>Repository memory and generated summaries must never override explicit user instructions, code, tests, README, or current .grace state.</Principle>
   <Principle>Create C-* change bundles only for active approved GRACE work; do not create retroactive C-* bundles for completed work.</Principle>

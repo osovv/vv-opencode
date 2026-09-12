@@ -3,8 +3,8 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Pure strict linter for .vvoc spec-package XML artifacts (spec.xml, plan.xml, design-context.xml) enforcing the element-name identity format and delegated execution/checkpoint contracts.
 //   SCOPE: Strict well-formedness validation over the htmlparser2 xmlMode event stream, template-contract checks per artifact kind, component/task/wave/checkpoint identity rules, reference integrity, lifecycle-aware severity, plan-subset-of-spec cross-file checking, delegated execution and review-checkpoint validation with typed extraction, and package layout checks. No filesystem access — callers pass artifact contents.
-//   DEPENDS: [htmlparser2]
-//   LINKS: [M-SPEC-LINT, M-PLUGIN-SPEC-GUARD, M-CLI-COMMANDS, M-WORKFLOW-CHECKPOINTS]
+//   DEPENDS: [htmlparser2, src/lib/workflow-contract.ts]
+//   LINKS: [M-SPEC-LINT, M-WORKFLOW-CONTRACT, M-PLUGIN-SPEC-GUARD, M-CLI-COMMANDS, M-WORKFLOW-CHECKPOINTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,13 +17,13 @@
 //   SpecLintVerdict - Per-artifact lint result with kind, ok flag, and findings.
 //   SpecLintArtifactInput - One artifact to lint identified by a file label and raw content.
 //   SpecLintOptions - Options for lint runs (skipCrossFile for single-file contexts).
-//   DelegatedReviewer - Canonical delegated checkpoint reviewer roles (spec, code).
-//   DelegatedTaskDefinition - Typed delegated obligation for one declared plan task.
-//   DelegatedCheckpointDefinition - Typed delegated obligation for one declared review checkpoint.
-//   DelegatedPlanDefinition - Typed obligations extracted from a delegated execution section.
-//   DelegatedPlanExtractionResult - Success payload or error list returned by delegated extraction.
-//   DeclaredScopePathResult - Normalized workspace-relative path or a rejection reason.
-//   normalizeDeclaredScopePath - Text-level canonical normalization for declared scope file paths.
+//   DelegatedReviewer - Canonical delegated checkpoint reviewer roles (spec, code); re-exported from the common contract.
+//   DelegatedTaskDefinition - Typed delegated obligation for one declared plan task; re-exported from the common contract.
+//   DelegatedCheckpointDefinition - Typed delegated obligation for one declared review checkpoint; re-exported from the common contract.
+//   DelegatedPlanDefinition - Typed obligations extracted from a delegated execution section; re-exported from the common contract.
+//   DelegatedPlanExtractionResult - Success payload or error list returned by delegated extraction; re-exported from the common contract.
+//   DeclaredScopePathResult - Normalized workspace-relative path or a rejection reason; re-exported from the common contract.
+//   normalizeDeclaredScopePath - Text-level canonical normalization for declared scope file paths; re-exported from the common contract.
 //   extractDelegatedPlanDefinition - Strictly extract and validate typed delegated obligations from plan content.
 //   parseSpecXml - Strict xmlMode parse producing a positioned element tree or well-formedness findings.
 //   lintSpecArtifacts - Lint a set of artifacts together, applying cross-file rules between plans and specs.
@@ -32,10 +32,19 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the delegated execution section, review-checkpoint vocabulary, scope-path normalization, typed extractDelegatedPlanDefinition, and bumped LINT_VERSION to 2.]
+//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Delegated obligation types and declared-path normalization moved to the dependency-free M-WORKFLOW-CONTRACT and re-exported here; native extraction now lifts task title, acceptance, verification, and dependency text for the common adapter.]
 // END_CHANGE_SUMMARY
 
 import { Tokenizer, type TokenizerCallbacks } from "htmlparser2";
+import {
+  normalizeDeclaredScopePath,
+  type DeclaredScopePathResult,
+  type DelegatedCheckpointDefinition,
+  type DelegatedPlanDefinition,
+  type DelegatedPlanExtractionResult,
+  type DelegatedReviewer,
+  type DelegatedTaskDefinition,
+} from "./workflow-contract.js";
 
 // START_BLOCK_PUBLIC_TYPES
 export const LINT_VERSION = 2;
@@ -457,84 +466,20 @@ function nonEmpty(node: XmlNode | undefined): boolean {
 // END_BLOCK_TREE_HELPERS
 
 // START_BLOCK_DELEGATED_TYPES
-/** Canonical reviewer roles accepted inside a delegated checkpoint's reviewer set. */
-export type DelegatedReviewer = "spec" | "code";
-
-/** Typed delegated obligation for one declared plan task. */
-export interface DelegatedTaskDefinition {
-  /** Canonical task id used by depends_on and checkpoint coverage (e.g. "T-001"). */
-  taskId: string;
-  /** Declaring identity element name (e.g. "TASK-T-001"). */
-  taskElement: string;
-  /** Declaring wave id in document order (e.g. "WAVE-1"). */
-  wave: string;
-  /** Normalized workspace-relative write scope files declared for the task. */
-  writeScope: string[];
-}
-
-/** Typed delegated obligation for one declared review checkpoint. */
-export interface DelegatedCheckpointDefinition {
-  /** Declared checkpoint identity (e.g. "CHECKPOINT-R-001"). */
-  checkpointId: string;
-  kind: "milestone" | "final";
-  /** Wave barrier that must be accepted before the checkpoint may start. */
-  afterWave: string;
-  /** Canonical task ids covered by the checkpoint. */
-  covers: string[];
-  /** Normalized workspace-relative files reviewed by the checkpoint. */
-  scope: string[];
-  /** Declared reviewer roles; every role must pass for the checkpoint to pass. */
-  reviewers: DelegatedReviewer[];
-  /** Acceptance criterion texts recorded in the plan. */
-  acceptance: string[];
-  /** Verification command texts recorded in the plan. */
-  verification: string[];
-}
-
-/** Typed obligations extracted from a plan's delegated execution section. */
-export interface DelegatedPlanDefinition {
-  mode: "delegated";
-  /** Declared wave ids in document order. */
-  waves: string[];
-  tasks: DelegatedTaskDefinition[];
-  checkpoints: DelegatedCheckpointDefinition[];
-}
-
-/** Either a typed delegated definition or the collected validation errors. */
-export type DelegatedPlanExtractionResult =
-  | { ok: true; definition: DelegatedPlanDefinition }
-  | { ok: false; errors: string[] };
-
-/** Normalized workspace-relative path, or the reason a declared path is malformed. */
-export type DeclaredScopePathResult = { ok: true; path: string } | { ok: false; reason: string };
+// The delegated obligation vocabulary and the pure declared-path normalizer
+// live in the dependency-free common contract so the native linter and the
+// common runtime share one representation. These names remain re-exported here
+// for existing linter consumers.
+export {
+  normalizeDeclaredScopePath,
+  type DeclaredScopePathResult,
+  type DelegatedCheckpointDefinition,
+  type DelegatedPlanDefinition,
+  type DelegatedPlanExtractionResult,
+  type DelegatedReviewer,
+  type DelegatedTaskDefinition,
+};
 // END_BLOCK_DELEGATED_TYPES
-
-// START_BLOCK_SCOPE_PATH_NORMALIZATION
-/**
- * Text-level canonical normalization for declared scope paths. The linter and
- * the runtime snapshot fingerprint share this representation so a plan that
- * lints clean cannot declare paths the runtime normalizer rejects on sight.
- * Filesystem-specific checks (existence, symlinks, regular files) stay in the
- * runtime normalizer; this function is deliberately pure.
- */
-export function normalizeDeclaredScopePath(raw: string): DeclaredScopePathResult {
-  const trimmed = raw.trim();
-  if (trimmed === "") return { ok: false, reason: "empty path" };
-  if (trimmed.includes("\\")) return { ok: false, reason: "backslash separator" };
-  if (trimmed.startsWith("/")) return { ok: false, reason: "absolute path" };
-  if (/^[A-Za-z]:/.test(trimmed)) return { ok: false, reason: "drive-absolute path" };
-  if (trimmed.startsWith("~")) return { ok: false, reason: "home-relative path" };
-  if (/[*?[\]]/.test(trimmed)) return { ok: false, reason: "wildcard characters" };
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f]/.test(trimmed)) return { ok: false, reason: "control characters" };
-  const segments = trimmed.split("/");
-  for (const segment of segments) {
-    if (segment === "") return { ok: false, reason: "empty path segment" };
-    if (segment === "." || segment === "..") return { ok: false, reason: "traversal segment" };
-  }
-  return { ok: true, path: segments.join("/") };
-}
-// END_BLOCK_SCOPE_PATH_NORMALIZATION
 
 // START_BLOCK_DELEGATED_FACTS
 interface DelegatedTaskFactsEntry {
@@ -546,6 +491,10 @@ interface DelegatedTaskFactsEntry {
   writeScopeDeclared: boolean;
   writeScopeDuplicates: string[];
   primaryFile: string;
+  title: string;
+  acceptance: string[];
+  verification: string[];
+  dependsOn: string[];
 }
 
 interface DelegatedTaskFacts {
@@ -608,6 +557,31 @@ function collectDelegatedTaskFacts(root: XmlNode): DelegatedTaskFacts {
         primaryFile: (() => {
           const normalized = normalizeDeclaredScopePath(textOf(child(task, "file")));
           return normalized.ok ? normalized.path : "";
+        })(),
+        title: textOf(child(task, "title")).trim(),
+        acceptance: (() => {
+          const acceptanceNode = child(task, "acceptance");
+          return acceptanceNode
+            ? children(acceptanceNode, "criterion")
+                .map((entry) => textOf(entry).trim())
+                .filter(Boolean)
+            : [];
+        })(),
+        verification: (() => {
+          const verificationNode = child(task, "verification");
+          return verificationNode
+            ? children(verificationNode, "command")
+                .map((entry) => textOf(entry).trim())
+                .filter(Boolean)
+            : [];
+        })(),
+        dependsOn: (() => {
+          const dependsNode = child(task, "depends_on");
+          return dependsNode
+            ? children(dependsNode, "task_id")
+                .map((entry) => textOf(entry).trim())
+                .filter(Boolean)
+            : [];
         })(),
       });
     }
@@ -1097,6 +1071,10 @@ export function extractDelegatedPlanDefinition(
         taskElement: task.taskElement,
         wave: task.wave,
         writeScope: [...task.writeScope],
+        ...(task.title ? { title: task.title } : {}),
+        ...(task.acceptance.length > 0 ? { acceptance: [...task.acceptance] } : {}),
+        ...(task.verification.length > 0 ? { verification: [...task.verification] } : {}),
+        ...(task.dependsOn.length > 0 ? { dependsOn: [...task.dependsOn] } : {}),
       })),
       checkpoints,
     },

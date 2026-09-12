@@ -70,7 +70,7 @@ describe("managed agent prompts", () => {
     expect(template).toContain("<editing_workflow>");
     expect(template).toContain("<reroute_on_evidence>");
     expect(template).toContain("<skill_trigger_rule>");
-    expect(template).toContain("<large_feature_gate>");
+    expect(template).toContain("<source_and_authority>");
     expect(template).toContain("<stop_and_recovery>");
     expect(template).toContain("<plan_artifacts>");
     expect(template).toContain("<final_response_format>");
