@@ -1,3 +1,11 @@
+## <small>1.4.3-rc.0 (2026-09-12)</small>
+
+### Summary
+
+This release makes delegated workflow execution recoverable instead of dead-ending: tasks and checkpoint review cycles that stop or exhaust their ordinary budgets can now resume through a bounded, explicitly recorded recovery operation, with one autonomous grant per target and any further unit requiring a fresh root-user message that the runtime validates for role, session identity, and timing. A worker whose report stays protocol-invalid is now settled truthfully as a rejected report with bounded diagnostics rather than appearing permanently in flight, while observed hard stops are preserved and never converted into success. Persistence advances to version 3, adding recovery and rejected-report records while conservatively loading older snapshots, and recovery changes are written durably before new launch permissions appear. Managed controller, worker, and reviewer prompts were also recalibrated to distinguish stops, recovery, and completion, reserve handoff files for genuine transfers, and scope re-reviews to prior findings and the fix's effects — so users get clearer guidance and fewer unnecessary dead ends without weakening mandatory review.
+
+* feat(workflow): add bounded recovery, report-rejection settlement, and calibrated prompts ([f5fa9d3](https://github.com/osovv/vv-opencode/commit/f5fa9d3))
+
 ## <small>1.4.2 (2026-09-11)</small>
 
 ### Summary
