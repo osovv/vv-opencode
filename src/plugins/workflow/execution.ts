@@ -15,6 +15,7 @@
 //   WorkflowCheckpointReviewerOutcome - One reviewer's recorded outcome inside a generation.
 //   WorkflowCheckpointReviewState - Current in-flight generic review generation state.
 //   WorkflowCheckpointHistoryEntry - One settled generic generation outcome.
+//   WorkflowCheckpointRecoveryEntry - One recorded generic checkpoint exhaustion recovery.
 //   WorkflowCheckpointBinding - One registered checkpoint contract bound to its execution revision.
 //   WorkflowExecutionRecord - Authoritative registry entry for one common execution.
 //   RegisterExecutionTaskInput - One task contract plus an optional exact unbound work item to adopt.
@@ -46,6 +47,7 @@
 //   startGenericCheckpointInStore - Start one generic checkpoint generation after covered tasks are accepted.
 //   recordGenericReviewerLaunchInStore - Bind one reviewer launch call to the current generation.
 //   recordGenericReviewerResultInStore - Record one reviewer outcome and settle the generation.
+//   recoverGenericCheckpointInStore - Grant one exhaustion-recovery generation under a recorded advance unit.
 //   isTaskLaunchableInStore - Whether declared dependencies and barriers allow a task launch.
 //   completeExecutionInStore - Complete a generic execution when all tasks and obligations hold.
 //   registerExecution - Store-surface registration wrapper.
@@ -53,6 +55,10 @@
 //   adoptWorkItems - Store-surface adoption wrapper.
 //   splitExecutionTask - Store-surface replacement/split wrapper.
 //   delegatedAttemptBudget - Re-exported budget helper for inherited lineage budgets.
+//   addAuthorityInStore - Persist one advance-authority record and message claim.
+//   addStageApprovalInStore - Persist one recorded stage approval.
+//   addReserveDebitInStore - Persist one advance-reserve debit.
+//   putAuthorityInStore - Replace or append one authority record.
 //   ExecutionMutationErrorCode - Coded rejection families for registry mutations.
 // END_MODULE_MAP
 //
@@ -77,6 +83,7 @@ import {
   type WorkflowExecutionSource,
   type WorkflowExecutionState,
   type WorkflowLineageEntry,
+  type WorkflowMessageClaim,
   type WorkflowObligationOrigin,
   type WorkflowReserveDebit,
   type WorkflowReviewer,
@@ -129,6 +136,15 @@ export interface WorkflowCheckpointHistoryEntry {
   completedAt: string;
 }
 
+export interface WorkflowCheckpointRecoveryEntry {
+  recoveryId: string;
+  kind: "advance_grant";
+  diagnosis: string;
+  changedCondition: string;
+  verification: string[];
+  recoveredAt: string;
+}
+
 export interface WorkflowCheckpointBinding {
   checkpointId: string;
   contract: WorkflowCheckpointContract;
@@ -140,6 +156,7 @@ export interface WorkflowCheckpointBinding {
   passedRevision?: number;
   currentReview?: WorkflowCheckpointReviewState;
   history?: WorkflowCheckpointHistoryEntry[];
+  recoveryHistory?: WorkflowCheckpointRecoveryEntry[];
 }
 
 export interface WorkflowExecutionRecord {
@@ -232,6 +249,14 @@ function cloneCheckpointBinding(binding: WorkflowCheckpointBinding): WorkflowChe
         }
       : {}),
     ...(binding.history ? { history: binding.history.map((entry) => ({ ...entry })) } : {}),
+    ...(binding.recoveryHistory
+      ? {
+          recoveryHistory: binding.recoveryHistory.map((entry) => ({
+            ...entry,
+            verification: [...entry.verification],
+          })),
+        }
+      : {}),
   };
 }
 
@@ -783,7 +808,10 @@ export function appendExecutionWorkInStore(
   data: WorkItemStoreData,
   input: AppendExecutionWorkInput,
 ): AppendExecutionWorkResult {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -799,6 +827,13 @@ export function appendExecutionWorkInStore(
       ok: false,
       errorCode: "EXECUTION_SEALED",
       message: `execution ${input.runId} is sealed`,
+    };
+  }
+  if (execution.source.kind === "native-package") {
+    return {
+      ok: false,
+      errorCode: "NATIVE_REPLACEMENT",
+      message: "native structural amendments require the native source lifecycle",
     };
   }
   if (!isBoundedWorkflowId(input.amendmentId)) {
@@ -960,6 +995,7 @@ export function appendExecutionWorkInStore(
     rationale,
     createdAt: now,
   });
+  data.executions.set(execution.runId, execution);
 
   return { ok: true, revision, execution: cloneWorkflowExecution(execution) };
 }
@@ -974,7 +1010,10 @@ export function adoptWorkItemsInStore(
   data: WorkItemStoreData,
   input: AdoptWorkItemsInput,
 ): AdoptWorkItemsResult {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1080,6 +1119,7 @@ export function adoptWorkItemsInStore(
     });
   }
   execution.updatedAt = toIsoNow();
+  data.executions.set(execution.runId, execution);
   return { ok: true, execution: cloneWorkflowExecution(execution) };
 }
 // START_CONTRACT: splitExecutionTaskInStore
@@ -1093,7 +1133,10 @@ export function splitExecutionTaskInStore(
   data: WorkItemStoreData,
   input: SplitExecutionTaskInput,
 ): SplitExecutionTaskResult {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1342,6 +1385,7 @@ export function splitExecutionTaskInStore(
     rationale: splitRationale,
     createdAt: now,
   });
+  data.executions.set(execution.runId, execution);
 
   return { ok: true, childTaskIds: childIds, execution: cloneWorkflowExecution(execution) };
 }
@@ -1358,7 +1402,10 @@ export function sealExecutionInStore(
 ):
   | { ok: true; execution: WorkflowExecutionRecord }
   | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1372,6 +1419,7 @@ export function sealExecutionInStore(
   execution.state = "sealed";
   execution.sealedAt = toIsoNow();
   execution.updatedAt = execution.sealedAt;
+  data.executions.set(execution.runId, execution);
   return { ok: true, execution: cloneWorkflowExecution(execution) };
 }
 // START_CONTRACT: ensureNativeExecutions
@@ -1588,7 +1636,10 @@ export function startGenericCheckpointInStore(
     startFingerprint?: string;
   },
 ): StartGenericCheckpointResult {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1635,7 +1686,10 @@ export function startGenericCheckpointInStore(
       message: `checkpoint ${input.checkpointId} already passed; re-review requires an explicit amendment or recovery`,
     };
   }
-  if ((checkpoint.attempts ?? 0) >= GENERIC_CHECKPOINT_GENERATIONS) {
+  if (
+    (checkpoint.attempts ?? 0) >=
+    GENERIC_CHECKPOINT_GENERATIONS + (checkpoint.recoveryHistory?.length ?? 0)
+  ) {
     return {
       ok: false,
       errorCode: "INVALID_INPUT",
@@ -1677,6 +1731,7 @@ export function startGenericCheckpointInStore(
   };
   execution.checkpoints.set(input.checkpointId, updated);
   execution.updatedAt = toIsoNow();
+  data.executions.set(execution.runId, execution);
   return {
     ok: true,
     checkpoint: cloneCheckpointBinding(updated),
@@ -1696,7 +1751,10 @@ export function recordGenericReviewerLaunchInStore(
     callId: string;
   },
 ): { ok: true } | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1728,6 +1786,7 @@ export function recordGenericReviewerLaunchInStore(
   }
   review.reviewerCallIds[input.reviewer] = input.callId;
   execution.updatedAt = toIsoNow();
+  data.executions.set(execution.runId, execution);
   return { ok: true };
 }
 
@@ -1750,7 +1809,10 @@ export function recordGenericReviewerResultInStore(
     status: "PASS" | "FAIL" | "NEEDS_CONTEXT";
   },
 ): RecordGenericReviewerResultResult {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1791,6 +1853,7 @@ export function recordGenericReviewerResultInStore(
   );
   if (!allReported) {
     execution.updatedAt = toIsoNow();
+    data.executions.set(execution.runId, execution);
     return { ok: true, outcome: "in_progress", checkpoint: cloneCheckpointBinding(checkpoint) };
   }
 
@@ -1814,11 +1877,97 @@ export function recordGenericReviewerResultInStore(
   };
   execution.checkpoints.set(input.checkpointId, settled);
   execution.updatedAt = toIsoNow();
+  data.executions.set(execution.runId, execution);
   return {
     ok: true,
     outcome: passed ? "passed" : "failed",
     checkpoint: cloneCheckpointBinding(settled),
   };
+}
+
+/** Recover one exhausted generic checkpoint generation under a recorded advance unit. */
+export function recoverGenericCheckpointInStore(
+  data: WorkItemStoreData,
+  input: {
+    sessionId: string;
+    runId: string;
+    checkpointId: string;
+    recoveryId: string;
+    diagnosis: string;
+    changedCondition: string;
+    verification: string[];
+  },
+):
+  | { ok: true; checkpoint: WorkflowCheckpointBinding }
+  | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
+  const found = findExecution(data, input.runId);
+  const execution = found ? cloneWorkflowExecution(found) : undefined;
+  if (!execution) {
+    return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
+  }
+  if (execution.sessionId !== input.sessionId) {
+    return {
+      ok: false,
+      errorCode: "SESSION_MISMATCH",
+      message: "execution belongs to another session",
+    };
+  }
+  if (execution.state === "sealed") {
+    return {
+      ok: false,
+      errorCode: "EXECUTION_SEALED",
+      message: `execution ${input.runId} is sealed`,
+    };
+  }
+  const checkpoint = findCheckpoint(execution, input.checkpointId);
+  if (!checkpoint) {
+    return {
+      ok: false,
+      errorCode: "UNKNOWN_REFERENCE",
+      message: `no checkpoint ${input.checkpointId} in ${input.runId}`,
+    };
+  }
+  if (checkpoint.currentReview) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message: `checkpoint ${input.checkpointId} has an in-flight review generation`,
+    };
+  }
+  const recoveryHistory = checkpoint.recoveryHistory ?? [];
+  if (recoveryHistory.some((entry) => entry.recoveryId === input.recoveryId)) {
+    return {
+      ok: false,
+      errorCode: "DUPLICATE_ID",
+      message: `recovery ${input.recoveryId} is already recorded for ${input.checkpointId}`,
+    };
+  }
+  const budget = GENERIC_CHECKPOINT_GENERATIONS + recoveryHistory.length;
+  if ((checkpoint.attempts ?? 0) < budget) {
+    return {
+      ok: false,
+      errorCode: "INVALID_INPUT",
+      message: `checkpoint ${input.checkpointId} is not exhausted; ordinary generations remain`,
+    };
+  }
+  const updated: WorkflowCheckpointBinding = {
+    ...checkpoint,
+    recoveryHistory: [
+      ...recoveryHistory,
+      {
+        recoveryId: input.recoveryId,
+        kind: "advance_grant",
+        diagnosis: input.diagnosis.trim(),
+        changedCondition: input.changedCondition.trim(),
+        verification: input.verification.map((entry) => entry.trim()),
+        recoveredAt: toIsoNow(),
+      },
+    ],
+  };
+  execution.checkpoints.set(input.checkpointId, updated);
+  execution.updatedAt = toIsoNow();
+  data.executions.set(execution.runId, execution);
+  return { ok: true, checkpoint: cloneCheckpointBinding(updated) };
 }
 
 /** Whether a task's declared dependencies and barriers currently allow launch. */
@@ -1832,7 +1981,10 @@ export function isTaskLaunchableInStore(
       reason: "TASK_NOT_FOUND" | "DEPENDENCIES_UNMET" | "BARRIER_UNSATISFIED";
       message: string;
     } {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution || execution.sessionId !== input.sessionId) {
     return { ok: false, reason: "TASK_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1871,7 +2023,10 @@ export function completeExecutionInStore(
   data: WorkItemStoreData,
   input: { sessionId: string; runId: string; rationale: string; evidence: string[] },
 ): CompleteExecutionResult {
-  const execution = findExecution(data, input.runId);
+  const foundExecution = findExecution(data, input.runId);
+  // Mutate a clone so staged transactions and accidental callers never mutate
+  // shared live state before the snapshot is persisted.
+  const execution = foundExecution ? cloneWorkflowExecution(foundExecution) : undefined;
   if (!execution) {
     return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${input.runId}` };
   }
@@ -1953,11 +2108,142 @@ export function completeExecutionInStore(
 
   const sealed = sealExecutionInStore(data, { sessionId: input.sessionId, runId: input.runId });
   if (!sealed.ok) return { ok: false, errorCode: sealed.errorCode, message: sealed.message };
+  const passedCheckpoints = [...sealed.execution.checkpoints.values()].filter(
+    (checkpoint) => checkpoint.status === "passed",
+  );
+  const activeBindings = [...sealed.execution.tasks.values()].filter(
+    (binding) => binding.status !== "superseded",
+  );
+  // Independent review is claimed only when every active task is covered by a
+  // passed checkpoint; mixed or partial coverage is controller-accepted.
   const reviewStatus =
-    execution.checkpoints.size > 0 ? "independently_reviewed" : "controller_accepted";
+    activeBindings.length > 0 &&
+    passedCheckpoints.length > 0 &&
+    activeBindings.every((binding) =>
+      passedCheckpoints.some((checkpoint) => checkpoint.contract.covers.includes(binding.taskId)),
+    )
+      ? "independently_reviewed"
+      : "controller_accepted";
   return { ok: true, reviewStatus, execution: sealed.execution };
 }
 // END_BLOCK_GENERIC_REVIEWS
+
+// START_BLOCK_AUTHORITY_PERSISTENCE
+function mutateExecution(
+  data: WorkItemStoreData,
+  sessionId: string,
+  runId: string,
+  mutate: (
+    execution: WorkflowExecutionRecord,
+  ) => { ok: true } | { ok: false; errorCode: ExecutionMutationErrorCode; message: string },
+):
+  | { ok: true; execution: WorkflowExecutionRecord }
+  | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
+  const found = findExecution(data, runId);
+  if (!found) {
+    return { ok: false, errorCode: "EXECUTION_NOT_FOUND", message: `no execution ${runId}` };
+  }
+  if (found.sessionId !== sessionId) {
+    return {
+      ok: false,
+      errorCode: "SESSION_MISMATCH",
+      message: "execution belongs to another session",
+    };
+  }
+  const execution = cloneWorkflowExecution(found);
+  const applied = mutate(execution);
+  if (!applied.ok) return applied;
+  execution.updatedAt = toIsoNow();
+  data.executions.set(execution.runId, execution);
+  return { ok: true, execution };
+}
+
+/** Persist one advance-authority record and its session-wide message claim atomically. */
+export function addAuthorityInStore(
+  data: WorkItemStoreData,
+  input: {
+    sessionId: string;
+    runId: string;
+    authority: WorkflowAuthorityRecord;
+    claim: WorkflowMessageClaim;
+  },
+):
+  | { ok: true; execution: WorkflowExecutionRecord }
+  | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
+  return mutateExecution(data, input.sessionId, input.runId, (execution) => {
+    if (execution.authority.some((entry) => entry.authorityId === input.authority.authorityId)) {
+      return {
+        ok: false,
+        errorCode: "DUPLICATE_ID",
+        message: `authority ${input.authority.authorityId} already recorded`,
+      };
+    }
+    execution.authority.push(input.authority);
+    data.messageClaims.set(input.claim.messageId, input.claim);
+    return { ok: true };
+  });
+}
+
+/** Persist one recorded stage approval on its execution. */
+export function addStageApprovalInStore(
+  data: WorkItemStoreData,
+  input: { sessionId: string; runId: string; approval: WorkflowStageApproval },
+):
+  | { ok: true; execution: WorkflowExecutionRecord }
+  | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
+  return mutateExecution(data, input.sessionId, input.runId, (execution) => {
+    if (execution.stageApprovals.some((entry) => entry.approvalId === input.approval.approvalId)) {
+      return {
+        ok: false,
+        errorCode: "DUPLICATE_ID",
+        message: `approval ${input.approval.approvalId} already recorded`,
+      };
+    }
+    execution.stageApprovals.push(input.approval);
+    return { ok: true };
+  });
+}
+
+/** Persist one reserve debit on its execution. */
+export function addReserveDebitInStore(
+  data: WorkItemStoreData,
+  input: { sessionId: string; runId: string; debit: WorkflowReserveDebit },
+):
+  | { ok: true; execution: WorkflowExecutionRecord }
+  | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
+  return mutateExecution(data, input.sessionId, input.runId, (execution) => {
+    if (execution.reserveDebits.some((entry) => entry.recoveryId === input.debit.recoveryId)) {
+      return {
+        ok: false,
+        errorCode: "DUPLICATE_ID",
+        message: `reserve debit ${input.debit.recoveryId} already recorded`,
+      };
+    }
+    execution.reserveDebits.push(input.debit);
+    return { ok: true };
+  });
+}
+
+/** Replace or append one authority record, preserving its reserve history. */
+export function putAuthorityInStore(
+  data: WorkItemStoreData,
+  input: { sessionId: string; runId: string; authority: WorkflowAuthorityRecord },
+):
+  | { ok: true; execution: WorkflowExecutionRecord }
+  | { ok: false; errorCode: ExecutionMutationErrorCode; message: string } {
+  return mutateExecution(data, input.sessionId, input.runId, (execution) => {
+    const index = execution.authority.findIndex(
+      (entry) => entry.authorityId === input.authority.authorityId,
+    );
+    if (index >= 0) {
+      execution.authority[index] = input.authority;
+    } else {
+      execution.authority.push(input.authority);
+    }
+    return { ok: true };
+  });
+}
+// END_BLOCK_AUTHORITY_PERSISTENCE
 
 // Re-exported helper so review/completion modules can reason about inherited
 // budgets without importing delegated.ts directly.

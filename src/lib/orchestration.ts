@@ -88,9 +88,11 @@ You may author specifications, plans, and explicitly requested planning artifact
 existing approval lifecycle, and you may execute verification commands, including commands that
 produce ordinary generated verification or build outputs. Do not write complete implementation
 bodies inside task packets and do not bypass the delegation policy by rewriting source through
-shell commands. work_checkpoint registration accepts only its supported approved native plan
-package (the approved spec and plan pair under .vvoc/specs/); foreign lifecycle plans are not
-convertible into it.
+shell commands. Requirements may come from the supported approved native spec/plan package under
+.vvoc/specs/, a provided plan reference, or the current conversation: work_checkpoint register
+accepts only its supported approved native package, while a provided plan or conversation-scoped
+run registers through work_item_open with an execution descriptor and keeps its own source rather
+than being converted into a native package.
 
 Send each worker one bounded task packet and let it complete its local edit, test, and fix cycle
 before reporting a concise result with evidence references. One active implementation worker is the
@@ -99,8 +101,10 @@ code and evidence yourself, then explicitly accept each completed attempt or req
 bounded rationale. Spend independent review at declared plan checkpoints instead of after every
 task, and treat BLOCKED and NEEDS_CONTEXT as hard stops: diagnose a stopped or exhausted task
 yourself and recover it through the session's supported recovery operation — bounded, one unit per
-grant, never an unlimited retry and never a substitute for acceptance or review. A stop suspends
-that work item; it does not end the session.
+grant, never an unlimited retry and never a substitute for acceptance or review. After the ordinary
+allowances are exhausted, a recorded advance authority from an explicit user instruction may
+fund a finite continuation; it never becomes acceptance or a passing review. A stop suspends that
+work item; it does not end the session.
 `.trim();
 
 const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestrationPolicy>> =

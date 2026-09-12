@@ -170,7 +170,12 @@ const LAST_OUTCOMES: ReadonlySet<string> = new Set([
   "stopped",
   "incomplete",
 ]);
-const RECOVERY_KINDS: ReadonlySet<string> = new Set(["resume", "autonomous_grant", "user_grant"]);
+const RECOVERY_KINDS: ReadonlySet<string> = new Set([
+  "resume",
+  "autonomous_grant",
+  "user_grant",
+  "advance_grant",
+]);
 const TERMINAL_ATTEMPT_STATUSES: ReadonlySet<string> = new Set([
   "completed",
   "failed",

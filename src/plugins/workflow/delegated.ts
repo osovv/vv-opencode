@@ -154,7 +154,7 @@ export interface DelegatedReworkRecord {
   revokedAcceptanceAttempt: number;
 }
 
-export type DelegatedRecoveryKind = "resume" | "autonomous_grant" | "user_grant";
+export type DelegatedRecoveryKind = "resume" | "autonomous_grant" | "user_grant" | "advance_grant";
 
 /**
  * One bounded recovery event. `resume` returns a stopped item to the launch
@@ -191,8 +191,12 @@ function toIsoNow(): string {
 
 /** Count of budget-granting recovery entries in a recovery history. */
 export function delegatedRecoveryGrantCount(history: readonly DelegatedRecoveryRecord[]): number {
-  return history.filter((entry) => entry.kind === "autonomous_grant" || entry.kind === "user_grant")
-    .length;
+  return history.filter(
+    (entry) =>
+      entry.kind === "autonomous_grant" ||
+      entry.kind === "user_grant" ||
+      entry.kind === "advance_grant",
+  ).length;
 }
 
 /** Allowed attempt count: base budget plus one per authorized rework or recovery grant. */
@@ -1534,6 +1538,12 @@ export interface RecoverDelegatedWorkItemInput {
   userMessageId?: string;
   /** Read-only authorization lookup supplied by the tool layer. */
   lookupUserMessage?: LookupRecoveryUserMessage;
+  /**
+   * Set by the transaction layer after it has validated and reserved one
+   * advance-authority unit for this exact recovery. It only authorizes the
+   * one-unit grant; it is never acceptance and never satisfies a reviewer.
+   */
+  advanceGrantApproved?: boolean;
 }
 
 type DelegatedRecoveryErrorCode =
@@ -1800,10 +1810,16 @@ export async function recoverDelegatedWorkItemInStore(
     return commitRecovery("autonomous_grant");
   }
 
+  if (input.advanceGrantApproved === true) {
+    // The transaction layer already validated the execution authority and
+    // reserved exactly one unit for this recoveryId; record the grant kind.
+    return commitRecovery("advance_grant");
+  }
+
   return {
     ok: false,
     errorCode: "AUTONOMOUS_GRANT_EXHAUSTED",
-    message: `AUTONOMOUS_GRANT_EXHAUSTED: the single autonomous recovery grant for ${input.workItemId} is consumed; one further unit requires a fresh root-user message referenced by userMessageId`,
+    message: `AUTONOMOUS_GRANT_EXHAUSTED: the single autonomous recovery grant for ${input.workItemId} is consumed; one further unit requires a recorded advance authority or a fresh root-user message referenced by userMessageId`,
   };
 }
 

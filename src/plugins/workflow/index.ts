@@ -36,6 +36,7 @@ import {
   createWorkflowResultExcerpt,
   beginTrackedLaunch,
   createWorkItemStore,
+  createWorkItemStoreView,
   getReviewRound,
   getWorkItem,
   revertReviewerLaunch,
@@ -85,6 +86,8 @@ import {
   snapshotWorkflowStateChecked,
 } from "./persistence.js";
 import { loadApprovedDelegatedPlan } from "./checkpoint-io.js";
+import { runWorkflowTransaction, WorkflowTransactionQueue } from "./transactions.js";
+import type { AuthorityMessageSnapshot } from "./authority.js";
 
 const z = tool.schema;
 
@@ -136,19 +139,26 @@ ordinary attempts without acceptance, diagnose it yourself and call work_item_de
 "recover", the terminal attempt number, a diagnosis, the changed condition or approach, the
 required verification references, and a stable recoveryId. A recovery resumes the same work item
 and its ordinary budget; when a further attempt is necessary it grants exactly one. The single
-autonomous grant per target is consumed on first use, and any further unit requires a fresh
-root-user message referenced by userMessageId — the runtime verifies that message's role, session
-identity, and timing, never its wording. Recovery never accepts a result, replaces a reviewer, or
+autonomous grant per target is consumed on first use. After that, a further unit requires either a
+fresh root-user message referenced by userMessageId — validated for role, session identity, and
+timing, never wording — or a recorded advance authority referenced by runId and authorityId whose
+finite shared reserve still has a unit. Recovery never accepts a result, replaces a reviewer, or
 changes declared scope. A rejected report (a worker execution that finished with a protocol-invalid
 result) is recorded with bounded diagnostics and has the same recovery path; it never becomes DONE.
 
-Register the supported approved native plan package once with work_checkpoint register (the
-spec/plan pair under .vvoc/specs/); foreign lifecycle plans are not convertible into it. Start
-each declared review checkpoint only after its prerequisite tasks are accepted, and run the due
-checkpoint before dependent waves. A checkpoint passes only when every declared reviewer passes
-against the pinned snapshot; a closed review-only FAIL report is a findings result, not approval.
-A checkpoint generation that stopped or exhausted its two ordinary generations recovers through
-work_checkpoint action "recover" with the same bounded fields. Do not write source files yourself:
+Requirements may come from the supported approved native spec/plan package under .vvoc/specs/, a
+provided plan reference, or the current conversation. Register a native package once with
+work_checkpoint register (planPath); start and verify declared checkpoints only after their
+prerequisite tasks are accepted. A provided-plan or conversation-scoped run is registered once with
+work_item_open carrying an execution descriptor (executionKey, source, goal, boundary) and its
+first task batch; later tasks append with the same runId plus amendmentId and rationale, and generic
+review obligations run through work_checkpoint start/review/complete. A selected source stays
+authoritative: a failed native package is never silently reopened as weaker generic execution, and
+a provided document is never converted or executed as commands. A checkpoint passes only when
+every declared reviewer passes against the pinned snapshot; a closed review-only FAIL report is a
+findings result, not approval. A checkpoint generation that stopped or exhausted its ordinary
+generations recovers through work_checkpoint action "recover" with the same bounded fields and the
+same authority options. Do not write source files yourself:
 delegate implementation edits, including fixes requested by reviewers, through bounded task
 packets, while keeping planning artifacts, acceptance decisions, and verification commands in this
 session.
@@ -393,7 +403,6 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
   if (!isVvocPluginEnabled(vvoc.config, "workflow")) return {};
   const resolvedPolicy = resolveOrchestrationPolicy(vvoc.config);
   const workflowSystemInstruction = getWorkflowSystemInstruction(resolvedPolicy);
-  const delegatedProfileActive = resolvedPolicy.profile === "delegated";
   const trustedWorkspaceRoot = worktree || directory;
 
   // START_BLOCK_PERSISTENCE_SETUP
@@ -862,6 +871,108 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
     };
   };
 
+  // Advance-authority provenance uses the same pinned SDK message response.
+  // Only verified identity/timing/eligibility metadata leaves this lookup; raw
+  // user text is never persisted or logged.
+  const lookupAuthorityMessage = async (input: {
+    sessionId: string;
+    runId: string;
+    messageId: string;
+  }): Promise<AuthorityMessageSnapshot | undefined> => {
+    const response = await client.session.message({
+      path: { id: input.sessionId, messageID: input.messageId },
+      query: { directory },
+    });
+    if (response.error || !response.data) {
+      const errorName = (response.error as { name?: string } | undefined)?.name;
+      if (errorName && errorName !== "NotFound") {
+        throw new Error(`authority message lookup failed: ${errorName}`);
+      }
+      return undefined;
+    }
+    const info = response.data.info as {
+      role?: string;
+      sessionID?: string;
+      id?: string;
+      ignored?: boolean;
+      time?: { created?: number };
+    };
+    const parts = Array.isArray(response.data.parts) ? response.data.parts : [];
+    const textParts = parts
+      .map((part) => part as { type?: unknown; text?: unknown })
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text as string);
+    return {
+      messageId: info.id ?? input.messageId,
+      sessionId: info.sessionID ?? input.sessionId,
+      role: info.role === "user" ? "user" : "assistant",
+      createdMs:
+        typeof info.time?.created === "number" && Number.isFinite(info.time.created)
+          ? info.time.created
+          : 0,
+      ignored: info.ignored === true,
+      syntheticOnly: false,
+      textParts,
+    };
+  };
+
+  // Per-session serialization for generic mutating tool calls. The staged
+  // snapshot persists before the committed state is published, so a failed
+  // write never exposes new obligations, authority, or launch permissions.
+  const workflowTransactions = new WorkflowTransactionQueue();
+
+  async function commitGenericToolResult(
+    sessionId: string,
+    run: (view: WorkItemStore) => Promise<Record<string, unknown>> | Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const liveStore = stores.get(sessionId);
+    if (!liveStore) {
+      return {
+        ok: false,
+        errorCode: "SESSION_MISMATCH",
+        message: `no live workflow store for session ${sessionId}`,
+      };
+    }
+    if (invalidHydrationSessions.has(sessionId)) {
+      return {
+        ok: false,
+        errorCode: "INVALID_STATE",
+        message: `persisted workflow state for session ${sessionId} is invalid`,
+      };
+    }
+    const outcome = await runWorkflowTransaction<Record<string, unknown>>({
+      queue: workflowTransactions,
+      sessionId,
+      getData: () => liveStore.getStoreData(),
+      operation: async (staged) => {
+        const result = await run(createWorkItemStoreView(staged));
+        if (result.ok !== true) {
+          // Validation failed: persist nothing and publish nothing.
+          return { result, skipPersist: true };
+        }
+        return { result };
+      },
+    });
+    if (!outcome.ok) {
+      void client.app
+        .log({
+          body: {
+            service: "workflow",
+            level: "error",
+            message: "[workflow][generic][BLOCK_GENERIC_COMMIT] persistence failed",
+            extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
+          },
+        })
+        .catch(() => undefined);
+      return {
+        ok: false,
+        errorCode: "PERSISTENCE_FAILED",
+        message: `generic workflow mutation could not be persisted: ${outcome.error}`,
+      };
+    }
+    return outcome.result;
+  }
+
   /**
    * Execute one recovery mutation durably on the live store: the domain
    * reducer applies to the live entry (re-prechecking after any authorization
@@ -971,6 +1082,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
   });
   const workCheckpointTool = createWorkCheckpointTool(dummyStore, {
     lookupUserMessage: lookupRecoveryUserMessage,
+    lookupAuthorityMessage,
   });
 
   return {
@@ -987,11 +1099,49 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
               writeScope: z.array(z.string()).optional(),
               planRunId: z.string().optional(),
               planTaskId: z.string().optional(),
+              taskId: z.string().optional(),
+              goal: z.string().optional(),
+              acceptanceCriteria: z.array(z.string()).optional(),
+              verification: z.array(z.string()).optional(),
+              dependsOn: z.array(z.string()).optional(),
+              blockedBy: z.array(z.string()).optional(),
             }),
           ),
+          execution: z
+            .object({
+              executionKey: z.string(),
+              source: z.record(z.string(), z.unknown()),
+              goal: z.string(),
+              boundary: z.object({
+                files: z.array(z.string()),
+                directories: z.array(z.string()),
+              }),
+              checkpoints: z.array(z.record(z.string(), z.unknown())).optional(),
+            })
+            .optional(),
+          runId: z.string().optional(),
+          amendmentId: z.string().optional(),
+          rationale: z.string().optional(),
         },
         async execute(args, context) {
           assertWorkflowToolAccess(context.agent, "work_item_open");
+          const isGeneric = args.execution !== undefined || args.runId !== undefined;
+          if (isGeneric) {
+            // Hydrate/validate the session store before the transaction boundary
+            // reads it, matching every other tool entry point.
+            getOrCreateStore(context.sessionID);
+            const result = await commitGenericToolResult(context.sessionID, (view) =>
+              workItemOpenTool.execute(
+                args,
+                {
+                  sessionId: context.sessionID,
+                  workspaceRoot: trustedWorkspaceRoot,
+                },
+                view,
+              ),
+            );
+            return stringifyToolOutput(result);
+          }
           const sessionStore = getOrCreateStore(context.sessionID);
           const opened = workItemOpenTool.execute(
             args,
@@ -1032,134 +1182,191 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
           return stringifyToolOutput(closed);
         },
       }),
-      // The delegated control tools are registered only under the delegated
-      // startup profile; other profiles keep their current tool-schema footprint.
-      ...(delegatedProfileActive
-        ? {
-            work_item_decide: tool({
-              description: workItemDecideTool.description,
-              args: {
-                workItemId: z.string(),
-                attempt: z.number().int().min(1),
-                decision: z.enum(["accept", "request_changes", "rework", "recover"]),
-                rationale: z.string().optional(),
-                evidence: z.array(z.string()).optional(),
-                concernsDisposition: z.string().optional(),
-                runId: z.string().optional(),
-                checkpointId: z.string().optional(),
-                diagnosis: z.string().optional(),
-                changedCondition: z.string().optional(),
-                verification: z.array(z.string()).optional(),
-                recoveryId: z.string().optional(),
-                userMessageId: z.string().optional(),
-              },
-              async execute(args, context) {
-                // Resolve the store first so invalid persisted state is detected
-                // before the authorization check reports it as a control denial.
-                const sessionStore = getOrCreateStore(context.sessionID);
-                await assertPrimaryControllerMutation(
-                  context.agent,
-                  context.sessionID,
-                  { directory: context.directory, worktree: context.worktree },
-                  "work_item_decide",
+      // Control tools are registered independent of the startup profile; they
+      // remain root-session, agent, workspace, and invalid-hydration gated at
+      // execution time.
+      ...{
+        work_item_decide: tool({
+          description: workItemDecideTool.description,
+          args: {
+            workItemId: z.string(),
+            attempt: z.number().int().min(1),
+            decision: z.enum(["accept", "request_changes", "rework", "recover"]),
+            rationale: z.string().optional(),
+            evidence: z.array(z.string()).optional(),
+            concernsDisposition: z.string().optional(),
+            runId: z.string().optional(),
+            checkpointId: z.string().optional(),
+            diagnosis: z.string().optional(),
+            changedCondition: z.string().optional(),
+            verification: z.array(z.string()).optional(),
+            recoveryId: z.string().optional(),
+            userMessageId: z.string().optional(),
+            authorityId: z.string().optional(),
+          },
+          async execute(args, context) {
+            // Resolve the store first so invalid persisted state is detected
+            // before the authorization check reports it as a control denial.
+            const sessionStore = getOrCreateStore(context.sessionID);
+            await assertPrimaryControllerMutation(
+              context.agent,
+              context.sessionID,
+              { directory: context.directory, worktree: context.worktree },
+              "work_item_decide",
+            );
+            // Recovery is the only decision family that must persist
+            // before it exposes new launch permissions. Authority-bearing
+            // recovery stages the work-item recovery and the reserve debit in
+            // one serialized transaction so they commit or fail together.
+            if (args.decision === "recover") {
+              if (args.authorityId !== undefined) {
+                const staged = await commitGenericToolResult(context.sessionID, (view) =>
+                  workItemDecideTool.execute(args, { sessionId: context.sessionID }, view),
                 );
-                // Recovery is the only decision family that must persist
-                // before it exposes new launch permissions, so it commits
-                // durably on the live store and rolls back on write failure.
-                if (args.decision === "recover") {
-                  const workItemId = String(args.workItemId ?? "");
-                  const recovered = await executeCommittedRecovery(
-                    context.sessionID,
-                    (liveStore) =>
-                      workItemDecideTool.execute(args, { sessionId: context.sessionID }, liveStore),
-                    () => captureRecordRestore(context.sessionID, workItemId),
-                    (result) => result.ok === true,
-                  );
-                  return stringifyToolOutput(recovered);
-                }
-                const decided = await workItemDecideTool.execute(
-                  args,
-                  { sessionId: context.sessionID },
-                  sessionStore,
+                return stringifyToolOutput(staged);
+              }
+              const workItemId = String(args.workItemId ?? "");
+              const recovered = await executeCommittedRecovery(
+                context.sessionID,
+                (liveStore) =>
+                  workItemDecideTool.execute(args, { sessionId: context.sessionID }, liveStore),
+                () => captureRecordRestore(context.sessionID, workItemId),
+                (result) => result.ok === true,
+              );
+              return stringifyToolOutput(recovered);
+            }
+            const decided = await workItemDecideTool.execute(
+              args,
+              { sessionId: context.sessionID },
+              sessionStore,
+            );
+            if (decided.ok) {
+              const persisted = snapshotSession(context.sessionID);
+              if (!persisted.ok) {
+                throw new Error(
+                  `PERSISTENCE_FAILED: decision applied in memory but could not be persisted: ${persisted.error}`,
                 );
-                if (decided.ok) {
-                  const persisted = snapshotSession(context.sessionID);
-                  if (!persisted.ok) {
-                    throw new Error(
-                      `PERSISTENCE_FAILED: decision applied in memory but could not be persisted: ${persisted.error}`,
-                    );
-                  }
-                }
-                return stringifyToolOutput(decided);
+              }
+            }
+            return stringifyToolOutput(decided);
+          },
+        }),
+        work_checkpoint: tool({
+          description: workCheckpointTool.description,
+          args: {
+            action: z.enum([
+              "register",
+              "start",
+              "verify",
+              "recover",
+              "review",
+              "bind",
+              "complete",
+              "amend",
+              "authorize",
+              "record_approval",
+              "revoke_authority",
+            ]),
+            planPath: z.string().optional(),
+            runId: z.string().optional(),
+            checkpointId: z.string().optional(),
+            complete: z.boolean().optional(),
+            diagnosis: z.string().optional(),
+            changedCondition: z.string().optional(),
+            verification: z.array(z.string()).optional(),
+            recoveryId: z.string().optional(),
+            userMessageId: z.string().optional(),
+            checkpoints: z.array(z.record(z.string(), z.unknown())).optional(),
+            tasks: z.array(z.record(z.string(), z.unknown())).optional(),
+            amendmentId: z.string().optional(),
+            rationale: z.string().optional(),
+            startFingerprint: z.string().optional(),
+            reviewer: z.string().optional(),
+            status: z.string().optional(),
+            callId: z.string().optional(),
+            authorityId: z.string().optional(),
+            messageId: z.string().optional(),
+            approvalId: z.string().optional(),
+            stage: z.string().optional(),
+            stages: z.array(z.string()).optional(),
+            decisionScope: z.string().optional(),
+            fileBoundary: z.array(z.string()).optional(),
+            reservedStops: z.array(z.string()).optional(),
+            artifactPath: z.string().optional(),
+            artifactSha256: z.string().optional(),
+            revocationId: z.string().optional(),
+          },
+          async execute(args, context) {
+            // Resolve the store first so invalid persisted state is detected
+            // before the authorization check reports it as a control denial.
+            const sessionStore = getOrCreateStore(context.sessionID);
+            await assertPrimaryControllerMutation(
+              context.agent,
+              context.sessionID,
+              { directory: context.directory, worktree: context.worktree },
+              "work_checkpoint",
+            );
+            const toolContext = {
+              sessionId: context.sessionID,
+              workspaceRoot: trustedWorkspaceRoot,
+              loadPlan: async (planPath: string, workspaceRoot: string) => {
+                const loaded = await loadApprovedDelegatedPlan({ workspaceRoot, planPath });
+                return loaded.ok ? loaded.plan : { loadError: `${loaded.code}: ${loaded.message}` };
               },
-            }),
-            work_checkpoint: tool({
-              description: workCheckpointTool.description,
-              args: {
-                action: z.enum(["register", "start", "verify", "recover"]),
-                planPath: z.string().optional(),
-                runId: z.string().optional(),
-                checkpointId: z.string().optional(),
-                complete: z.boolean().optional(),
-                diagnosis: z.string().optional(),
-                changedCondition: z.string().optional(),
-                verification: z.array(z.string()).optional(),
-                recoveryId: z.string().optional(),
-                userMessageId: z.string().optional(),
-              },
-              async execute(args, context) {
-                // Resolve the store first so invalid persisted state is detected
-                // before the authorization check reports it as a control denial.
-                const sessionStore = getOrCreateStore(context.sessionID);
-                await assertPrimaryControllerMutation(
-                  context.agent,
-                  context.sessionID,
-                  { directory: context.directory, worktree: context.worktree },
-                  "work_checkpoint",
+            };
+            // Generic (non-native) executions route through the atomic
+            // transaction boundary: staged persist, then publish.
+            const runIdArg = String(args.runId ?? "");
+            const liveExecution = runIdArg
+              ? sessionStore.getStoreData().executions.get(runIdArg)
+              : undefined;
+            const authorityAction =
+              args.action === "authorize" ||
+              args.action === "record_approval" ||
+              args.action === "revoke_authority";
+            const genericAction =
+              args.action !== "register" &&
+              liveExecution !== undefined &&
+              (liveExecution.source.kind !== "native-package" || authorityAction);
+            const nativeAuthorityRecover =
+              args.action === "recover" &&
+              args.authorityId !== undefined &&
+              liveExecution !== undefined;
+            const genericRegister = args.action === "register" && !args.planPath;
+            if (genericAction || genericRegister || nativeAuthorityRecover) {
+              const result = await commitGenericToolResult(context.sessionID, (view) =>
+                workCheckpointTool.execute(args, toolContext, view),
+              );
+              return stringifyToolOutput(result);
+            }
+            // Checkpoint recovery commits durably on the live store and
+            // rolls the checkpoint entry back on write failure, so a
+            // granted generation is never exposed before its state is
+            // durably recorded.
+            if (args.action === "recover") {
+              const runId = String(args.runId ?? "");
+              const checkpointId = String(args.checkpointId ?? "");
+              const recovered = await executeCommittedRecovery(
+                context.sessionID,
+                (liveStore) => workCheckpointTool.execute(args, toolContext, liveStore),
+                () => captureCheckpointRestore(context.sessionID, runId, checkpointId),
+                (result) => result.ok === true,
+              );
+              return stringifyToolOutput(recovered);
+            }
+            const result = await workCheckpointTool.execute({ ...args }, toolContext, sessionStore);
+            if (result.ok) {
+              const persisted = snapshotSession(context.sessionID);
+              if (!persisted.ok) {
+                throw new Error(
+                  `PERSISTENCE_FAILED: checkpoint change applied in memory but could not be persisted: ${persisted.error}`,
                 );
-                const toolContext = {
-                  sessionId: context.sessionID,
-                  workspaceRoot: trustedWorkspaceRoot,
-                  loadPlan: async (planPath: string, workspaceRoot: string) => {
-                    const loaded = await loadApprovedDelegatedPlan({ workspaceRoot, planPath });
-                    return loaded.ok
-                      ? loaded.plan
-                      : { loadError: `${loaded.code}: ${loaded.message}` };
-                  },
-                };
-                // Checkpoint recovery commits durably on the live store and
-                // rolls the checkpoint entry back on write failure, so a
-                // granted generation is never exposed before its state is
-                // durably recorded.
-                if (args.action === "recover") {
-                  const runId = String(args.runId ?? "");
-                  const checkpointId = String(args.checkpointId ?? "");
-                  const recovered = await executeCommittedRecovery(
-                    context.sessionID,
-                    (liveStore) => workCheckpointTool.execute(args, toolContext, liveStore),
-                    () => captureCheckpointRestore(context.sessionID, runId, checkpointId),
-                    (result) => result.ok === true,
-                  );
-                  return stringifyToolOutput(recovered);
-                }
-                const result = await workCheckpointTool.execute(
-                  { ...args },
-                  toolContext,
-                  sessionStore,
-                );
-                if (result.ok) {
-                  const persisted = snapshotSession(context.sessionID);
-                  if (!persisted.ok) {
-                    throw new Error(
-                      `PERSISTENCE_FAILED: checkpoint change applied in memory but could not be persisted: ${persisted.error}`,
-                    );
-                  }
-                }
-                return stringifyToolOutput(result);
-              },
-            }),
-          }
-        : {}),
+              }
+            }
+            return stringifyToolOutput(result);
+          },
+        }),
+      },
     },
     "tool.execute.before": async (input, output) => {
       if (input.tool !== "task") {

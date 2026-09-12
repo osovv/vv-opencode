@@ -45,6 +45,11 @@ export interface WorkflowMutation<T> {
    * succeeds. When omitted, the committed staged snapshot replaces live state.
    */
   commit?: (live: WorkItemStoreData) => void;
+  /**
+   * When true the staged mutation is discarded without persisting or
+   * publishing; used for validation failures so nothing reaches disk.
+   */
+  skipPersist?: boolean;
 }
 
 export type WorkflowTransactionResult<T> = { ok: true; result: T } | { ok: false; error: string };
@@ -118,6 +123,10 @@ export async function runWorkflowTransaction<T>(options: {
   return queue.run(sessionId, async () => {
     const staged = cloneWorkItemStoreData(getData());
     const mutation = await options.operation(staged);
+    if (mutation.skipPersist === true) {
+      // Validation failed: persist nothing and publish nothing.
+      return { ok: true, result: mutation.result };
+    }
     const persist = options.persist ?? snapshotWorkflowStateChecked;
     const persisted = await persist(sessionId, staged);
     if (!persisted.ok) {

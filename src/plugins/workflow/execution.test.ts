@@ -399,6 +399,18 @@ describe("native compatibility migration", () => {
     expect(execution?.tasks.get("T-001")?.contract.acceptanceCriteria).toEqual([
       "Native acceptance",
     ]);
+
+    // Native executions never accept the generic append path.
+    const appended = appendExecutionWorkInStore(data, {
+      sessionId: SESSION,
+      runId: "run-native-1",
+      amendmentId: "native-append",
+      rationale: "Attempt generic append onto a native run.",
+      tasks: [{ contract: task({ taskId: "T-300", writeScope: ["src/lib/a.ts"] }) }],
+    });
+    expect(appended.ok).toBe(false);
+    if (appended.ok) return;
+    expect(appended.errorCode).toBe("NATIVE_REPLACEMENT");
   });
 });
 

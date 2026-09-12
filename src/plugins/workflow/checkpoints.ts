@@ -230,8 +230,12 @@ function cloneRun(run: DelegatedPlanRun): DelegatedPlanRun {
 export function checkpointRecoveryGrantCount(
   history: readonly DelegatedCheckpointRecoveryRecord[],
 ): number {
-  return history.filter((entry) => entry.kind === "autonomous_grant" || entry.kind === "user_grant")
-    .length;
+  return history.filter(
+    (entry) =>
+      entry.kind === "autonomous_grant" ||
+      entry.kind === "user_grant" ||
+      entry.kind === "advance_grant",
+  ).length;
 }
 
 /** Allowed generation count: the ordinary maximum plus one per recovery grant. */
@@ -1469,6 +1473,11 @@ export interface RecoverDelegatedCheckpointInput {
   userMessageId?: string;
   /** Read-only authorization lookup supplied by the tool layer. */
   lookupUserMessage?: LookupRecoveryUserMessage;
+  /**
+   * Set by the transaction layer after it has validated and reserved one
+   * advance-authority unit for this exact recovery.
+   */
+  advanceGrantApproved?: boolean;
 }
 
 type CheckpointRecoveryPrecheck =
@@ -1756,10 +1765,14 @@ export async function recoverDelegatedCheckpointInStore(
     return commitRecovery("autonomous_grant");
   }
 
+  if (input.advanceGrantApproved === true) {
+    return commitRecovery("advance_grant");
+  }
+
   return {
     ok: false,
     errorCode: "AUTONOMOUS_GRANT_EXHAUSTED",
-    message: `AUTONOMOUS_GRANT_EXHAUSTED: the single autonomous recovery grant for ${input.checkpointId} is consumed; one further generation requires a fresh root-user message referenced by userMessageId`,
+    message: `AUTONOMOUS_GRANT_EXHAUSTED: the single autonomous recovery grant for ${input.checkpointId} is consumed; one further generation requires a recorded advance authority or a fresh root-user message referenced by userMessageId`,
   };
 }
 // END_BLOCK_CHECKPOINT_RECOVERY

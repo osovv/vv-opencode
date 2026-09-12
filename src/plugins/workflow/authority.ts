@@ -377,7 +377,7 @@ export function extendAdvanceAuthority(input: {
   const nowMs = input.nowMs ?? input.message.createdMs;
   const claim = claimMessage(
     input.message,
-    authority.authorityId,
+    authority.runId,
     authority.authorityId,
     input.messageClaims,
     nowMs,

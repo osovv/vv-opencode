@@ -733,16 +733,46 @@ async function driveAcceptedTask(
 
 // START_BLOCK_AUTHORIZATION_TESTS
 describe("delegated control-tool authorization", () => {
-  test("registers control tools only under the delegated profile", async () => {
+  test("registers control tools independent of profile with root authorization", async () => {
     const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
     const delegatedHarness = await createDelegatedPluginHarness(workspaceRoot, "delegated");
     expect(delegatedHarness.plugin.tool?.work_item_decide).toBeDefined();
     expect(delegatedHarness.plugin.tool?.work_checkpoint).toBeDefined();
 
     const balancedHarness = await createDelegatedPluginHarness(workspaceRoot, "balanced");
-    expect(balancedHarness.plugin.tool?.work_item_decide).toBeUndefined();
-    expect(balancedHarness.plugin.tool?.work_checkpoint).toBeUndefined();
+    expect(balancedHarness.plugin.tool?.work_item_decide).toBeDefined();
+    expect(balancedHarness.plugin.tool?.work_checkpoint).toBeDefined();
     expect(balancedHarness.plugin.tool?.work_item_open).toBeDefined();
+  });
+
+  test("generic registration succeeds as the first workflow call of a fresh session", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot, "balanced");
+    const raw = await harness.plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "generic-first",
+            title: "Generic first task",
+            mode: "delegated",
+            requiredReviewers: [],
+            taskId: "T-100",
+            writeScope: ["src/tasks"],
+            acceptanceCriteria: ["Task works."],
+          },
+        ],
+        execution: {
+          executionKey: "generic-first",
+          source: { kind: "conversation-scoped" },
+          goal: "Register a generic execution first.",
+          boundary: { files: ["src/tasks"], directories: [] },
+        },
+      } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const parsed = parseToolJson<{ ok: boolean; runId?: string; message?: string }>(raw ?? "{}");
+    expect(parsed.ok).toBe(true);
+    expect(parsed.runId).toBeTruthy();
   });
 
   test("denies self-acceptance, child sessions, unknown session data, and untrusted workspaces", async () => {

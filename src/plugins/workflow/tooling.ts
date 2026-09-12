@@ -2,9 +2,9 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses.
-//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization including recovery-aware progress summaries; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, plan registration, checkpoint start/verify, failed-checkpoint rework authorization, and bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup.
-//   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/state.ts]
-//   LINKS: M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-PLUGIN-WORKFLOW
+//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization including recovery-aware progress summaries; generic execution registration/append through an optional execution descriptor or runId; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, native plan registration, checkpoint start/verify, failed-checkpoint rework authorization, bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup, and the generic (non-native) checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions.
+//   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/execution.ts, src/plugins/workflow/authority.ts, src/lib/workflow-contract.ts, src/plugins/workflow/state.ts]
+//   LINKS: M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY, M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,7 +17,8 @@
 //   createWorkItemListTool - Creates work_item_list tool wrapper with mode, round metadata, delegated acceptance and recovery state, and registered plan runs.
 //   createWorkItemCloseTool - Creates work_item_close tool wrapper with ready_to_close gating responses.
 //   createWorkItemDecideTool - Creates work_item_decide control wrapper around decideDelegatedWorkItem, rework authorization, and bounded recovery.
-//   createWorkCheckpointTool - Creates work_checkpoint control wrapper around plan registration, checkpoint start, verify, and checkpoint recovery.
+//   createWorkCheckpointTool - Creates work_checkpoint control wrapper around plan registration, checkpoint start, verify, checkpoint recovery, and generic checkpoint/completion/amendment/authority actions.
+//   DelegatedControlOptions - Optional read-only authorization lookups bound to the plugin SDK client.
 //   DecideArgs - work_item_decide tool argument shape.
 //   CheckpointArgs - work_checkpoint tool argument shape.
 //   WorkCheckpointRegisterInput - Register-action input discriminator.
@@ -26,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added decision recover and work_checkpoint action recover with bounded recovery text, stable recoveryId, optional userMessageId authorization, and recovery-aware inspection output.]
+//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Added generic execution registration/append through work_item_open and generic checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions through work_checkpoint, plus the SDK-backed authority-message lookup seam.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -39,6 +40,7 @@ import {
   type WorkItemMode,
   type WorkItemRecord,
   type WorkItemStore,
+  type WorkItemStoreData,
 } from "./state.js";
 import {
   authorizeReworkFromFailedCheckpoint,
@@ -55,10 +57,45 @@ import {
   summarizeDelegatedProgress,
   type LookupRecoveryUserMessage,
 } from "./delegated.js";
+import {
+  addAuthorityInStore,
+  addReserveDebitInStore,
+  addStageApprovalInStore,
+  appendExecutionWorkInStore,
+  completeExecutionInStore,
+  findExecution,
+  getExecutionView,
+  recordGenericReviewerLaunchInStore,
+  recordGenericReviewerResultInStore,
+  recoverGenericCheckpointInStore,
+  putAuthorityInStore,
+  registerExecutionInStore,
+  startGenericCheckpointInStore,
+} from "./execution.js";
+import {
+  advanceUnitsAvailable,
+  effectiveAuthorityStages,
+  extendAdvanceAuthority,
+  grantAdvanceAuthority,
+  proposeReserveDebit,
+  proposeStageApproval,
+  revokeAdvanceAuthority,
+  narrowAdvanceAuthority,
+  type AuthorityMessageSnapshot,
+} from "./authority.js";
 import type { LoadedDelegatedPlan } from "./checkpoint-io.js";
+import type {
+  WorkflowAuthorityStage,
+  WorkflowExecutionBoundary,
+  WorkflowExecutionSource,
+  WorkflowReviewer,
+  WorkflowTaskContract,
+} from "../../lib/workflow-contract.js";
 
 export type WorkflowToolContext = {
   sessionId: string;
+  /** Trusted absolute workspace root; required for generic execution registration. */
+  workspaceRoot?: string;
 };
 
 export type WorkflowToolDefinition<TArgs, TResult> = {
@@ -70,6 +107,12 @@ export type WorkflowToolDefinition<TArgs, TResult> = {
 /** Optional read-only authorization lookup bound to the plugin SDK client. */
 export interface DelegatedControlOptions {
   lookupUserMessage?: LookupRecoveryUserMessage;
+  /** Resolve one root-user message snapshot for advance-authority provenance. */
+  lookupAuthorityMessage?: (input: {
+    sessionId: string;
+    runId: string;
+    messageId: string;
+  }) => Promise<AuthorityMessageSnapshot | undefined>;
 }
 
 type OpenInputItem = {
@@ -80,10 +123,23 @@ type OpenInputItem = {
   writeScope?: unknown;
   planRunId?: unknown;
   planTaskId?: unknown;
+  /** Generic execution task-contract fields. */
+  taskId?: unknown;
+  goal?: unknown;
+  acceptanceCriteria?: unknown;
+  verification?: unknown;
+  dependsOn?: unknown;
+  blockedBy?: unknown;
 };
 
 type OpenArgs = {
   items: OpenInputItem[];
+  /** Generic execution descriptor; mutually exclusive with runId. */
+  execution?: unknown;
+  /** Append tasks to an existing generic execution. */
+  runId?: unknown;
+  amendmentId?: unknown;
+  rationale?: unknown;
 };
 
 type ListArgs = {
@@ -112,10 +168,23 @@ export type DecideArgs = {
   recoveryId?: string;
   /** Recover-only fresh root-user message authorizing one further unit. */
   userMessageId?: string;
+  /** Recover-only recorded advance authority authorizing one further unit. */
+  authorityId?: string;
 };
 
 export type CheckpointArgs = {
-  action: "register" | "start" | "verify" | "recover";
+  action:
+    | "register"
+    | "start"
+    | "verify"
+    | "recover"
+    | "review"
+    | "bind"
+    | "complete"
+    | "amend"
+    | "authorize"
+    | "record_approval"
+    | "revoke_authority";
   planPath?: string;
   runId?: string;
   checkpointId?: string;
@@ -127,6 +196,29 @@ export type CheckpointArgs = {
   recoveryId?: string;
   /** Recover-only fresh root-user message authorizing one further generation. */
   userMessageId?: string;
+  /** Generic checkpoint append/registration payloads. */
+  checkpoints?: unknown;
+  tasks?: unknown;
+  amendmentId?: string;
+  rationale?: string;
+  startFingerprint?: string;
+  /** Generic reviewer result recording. */
+  reviewer?: string;
+  status?: string;
+  callId?: string;
+  /** Advance authority inputs. */
+  authorityId?: string;
+  messageId?: string;
+  approvalId?: string;
+  stage?: string;
+  artifactPath?: string;
+  artifactSha256?: string;
+  revocationId?: string;
+  /** Authority scope inputs. */
+  stages?: unknown;
+  decisionScope?: string;
+  fileBoundary?: unknown;
+  reservedStops?: unknown;
 };
 
 function coerceNonEmptyString(value: unknown): string | undefined {
@@ -153,6 +245,95 @@ function canonicalizeReviewers(value: unknown): ReviewerRole[] | undefined {
     return left === "spec" ? -1 : 1;
   });
 }
+
+// START_BLOCK_GENERIC_NORMALIZATION
+function isWorkflowReviewer(value: unknown): value is WorkflowReviewer {
+  return value === "spec" || value === "code";
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+/** Normalize one tool item into a bounded generic task contract. */
+function normalizeTaskContract(
+  item: OpenInputItem,
+): { ok: true; contract: WorkflowTaskContract } | { ok: false; message: string } {
+  const taskId = coerceNonEmptyString(item.taskId) ?? coerceNonEmptyString(item.key);
+  const title = coerceNonEmptyString(item.title) ?? taskId;
+  if (!taskId || !title) {
+    return { ok: false, message: "each task item requires a non-empty taskId (or key) and title" };
+  }
+  if (!Array.isArray(item.requiredReviewers)) {
+    return {
+      ok: false,
+      message:
+        "requiredReviewers must be declared explicitly for each task (use [] for no independent review)",
+    };
+  }
+  const reviewers = item.requiredReviewers;
+  if (!reviewers.every(isWorkflowReviewer) || new Set(reviewers).size !== reviewers.length) {
+    return { ok: false, message: "requiredReviewers must be a unique spec/code array" };
+  }
+  return {
+    ok: true,
+    contract: {
+      taskId,
+      title,
+      goal: coerceNonEmptyString(item.goal) ?? title,
+      acceptanceCriteria: stringList(item.acceptanceCriteria),
+      verification: stringList(item.verification),
+      writeScope: stringList(item.writeScope),
+      dependsOn: stringList(item.dependsOn),
+      blockedBy: stringList(item.blockedBy),
+      requiredReviewers: [...(reviewers as WorkflowReviewer[])],
+    },
+  };
+}
+
+function normalizeExecutionSource(raw: unknown): WorkflowExecutionSource | undefined {
+  if (raw === null || typeof raw !== "object") return undefined;
+  const candidate = raw as Record<string, unknown>;
+  if (candidate.kind === "conversation-scoped") return { kind: "conversation-scoped" };
+  if (candidate.kind === "provided-plan") {
+    const reference = coerceNonEmptyString(candidate.reference);
+    if (!reference) return undefined;
+    const sha256 = coerceNonEmptyString(candidate.sha256);
+    return { kind: "provided-plan", reference, ...(sha256 ? { sha256 } : {}) };
+  }
+  // Native packages must register through work_checkpoint register with a
+  // planPath; the generic descriptor never fabricates a native source.
+  return undefined;
+}
+
+function normalizeBoundary(raw: unknown): WorkflowExecutionBoundary | undefined {
+  if (raw === null || typeof raw !== "object") return undefined;
+  const candidate = raw as Record<string, unknown>;
+  const files = stringList(candidate.files);
+  const directories = stringList(candidate.directories);
+  if (files.length === 0 && directories.length === 0) return undefined;
+  return { files, directories };
+}
+
+function normalizeCheckpointContracts(raw: unknown): unknown[] {
+  return Array.isArray(raw) ? raw : [];
+}
+
+function taskContractsFromItems(
+  items: OpenInputItem[],
+): { ok: true; contracts: WorkflowTaskContract[] } | { ok: false; message: string } {
+  const contracts: WorkflowTaskContract[] = [];
+  for (const item of items) {
+    const normalized = normalizeTaskContract(item);
+    if (!normalized.ok) return { ok: false, message: normalized.message };
+    contracts.push(normalized.contract);
+  }
+  if (contracts.length === 0) {
+    return { ok: false, message: "at least one task item is required" };
+  }
+  return { ok: true, contracts };
+}
+// END_BLOCK_GENERIC_NORMALIZATION
 
 function normalizeOpenInputItem(
   item: OpenInputItem,
@@ -321,6 +502,119 @@ export function createWorkItemOpenTool(
       "Open one or more workflow work items idempotently with explicit mode and requiredReviewers.",
     execute: (args, context, overrideStore) => {
       const inputItems = Array.isArray(args.items) ? args.items : [];
+      const runIdArg = coerceNonEmptyString(args.runId);
+      const executionArg = args.execution;
+      if (executionArg !== undefined && runIdArg !== undefined) {
+        return {
+          tool: "work_item_open",
+          sessionId: context.sessionId,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "INVALID_INPUT: execution and runId are mutually exclusive",
+        };
+      }
+
+      if (executionArg !== undefined || runIdArg !== undefined) {
+        const s = overrideStore ?? store;
+        const data = s.getStoreData();
+        const contracts = taskContractsFromItems(inputItems);
+        if (!contracts.ok) {
+          return {
+            tool: "work_item_open",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message: `INVALID_INPUT: ${contracts.message}`,
+          };
+        }
+
+        if (executionArg !== undefined) {
+          const descriptor =
+            executionArg !== null && typeof executionArg === "object"
+              ? (executionArg as Record<string, unknown>)
+              : {};
+          const executionKey = coerceNonEmptyString(descriptor.executionKey);
+          const source = normalizeExecutionSource(descriptor.source);
+          const boundary = normalizeBoundary(descriptor.boundary);
+          const goal = coerceNonEmptyString(descriptor.goal);
+          const workspaceRoot = coerceNonEmptyString(context.workspaceRoot);
+          if (!executionKey || !source || !boundary || !goal || !workspaceRoot) {
+            return {
+              tool: "work_item_open",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: "INVALID_INPUT",
+              message:
+                "INVALID_INPUT: execution requires executionKey, source, goal, boundary, and the trusted workspace root",
+            };
+          }
+          const registered = registerExecutionInStore(data, {
+            sessionId: context.sessionId,
+            workspaceRoot,
+            executionKey,
+            source,
+            goal,
+            boundary,
+            tasks: contracts.contracts.map((contract) => ({ contract })),
+            checkpoints: normalizeCheckpointContracts(descriptor.checkpoints) as never,
+          });
+          if (!registered.ok) {
+            return {
+              tool: "work_item_open",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: registered.errorCode,
+              message: registered.message,
+            };
+          }
+          return {
+            tool: "work_item_open",
+            sessionId: context.sessionId,
+            ok: true,
+            action: "register",
+            runId: registered.runId,
+            reused: registered.reused,
+            execution: getExecutionView(registered.execution),
+          };
+        }
+
+        const amendmentId = coerceNonEmptyString(args.amendmentId);
+        const rationale = coerceNonEmptyString(args.rationale);
+        if (!runIdArg || !amendmentId || !rationale) {
+          return {
+            tool: "work_item_open",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message: "INVALID_INPUT: runId append requires amendmentId and rationale",
+          };
+        }
+        const appended = appendExecutionWorkInStore(data, {
+          sessionId: context.sessionId,
+          runId: runIdArg,
+          amendmentId,
+          rationale,
+          tasks: contracts.contracts.map((contract) => ({ contract })),
+        });
+        if (!appended.ok) {
+          return {
+            tool: "work_item_open",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: appended.errorCode,
+            message: appended.message,
+          };
+        }
+        return {
+          tool: "work_item_open",
+          sessionId: context.sessionId,
+          ok: true,
+          action: "amend",
+          runId: runIdArg,
+          revision: appended.revision,
+          execution: getExecutionView(appended.execution),
+        };
+      }
 
       const results = inputItems.map((item) => {
         const normalized = normalizeOpenInputItem(item, context.sessionId);
@@ -523,6 +817,7 @@ export function createWorkItemDecideTool(
           typeof args.changedCondition === "string" ? args.changedCondition : "";
         const verification = Array.isArray(args.verification) ? args.verification.map(String) : [];
         const userMessageId = coerceNonEmptyString(args.userMessageId);
+        const authorityId = coerceNonEmptyString(args.authorityId);
         if (!recoveryId) {
           return {
             tool: "work_item_decide",
@@ -533,6 +828,48 @@ export function createWorkItemDecideTool(
               "INVALID_INPUT: recover requires a stable recoveryId, diagnosis, changedCondition, and verification references",
           };
         }
+        let advanceGrantApproved = false;
+        let advanceRunId: string | undefined;
+        if (authorityId) {
+          advanceRunId = coerceNonEmptyString(args.runId);
+          if (!advanceRunId) {
+            return {
+              tool: "work_item_decide",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: "INVALID_INPUT",
+              message: "INVALID_INPUT: authorityId recovery requires the owning runId",
+            };
+          }
+          const execution = findExecution(s.getStoreData(), advanceRunId);
+          const authority = execution?.authority.find((entry) => entry.authorityId === authorityId);
+          if (!execution || !authority) {
+            return {
+              tool: "work_item_decide",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: "AUTHORITY_NOT_FOUND",
+              message: `AUTHORITY_NOT_FOUND: no recorded authority ${authorityId} for ${advanceRunId}`,
+            };
+          }
+          const proposed = proposeReserveDebit({
+            authority,
+            debits: execution.reserveDebits,
+            recoveryId,
+            targetKind: "task",
+            targetId: workItemId,
+          });
+          if (!proposed.ok) {
+            return {
+              tool: "work_item_decide",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: proposed.code,
+              message: proposed.message,
+            };
+          }
+          advanceGrantApproved = true;
+        }
         const recovered = await recoverDelegatedWorkItem(s, {
           sessionId: context.sessionId,
           workItemId,
@@ -541,6 +878,7 @@ export function createWorkItemDecideTool(
           changedCondition,
           verification,
           recoveryId,
+          ...(advanceGrantApproved ? { advanceGrantApproved: true } : {}),
           ...(userMessageId !== undefined
             ? { userMessageId, lookupUserMessage: options?.lookupUserMessage }
             : {}),
@@ -553,6 +891,43 @@ export function createWorkItemDecideTool(
             errorCode: recovered.errorCode,
             message: recovered.message,
           };
+        }
+        if (recovered.kind === "advance_grant" && advanceRunId !== undefined) {
+          const execution = findExecution(s.getStoreData(), advanceRunId);
+          const authority = execution?.authority.find((entry) => entry.authorityId === authorityId);
+          const proposed = authority
+            ? proposeReserveDebit({
+                authority,
+                debits: execution?.reserveDebits ?? [],
+                recoveryId,
+                targetKind: "task",
+                targetId: workItemId,
+              })
+            : undefined;
+          if (!proposed?.ok) {
+            return {
+              tool: "work_item_decide",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: proposed?.code ?? "RESERVE_EXHAUSTED",
+              message:
+                proposed?.message ?? "advance recovery debit could not be recorded with the grant",
+            };
+          }
+          const stored = addReserveDebitInStore(s.getStoreData(), {
+            sessionId: context.sessionId,
+            runId: advanceRunId,
+            debit: proposed.value,
+          });
+          if (!stored.ok) {
+            return {
+              tool: "work_item_decide",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: stored.errorCode,
+              message: stored.message,
+            };
+          }
         }
         return {
           tool: "work_item_decide",
@@ -643,6 +1018,517 @@ export type WorkCheckpointExecuteContext = WorkflowToolContext & {
   ) => Promise<LoadedDelegatedPlan | { loadError: string }>;
 };
 
+// START_CONTRACT: executeGenericCheckpoint
+//   PURPOSE: Execute one generic (non-native) checkpoint/authority action against the common execution registry.
+//   INPUTS: { data, sessionId, runId, args, control? }
+//   OUTPUTS: { Promise<Record<string, unknown>> - structured tool result }
+//   SIDE_EFFECTS: [Mutates the common execution registry and may consult the SDK-backed authority lookup]
+//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY]
+// END_CONTRACT: executeGenericCheckpoint
+async function executeGenericCheckpoint(options: {
+  data: WorkItemStoreData;
+  sessionId: string;
+  runId: string;
+  args: CheckpointArgs;
+  control?: DelegatedControlOptions;
+}): Promise<Record<string, unknown>> {
+  const { data, sessionId, runId, args } = options;
+  const base: Record<string, unknown> = { tool: "work_checkpoint", sessionId, runId };
+  const execution = findExecution(data, runId);
+  if (!execution) {
+    return {
+      ...base,
+      ok: false,
+      errorCode: "EXECUTION_NOT_FOUND",
+      message: `no execution ${runId}`,
+    };
+  }
+  if (execution.sessionId !== sessionId) {
+    return {
+      ...base,
+      ok: false,
+      errorCode: "SESSION_MISMATCH",
+      message: "execution belongs to another session",
+    };
+  }
+  const amendmentId = coerceNonEmptyString(args.amendmentId);
+  const rationale = coerceNonEmptyString(args.rationale);
+
+  switch (args.action) {
+    case "register":
+    case "amend": {
+      if (!amendmentId || !rationale) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "generic register/amend requires amendmentId and rationale",
+        };
+      }
+      const items = Array.isArray(args.tasks) ? (args.tasks as OpenInputItem[]) : [];
+      const contracts =
+        items.length > 0 ? taskContractsFromItems(items) : { ok: true as const, contracts: [] };
+      if (!contracts.ok) {
+        return { ...base, ok: false, errorCode: "INVALID_INPUT", message: contracts.message };
+      }
+      const appended = appendExecutionWorkInStore(data, {
+        sessionId,
+        runId,
+        amendmentId,
+        rationale,
+        tasks: contracts.contracts.map((contract) => ({ contract })),
+        checkpoints: normalizeCheckpointContracts(args.checkpoints) as never,
+      });
+      if (!appended.ok) {
+        return { ...base, ok: false, errorCode: appended.errorCode, message: appended.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "amend",
+        revision: appended.revision,
+        execution: getExecutionView(appended.execution),
+      };
+    }
+
+    case "start": {
+      const checkpointId = coerceNonEmptyString(args.checkpointId);
+      if (!checkpointId) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "start requires checkpointId",
+        };
+      }
+      const startFingerprint = coerceNonEmptyString(args.startFingerprint);
+      const started = startGenericCheckpointInStore(data, {
+        sessionId,
+        runId,
+        checkpointId,
+        ...(startFingerprint ? { startFingerprint } : {}),
+      });
+      if (!started.ok) {
+        return { ...base, ok: false, errorCode: started.errorCode, message: started.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "start",
+        checkpointId,
+        generation: started.checkpoint.currentReview?.generation,
+        reviewersToLaunch: started.reviewers,
+        coveredAttemptIds: started.coveredAttemptIds,
+      };
+    }
+
+    case "review":
+    case "bind":
+    case "verify": {
+      const checkpointId = coerceNonEmptyString(args.checkpointId);
+      if (!checkpointId) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "checkpointId is required",
+        };
+      }
+      const reviewer = coerceNonEmptyString(args.reviewer);
+      if (!reviewer) {
+        const view = getExecutionView(execution);
+        return {
+          ...base,
+          ok: true,
+          action: "verify",
+          checkpointId,
+          checkpoint: view.checkpoints.find((entry) => entry.checkpointId === checkpointId),
+        };
+      }
+      if (reviewer !== "spec" && reviewer !== "code") {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "reviewer must be spec or code",
+        };
+      }
+      const status = coerceNonEmptyString(args.status);
+      if (status !== "PASS" && status !== "FAIL" && status !== "NEEDS_CONTEXT") {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "status must be PASS, FAIL, or NEEDS_CONTEXT",
+        };
+      }
+      const callId = coerceNonEmptyString(args.callId);
+      if (callId) {
+        const bound = recordGenericReviewerLaunchInStore(data, {
+          sessionId,
+          runId,
+          checkpointId,
+          reviewer,
+          callId,
+        });
+        if (!bound.ok) {
+          return { ...base, ok: false, errorCode: bound.errorCode, message: bound.message };
+        }
+      }
+      const recorded = recordGenericReviewerResultInStore(data, {
+        sessionId,
+        runId,
+        checkpointId,
+        reviewer,
+        status,
+      });
+      if (!recorded.ok) {
+        return { ...base, ok: false, errorCode: recorded.errorCode, message: recorded.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: args.action,
+        checkpointId,
+        reviewer,
+        outcome: recorded.outcome,
+        checkpointStatus: recorded.checkpoint.status,
+      };
+    }
+
+    case "recover": {
+      const checkpointId = coerceNonEmptyString(args.checkpointId);
+      const recoveryId = coerceNonEmptyString(args.recoveryId);
+      const diagnosis = typeof args.diagnosis === "string" ? args.diagnosis : "";
+      const changedCondition =
+        typeof args.changedCondition === "string" ? args.changedCondition : "";
+      const verification = stringList(args.verification);
+      const authorityId = coerceNonEmptyString(args.authorityId);
+      if (!checkpointId || !recoveryId || !authorityId) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message:
+            "generic checkpoint recovery requires checkpointId, recoveryId, and an authorityId",
+        };
+      }
+      const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
+      if (!authority) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "AUTHORITY_NOT_FOUND",
+          message: `AUTHORITY_NOT_FOUND: no recorded authority ${authorityId}`,
+        };
+      }
+      const proposed = proposeReserveDebit({
+        authority,
+        debits: execution.reserveDebits,
+        recoveryId,
+        targetKind: "checkpoint",
+        targetId: checkpointId,
+      });
+      if (!proposed.ok) {
+        return { ...base, ok: false, errorCode: proposed.code, message: proposed.message };
+      }
+      const recovered = recoverGenericCheckpointInStore(data, {
+        sessionId,
+        runId,
+        checkpointId,
+        recoveryId,
+        diagnosis,
+        changedCondition,
+        verification,
+      });
+      if (!recovered.ok) {
+        return { ...base, ok: false, errorCode: recovered.errorCode, message: recovered.message };
+      }
+      const freshAuthority = data.executions
+        .get(runId)
+        ?.authority.find((entry) => entry.authorityId === authorityId);
+      if (freshAuthority) {
+        const debit = proposeReserveDebit({
+          authority: freshAuthority,
+          debits: data.executions.get(runId)?.reserveDebits ?? [],
+          recoveryId,
+          targetKind: "checkpoint",
+          targetId: checkpointId,
+        });
+        if (debit.ok) {
+          addReserveDebitInStore(data, { sessionId, runId, debit: debit.value });
+        }
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "recover",
+        checkpointId,
+        recoveryId,
+        kind: "advance_grant",
+        checkpointStatus: recovered.checkpoint.status,
+      };
+    }
+
+    case "complete": {
+      const completed = completeExecutionInStore(data, {
+        sessionId,
+        runId,
+        rationale: rationale ?? "Generic execution completed with controller acceptance.",
+        evidence: stringList(args.verification),
+      });
+      if (!completed.ok) {
+        return { ...base, ok: false, errorCode: completed.errorCode, message: completed.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "complete",
+        reviewStatus: completed.reviewStatus,
+        execution: getExecutionView(completed.execution),
+      };
+    }
+
+    case "authorize": {
+      const authorityId = coerceNonEmptyString(args.authorityId);
+      const messageId = coerceNonEmptyString(args.messageId);
+      const stagesArg = Array.isArray(args.stages) ? args.stages : [];
+      const stages = stagesArg.filter(
+        (stage): stage is WorkflowAuthorityStage =>
+          stage === "specification" ||
+          stage === "planning" ||
+          stage === "implementation" ||
+          stage === "verification",
+      );
+      if (!authorityId || !messageId || stages.length === 0) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "authorize requires authorityId, messageId, and explicit stages",
+        };
+      }
+      const lookup = options.control?.lookupAuthorityMessage;
+      if (!lookup) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "authorize requires the SDK-backed authorization lookup",
+        };
+      }
+      const message = await lookup({ sessionId, runId, messageId });
+      if (!message) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "AUTHORITY_DENIED",
+          message:
+            "authorization message could not be verified as an eligible root-user instruction",
+        };
+      }
+      const existingAuthority = execution.authority.find(
+        (entry) => entry.authorityId === authorityId,
+      );
+      if (existingAuthority) {
+        if (existingAuthority.grantedByMessageId === messageId) {
+          // Idempotent replay of the originating registration.
+          return {
+            ...base,
+            ok: true,
+            action: "authorize",
+            authorityId,
+            reused: true,
+            units: existingAuthority.initialUnits,
+            availableUnits: advanceUnitsAvailable(existingAuthority, execution.reserveDebits),
+          };
+        }
+        const extended = extendAdvanceAuthority({
+          authority: existingAuthority,
+          extensionId: `ext-${messageId}`,
+          sessionId,
+          message,
+          messageClaims: data.messageClaims,
+        });
+        if (!extended.ok) {
+          return { ...base, ok: false, errorCode: extended.code, message: extended.message };
+        }
+        const updated = {
+          ...existingAuthority,
+          extensions: [...existingAuthority.extensions, extended.value],
+        };
+        const storedExtension = putAuthorityInStore(data, { sessionId, runId, authority: updated });
+        if (!storedExtension.ok) {
+          return {
+            ...base,
+            ok: false,
+            errorCode: storedExtension.errorCode,
+            message: storedExtension.message,
+          };
+        }
+        return {
+          ...base,
+          ok: true,
+          action: "authorize",
+          authorityId,
+          extensions: updated.extensions.length,
+          availableUnits: advanceUnitsAvailable(updated, execution.reserveDebits),
+        };
+      }
+      const granted = grantAdvanceAuthority({
+        authorityId,
+        runId,
+        sessionId,
+        message,
+        scope: {
+          stages,
+          decisionScope: coerceNonEmptyString(args.decisionScope) ?? "",
+          fileBoundary: stringList(args.fileBoundary),
+          reservedStops: stringList(args.reservedStops).filter(
+            (stage): stage is WorkflowAuthorityStage =>
+              stage === "specification" ||
+              stage === "planning" ||
+              stage === "implementation" ||
+              stage === "verification",
+          ),
+        },
+        existingAuthorities: execution.authority,
+        messageClaims: data.messageClaims,
+      });
+      if (!granted.ok) {
+        return { ...base, ok: false, errorCode: granted.code, message: granted.message };
+      }
+      const stored = addAuthorityInStore(data, {
+        sessionId,
+        runId,
+        authority: granted.value.record,
+        claim: granted.value.claim,
+      });
+      if (!stored.ok) {
+        return { ...base, ok: false, errorCode: stored.errorCode, message: stored.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "authorize",
+        authorityId,
+        units: granted.value.record.initialUnits,
+        availableUnits: advanceUnitsAvailable(granted.value.record, []),
+      };
+    }
+
+    case "record_approval": {
+      const authorityId = coerceNonEmptyString(args.authorityId);
+      const approvalId = coerceNonEmptyString(args.approvalId);
+      const stage = coerceNonEmptyString(args.stage) as WorkflowAuthorityStage | undefined;
+      const artifactPath = coerceNonEmptyString(args.artifactPath);
+      const artifactSha256 = coerceNonEmptyString(args.artifactSha256);
+      const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
+      if (!authority || !approvalId || !stage || !artifactPath || !artifactSha256) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message:
+            "record_approval requires a recorded authorityId, approvalId, stage, artifactPath, and artifactSha256",
+        };
+      }
+      const approval = proposeStageApproval({
+        authority,
+        approvalId,
+        stage,
+        artifactPath,
+        artifactSha256,
+        provenance: "controller_delegated",
+      });
+      if (!approval.ok) {
+        return { ...base, ok: false, errorCode: approval.code, message: approval.message };
+      }
+      const stored = addStageApprovalInStore(data, {
+        sessionId,
+        runId,
+        approval: approval.value,
+      });
+      if (!stored.ok) {
+        return { ...base, ok: false, errorCode: stored.errorCode, message: stored.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "record_approval",
+        approvalId,
+        stage,
+        provenance: approval.value.provenance,
+      };
+    }
+
+    case "revoke_authority": {
+      const authorityId = coerceNonEmptyString(args.authorityId);
+      const revocationId = coerceNonEmptyString(args.revocationId);
+      const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
+      if (!authority || !revocationId) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "revoke_authority requires a recorded authorityId and a revocationId",
+        };
+      }
+      const stagesArg = Array.isArray(args.stages) ? args.stages : undefined;
+      const revoked =
+        stagesArg === undefined || stagesArg.length === 0
+          ? revokeAdvanceAuthority({
+              authority,
+              revocationId,
+              reason: coerceNonEmptyString(args.rationale) ?? "revoked",
+            })
+          : narrowAdvanceAuthority({
+              authority,
+              revocationId,
+              reason: coerceNonEmptyString(args.rationale) ?? "narrowed",
+              narrowedStages: stagesArg.filter(
+                (stage): stage is WorkflowAuthorityStage =>
+                  stage === "specification" ||
+                  stage === "planning" ||
+                  stage === "implementation" ||
+                  stage === "verification",
+              ),
+            });
+      if (!revoked.ok) {
+        return { ...base, ok: false, errorCode: revoked.code, message: revoked.message };
+      }
+      const updated = {
+        ...authority,
+        revocations: [...authority.revocations, revoked.value],
+      };
+      const stored = putAuthorityInStore(data, { sessionId, runId, authority: updated });
+      if (!stored.ok) {
+        return { ...base, ok: false, errorCode: stored.errorCode, message: stored.message };
+      }
+      return {
+        ...base,
+        ok: true,
+        action: "revoke_authority",
+        authorityId,
+        kind: revoked.value.kind,
+        availableUnits: advanceUnitsAvailable(
+          updated,
+          data.executions.get(runId)?.reserveDebits ?? [],
+        ),
+        stages: effectiveAuthorityStages(updated),
+      };
+    }
+
+    default:
+      return {
+        ...base,
+        ok: false,
+        errorCode: "INVALID_INPUT",
+        message: `unsupported generic checkpoint action ${String(args.action)}`,
+      };
+  }
+}
+
 // START_CONTRACT: createWorkCheckpointTool
 //   PURPOSE: Build work_checkpoint handler wrapping plan registration, checkpoint start, fingerprint-verified outcomes, and bounded checkpoint recovery.
 //   INPUTS: { store: WorkItemStore - workflow in-memory store, options?: DelegatedControlOptions - optional read-only authorization lookup }
@@ -661,8 +1547,8 @@ export function createWorkCheckpointTool(
     async execute(args, context, overrideStore) {
       const s = overrideStore ?? store;
       const action = args.action;
-      if (action === "register") {
-        const planPath = coerceNonEmptyString(args.planPath);
+      if (action === "register" && coerceNonEmptyString(args.planPath)) {
+        const planPath = coerceNonEmptyString(args.planPath)!;
         const workspaceRoot = coerceNonEmptyString(
           (context as WorkCheckpointExecuteContext).workspaceRoot,
         );
@@ -718,6 +1604,21 @@ export function createWorkCheckpointTool(
           tasks: registered.run.tasks.size,
           checkpoints: registered.run.checkpoints.size,
         };
+      }
+
+      const genericRunId = coerceNonEmptyString(args.runId);
+      if (genericRunId) {
+        const data = s.getStoreData();
+        const execution = findExecution(data, genericRunId);
+        if (execution && execution.source.kind !== "native-package") {
+          return executeGenericCheckpoint({
+            data,
+            sessionId: context.sessionId,
+            runId: genericRunId,
+            args,
+            ...(options ? { control: options } : {}),
+          });
+        }
       }
 
       const runId = coerceNonEmptyString(args.runId);
@@ -807,6 +1708,38 @@ export function createWorkCheckpointTool(
               "INVALID_INPUT: recover requires a stable recoveryId, diagnosis, changedCondition, and verification references",
           };
         }
+        const authorityId = coerceNonEmptyString(args.authorityId);
+        let advanceGrantApproved = false;
+        if (authorityId) {
+          const execution = findExecution(s.getStoreData(), runId);
+          const authority = execution?.authority.find((entry) => entry.authorityId === authorityId);
+          if (!execution || !authority) {
+            return {
+              tool: "work_checkpoint",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: "AUTHORITY_NOT_FOUND",
+              message: `AUTHORITY_NOT_FOUND: no recorded authority ${authorityId} for ${runId}`,
+            };
+          }
+          const proposed = proposeReserveDebit({
+            authority,
+            debits: execution.reserveDebits,
+            recoveryId,
+            targetKind: "checkpoint",
+            targetId: checkpointId,
+          });
+          if (!proposed.ok) {
+            return {
+              tool: "work_checkpoint",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: proposed.code,
+              message: proposed.message,
+            };
+          }
+          advanceGrantApproved = true;
+        }
         const recovered = await recoverDelegatedCheckpoint(s, {
           sessionId: context.sessionId,
           runId,
@@ -815,6 +1748,7 @@ export function createWorkCheckpointTool(
           changedCondition,
           verification,
           recoveryId,
+          ...(advanceGrantApproved ? { advanceGrantApproved: true } : {}),
           ...(userMessageId !== undefined
             ? { userMessageId, lookupUserMessage: options?.lookupUserMessage }
             : {}),
@@ -827,6 +1761,43 @@ export function createWorkCheckpointTool(
             errorCode: recovered.errorCode,
             message: recovered.message,
           };
+        }
+        if (recovered.kind === "advance_grant" && authorityId) {
+          const execution = findExecution(s.getStoreData(), runId);
+          const authority = execution?.authority.find((entry) => entry.authorityId === authorityId);
+          const proposed = authority
+            ? proposeReserveDebit({
+                authority,
+                debits: execution?.reserveDebits ?? [],
+                recoveryId,
+                targetKind: "checkpoint",
+                targetId: checkpointId,
+              })
+            : undefined;
+          if (!proposed?.ok) {
+            return {
+              tool: "work_checkpoint",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: proposed?.code ?? "RESERVE_EXHAUSTED",
+              message:
+                proposed?.message ?? "advance checkpoint recovery debit could not be recorded",
+            };
+          }
+          const stored = addReserveDebitInStore(s.getStoreData(), {
+            sessionId: context.sessionId,
+            runId,
+            debit: proposed.value,
+          });
+          if (!stored.ok) {
+            return {
+              tool: "work_checkpoint",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: stored.errorCode,
+              message: stored.message,
+            };
+          }
         }
         return {
           tool: "work_checkpoint",

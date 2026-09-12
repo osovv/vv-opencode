@@ -141,9 +141,14 @@ describe("resolved orchestration policies", () => {
 
     expect(context).toContain("workers, including small mechanical fixes");
     expect(normalized).toContain(
-      "work_checkpoint registration accepts only its supported approved native plan package",
+      "work_checkpoint register accepts only its supported approved native package",
     );
-    expect(normalized).toContain("foreign lifecycle plans are not");
+    expect(normalized).toContain(
+      "a provided plan or conversation-scoped run registers through work_item_open with an execution descriptor",
+    );
+    expect(normalized).toContain(
+      "a recorded advance authority from an explicit user instruction may fund a finite continuation",
+    );
     expect(normalized).toContain("diagnose a stopped or exhausted task");
     expect(normalized).toContain("through the session's supported recovery operation");
     expect(normalized).toContain(

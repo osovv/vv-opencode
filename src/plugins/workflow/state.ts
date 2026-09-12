@@ -34,6 +34,7 @@
 //   WorkItemStoreData - Snapshot shape used by workflow persistence.
 //   WorkItemStore - Store interface exposing open, launch, result, list, close, and snapshot operations.
 //   createWorkItemStore - Creates a new scoped in-memory work-item store.
+//   createWorkItemStoreView - Wraps existing store data by reference for staged transactions.
 //   createRecordLookupKey - Session-scoped record map key shared with delegated helpers.
 //   cloneRecord - Deep clone of one work-item record shared with delegated helpers.
 //   openWorkItem - Creates or returns an existing work item by idempotency key.
@@ -1030,6 +1031,19 @@ export function createWorkItemStore(hydrateData?: WorkItemStoreData | null): Wor
         messageClaims: new Map(),
       };
 
+  return buildStore(data);
+}
+
+/**
+ * Wrap an existing data object directly (no cloning) so a staged transaction
+ * can drive the same store handlers while keeping committed live state intact
+ * until the staged snapshot is persisted.
+ */
+export function createWorkItemStoreView(data: WorkItemStoreData): WorkItemStore {
+  return buildStore(data);
+}
+
+function buildStore(data: WorkItemStoreData): WorkItemStore {
   return {
     openWorkItem: (input) => openWorkItemInStore(data, input),
     beginTrackedLaunch: (input) => beginTrackedLaunchInStore(data, input),

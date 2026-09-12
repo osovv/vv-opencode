@@ -167,7 +167,7 @@ describe("managed workflow skill prompts", () => {
     );
     expect(normalized).toContain("one autonomous grant per target");
     expect(normalized).toContain(
-      "further units only with an explicit root-user message referenced by userMessageId",
+      "further units only with an explicit root-user message referenced by userMessageId or a recorded advance authority referenced by runId and authorityId",
     );
     expect(normalized).toContain(
       "an accepted task covered by a failed checkpoint reopens through decision rework",
