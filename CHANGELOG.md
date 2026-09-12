@@ -1,3 +1,15 @@
+## <small>1.4.3-rc.1 (2026-09-12)</small>
+
+### Summary
+
+This release makes delegated workflow execution independent of native plan documents and hardens recovery authority. Requirements can now come from a native spec/plan package, a provided plan reference, or the current conversation through one common execution contract, with generic registration and checkpoints exposed through work_item_open and work_checkpoint actions such as start, review, bind, complete, and amend, so a small request no longer needs spec/plan files or a multi-stage ceremony. Required reviews are exactly those declared by the source, the user, or an explicit controller decision, with a no-review result honestly reported as controller-accepted rather than independently reviewed, and assigned reviewers are enforced mechanically against the current revision. A bounded advance authority with a shared three-unit reserve lets an explicit user instruction fund a finite continuation after ordinary allowances are exhausted, without weakening post-stop validation, refilling on replay, or turning authority into acceptance or a passing review. The release also fixes a generic-review resume wedge by giving each checkpoint generation a fresh identity, settles reviewer NEEDS_CONTEXT as a cost-free recoverable stop, validates and reserves advance units before mutating state, binds authority recovery to the owning execution, rejects asserted reviewer statuses, and adds a whole-store fingerprint guard so staged transactions never publish over concurrent live mutations. Workflow state now persists at snapshot version 4, preserving v1/v2/v3 recovery and rejected-report history, while documentation and instructions scope source-independent execution claims to the implemented surface. Runtime plugin upgrades still require an OpenCode restart.
+
+* chore(grace): apply and archive C-WORKFLOW-PLAN-INDEPENDENCE ([190ee03](https://github.com/osovv/vv-opencode/commit/190ee03))
+* fix(workflow): close generic-review resume wedge and harden authority recovery ([4838f2b](https://github.com/osovv/vv-opencode/commit/4838f2b))
+* feat(workflow): add source-independent execution contract and bounded advance authority ([8059770](https://github.com/osovv/vv-opencode/commit/8059770))
+* feat(workflow): expose source-independent execution and advance authority through workflow tools ([4ed5e2c](https://github.com/osovv/vv-opencode/commit/4ed5e2c))
+* docs(workflow): scope source-independent execution claims to the implemented domain surface ([fce2342](https://github.com/osovv/vv-opencode/commit/fce2342))
+
 ## <small>1.4.3-rc.0 (2026-09-12)</small>
 
 ### Summary
