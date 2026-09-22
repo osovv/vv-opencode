@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Added vv-osovv-mimo mirroring vv-osovv-ds with xiaomi/vv-mimo-v2.6-flash-high on default and smart while keeping Luna fast, GLM-5.3 Max review, and single-session profile.]
+//   LAST_CHANGE: [direct fix - Moved the worker default role to xiaomi/vv-mimo-v2.6-flash-high in vv-osovv-zai, vv-osovv-qwen, vv-astra-solo, and vv-astra-workers, leaving smart/fast/reviewer and profiles unchanged.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -102,9 +102,9 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     orchestration: { profile: "single-session" },
   },
   "vv-osovv-zai": {
-    description: "Personal osovv stack with GLM-5.3 smart (deepseek + openai + zai).",
+    description: "Personal osovv stack with GLM-5.3 smart (mimo + openai + zai).",
     agents: {
-      default: "deepseek/vv-deepseek-flash-max",
+      default: "xiaomi/vv-mimo-v2.6-flash-high",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "zai-coding-plan/vv-glm-5.3-max",
       reviewer: "zai-coding-plan/vv-glm-5.3-max",
@@ -112,9 +112,9 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     orchestration: { profile: "single-session" },
   },
   "vv-osovv-qwen": {
-    description: "Personal osovv stack with qwen3.8 smart (deepseek + openai + qwen + zai).",
+    description: "Personal osovv stack with qwen3.8 smart (mimo + openai + qwen + zai).",
     agents: {
-      default: "deepseek/vv-deepseek-flash-max",
+      default: "xiaomi/vv-mimo-v2.6-flash-high",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
       reviewer: "zai-coding-plan/vv-glm-5.3-max",
@@ -122,9 +122,9 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     orchestration: { profile: "delegated" },
   },
   "vv-astra-solo": {
-    description: "Astra-primary solo stack with Luna fast and GLM-5.3 review.",
+    description: "Astra-smart solo stack with MiMo default, Luna fast, and GLM-5.3 review.",
     agents: {
-      default: "openai/vv-codex-gpt-6-astra-max",
+      default: "xiaomi/vv-mimo-v2.6-flash-high",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "openai/vv-codex-gpt-6-astra-max",
       reviewer: "zai-coding-plan/vv-glm-5.3-high",
@@ -132,10 +132,9 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     orchestration: { profile: "single-session" },
   },
   "vv-astra-workers": {
-    description:
-      "Astra-architecture delegated stack with DeepSeek Flash workers and GLM-5.3 review.",
+    description: "Astra-architecture delegated stack with MiMo Flash workers and GLM-5.3 review.",
     agents: {
-      default: "deepseek/vv-deepseek-flash-high",
+      default: "xiaomi/vv-mimo-v2.6-flash-high",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "openai/vv-codex-gpt-6-astra-max",
       reviewer: "zai-coding-plan/vv-glm-5.3-high",

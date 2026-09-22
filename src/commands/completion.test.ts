@@ -137,10 +137,14 @@ test("completion scripts - contain patch-provider presets", () => {
   expect(generateZshCompletion()).toContain("_vvoc_patch_provider_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_patch_provider_cmds");
   expect(generateBashCompletion()).toContain(
-    'local commands="stepfun-ai codex deepseek kimi alibaba zai all"',
+    'local commands="stepfun-ai codex deepseek kimi alibaba zai xiaomi all"',
   );
-  expect(generateZshCompletion()).toContain("stepfun-ai codex deepseek kimi alibaba zai all");
-  expect(generateFishCompletion()).toContain("echo stepfun-ai codex deepseek kimi alibaba zai all");
+  expect(generateZshCompletion()).toContain(
+    "stepfun-ai codex deepseek kimi alibaba zai xiaomi all",
+  );
+  expect(generateFishCompletion()).toContain(
+    "echo stepfun-ai codex deepseek kimi alibaba zai xiaomi all",
+  );
 });
 
 test("completion scripts - contain preset commands and default preset names", () => {

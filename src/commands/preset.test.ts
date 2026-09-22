@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Extended preset assertions to the 11-preset order including vv-osovv-mimo with xiaomi/vv-mimo-v2.6-flash-high on default and smart.]
+//   LAST_CHANGE: [direct fix - Updated the exact role matrix for the four presets whose default worker role moved to xiaomi/vv-mimo-v2.6-flash-high.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -116,28 +116,28 @@ describe("preset helpers", () => {
         profile: "single-session",
       },
       "vv-osovv-zai": {
-        default: "deepseek/vv-deepseek-flash-max",
+        default: "xiaomi/vv-mimo-v2.6-flash-high",
         fast: "openai/vv-codex-gpt-5.6-luna-low",
         smart: "zai-coding-plan/vv-glm-5.3-max",
         reviewer: "zai-coding-plan/vv-glm-5.3-max",
         profile: "single-session",
       },
       "vv-osovv-qwen": {
-        default: "deepseek/vv-deepseek-flash-max",
+        default: "xiaomi/vv-mimo-v2.6-flash-high",
         fast: "openai/vv-codex-gpt-5.6-luna-low",
         smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
         reviewer: "zai-coding-plan/vv-glm-5.3-max",
         profile: "delegated",
       },
       "vv-astra-solo": {
-        default: "openai/vv-codex-gpt-6-astra-max",
+        default: "xiaomi/vv-mimo-v2.6-flash-high",
         fast: "openai/vv-codex-gpt-5.6-luna-low",
         smart: "openai/vv-codex-gpt-6-astra-max",
         reviewer: "zai-coding-plan/vv-glm-5.3-high",
         profile: "single-session",
       },
       "vv-astra-workers": {
-        default: "deepseek/vv-deepseek-flash-high",
+        default: "xiaomi/vv-mimo-v2.6-flash-high",
         fast: "openai/vv-codex-gpt-5.6-luna-low",
         smart: "openai/vv-codex-gpt-6-astra-max",
         reviewer: "zai-coding-plan/vv-glm-5.3-high",
@@ -235,7 +235,7 @@ describe("preset helpers", () => {
   test("formatPreset renders all four vv-osovv-zai role assignments", () => {
     const resolved = resolvePreset("vv-osovv-zai", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-max"');
+    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"smart": "zai-coding-plan/vv-glm-5.3-max"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
@@ -244,7 +244,7 @@ describe("preset helpers", () => {
   test("formatPreset renders the vv-osovv-qwen delegated assignments", () => {
     const resolved = resolvePreset("vv-osovv-qwen", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-max"');
+    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"smart": "alibaba-token-plan/vv-qwen3.8-max-xhigh"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
@@ -254,7 +254,7 @@ describe("preset helpers", () => {
   test("formatPreset renders the vv-astra-solo explicit-reasoning assignments", () => {
     const resolved = resolvePreset("vv-astra-solo", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "openai/vv-codex-gpt-6-astra-max"');
+    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
@@ -264,7 +264,7 @@ describe("preset helpers", () => {
   test("formatPreset renders the vv-astra-workers delegated assignments", () => {
     const resolved = resolvePreset("vv-astra-workers", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-high"');
+    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
     expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');

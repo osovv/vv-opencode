@@ -58,6 +58,7 @@ const VVOC_PATCH_PROVIDER_PRESETS = [
   "kimi",
   "alibaba",
   "zai",
+  "xiaomi",
   "all",
 ];
 const VVOC_PRESET_COMMANDS = ["list", "show"];

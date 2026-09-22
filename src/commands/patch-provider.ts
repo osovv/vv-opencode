@@ -2,7 +2,7 @@
 // VERSION: 0.10.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
-//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (codex, deepseek, kimi, alibaba, zai), and CLI output.
+//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (codex, deepseek, kimi, alibaba, zai, xiaomi), and CLI output.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: M-CLI-PATCH-PROVIDER, M-CLI-COMPLETION, M-CLI-CONFIG
 //   ROLE: RUNTIME
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Corrected vv-codex-gpt-6-astra-max limits to the official GPT-6 Astra contract (context 1050000, input 922000, output 128000) instead of the GPT-5.6-family 400000/272000 values that only apply post-PR#33972.]
+//   LAST_CHANGE: [direct fix - Added the xiaomi patch-provider preset installing vv-mimo-v2.6-flash-high over mimo-v2.6-flash with official 1M/131K limits, multimodal input, and high reasoning effort, included in all and shell completions.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -359,6 +359,33 @@ const ZAI_PATCH = {
   },
 } as const satisfies Record<string, unknown>;
 
+const XIAOMI_PATCH = {
+  models: {
+    "vv-mimo-v2.6-flash-high": {
+      name: "VV MiMo V2.6 Flash High",
+      // Official Xiaomi API id; the vv-* name is a local OpenCode alias only.
+      // Limits/modalities follow models.dev xiaomi/mimo-v2.6-flash (1M/131K,
+      // text+image+audio+video+pdf). Effort "high" matches the alias name and
+      // the deepseek flash-high pattern; the public API documents a thinking
+      // toggle, so live effort mapping is not smoke-verified here.
+      id: "mimo-v2.6-flash",
+      variants: {},
+      limit: {
+        context: 1048576,
+        output: 131072,
+      },
+      modalities: {
+        input: ["text", "image", "audio", "video", "pdf"],
+        output: ["text"],
+      },
+      reasoning: true,
+      options: {
+        reasoningEffort: "high",
+      },
+    },
+  },
+} as const satisfies Record<string, unknown>;
+
 const PATCH_PROVIDER_PRESETS = {
   "stepfun-ai": {
     kind: "provider-object",
@@ -395,6 +422,12 @@ const PATCH_PROVIDER_PRESETS = {
     providerID: "zai-coding-plan",
     value: ZAI_PATCH,
     summary: "provider.zai-coding-plan.models vv-glm-5.3 high/max/flash-max aliases patched",
+  },
+  xiaomi: {
+    kind: "provider-object",
+    providerID: "xiaomi",
+    value: XIAOMI_PATCH,
+    summary: "provider.xiaomi.models.vv-mimo-v2.6-flash-high patched",
   },
 } as const satisfies Record<string, PatchPreset>;
 

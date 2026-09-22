@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Covered the deepseek Flash Max image alias and the zai GLM-5.3 max/flash-max aliases, including idempotent writes, root/sibling preservation, and all-preset installation.]
+//   LAST_CHANGE: [direct fix - Covered the xiaomi vv-mimo-v2.6-flash-high alias resolution, write, and inclusion in the all preset order.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -158,6 +158,29 @@ describe("resolvePatchProviderPreset", () => {
       output: ["text"],
     });
   });
+
+  test("returns the built-in xiaomi alias patch for vv-mimo-v2.6-flash-high", () => {
+    expect(resolvePatchProviderPreset("xiaomi")).toMatchObject({
+      kind: "provider-object",
+      providerID: "xiaomi",
+      summary: "provider.xiaomi.models.vv-mimo-v2.6-flash-high patched",
+    });
+    const value = JSON.parse(
+      JSON.stringify(
+        (resolvePatchProviderPreset("xiaomi") as { value: Record<string, unknown> }).value,
+      ),
+    );
+    expect(value.models["vv-mimo-v2.6-flash-high"]).toMatchObject({
+      id: "mimo-v2.6-flash",
+      limit: { context: 1048576, output: 131072 },
+      reasoning: true,
+    });
+    expect(value.models["vv-mimo-v2.6-flash-high"].options.reasoningEffort).toBe("high");
+    expect(value.models["vv-mimo-v2.6-flash-high"].modalities).toEqual({
+      input: ["text", "image", "audio", "video", "pdf"],
+      output: ["text"],
+    });
+  });
   test("codex patch includes the vv-codex-gpt-6-astra-max and Spark medium aliases", () => {
     const value = JSON.parse(
       JSON.stringify(
@@ -207,7 +230,7 @@ describe("resolvePatchProviderPreset", () => {
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba, zai. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba, zai, xiaomi. Compatibility aliases: openai",
     );
   });
 });
@@ -597,9 +620,11 @@ describe("applyPatchProviderPreset", () => {
         "kimi",
         "alibaba",
         "zai",
+        "xiaomi",
       ]);
       expect(results.map((entry) => entry.result.action)).toEqual([
         "created",
+        "updated",
         "updated",
         "updated",
         "updated",
@@ -630,6 +655,9 @@ describe("applyPatchProviderPreset", () => {
       ).toBe("max");
       expect(
         parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-high"]?.options?.reasoningEffort,
+      ).toBe("high");
+      expect(
+        parsed.provider?.xiaomi?.models?.["vv-mimo-v2.6-flash-high"]?.options?.reasoningEffort,
       ).toBe("high");
     } finally {
       await rm(configHome, { recursive: true, force: true });
