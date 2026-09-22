@@ -1,3 +1,11 @@
+## <small>1.4.3 (2026-09-22)</small>
+
+### Summary
+
+Version 1.4.3 adds a new built-in preset, vv-osovv-mimo, giving users a personal osovv stack built around MiMo Flash High. The preset assigns xiaomi/vv-mimo-v2.6-flash-high to the default and smart roles, keeps openai/vv-codex-gpt-5.6-luna-low as the fast role, uses zai-coding-plan/vv-glm-5.3-max for review, and runs with the single-session orchestration profile, so teams can apply it directly with vvoc preset vv-osovv-mimo. The preset registry, shell completions for bash, zsh, and fish, and the README preset and orchestration tables were updated alongside it, so the new option appears consistently in listings, completion, and documentation.
+
+* feat(presets): add vv-osovv-mimo preset with MiMo Flash High roles ([37c3a0e](https://github.com/osovv/vv-opencode/commit/37c3a0e))
+
 ## <small>1.4.3-rc.1 (2026-09-12)</small>
 
 ### Summary
