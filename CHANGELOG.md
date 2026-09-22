@@ -1,3 +1,13 @@
+## <small>1.4.4 (2026-09-22)</small>
+
+### Summary
+
+Version 1.4.4 expands the shipped preset and provider-patch lineup around Xiaomi's MiMo models. A new vv-osovv-mimo preset assigns xiaomi/vv-mimo-v2.6-flash-high to both the default and smart roles, keeps openai/vv-codex-gpt-5.6-luna-low as the fast role, uses zai-coding-plan/vv-glm-5.3-max for review, and runs the single-session orchestration profile, so it can be applied directly with vvoc preset vv-osovv-mimo. The vv-osovv-zai, vv-osovv-qwen, vv-astra-solo, and vv-astra-workers presets now route their worker default role to xiaomi/vv-mimo-v2.6-flash-high while leaving their smart, fast, and reviewer assignments and profiles unchanged. A new xiaomi patch-provider preset installs the vv-mimo-v2.6-flash-high alias over mimo-v2.6-flash with 1M context and 131K output limits, high reasoning effort, and text, image, audio, video, and PDF input, and is included in the all preset; the README preset, orchestration, and patch-provider tables plus bash, zsh, and fish completions were updated so the new preset, provider, and aliases appear consistently in listings and shell completion. Note that live effort mapping for the Xiaomi alias is not smoke-verified because the public API documents a thinking toggle, so real model behavior remains unmeasured.
+
+* feat(presets): add vv-osovv-mimo preset with MiMo Flash High roles ([37c3a0e](https://github.com/osovv/vv-opencode/commit/37c3a0e))
+* feat(presets): route worker defaults to MiMo Flash High and add xiaomi patch ([cc8facb](https://github.com/osovv/vv-opencode/commit/cc8facb))
+* chore: bump version from 1.4.3-rc.1 to 1.4.3 with changelog ([ef30770](https://github.com/osovv/vv-opencode/commit/ef30770))
+
 ## <small>1.4.3 (2026-09-22)</small>
 
 ### Summary
