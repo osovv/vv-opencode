@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Retired vv-osovv-sol/flash/kimi from the shipped registry, added vv-osovv-ds and vv-osovv-zai, moved vv-zai, vv-deepseek, and vv-osovv-qwen to the approved DeepSeek Flash Max / GLM-5.3 Max / GLM-5.3 Flash Max role matrix, and replaced the Astra fast assignments with Luna Low so no shipped preset selects the legacy Spark alias.]
+//   LAST_CHANGE: [direct fix - Added vv-osovv-mimo mirroring vv-osovv-ds with xiaomi/vv-mimo-v2.6-flash-high on default and smart while keeping Luna fast, GLM-5.3 Max review, and single-session profile.]
 // END_CHANGE_SUMMARY
 
 import type { OrchestrationConfig } from "./orchestration.js";
@@ -86,6 +86,17 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       default: "deepseek/vv-deepseek-flash-max",
       fast: "openai/vv-codex-gpt-5.6-luna-low",
       smart: "deepseek/vv-deepseek-flash-max",
+      reviewer: "zai-coding-plan/vv-glm-5.3-max",
+    },
+    orchestration: { profile: "single-session" },
+  },
+  "vv-osovv-mimo": {
+    description:
+      "Personal osovv stack with MiMo Flash High default and smart (mimo + openai + zai).",
+    agents: {
+      default: "xiaomi/vv-mimo-v2.6-flash-high",
+      fast: "openai/vv-codex-gpt-5.6-luna-low",
+      smart: "xiaomi/vv-mimo-v2.6-flash-high",
       reviewer: "zai-coding-plan/vv-glm-5.3-max",
     },
     orchestration: { profile: "single-session" },

@@ -738,6 +738,7 @@ describe("canonical vvoc config helpers", () => {
         "vv-kimi",
         "vv-alibaba",
         "vv-osovv-ds",
+        "vv-osovv-mimo",
         "vv-osovv-zai",
         "vv-osovv-qwen",
         "vv-astra-solo",

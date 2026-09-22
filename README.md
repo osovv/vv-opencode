@@ -368,6 +368,7 @@ vvoc preset vv-deepseek
 vvoc preset vv-kimi
 vvoc preset vv-alibaba
 vvoc preset vv-osovv-ds
+vvoc preset vv-osovv-mimo
 vvoc preset vv-osovv-zai
 vvoc preset vv-osovv-qwen
 vvoc preset vv-astra-solo
@@ -392,6 +393,7 @@ Every shipped preset declares an explicit role matrix and orchestration profile:
 | `vv-kimi` | `kimi-for-coding/k3` | `kimi-for-coding/kimi-for-coding-highspeed` | `kimi-for-coding/vv-kimi-k3-max` | `kimi-for-coding/kimi-for-coding` | single-session |
 | `vv-alibaba` | `alibaba-token-plan/qwen3.8-max` | `alibaba-token-plan/deepseek-v4-flash` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `alibaba-token-plan/glm-5.2` | single-session |
 | `vv-osovv-ds` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `deepseek/vv-deepseek-flash-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
+| `vv-osovv-mimo` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `xiaomi/vv-mimo-v2.6-flash-high` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
 | `vv-osovv-zai` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `zai-coding-plan/vv-glm-5.3-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
 | `vv-osovv-qwen` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `zai-coding-plan/vv-glm-5.3-max` | delegated |
 | `vv-astra-solo` | `openai/vv-codex-gpt-6-astra-max` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | single-session |
@@ -425,6 +427,7 @@ Built-in presets declare an orchestration mapping:
 | `vv-kimi` | single-session |
 | `vv-alibaba` | single-session |
 | `vv-osovv-ds` | single-session |
+| `vv-osovv-mimo` | single-session |
 | `vv-osovv-zai` | single-session |
 | `vv-astra-solo` | single-session |
 | `vv-astra-workers` | delegated |

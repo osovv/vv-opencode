@@ -150,13 +150,13 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain(
-    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateZshCompletion()).toContain(
-    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateFishCompletion()).toContain(
-    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
 });
 

@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Reworked preset assertions to the approved 10-preset order and DeepSeek Flash Max / GLM-5.3 Max / GLM-5.3 Flash Max role matrix, replaced the Astra fast assignments with Luna Low, added an over-all-assignments guard that no shipped preset selects the legacy Spark alias, and kept retired-name absence plus restored custom/retired saved-preset survival.]
+//   LAST_CHANGE: [direct fix - Extended preset assertions to the 11-preset order including vv-osovv-mimo with xiaomi/vv-mimo-v2.6-flash-high on default and smart.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -35,6 +35,7 @@ describe("preset helpers", () => {
       "vv-kimi",
       "vv-alibaba",
       "vv-osovv-ds",
+      "vv-osovv-mimo",
       "vv-osovv-zai",
       "vv-osovv-qwen",
       "vv-astra-solo",
@@ -107,6 +108,13 @@ describe("preset helpers", () => {
         reviewer: "zai-coding-plan/vv-glm-5.3-max",
         profile: "single-session",
       },
+      "vv-osovv-mimo": {
+        default: "xiaomi/vv-mimo-v2.6-flash-high",
+        fast: "openai/vv-codex-gpt-5.6-luna-low",
+        smart: "xiaomi/vv-mimo-v2.6-flash-high",
+        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        profile: "single-session",
+      },
       "vv-osovv-zai": {
         default: "deepseek/vv-deepseek-flash-max",
         fast: "openai/vv-codex-gpt-5.6-luna-low",
@@ -165,6 +173,7 @@ describe("preset helpers", () => {
       "vv-kimi": "single-session",
       "vv-alibaba": "single-session",
       "vv-osovv-ds": "single-session",
+      "vv-osovv-mimo": "single-session",
       "vv-osovv-zai": "single-session",
       "vv-osovv-qwen": "delegated",
       "vv-astra-solo": "single-session",
@@ -184,6 +193,7 @@ describe("preset helpers", () => {
       "vv-deepseek",
       "vv-kimi",
       "vv-osovv-ds",
+      "vv-osovv-mimo",
       "vv-osovv-qwen",
       "vv-osovv-zai",
       "vv-zai",
@@ -210,6 +220,16 @@ describe("preset helpers", () => {
     expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
     expect(output).toContain('"smart": "deepseek/vv-deepseek-flash-max"');
     expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+  });
+
+  test("formatPreset renders all four vv-osovv-mimo role assignments", () => {
+    const resolved = resolvePreset("vv-osovv-mimo", createDefaultVvocConfig().presets);
+    const output = formatPreset(resolved.name, resolved.preset);
+    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
+    expect(output).toContain('"fast": "openai/vv-codex-gpt-5.6-luna-low"');
+    expect(output).toContain('"smart": "xiaomi/vv-mimo-v2.6-flash-high"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain("single-session");
   });
 
   test("formatPreset renders all four vv-osovv-zai role assignments", () => {
@@ -332,7 +352,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-ds, vv-osovv-qwen, vv-osovv-zai, vv-zai",
+        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-ds, vv-osovv-mimo, vv-osovv-qwen, vv-osovv-zai, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
