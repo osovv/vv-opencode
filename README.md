@@ -358,7 +358,7 @@ vvoc role list --scope effective
 # Assign models to roles
 vvoc role set default deepseek/vv-deepseek-flash-max
 vvoc role set smart zai-coding-plan/vv-glm-5.3-max
-vvoc role set fast openai/vv-codex-gpt-5.6-luna-low
+vvoc role set fast openai/vv-codex-gpt-6-luna-low
 vvoc role set reviewer zai-coding-plan/vv-glm-5.3-max --scope project
 
 # Switch provider presets
@@ -388,17 +388,17 @@ Every shipped preset declares an explicit role matrix and orchestration profile:
 
 | Preset | default | fast | smart | reviewer | Profile |
 |---|---|---|---|---|---|
-| `vv-codex` | `openai/vv-codex-gpt-5.6-terra-high` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-5.6-sol-xhigh` | `openai/vv-codex-gpt-5.6-sol-xhigh` | single-session |
+| `vv-codex` | `openai/vv-codex-gpt-5.6-terra-high` | `openai/vv-codex-gpt-6-luna-low` | `openai/vv-codex-gpt-5.6-sol-xhigh` | `openai/vv-codex-gpt-5.6-sol-xhigh` | single-session |
 | `vv-zai` | `zai-coding-plan/vv-glm-5.3-flash-max` | `zai-coding-plan/vv-glm-5.3-flash-max` | `zai-coding-plan/vv-glm-5.3-max` | `zai-coding-plan/vv-glm-5.3-max` | balanced |
 | `vv-deepseek` | `deepseek/vv-deepseek-flash-max` | `deepseek/vv-deepseek-flash-max` | `deepseek/vv-deepseek-flash-max` | `deepseek/vv-deepseek-flash-max` | balanced |
 | `vv-kimi` | `kimi-for-coding/k3` | `kimi-for-coding/kimi-for-coding-highspeed` | `kimi-for-coding/vv-kimi-k3-max` | `kimi-for-coding/kimi-for-coding` | single-session |
 | `vv-alibaba` | `alibaba-token-plan/qwen3.8-max` | `alibaba-token-plan/deepseek-v4-flash` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `alibaba-token-plan/glm-5.2` | single-session |
-| `vv-osovv-ds` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-5.6-luna-low` | `deepseek/vv-deepseek-flash-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
-| `vv-osovv-mimo` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `xiaomi/vv-mimo-v2.6-flash-high` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
-| `vv-osovv-zai` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `zai-coding-plan/vv-glm-5.3-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
-| `vv-osovv-qwen` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `zai-coding-plan/vv-glm-5.3-max` | delegated |
-| `vv-astra-solo` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | single-session |
-| `vv-astra-workers` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-5.6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | delegated |
+| `vv-osovv-ds` | `deepseek/vv-deepseek-flash-max` | `openai/vv-codex-gpt-6-luna-low` | `deepseek/vv-deepseek-flash-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
+| `vv-osovv-mimo` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-6-luna-low` | `xiaomi/vv-mimo-v2.6-flash-high` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
+| `vv-osovv-zai` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-6-luna-low` | `zai-coding-plan/vv-glm-5.3-max` | `zai-coding-plan/vv-glm-5.3-max` | single-session |
+| `vv-osovv-qwen` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-6-luna-low` | `alibaba-token-plan/vv-qwen3.8-max-xhigh` | `zai-coding-plan/vv-glm-5.3-max` | delegated |
+| `vv-astra-solo` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | single-session |
+| `vv-astra-workers` | `xiaomi/vv-mimo-v2.6-flash-high` | `openai/vv-codex-gpt-6-luna-low` | `openai/vv-codex-gpt-6-astra-max` | `zai-coding-plan/vv-glm-5.3-high` | delegated |
 
 `vv-osovv-ds` replaces the former `vv-osovv-flash` offering and `vv-osovv-zai` is new; `vv-osovv-sol`, `vv-osovv-flash`, and `vv-osovv-kimi` are no longer shipped. A retired preset definition already present in a saved `vvoc.json` is preserved in place rather than migrated or removed across `vvoc install`/`vvoc sync`; delete it manually if you no longer want it. No automatic provider migration or legacy-name cleanup runs, and applying a preset changes only the roles and profile it declares.
 

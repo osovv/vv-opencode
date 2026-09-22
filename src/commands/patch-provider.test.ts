@@ -187,6 +187,16 @@ describe("resolvePatchProviderPreset", () => {
         (resolvePatchProviderPreset("codex") as { value: Record<string, unknown> }).value,
       ),
     );
+    expect(value.models["vv-codex-gpt-6-luna-low"]).toMatchObject({
+      id: "gpt-6-luna",
+      limit: { context: 1050000, input: 922000, output: 128000 },
+    });
+    expect(value.models["vv-codex-gpt-6-luna-low"].options).toMatchObject({
+      reasoningEffort: "low",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    });
+
     expect(value.models["vv-codex-gpt-6-astra-max"]).toMatchObject({
       id: "gpt-6-astra",
       limit: { context: 1050000, input: 922000, output: 128000 },
@@ -363,10 +373,12 @@ describe("applyPatchProviderPreset", () => {
         },
       });
 
-      // Old vv-gpt-* aliases should not be written
+      // Old vv-gpt-* aliases and the removed GPT-5.6 Luna catalog key
+      // should not be written
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
+      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-luna-low"]).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]).toBeUndefined();
       expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toBeUndefined();
     } finally {

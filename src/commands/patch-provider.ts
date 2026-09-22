@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Added the xiaomi patch-provider preset installing vv-mimo-v2.6-flash-high over mimo-v2.6-flash with official 1M/131K limits, multimodal input, and high reasoning effort, included in all and shell completions.]
+//   LAST_CHANGE: [direct fix - Replaced the GPT-5.6 Luna catalog entry with vv-codex-gpt-6-luna-low over gpt-6-luna on the official GPT-6 contract (1.05M/922K/128K), keeping low reasoning effort.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -129,13 +129,17 @@ const OPENAI_PATCH = {
         include: ["reasoning.encrypted_content"],
       },
     },
-    "vv-codex-gpt-5.6-luna-low": {
-      name: "VV Codex GPT-5.6 Luna Low",
-      id: "gpt-5.6-luna",
+    "vv-codex-gpt-6-luna-low": {
+      name: "VV Codex GPT-6 Luna Low",
+      id: "gpt-6-luna",
       variants: {},
+      // GPT-6 Luna launched Sept 22, 2026 on the official GPT-6 contract
+      // (1.05M context / 922K input / 128K output per OpenAI model docs and
+      // models.dev); the Codex 272K input cap applied only to the GPT-5.6
+      // family (Codex PR#33972). Revisit if Codex later caps GPT-6 input.
       limit: {
-        context: 400000,
-        input: 272000,
+        context: 1050000,
+        input: 922000,
         output: 128000,
       },
       modalities: {
