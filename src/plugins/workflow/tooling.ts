@@ -1,9 +1,9 @@
 // FILE: src/plugins/workflow/tooling.ts
-// VERSION: 0.4.0
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses.
-//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization including recovery-aware progress summaries; generic execution registration/append through an optional execution descriptor or runId; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, native plan registration, checkpoint start/verify, failed-checkpoint rework authorization, bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup, and the generic (non-native) checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions.
-//   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/execution.ts, src/plugins/workflow/authority.ts, src/lib/workflow-contract.ts, src/plugins/workflow/state.ts]
+//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization including recovery-aware progress summaries; generic execution registration/append through an optional execution descriptor or runId; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, native plan registration, checkpoint start/verify, failed-checkpoint rework authorization, bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup, and the generic (non-native) checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions. Tool argument shapes are single-sourced from src/plugins/workflow/schemas.ts.
+//   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/execution.ts, src/plugins/workflow/authority.ts, src/plugins/workflow/schemas.ts, src/lib/workflow-contract.ts, src/plugins/workflow/state.ts]
 //   LINKS: M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY, M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Added generic execution registration/append through work_item_open and generic checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions through work_checkpoint, plus the SDK-backed authority-message lookup seam.]
+//   LAST_CHANGE: [C-WORKFLOW-INDEX-REDUCE - Argument shapes moved to single-sourced schemas.ts with z.infer types re-exported here; accepted shapes are unchanged.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -91,6 +91,11 @@ import type {
   WorkflowReviewer,
   WorkflowTaskContract,
 } from "../../lib/workflow-contract.js";
+import type { CheckpointArgs, CloseArgs, DecideArgs, ListArgs } from "./schemas.js";
+
+// Argument shapes are single-sourced with the plugin registrations in index.ts
+// through the schemas module; re-export them here for existing importers.
+export type { CheckpointArgs, DecideArgs } from "./schemas.js";
 
 export type WorkflowToolContext = {
   sessionId: string;
@@ -132,7 +137,13 @@ type OpenInputItem = {
   blockedBy?: unknown;
 };
 
-type OpenArgs = {
+/**
+ * work_item_open wrapper input. Deliberately looser than the registered
+ * schema shape in schemas.ts: this wrapper is the defensive validator for
+ * partially-shaped caller input, so item and descriptor fields stay unknown
+ * here and are rejected or normalized by the wrapper itself.
+ */
+type OpenToolInput = {
   items: OpenInputItem[];
   /** Generic execution descriptor; mutually exclusive with runId. */
   execution?: unknown;
@@ -140,83 +151,6 @@ type OpenArgs = {
   runId?: unknown;
   amendmentId?: unknown;
   rationale?: unknown;
-};
-
-type ListArgs = {
-  includeClosed?: boolean;
-};
-
-type CloseArgs = {
-  workItemId: string;
-};
-
-export type DecideArgs = {
-  workItemId: string;
-  attempt: number;
-  decision: "accept" | "request_changes" | "rework" | "recover";
-  /** Required for accept, request_changes, and rework; unused by recover. */
-  rationale?: string;
-  /** Required for accept and request_changes; unused by rework and recover. */
-  evidence?: string[];
-  concernsDisposition?: string;
-  runId?: string;
-  checkpointId?: string;
-  /** Recover-only bounded diagnosis, changed condition, and verification references. */
-  diagnosis?: string;
-  changedCondition?: string;
-  verification?: string[];
-  recoveryId?: string;
-  /** Recover-only fresh root-user message authorizing one further unit. */
-  userMessageId?: string;
-  /** Recover-only recorded advance authority authorizing one further unit. */
-  authorityId?: string;
-};
-
-export type CheckpointArgs = {
-  action:
-    | "register"
-    | "start"
-    | "verify"
-    | "recover"
-    | "review"
-    | "bind"
-    | "complete"
-    | "amend"
-    | "authorize"
-    | "record_approval"
-    | "revoke_authority";
-  planPath?: string;
-  runId?: string;
-  checkpointId?: string;
-  complete?: boolean;
-  /** Recover-only bounded diagnosis, changed condition, and verification references. */
-  diagnosis?: string;
-  changedCondition?: string;
-  verification?: string[];
-  recoveryId?: string;
-  /** Recover-only fresh root-user message authorizing one further generation. */
-  userMessageId?: string;
-  /** Generic checkpoint append/registration payloads. */
-  checkpoints?: unknown;
-  tasks?: unknown;
-  amendmentId?: string;
-  rationale?: string;
-  startFingerprint?: string;
-  /** Generic reviewer result recording (status is read from the linked round). */
-  reviewer?: string;
-  /** Advance authority inputs. */
-  authorityId?: string;
-  messageId?: string;
-  approvalId?: string;
-  stage?: string;
-  artifactPath?: string;
-  artifactSha256?: string;
-  revocationId?: string;
-  /** Authority scope inputs. */
-  stages?: unknown;
-  decisionScope?: string;
-  fileBoundary?: unknown;
-  reservedStops?: unknown;
 };
 
 function coerceNonEmptyString(value: unknown): string | undefined {
@@ -487,13 +421,13 @@ function serializeProgress(record: WorkItemRecord): Record<string, unknown> {
 // START_CONTRACT: createWorkItemOpenTool
 //   PURPOSE: Build work_item_open handler that supports deterministic batch idempotent open operations with explicit workflow intent.
 //   INPUTS: { store: WorkItemStore - workflow in-memory store }
-//   OUTPUTS: { WorkflowToolDefinition<OpenArgs, unknown> - executable tool definition }
+//   OUTPUTS: { WorkflowToolDefinition<OpenToolInput, unknown> - executable tool definition }
 //   SIDE_EFFECTS: [Mutates in-memory work-item store through open operations]
 //   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-STATE]
 // END_CONTRACT: createWorkItemOpenTool
 export function createWorkItemOpenTool(
   store: WorkItemStore,
-): WorkflowToolDefinition<OpenArgs, Record<string, unknown>> {
+): WorkflowToolDefinition<OpenToolInput, Record<string, unknown>> {
   return {
     name: "work_item_open",
     description:

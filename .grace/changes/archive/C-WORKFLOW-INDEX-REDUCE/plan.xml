@@ -1,0 +1,106 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-WORKFLOW-INDEX-REDUCE>
+    <IntentSummary>Single-source the five workflow tool argument schemas in src/plugins/workflow/schemas.ts with z.infer types consumed by tooling.ts, extract the authorization and committed-recovery seams from the plugin closure into authorization.ts and recovery.ts over explicit context, and reconcile M-PLUGIN-WORKFLOW and M-WORKFLOW-TOOLING projections. Behavior-preserving; approved by explicit user instruction formalizing the reviewed refactoring list; execution has not started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-WORKFLOW</Value><Value>M-WORKFLOW-TOOLING</Value><Value>M-WORKFLOW-PERSISTENCE</Value>
+        <Value>src/plugins/workflow/index.ts</Value><Value>src/plugins/workflow/tooling.ts</Value>
+        <Value>src/plugins/workflow.test.ts</Value><Value>src/plugins/workflow.delegated.test.ts</Value><Value>src/plugins/workflow.execution.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =&gt; {</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>const z = tool.schema;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>async function executeCommittedRecovery&lt;T&gt;(</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>function captureRecordRestore(sessionId: string, workItemId: string): () =&gt; void {</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>async function assertPrimaryControllerMutation(</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>const lookupRecoveryUserMessage: LookupRecoveryUserMessage = async (sessionId, messageId) =&gt; {</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>const lookupAuthorityMessage = async (input: {</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>export type DecideArgs = {</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>type OpenArgs = {</Text></MustContain>
+      <MustPassCommand><Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow.execution.test.ts</Command></MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-PLUGIN-WORKFLOW</Module><Module>M-WORKFLOW-TOOLING</Module></MustVerify>
+      <MustExist>
+        <Value>src/plugins/workflow/schemas.ts</Value><Value>src/plugins/workflow/authorization.ts</Value><Value>src/plugins/workflow/recovery.ts</Value>
+      </MustExist>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>tool.schema</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>z.infer</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>DecideArgs</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>from "./schemas.js"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>from "./schemas.js"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>from "./authorization.js"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>from "./recovery.js"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>export const WorkflowPlugin</Text></MustContain>
+      <MustNotContain><File>src/plugins/workflow/index.ts</File><Text>async function executeCommittedRecovery&lt;T&gt;(</Text></MustNotContain>
+      <MustNotContain><File>src/plugins/workflow/index.ts</File><Text>async function assertPrimaryControllerMutation(</Text></MustNotContain>
+      <MustNotContain><File>src/plugins/workflow/index.ts</File><Text>const lookupRecoveryUserMessage: LookupRecoveryUserMessage = async (sessionId, messageId) =&gt; {</Text></MustNotContain>
+      <MustNotContain><File>src/plugins/workflow/tooling.ts</File><Text>export type DecideArgs = {</Text></MustNotContain>
+      <MustNotContain><File>src/plugins/workflow/tooling.ts</File><Text>type OpenArgs = {</Text></MustNotContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow.execution.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user explicitly instructed autonomous formalization of the five reviewed refactoring items; this bundle combines items 2 (z.infer single-sourcing) and 3 (seam extraction) because they edit the same two files sequentially. No implementation has started.</Note>
+      <Note>Coordinated execution order: after C-OPENCODE-MODULE-SPLIT and before C-SPEC-LINT-RULES-SPLIT and C-TEST-PLACEMENT-CONVENTION. This bundle's baseline and target commands reference the current integration test paths, which C-TEST-PLACEMENT-CONVENTION renames afterward; execute and archive one bundle before starting the next.</Note>
+      <Note>T-001 schemas: move the inline zod schemas for work_item_open (items array, execution descriptor, runId, amendmentId, rationale), work_item_list, work_item_close, work_item_decide, and work_checkpoint into schemas.ts using the plugin API schema instance (const z = tool.schema). Export the schema objects plus z.infer argument types named OpenArgs, ListArgs, CloseArgs, DecideArgs, and CheckpointArgs. tooling.ts deletes its local argument type declarations and imports these; its exported DecideArgs and CheckpointArgs type names stay stable for index.ts consumers. Field names, optionality, enums, and bounds must match the previous inline schemas exactly; the integration suites' tool calls are the regression evidence.</Note>
+      <Note>T-002 authorization seam: move assertPrimaryControllerMutation, the root-session/agent/workspace trust checks it composes, and the SDK-backed lookupRecoveryUserMessage and lookupAuthorityMessage factories into authorization.ts. Factories receive the plugin client and trusted workspace identity explicitly and return the same call signatures the plugin closure used, including retained identity/timing/eligibility validation and CONTROL_DENIED error text. The LookupRecoveryUserMessage type moves or re-exports so tooling.ts imports stay unchanged.</Note>
+      <Note>T-002 recovery seam: move executeCommittedRecovery and captureRecordRestore into recovery.ts as a factory over the persistence seam (per-session store resolver, staged commit, snapshot capture) preserving the persist-before-permission ordering, synchronous rollback, and result-ok discrimination the integration suites exercise.</Note>
+      <Note>Nesting and remaining scope: after extraction index.ts keeps plugin assembly, tool registration over schemas.ts, the event hook with its failure bindings, and guidance injection. Deeper event-hook decomposition stays out of scope per the spec NonGoals. The plugin closure continues to own per-session store lifecycle; extracted modules never reach for hidden module state.</Note>
+      <Note>Durable reconciliation: add schemas.ts to M-WORKFLOW-TOOLING Paths; add authorization.ts and recovery.ts to M-PLUGIN-WORKFLOW Paths; update both module Purposes in one clause each and their file-local contracts/maps/change summaries. V-M-PLUGIN-WORKFLOW and V-M-WORKFLOW-TOOLING command paths still reference the three unchanged integration test paths, so verification needs reconciliation review only.</Note>
+      <Note>No final-review obligation is declared for this refactor: evidence is the unmodified integration suites, check, and build. If the controller independently requests review before archive, that is optional and not a gate recorded here.</Note>
+      <Note>GRACE lifecycle commands are external execution gates, never nested MustPassCommand values.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors><M-PLUGIN-WORKFLOW /><M-WORKFLOW-TOOLING /><M-WORKFLOW-PERSISTENCE /></GraphAnchors>
+      <VerificationAnchors><V-M-PLUGIN-WORKFLOW /><V-M-WORKFLOW-TOOLING /></VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/workflow/index.ts</File><File>src/plugins/workflow/tooling.ts</File>
+      <File>src/plugins/workflow/schemas.ts</File><File>src/plugins/workflow/authorization.ts</File><File>src/plugins/workflow/recovery.ts</File>
+      <File>src/plugins/workflow.test.ts</File><File>src/plugins/workflow.delegated.test.ts</File><File>src/plugins/workflow.execution.test.ts</File>
+      <File>.grace/graph/main.xml</File><File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-WORKFLOW-INDEX-REDUCE/spec.xml</File>
+      <File>.grace/changes/active/C-WORKFLOW-INDEX-REDUCE/plan.xml</File>
+      <File>.grace/changes/archive/C-WORKFLOW-INDEX-REDUCE/spec.xml</File>
+      <File>.grace/changes/archive/C-WORKFLOW-INDEX-REDUCE/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Single-source tool argument schemas in schemas.ts with z.infer types.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create src/plugins/workflow/schemas.ts declaring the five tool argument schemas through tool.schema with shapes exactly matching the current inline schemas, and export z.infer argument types OpenArgs, ListArgs, CloseArgs, DecideArgs, and CheckpointArgs.</Criterion>
+          <Criterion>Replace tooling.ts local argument type declarations with imports from schemas.js, keeping exported type names and tool execute signatures unchanged; index.ts tool registrations consume the schemas from schemas.js instead of inline z literals.</Criterion>
+          <Criterion>Give schemas.ts a MODULE_CONTRACT linking M-WORKFLOW-TOOLING, a MODULE_MAP, and a change summary crediting this change; update tooling.ts and index.ts contracts and change summaries.</Criterion>
+          <Criterion>The three integration suites pass unmodified and bun run typecheck passes; no tool description or accepted argument shape changes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow.execution.test.ts</Command><Command>bun run typecheck</Command></Verification>
+      </T-001>
+      <T-002>
+        <Title>Extract authorization and committed-recovery seams over explicit context.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create src/plugins/workflow/authorization.ts exposing the primary-controller mutation guard and the recovery/authority message lookup factories over explicit client and trusted-workspace context, preserving CONTROL_DENIED text, root-session and workspace trust outcomes, and SDK identity/timing/eligibility validation; index.ts imports them instead of defining them.</Criterion>
+          <Criterion>Create src/plugins/workflow/recovery.ts exposing the committed staged-recovery executor and record-restore capture over the persistence seam, preserving persist-before-permission ordering, synchronous rollback, and failure surfacing; index.ts imports them instead of defining them.</Criterion>
+          <Criterion>Both new modules carry truthful contracts, maps, and change summaries; neither holds module-level mutable plugin state nor introduces a runtime import cycle.</Criterion>
+          <Criterion>The three integration suites pass unmodified, covering control authorization denial, bounded recovery, report-rejection settlement, and staged persistence failure behavior through the real plugin entry.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow.execution.test.ts</Command><Command>bun run typecheck</Command><Command>git diff --check</Command></Verification>
+      </T-002>
+      <T-003>
+        <Title>Reconcile M-PLUGIN-WORKFLOW and M-WORKFLOW-TOOLING durable projections.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add schemas.ts to M-WORKFLOW-TOOLING Paths and authorization.ts plus recovery.ts to M-PLUGIN-WORKFLOW Paths in .grace/graph/main.xml, updating each Purpose with one accurate clause and keeping dependencies and verification linkage truthful.</Criterion>
+          <Criterion>Review V-M-PLUGIN-WORKFLOW and V-M-WORKFLOW-TOOLING entries: recorded commands keep referencing the three unchanged integration test paths; update only text that no longer resolves and add no new scenarios.</Criterion>
+          <Criterion>grace lint --path . and grace status --path . pass for this bundle.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow.execution.test.ts</Command><Command>bun run check</Command></Verification>
+      </T-003>
+    </ImplementationPlan>
+  </C-WORKFLOW-INDEX-REDUCE>
+</GraceChangePlan>

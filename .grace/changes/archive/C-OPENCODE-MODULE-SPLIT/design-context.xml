@@ -1,0 +1,19 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <C-OPENCODE-MODULE-SPLIT>
+    <Rationale>Repository review on 2026-09-22 ranked refactoring targets by size times churn. src/lib/opencode.ts is 2045 lines with ~50 public exports plus ~40 private helpers and is the most-changed source file (57 changes to the source and 96 to its test in six months per git log --name-only). Every consumer imports a narrow slice: patch-provider.ts pulls 11 symbols; the other 17 consumers pull 1-3 each. No runtime import cycles exist today; the split must not introduce any.</Rationale>
+    <Evidence>
+      <Item>Zone boundaries were derived from the START_BLOCK_* anchors and export clusters in the current file: START_BLOCK_RESOLVE_CONFIG_PATHS, START_BLOCK_ENSURE_OPENCODE_PLUGIN_CONFIG / ENSURE_TUI_PLUGIN_CONFIG, START_BLOCK_MANAGED_AGENT_CONFIG / MANAGED_SKILL_FUNCTIONS / MANAGED_SKILL_SYMLINK / MANAGED_AGENT_MODEL_IO, provider/default-model read-write functions, START_BLOCK_VVOC_CONFIG_IO, START_BLOCK_INSPECT_OPENCODE_RUNTIME / INSPECT_INSTALLATION_STATE, and the trailing JSON_VALUE_HELPERS and FILESYSTEM_HELPERS blocks.</Item>
+      <Item>src/lib/opencode.test.ts imports only from ./opencode.js, so replacing the file with a directory barrel keeps its imports valid through standard TS/Bun resolution (opencode.ts absent, opencode/index.ts present).</Item>
+      <Item>package.json exports expose only root ./, ./tui, and ./plugins/* subpaths; src/lib/* is internal, so the dist layout change under dist/lib/opencode/ is not a public surface change. pack:check still guards it.</Item>
+    </Evidence>
+    <Alternatives>
+      <Item>Keep one file and only reorganize section order: rejected because the merge-conflict and review funnel problem is the file boundary, not internal ordering.</Item>
+      <Item>Split into several M-* graph modules: rejected for now because M-CLI-CONFIG already owns six files and the graph purpose already spans these zones; per-file contracts give the navigation benefit without graph ceremony.</Item>
+      <Item>Migrate consumers to deep imports immediately: deferred to optional follow-ups so this change stays a pure move verified by unmodified tests.</Item>
+    </Alternatives>
+    <Scenarios>
+      <Item>A contributor editing only TUI pinning logic touches src/lib/opencode/plugin-registration.ts and its test block, not a 2000-line diff context.</Item>
+      <Item>A future config-path change review shows only paths.ts and its consumers.</Item>
+    </Scenarios>
+  </C-OPENCODE-MODULE-SPLIT>
+</GraceChangeDesignContext>

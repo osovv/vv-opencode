@@ -1,0 +1,76 @@
+// FILE: src/plugins/hashline-edit/validation.test.ts
+// VERSION: 0.4.0
+// START_MODULE_CONTRACT
+//   PURPOSE: Verify hashline reference parsing and validation diagnostics.
+//   SCOPE: Valid reference parsing, malformed reference failures, copied-anchor normalization, context-anchor preservation, old hash rejection, mismatch context, and line-number suggestion hints.
+//   DEPENDS: [bun:test, src/plugins/hashline-edit/constants.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/validation.ts]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
+//   ROLE: TEST
+//   MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   [test scenarios] - Hashline validation coverage is expressed through module-level tests.
+// END_MODULE_MAP
+//
+// START_CHANGE_SUMMARY
+//   LAST_CHANGE: [v0.4.0 - Replaced old whitespace-collapsed hash acceptance coverage with rejection coverage.]
+// END_CHANGE_SUMMARY
+
+import { describe, expect, test } from "bun:test";
+import { HASHLINE_DICT } from "./constants.js";
+import { computeLineHash } from "./hash-computation.js";
+import { parseLineRef, validateLineRef, validateLineRefs } from "./validation.js";
+
+describe("hashline validation", () => {
+  test("parses a valid line reference", () => {
+    expect(parseLineRef("42#VK")).toEqual({ line: 42, hash: "VK", anchorHash: undefined });
+  });
+
+  test("rejects invalid reference format", () => {
+    expect(() => parseLineRef("42:VK")).toThrow(/\{line_number\}#\{hash_id\}/);
+  });
+
+  test("rejects non-numeric line prefixes with a clear hint", () => {
+    expect(() => parseLineRef("LINE#HK")).toThrow(/not a line number/i);
+  });
+
+  test("accepts copied references with markers and trailing content", () => {
+    expect(parseLineRef(">>> 42#VK|const value = 1")).toEqual({
+      line: 42,
+      hash: "VK",
+      anchorHash: undefined,
+    });
+  });
+
+  test("accepts references with spaces around the hash separator", () => {
+    expect(parseLineRef("42 # VK")).toEqual({ line: 42, hash: "VK", anchorHash: undefined });
+  });
+
+  test("preserves context anchors when references include spaces around separators", () => {
+    expect(parseLineRef("42 # VK # MB")).toEqual({ line: 42, hash: "VK", anchorHash: "MB" });
+  });
+
+  test("rejects old whitespace-collapsed hashes for whitespace-variant content", () => {
+    const lines = ["if (a && b) {"];
+    const oldWhitespaceCollapsedHash = HASHLINE_DICT[Bun.hash.xxHash32("if(a&&b){", 0) % 256]!;
+
+    expect(oldWhitespaceCollapsedHash).not.toBe(computeLineHash(1, lines[0] ?? ""));
+    expect(() => validateLineRef(lines, `1#${oldWhitespaceCollapsedHash}`)).toThrow();
+  });
+
+  test("shows mismatch context with >>> markers for batched validation", () => {
+    const lines = ["one", "two", "three", "four"];
+
+    expect(() => validateLineRefs(lines, ["2#ZZ"])).toThrow(
+      />>>\s+2#[ZPMQVRWSNKTXJBYH]{2}#[ZPMQVRWSNKTXJBYH]{2}\|two/,
+    );
+  });
+
+  test("suggests the correct line number when the hash matches a current line", () => {
+    const lines = ["function hello() {", "  return 42", "}"];
+    const hash = computeLineHash(1, lines[0] ?? "");
+
+    expect(() => validateLineRefs(lines, [`LINE#${hash}`])).toThrow(new RegExp(`1#${hash}`));
+  });
+});

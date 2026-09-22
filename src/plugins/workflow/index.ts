@@ -1,9 +1,9 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools with bounded recovery, host-call-bound attempts, terminal report-rejection settlement, and checkpoint reviewer linkage.
-//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization and an SDK-backed read-only authorization-message lookup for user-authorized recovery, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results, terminal settlement of protocol-invalid reports as report_rejected attempts through staged persistence, checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, durably committed recovery with synchronous persist and rollback so launch permissions appear only after a durable write, checked persistence, and profile-selected chat.message guidance.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
+//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization and an SDK-backed read-only authorization-message lookup for user-authorized recovery, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results, terminal settlement of protocol-invalid reports as report_rejected attempts through staged persistence, checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance. Tool argument schemas come from schemas.ts; the authorization guard and message lookups from authorization.ts; staged transactions and committed recovery from recovery.ts.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/authorization.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/recovery.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/schemas.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
 //   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added decision/checkpoint recover wiring with an SDK-backed authorization lookup and durable persist-then-rollback commits, settled terminal protocol-invalid delegated reports as report_rejected attempts, and calibrated the delegated instruction for bounded recovery and native plan registration.]
+//   LAST_CHANGE: [C-WORKFLOW-INDEX-REDUCE - Moved the five tool argument schemas into schemas.ts with z.infer types, and extracted the authorization guard, message lookups, staged transactions, and committed recovery into authorization.ts and recovery.ts over explicit context; registered shapes and behavior are unchanged.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -36,7 +36,6 @@ import {
   createWorkflowResultExcerpt,
   beginTrackedLaunch,
   createWorkItemStore,
-  createWorkItemStoreView,
   getReviewRound,
   getWorkItem,
   revertReviewerLaunch,
@@ -51,7 +50,6 @@ import {
   beginDelegatedLaunch,
   revertInFlightDelegatedLaunches,
   summarizeDelegatedProgress,
-  type LookupRecoveryUserMessage,
 } from "./delegated.js";
 import {
   checkpointBarrierUnsatisfied,
@@ -73,6 +71,19 @@ import {
   createWorkItemOpenTool,
   createWorkCheckpointTool,
 } from "./tooling.js";
+import {
+  workCheckpointArgs,
+  workItemCloseArgs,
+  workItemDecideArgs,
+  workItemListArgs,
+  workItemOpenArgs,
+} from "./schemas.js";
+import {
+  assertWorkflowToolAccess,
+  createWorkflowAuthorization,
+  shouldInjectForAgent,
+} from "./authorization.js";
+import { createRecoverySupport } from "./recovery.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
 import { loadVvocConfig } from "../../lib/config-layers.js";
 import {
@@ -87,15 +98,10 @@ import {
 } from "./persistence.js";
 import { loadApprovedDelegatedPlan } from "./checkpoint-io.js";
 import { isTaskLaunchableInStore } from "./execution.js";
-import { runWorkflowTransaction, WorkflowTransactionQueue } from "./transactions.js";
-import type { AuthorityMessageSnapshot } from "./authority.js";
-
-const z = tool.schema;
 
 const TRACKED_SUBAGENT_SET = new Set<string>(TRACKED_SUBAGENT_NAMES);
 const WORK_ITEM_MISSING_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_a6f582092f05__";
 const INVALID_NEXT_AGENT_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_513fa2de603d__";
-const WORKFLOW_CONTROLLER_AGENT = "vv-controller";
 
 const REVIEW_ONLY_WORKFLOW_SYSTEM_INSTRUCTION = `
 <workflow_protocol>
@@ -281,25 +287,6 @@ function delegatedHostFailurePrefix(childSessionId: string): string {
   return `Subagent failed (task_id: ${childSessionId}): `;
 }
 // END_BLOCK_DELEGATED_FAILURE_BINDING_TYPES
-
-function canUseWorkflowTools(agentName: string | undefined): boolean {
-  return agentName === WORKFLOW_CONTROLLER_AGENT;
-}
-
-function assertWorkflowToolAccess(agentName: string | undefined, toolName: string): void {
-  if (canUseWorkflowTools(agentName)) {
-    return;
-  }
-
-  const resolvedAgent = agentName?.trim() || "unknown-agent";
-  throw new Error(
-    `WORKFLOW_TOOL_DENIED: ${toolName} is only available to ${WORKFLOW_CONTROLLER_AGENT} sessions. Current agent: ${resolvedAgent}.`,
-  );
-}
-
-function shouldInjectForAgent(agentName: string | undefined): boolean {
-  return canUseWorkflowTools(agentName);
-}
 
 function appendSystemInstruction(existingSystem: string | undefined, instruction: string): string {
   if (!existingSystem?.trim()) {
@@ -778,279 +765,28 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
   // END_BLOCK_DELEGATED_FAILURE_BINDING
 
   // START_BLOCK_DELEGATED_AUTHORIZATION
-  // New control mutations require the primary vv-controller session: the calling
-  // agent must be vv-controller, the session must be a root session (no
-  // parentID), and the ToolContext workspace must match the plugin's trusted
-  // directory/worktree. None of this identity comes from tool arguments.
-  async function assertPrimaryControllerMutation(
-    agent: string | undefined,
-    sessionId: string,
-    contextWorkspace: { directory?: string; worktree?: string },
-    toolName: string,
-  ): Promise<void> {
-    if (!canUseWorkflowTools(agent)) {
-      throw new Error(
-        `CONTROL_DENIED: ${toolName} is only available to ${WORKFLOW_CONTROLLER_AGENT} sessions. Current agent: ${agent?.trim() || "unknown-agent"}.`,
-      );
-    }
-    if (
-      contextWorkspace.worktree !== undefined &&
-      contextWorkspace.worktree !== worktree &&
-      contextWorkspace.worktree !== trustedWorkspaceRoot
-    ) {
-      throw new Error(
-        `CONTROL_DENIED: ${toolName} workspace ${contextWorkspace.worktree} does not match the trusted plugin workspace.`,
-      );
-    }
-    if (
-      contextWorkspace.worktree === undefined &&
-      contextWorkspace.directory !== undefined &&
-      contextWorkspace.directory !== directory
-    ) {
-      throw new Error(
-        `CONTROL_DENIED: ${toolName} directory ${contextWorkspace.directory} does not match the trusted plugin directory.`,
-      );
-    }
-    if (invalidHydrationSessions.has(sessionId)) {
-      throw new Error(
-        `CONTROL_DENIED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
-      );
-    }
-
-    let parentID: string | undefined;
-    try {
-      const response = await client.session.get({ path: { id: sessionId } });
-      if (!response.data) {
-        throw new Error("missing session payload");
-      }
-      parentID = response.data.parentID;
-    } catch (error) {
-      throw new Error(
-        `CONTROL_DENIED: ${toolName} requires root-session identity for ${sessionId}, which could not be verified: ${(error as Error).message}`,
-      );
-    }
-    if (parentID !== undefined && parentID !== null && parentID !== "") {
-      throw new Error(
-        `CONTROL_DENIED: ${toolName} may only run in the root session; session ${sessionId} is a child of ${parentID}.`,
-      );
-    }
-  }
+  // New control mutations require the primary vv-controller session; the
+  // guard, its root-session identity check, and the SDK-backed message
+  // lookups live in authorization.js over this explicit plugin context.
+  const { assertPrimaryControllerMutation, lookupRecoveryUserMessage, lookupAuthorityMessage } =
+    createWorkflowAuthorization({
+      client,
+      directory,
+      worktree,
+      trustedWorkspaceRoot,
+      invalidHydrationSessions,
+    });
   // END_BLOCK_DELEGATED_AUTHORIZATION
 
   // START_BLOCK_RECOVERY_SUPPORT
-  // Read-only SDK message lookup for user-authorized recovery. Only identity
-  // and timing metadata (role, sessionID, id, time.created) are retained;
-  // message bodies never enter validation, persistence, or logs. Transport
-  // failures throw so the domain reports AUTHORIZATION_LOOKUP_FAILED instead
-  // of conflating an unreachable lookup with a nonexistent message.
-  const lookupRecoveryUserMessage: LookupRecoveryUserMessage = async (sessionId, messageId) => {
-    const response = await client.session.message({
-      path: { id: sessionId, messageID: messageId },
-      query: { directory },
-    });
-    if (response.error || !response.data) {
-      const errorName = (response.error as { name?: string } | undefined)?.name;
-      if (errorName && errorName !== "NotFound") {
-        throw new Error(`session message lookup failed: ${errorName}`);
-      }
-      return undefined;
-    }
-    const info = response.data.info as {
-      role?: string;
-      sessionID?: string;
-      id?: string;
-      time?: { created?: number };
-    };
-    return {
-      role: info.role,
-      sessionID: info.sessionID,
-      id: info.id,
-      timeCreatedMs:
-        typeof info.time?.created === "number" && Number.isFinite(info.time.created)
-          ? info.time.created
-          : undefined,
-    };
-  };
-
-  // Advance-authority provenance uses the same pinned SDK message response.
-  // Only verified identity/timing/eligibility metadata leaves this lookup; raw
-  // user text is never persisted or logged.
-  const lookupAuthorityMessage = async (input: {
-    sessionId: string;
-    runId: string;
-    messageId: string;
-  }): Promise<AuthorityMessageSnapshot | undefined> => {
-    const response = await client.session.message({
-      path: { id: input.sessionId, messageID: input.messageId },
-      query: { directory },
-    });
-    if (response.error || !response.data) {
-      const errorName = (response.error as { name?: string } | undefined)?.name;
-      if (errorName && errorName !== "NotFound") {
-        throw new Error(`authority message lookup failed: ${errorName}`);
-      }
-      return undefined;
-    }
-    const info = response.data.info as {
-      role?: string;
-      sessionID?: string;
-      id?: string;
-      ignored?: boolean;
-      time?: { created?: number };
-    };
-    const parts = Array.isArray(response.data.parts) ? response.data.parts : [];
-    const textParts = parts
-      .map((part) => part as { type?: unknown; text?: unknown })
-      .filter((part) => part.type === "text" && typeof part.text === "string")
-      .map((part) => part.text as string);
-    return {
-      messageId: info.id ?? input.messageId,
-      sessionId: info.sessionID ?? input.sessionId,
-      role: info.role === "user" ? "user" : "assistant",
-      createdMs:
-        typeof info.time?.created === "number" && Number.isFinite(info.time.created)
-          ? info.time.created
-          : 0,
-      ignored: info.ignored === true,
-      syntheticOnly: false,
-      textParts,
-    };
-  };
-
-  // Per-session serialization for generic mutating tool calls. The staged
-  // snapshot persists before the committed state is published, so a failed
-  // write never exposes new obligations, authority, or launch permissions.
-  const workflowTransactions = new WorkflowTransactionQueue();
-
-  async function commitGenericToolResult(
-    sessionId: string,
-    run: (view: WorkItemStore) => Promise<Record<string, unknown>> | Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    const liveStore = stores.get(sessionId);
-    if (!liveStore) {
-      return {
-        ok: false,
-        errorCode: "SESSION_MISMATCH",
-        message: `no live workflow store for session ${sessionId}`,
-      };
-    }
-    if (invalidHydrationSessions.has(sessionId)) {
-      return {
-        ok: false,
-        errorCode: "INVALID_STATE",
-        message: `persisted workflow state for session ${sessionId} is invalid`,
-      };
-    }
-    const outcome = await runWorkflowTransaction<Record<string, unknown>>({
-      queue: workflowTransactions,
-      sessionId,
-      getData: () => liveStore.getStoreData(),
-      operation: async (staged) => {
-        const result = await run(createWorkItemStoreView(staged));
-        if (result.ok !== true) {
-          // Validation failed: persist nothing and publish nothing.
-          return { result, skipPersist: true };
-        }
-        return { result };
-      },
-    });
-    if (!outcome.ok) {
-      void client.app
-        .log({
-          body: {
-            service: "workflow",
-            level: "error",
-            message: "[workflow][generic][BLOCK_GENERIC_COMMIT] persistence failed",
-            extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
-          },
-        })
-        .catch(() => undefined);
-      return {
-        ok: false,
-        errorCode: "PERSISTENCE_FAILED",
-        message: `generic workflow mutation could not be persisted: ${outcome.error}`,
-      };
-    }
-    return outcome.result;
-  }
-
-  /**
-   * Execute one recovery mutation durably on the live store: the domain
-   * reducer applies to the live entry (re-prechecking after any authorization
-   * await), and the whole live store is then persisted synchronously. If the
-   * write fails, the captured prior entry is restored so no unpersisted launch
-   * permission is ever exposed — there is no await between mutation, persist,
-   * and rollback, so no concurrent actor can observe the intermediate state,
-   * and no stale whole-store snapshot can regress concurrent transitions.
-   */
-  async function executeCommittedRecovery<T>(
-    sessionId: string,
-    runRecovery: (liveStore: WorkItemStore) => Promise<T>,
-    captureRestore: () => () => void,
-    wasApplied: (result: T) => boolean,
-  ): Promise<T> {
-    const liveStore = stores.get(sessionId);
-    if (!liveStore || invalidHydrationSessions.has(sessionId)) {
-      throw new Error(
-        `CONTROL_DENIED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
-      );
-    }
-    const restore = captureRestore();
-    const result = await runRecovery(liveStore);
-    if (!wasApplied(result)) {
-      return result;
-    }
-    const persisted = snapshotWorkflowStateChecked(sessionId, liveStore.getStoreData());
-    if (!persisted.ok) {
-      restore();
-      void client.app
-        .log({
-          body: {
-            service: "workflow",
-            level: "error",
-            message: "[workflow][recovery][BLOCK_RECOVERY_COMMIT] recovery persistence failed",
-            extra: { sessionID: sessionId, error: persisted.error.slice(0, 300) },
-          },
-        })
-        .catch(() => undefined);
-      throw new Error(
-        `PERSISTENCE_FAILED: recovery applied in memory but could not be persisted and was rolled back: ${persisted.error}`,
-      );
-    }
-    return result;
-  }
-
-  /** Capture and restore one work-item record entry for recovery rollback. */
-  function captureRecordRestore(sessionId: string, workItemId: string): () => void {
-    const liveStore = stores.get(sessionId);
-    if (!liveStore) return () => undefined;
-    const liveData = liveStore.getStoreData();
-    const lookupKey = createRecordLookupKey(sessionId, workItemId);
-    const prior = liveData.records.get(lookupKey);
-    return () => {
-      if (prior) {
-        liveData.records.set(lookupKey, prior);
-      }
-    };
-  }
-
-  /** Capture and restore one checkpoint entry for recovery rollback. */
-  function captureCheckpointRestore(
-    sessionId: string,
-    runId: string,
-    checkpointId: string,
-  ): () => void {
-    const liveStore = stores.get(sessionId);
-    if (!liveStore) return () => undefined;
-    const run = liveStore.getStoreData().planRuns.get(runId);
-    if (!run) return () => undefined;
-    const priorCheckpoint = run.checkpoints.get(checkpointId);
-    return () => {
-      if (priorCheckpoint) {
-        run.checkpoints.set(checkpointId, priorCheckpoint);
-      }
-    };
-  }
+  // Staged generic transactions and durably committed recovery with rollback
+  // live in recovery.js over this explicit persistence seam.
+  const {
+    commitGenericToolResult,
+    executeCommittedRecovery,
+    captureRecordRestore,
+    captureCheckpointRestore,
+  } = createRecoverySupport({ client, stores, invalidHydrationSessions });
   // END_BLOCK_RECOVERY_SUPPORT
 
   // START_BLOCK_CHECKPOINT_LINKAGE
@@ -1090,40 +826,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
     tool: {
       work_item_open: tool({
         description: workItemOpenTool.description,
-        args: {
-          items: z.array(
-            z.object({
-              key: z.string(),
-              title: z.string(),
-              mode: z.string(),
-              requiredReviewers: z.array(z.string()),
-              writeScope: z.array(z.string()).optional(),
-              planRunId: z.string().optional(),
-              planTaskId: z.string().optional(),
-              taskId: z.string().optional(),
-              goal: z.string().optional(),
-              acceptanceCriteria: z.array(z.string()).optional(),
-              verification: z.array(z.string()).optional(),
-              dependsOn: z.array(z.string()).optional(),
-              blockedBy: z.array(z.string()).optional(),
-            }),
-          ),
-          execution: z
-            .object({
-              executionKey: z.string(),
-              source: z.record(z.string(), z.unknown()),
-              goal: z.string(),
-              boundary: z.object({
-                files: z.array(z.string()),
-                directories: z.array(z.string()),
-              }),
-              checkpoints: z.array(z.record(z.string(), z.unknown())).optional(),
-            })
-            .optional(),
-          runId: z.string().optional(),
-          amendmentId: z.string().optional(),
-          rationale: z.string().optional(),
-        },
+        args: workItemOpenArgs,
         async execute(args, context) {
           assertWorkflowToolAccess(context.agent, "work_item_open");
           const isGeneric = args.execution !== undefined || args.runId !== undefined;
@@ -1155,9 +858,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       }),
       work_item_list: tool({
         description: workItemListTool.description,
-        args: {
-          includeClosed: z.boolean().optional(),
-        },
+        args: workItemListArgs,
         async execute(args, context) {
           assertWorkflowToolAccess(context.agent, "work_item_list");
           const sessionStore = getOrCreateStore(context.sessionID);
@@ -1168,9 +869,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       }),
       work_item_close: tool({
         description: workItemCloseTool.description,
-        args: {
-          workItemId: z.string(),
-        },
+        args: workItemCloseArgs,
         async execute(args, context) {
           assertWorkflowToolAccess(context.agent, "work_item_close");
           const sessionStore = getOrCreateStore(context.sessionID);
@@ -1189,22 +888,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
       ...{
         work_item_decide: tool({
           description: workItemDecideTool.description,
-          args: {
-            workItemId: z.string(),
-            attempt: z.number().int().min(1),
-            decision: z.enum(["accept", "request_changes", "rework", "recover"]),
-            rationale: z.string().optional(),
-            evidence: z.array(z.string()).optional(),
-            concernsDisposition: z.string().optional(),
-            runId: z.string().optional(),
-            checkpointId: z.string().optional(),
-            diagnosis: z.string().optional(),
-            changedCondition: z.string().optional(),
-            verification: z.array(z.string()).optional(),
-            recoveryId: z.string().optional(),
-            userMessageId: z.string().optional(),
-            authorityId: z.string().optional(),
-          },
+          args: workItemDecideArgs,
           async execute(args, context) {
             // Resolve the store first so invalid persisted state is detected
             // before the authorization check reports it as a control denial.
@@ -1254,47 +938,7 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         }),
         work_checkpoint: tool({
           description: workCheckpointTool.description,
-          args: {
-            action: z.enum([
-              "register",
-              "start",
-              "verify",
-              "recover",
-              "review",
-              "bind",
-              "complete",
-              "amend",
-              "authorize",
-              "record_approval",
-              "revoke_authority",
-            ]),
-            planPath: z.string().optional(),
-            runId: z.string().optional(),
-            checkpointId: z.string().optional(),
-            complete: z.boolean().optional(),
-            diagnosis: z.string().optional(),
-            changedCondition: z.string().optional(),
-            verification: z.array(z.string()).optional(),
-            recoveryId: z.string().optional(),
-            userMessageId: z.string().optional(),
-            checkpoints: z.array(z.record(z.string(), z.unknown())).optional(),
-            tasks: z.array(z.record(z.string(), z.unknown())).optional(),
-            amendmentId: z.string().optional(),
-            rationale: z.string().optional(),
-            startFingerprint: z.string().optional(),
-            reviewer: z.string().optional(),
-            authorityId: z.string().optional(),
-            messageId: z.string().optional(),
-            approvalId: z.string().optional(),
-            stage: z.string().optional(),
-            stages: z.array(z.string()).optional(),
-            decisionScope: z.string().optional(),
-            fileBoundary: z.array(z.string()).optional(),
-            reservedStops: z.array(z.string()).optional(),
-            artifactPath: z.string().optional(),
-            artifactSha256: z.string().optional(),
-            revocationId: z.string().optional(),
-          },
+          args: workCheckpointArgs,
           async execute(args, context) {
             // Resolve the store first so invalid persisted state is detected
             // before the authorization check reports it as a control denial.

@@ -1,0 +1,88 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-OPENCODE-MODULE-SPLIT-R1>
+    <IntentSummary>Replace the superseded C-OPENCODE-MODULE-SPLIT plan with the NodeNext-valid barrel placement: src/lib/opencode.ts stays at its path as a re-export-only barrel over seven concern-scoped zone files in src/lib/opencode/, then M-CLI-CONFIG durable projections are reconciled. Pure structural move; approved by explicit user instruction formalizing and executing the reviewed refactoring list autonomously.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-CONFIG</Value><Value>M-CONFIG-LAYERS</Value><Value>M-CLI-MANAGED-AGENTS</Value><Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>src/lib/opencode/shared-utils.ts</Value><Value>src/lib/opencode/paths.ts</Value><Value>src/lib/opencode/plugin-registration.ts</Value>
+        <Value>src/lib/opencode/agent-registrations.ts</Value><Value>src/lib/opencode/model-overrides.ts</Value><Value>src/lib/opencode/vvoc-config-io.ts</Value>
+        <Value>src/lib/opencode/inspection.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/opencode/shared-utils.ts</File><Text>export function parseObjectDocument(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/plugin-registration.ts</File><Text>export function ensureTuiPackageConfigText(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>export function ensureManagedAgentRegistrationsConfigText(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>export async function inspectInstallationForScope(</Text></MustContain>
+      <MustPassCommand><Command>bun test src/lib/opencode.test.ts</Command></MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-CLI-CONFIG</Module></MustVerify>
+      <MustExist>
+        <Value>src/lib/opencode.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/opencode.ts</File><Text>resolvePaths</Text></MustContain>
+      <MustContain><File>src/lib/opencode.ts</File><Text>ensureTuiPackageConfigText</Text></MustContain>
+      <MustContain><File>src/lib/opencode.ts</File><Text>inspectInstallationForScope</Text></MustContain>
+      <MustNotContain><File>src/lib/opencode.ts</File><Text>node:fs/promises</Text></MustNotContain>
+      <MustNotContain><File>src/lib/opencode.ts</File><Text>jsonc-parser</Text></MustNotContain>
+      <MustNotContain><File>src/lib/opencode.ts</File><Text>export async function</Text></MustNotContain>
+      <MustPassCommand>
+        <Command>test ! -f src/lib/opencode/index.ts</Command>
+        <Command>bun test src/lib/opencode.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Supersession provenance: this plan is the user-authorized technical replacement of C-OPENCODE-MODULE-SPLIT, discovered infeasible mid-execution when bun run typecheck proved moduleResolution NodeNext rejects directory imports for ../lib/opencode.js. The corrected barrel placement keeps src/lib/opencode.ts at its path as a re-export-only barrel, exactly as the reviewed design proposed ("keep src/lib/opencode.ts as a barrel"); product goals, zones, behavior preservation, and file scope are unchanged from the superseded bundle.</Note>
+      <Note>Execution continuity: the seven zone files were already written under the superseded bundle before the discovery and remain valid here; the only corrective work is recreating src/lib/opencode.ts as the barrel, removing the interim src/lib/opencode/index.ts, and reconciling durable state. The superseded bundle is archived unchanged with status superseded and this bundle as its replacement.</Note>
+      <Note>Coordinated execution order for the four refactor bundles: C-OPENCODE-MODULE-SPLIT-R1, then C-WORKFLOW-INDEX-REDUCE, then C-SPEC-LINT-RULES-SPLIT, then C-TEST-PLACEMENT-CONVENTION last, because the last one renames test file paths that earlier bundles' command evidence references. Execute and archive one bundle before starting the next.</Note>
+      <Note>Barrel contract: src/lib/opencode.ts re-exports the complete previous public API from the zone modules plus PACKAGE_NAME from ./package.js and parseGuardianConfigText, renderGuardianConfig, and GuardianConfigOverrides from ./vvoc-config.js, with no implementation, no filesystem/jsonc imports, and no additional exports.</Note>
+      <Note>M-CLI-CONFIG stays the single owning module: its Paths list src/lib/opencode.ts plus the seven zone files; Purpose, Depends, and Verification stay unchanged. V-M-CLI-CONFIG command paths reference src/lib/opencode.test.ts, which keeps its path, so verification needs reconciliation review only.</Note>
+      <Note>No final-review obligation is declared: this is a behavior-preserving move whose evidence is the unmodified opencode suite, check, build, and pack:check through the barrel.</Note>
+      <Note>GRACE lifecycle commands are external execution gates, never nested MustPassCommand values. The test ! -f leaf command is file-shape evidence for the removed interim directory barrel, not a lifecycle command.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors><M-CLI-CONFIG /></GraphAnchors>
+      <VerificationAnchors><V-M-CLI-CONFIG /></VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/opencode.ts</File>
+      <Glob>src/lib/opencode/**</Glob>
+      <File>src/lib/opencode.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/archive/C-OPENCODE-MODULE-SPLIT/spec.xml</File>
+      <File>.grace/changes/archive/C-OPENCODE-MODULE-SPLIT/plan.xml</File>
+      <File>.grace/changes/archive/C-OPENCODE-MODULE-SPLIT/design-context.xml</File>
+      <File>.grace/changes/active/C-OPENCODE-MODULE-SPLIT-R1/spec.xml</File>
+      <File>.grace/changes/active/C-OPENCODE-MODULE-SPLIT-R1/plan.xml</File>
+      <File>.grace/changes/archive/C-OPENCODE-MODULE-SPLIT-R1/spec.xml</File>
+      <File>.grace/changes/archive/C-OPENCODE-MODULE-SPLIT-R1/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Restore src/lib/opencode.ts as the re-export-only public barrel.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write src/lib/opencode.ts as a re-export-only barrel over the seven zone modules plus the package.js and vvoc-config.js re-exports, covering the complete previous public API, and remove the interim src/lib/opencode/index.ts.</Criterion>
+          <Criterion>The barrel carries a truthful BARREL MODULE_CONTRACT linking M-CLI-CONFIG and a START_CHANGE_SUMMARY crediting this change; it contains no implementation and no node:fs, node:path, or jsonc-parser imports.</Criterion>
+          <Criterion>src/lib/opencode.test.ts passes unmodified and bun run typecheck passes across all consumers; ../lib/opencode.js and ./opencode.js resolve to the barrel.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/lib/opencode.test.ts</Command><Command>bun run typecheck</Command><Command>test ! -f src/lib/opencode/index.ts</Command></Verification>
+      </T-001>
+      <T-002>
+        <Title>Reconcile M-CLI-CONFIG durable projections with the zone layout.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update M-CLI-CONFIG Paths in .grace/graph/main.xml to list src/lib/opencode.ts plus the seven zone files, keeping Name, Type, Status, Purpose, Depends, and Verification unchanged.</Criterion>
+          <Criterion>Review V-M-CLI-CONFIG in .grace/verification/main.xml: recorded commands still reference src/lib/opencode.test.ts, so update only path text that no longer resolves; add no new scenarios.</Criterion>
+          <Criterion>grace lint --path . and grace status --path . pass for this bundle.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/lib/opencode.test.ts</Command><Command>bun run check</Command></Verification>
+      </T-002>
+    </ImplementationPlan>
+  </C-OPENCODE-MODULE-SPLIT-R1>
+</GraceChangePlan>

@@ -1,0 +1,49 @@
+<GraceChangeSpec graceVersion="4.0" status="superseded">
+  <C-OPENCODE-MODULE-SPLIT>
+    <ReplacementChange>C-OPENCODE-MODULE-SPLIT-R1</ReplacementChange>
+    <Summary>Split the 2045-line src/lib/opencode.ts god-module into a concern-scoped src/lib/opencode/ directory while preserving its entire public API through a barrel, so config-related changes stop converging on one hot file.</Summary>
+    <Problem>src/lib/opencode.ts mixes six concerns in one file: scope-aware path resolution, runtime/TUI plugin registration, managed agent/skill sync, model and provider overrides, vvoc.json IO, and runtime/installation inspection, plus ~40 private JSON/text/filesystem helpers. It is the highest-churn source file in the repository (57 source and 96 test changes in six months) and every consumer imports only a small slice of it, so unrelated changes merge-conflict and review through one file.</Problem>
+    <Goals>
+      <Goal>One concern-scoped module file per zone under src/lib/opencode/ with accurate file-local MODULE_CONTRACT, map, and change summary.</Goal>
+      <Goal>A barrel at src/lib/opencode/index.ts that re-exports the complete current public API of src/lib/opencode.ts so no consumer import changes in this change.</Goal>
+      <Goal>Behavior-preserving move: no public export added, removed, renamed, or retyped; all existing tests in src/lib/opencode.test.ts pass unmodified.</Goal>
+      <Goal>M-CLI-CONFIG remains the single owning graph module for these files with updated Paths and unchanged dependencies and verification linkage.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>This is a pure structural refactor: no runtime behavior, config precedence, write semantics, error text, schema, or package.json exports may change.</Constraint>
+      <Constraint>src/lib/opencode.ts is replaced by the directory barrel; the literal module specifier ../lib/opencode.js and ./opencode.js must keep resolving for every current consumer, including src/lib/opencode.test.ts.</Constraint>
+      <Constraint>The barrel contains re-exports only: no implementation, no node:fs or jsonc-parser imports.</Constraint>
+      <Constraint>Split into these zones: paths (scope-aware path resolution), plugin-registration (runtime and TUI plugin pinning and plugin-list helpers), agent-registrations (managed agents, prompts, skills, symlink, managed model IO), model-overrides (generic agent/default model and provider object overrides), vvoc-config-io (canonical vvoc.json read/install/sync and guardian writes), inspection (runtime version/compatibility, installation inspection, describeWriteResult), and shared-utils (private JSON/text/filesystem helpers).</Constraint>
+      <Constraint>Each new file links its contract to M-CLI-CONFIG; the graph module count and cross-module dependency edges do not grow.</Constraint>
+      <Constraint>src/lib/opencode.test.ts stays at its current path and content; splitting the test file is out of scope.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No consumer import migration to deep paths; consumers keep importing ../lib/opencode.js.</NonGoal>
+      <NonGoal>No new graph module anchors, no new verification entries, no schema or README changes.</NonGoal>
+      <NonGoal>No refactoring of sibling modules (config-layers, vvoc-config, managed-agents, managed-skills, vvoc-paths, package) and no changes outside src/lib/opencode*, .grace projections, and this bundle.</NonGoal>
+      <NonGoal>No test-file split, no test additions beyond what a pure move requires.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: src/lib/opencode.ts no longer exists; src/lib/opencode/index.ts re-exports every export the old file provided and importing ../lib/opencode.js still typechecks and behaves identically for all 18 command/lib consumers.</Criterion>
+      <Criterion>AC-02: Each zone lives in its own file under src/lib/opencode/ with a truthful MODULE_CONTRACT, MODULE_MAP, and START_CHANGE_SUMMARY describing the split; shared private helpers are not duplicated across zone files.</Criterion>
+      <Criterion>AC-03: bun test src/lib/opencode.test.ts passes unmodified before and after the move; bun run check, bun run build, and bun run pack:check pass, proving the public package surface is unchanged.</Criterion>
+      <Criterion>AC-04: M-CLI-CONFIG Paths in .grace/graph/main.xml lists the new files instead of src/lib/opencode.ts with Purpose, Depends, and Verification unchanged; grace lint and grace status pass with no integrity errors.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build &amp;&amp; bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Target assertions verify the barrel re-exports the previous public API, contain no implementation imports, and that the zone files exist; the pre-existing opencode test suite passing unmodified is the behavior-preservation evidence because it exercises every zone through the barrel.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The zone file names in the constraints are the planned targets; a name may shift during execution only when the moved code reveals a clearer boundary, recorded in the change summary, without changing zone count or the barrel contract.</Assumption>
+      <Assumption>Consumers migrate to deep imports in later optional follow-ups; this change deliberately keeps the barrel as the only import path.</Assumption>
+      <Assumption>Approval provenance: the user explicitly instructed autonomous formalization of the five reviewed refactoring items, including this one, in the session that produced this bundle.</Assumption>
+    </Assumptions>
+  </C-OPENCODE-MODULE-SPLIT>
+</GraceChangeSpec>

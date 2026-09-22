@@ -1,0 +1,45 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-SPEC-LINT-RULES-SPLIT-R1>
+    <Summary>Split the 1766-line src/lib/spec-lint.ts rule monolith into zone modules under src/lib/spec-lint/ while keeping src/lib/spec-lint.ts itself as the re-export-only public barrel, so every ../lib/spec-lint.js import keeps resolving under moduleResolution NodeNext.</Summary>
+    <Problem>spec-lint.ts is a pure, well-scoped linter but internally monolithic: only 6 exports are public while roughly 1500 lines of private rule functions for all artifact kinds, cross-file checks, delegated extraction, and parsing sit in one file. The superseded C-SPEC-LINT-RULES-SPLIT plan intended to replace the file with a directory barrel at src/lib/spec-lint/index.ts, but under TypeScript moduleResolution NodeNext the specifier ../lib/spec-lint.js never resolves to a directory index, so deleting the file would break every consumer. This replacement keeps the reviewed intent with the NodeNext-valid barrel placement.</Problem>
+    <Goals>
+      <Goal>src/lib/spec-lint/ with parser.ts, spec-rules.ts, plan-rules.ts, cross-file-rules.ts, and delegated-extraction.ts zone modules; src/lib/spec-lint.ts remains at its path as a re-export-only barrel preserving the complete current public API.</Goal>
+      <Goal>Behavior-preserving: identical findings, severities, rule ids, line numbers, cache keys, and extraction results for the same inputs; LINT_VERSION stays 2.</Goal>
+      <Goal>M-SPEC-LINT remains the owning graph module with Paths updated to the barrel plus zone files and spec-lint-cache.ts untouched.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Pure structural move: no rule semantics, finding text, severity mapping, LINT_VERSION bump, or public API change.</Constraint>
+      <Constraint>src/lib/spec-lint.ts is a re-export barrel only: no rule implementation and no htmlparser2 import; its imports are limited to ./spec-lint/*.js zone modules.</Constraint>
+      <Constraint>Zone boundaries: parser.ts (xmlMode event-stream parse, positioned element tree, artifact-kind detection, archive-path check), spec-rules.ts (spec and design-context template/identity rules), plan-rules.ts (plan template, task/wave/checkpoint identity and reference rules, execution-section and review-checkpoint rules), cross-file-rules.ts (plan-subset-of-spec and cross-artifact checks), delegated-extraction.ts (extractDelegatedPlanDefinition and typed helpers); lintSpecArtifacts orchestration lives in a lint.ts zone module re-exported by the barrel.</Constraint>
+      <Constraint>src/lib/spec-lint.test.ts and src/lib/spec-lint-cache.test.ts stay at their current paths and content; all consumers keep importing ../lib/spec-lint.js.</Constraint>
+      <Constraint>Shared private helpers live in exactly one zone module; no duplication.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No new lint rules, no rule relaxations or tightenings, no cache format change, no tsconfig change.</NonGoal>
+      <NonGoal>No changes to spec-lint-cache.ts, the spec-guard plugin, commands/lint.ts, or workflow-contract re-exports.</NonGoal>
+      <NonGoal>No new graph modules; M-SPEC-LINT keeps owning the linter.</NonGoal>
+      <NonGoal>No test additions or renames; the existing suites passing unmodified are the behavior-preservation evidence.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: src/lib/spec-lint.ts exists as a re-export-only barrel over the zone modules re-exporting the complete previous public API; ../lib/spec-lint.js and ./spec-lint.js keep resolving and typechecking for every consumer, including spec-lint-cache.ts and both test files.</Criterion>
+      <Criterion>AC-02: Rule functions are distributed into the zone modules with truthful file-local contracts, maps, and change summaries linking M-SPEC-LINT; shared helpers exist once.</Criterion>
+      <Criterion>AC-03: bun test on src/lib/spec-lint.test.ts, src/lib/spec-lint-cache.test.ts, and src/plugins/spec-guard/index.test.ts passes unmodified; bun run check, build, and pack:check pass.</Criterion>
+      <Criterion>AC-04: M-SPEC-LINT Paths list src/lib/spec-lint.ts plus the zone files and the unchanged spec-lint-cache.ts, Purpose/Depends/Verification stay truthful, and grace lint and grace status pass.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-SPEC-LINT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/plugins/spec-guard/index.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build &amp;&amp; bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Target assertions verify the zone files and barrel re-exports exist with no htmlparser2 in the barrel; the unmodified linter, cache, and spec-guard suites through the barrel are the behavior-preservation evidence.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>A rule function may move to an adjacent zone during execution when its inputs reveal a clearer owner, recorded in the change summary, without adding or removing zones.</Assumption>
+      <Assumption>Approval provenance: the user approved the reviewed five-item refactoring list and explicitly instructed autonomous grace-plan/grace-execute execution; this replacement corrects only the barrel placement discovered under NodeNext and inherits that authorization.</Assumption>
+    </Assumptions>
+  </C-SPEC-LINT-RULES-SPLIT-R1>
+</GraceChangeSpec>

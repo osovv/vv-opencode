@@ -1,0 +1,87 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-SPEC-LINT-RULES-SPLIT-R1>
+    <IntentSummary>Replace the superseded C-SPEC-LINT-RULES-SPLIT plan with the NodeNext-valid barrel placement: keep src/lib/spec-lint.ts as a re-export-only barrel over parser, spec-rules, plan-rules, cross-file-rules, delegated-extraction, and lint orchestration zone modules in src/lib/spec-lint/, then reconcile M-SPEC-LINT projections. Pure structural move with LINT_VERSION unchanged; approved by explicit user instruction executing the reviewed refactoring list autonomously.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-SPEC-LINT</Value><Value>M-PLUGIN-SPEC-GUARD</Value><Value>M-WORKFLOW-CONTRACT</Value>
+        <Value>src/lib/spec-lint.ts</Value><Value>src/lib/spec-lint-cache.ts</Value><Value>src/lib/spec-lint.test.ts</Value><Value>src/lib/spec-lint-cache.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>export const LINT_VERSION = 2;</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>export function parseSpecXml(content: string, file: string): ParseResult {</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>export function extractDelegatedPlanDefinition(</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>export function lintSpecArtifacts(</Text></MustContain>
+      <MustPassCommand><Command>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/plugins/spec-guard/index.test.ts</Command></MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-SPEC-LINT</Module></MustVerify>
+      <MustExist>
+        <Value>src/lib/spec-lint/parser.ts</Value><Value>src/lib/spec-lint/spec-rules.ts</Value><Value>src/lib/spec-lint/plan-rules.ts</Value>
+        <Value>src/lib/spec-lint/cross-file-rules.ts</Value><Value>src/lib/spec-lint/delegated-extraction.ts</Value><Value>src/lib/spec-lint/lint.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>LINT_VERSION</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>parseSpecXml</Text></MustContain>
+      <MustContain><File>src/lib/spec-lint.ts</File><Text>lintSpecArtifacts</Text></MustContain>
+      <MustNotContain><File>src/lib/spec-lint.ts</File><Text>htmlparser2</Text></MustNotContain>
+      <MustNotContain><File>src/lib/spec-lint.ts</File><Text>export function lintSpecArtifacts(</Text></MustNotContain>
+      <MustPassCommand>
+        <Command>test ! -f src/lib/spec-lint/index.ts</Command>
+        <Command>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/plugins/spec-guard/index.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Supersession provenance: this plan is the user-authorized technical replacement of C-SPEC-LINT-RULES-SPLIT, whose directory-barrel placement is infeasible under moduleResolution NodeNext (no directory imports for ../lib/spec-lint.js), the same discovery already superseded once in C-OPENCODE-MODULE-SPLIT-R1. Product goals, zones, and behavior preservation are unchanged; the superseded bundle is archived unchanged with this bundle as its replacement.</Note>
+      <Note>Zone mapping: parser.ts takes the htmlparser2 xmlMode event-stream parse, the positioned element tree and cursor helpers, detectSpecArtifactKind, and isSpecArchivePath. spec-rules.ts takes spec and design-context template-contract, identity, uniqueness, and lifecycle-severity rules. plan-rules.ts takes plan template-contract, component/task/wave/checkpoint identity and reference rules, execution-section mode rules, review-checkpoints, scope-path, wave-barrier, and final-coverage rules. cross-file-rules.ts takes plan-components-subset-of-spec-components and other cross-artifact checks. delegated-extraction.ts takes extractDelegatedPlanDefinition and its typed helpers. lint.ts orchestrates lintSpecArtifacts. src/lib/spec-lint.ts becomes the re-export-only barrel over these modules.</Note>
+      <Note>Public surface preserved: LINT_VERSION, SpecLintArtifactKind, SpecLintSeverity, SpecLintFinding, SpecLintVerdict, SpecLintArtifactInput, SpecLintOptions, the workflow-contract re-exports (DelegatedReviewer, DelegatedTaskDefinition, DelegatedCheckpointDefinition, DelegatedPlanDefinition, DelegatedPlanExtractionResult, DeclaredScopePathResult, normalizeDeclaredScopePath), parseSpecXml, extractDelegatedPlanDefinition, isSpecArchivePath, detectSpecArtifactKind, and lintSpecArtifacts keep their exact names and shapes.</Note>
+      <Note>Consumers: spec-lint-cache.ts imports ./spec-lint.js and keeps resolving through the barrel file; commands/lint.ts, plugins/spec-guard, and the two test files are unchanged. LINT_VERSION stays 2 so existing cache keys remain valid.</Note>
+      <Note>Each new file gets a MODULE_CONTRACT linking M-SPEC-LINT, a MODULE_MAP, moved START_BLOCK anchors, and a change summary crediting this change. M-SPEC-LINT Paths become src/lib/spec-lint.ts plus the six zone files plus the unchanged spec-lint-cache.ts; V-M-SPEC-LINT commands reference unchanged test paths and need reconciliation review only.</Note>
+      <Note>No final-review obligation is declared: evidence is the unmodified linter, cache, and spec-guard suites plus check, build, and pack:check through the barrel.</Note>
+      <Note>GRACE lifecycle commands are external execution gates, never nested MustPassCommand values. The test ! -f leaf command is file-shape evidence for the absent directory barrel, not a lifecycle command.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors><M-SPEC-LINT /></GraphAnchors>
+      <VerificationAnchors><V-M-SPEC-LINT /></VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/spec-lint.ts</File>
+      <Glob>src/lib/spec-lint/**</Glob>
+      <File>src/lib/spec-lint-cache.ts</File>
+      <File>src/lib/spec-lint.test.ts</File>
+      <File>src/lib/spec-lint-cache.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/archive/C-SPEC-LINT-RULES-SPLIT/spec.xml</File>
+      <File>.grace/changes/archive/C-SPEC-LINT-RULES-SPLIT/plan.xml</File>
+      <File>.grace/changes/active/C-SPEC-LINT-RULES-SPLIT-R1/spec.xml</File>
+      <File>.grace/changes/active/C-SPEC-LINT-RULES-SPLIT-R1/plan.xml</File>
+      <File>.grace/changes/archive/C-SPEC-LINT-RULES-SPLIT-R1/spec.xml</File>
+      <File>.grace/changes/archive/C-SPEC-LINT-RULES-SPLIT-R1/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Split spec-lint.ts into zone modules behind the preserved barrel file.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create src/lib/spec-lint/ with parser.ts, spec-rules.ts, plan-rules.ts, cross-file-rules.ts, delegated-extraction.ts, and lint.ts, moving every current private rule and helper into exactly one zone module per the PlanningNotes mapping and preserving finding text, severities, rule ids, line attribution, and extraction outputs.</Criterion>
+          <Criterion>Rewrite src/lib/spec-lint.ts as a re-export-only barrel covering the complete previous public API including the workflow-contract re-exports; ./spec-lint.js keeps resolving for spec-lint-cache.ts and the tests, and no src/lib/spec-lint/index.ts is created.</Criterion>
+          <Criterion>Every zone file carries a truthful MODULE_CONTRACT linking M-SPEC-LINT, a MODULE_MAP, moved anchors, and a change summary crediting this change; shared helpers exist once.</Criterion>
+          <Criterion>Both test suites and the spec-guard suite pass unmodified, bun run typecheck passes, and LINT_VERSION remains 2.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/plugins/spec-guard/index.test.ts</Command><Command>bun run typecheck</Command><Command>test ! -f src/lib/spec-lint/index.ts</Command></Verification>
+      </T-001>
+      <T-002>
+        <Title>Reconcile M-SPEC-LINT durable projections with the zone layout.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update M-SPEC-LINT Paths in .grace/graph/main.xml to src/lib/spec-lint.ts, the six zone files, and the unchanged spec-lint-cache.ts, keeping Name, Type, Status, Depends, and Verification unchanged and the Purpose accurate for the zone layout.</Criterion>
+          <Criterion>Review V-M-SPEC-LINT in .grace/verification/main.xml: recorded commands still reference unchanged test paths, so update only path text that no longer resolves; add no new scenarios.</Criterion>
+          <Criterion>grace lint --path . and grace status --path . pass for this bundle.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/lib/spec-lint.test.ts src/lib/spec-lint-cache.test.ts src/plugins/spec-guard/index.test.ts</Command><Command>bun run check</Command></Verification>
+      </T-002>
+    </ImplementationPlan>
+  </C-SPEC-LINT-RULES-SPLIT-R1>
+</GraceChangePlan>

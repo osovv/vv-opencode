@@ -1,0 +1,46 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-OPENCODE-MODULE-SPLIT-R1>
+    <Summary>Split the 2045-line src/lib/opencode.ts god-module into concern-scoped zone files under src/lib/opencode/ while keeping src/lib/opencode.ts itself as the re-export-only public barrel, so every ../lib/opencode.js import keeps resolving and no consumer changes.</Summary>
+    <Problem>src/lib/opencode.ts mixed six concerns in one hot file (57 source and 96 test changes in six months). The superseded C-OPENCODE-MODULE-SPLIT plan intended to replace the file with a directory barrel at src/lib/opencode/index.ts, but the project uses TypeScript moduleResolution NodeNext, where ESM-style relative specifiers like ../lib/opencode.js never resolve to a directory index — deleting the file would break all 18 consumers. This replacement keeps the reviewed intent (barrel keeps imports stable) with the only NodeNext-valid placement: the existing path stays as the barrel file.</Problem>
+    <Goals>
+      <Goal>One concern-scoped module file per zone under src/lib/opencode/ with accurate file-local MODULE_CONTRACT, map, and change summary.</Goal>
+      <Goal>src/lib/opencode.ts remains at its current path as a re-export-only barrel over the zone modules, preserving the complete previous public API so no consumer import changes.</Goal>
+      <Goal>Behavior-preserving move: no public export added, removed, renamed, or retyped; all existing tests in src/lib/opencode.test.ts pass unmodified.</Goal>
+      <Goal>M-CLI-CONFIG remains the single owning graph module for these files with updated Paths and unchanged dependencies and verification linkage.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>This is a pure structural refactor: no runtime behavior, config precedence, write semantics, error text, schema, or package.json exports may change.</Constraint>
+      <Constraint>src/lib/opencode.ts is a re-export barrel only: no implementation, no node:fs, node:path, or jsonc-parser imports; its imports are limited to ./opencode/*.js zone modules, ./package.js, and ./vvoc-config.js.</Constraint>
+      <Constraint>Split zones: shared-utils (private shared JSONC/value/text/filesystem helpers and cross-zone constants), paths (scope-aware path resolution), plugin-registration (runtime/TUI plugin pinning and plugin-list normalization), agent-registrations (managed agents, prompts, skills, symlink, managed model IO), model-overrides (generic agent/default-model/provider overrides), vvoc-config-io (canonical vvoc.json read/install/sync and guardian writes), inspection (runtime version/compatibility, installation inspection, describeWriteResult).</Constraint>
+      <Constraint>Each new file links its contract to M-CLI-CONFIG; the graph module count and cross-module dependency edges do not grow.</Constraint>
+      <Constraint>src/lib/opencode.test.ts stays at its current path and content; splitting the test file is out of scope.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No consumer import migration; consumers keep importing ../lib/opencode.js.</NonGoal>
+      <NonGoal>No tsconfig moduleResolution change and no directory-import reliance.</NonGoal>
+      <NonGoal>No new graph module anchors, no new verification entries, no schema or README changes.</NonGoal>
+      <NonGoal>No test-file split; no changes to sibling lib modules beyond imports they already had.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: src/lib/opencode.ts exists as a re-export-only barrel over src/lib/opencode/ zone modules re-exporting the complete previous public API; ../lib/opencode.js and ./opencode.js keep resolving and typechecking for every consumer, including src/lib/opencode.test.ts.</Criterion>
+      <Criterion>AC-02: Each zone lives in its own file under src/lib/opencode/ with a truthful MODULE_CONTRACT, MODULE_MAP, and START_CHANGE_SUMMARY describing the split; shared private helpers are not duplicated across zone files.</Criterion>
+      <Criterion>AC-03: bun test src/lib/opencode.test.ts passes unmodified before and after the move; bun run check, bun run build, and bun run pack:check pass, proving the public package surface is unchanged.</Criterion>
+      <Criterion>AC-04: M-CLI-CONFIG Paths in .grace/graph/main.xml lists src/lib/opencode.ts plus the zone files with Purpose, Depends, and Verification unchanged; grace lint and grace status pass with no integrity errors.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-CONFIG />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build &amp;&amp; bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Target assertions verify the barrel re-exports the previous public API with no implementation imports and that the zone files exist; the unmodified opencode test suite passing through the barrel is the behavior-preservation evidence because it exercises every zone.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>Zone file names follow the reviewed zones; a name may shift during execution only when moved code reveals a clearer boundary, recorded in the change summary, without changing zone count or the barrel contract.</Assumption>
+      <Assumption>Approval provenance: the user approved the reviewed five-item refactoring list and explicitly instructed autonomous grace-plan/grace-execute execution; this replacement inherits that authorization after the NodeNext barrel-placement discovery and changes no product behavior beyond the superseded bundle.</Assumption>
+    </Assumptions>
+  </C-OPENCODE-MODULE-SPLIT-R1>
+</GraceChangeSpec>

@@ -1,0 +1,106 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-TEST-PLACEMENT-CONVENTION>
+    <IntentSummary>Rename the nine plugin-entry integration suites at src/plugins root to NAME.integration.test.ts, move the twelve misplaced unit suites into their owning plugin directories with corrected imports, update AGENTS.md and the durable graph and verification path references, and document the convention. Test content stays unchanged; approved by explicit user instruction formalizing the reviewed refactoring list; execution has not started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-WORKFLOW</Value><Value>M-PLUGIN-GUARDIAN</Value><Value>M-PLUGIN-HASHLINE-EDIT</Value><Value>M-PLUGIN-WEB-TOOLS</Value>
+        <Value>src/plugins/guardian.test.ts</Value><Value>src/plugins/hashline-edit.test.ts</Value><Value>src/plugins/model-roles.test.ts</Value>
+        <Value>src/plugins/system-context-injection.test.ts</Value><Value>src/plugins/tool-history-compaction.test.ts</Value><Value>src/plugins/web-tools.test.ts</Value>
+        <Value>src/plugins/workflow.test.ts</Value><Value>src/plugins/workflow.delegated.test.ts</Value><Value>src/plugins/workflow.execution.test.ts</Value>
+        <Value>src/plugins/hashline-edit.validation.test.ts</Value><Value>src/plugins/hashline-edit.str-replace-editor.test.ts</Value>
+        <Value>src/plugins/tool-history-compaction.prune.test.ts</Value><Value>src/plugins/tool-history-compaction.transform.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/plugins/guardian.test.ts</File><Text>from "./guardian/index.js"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow.delegated.test.ts</File><Text>from "./workflow/index.js"</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit.validation.test.ts</File><Text>from "./hashline-edit/</Text></MustContain>
+      <MustContain><File>AGENTS.md</File><Text>bun test src/plugins/workflow.test.ts</Text></MustContain>
+      <MustPassCommand><Command>bun test src/plugins/</Command></MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-PLUGIN-WORKFLOW</Module><Module>M-PLUGIN-GUARDIAN</Module><Module>M-PLUGIN-HASHLINE-EDIT</Module><Module>M-PLUGIN-MODEL-ROLES</Module><Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module><Module>M-PLUGIN-TOOL-HISTORY-COMPACTION</Module><Module>M-PLUGIN-WEB-TOOLS</Module></MustVerify>
+      <MustExist>
+        <Value>src/plugins/guardian.integration.test.ts</Value><Value>src/plugins/hashline-edit.integration.test.ts</Value><Value>src/plugins/model-roles.integration.test.ts</Value>
+        <Value>src/plugins/system-context-injection.integration.test.ts</Value><Value>src/plugins/tool-history-compaction.integration.test.ts</Value><Value>src/plugins/web-tools.integration.test.ts</Value>
+        <Value>src/plugins/workflow.integration.test.ts</Value><Value>src/plugins/workflow.delegated.integration.test.ts</Value><Value>src/plugins/workflow.execution.integration.test.ts</Value>
+        <Value>src/plugins/hashline-edit/validation.test.ts</Value><Value>src/plugins/hashline-edit/edit-operations.test.ts</Value><Value>src/plugins/hashline-edit/normalize-edits.test.ts</Value>
+        <Value>src/plugins/hashline-edit/routing.test.ts</Value><Value>src/plugins/hashline-edit/session-state.test.ts</Value><Value>src/plugins/hashline-edit/str-replace-editor.test.ts</Value>
+        <Value>src/plugins/hashline-edit/tool-description.test.ts</Value><Value>src/plugins/tool-history-compaction/config.test.ts</Value><Value>src/plugins/tool-history-compaction/prune.test.ts</Value>
+        <Value>src/plugins/tool-history-compaction/read-slim.test.ts</Value><Value>src/plugins/tool-history-compaction/saved-output.test.ts</Value><Value>src/plugins/tool-history-compaction/transform.test.ts</Value>
+      </MustExist>
+      <MustContain><File>AGENTS.md</File><Text>integration.test.ts</Text></MustContain>
+      <MustContain><File>AGENTS.md</File><Text>bun test src/plugins/workflow.integration.test.ts</Text></MustContain>
+      <MustNotContain><File>AGENTS.md</File><Text>src/plugins/workflow.test.ts</Text></MustNotContain>
+      <MustPassCommand>
+        <Command>test ! -f src/plugins/workflow.test.ts &amp;&amp; test ! -f src/plugins/guardian.test.ts &amp;&amp; test ! -f src/plugins/hashline-edit.validation.test.ts &amp;&amp; test ! -f src/plugins/tool-history-compaction.prune.test.ts</Command>
+        <Command>bun test src/plugins/</Command>
+        <Command>bun run check</Command>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user explicitly instructed autonomous formalization of the five reviewed refactoring items; this bundle is the test-placement convention item. No implementation has started.</Note>
+      <Note>Coordinated execution order: execute this bundle LAST, after C-OPENCODE-MODULE-SPLIT, C-WORKFLOW-INDEX-REDUCE, and C-SPEC-LINT-RULES-SPLIT are executed and archived, because their recorded baseline and target commands reference the current test paths. Within this bundle T-001 and T-002 touch disjoint file sets and may run in either order or in parallel; T-003 depends on both.</Note>
+      <Note>Expected lint warning: grace lint reports scope.durable-overlap on M-PLUGIN-WORKFLOW and V-M-PLUGIN-WORKFLOW against C-WORKFLOW-INDEX-REDUCE while both bundles are active. The overlap is intentional and safe under the declared sequential execution: this bundle edits M-PLUGIN-WORKFLOW Paths and V-M-PLUGIN-WORKFLOW command paths only for the test renames, after C-WORKFLOW-INDEX-REDUCE has been archived. Do not run the two bundles concurrently.</Note>
+      <Note>T-001 renames, verified classification: the nine suites importing their plugin entry (guardian, hashline-edit, model-roles, system-context-injection, tool-history-compaction, web-tools, workflow, workflow.delegated, workflow.execution all import X/index.js) gain the .integration.test.ts suffix at src/plugins root via git mv. Each file's FILE header comment and MODULE_CONTRACT path update; test bodies stay byte-identical apart from the header.</Note>
+      <Note>T-002 moves: hashline-edit.{edit-operations,normalize-edits,routing,session-state,str-replace-editor,tool-description,validation}.test.ts and tool-history-compaction.{config,prune,read-slim,saved-output,transform}.test.ts move beside their implementation via git mv. Specifier rewrites: ./hashline-edit/x.js to ./x.js, ./tool-history-compaction/x.js to ./x.js, ../lib/ to ../../lib/, and entry imports ./hashline-edit/index.js to ./index.js. Run a pre-move grep proving no non-test source imports any moved file.</Note>
+      <Note>Reference updates sweep: .grace/verification/main.xml command strings reference all twenty-one current root paths and must be rewritten to the new locations; .grace/graph/main.xml M-PLUGIN-WORKFLOW Paths reference workflow.delegated.test.ts and workflow.execution.test.ts and must be updated; AGENTS.md impact-table command bun test src/plugins/workflow.test.ts becomes bun test src/plugins/workflow.integration.test.ts. No README, CI workflow, or package.json script references exist at baseline.</Note>
+      <Note>Convention documentation in T-003 adds a short placement rule to AGENTS.md near the test guidance: unit tests sit beside the implementation they test inside their module directory; suites that exercise a plugin through its public entry live at src/plugins root as NAME.integration.test.ts; bun test discovery covers both suffixes without configuration.</Note>
+      <Note>No final-review obligation is declared: this is a rename-and-move change whose evidence is the unchanged test bodies passing under the new layout plus the stale-path absence checks.</Note>
+      <Note>GRACE lifecycle commands are external execution gates, never nested MustPassCommand values. The chained test ! -f leaf command is file-shape evidence, not a lifecycle command.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors><M-PLUGIN-WORKFLOW /><M-PLUGIN-GUARDIAN /><M-PLUGIN-HASHLINE-EDIT /><M-PLUGIN-MODEL-ROLES /><M-PLUGIN-SYSTEM-CONTEXT-INJECTION /><M-PLUGIN-TOOL-HISTORY-COMPACTION /><M-PLUGIN-WEB-TOOLS /></GraphAnchors>
+      <VerificationAnchors><V-M-PLUGIN-WORKFLOW /><V-M-PLUGIN-GUARDIAN /><V-M-PLUGIN-HASHLINE-EDIT /><V-M-PLUGIN-MODEL-ROLES /><V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION /><V-M-PLUGIN-TOOL-HISTORY-COMPACTION /><V-M-PLUGIN-WEB-TOOLS /></VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/guardian.test.ts</File><File>src/plugins/guardian.integration.test.ts</File>
+      <File>src/plugins/hashline-edit.test.ts</File><File>src/plugins/hashline-edit.integration.test.ts</File>
+      <File>src/plugins/model-roles.test.ts</File><File>src/plugins/model-roles.integration.test.ts</File>
+      <File>src/plugins/system-context-injection.test.ts</File><File>src/plugins/system-context-injection.integration.test.ts</File>
+      <File>src/plugins/tool-history-compaction.test.ts</File><File>src/plugins/tool-history-compaction.integration.test.ts</File>
+      <File>src/plugins/web-tools.test.ts</File><File>src/plugins/web-tools.integration.test.ts</File>
+      <File>src/plugins/workflow.test.ts</File><File>src/plugins/workflow.integration.test.ts</File>
+      <File>src/plugins/workflow.delegated.test.ts</File><File>src/plugins/workflow.delegated.integration.test.ts</File>
+      <File>src/plugins/workflow.execution.test.ts</File><File>src/plugins/workflow.execution.integration.test.ts</File>
+      <Glob>src/plugins/hashline-edit/*.test.ts</Glob>
+      <Glob>src/plugins/tool-history-compaction/*.test.ts</Glob>
+      <File>.grace/graph/main.xml</File><File>.grace/verification/main.xml</File>
+      <File>AGENTS.md</File>
+      <File>.grace/changes/active/C-TEST-PLACEMENT-CONVENTION/spec.xml</File>
+      <File>.grace/changes/active/C-TEST-PLACEMENT-CONVENTION/plan.xml</File>
+      <File>.grace/changes/archive/C-TEST-PLACEMENT-CONVENTION/spec.xml</File>
+      <File>.grace/changes/archive/C-TEST-PLACEMENT-CONVENTION/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Rename the nine plugin-entry integration suites to *.integration.test.ts.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>git mv the nine entry-exercising suites to NAME.integration.test.ts at src/plugins root, updating each file's FILE header and MODULE_CONTRACT path with byte-identical test bodies otherwise.</Criterion>
+          <Criterion>Update the AGENTS.md impact-table command and every .grace/verification/main.xml command string plus the M-PLUGIN-WORKFLOW graph Paths entries that reference the old names; run a repository-wide grep proving no stale old-path references remain outside archives.</Criterion>
+          <Criterion>bun test src/plugins/ passes over the renamed layout.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/guardian.integration.test.ts src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts src/plugins/workflow.execution.integration.test.ts</Command><Command>git diff --check</Command></Verification>
+      </T-001>
+      <T-002>
+        <Title>Move the twelve misplaced unit suites into their owning plugin directories.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>git mv the seven hashline-edit and five tool-history-compaction unit suites beside their implementation, rewriting relative specifiers (./hashline-edit/x.js and ./tool-history-compaction/x.js to ./x.js, ../lib/ to ../../lib/) so every moved file runs green with unchanged test logic.</Criterion>
+          <Criterion>Update each moved file's FILE header and every .grace/verification/main.xml command string referencing the old root paths; confirm via grep that no non-test source imports any moved file and no stale references remain outside archives.</Criterion>
+          <Criterion>bun test src/plugins/ passes with the moved files at their new locations.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/hashline-edit/ src/plugins/tool-history-compaction/</Command><Command>git diff --check</Command></Verification>
+      </T-002>
+      <T-003>
+        <Title>Document the test placement convention and run the combined gate.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add the placement rule to AGENTS.md: unit tests beside their implementation inside module directories; plugin-entry suites at src/plugins root as NAME.integration.test.ts; bun test discovery needs no configuration for either suffix.</Criterion>
+          <Criterion>bun test src/plugins/ and bun run check pass over the final layout; grace lint --path . and grace status --path . pass for this bundle.</Criterion>
+        </AcceptanceCriteria>
+        <Verification><Command>bun test src/plugins/</Command><Command>bun run check</Command></Verification>
+      </T-003>
+    </ImplementationPlan>
+  </C-TEST-PLACEMENT-CONVENTION>
+</GraceChangePlan>

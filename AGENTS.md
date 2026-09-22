@@ -256,11 +256,19 @@ File-local reference:
 | A module, dependency, data flow, or public export | `.grace/graph/*`, `src/index.ts`, `package.json#exports` as applicable | `bun run check`, `bun run build`; add `bun run pack:check` for exports/package surface |
 | A test strategy, critical scenario, command gate, or log marker | `.grace/verification/*` | Targeted tests plus the recorded gate command |
 | Managed agent or skill content | `templates/`, loader tests, README when user-facing behavior changes | `bun test src/lib/managed-agents.test.ts` or the owning loader test, then `bun run check` |
-| Workflow protocol/state/transitions/persistence | All affected files under `src/plugins/workflow/`, graph, verification | `bun test src/plugins/workflow.test.ts`, `bun run typecheck`, `bun run build` |
+| Workflow protocol/state/transitions/persistence | All affected files under `src/plugins/workflow/`, graph, verification | `bun test src/plugins/workflow.integration.test.ts`, `bun run typecheck`, `bun run build` |
 | Release behavior or package/schema versioning | `.grace/context/deployment.xml`, release scripts/tests, changelog/schema/package metadata | `bun run release:check`, `bun run check`, `bun run pack:check` |
 | Documentation only | Referenced commands, paths, and current code/schema | Review the diff and validate every changed command/path; code tests are optional unless the docs expose uncertain behavior |
 
 ## Verification Commands
+
+### Test placement convention
+
+Unit tests sit beside the implementation they test inside their module
+directory (for example `src/plugins/hashline-edit/validation.test.ts`). Suites
+that exercise a plugin through its public entry live at `src/plugins/` root as
+`NAME.integration.test.ts` (for example `src/plugins/workflow.integration.test.ts`).
+Bun test discovery covers both suffixes with no configuration.
 
 ```bash
 bun install                         # install dependencies

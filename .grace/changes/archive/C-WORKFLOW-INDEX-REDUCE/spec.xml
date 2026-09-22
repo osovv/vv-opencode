@@ -1,0 +1,49 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-WORKFLOW-INDEX-REDUCE>
+    <Summary>Reduce src/plugins/workflow/index.ts (2144 lines, one ~1070-line plugin body) by moving the five tool argument schemas into a single-sourced schemas.ts with z.infer types and extracting the authorization and committed-recovery seams into sibling modules with explicit context, leaving index.ts as plugin assembly.</Summary>
+    <Problem>The workflow plugin entry file mixes plugin assembly, inline zod argument schemas, delegated authorization lookups, and committed-recovery machinery in one closure with nesting up to 10 levels. Tool argument shapes are declared twice with no compile-time link: TS types in tooling.ts (OpenArgs, DecideArgs, CheckpointArgs) and duplicate zod schemas inline in index.ts, so a field added in one place can silently miss the other. The seams are untestable without instantiating the whole plugin.</Problem>
+    <Goals>
+      <Goal>One declaration site per tool argument shape: zod schemas in src/plugins/workflow/schemas.ts, with argument types derived by z.infer and consumed by tooling.ts.</Goal>
+      <Goal>Authorization checks and SDK-backed message lookups live in src/plugins/workflow/authorization.ts as factories over an explicit context (plugin client, trusted workspace root) instead of plugin-closure locals.</Goal>
+      <Goal>Committed staged-recovery machinery lives in src/plugins/workflow/recovery.ts as a factory over the persistence seam instead of inline helpers.</Goal>
+      <Goal>index.ts keeps registering the same tools with the same names, descriptions, accepted argument shapes, and behavior; the three integration suites pass unmodified.</Goal>
+      <Goal>M-WORKFLOW-TOOLING owns schemas.ts in the graph; M-PLUGIN-WORKFLOW owns authorization.ts and recovery.ts; both durable projections stay truthful.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Behavior-preserving: tool names, descriptions, argument names/types/optionality, error text, authorization outcomes, persistence ordering, and recovery semantics must not change.</Constraint>
+      <Constraint>The z source stays the plugin API schema instance (tool.schema), not a separate zod dependency.</Constraint>
+      <Constraint>Extracted modules receive their dependencies through explicit context or factory parameters; no module-level mutable plugin state, no new singleton stores, and no new runtime import cycle (type-only imports are acceptable).</Constraint>
+      <Constraint>Domain modules (state.ts, delegated.ts, checkpoints.ts, execution.ts, persistence.ts, tooling.ts domain logic, protocol.ts, transitions.ts, repair.ts, snapshots.ts, authority.ts, transactions.ts, checkpoint-io.ts) are not refactored; tooling.ts changes only its argument-type imports and moved declarations.</Constraint>
+      <Constraint>Existing test files are not renamed here; test-path renames belong to C-TEST-PLACEMENT-CONVENTION which executes after this bundle.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No new tools, tool actions, argument fields, or protocol changes; no changes to persisted state format or version.</NonGoal>
+      <NonGoal>No restructuring of the event-hook result/failure binding bodies beyond what extracting the named seams requires; deeper hook-body decomposition is a possible follow-up.</NonGoal>
+      <NonGoal>No line-count target as an assertion; structure is verified by moved-symbol markers and unmodified integration tests.</NonGoal>
+      <NonGoal>No changes outside src/plugins/workflow/*, the three workflow integration test files, .grace graph/verification projections, and this bundle.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: schemas.ts declares the zod schemas for work_item_open, work_item_list, work_item_close, work_item_decide, and work_checkpoint exactly matching the current accepted shapes, exports z.infer argument types, and tooling.ts consumes them instead of locally redeclaring OpenArgs, ListArgs, CloseArgs, DecideArgs, and CheckpointArgs.</Criterion>
+      <Criterion>AC-02: authorization.ts exports the primary-controller mutation guard and the recovery/authority message lookup factories over explicit context; index.ts no longer defines lookupRecoveryUserMessage, lookupAuthorityMessage, or assertPrimaryControllerMutation locally.</Criterion>
+      <Criterion>AC-03: recovery.ts exports the committed staged-recovery executor and record-restore capture over the persistence seam; index.ts no longer defines executeCommittedRecovery or captureRecordRestore.</Criterion>
+      <Criterion>AC-04: bun test on src/plugins/workflow.test.ts, src/plugins/workflow.delegated.test.ts, and src/plugins/workflow.execution.test.ts passes unmodified, proving registration, authorization denial, recovery, settlement, and continuation behavior are preserved through the real plugin entry.</Criterion>
+      <Criterion>AC-05: M-WORKFLOW-TOOLING Paths include schemas.ts; M-PLUGIN-WORKFLOW Paths include authorization.ts and recovery.ts; graph purposes, dependencies, and verification linkage stay truthful; grace lint and grace status pass.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-WORKFLOW />
+      <M-WORKFLOW-TOOLING />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/workflow.test.ts src/plugins/workflow.delegated.test.ts src/plugins/workflow.execution.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Target assertions verify the moved symbol definitions live in the new modules, tooling.ts imports argument types from schemas.ts, and index.ts still exports WorkflowPlugin while no longer defining the extracted helpers. The unmodified integration suites are the behavior-preservation evidence because they exercise registration, control authorization, callID-bound attempts, bounded recovery, report-rejection settlement, and same-session continuation through the plugin entry.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The authorization and recovery seams can be factored over explicit context without changing call ordering; if execution reveals a seam genuinely requires plugin-lifecycle state that cannot be passed explicitly, that part stays in index.ts and the deviation is recorded rather than forcing a hidden singleton.</Assumption>
+      <Assumption>Approval provenance: the user explicitly instructed autonomous formalization of the five reviewed refactoring items, including items 2 and 3 of that list which this bundle combines because they touch the same files sequentially.</Assumption>
+    </Assumptions>
+  </C-WORKFLOW-INDEX-REDUCE>
+</GraceChangeSpec>

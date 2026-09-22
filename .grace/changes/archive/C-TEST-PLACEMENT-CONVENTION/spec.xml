@@ -1,0 +1,51 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-TEST-PLACEMENT-CONVENTION>
+    <Summary>Make plugin test placement explicit and consistent: rename the nine plugin-entry integration suites to *.integration.test.ts at src/plugins root and move the twelve misplaced unit suites into their owning plugin directories, then document the convention in AGENTS.md.</Summary>
+    <Problem>Plugin tests follow an implicit, asymmetric layout. Nine suites that exercise plugin entries through X/index.js live at src/plugins root with unit-sounding names, while twelve suites that test module internals (seven hashline-edit and five tool-history-compaction files) also sit at src/plugins root next to them, and other plugins keep unit tests inside their directories. workflow.delegated.test.ts at root (integration) is indistinguishable by name from workflow/delegated.test.ts (unit), which misleads navigation and review scoping.</Problem>
+    <Goals>
+      <Goal>Every plugin-entry integration suite is named NAME.integration.test.ts and lives at src/plugins root.</Goal>
+      <Goal>Every module-internals unit suite lives inside its owning plugin directory beside the implementation it tests, with corrected relative imports.</Goal>
+      <Goal>AGENTS.md documents the placement convention and its existing workflow-impact reference points to the renamed file.</Goal>
+      <Goal>Durable graph Paths and verification command paths reference the new locations truthfully; all tests pass under the new names with unchanged content.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Renames and moves only: no test logic, fixtures, assertions, or coverage change; file content changes are limited to the FILE header path and import specifiers broken by the move.</Constraint>
+      <Constraint>Integration renames: guardian, hashline-edit, model-roles, system-context-injection, tool-history-compaction, web-tools, workflow, workflow.delegated, and workflow.execution gain the .integration.test.ts suffix and stay at src/plugins root.</Constraint>
+      <Constraint>Unit moves: hashline-edit.edit-operations, hashline-edit.normalize-edits, hashline-edit.routing, hashline-edit.session-state, hashline-edit.str-replace-editor, hashline-edit.tool-description, hashline-edit.validation, tool-history-compaction.config, tool-history-compaction.prune, tool-history-compaction.read-slim, tool-history-compaction.saved-output, and tool-history-compaction.transform move into their plugin directories with ./hashline-edit/x.js specifiers rewritten to ./x.js and ../lib specifiers to ../../lib.</Constraint>
+      <Constraint>Bun test discovery keeps matching both *.test.ts and *.integration.test.ts with no configuration change.</Constraint>
+      <Constraint>This bundle executes after C-OPENCODE-MODULE-SPLIT, C-WORKFLOW-INDEX-REDUCE, and C-SPEC-LINT-RULES-SPLIT, because their recorded command evidence references the current test paths.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No new tests, no test splitting or merging, no assertion strengthening, and no moves for tests already correctly placed inside plugin directories or under src/lib, src/commands, src/tui, or scripts.</NonGoal>
+      <NonGoal>No src/plugins/integration directory, no bunfig or package.json script changes, no CI workflow changes.</NonGoal>
+      <NonGoal>No source (non-test) file changes beyond none expected; if a moved test imports a non-exported helper through a path that breaks, the import is re-pointed, not the source refactored.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: The nine integration suites exist at src/plugins root with the .integration.test.ts suffix and no stale old-named files remain; their FILE headers and any internal path references match the new paths.</Criterion>
+      <Criterion>AC-02: The twelve unit suites exist inside their owning plugin directories with working imports; no stale root-level copies remain.</Criterion>
+      <Criterion>AC-03: AGENTS.md states the placement convention (unit tests beside implementation, plugin-entry integration suites as NAME.integration.test.ts at src/plugins root) and its workflow impact-table reference uses the renamed workflow integration test path.</Criterion>
+      <Criterion>AC-04: .grace/verification command paths and .grace/graph Paths (including M-PLUGIN-WORKFLOW) reference the new test locations; bun test src/plugins, bun run check, grace lint, and grace status pass.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-WORKFLOW />
+      <M-PLUGIN-GUARDIAN />
+      <M-PLUGIN-HASHLINE-EDIT />
+      <M-PLUGIN-MODEL-ROLES />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+      <M-PLUGIN-WEB-TOOLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Target assertions verify the nine new integration paths and twelve new unit paths exist and the old root-level names are absent from AGENTS.md. bun test src/plugins/ passing over the renamed layout with unchanged test content is the evidence that discovery and imports remain intact.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>hashline-edit.test.ts counts as integration because it exercises the plugin entry among its imports; its internals-focused siblings are the ones that move.</Assumption>
+      <Assumption>No non-test source file imports any moved test file; a pre-move grep confirms this during execution.</Assumption>
+      <Assumption>Approval provenance: the user explicitly instructed autonomous formalization of the five reviewed refactoring items, including this convention cleanup.</Assumption>
+    </Assumptions>
+  </C-TEST-PLACEMENT-CONVENTION>
+</GraceChangeSpec>
