@@ -1,3 +1,17 @@
+## 1.5.0 (2026-09-22)
+
+### Summary
+
+Version 1.5.0 expands the shipped preset lineup around Xiaomi's MiMo models and moves the fast role to OpenAI's newer GPT-6 Luna model. A new vv-osovv-mimo preset assigns xiaomi/vv-mimo-v2.6-flash-high to the default and smart roles with GLM-5.3 Max review on the single-session profile, the vv-osovv-zai, vv-osovv-qwen, vv-astra-solo, and vv-astra-workers presets now route their worker default role to MiMo Flash High, and a new xiaomi patch-provider preset installs the vv-mimo-v2.6-flash-high alias over mimo-v2.6-flash with 1M context, 131K output, high reasoning effort, and text, image, audio, video, and PDF input, included in the all preset and shell completions. The fast role across vv-codex, the vv-osovv presets, and the astra presets now points at vv-codex-gpt-6-luna-low, replacing the retired GPT-5.6 Luna entry with the official GPT-6 contract of 1.05M context, 922K input, and 128K output, giving fast-role sessions a much larger usable context window. Under the hood, a behavior-preserving refactor split the opencode.ts and spec-lint.ts monoliths into concern-scoped zone modules behind unchanged public barrels, single-sourced the five workflow tool argument schemas with derived z.infer types, extracted the authorization and committed-recovery seams from the workflow plugin closure, and normalized the test layout by renaming plugin-entry suites to *.integration.test.ts and moving unit suites beside their implementations, with all 1289 tests passing unmodified and the public package surface unchanged.
+
+* feat(presets): add vv-osovv-mimo preset with MiMo Flash High roles ([37c3a0e](https://github.com/osovv/vv-opencode/commit/37c3a0e))
+* feat(presets): route fast roles to GPT-6 Luna low ([17b4ff6](https://github.com/osovv/vv-opencode/commit/17b4ff6)), closes [PR#33972](https://github.com/PR/issues/33972)
+* feat(presets): route worker defaults to MiMo Flash High and add xiaomi patch ([cc8facb](https://github.com/osovv/vv-opencode/commit/cc8facb))
+* refactor: split opencode/spec-lint monoliths, single-source workflow schemas, normalize test layout ([684b9bd](https://github.com/osovv/vv-opencode/commit/684b9bd))
+* chore: bump version from 1.4.3 to 1.4.4 with changelog ([caca561](https://github.com/osovv/vv-opencode/commit/caca561))
+* chore: bump version from 1.4.3-rc.1 to 1.4.3 with changelog ([ef30770](https://github.com/osovv/vv-opencode/commit/ef30770))
+* chore: bump version from 1.4.4 to 1.4.5 with changelog ([e366f32](https://github.com/osovv/vv-opencode/commit/e366f32))
+
 ## <small>1.4.5 (2026-09-22)</small>
 
 ### Summary
