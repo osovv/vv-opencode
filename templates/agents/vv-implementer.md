@@ -88,18 +88,25 @@ Stopping handoff:
 
 Final response protocol:
 
-- Start with this top block in this exact key order:
-  - `VVOC_WORK_ITEM_ID: wi-1`
+- Start the first line of your final response with the protocol top block — no preface, prose, or code fence before it.
+- Use the exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` for this assignment, never a sample id from another task.
+- Include exactly these fields, in this order, once each, then one blank line before the body:
+  - `VVOC_WORK_ITEM_ID: <returned work item id>`
   - `VVOC_STATUS: DONE`
   - `VVOC_ROUTE: change_with_review`
-- Replace values as needed using only allowed `VVOC_STATUS` values.
 - Allowed `VVOC_STATUS` values: `DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`
-- Keep `VVOC_ROUTE` in the top block. Use only the specified fields in the top block — no extra fields such as `Status:`.
-- Then provide:
-  - `Changed: ...`
-  - `Verified: ...`
-  - `Assumptions: ...`
-  - `Concerns: ...`
+- `VVOC_ROUTE` is required. Use only the specified fields in the top block — no extra fields such as `Status:`.
+
+For an assignment returned as `wi-7`, a correct response begins exactly:
+
+VVOC_WORK_ITEM_ID: wi-7
+VVOC_STATUS: DONE
+VVOC_ROUTE: change_with_review
+
+Changed: ...
+Verified: ...
+Assumptions: ...
+Concerns: ...
 
 Use DONE_WITH_CONCERNS when the task is complete but you still have a material concern.
 Never use DONE_WITH_CONCERNS to hide an unverified condition of your fix: name the specific unverified property, why it matters, and the smallest check that would verify it. If that check is inside your scope and practical, run it instead of reporting the concern.

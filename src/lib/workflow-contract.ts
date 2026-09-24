@@ -1,10 +1,10 @@
 // FILE: src/lib/workflow-contract.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Dependency-free common execution contract for native-package, provided-plan, and conversation-scoped workflow runs: declared-path normalization, bounded task/checkpoint/boundary contracts, explicit reviewer sets, exact-reference DAG validation, lineage/revision records, and authority/stage provenance shapes.
-//   SCOPE: Pure path normalization, bounded identity/text validation, explicit reviewer-set normalization, execution boundary containment, task and checkpoint contract validation, exact reference and acyclic dependency checks, native definition adaptation into common contracts, and structural source/lineage/authority record types. No filesystem access, native XML parsing, SDK transport, task dispatch, or persistence.
+//   PURPOSE: Dependency-free common execution contract for native-package, provided-plan, and conversation-scoped workflow runs: canonical work-item/reviewer/authority enums, declared-path normalization, bounded task/checkpoint/boundary contracts, explicit reviewer sets, exact-reference DAG validation, lineage/revision records, and authority/stage provenance shapes.
+//   SCOPE: Pure path normalization, bounded identity/text validation, canonical enum constants shared by tool schemas and domain owners, explicit reviewer-set normalization, execution boundary containment (with boundary-reporting containment failures), task and checkpoint contract validation, exact reference and acyclic dependency checks, native definition adaptation into common contracts, and structural source/lineage/authority record types. No filesystem access, native XML parsing, SDK transport, task dispatch, or persistence.
 //   DEPENDS: [] (deliberately dependency-free so the native adapter and the generic runtime share one contract without a cycle)
-//   LINKS: [M-WORKFLOW-CONTRACT, M-SPEC-LINT, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY]
+//   LINKS: [M-WORKFLOW-CONTRACT, M-SPEC-LINT, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY, M-WORKFLOW-STATE, M-WORKFLOW-TOOLING]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -14,6 +14,9 @@
 //   WORKFLOW_ID_MAX_CHARS - Maximum accepted workflow identity length.
 //   WORKFLOW_TEXT_MAX_CHARS - Maximum accepted bounded contract text length.
 //   WORKFLOW_TEXT_MAX_ITEMS - Maximum accepted list length inside one contract field.
+//   WORK_ITEM_MODES - Canonical work-item intent values accepted by work_item_open.
+//   REVIEWER_ROLES - Canonical independent reviewer roles accepted across workflow inputs.
+//   AUTHORITY_STAGES - Canonical delegatable lifecycle stages for advance authority.
 //   WorkflowReviewer - Canonical independent reviewer role.
 //   WorkflowObligationOrigin - Where a registered obligation came from (source, user, controller).
 //   DelegatedReviewer - Canonical delegated checkpoint reviewer roles (spec, code).
@@ -43,7 +46,7 @@
 //   WorkflowStageApproval - Recorded stage approval bound to an approved artifact hash.
 //   WorkflowReserveDebit - One consumed unit of the shared advance-recovery reserve.
 //   WorkflowMessageClaim - Session-wide claim that one root-user message already funded a grant.
-//   WorkflowContractProblem - One deterministic contract validation problem.
+//   WorkflowContractProblem - One deterministic contract validation problem, with an optional indexed path.
 //   WorkflowContractValidation - Validation result carrying a value or deterministic problems.
 //   isBoundedWorkflowId - Whether a value is a bounded explicit workflow identity.
 //   isPathInExecutionBoundary - Whether a normalized path is contained in an execution boundary.
@@ -56,7 +59,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial dependency-free common contract extracted from the native spec linter so provided-plan and conversation-scoped execution share one validated contract.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Added canonical work-item mode, reviewer role, and authority stage enum constants for schema/domain reuse, made OUT_OF_BOUNDARY containment failures report the offending scope together with the applicable declared boundary, and gave boundary problems precise indexed paths with bounded value previews.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONTRACT_CONSTANTS
@@ -64,6 +67,20 @@ export const WORKFLOW_CONTRACT_VERSION = 1;
 export const WORKFLOW_ID_MAX_CHARS = 128;
 export const WORKFLOW_TEXT_MAX_CHARS = 2000;
 export const WORKFLOW_TEXT_MAX_ITEMS = 64;
+
+/** Canonical work-item intent values accepted by work_item_open. */
+export const WORK_ITEM_MODES = ["implementation", "review_only", "delegated"] as const;
+
+/** Canonical independent reviewer roles accepted across workflow inputs. */
+export const REVIEWER_ROLES = ["spec", "code"] as const;
+
+/** Canonical delegatable lifecycle stages for advance authority. */
+export const AUTHORITY_STAGES = [
+  "specification",
+  "planning",
+  "implementation",
+  "verification",
+] as const;
 // END_BLOCK_CONTRACT_CONSTANTS
 
 // START_BLOCK_SCOPE_PATH_NORMALIZATION
@@ -336,6 +353,12 @@ export interface WorkflowMessageClaim {
 export interface WorkflowContractProblem {
   code: string;
   message: string;
+  /**
+   * Tokenized field/index path of the offending value when it applies to one
+   * element (e.g. ["boundary", "files", 0]); absent when the problem applies to
+   * the whole value rather than a single indexed element.
+   */
+  path?: readonly (string | number)[];
 }
 
 export type WorkflowContractValidation<T> =
@@ -440,36 +463,58 @@ export function normalizeReviewerSet(value: unknown): WorkflowReviewer[] | undef
 // END_BLOCK_REVIEWER_NORMALIZATION
 
 // START_BLOCK_BOUNDARY_VALIDATION
+/** Bounded preview of one offending value; never echoes an unbounded payload. */
+const DIAGNOSTIC_PREVIEW_MAX_CHARS = 64;
+function previewValue(value: unknown): string {
+  const json = JSON.stringify(value);
+  const text = json === undefined ? String(value) : json;
+  return text.length <= DIAGNOSTIC_PREVIEW_MAX_CHARS
+    ? text
+    : `${text.slice(0, DIAGNOSTIC_PREVIEW_MAX_CHARS - 1)}…`;
+}
+
 function normalizeUniquePaths(
   raw: unknown,
   field: string,
   normalize: (value: string) => DeclaredScopePathResult,
   problems: WorkflowContractProblem[],
+  pathBase: readonly (string | number)[] = [],
 ): string[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
-    problems.push({ code: "INVALID_LIST", message: `${field} must be an array` });
+    problems.push({
+      code: "INVALID_LIST",
+      message: `${field} must be an array`,
+      path: [...pathBase],
+    });
     return [];
   }
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const entry of raw) {
+  for (let index = 0; index < raw.length; index += 1) {
+    const entry: unknown = raw[index];
     if (typeof entry !== "string") {
-      problems.push({ code: "INVALID_PATH", message: `${field} entries must be strings` });
+      problems.push({
+        code: "INVALID_PATH",
+        message: `${field} entries must be strings`,
+        path: [...pathBase, index],
+      });
       return [];
     }
     const normalized = normalize(entry);
     if (!normalized.ok) {
       problems.push({
         code: "INVALID_PATH",
-        message: `${field} path ${JSON.stringify(entry)} is malformed (${normalized.reason})`,
+        message: `${field} path ${previewValue(entry)} is malformed (${normalized.reason})`,
+        path: [...pathBase, index],
       });
       return [];
     }
     if (seen.has(normalized.path)) {
       problems.push({
         code: "DUPLICATE_PATH",
-        message: `${field} path ${JSON.stringify(normalized.path)} is declared more than once`,
+        message: `${field} path ${previewValue(normalized.path)} is declared more than once`,
+        path: [...pathBase, index],
       });
       return [];
     }
@@ -487,7 +532,13 @@ export function validateExecutionBoundary(
   if (raw === null || typeof raw !== "object") {
     return {
       ok: false,
-      problems: [{ code: "INVALID_BOUNDARY", message: "execution boundary must be an object" }],
+      problems: [
+        {
+          code: "INVALID_BOUNDARY",
+          message: "execution boundary must be an object",
+          path: ["boundary"],
+        },
+      ],
     };
   }
   const candidate = raw as { files?: unknown; directories?: unknown };
@@ -496,19 +547,25 @@ export function validateExecutionBoundary(
     "boundary.files",
     normalizeDeclaredScopePath,
     problems,
+    ["boundary", "files"],
   );
   const directories = normalizeUniquePaths(
     candidate.directories,
     "boundary.directories",
     normalizeDeclaredDirectoryPath,
     problems,
+    ["boundary", "directories"],
   );
   if (problems.length > 0) return { ok: false, problems };
   if (files.length === 0 && directories.length === 0) {
     return {
       ok: false,
       problems: [
-        { code: "EMPTY_BOUNDARY", message: "execution boundary declares no files or directories" },
+        {
+          code: "EMPTY_BOUNDARY",
+          message: "execution boundary declares no files or directories",
+          path: ["boundary"],
+        },
       ],
     };
   }
@@ -522,6 +579,17 @@ export function isPathInExecutionBoundary(
 ): boolean {
   if (boundary.files.includes(path)) return true;
   return boundary.directories.some((directory) => path.startsWith(`${directory}/`));
+}
+
+/** Bounded one-line summary of a declared boundary for containment diagnostics. */
+function describeExecutionBoundary(boundary: WorkflowExecutionBoundary): string {
+  const summarize = (entries: readonly string[]): string =>
+    entries.length <= 8
+      ? entries.join(", ")
+      : `${entries.slice(0, 8).join(", ")}, …(+${entries.length - 8})`;
+  const files = boundary.files.length > 0 ? summarize(boundary.files) : "(none)";
+  const directories = boundary.directories.length > 0 ? summarize(boundary.directories) : "(none)";
+  return `files: ${files}; directories: ${directories}`;
 }
 // END_BLOCK_BOUNDARY_VALIDATION
 
@@ -810,7 +878,7 @@ export function validateWorkflowContractGraph(graph: {
       if (!isPathInExecutionBoundary(path, graph.boundary)) {
         problems.push({
           code: "OUT_OF_BOUNDARY",
-          message: `task ${task.taskId} writeScope ${JSON.stringify(path)} is outside the execution boundary`,
+          message: `task ${task.taskId} writeScope ${JSON.stringify(path)} is outside the execution boundary (declared ${describeExecutionBoundary(graph.boundary)})`,
         });
       }
     }
@@ -839,7 +907,7 @@ export function validateWorkflowContractGraph(graph: {
       if (!isPathInExecutionBoundary(path, graph.boundary)) {
         problems.push({
           code: "OUT_OF_BOUNDARY",
-          message: `checkpoint ${checkpoint.checkpointId} scope ${JSON.stringify(path)} is outside the execution boundary`,
+          message: `checkpoint ${checkpoint.checkpointId} scope ${JSON.stringify(path)} is outside the execution boundary (declared ${describeExecutionBoundary(graph.boundary)})`,
         });
       }
     }

@@ -1,9 +1,9 @@
 // FILE: src/plugins/web-tools/fetch-service.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the provider-neutral web_fetch tool schema, URL validation, permission flow, provider dispatch, attachments, metadata, and credential errors.
+//   PURPOSE: Verify the provider-neutral web_fetch tool schema, strict contract validation with explicit execute-time defaults, URL validation, permission flow, provider dispatch, attachments, metadata, and credential errors.
 //   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
-//   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/fetch-service.ts]
+//   DEPENDS: [bun:test, @opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/fetch-service.ts]
 //   LINKS: M-WEB-FETCH-SERVICE, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -11,17 +11,19 @@
 //
 // START_MODULE_MAP
 //   PNG_BYTES - Minimal PNG fixture.
+//   PDF_BYTES - Minimal PDF fixture.
 //   createContext - Build a tool execution context fixture.
 //   withFetch - Temporarily install a deterministic global fetch fixture.
 //   structuredResult - Narrow a ToolResult to its structured form.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Covered runtime format and timeout fallbacks when OpenCode omits schema-defaulted web_fetch arguments.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Covered strict execute-boundary rejection (structural, URL scheme, and malformed values) before permission/dispatch plus fractional timeout and PDF media delivery.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { tool, type ToolContext, type ToolResult } from "@opencode-ai/plugin";
+import { ContractInputError } from "../../lib/agent-tool-contract.js";
 import {
   createWebFetchTool,
   WEB_FETCH_DEFAULT_TIMEOUT_SECONDS,
@@ -30,6 +32,7 @@ import {
 import type { FetchLike } from "./http.js";
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 1]);
 
 function createContext(ask: ToolContext["ask"] = async () => undefined): ToolContext {
   return {
@@ -132,9 +135,115 @@ describe("createWebFetchTool", () => {
         ),
     ).catch((caught) => caught);
 
-    expect(String(error.message)).toContain("HTTP and HTTPS");
+    expect(error).toBeInstanceOf(ContractInputError);
+    expect(String(error.message)).toContain("http and https");
+    expect(String(error.message)).not.toContain("/tmp/secret");
     expect(asked).toBe(false);
     expect(fetched).toBe(false);
+  });
+
+  test("rejects relative, malformed, and other-scheme URLs before permission or network work", async () => {
+    const definition = createWebFetchTool({ provider: "native" });
+    let asked = false;
+    let fetched = false;
+    const context = createContext(async () => {
+      asked = true;
+    });
+
+    for (const url of [
+      "/page",
+      "https://",
+      "https://exa mple.test",
+      "data:text/plain,hello",
+      "ftp://example.test/file",
+    ]) {
+      const error = await withFetch(
+        async () => {
+          fetched = true;
+          return new Response("unexpected");
+        },
+        () => definition.execute({ url, format: "markdown", timeout: 30 }, context),
+      ).catch((caught) => caught);
+      expect(error).toBeInstanceOf(ContractInputError);
+      if (error instanceof ContractInputError) {
+        expect(error.issues.some((issue) => issue.path === "url")).toBe(true);
+      }
+    }
+
+    expect(asked).toBe(false);
+    expect(fetched).toBe(false);
+  });
+
+  test("rejects invalid format, timeout, and unknown credential fields before permission or network work", async () => {
+    const definition = createWebFetchTool({ provider: "native" });
+    let asked = false;
+    let fetched = false;
+    const context = createContext(async () => {
+      asked = true;
+    });
+
+    const invalidArgs: Array<Record<string, unknown>> = [
+      { url: "https://example.test/page", format: "pdf" },
+      { url: "https://example.test/page", timeout: 0 },
+      { url: "https://example.test/page", timeout: WEB_FETCH_MAX_TIMEOUT_SECONDS + 1 },
+      { url: "https://example.test/page", timeout: "30" },
+      { url: "https://example.test/page", timeout: null },
+      { url: "https://example.test/page", apiKey: "never-print-this" },
+      { url: "https://example.test/page", credential: "never-print-this" },
+      { url: "https://example.test/page", provider: "spider" },
+    ];
+
+    for (const args of invalidArgs) {
+      const error = await withFetch(
+        async () => {
+          fetched = true;
+          return new Response("unexpected");
+        },
+        () => definition.execute(args as never, context),
+      ).catch((caught) => caught);
+      expect(error).toBeInstanceOf(ContractInputError);
+      expect(String(error.message)).not.toContain("never-print-this");
+    }
+
+    expect(asked).toBe(false);
+    expect(fetched).toBe(false);
+  });
+
+  test("applies a fractional positive timeout at the execute boundary", async () => {
+    let readerBody: Record<string, unknown> | undefined;
+    const definition = createWebFetchTool({
+      provider: "zai",
+      region: "international",
+      credential: { value: "zai-secret", source: "env" },
+    });
+
+    await withFetch(
+      async (url, init) => {
+        if (String(url).endsWith("/api/paas/v4/reader")) {
+          readerBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          return new Response(JSON.stringify({ reader_result: { content: "fractional" } }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response("<html>probe</html>", { headers: { "content-type": "text/html" } });
+      },
+      () => definition.execute({ url: "https://example.test/page", timeout: 0.5 }, createContext()),
+    );
+
+    expect(readerBody?.timeout).toBe(0.5);
+  });
+
+  test("returns native PDF media as an attachment", async () => {
+    const definition = createWebFetchTool({ provider: "native" });
+    const result = await withFetch(
+      async () =>
+        new Response(PDF_BYTES, { status: 200, headers: { "content-type": "application/pdf" } }),
+      () => definition.execute({ url: "https://example.test/doc.pdf" }, createContext()),
+    );
+
+    const structured = structuredResult(result);
+    expect(structured.attachments?.[0]).toMatchObject({ type: "file", mime: "application/pdf" });
+    expect(structured.metadata).toMatchObject({ provider: "native", format: "markdown" });
   });
 
   test("asks permission before native dispatch and returns requested text", async () => {

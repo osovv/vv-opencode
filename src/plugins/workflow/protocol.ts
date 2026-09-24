@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/protocol.ts
-// VERSION: 0.1.2
+// VERSION: 0.1.3
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the tracked subagent result protocol, strict top-block parsing rules, body extraction, and work-item header extraction.
-//   SCOPE: Tracked agent/status constants, status validation per agent, strict result-block parsing with body separation, protocol error reporting, and VVOC_WORK_ITEM_ID header parsing.
+//   SCOPE: Tracked agent/status constants, status validation per agent, strict result-block parsing with body separation, shared instruction descriptions derived from the same status/route contract the parser enforces, protocol error reporting, and VVOC_WORK_ITEM_ID header parsing.
 //   DEPENDS: [none]
 //   LINKS: [M-WORKFLOW-PROTOCOL]
 //   ROLE: RUNTIME
@@ -18,13 +18,15 @@
 //   ProtocolResult - Deterministic success/failure wrapper for parsing and validation operations.
 //   TRACKED_SUBAGENT_NAMES - Ordered tracked subagent names.
 //   ALLOWED_STATUSES - Allowed VVOC_STATUS values per tracked subagent.
+//   describeStatusVocabulary - Canonical pipe-joined VVOC_STATUS vocabulary for one tracked agent.
+//   resultBlockRequiresRoute - Whether a tracked agent result block must include VVOC_ROUTE.
 //   parseResultBlock - Parses strict top-block protocol fields and separated body from tracked subagent output.
 //   validateStatusForAgent - Validates VVOC_STATUS against tracked agent allowances.
 //   parseWorkItemHeader - Extracts and validates the top-line VVOC_WORK_ITEM_ID prompt header.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.3 - Preserved separated result body text and added missing blank-line diagnostics for body text inside the strict top block.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Extracted resultBlockRequiresRoute and added describeStatusVocabulary so instruction text is generated from the same status/route contract the parser enforces; parsing behavior is unchanged. Prior: separated result body text and missing blank-line diagnostics.]
 // END_CHANGE_SUMMARY
 
 export const TRACKED_SUBAGENT_NAMES = [
@@ -48,6 +50,28 @@ export type VVocStatus =
   | "BLOCKED"
   | "PASS"
   | "FAIL";
+
+// START_CONTRACT: describeStatusVocabulary
+//   PURPOSE: Render the canonical allowed VVOC_STATUS vocabulary for one tracked subagent so instruction text is generated from the same source the parser enforces.
+//   INPUTS: { agent: TrackedAgentName - tracked subagent name }
+//   OUTPUTS: { string - pipe-joined allowed statuses in declaration order }
+//   SIDE_EFFECTS: [none]
+//   LINKS: [M-WORKFLOW-PROTOCOL]
+// END_CONTRACT: describeStatusVocabulary
+export function describeStatusVocabulary(agent: TrackedAgentName): string {
+  return ALLOWED_STATUSES[agent].join(" | ");
+}
+
+// START_CONTRACT: resultBlockRequiresRoute
+//   PURPOSE: State whether a tracked subagent result block must include VVOC_ROUTE, matching the parseResultBlock requirement.
+//   INPUTS: { agent: TrackedAgentName - tracked subagent name }
+//   OUTPUTS: { boolean - true only for the implementer role }
+//   SIDE_EFFECTS: [none]
+//   LINKS: [M-WORKFLOW-PROTOCOL]
+// END_CONTRACT: resultBlockRequiresRoute
+export function resultBlockRequiresRoute(agent: TrackedAgentName): boolean {
+  return agent === "vv-implementer";
+}
 
 export type ParsedResultBlock = {
   agent: TrackedAgentName;
@@ -303,7 +327,7 @@ export function parseResultBlock(options: {
   }
 
   const route = readTopBlockField(topBlockLines, "VVOC_ROUTE");
-  if (options.agent === "vv-implementer" && !route) {
+  if (resultBlockRequiresRoute(options.agent) && !route) {
     return createProtocolError(
       "MISSING_ROUTE",
       "MISSING_ROUTE: vv-implementer output must include VVOC_ROUTE",

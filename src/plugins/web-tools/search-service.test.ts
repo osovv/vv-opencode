@@ -1,9 +1,9 @@
 // FILE: src/plugins/web-tools/search-service.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the provider-neutral web_search tool schema, permission flow, dispatch, rendering, metadata, and credential-safe errors.
+//   PURPOSE: Verify the provider-neutral web_search tool schema, strict contract validation with explicit execute-time defaults, permission flow, dispatch, rendering, metadata, and credential-safe errors.
 //   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
-//   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/search-service.ts]
+//   DEPENDS: [bun:test, @opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/search-service.ts]
 //   LINKS: M-WEB-SEARCH-SERVICE, V-M-WEB-SEARCH-SERVICE, DF-WEB-SEARCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -16,11 +16,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Covered runtime count fallback when OpenCode omits the schema-defaulted argument.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Covered strict execute-boundary rejection before permission/dispatch, the runtime count default reaching the HTTP adapter, and freshness mapping.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { tool, type ToolContext, type ToolResult } from "@opencode-ai/plugin";
+import { ContractInputError } from "../../lib/agent-tool-contract.js";
 import type { FetchLike } from "./http.js";
 import { createWebSearchTool, renderSearchMarkdown } from "./search-service.js";
 
@@ -105,6 +106,75 @@ describe("createWebSearchTool", () => {
       search_query: "vvoc",
       count: 8,
     });
+  });
+
+  test("rejects invalid count, freshness, and unknown credential fields before permission or dispatch", async () => {
+    let asked = false;
+    let fetched = false;
+    const definition = createWebSearchTool({
+      provider: "exa",
+      envVar: "EXA_API_KEY",
+      configField: "web.search.apiKey",
+      credential: { value: "never-print-this", source: "env" },
+    });
+    const context = createContext(async () => {
+      asked = true;
+    });
+
+    const invalidArgs: Array<Record<string, unknown>> = [
+      { query: "vvoc", count: 0 },
+      { query: "vvoc", count: 21 },
+      { query: "vvoc", count: 1.5 },
+      { query: "vvoc", count: "8" },
+      { query: "vvoc", count: null },
+      { query: "vvoc", freshness: "hour" },
+      { query: "vvoc", extra: true },
+      { query: "vvoc", apiKey: "never-print-this" },
+      { query: "vvoc", credential: "never-print-this" },
+      { query: "vvoc", provider: "brave" },
+    ];
+
+    for (const args of invalidArgs) {
+      const error = await withFetch(
+        async () => {
+          fetched = true;
+          return new Response("unexpected");
+        },
+        () => definition.execute(args as never, context),
+      ).catch((caught) => caught);
+      expect(error).toBeInstanceOf(ContractInputError);
+      if (error instanceof ContractInputError) {
+        expect(error.toolId).toBe("web_search");
+        expect(error.issues.length).toBeGreaterThan(0);
+      }
+      expect(String(error.message)).not.toContain("never-print-this");
+    }
+
+    expect(asked).toBe(false);
+    expect(fetched).toBe(false);
+  });
+
+  test("maps the freshness window to the provider request", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const definition = createWebSearchTool({
+      provider: "zai",
+      region: "international",
+      envVar: "ZAI_API_KEY",
+      configField: "web.search.apiKey",
+      credential: { value: "zai-secret", source: "env" },
+    });
+
+    await withFetch(
+      async (_url, init) => {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({ search_result: [] }), {
+          headers: { "content-type": "application/json" },
+        });
+      },
+      () => definition.execute({ query: "vvoc", freshness: "week" }, createContext()),
+    );
+
+    expect(requestBody).toMatchObject({ search_recency_filter: "oneWeek" });
   });
 
   test("asks permission before Exa dispatch and returns ranked Markdown metadata", async () => {

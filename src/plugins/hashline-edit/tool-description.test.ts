@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/tool-description.test.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the LLM-facing hashline edit contract directs structural insertions to safe operations and documents literal payload semantics.
-//   SCOPE: Operation-choice guidance for adjacent insertions, consumed closing syntax, literal application, physical single-line entries, blank-payload rejection, and post-edit diff verification.
+//   PURPOSE: Verify the LLM-facing edit-tool descriptions: hashline structural-insertion safety and literal payload semantics, and the str_replace_editor description surface.
+//   SCOPE: Operation-choice guidance for adjacent insertions, consumed closing syntax, literal application, physical single-line entries, blank-payload rejection, post-edit diff verification, and the shared str_replace_editor description constant.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/tool-description.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -10,15 +10,15 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   [test scenarios] - Hashline tool-description coverage is expressed through module-level tests.
+//   [test scenarios] - Edit tool-description coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added literal-application assertions and updated the closing-syntax wording after removing autocorrect promises.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Added coverage for the str_replace_editor description constant moved into this module.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
+import { HASHLINE_EDIT_DESCRIPTION, STR_REPLACE_EDITOR_DESCRIPTION } from "./tool-description.js";
 
 describe("HASHLINE_EDIT_DESCRIPTION", () => {
   test("directs adjacent insertions away from replacing structural closing lines", () => {
@@ -57,5 +57,13 @@ describe("HASHLINE_EDIT_DESCRIPTION", () => {
   test("directs the model to verify the post-edit diff summary", () => {
     expect(HASHLINE_EDIT_DESCRIPTION).toContain("VERIFY");
     expect(HASHLINE_EDIT_DESCRIPTION).toContain("bounded diff (@@ block)");
+  });
+});
+
+describe("STR_REPLACE_EDITOR_DESCRIPTION", () => {
+  test("exposes the dsh command contract text", () => {
+    expect(STR_REPLACE_EDITOR_DESCRIPTION).toContain("Custom editing tool for viewing");
+    expect(STR_REPLACE_EDITOR_DESCRIPTION).toContain("`old_str` parameter should match EXACTLY");
+    expect(STR_REPLACE_EDITOR_DESCRIPTION).toContain("<response clipped>");
   });
 });

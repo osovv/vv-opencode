@@ -52,7 +52,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added integration coverage: tool-level bounded recovery with autonomous denial and root-user message authorization plus replay rejection, terminal malformed hard-stop settlement, staged recovery persistence failure, and post-recovery final completion that still refuses skipped reviewers.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Native register/start/verify/rework/accept/request_changes/recover outputs produced through the registered helpers are now asserted against the closed result schemas; a failing session lookup and invalid persisted state assert their host_context/persistence categories. Earlier T-002 correction added registered-wrapper diagnostics for native/generic run routing, planPath/runId conflicts, unknown-run lookup failures, source-only field rejection, cross-session no-source-detail refusal, and normalized-runId staged fail-closed routing.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -76,6 +76,7 @@ import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { WorkflowPlugin } from "./workflow/index.js";
 import { deleteWorkflowSessionDir, getWorkflowSessionDir } from "./workflow/persistence.js";
+import { validateWorkflowToolResult } from "./workflow/results.js";
 import type { ParsedResultBlock } from "./workflow/protocol.js";
 
 const ROOT_SESSION = "ses_delegated_root";
@@ -478,6 +479,7 @@ async function registerPlan(
   const registered = parseToolJson<{ ok: boolean; runId?: string; message?: string }>(
     registeredRaw ?? "{}",
   );
+  expect(validateWorkflowToolResult("work_checkpoint", registered).ok).toBe(true);
   if (!registered.ok || !registered.runId) throw new Error(registered.message ?? "register failed");
   return registered.runId;
 }
@@ -495,6 +497,7 @@ async function taskWorkItemId(
   const listed = parseToolJson<{
     planRuns?: Array<{ runId: string; tasks: Array<{ taskId: string; workItemId: string }> }>;
   }>(listedRaw ?? "{}");
+  expect(validateWorkflowToolResult("work_item_list", listed).ok).toBe(true);
   const run = listed.planRuns?.find((entry) => entry.runId === runId);
   const binding = run?.tasks.find((task) => task.taskId === taskId);
   if (!binding) throw new Error(`missing binding for ${taskId}`);
@@ -611,7 +614,9 @@ async function checkpointCall(
     args as never,
     createStubToolContext(harness, ROOT_SESSION) as never,
   );
-  return parseToolJson<Record<string, unknown>>(raw ?? "{}");
+  const parsed = parseToolJson<Record<string, unknown>>(raw ?? "{}");
+  expect(validateWorkflowToolResult("work_checkpoint", parsed).ok).toBe(true);
+  return parsed;
 }
 
 async function finishTask(
@@ -694,15 +699,16 @@ async function decide(
   sessionID = ROOT_SESSION,
   agent = "vv-controller",
 ): Promise<Record<string, unknown>> {
+  // Omit optional rationale/evidence unless the caller supplies them: a
+  // supplied blank rationale is now rejected rather than treated as absent, so
+  // the helper must not inject an empty default.
   const raw = await harness.plugin.tool?.work_item_decide?.execute(
-    {
-      rationale: "",
-      evidence: [],
-      ...input,
-    } as never,
+    { ...input } as never,
     createStubToolContext(harness, sessionID, agent) as never,
   );
-  return parseToolJson<Record<string, unknown>>(raw ?? "{}");
+  const parsed = parseToolJson<Record<string, unknown>>(raw ?? "{}");
+  expect(validateWorkflowToolResult("work_item_decide", parsed).ok).toBe(true);
+  return parsed;
 }
 
 async function driveAcceptedTask(
@@ -842,8 +848,11 @@ describe("delegated control-tool authorization", () => {
         } as never,
         createStubToolContext(harness, ROOT_SESSION, "vv-implementer") as never,
       )
-      .catch((error: Error) => error.message);
+      .then(() => undefined)
+      .catch((error: Error) => error);
     expect(String(selfAcceptance)).toContain("CONTROL_DENIED");
+    expect((selfAcceptance as { code?: string }).code).toBe("CONTROL_DENIED");
+    expect((selfAcceptance as { category?: string }).category).toBe("authorization");
 
     harness.sessions.set(ROOT_SESSION, { parentID: "ses_parent" });
     const deniedChild = await harness.plugin.tool?.work_item_decide
@@ -857,8 +866,11 @@ describe("delegated control-tool authorization", () => {
         } as never,
         createStubToolContext(harness, ROOT_SESSION, "vv-controller") as never,
       )
-      .catch((error: Error) => error.message);
+      .then(() => undefined)
+      .catch((error: Error) => error);
     expect(String(deniedChild)).toContain("root session");
+    expect((deniedChild as { code?: string }).code).toBe("CONTROL_DENIED");
+    expect((deniedChild as { category?: string }).category).toBe("authorization");
     harness.sessions.delete(ROOT_SESSION);
 
     harness.sessionGetFails = true;
@@ -873,8 +885,11 @@ describe("delegated control-tool authorization", () => {
         } as never,
         createStubToolContext(harness, ROOT_SESSION) as never,
       )
-      .catch((error: Error) => error.message);
+      .then(() => undefined)
+      .catch((error: Error) => error);
     expect(String(unknownSession)).toContain("could not be verified");
+    expect((unknownSession as { code?: string }).code).toBe("HOST_CONTEXT_UNAVAILABLE");
+    expect((unknownSession as { category?: string }).category).toBe("host_context");
     harness.sessionGetFails = false;
 
     const untrusted = {
@@ -886,8 +901,11 @@ describe("delegated control-tool authorization", () => {
         { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
         untrusted as never,
       )
-      .catch((error: Error) => error.message);
+      .then(() => undefined)
+      .catch((error: Error) => error);
     expect(String(deniedWorkspace)).toContain("does not match the trusted plugin workspace");
+    expect((deniedWorkspace as { code?: string }).code).toBe("CONTROL_DENIED");
+    expect((deniedWorkspace as { category?: string }).category).toBe("authorization");
   });
 
   test("invalid persisted state denies new control mutations instead of resetting", async () => {
@@ -903,16 +921,350 @@ describe("delegated control-tool authorization", () => {
     writeFileSync(statePath, "{ not valid json", "utf8");
 
     const secondHarness = await createDelegatedPluginHarness(workspaceRoot);
-    const denied = await secondHarness.plugin.tool?.work_checkpoint
+    const deniedError = await secondHarness.plugin.tool?.work_checkpoint
       ?.execute(
         { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
         createStubToolContext(secondHarness, ROOT_SESSION) as never,
       )
-      .catch((error: Error) => error.message);
-    expect(String(denied)).toContain("invalid");
+      .then(() => undefined)
+      .catch((error: Error) => error);
+    expect(String(deniedError)).toContain("invalid");
+    expect((deniedError as { code?: string }).code).toBe("PERSISTENCE_FAILED");
+    expect((deniedError as { category?: string }).category).toBe("persistence");
   });
 });
 // END_BLOCK_AUTHORIZATION_TESTS
+
+// START_BLOCK_NATIVE_ROUTING_CONTRACTS
+describe("native and generic run routing through the registered wrapper", () => {
+  test("generic-only actions on a native run and conflicting register routes are explicit rejections", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    expect(runId).toBeTruthy();
+
+    const reviewNative = parseToolJson<{ ok: boolean; errorCode?: string; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "review", runId, checkpointId: "CHECKPOINT-R-001" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(reviewNative.ok).toBe(false);
+    expect(reviewNative.errorCode).toBe("INVALID_INPUT");
+    expect(String(reviewNative.message)).toContain("native-package run");
+    expect(String(reviewNative.message)).toContain(runId);
+
+    const completeNative = parseToolJson<{ ok: boolean; errorCode?: string; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "complete", runId } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(completeNative.ok).toBe(false);
+    expect(String(completeNative.message)).toContain("native-package run");
+
+    // planPath and runId are mutually exclusive registration routes.
+    const conflictingRegister = parseToolJson<{
+      ok: boolean;
+      errorCode?: string;
+      message?: string;
+    }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "register", planPath, runId } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(conflictingRegister.ok).toBe(false);
+    expect(conflictingRegister.errorCode).toBe("INVALID_INPUT");
+    expect(String(conflictingRegister.message)).toContain("runId");
+
+    // Unknown run with a generic-only action is a lookup failure, not a
+    // native-argument requirement.
+    const unknownRun = parseToolJson<{ ok: boolean; errorCode?: string; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "review", runId: "run-does-not-exist", checkpointId: "C-1" } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    expect(unknownRun.ok).toBe(false);
+    expect(unknownRun.errorCode).toBe("EXECUTION_NOT_FOUND");
+    expect(String(unknownRun.message)).not.toContain("start and verify");
+    expect(String(unknownRun.message)).not.toContain("planPath");
+
+    // The native run itself stays registered after the rejected calls.
+    const listed = parseToolJson<{
+      planRuns?: Array<{ runId: string; tasks: Array<{ taskId: string }> }>;
+    }>(
+      (await harness.plugin.tool?.work_item_list?.execute(
+        { includeClosed: true },
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )) ?? "{}",
+    );
+    const nativeRun = listed.planRuns?.find((entry) => entry.runId === runId);
+    expect(nativeRun).toBeDefined();
+    expect(nativeRun?.tasks.map((entry) => entry.taskId)).toEqual(["T-001"]);
+  });
+
+  test("source-only fields reject after source lookup and unknown runs stay lookup failures", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const nativeRunId = await registerPlan(harness, planPath);
+    const context = createStubToolContext(harness, ROOT_SESSION);
+
+    const nativeFingerprint = parseToolJson<{ ok: boolean; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        {
+          action: "start",
+          runId: nativeRunId,
+          checkpointId: "CHECKPOINT-R-001",
+          startFingerprint: "abc",
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(nativeFingerprint.ok).toBe(false);
+    expect(String(nativeFingerprint.message)).toContain("startFingerprint");
+
+    const nativeReviewer = parseToolJson<{ ok: boolean; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        {
+          action: "verify",
+          runId: nativeRunId,
+          checkpointId: "CHECKPOINT-R-001",
+          reviewer: "code",
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(nativeReviewer.ok).toBe(false);
+    expect(String(nativeReviewer.message)).toContain("reviewer");
+
+    const registered = parseToolJson<{ ok: boolean; runId?: string }>(
+      (await harness.plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "gen-src",
+              title: "Generic",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/a.ts"],
+              taskId: "T-GEN",
+            },
+          ],
+          execution: {
+            executionKey: "gen-src",
+            source: { kind: "conversation-scoped" },
+            goal: "Exercise source-dependent fields.",
+            boundary: { files: ["src/lib/a.ts"], directories: [] },
+          },
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(registered.ok).toBe(true);
+    const genericRunId = String(registered.runId);
+
+    const genericComplete = parseToolJson<{ ok: boolean; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        {
+          action: "verify",
+          runId: genericRunId,
+          checkpointId: "review-T-GEN",
+          complete: true,
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(genericComplete.ok).toBe(false);
+    expect(String(genericComplete.message)).toContain("complete");
+
+    const genericRecoverMessage = parseToolJson<{ ok: boolean; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        {
+          action: "recover",
+          runId: genericRunId,
+          checkpointId: "review-T-GEN",
+          recoveryId: "rec-src",
+          diagnosis: "Both generations failed.",
+          changedCondition: "Narrowed coverage.",
+          verification: ["src/lib/a.ts"],
+          userMessageId: "msg-1",
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(genericRecoverMessage.ok).toBe(false);
+    expect(String(genericRecoverMessage.message)).toContain("userMessageId");
+
+    // An unknown run stays a lookup failure even when a native-only field is present.
+    const unknownRun = parseToolJson<{ ok: boolean; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        { action: "verify", runId: "run-unknown", checkpointId: "C-1", complete: true } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(unknownRun.ok).toBe(false);
+    expect(String(unknownRun.message)).not.toContain("complete");
+  });
+
+  test("a foreign root session sees no source details for another session's run", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const ownerContext = createStubToolContext(harness, ROOT_SESSION);
+    const registered = parseToolJson<{ ok: boolean; runId?: string }>(
+      (await harness.plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "owned-run",
+              title: "Owned",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/a.ts"],
+              taskId: "T-OWNED",
+            },
+          ],
+          execution: {
+            executionKey: "owned-run",
+            source: { kind: "conversation-scoped" },
+            goal: "Owned by the registering session.",
+            boundary: { files: ["src/lib/a.ts"], directories: [] },
+          },
+        } as never,
+        ownerContext as never,
+      )) ?? "{}",
+    );
+    expect(registered.ok).toBe(true);
+    const runId = String(registered.runId);
+
+    const foreignContext = createStubToolContext(harness, "ses_delegated_foreign");
+    const foreignCalls: Array<Record<string, unknown>> = [
+      { action: "verify", runId, checkpointId: "review-T-OWNED" },
+      { action: "verify", runId, checkpointId: "review-T-OWNED", complete: true },
+      { action: "verify", runId, checkpointId: "review-T-OWNED", complete: false },
+      { action: "start", runId, checkpointId: "review-T-OWNED", startFingerprint: "abc" },
+      {
+        action: "recover",
+        runId,
+        checkpointId: "review-T-OWNED",
+        recoveryId: "rec-foreign",
+        diagnosis: "d",
+        changedCondition: "c",
+        verification: ["v"],
+        userMessageId: "msg-1",
+      },
+    ];
+    for (const args of foreignCalls) {
+      const result = parseToolJson<{ ok: boolean; errorCode?: string; message?: string }>(
+        (await harness.plugin.tool?.work_checkpoint?.execute(
+          args as never,
+          foreignContext as never,
+        )) ?? "{}",
+      );
+      expect(result.ok).toBe(false);
+      const message = String(result.message ?? "");
+      expect(message).not.toContain("complete");
+      expect(message).not.toContain("startFingerprint");
+      expect(message).not.toContain("userMessageId");
+      expect(message).not.toContain("generic");
+      expect(message).not.toContain("native-package");
+      expect(message).not.toContain(ROOT_SESSION);
+    }
+  });
+
+  test("a whitespace-padded generic runId routes through the staged fail-closed transaction", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const context = createStubToolContext(harness, ROOT_SESSION);
+
+    const registered = parseToolJson<{ ok: boolean; runId?: string }>(
+      (await harness.plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "gen-normalized",
+              title: "Generic",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/a.ts"],
+              taskId: "T-NORM",
+            },
+          ],
+          execution: {
+            executionKey: "gen-normalized",
+            source: { kind: "conversation-scoped" },
+            goal: "Route by a normalized runId.",
+            boundary: { files: ["src/lib/a.ts"], directories: [] },
+          },
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(registered.ok).toBe(true);
+    const runId = String(registered.runId);
+
+    // Force the checked snapshot write to fail by occupying the state path.
+    const statePath = join(getWorkflowSessionDir(ROOT_SESSION), "workflow-state.json");
+    rmSync(statePath, { recursive: true, force: true });
+    mkdirSync(statePath, { recursive: true });
+
+    const failed = parseToolJson<{ ok: boolean; errorCode?: string; message?: string }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        {
+          action: "amend",
+          runId: ` ${runId} `,
+          amendmentId: "amend-normalized",
+          rationale: "Append after normalizing the runId.",
+          tasks: [
+            {
+              key: "gen-normalized-2",
+              title: "Generic 2",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/a.ts"],
+              taskId: "T-NORM-2",
+            },
+          ],
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(failed.ok).toBe(false);
+    expect(failed.errorCode).toBe("PERSISTENCE_FAILED");
+
+    // After I/O recovery the amendment applies as revision 2: the failed
+    // padded call never published a partial live mutation.
+    rmSync(statePath, { recursive: true, force: true });
+    const retried = parseToolJson<{
+      ok: boolean;
+      execution?: { revision?: number };
+    }>(
+      (await harness.plugin.tool?.work_checkpoint?.execute(
+        {
+          action: "amend",
+          runId,
+          amendmentId: "amend-normalized",
+          rationale: "Append after normalizing the runId.",
+          tasks: [
+            {
+              key: "gen-normalized-2",
+              title: "Generic 2",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/a.ts"],
+              taskId: "T-NORM-2",
+            },
+          ],
+        } as never,
+        context as never,
+      )) ?? "{}",
+    );
+    expect(retried.ok).toBe(true);
+    expect(retried.execution?.revision).toBe(2);
+  });
+});
+// END_BLOCK_NATIVE_ROUTING_CONTRACTS
 
 // START_BLOCK_DELEGATED_FLOW_TESTS
 describe("delegated attempt flow through plugin hooks", () => {
@@ -1220,6 +1572,7 @@ describe("delegated attempt flow through plugin hooks", () => {
       )) ?? "{}",
     );
     expect(closedReport.ok).toBe(true);
+    expect(validateWorkflowToolResult("work_item_close", closedReport).ok).toBe(true);
     const prematureComplete = parseToolJson<{ ok: boolean; errorCode?: string }>(
       (await harness.plugin.tool?.work_checkpoint?.execute(
         { action: "verify", runId, checkpointId: "CHECKPOINT-R-001", complete: true } as never,
@@ -1230,12 +1583,13 @@ describe("delegated attempt flow through plugin hooks", () => {
 
     // Rework the covered accepted task, correct it, re-accept, and complete.
     const t2 = await taskWorkItemId(harness, runId, "T-002");
+    // rework consumes only its failed checkpoint binding plus the bounded
+    // reason; supplying evidence is a recognized-field conflict and is rejected.
     const reworked = await decide(harness, {
       workItemId: t2,
       attempt: 1,
       decision: "rework",
       rationale: "Spec review found a missing branch.",
-      evidence: ["review findings"],
       runId,
       checkpointId: "CHECKPOINT-R-001",
     });

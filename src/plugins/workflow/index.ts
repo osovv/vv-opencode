@@ -1,20 +1,20 @@
 // FILE: src/plugins/workflow/index.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including delegated control tools with bounded recovery, host-call-bound attempts, terminal report-rejection settlement, and checkpoint reviewer linkage.
-//   SCOPE: work_item_open/list/close registration, delegated-only work_item_decide and work_checkpoint registration with root-session authorization and an SDK-backed read-only authorization-message lookup for user-authorized recovery, tracked launch validation with delegated barriers and overlapping-write gates, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results, terminal settlement of protocol-invalid reports as report_rejected attempts through staged persistence, checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance. Tool argument schemas come from schemas.ts; the authorization guard and message lookups from authorization.ts; staged transactions and committed recovery from recovery.ts.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/authorization.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/recovery.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/schemas.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
-//   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, V-M-PLUGIN-WORKFLOW
+//   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including profile-independent control tools with bounded recovery, host-call-bound attempts, terminal report-rejection settlement, checkpoint reviewer linkage, and strict owned-tool contract publication/validation.
+//   SCOPE: work_item_open/list/close registration, profile-independent work_item_decide and work_checkpoint registration with root-session authorization and an SDK-backed read-only authorization-message lookup for user-authorized recovery, owned tool.definition publication of strict input JSON Schemas plus early validateWorkflowToolInput guards in tool.execute.before (without touching task-launch hooks), pre-dispatch structural validation of mutation tools, tracked launch validation with delegated barriers, overlapping-write gates, and authoritative native sealed-run rejection, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results, terminal settlement of protocol-invalid reports as report_rejected attempts through staged persistence, checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance. Tool argument schemas come from schemas.ts; branch-aware validation from input-validation.ts; the authorization guard and message lookups from authorization.ts; staged transactions and committed recovery from recovery.ts.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/authorization.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/input-validation.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/recovery.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/results.ts, src/plugins/workflow/schemas.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
+//   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-AGENT-TOOL-CONTRACT, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   WorkflowPlugin - Registers workflow work-item tools, delegated control tools under the delegated profile, tracked task protocol enforcement with callID-bound delegated attempts, bounded recovery with durable persist-and-rollback commits, terminal report-rejection settlement, checkpoint linkage, live host-call failure bindings, and primary-session workflow guidance injection.
+//   WorkflowPlugin - Registers workflow work-item tools, profile-independent control tools whose execution remains root-session gated, owned tool.definition/execute.before contract hooks, tracked task protocol enforcement with callID-bound delegated attempts, bounded recovery with durable persist-and-rollback commits, terminal report-rejection settlement, checkpoint linkage, live host-call failure bindings, and primary-session workflow guidance injection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-INDEX-REDUCE - Moved the five tool argument schemas into schemas.ts with z.infer types, and extracted the authorization guard, message lookups, staged transactions, and committed recovery into authorization.ts and recovery.ts over explicit context; registered shapes and behavior are unchanged.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Appended one shared tracked result-protocol instruction, generated from protocol.ts status vocabularies, to the review-only/selective/delegated guidance so common launch/result rules and the on-demand reference path are available without the native execution skill; the profile-specific ownership text and the tracked system instruction are otherwise unchanged. Prior T-004: removed the redundant registration spread and made the native launch hook reject an authoritatively sealed plan run.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -25,6 +25,7 @@ import {
   unwrapResumableTaskResult,
 } from "./repair.js";
 import {
+  describeStatusVocabulary,
   parseResultBlock,
   parseWorkItemHeader,
   TRACKED_SUBAGENT_NAMES,
@@ -79,6 +80,15 @@ import {
   workItemOpenArgs,
 } from "./schemas.js";
 import {
+  isWorkflowToolId,
+  validateWorkflowToolInput,
+  workflowToolContracts,
+} from "./input-validation.js";
+import { ContractInputError, createToolDefinitionAdapter } from "../../lib/agent-tool-contract.js";
+import { serializeWorkflowResult, workflowInputFailure } from "./results.js";
+import type { WorkflowMutationOutcome } from "./results.js";
+import { deriveDelegatedGuidance } from "./inspection.js";
+import {
   assertWorkflowToolAccess,
   createWorkflowAuthorization,
   shouldInjectForAgent,
@@ -97,7 +107,7 @@ import {
   snapshotWorkflowStateChecked,
 } from "./persistence.js";
 import { loadApprovedDelegatedPlan } from "./checkpoint-io.js";
-import { isTaskLaunchableInStore } from "./execution.js";
+import { isTaskLaunchableInStore, latestAttemptView } from "./execution.js";
 
 const TRACKED_SUBAGENT_SET = new Set<string>(TRACKED_SUBAGENT_NAMES);
 const WORK_ITEM_MISSING_MARKER = "__VVOC" + "_SECRET_BEARER_TOKEN_a6f582092f05__";
@@ -172,17 +182,30 @@ session.
 </workflow_protocol>
 `.trim();
 
+// Common result-protocol guidance appended to the non-tracked profile
+// instructions. It states shared launch/result rules only: it does not select a
+// source or lifecycle, and it adds no delegation or review obligation. Status
+// vocabularies come from protocol.ts so the text cannot drift from the parser.
+const TRACKED_RESULT_PROTOCOL_INSTRUCTION = `
+<tracked_result_protocol>
+A tracked subagent result begins on its first line with the protocol top block — no preface, prose, or code fence — followed by a blank line and the body. Use the exact VVOC_WORK_ITEM_ID returned by work_item_open for that assignment; never reuse a sample id from another task.
+- vv-implementer: VVOC_STATUS ${describeStatusVocabulary("vv-implementer")}, with a required VVOC_ROUTE.
+- vv-spec-reviewer / vv-code-reviewer: VVOC_STATUS ${describeStatusVocabulary("vv-spec-reviewer")}; a reviewer result carries no route.
+A result whose first field names a different work item is a work-item mismatch, not a malformed header, and is never relabeled to the expected id. Inspect work_item_list before retrying to recover the current identity, state, attempt, and remaining budget. Common tool calls follow the published input schemas, and work_item_list reports the loaded contract revision and the on-demand reference path at contract.referencePath.
+</tracked_result_protocol>
+`.trim();
+
 /** Returns the exact workflow instruction compatible with one resolved policy. */
 function getWorkflowSystemInstruction(policy: ResolvedOrchestrationPolicy): string {
   switch (policy.workflowGuidance) {
     case "review-only":
-      return REVIEW_ONLY_WORKFLOW_SYSTEM_INSTRUCTION;
+      return `${REVIEW_ONLY_WORKFLOW_SYSTEM_INSTRUCTION}\n\n${TRACKED_RESULT_PROTOCOL_INSTRUCTION}`;
     case "selective":
-      return SELECTIVE_WORKFLOW_SYSTEM_INSTRUCTION;
+      return `${SELECTIVE_WORKFLOW_SYSTEM_INSTRUCTION}\n\n${TRACKED_RESULT_PROTOCOL_INSTRUCTION}`;
     case "tracked":
       return workflowSystemInstructionTemplate.trim();
     case "delegated":
-      return DELEGATED_WORKFLOW_SYSTEM_INSTRUCTION;
+      return `${DELEGATED_WORKFLOW_SYSTEM_INSTRUCTION}\n\n${TRACKED_RESULT_PROTOCOL_INSTRUCTION}`;
   }
 }
 
@@ -298,8 +321,14 @@ function appendSystemInstruction(existingSystem: string | undefined, instruction
   return `${existingSystem.trim()}\n\n${instruction}`;
 }
 
-function stringifyToolOutput(value: Record<string, unknown>): string {
-  return JSON.stringify(value, null, 2);
+// Serialize every public workflow result through the shared results contract so
+// failures gain a stable category and post-side-effect reporting failures stay
+// bounded and truthful instead of throwing raw after a committed mutation.
+function stringifyToolOutput(
+  value: Record<string, unknown>,
+  outcome?: WorkflowMutationOutcome,
+): string {
+  return serializeWorkflowResult(value, outcome !== undefined ? { outcome } : undefined);
 }
 
 function createRoundLimitMessage(record: WorkItemRecord, attemptedRound: number): string {
@@ -822,6 +851,16 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
     lookupAuthorityMessage,
   });
 
+  // START_BLOCK_TOOL_CONTRACT_HOOKS
+  // Owned-only contract publication and early structural/branch validation.
+  // The tool.definition adapter publishes the strict input JSON Schema through
+  // the host's observable jsonSchema member (T-001-proven seam) without
+  // replacing the host decoder; the execute.before guard rejects invalid
+  // raw arguments with bounded tokenized paths before any handler runs and
+  // never touches the task-launch hooks below.
+  const toolDefinitionAdapter = createToolDefinitionAdapter([...workflowToolContracts]);
+  // END_BLOCK_TOOL_CONTRACT_HOOKS
+
   return {
     tool: {
       work_item_open: tool({
@@ -829,22 +868,32 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         args: workItemOpenArgs,
         async execute(args, context) {
           assertWorkflowToolAccess(context.agent, "work_item_open");
-          const isGeneric = args.execution !== undefined || args.runId !== undefined;
+          const validation = validateWorkflowToolInput("work_item_open", args);
+          if (!validation.ok) {
+            return stringifyToolOutput(
+              workflowInputFailure("work_item_open", context.sessionID, validation.issues),
+            );
+          }
+          const isGeneric =
+            validation.data.execution !== undefined || validation.data.runId !== undefined;
           if (isGeneric) {
             // Hydrate/validate the session store before the transaction boundary
             // reads it, matching every other tool entry point.
             getOrCreateStore(context.sessionID);
-            const result = await commitGenericToolResult(context.sessionID, (view) =>
-              workItemOpenTool.execute(
-                args,
-                {
-                  sessionId: context.sessionID,
-                  workspaceRoot: trustedWorkspaceRoot,
-                },
-                view,
-              ),
+            const result = await commitGenericToolResult(
+              context.sessionID,
+              "work_item_open",
+              (view) =>
+                workItemOpenTool.execute(
+                  args,
+                  {
+                    sessionId: context.sessionID,
+                    workspaceRoot: trustedWorkspaceRoot,
+                  },
+                  view,
+                ),
             );
-            return stringifyToolOutput(result);
+            return stringifyToolOutput(result, result.ok === true ? "committed" : "not_applied");
           }
           const sessionStore = getOrCreateStore(context.sessionID);
           const opened = workItemOpenTool.execute(
@@ -852,8 +901,11 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
             { sessionId: context.sessionID },
             sessionStore,
           );
-          snapshotSession(context.sessionID);
-          return stringifyToolOutput(opened);
+          const openedPersisted = snapshotSession(context.sessionID);
+          return stringifyToolOutput(
+            opened,
+            opened.ok === false ? "not_applied" : openedPersisted.ok ? "committed" : "unknown",
+          );
         },
       }),
       work_item_list: tool({
@@ -878,140 +930,182 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
             { sessionId: context.sessionID },
             sessionStore,
           );
-          snapshotSession(context.sessionID);
-          return stringifyToolOutput(closed);
+          const closedPersisted = snapshotSession(context.sessionID);
+          return stringifyToolOutput(
+            closed,
+            closed.ok === false ? "not_applied" : closedPersisted.ok ? "committed" : "unknown",
+          );
         },
       }),
       // Control tools are registered independent of the startup profile; they
       // remain root-session, agent, workspace, and invalid-hydration gated at
       // execution time.
-      ...{
-        work_item_decide: tool({
-          description: workItemDecideTool.description,
-          args: workItemDecideArgs,
-          async execute(args, context) {
-            // Resolve the store first so invalid persisted state is detected
-            // before the authorization check reports it as a control denial.
-            const sessionStore = getOrCreateStore(context.sessionID);
-            await assertPrimaryControllerMutation(
-              context.agent,
-              context.sessionID,
-              { directory: context.directory, worktree: context.worktree },
-              "work_item_decide",
+      work_item_decide: tool({
+        description: workItemDecideTool.description,
+        args: workItemDecideArgs,
+        async execute(args, context) {
+          // Resolve the store first so invalid persisted state is detected
+          // before the authorization check reports it as a control denial.
+          const sessionStore = getOrCreateStore(context.sessionID);
+          await assertPrimaryControllerMutation(
+            context.agent,
+            context.sessionID,
+            { directory: context.directory, worktree: context.worktree },
+            "work_item_decide",
+          );
+          const validation = validateWorkflowToolInput("work_item_decide", args);
+          if (!validation.ok) {
+            return stringifyToolOutput(
+              workflowInputFailure("work_item_decide", context.sessionID, validation.issues),
             );
-            // Recovery is the only decision family that must persist
-            // before it exposes new launch permissions. Authority-bearing
-            // recovery stages the work-item recovery and the reserve debit in
-            // one serialized transaction so they commit or fail together.
-            if (args.decision === "recover") {
-              if (args.authorityId !== undefined) {
-                const staged = await commitGenericToolResult(context.sessionID, (view) =>
-                  workItemDecideTool.execute(args, { sessionId: context.sessionID }, view),
-                );
-                return stringifyToolOutput(staged);
-              }
-              const workItemId = String(args.workItemId ?? "");
-              const recovered = await executeCommittedRecovery(
+          }
+          // Recovery is the only decision family that must persist
+          // before it exposes new launch permissions. Authority-bearing
+          // recovery stages the work-item recovery and the reserve debit in
+          // one serialized transaction so they commit or fail together.
+          // Routing uses the same validated/normalized values the handler consumes.
+          const parsedDecide = validation.data;
+          if (parsedDecide.decision === "recover") {
+            if (parsedDecide.authorityId !== undefined) {
+              const staged = await commitGenericToolResult(
                 context.sessionID,
-                (liveStore) =>
-                  workItemDecideTool.execute(args, { sessionId: context.sessionID }, liveStore),
-                () => captureRecordRestore(context.sessionID, workItemId),
-                (result) => result.ok === true,
+                "work_item_decide",
+                (view) => workItemDecideTool.execute(args, { sessionId: context.sessionID }, view),
               );
-              return stringifyToolOutput(recovered);
+              return stringifyToolOutput(staged, staged.ok === true ? "committed" : "not_applied");
             }
-            const decided = await workItemDecideTool.execute(
-              args,
-              { sessionId: context.sessionID },
-              sessionStore,
-            );
-            if (decided.ok) {
-              const persisted = snapshotSession(context.sessionID);
-              if (!persisted.ok) {
-                throw new Error(
-                  `PERSISTENCE_FAILED: decision applied in memory but could not be persisted: ${persisted.error}`,
-                );
-              }
-            }
-            return stringifyToolOutput(decided);
-          },
-        }),
-        work_checkpoint: tool({
-          description: workCheckpointTool.description,
-          args: workCheckpointArgs,
-          async execute(args, context) {
-            // Resolve the store first so invalid persisted state is detected
-            // before the authorization check reports it as a control denial.
-            const sessionStore = getOrCreateStore(context.sessionID);
-            await assertPrimaryControllerMutation(
-              context.agent,
+            const workItemId = parsedDecide.workItemId.trim();
+            const recovered = await executeCommittedRecovery(
               context.sessionID,
-              { directory: context.directory, worktree: context.worktree },
+              (liveStore) =>
+                workItemDecideTool.execute(args, { sessionId: context.sessionID }, liveStore),
+              () => captureRecordRestore(context.sessionID, workItemId),
+              (result) => result.ok === true,
+            );
+            // executeCommittedRecovery returns a success only after a durable
+            // write, and throws (rollback) if the write fails.
+            return stringifyToolOutput(
+              recovered,
+              recovered.ok === true ? "committed" : "not_applied",
+            );
+          }
+          const decided = await workItemDecideTool.execute(
+            args,
+            { sessionId: context.sessionID },
+            sessionStore,
+          );
+          if (decided.ok) {
+            const persisted = snapshotSession(context.sessionID);
+            if (!persisted.ok) {
+              throw new Error(
+                `PERSISTENCE_FAILED: decision applied in memory but could not be persisted: ${persisted.error}`,
+              );
+            }
+          }
+          return stringifyToolOutput(decided, decided.ok === true ? "committed" : "not_applied");
+        },
+      }),
+      work_checkpoint: tool({
+        description: workCheckpointTool.description,
+        args: workCheckpointArgs,
+        async execute(args, context) {
+          // Resolve the store first so invalid persisted state is detected
+          // before the authorization check reports it as a control denial.
+          const sessionStore = getOrCreateStore(context.sessionID);
+          await assertPrimaryControllerMutation(
+            context.agent,
+            context.sessionID,
+            { directory: context.directory, worktree: context.worktree },
+            "work_checkpoint",
+          );
+          const validation = validateWorkflowToolInput("work_checkpoint", args);
+          if (!validation.ok) {
+            return stringifyToolOutput(
+              workflowInputFailure("work_checkpoint", context.sessionID, validation.issues),
+            );
+          }
+          const parsedArgs = validation.data;
+          const toolContext = {
+            sessionId: context.sessionID,
+            workspaceRoot: trustedWorkspaceRoot,
+            loadPlan: async (planPath: string, workspaceRoot: string) => {
+              const loaded = await loadApprovedDelegatedPlan({ workspaceRoot, planPath });
+              return loaded.ok ? loaded.plan : { loadError: `${loaded.code}: ${loaded.message}` };
+            },
+          };
+          // Generic (non-native) executions route through the atomic
+          // transaction boundary: staged persist, then publish. Routing uses
+          // the same trimmed runId the handler looks up, not a raw caller
+          // field that could select a different persistence path.
+          const runIdArg = parsedArgs.runId?.trim() ?? "";
+          const liveExecution = runIdArg
+            ? sessionStore.getStoreData().executions.get(runIdArg)
+            : undefined;
+          const authorityAction =
+            parsedArgs.action === "authorize" ||
+            parsedArgs.action === "record_approval" ||
+            parsedArgs.action === "revoke_authority";
+          const genericAction =
+            parsedArgs.action !== "register" &&
+            liveExecution !== undefined &&
+            (liveExecution.source.kind !== "native-package" || authorityAction);
+          const nativeAuthorityRecover =
+            parsedArgs.action === "recover" &&
+            parsedArgs.authorityId !== undefined &&
+            liveExecution !== undefined;
+          const genericRegister =
+            parsedArgs.action === "register" && parsedArgs.planPath === undefined;
+          if (genericAction || genericRegister || nativeAuthorityRecover) {
+            const result = await commitGenericToolResult(
+              context.sessionID,
               "work_checkpoint",
+              (view) => workCheckpointTool.execute(args, toolContext, view),
             );
-            const toolContext = {
-              sessionId: context.sessionID,
-              workspaceRoot: trustedWorkspaceRoot,
-              loadPlan: async (planPath: string, workspaceRoot: string) => {
-                const loaded = await loadApprovedDelegatedPlan({ workspaceRoot, planPath });
-                return loaded.ok ? loaded.plan : { loadError: `${loaded.code}: ${loaded.message}` };
-              },
-            };
-            // Generic (non-native) executions route through the atomic
-            // transaction boundary: staged persist, then publish.
-            const runIdArg = String(args.runId ?? "");
-            const liveExecution = runIdArg
-              ? sessionStore.getStoreData().executions.get(runIdArg)
-              : undefined;
-            const authorityAction =
-              args.action === "authorize" ||
-              args.action === "record_approval" ||
-              args.action === "revoke_authority";
-            const genericAction =
-              args.action !== "register" &&
-              liveExecution !== undefined &&
-              (liveExecution.source.kind !== "native-package" || authorityAction);
-            const nativeAuthorityRecover =
-              args.action === "recover" &&
-              args.authorityId !== undefined &&
-              liveExecution !== undefined;
-            const genericRegister = args.action === "register" && !args.planPath;
-            if (genericAction || genericRegister || nativeAuthorityRecover) {
-              const result = await commitGenericToolResult(context.sessionID, (view) =>
-                workCheckpointTool.execute(args, toolContext, view),
+            return stringifyToolOutput(result, result.ok === true ? "committed" : "not_applied");
+          }
+          // Checkpoint recovery commits durably on the live store and
+          // rolls the checkpoint entry back on write failure, so a
+          // granted generation is never exposed before its state is
+          // durably recorded.
+          if (parsedArgs.action === "recover") {
+            const runId = parsedArgs.runId ?? "";
+            const checkpointId = parsedArgs.checkpointId ?? "";
+            const recovered = await executeCommittedRecovery(
+              context.sessionID,
+              (liveStore) => workCheckpointTool.execute(args, toolContext, liveStore),
+              () => captureCheckpointRestore(context.sessionID, runId, checkpointId),
+              (result) => result.ok === true,
+            );
+            return stringifyToolOutput(
+              recovered,
+              recovered.ok === true ? "committed" : "not_applied",
+            );
+          }
+          const result = await workCheckpointTool.execute({ ...args }, toolContext, sessionStore);
+          if (result.ok) {
+            const persisted = snapshotSession(context.sessionID);
+            if (!persisted.ok) {
+              throw new Error(
+                `PERSISTENCE_FAILED: checkpoint change applied in memory but could not be persisted: ${persisted.error}`,
               );
-              return stringifyToolOutput(result);
             }
-            // Checkpoint recovery commits durably on the live store and
-            // rolls the checkpoint entry back on write failure, so a
-            // granted generation is never exposed before its state is
-            // durably recorded.
-            if (args.action === "recover") {
-              const runId = String(args.runId ?? "");
-              const checkpointId = String(args.checkpointId ?? "");
-              const recovered = await executeCommittedRecovery(
-                context.sessionID,
-                (liveStore) => workCheckpointTool.execute(args, toolContext, liveStore),
-                () => captureCheckpointRestore(context.sessionID, runId, checkpointId),
-                (result) => result.ok === true,
-              );
-              return stringifyToolOutput(recovered);
-            }
-            const result = await workCheckpointTool.execute({ ...args }, toolContext, sessionStore);
-            if (result.ok) {
-              const persisted = snapshotSession(context.sessionID);
-              if (!persisted.ok) {
-                throw new Error(
-                  `PERSISTENCE_FAILED: checkpoint change applied in memory but could not be persisted: ${persisted.error}`,
-                );
-              }
-            }
-            return stringifyToolOutput(result);
-          },
-        }),
-      },
+          }
+          return stringifyToolOutput(result, result.ok === true ? "committed" : "not_applied");
+        },
+      }),
     },
+    "tool.definition": toolDefinitionAdapter,
     "tool.execute.before": async (input, output) => {
+      // Owned workflow tools get strict structural plus branch validation on
+      // the raw forwarded arguments before their handlers run. This runs before
+      // the non-task early return and never mutates output.args.
+      if (isWorkflowToolId(input.tool)) {
+        const validation = validateWorkflowToolInput(input.tool, output.args);
+        if (!validation.ok) {
+          throw new ContractInputError(input.tool, validation.issues);
+        }
+        return;
+      }
       if (input.tool !== "task") {
         return;
       }
@@ -1180,6 +1274,11 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
         const planRunId = workItem.delegated?.planRunId;
         if (planRunId) {
           const run = data.planRuns.get(planRunId);
+          if (run?.status === "sealed") {
+            throw new Error(
+              `LAUNCH_REJECTED_SEALED: run ${planRunId} is sealed and cannot launch ${workItem.workItemId}.`,
+            );
+          }
           const binding = run
             ? [...run.tasks.values()].find((task) => task.workItemId === workItem.workItemId)
             : undefined;
@@ -1465,17 +1564,19 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
           ? [
               `Report rejected: attempt ${settledAttempt} of ${header.value} settled as report_rejected with bounded diagnostics retained.`,
               (() => {
-                const settledRecord = getWorkItem(
-                  getOrCreateStore(input.sessionID),
-                  input.sessionID,
-                  header.value,
-                );
-                const progress = settledRecord
-                  ? summarizeDelegatedProgress(settledRecord)
+                const store = getOrCreateStore(input.sessionID);
+                const settledRecord = getWorkItem(store, input.sessionID, header.value);
+                const guidance = settledRecord
+                  ? deriveDelegatedGuidance({
+                      record: settledRecord,
+                      progress: summarizeDelegatedProgress(settledRecord),
+                      latest: latestAttemptView(settledRecord),
+                      context: { data: store.getStoreData(), sessionId: input.sessionID },
+                    })
                   : undefined;
-                return `Next action: ${progress?.nextAction ?? "inspect work_item_list"}${
-                  progress?.nextAction === "recover" ||
-                  progress?.nextAction === "recover_with_user_authorization"
+                return `Next action: ${guidance?.nextAction ?? "inspect work_item_list"}${
+                  guidance?.nextAction === "recover" ||
+                  guidance?.nextAction === "recover_with_user_authorization"
                     ? ' through work_item_decide decision "recover"'
                     : ""
                 }.`;

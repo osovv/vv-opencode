@@ -1,54 +1,48 @@
 // FILE: src/plugins/hashline-edit/normalize-edits.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Validate and normalize raw hashline tool arguments into strongly-typed edit operations.
-//   SCOPE: Raw edit input shape, anchor trimming, three-part anchor enforcement, required-field validation, physical single-line payload enforcement, blank-payload rejection for replacements, and unified replace (optional end) with replace_range alias plus append/prepend normalization.
-//   DEPENDS: [src/plugins/hashline-edit/types.ts, src/plugins/hashline-edit/validation.ts]
-//   LINKS: [M-PLUGIN-HASHLINE-EDIT]
+//   SCOPE: Closed raw edit input shape (single-sourced from schemas.ts), anchor trimming, three-part anchor enforcement, blank/malformed provided-anchor rejection, required-field validation, physical single-line payload enforcement, blank-payload rejection for replacements, unified replace (optional end) with replace_range alias, append/prepend normalization with end-anchor fallback, and rejection of truly conflicting pos/end insert references.
+//   DEPENDS: [src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/types.ts, src/plugins/hashline-edit/validation.ts]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   RawHashlineEdit - Tool-facing edit input before validation and normalization.
+//   RawHashlineEdit - Tool-facing edit input before validation and normalization (re-exported from schemas.ts).
 //   normalizeHashlineEdits - Convert raw tool args into validated HashlineEdit operations.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Unified replace to accept an optional end anchor (range semantics) with replace_range kept as an alias, rejected multi-line replace without end via add-end guidance, and enforced three-part anchors on all edit references.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Correction cycle: the direct normalizer now runs the schema-owned closed single-edit shape (unknown keys and malformed provided types are rejected instead of stripped) and rejects a provided-but-blank pos/end rather than treating it as absent.]
 // END_CHANGE_SUMMARY
 
+import { formatContractIssues } from "../../lib/agent-tool-contract.js";
 import type { AppendEdit, HashlineEdit, PrependEdit, ReplaceRangeEdit } from "./types.js";
 import { requireThreePartRef } from "./validation.js";
+import { validateRawHashlineEditEntry, type RawHashlineEdit } from "./schemas.js";
 
-type HashlineToolOp = "replace" | "replace_range" | "append" | "prepend";
+export type { RawHashlineEdit };
 
-export interface RawHashlineEdit {
-  op?: HashlineToolOp;
-  pos?: string;
-  end?: string;
-  lines?: string | string[] | null;
-}
-
-function normalizeAnchor(value: string | undefined): string | undefined {
-  if (typeof value !== "string") {
+function requireAnchor(value: unknown, index: number, field: string): string | undefined {
+  if (value === undefined) {
     return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new Error(
+      `Edit ${index}: ${field} must be a string anchor when provided; received ${typeof value}.`,
+    );
   }
   const trimmed = value.trim();
-  return trimmed === "" ? undefined : trimmed;
-}
-
-function requireAnchor(
-  value: string | undefined,
-  index: number,
-  field: string,
-): string | undefined {
-  const anchor = normalizeAnchor(value);
-  if (anchor === undefined) {
-    return undefined;
+  if (trimmed === "") {
+    throw new Error(
+      `Edit ${index}: ${field} was provided but is blank. Omit it for boundary/fallback behavior, ` +
+        "or supply a full three-part anchor.",
+    );
   }
-  requireThreePartRef(anchor, `Edit ${index} ${field}`);
-  return anchor;
+  requireThreePartRef(trimmed, `Edit ${index} ${field}`);
+  return trimmed;
 }
 
 function requireLines(edit: RawHashlineEdit, index: number): string | string[] {
@@ -112,6 +106,14 @@ function normalizeInsertEdit(
 ): HashlineEdit {
   const pos = requireAnchor(edit.pos, index, "pos");
   const end = requireAnchor(edit.end, index, "end");
+  // pos is primary and end is the documented fallback, but two references that
+  // name different lines would silently drop one: reject that contradiction.
+  if (pos !== undefined && end !== undefined && pos !== end) {
+    throw new Error(
+      `Edit ${index}: ${op} received conflicting pos and end anchors that reference different lines. ` +
+        "Provide one anchor, or the same reference for both.",
+    );
+  }
   const anchor = pos ?? end;
   const lines = requireLines(edit, index);
   assertPhysicalLines(edit, index, lines);
@@ -159,7 +161,14 @@ function assertNonBlankReplacement(
 
 export function normalizeHashlineEdits(rawEdits: RawHashlineEdit[]): HashlineEdit[] {
   return rawEdits.map((rawEdit, index) => {
-    const edit = rawEdit ?? {};
+    // Reuse the same closed single-edit shape the registered contract publishes:
+    // unknown operation fields and malformed provided types are rejected here
+    // instead of being silently stripped by the destructuring below.
+    const shape = validateRawHashlineEditEntry(rawEdit, index);
+    if (!shape.ok) {
+      throw new Error(formatContractIssues(shape.issues));
+    }
+    const edit = shape.data;
 
     switch (edit.op) {
       case "replace":

@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/tool-description.ts
-// VERSION: 0.9.0
+// VERSION: 0.10.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Provide the LLM-facing tool description for the hash-anchored edit tool.
-//   SCOPE: Stable instructions for read-then-edit workflow, three-part anchor usage, unified replace operation choice, literal payload semantics, and stale-anchor recovery.
+//   PURPOSE: Provide the LLM-facing tool descriptions for both vvoc-owned edit tools.
+//   SCOPE: Stable instructions for the hash-anchored read-then-edit workflow (three-part anchors, unified replace, literal payload semantics, stale-anchor recovery) plus the verbatim dsh str_replace_editor description (MIT attribution). Both constants are consumed by the registered tool contracts in schemas.ts; the str_replace_editor module re-exports its description to preserve the existing public surface.
 //   DEPENDS: []
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -11,11 +11,28 @@
 //
 // START_MODULE_MAP
 //   HASHLINE_EDIT_DESCRIPTION - Canonical LLM-facing description for the hashline-backed `hashline_edit` tool.
+//   STR_REPLACE_EDITOR_DESCRIPTION - Verbatim dsh description for the `str_replace_editor` tool (re-exported by str-replace-editor.ts).
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.9.0 - Documented mandatory three-part anchors and unified replace with optional end for hashline; removed the replace-profile edit description (the host built-in edit serves the edit cohort).]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Moved the str_replace_editor description here so the pure contract module can single-source both descriptions without a schema/editor import cycle; str-replace-editor.ts re-exports it.]
 // END_CHANGE_SUMMARY
+
+// START_BLOCK_STR_REPLACE_DESCRIPTION
+// Verbatim from deepseek-ai/deepseek-harness (MIT).
+export const STR_REPLACE_EDITOR_DESCRIPTION = `
+Custom editing tool for viewing, creating and editing files
+* State is persistent across command calls and discussions with the user
+* If \`path\` is a file, \`view\` displays the result of applying \`cat -n\`. If \`path\` is a directory, \`view\` lists non-hidden files and directories up to 2 levels deep
+* The \`create\` command cannot be used if the specified \`path\` already exists as a file
+* If a \`command\` generates a long output, it will be truncated and marked with \`<response clipped>\`
+
+Notes for using the \`str_replace\` command:
+* The \`old_str\` parameter should match EXACTLY one or more consecutive lines from the original file. Be mindful of whitespaces!
+* If the \`old_str\` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in \`old_str\` to make it unique
+* The \`new_str\` parameter should contain the edited lines that should replace the \`old_str\`
+`.trim();
+// END_BLOCK_STR_REPLACE_DESCRIPTION
 export const HASHLINE_EDIT_DESCRIPTION = `Edit files using exact hash-anchored line references from the latest Read output.
 
 <must>

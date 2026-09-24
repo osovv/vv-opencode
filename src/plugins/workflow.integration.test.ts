@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
-//   SCOPE: Protocol parsing, result excerpts, bounded continuation guidance and host-permission preservation, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
+//   SCOPE: Protocol parsing, result excerpts, bounded continuation guidance and host-permission preservation, canonical result-status/identity agreement across orchestration profiles, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
 //   DEPENDS: [bun:test, node:fs, node:path, @opencode-ai/sdk, @opencode-ai/sdk/v2/types, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PERSISTENCE, V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW, V-M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
@@ -43,7 +43,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix bounded result continuation - Added SDK-derived prompt/permission fixtures and coverage that the truthful-status continuation prompt, a later ordinary child prompt, and explicit malformed hard-stop suppression all preserve persistent permissions without session mutations.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Added parser-backed coverage for the tracked result protocol: canonical terminal statuses against a real non-first assigned id, wrong-identity mismatch without relabeling, fail-closed duplicate/separator fixtures, unchanged bounded repair eligibility, the first-line continuation rule, and shared profile guidance agreement. Prior T-002: registered-schema/hook/wrapper diagnostic regressions.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -61,6 +61,7 @@ import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { WorkflowPlugin } from "./workflow/index.js";
+import { ContractInputError } from "../lib/agent-tool-contract.js";
 import {
   deleteWorkflowSessionDir,
   getWorkflowSessionDir,
@@ -77,6 +78,7 @@ import {
   attemptTrackedResultRepair,
   buildTrackedResultRepairPrompt,
   hasExplicitHardStopStatus,
+  isTrackedResultRepairEligible,
   unwrapResumableTaskResult,
 } from "./workflow/repair.js";
 import {
@@ -197,6 +199,127 @@ Implemented all requested changes.`,
     expect(parsed.error.message).toContain("VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: FAIL");
     expect(parsed.error.message).not.toContain("non-protocol line");
   });
+
+  test("strict parsing accepts every canonical terminal status with a real assigned id", () => {
+    const store = createWorkItemStore();
+    expect(
+      openWorkItem(store, {
+        sessionId: SESSION_ID,
+        key: "assigned-first",
+        title: "First",
+        mode: "implementation",
+        requiredReviewers: ["spec"],
+      }).ok,
+    ).toBe(true);
+    const assigned = openWorkItem(store, {
+      sessionId: SESSION_ID,
+      key: "assigned-second",
+      title: "Second",
+      mode: "implementation",
+      requiredReviewers: ["spec"],
+    });
+    expect(assigned.ok).toBe(true);
+    if (!assigned.ok) return;
+
+    const assignedId = assigned.record.workItemId;
+    expect(assignedId).not.toBe("wi-1");
+    expect(assigned.header).toBe(`VVOC_WORK_ITEM_ID: ${assignedId}`);
+
+    const header = parseWorkItemHeader(`${assigned.header}\n<assignment>goal</assignment>`);
+    expect(header.ok).toBe(true);
+    if (header.ok) expect(header.value).toBe(assignedId);
+
+    for (const status of ["DONE", "DONE_WITH_CONCERNS", "NEEDS_CONTEXT", "BLOCKED"] as const) {
+      const parsed = parseResultBlock({
+        agent: "vv-implementer",
+        output: `VVOC_WORK_ITEM_ID: ${assignedId}\nVVOC_STATUS: ${status}\nVVOC_ROUTE: change_with_review\n\nChanged: done`,
+        expectedWorkItemId: assignedId,
+      });
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) continue;
+      expect(parsed.value.status).toBe(status);
+      expect(parsed.value.route).toBe("change_with_review");
+      expect(parsed.value.body).toBe("Changed: done");
+    }
+
+    for (const [agent, statuses] of [
+      ["vv-spec-reviewer", ["PASS", "FAIL", "NEEDS_CONTEXT"]],
+      ["vv-code-reviewer", ["PASS", "FAIL", "NEEDS_CONTEXT"]],
+    ] as const) {
+      for (const status of statuses) {
+        const parsed = parseResultBlock({
+          agent,
+          output: `VVOC_WORK_ITEM_ID: ${assignedId}\nVVOC_STATUS: ${status}\n\nFindings: none`,
+          expectedWorkItemId: assignedId,
+        });
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) continue;
+        expect(parsed.value.status).toBe(status);
+        expect(parsed.value.route).toBeUndefined();
+      }
+    }
+  });
+
+  test("wrong identity is a mismatch and is never relabeled to the assigned id", () => {
+    const assignedId = "wi-7";
+    const wrongIdentity = {
+      agent: "vv-implementer" as const,
+      output: "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nbody",
+    };
+    const mismatch = parseResultBlock({ ...wrongIdentity, expectedWorkItemId: assignedId });
+    expect(mismatch.ok).toBe(false);
+    if (!mismatch.ok) {
+      expect(mismatch.error.code).toBe("WORK_ITEM_MISMATCH");
+      expect(mismatch.error.message).toContain("wi-1");
+      expect(mismatch.error.message).toContain(assignedId);
+    }
+
+    // The block is never silently relabeled: without an expected id it still
+    // reports the identity it actually names.
+    const named = parseResultBlock(wrongIdentity);
+    expect(named.ok).toBe(true);
+    if (named.ok) expect(named.value.workItemId).toBe("wi-1");
+
+    const duplicate = parseResultBlock({
+      agent: "vv-implementer",
+      output: `VVOC_WORK_ITEM_ID: ${assignedId}\nVVOC_STATUS: DONE\nVVOC_STATUS: BLOCKED\nVVOC_ROUTE: change_with_review\n\nbody`,
+      expectedWorkItemId: assignedId,
+    });
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok) expect(duplicate.error.code).toBe("DUPLICATE_TOP_BLOCK_FIELD");
+
+    const missingSeparator = parseResultBlock({
+      agent: "vv-spec-reviewer",
+      output: `VVOC_WORK_ITEM_ID: ${assignedId}\nVVOC_STATUS: FAIL\nFindings without a blank line`,
+      expectedWorkItemId: assignedId,
+    });
+    expect(missingSeparator.ok).toBe(false);
+    if (!missingSeparator.ok) {
+      expect(missingSeparator.error.code).toBe("MISSING_BODY_SEPARATOR");
+    }
+  });
+
+  test("bounded repair eligibility stays limited to safe syntax errors", () => {
+    for (const code of [
+      "MISSING_STATUS",
+      "MISSING_ROUTE",
+      "UNEXPECTED_TOP_BLOCK_LINE",
+      "MISSING_BODY_SEPARATOR",
+    ] as const) {
+      expect(isTrackedResultRepairEligible(code)).toBe(true);
+    }
+    for (const code of [
+      "WORK_ITEM_MISMATCH",
+      "DUPLICATE_TOP_BLOCK_FIELD",
+      "MISSING_WORK_ITEM_ID",
+      "MALFORMED_WORK_ITEM_HEADER",
+      "MISSING_WORK_ITEM_HEADER",
+      "UNKNOWN_STATUS",
+      "STATUS_NOT_ALLOWED",
+    ] as const) {
+      expect(isTrackedResultRepairEligible(code)).toBe(false);
+    }
+  });
 });
 
 describe("workflow repair", () => {
@@ -231,6 +354,9 @@ describe("workflow repair", () => {
     expect(prompt).toContain("If the honest outcome is BLOCKED or NEEDS_CONTEXT");
     expect(prompt).toContain(
       "VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: <truthful status>\n\n<brief result handoff>",
+    );
+    expect(prompt).toContain(
+      "Begin the corrected response with the protocol block on the first line",
     );
     expect(prompt).not.toContain("same VVOC_STATUS");
   });
@@ -753,15 +879,19 @@ describe("workflow transitions", () => {
 });
 
 describe("workflow tooling", () => {
-  test("work_item_open requires explicit mode and requiredReviewers", () => {
+  test("work_item_open rejects a whole request structurally before any item opens", () => {
     const store = createWorkItemStore();
     const openTool = createWorkItemOpenTool(store);
+    // Missing mode/reviewers is structural: the complete request is rejected
+    // and the store stays unchanged (AC-10 whole-request structural rejection).
     const invalid = openTool.execute(
       { items: [{ key: "invalid", title: "Invalid" }] },
       { sessionId: SESSION_ID },
-    ) as { items: Array<{ ok: boolean; errorCode?: string }> };
-    expect(invalid.items[0]?.ok).toBe(false);
-    expect(invalid.items[0]?.errorCode).toBe("INVALID_INPUT");
+    ) as { ok?: boolean; errorCode?: string; items?: Array<{ ok: boolean }> };
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errorCode).toBe("INVALID_INPUT");
+    expect(invalid.items).toBeUndefined();
+    expect(store.getStoreData().records.size).toBe(0);
 
     const opened = openTool.execute(
       {
@@ -873,6 +1003,409 @@ describe("workflow tooling", () => {
     );
   });
 });
+
+// START_BLOCK_CONTRACT_DIAGNOSTICS
+describe("workflow tool contract diagnostics (registered schemas, hooks, wrappers)", () => {
+  async function catchHookError(
+    plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+    tool: string,
+    args: unknown,
+    sessionID: string,
+  ): Promise<unknown> {
+    try {
+      await plugin["tool.execute.before"]?.(
+        { tool, sessionID, callID: `contract-${tool}` } as never,
+        { args } as never,
+      );
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  }
+
+  test("tool.execute.before rejects owned structural and branch failures without touching task hooks", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-contract-hook";
+    await deleteWorkflowSessionDir(sessionID);
+
+    const structural = await catchHookError(
+      plugin,
+      "work_item_open",
+      { items: [{ key: "k", title: "T" }] },
+      sessionID,
+    );
+    expect(structural).toBeInstanceOf(ContractInputError);
+    expect(String((structural as Error).message)).toContain("items[0].mode");
+
+    const branch = await catchHookError(
+      plugin,
+      "work_checkpoint",
+      {
+        action: "authorize",
+        runId: "run-1",
+        authorityId: "auth-1",
+        messageId: "msg-1",
+        stages: ["implementation"],
+        reservedStops: ["verificaton"],
+      },
+      sessionID,
+    );
+    expect(branch).toBeInstanceOf(ContractInputError);
+    expect(String((branch as Error).message)).toContain("reservedStops[0]");
+
+    // Valid owned args and non-owned non-task tools pass the hook untouched.
+    await plugin["tool.execute.before"]?.(
+      { tool: "work_item_list", sessionID, callID: "contract-list" } as never,
+      { args: {} } as never,
+    );
+    await plugin["tool.execute.before"]?.(
+      { tool: "str_replace_editor", sessionID, callID: "contract-edit" } as never,
+      { args: { anything: true } } as never,
+    );
+    // The task-launch hook path still runs for untracked subagents.
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID, callID: "contract-task" } as never,
+      { args: { subagent_type: "general", prompt: "explore" } } as never,
+    );
+    await deleteWorkflowSessionDir(sessionID);
+  });
+
+  test("tool.definition publishes the strict owned schema and leaves unowned tools unchanged", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const ownedParameters = { decoder: "host" };
+    const ownedOutput = {
+      description: "work_item_open",
+      parameters: ownedParameters,
+      jsonSchema: { type: "object" },
+    };
+    await plugin["tool.definition"]?.({ toolID: "work_item_open" }, ownedOutput as never);
+    expect(ownedOutput.parameters).toBe(ownedParameters);
+    expect(ownedOutput.jsonSchema).not.toEqual({ type: "object" });
+    const published = ownedOutput.jsonSchema as Record<string, unknown>;
+    expect(published.additionalProperties).toBe(false);
+    expect(JSON.stringify(published)).toContain("conversation-scoped");
+
+    const unownedOriginal = { type: "object" };
+    const unownedOutput = {
+      description: "web_search",
+      parameters: { decoder: "host" },
+      jsonSchema: unownedOriginal,
+    };
+    await plugin["tool.definition"]?.({ toolID: "web_search" }, unownedOutput as never);
+    expect(unownedOutput.jsonSchema).toBe(unownedOriginal);
+  });
+
+  test("wrapper rejects source, binding, path, and unknown-key failures with the whole store unchanged", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-contract-wrapper";
+    await deleteWorkflowSessionDir(sessionID);
+    const context = createToolContext(sessionID);
+
+    const genericItem = {
+      key: "gk",
+      title: "Generic task",
+      mode: "delegated",
+      requiredReviewers: ["code"],
+      writeScope: ["src/lib/a.ts"],
+      taskId: "T-100",
+    };
+    const execution = {
+      executionKey: "contract-run",
+      source: { kind: "conversation-scoped" },
+      goal: "Deliver the contract checks.",
+      boundary: { files: ["src/lib/a.ts"], directories: [] },
+    };
+    const rejections: Array<{ args: Record<string, unknown>; expect: string }> = [
+      {
+        args: {
+          items: [genericItem],
+          execution: { ...execution, source: { kind: "conversation" } },
+        },
+        expect: "conversation-scoped",
+      },
+      {
+        args: {
+          items: [genericItem],
+          execution: { ...execution, source: { kind: "provided-plan" } },
+        },
+        expect: "execution.source.reference",
+      },
+      {
+        args: {
+          items: [genericItem],
+          execution: {
+            ...execution,
+            source: { kind: "provided-plan", reference: "docs/p.md", sha256: 42 },
+          },
+        },
+        expect: "execution.source.sha256",
+      },
+      {
+        args: {
+          items: [{ ...genericItem, unexpectedTaskKey: true }],
+          execution,
+        },
+        expect: "items[0].unexpectedTaskKey",
+      },
+      {
+        args: { items: [{ ...genericItem, mode: "implementation" }], execution },
+        expect: "items[0].mode",
+      },
+      {
+        args: {
+          items: [{ ...genericItem, planRunId: "native-run", planTaskId: "T-001" }],
+          execution,
+        },
+        expect: "items[0].planRunId",
+      },
+      {
+        args: {
+          items: [genericItem],
+          execution: {
+            ...execution,
+            boundary: { files: [99], directories: [] },
+          },
+        },
+        expect: "execution.boundary.files[0]",
+      },
+      {
+        args: {
+          items: [genericItem],
+          execution: {
+            ...execution,
+            boundary: { files: ["src/lib/"], directories: [] },
+          },
+        },
+        expect: "boundary.files",
+      },
+    ];
+
+    const beforeList = parseToolJson<{ items: unknown[] }>(
+      (await plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        context as never,
+      )) as string,
+    );
+    expect(beforeList.items).toHaveLength(0);
+
+    for (const rejection of rejections) {
+      const raw = await plugin.tool?.work_item_open?.execute(
+        rejection.args as never,
+        context as never,
+      );
+      const parsed = parseToolJson<{ ok?: boolean; errorCode?: string; message?: string }>(
+        raw as string,
+      );
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errorCode).toBe("INVALID_INPUT");
+      expect(String(parsed.message)).toContain(rejection.expect);
+    }
+
+    // Whole-request structural rejection after an earlier valid batch item:
+    // nothing from the batch reaches the store.
+    const partialBatch = await plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "valid-first",
+            title: "Valid",
+            mode: "implementation",
+            requiredReviewers: ["spec"],
+          },
+          { key: "invalid-second", title: "Invalid" },
+        ],
+      } as never,
+      context as never,
+    );
+    const partial = parseToolJson<{ ok?: boolean; errorCode?: string }>(partialBatch as string);
+    expect(partial.ok).toBe(false);
+    expect(partial.errorCode).toBe("INVALID_INPUT");
+
+    const afterList = parseToolJson<{ items: unknown[] }>(
+      (await plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        context as never,
+      )) as string,
+    );
+    expect(afterList.items).toHaveLength(0);
+
+    // After structural acceptance, domain conflicts stay per-item.
+    const first = parseToolJson<{ items: Array<{ ok: boolean }> }>(
+      (await plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "conflict-key",
+              title: "First",
+              mode: "implementation",
+              requiredReviewers: ["spec"],
+            },
+          ],
+        } as never,
+        context as never,
+      )) as string,
+    );
+    expect(first.items[0]?.ok).toBe(true);
+    const conflict = parseToolJson<{ items: Array<{ ok: boolean; errorCode?: string }> }>(
+      (await plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "conflict-key",
+              title: "Different intent",
+              mode: "review_only",
+              requiredReviewers: ["code"],
+            },
+          ],
+        } as never,
+        context as never,
+      )) as string,
+    );
+    expect(conflict.items[0]?.ok).toBe(false);
+    expect(conflict.items[0]?.errorCode).toBe("WORK_ITEM_KEY_CONFLICT");
+
+    await deleteWorkflowSessionDir(sessionID);
+  });
+
+  test("standalone delegated missing versus empty reviewers and file/directory trailing separators through the wrapper", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-contract-delegated";
+    await deleteWorkflowSessionDir(sessionID);
+    const context = createToolContext(sessionID);
+
+    const missingReviewers = parseToolJson<{ ok?: boolean; message?: string }>(
+      (await plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            { key: "del-missing", title: "Delegated", mode: "delegated", writeScope: ["src/a.ts"] },
+          ],
+        } as never,
+        context as never,
+      )) as string,
+    );
+    expect(missingReviewers.ok).toBe(false);
+    expect(String(missingReviewers.message)).toContain("items[0].requiredReviewers");
+
+    const trailingFile = parseToolJson<{ ok?: boolean; message?: string }>(
+      (await plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "del-trailing",
+              title: "Delegated",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/"],
+            },
+          ],
+        } as never,
+        context as never,
+      )) as string,
+    );
+    expect(trailingFile.ok).toBe(false);
+    expect(String(trailingFile.message)).toContain("items[0].writeScope[0]");
+
+    // Generic reviewer-positive path with a directory trailing separator in the
+    // boundary normalizes and opens successfully.
+    const reviewerPositive = parseToolJson<{ ok?: boolean; runId?: string }>(
+      (await plugin.tool?.work_item_open?.execute(
+        {
+          items: [
+            {
+              key: "del-empty",
+              title: "Delegated empty",
+              mode: "delegated",
+              requiredReviewers: [],
+              writeScope: ["src/lib/a.ts"],
+            },
+            {
+              key: "reviewed-task",
+              title: "Reviewed task",
+              mode: "delegated",
+              requiredReviewers: ["code"],
+              writeScope: ["src/lib/b.ts"],
+              taskId: "T-REVIEW",
+            },
+          ],
+          execution: {
+            executionKey: "reviewer-positive",
+            source: { kind: "conversation-scoped" },
+            goal: "Exercise the reviewer-positive generic path.",
+            boundary: { files: ["src/lib/a.ts", "src/lib/b.ts"], directories: ["src/lib/"] },
+          },
+        } as never,
+        context as never,
+      )) as string,
+    );
+    expect(reviewerPositive.ok).toBe(true);
+    expect(reviewerPositive.runId).toBeTruthy();
+
+    await deleteWorkflowSessionDir(sessionID);
+  });
+
+  test("registered hooks and wrappers reject conflicting fields and blank batch members", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sessionID = "session-contract-matrix";
+    await deleteWorkflowSessionDir(sessionID);
+    const context = createToolContext(sessionID);
+
+    const hookCheckpoint = await catchHookError(
+      plugin,
+      "work_checkpoint",
+      { action: "complete", runId: "run-1", reservedStops: ["verification"] },
+      sessionID,
+    );
+    expect(hookCheckpoint).toBeInstanceOf(ContractInputError);
+    expect(String((hookCheckpoint as Error).message)).toContain("reservedStops");
+
+    const hookDecide = await catchHookError(
+      plugin,
+      "work_item_decide",
+      {
+        workItemId: "wi-1",
+        attempt: 1,
+        decision: "accept",
+        rationale: "checked",
+        evidence: ["test"],
+        recoveryId: "ignored-recovery",
+      },
+      sessionID,
+    );
+    expect(hookDecide).toBeInstanceOf(ContractInputError);
+    expect(String((hookDecide as Error).message)).toContain("recoveryId");
+
+    // Wrapper path: a blank-after-trim batch member rejects the whole request
+    // before the first item opens.
+    const raw = await plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "blank-first",
+            title: "First",
+            mode: "implementation",
+            requiredReviewers: ["spec"],
+          },
+          { key: "   ", title: "Blank", mode: "review_only", requiredReviewers: ["code"] },
+        ],
+      } as never,
+      context as never,
+    );
+    const parsed = parseToolJson<{ ok?: boolean; message?: string }>(raw as string);
+    expect(parsed.ok).toBe(false);
+    expect(String(parsed.message)).toContain("items[1].key");
+
+    const listed = parseToolJson<{ items: unknown[] }>(
+      (await plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        context as never,
+      )) as string,
+    );
+    expect(listed.items).toHaveLength(0);
+
+    await deleteWorkflowSessionDir(sessionID);
+  });
+});
+// END_BLOCK_CONTRACT_DIAGNOSTICS
 
 type WorkflowPluginHarness = {
   plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
@@ -1537,6 +2070,36 @@ describe("workflow plugin integration", () => {
     expect(systemText).toContain("requiredReviewers");
     expect(systemText).toContain("do not route review-only failures to `vv-implementer`");
     expect(systemText).not.toContain("Selective delegation is available");
+  });
+
+  test("every orchestration profile exposes the shared tracked result protocol guidance", async () => {
+    for (const profile of ["single-session", "balanced", "orchestrated", "delegated"] as const) {
+      resetVvocConfigForTests();
+      const { plugin } = await createWorkflowPluginHarness(profile);
+      const output = { message: { agent: "vv-controller", system: "base" } } as {
+        message: { agent: string; system?: string };
+      };
+
+      await plugin["chat.message"]?.({} as never, output as never);
+      const normalized = (output.message.system ?? "").replace(/\s+/g, " ");
+
+      expect(normalized).toContain("VVOC_WORK_ITEM_ID");
+      expect(normalized).toContain("work-item mismatch");
+      expect(normalized).toContain("no preface");
+      expect(normalized).toContain("blank line and the body");
+      expect(normalized).toContain("work_item_list");
+      expect(normalized).toContain("contract.referencePath");
+      for (const status of [
+        "DONE",
+        "DONE_WITH_CONCERNS",
+        "NEEDS_CONTEXT",
+        "BLOCKED",
+        "PASS",
+        "FAIL",
+      ]) {
+        expect(normalized).toContain(status);
+      }
+    }
   });
 });
 

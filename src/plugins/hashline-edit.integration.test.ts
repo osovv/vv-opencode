@@ -1,26 +1,29 @@
 // FILE: src/plugins/hashline-edit.integration.test.ts
-// VERSION: 0.8.0
+// VERSION: 0.9.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior.
-//   SCOPE: Plugin registration, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, literal payload application, blank/embedded-newline payload rejection, EOF append behavior, normalization heuristics, post-edit diff feedback, and BOM/CRLF preservation.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts]
-//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
+//   PURPOSE: Verify hashline read-output enhancement and the default-on hash-anchored edit override behavior, including the owned contract hooks and direct-entry validation.
+//   SCOPE: Plugin registration, contract publication and hook validation, wrapped and plain read hashing, ranged edits, rename/delete flows, missing-file edits, stale-anchor rejection, partial-read anchors, literal payload application, blank/embedded-newline payload rejection, EOF append behavior, normalization heuristics, post-edit diff feedback, BOM/CRLF preservation, and truthful applied reporting when metadata publication fails.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts, src/plugins/hashline-edit/schemas.ts]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   anchorFor - Builds a visible hashline anchor for fixture content.
-//   createPluginInput - Builds an isolated OpenCode plugin input fixture.
-//   createToolContext - Builds a tool execution context fixture.
-//   hook_call - Invokes the chat.message hook with a session model fixture.
 //   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   METADATA_FAILURE_SECRET - Sentinel secret that must never leak through a metadata failure.
+//   METADATA_FAILURE_MESSAGE - Oversized metadata failure message embedding the sentinel secret.
+//   createPluginInput - Builds an isolated OpenCode plugin input fixture.
+//   createToolContext - Builds a tool execution context fixture (optionally with a throwing metadata sink).
+//   anchorFor - Builds a visible hashline anchor for fixture content.
 //   userMessage - Builds an SDK-shaped user message fixture carrying a provider/model pair.
 //   writeProjectVvocConfig - Seeds a project .vvoc/vvoc.json overriding the hashline-edit plugin entry.
+//   hook_call - Invokes the chat.message hook with a session model fixture.
+//   establishModel - Registers a real session model so direct execute passes the visibility gate.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.8.0 - Replaced autocorrect expectations with literal-application coverage and added blank-payload, embedded-newline, EOF-append, and diff-feedback regression tests.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Added contract publication/hook-validation coverage, direct-entry structural rejection without side effects, path-equivalent rename, the metadata fault-injection applied-truth check, and updated the before-hook fixture for the allowed-tool validation step.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -34,10 +37,18 @@ import {
 } from "./hashline-edit/edit-operation-primitives.js";
 import { computeAnchorHash, computeLineHash } from "./hashline-edit/hash-computation.js";
 import { HashlineEditPlugin } from "./hashline-edit/index.js";
+import {
+  hashlineEditMetadataSchema,
+  strReplaceEditorMetadataSchema,
+} from "./hashline-edit/schemas.js";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
+// A deliberately huge, secret-bearing thrown message: reporting-failure warnings
+// must stay bounded and must never echo the thrown payload.
+const METADATA_FAILURE_SECRET = "SECRET_TOKEN_must_not_leak";
+const METADATA_FAILURE_MESSAGE = `${METADATA_FAILURE_SECRET} ${"x".repeat(4096)}`;
 
 beforeEach(() => {
   resetVvocConfigForTests();
@@ -65,17 +76,23 @@ function createPluginInput(directory: string) {
   };
 }
 
-function createToolContext(directory: string) {
+function createToolContext(
+  directory: string,
+  options: { metadataThrows?: boolean; sessionID?: string } = {},
+) {
   const metadataCalls: Array<{ title?: string; metadata?: Record<string, unknown> }> = [];
   return {
     context: {
-      sessionID: "session-1",
+      sessionID: options.sessionID ?? "session-1",
       messageID: "message-1",
       agent: "build",
       directory,
       worktree: directory,
       abort: new AbortController().signal,
       metadata(input: { title?: string; metadata?: Record<string, unknown> }) {
+        if (options.metadataThrows) {
+          throw new Error(METADATA_FAILURE_MESSAGE);
+        }
         metadataCalls.push(input);
       },
       ask: async () => {},
@@ -289,6 +306,8 @@ describe("HashlineEditPlugin", () => {
       expect((metadataCalls[0]?.metadata?.filediff as { after?: string } | undefined)?.after).toBe(
         'function greet() {\n  return "hello";\n}\n',
       );
+      // Producer contract: the emitted metadata matches the declared schema.
+      expect(hashlineEditMetadataSchema.safeParse(metadataCalls[0]?.metadata).success).toBe(true);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -879,7 +898,7 @@ describe("HashlineEditPlugin routing", () => {
     }
   });
 
-  test("tool.execute.before rejects wrong-profile tools with a teaching error", async () => {
+  test("tool.execute.before denies visibility before argument validation and guards allowed tools", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-routing-guard-"));
     try {
       const plugin = await HashlineEditPlugin(createPluginInput(directory));
@@ -889,6 +908,8 @@ describe("HashlineEditPlugin routing", () => {
       const message = userMessage({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
       await hook_call(chatHook, "session-1", message);
 
+      // Visibility denial stays first: the hidden tool is refused with the
+      // routing teaching error even though its arguments are also invalid.
       await expect(
         beforeHook(
           { tool: "hashline_edit", sessionID: "session-1", callID: "c1" } as never,
@@ -896,12 +917,28 @@ describe("HashlineEditPlugin routing", () => {
         ),
       ).rejects.toThrow(/str_replace_editor instead/);
 
+      // The visible tool accepts valid arguments...
       await expect(
         beforeHook(
           { tool: "str_replace_editor", sessionID: "session-1", callID: "c2" } as never,
-          { args: {} } as never,
+          { args: { command: "view", path: "/tmp/x" } } as never,
         ),
       ).resolves.toBeUndefined();
+
+      // ...and rejects structural/command-invalid raw arguments before the handler.
+      await expect(
+        beforeHook(
+          { tool: "str_replace_editor", sessionID: "session-1", callID: "c3" } as never,
+          { args: { command: "view", path: "/tmp/x", old_str: "boom" } } as never,
+        ),
+      ).rejects.toThrow(/old_str is not consumed by command view/);
+
+      await expect(
+        beforeHook(
+          { tool: "str_replace_editor", sessionID: "session-1", callID: "c4" } as never,
+          { args: { command: "view", path: "   " } } as never,
+        ),
+      ).rejects.toThrow(/path must be a non-empty path/);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -990,7 +1027,7 @@ describe("HashlineEditPlugin routing", () => {
       const message = userMessage({ providerID: "deepseek", modelID: "deepseek-v4-flash" });
       await hook_call(chatHook, "session-1", message);
 
-      const { context } = createToolContext(directory);
+      const { context, metadataCalls } = createToolContext(directory);
       const editorTool = plugin.tool!.str_replace_editor;
 
       const viewed = await editorTool.execute(
@@ -998,6 +1035,7 @@ describe("HashlineEditPlugin routing", () => {
         context as never,
       );
       expect(viewed).toContain("Here's the content of");
+      expect(metadataCalls).toHaveLength(0);
 
       const replaced = await editorTool.execute(
         { command: "str_replace", path: filePath, old_str: "beta", new_str: "BETA" },
@@ -1005,6 +1043,11 @@ describe("HashlineEditPlugin routing", () => {
       );
       expect(replaced).toBe(`The file ${filePath} has been edited successfully.`);
       expect(await readFile(filePath, "utf8")).toBe("alpha\nBETA\n");
+      // Producer contract: the emitted metadata matches the declared schema.
+      expect(metadataCalls).toHaveLength(1);
+      expect(strReplaceEditorMetadataSchema.safeParse(metadataCalls[0]?.metadata).success).toBe(
+        true,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -1041,6 +1084,404 @@ describe("HashlineEditPlugin routing", () => {
   });
 });
 
+describe("HashlineEditPlugin edit tool contracts", () => {
+  test("publishes strict input schemas for both edit tools through the definition hook", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-definition-"));
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const definition = plugin["tool.definition"]!;
+
+      const hashlineOutput: Record<string, unknown> = {
+        description: "hashline",
+        parameters: {},
+        jsonSchema: {},
+      };
+      await definition({ toolID: "hashline_edit" } as never, hashlineOutput as never);
+      const hashlineSchema = hashlineOutput.jsonSchema as Record<string, unknown>;
+      expect(hashlineSchema.additionalProperties).toBe(false);
+      const hashlineProps = hashlineSchema.properties as Record<string, unknown>;
+      expect(Object.keys(hashlineProps).sort()).toEqual(["delete", "edits", "filePath", "rename"]);
+      const edits = hashlineProps.edits as {
+        items: { additionalProperties?: boolean; properties: Record<string, unknown> };
+      };
+      expect(edits.items.additionalProperties).toBe(false);
+      expect((edits.items.properties.op as { enum?: string[] }).enum).toEqual([
+        "replace",
+        "replace_range",
+        "append",
+        "prepend",
+      ]);
+
+      const strOutput: Record<string, unknown> = {
+        description: "str",
+        parameters: {},
+        jsonSchema: {},
+      };
+      await definition({ toolID: "str_replace_editor" } as never, strOutput as never);
+      const strSchema = strOutput.jsonSchema as Record<string, unknown>;
+      expect(strSchema.additionalProperties).toBe(false);
+      const strProps = strSchema.properties as Record<string, unknown>;
+      expect((strProps.command as { enum?: string[] }).enum).toEqual([
+        "view",
+        "create",
+        "str_replace",
+        "insert",
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("registered hook rejects unknown edit fields and blank anchors for a visible tool", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-hook-shape-"));
+    try {
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const beforeHook = plugin["tool.execute.before"]!;
+      const call = (args: Record<string, unknown>) =>
+        beforeHook(
+          { tool: "hashline_edit", sessionID: "session-hook", callID: "h1" } as never,
+          { args } as never,
+        );
+
+      // No model registered for this session: the default mode is hashline_edit.
+      await expect(
+        call({ filePath: "/tmp/a.ts", edits: [{ op: "append", lines: ["x"], typo: 1 }] }),
+      ).rejects.toThrow(/typo/);
+      await expect(
+        call({ filePath: "/tmp/a.ts", edits: [{ op: "append", pos: "   ", lines: ["x"] }] }),
+      ).rejects.toThrow(/pos was provided but is blank/);
+      await expect(
+        call({ filePath: "/tmp/a.ts", edits: [{ op: "prepend", end: "", lines: ["x"] }] }),
+      ).rejects.toThrow(/end was provided but is blank/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("direct hashline execute rejects structural input without editing or reporting", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-structural-"));
+    try {
+      const filePath = join(directory, "structural.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const { context, metadataCalls } = createToolContext(directory);
+
+      const unknownKey = await editTool.execute(
+        {
+          filePath,
+          edits: [{ op: "replace", pos: anchorFor(lines, 1), lines: ["x"], bogus: true }],
+        } as never,
+        context as never,
+      );
+      expect(unknownKey).toContain("INVALID_INPUT");
+      expect(await readFile(filePath, "utf8")).toBe(lines.join("\n"));
+
+      const unknownOp = await editTool.execute(
+        { filePath, edits: [{ op: "set_line", pos: anchorFor(lines, 1), lines: ["x"] }] } as never,
+        context as never,
+      );
+      expect(unknownOp).toContain("INVALID_INPUT");
+      expect(metadataCalls).toHaveLength(0);
+      expect(await readFile(filePath, "utf8")).toBe(lines.join("\n"));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("direct hashline execute rejects delete/rename and delete/edits conflicts before mutation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-conflict-"));
+    try {
+      const filePath = join(directory, "conflict.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const { context, metadataCalls } = createToolContext(directory);
+
+      const deleteRename = await editTool.execute(
+        { filePath, delete: true, rename: join(directory, "renamed.ts"), edits: [] },
+        context as never,
+      );
+      expect(deleteRename).toContain("delete and rename cannot be used together");
+
+      const deleteEdits = await editTool.execute(
+        {
+          filePath,
+          delete: true,
+          edits: [{ op: "replace", pos: anchorFor(lines, 1), lines: ["x"] }],
+        },
+        context as never,
+      );
+      expect(deleteEdits).toContain("delete mode requires edits to be an empty array");
+
+      expect(metadataCalls).toHaveLength(0);
+      expect(await readFile(filePath, "utf8")).toBe(lines.join("\n"));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("renaming to a path-equivalent source applies edits in place without deleting the file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-self-rename-"));
+    try {
+      const filePath = join(directory, "same.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const { context } = createToolContext(directory);
+
+      const result = await editTool.execute(
+        {
+          filePath,
+          rename: join(directory, ".", "same.ts"),
+          edits: [{ op: "replace", pos: anchorFor(lines, 2), lines: ["line2-updated"] }],
+        },
+        context as never,
+      );
+
+      expect(result).toContain(`Updated ${filePath}`);
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2-updated");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("a metadata publication failure after a successful edit stays truthful", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-metadata-fail-"));
+    try {
+      const filePath = join(directory, "meta.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const { context } = createToolContext(directory, { metadataThrows: true });
+
+      const result = await editTool.execute(
+        {
+          filePath,
+          edits: [{ op: "replace", pos: anchorFor(lines, 2), lines: ["line2-updated"] }],
+        },
+        context as never,
+      );
+
+      const text = result as string;
+      expect(text).toContain(`Updated ${filePath}`);
+      expect(text).not.toContain("INVALID_INPUT");
+      expect(text).toContain("reporting metadata failed");
+      expect(text).toContain("inspect the file before retrying");
+      expect(text).not.toContain(METADATA_FAILURE_SECRET);
+      const warningLine = text
+        .split("\n")
+        .find((line: string) => line.includes("reporting metadata failed"));
+      expect(warningLine).toBeDefined();
+      expect(warningLine!.length).toBeLessThan(300);
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2-updated");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("str_replace_editor metadata failure after a successful edit stays truthful", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-str-metadata-fail-"));
+    try {
+      const filePath = join(directory, "str-meta.ts");
+      await writeFile(filePath, "alpha\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      await establishModel(plugin, "session-1", "deepseek", "deepseek-v4-flash");
+      const editorTool = plugin.tool!.str_replace_editor;
+      const { context } = createToolContext(directory, { metadataThrows: true });
+
+      const result = await editorTool.execute(
+        { command: "str_replace", path: filePath, old_str: "alpha", new_str: "beta" },
+        context as never,
+      );
+
+      const text = result as string;
+      expect(text).toContain(`The file ${filePath} has been edited successfully.`);
+      expect(text).not.toContain("INVALID_INPUT");
+      expect(text).toContain("reporting metadata failed");
+      expect(text).not.toContain(METADATA_FAILURE_SECRET);
+      expect(text.length).toBeLessThan(1000);
+      expect(await readFile(filePath, "utf8")).toBe("beta\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("str_replace_editor direct execute rejects unknown fields without writing or reporting", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-str-structural-"));
+    try {
+      const filePath = join(directory, "str.ts");
+      await writeFile(filePath, "alpha\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      await establishModel(plugin, "session-1", "deepseek", "deepseek-v4-flash");
+      const editorTool = plugin.tool!.str_replace_editor;
+      const { context, metadataCalls } = createToolContext(directory);
+
+      const result = await editorTool.execute(
+        {
+          command: "str_replace",
+          path: filePath,
+          old_str: "alpha",
+          new_str: "beta",
+          bogus: 1,
+        } as never,
+        context as never,
+      );
+
+      expect(result).toContain("Error: INVALID_INPUT");
+      expect(metadataCalls).toHaveLength(0);
+      expect(await readFile(filePath, "utf8")).toBe("alpha\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("str_replace_editor view accepts an end-of-file range through the plugin", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-str-view-"));
+    try {
+      const filePath = join(directory, "view.ts");
+      await writeFile(filePath, "one\ntwo\nthree\n", "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      await establishModel(plugin, "session-1", "deepseek", "deepseek-v4-flash");
+      const editorTool = plugin.tool!.str_replace_editor;
+      const { context, metadataCalls } = createToolContext(directory);
+
+      const result = await editorTool.execute(
+        { command: "view", path: filePath, view_range: [2, -1] },
+        context as never,
+      );
+      expect(result).toContain("     2  two");
+      expect(result).toContain("     3  three");
+      expect(metadataCalls).toHaveLength(0);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("direct execute enforces session model visibility before argument details", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-direct-visibility-"));
+    try {
+      const filePath = join(directory, "visibility.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const editorTool = plugin.tool!.str_replace_editor;
+
+      // A real deepseek session model: str_replace_editor is visible, hashline_edit is not.
+      await establishModel(plugin, "session-1", "deepseek", "deepseek-v4-flash");
+
+      const validCtx = createToolContext(directory);
+      await expect(
+        editTool.execute(
+          { filePath, edits: [{ op: "replace", pos: anchorFor(lines, 1), lines: ["x"] }] },
+          validCtx.context as never,
+        ),
+      ).rejects.toThrow(/not available for this session's model/);
+
+      // Invalid arguments are denied by visibility too, before schema details.
+      const invalidCtx = createToolContext(directory);
+      await expect(
+        editTool.execute({ filePath, edits: [] }, invalidCtx.context as never),
+      ).rejects.toThrow(/not available for this session's model/);
+
+      expect(validCtx.metadataCalls).toHaveLength(0);
+      expect(invalidCtx.metadataCalls).toHaveLength(0);
+      expect(await readFile(filePath, "utf8")).toBe(lines.join("\n"));
+
+      // A session with no routing match defaults to hashline_edit, so the str editor is hidden.
+      const defaultCtx = createToolContext(directory, { sessionID: "session-default" });
+      await expect(
+        editorTool.execute({ command: "view", path: filePath }, defaultCtx.context as never),
+      ).rejects.toThrow(/not available for this session's model/);
+      expect(defaultCtx.metadataCalls).toHaveLength(0);
+      expect(await readFile(filePath, "utf8")).toBe(lines.join("\n"));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("direct execute rejects empty paths, blank rename, and blank anchors before effects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-path-blank-"));
+    try {
+      const filePath = join(directory, "paths.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const { context, metadataCalls } = createToolContext(directory);
+
+      const blankPath = await editTool.execute(
+        { filePath: "   ", edits: [{ op: "append", lines: ["x"] }] },
+        context as never,
+      );
+      expect(blankPath).toContain("filePath must be a non-empty path");
+
+      const blankRename = await editTool.execute(
+        { filePath, rename: "  ", edits: [{ op: "append", lines: ["x"] }] },
+        context as never,
+      );
+      expect(blankRename).toContain("rename must be a non-empty path");
+
+      const blankAnchor = await editTool.execute(
+        { filePath, edits: [{ op: "append", pos: "   ", lines: ["x"] }] },
+        context as never,
+      );
+      expect(blankAnchor).toContain("pos was provided but is blank");
+
+      expect(metadataCalls).toHaveLength(0);
+      expect(await readFile(filePath, "utf8")).toBe(lines.join("\n"));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves spaces inside real file and rename paths", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-path-spaces-"));
+    try {
+      const filePath = join(directory, "my file.ts");
+      const renamedPath = join(directory, "renamed file.ts");
+      const lines = ["line1", "line2"];
+      await writeFile(filePath, lines.join("\n"), "utf8");
+
+      const plugin = await HashlineEditPlugin(createPluginInput(directory));
+      const editTool = plugin.tool!.hashline_edit;
+      const { context } = createToolContext(directory);
+
+      const updated = await editTool.execute(
+        {
+          filePath,
+          edits: [{ op: "replace", pos: anchorFor(lines, 2), lines: ["line2-updated"] }],
+        },
+        context as never,
+      );
+      expect(updated).toContain(`Updated ${filePath}`);
+
+      const moved = await editTool.execute(
+        { filePath, rename: renamedPath, edits: [{ op: "append", lines: ["tail"] }] },
+        context as never,
+      );
+      expect(moved).toContain(`Moved ${filePath} to ${renamedPath}`);
+      expect(await readFile(renamedPath, "utf8")).toBe("line1\nline2-updated\ntail");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 async function hook_call(
   hook: (input: never, output: never) => Promise<void>,
   sessionID: string,
@@ -1050,4 +1491,14 @@ async function hook_call(
     { sessionID, model: message.model } as never,
     { message: message as never, parts: [] } as never,
   );
+}
+
+/** Register a real session model so direct execute passes the visibility gate. */
+async function establishModel(
+  plugin: Awaited<ReturnType<typeof HashlineEditPlugin>>,
+  sessionID: string,
+  providerID: string,
+  modelID: string,
+): Promise<void> {
+  await hook_call(plugin["chat.message"]!, sessionID, userMessage({ providerID, modelID }));
 }

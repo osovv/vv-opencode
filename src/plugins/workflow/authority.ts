@@ -15,6 +15,7 @@
 //   AuthorityValidationErrorCode - Coded reasons an authority operation is rejected.
 //   AuthorityOperationResult - Success value or a coded rejection.
 //   validateAuthorityMessage - Pure eligibility check for one candidate root-user instruction.
+//   authorityScopeDifferences - Field-level differences between a supplied and recorded authority scope.
 //   grantAdvanceAuthority - Initial grant recording the finite reserve and its message claim.
 //   extendAdvanceAuthority - Explicit finite extension from a new eligible instruction.
 //   advanceUnitsGranted - Total granted units across the initial reserve and extensions.
@@ -29,10 +30,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial bounded advance-authority domain with a shared three-unit reserve, replay protection, and truthful stage provenance.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Authority stage vocabulary now derives from the canonical AUTHORITY_STAGES constant, and grantAdvanceAuthority rejects a reuse whose supplied scope contradicts the recorded scope instead of silently returning it.]
 // END_CHANGE_SUMMARY
 
 import {
+  AUTHORITY_STAGES,
   isBoundedWorkflowId,
   WORKFLOW_TEXT_MAX_CHARS,
   type WorkflowAuthorityExtension,
@@ -50,12 +52,7 @@ import {
 /** Initial and per-extension advance recovery units shared by one authorized execution. */
 export const ADVANCE_RECOVERY_RESERVE = 3;
 
-const AUTHORITY_STAGES: ReadonlySet<string> = new Set([
-  "specification",
-  "planning",
-  "implementation",
-  "verification",
-]);
+const AUTHORITY_STAGES_SET: ReadonlySet<string> = new Set<string>(AUTHORITY_STAGES);
 // END_BLOCK_AUTHORITY_CONSTANTS
 
 export type AuthorityValidationErrorCode =
@@ -154,7 +151,10 @@ export function validateAuthorityMessage(
 }
 
 function validScope(scope: WorkflowAuthorityScope, problems: string[]): void {
-  if (!Array.isArray(scope.stages) || scope.stages.some((stage) => !AUTHORITY_STAGES.has(stage))) {
+  if (
+    !Array.isArray(scope.stages) ||
+    scope.stages.some((stage) => !AUTHORITY_STAGES_SET.has(stage))
+  ) {
     problems.push(
       "scope.stages must be a subset of specification/planning/implementation/verification",
     );
@@ -170,10 +170,52 @@ function validScope(scope: WorkflowAuthorityScope, problems: string[]): void {
   }
   if (
     !Array.isArray(scope.reservedStops) ||
-    scope.reservedStops.some((stage) => !AUTHORITY_STAGES.has(stage))
+    scope.reservedStops.some((stage) => !AUTHORITY_STAGES_SET.has(stage))
   ) {
     problems.push("scope.reservedStops must be a subset of the delegatable stages");
   }
+}
+
+function sortedStageList(stages: readonly WorkflowAuthorityStage[]): string[] {
+  return [...stages].map((stage) => stage).sort();
+}
+
+function sortedPathList(paths: readonly string[]): string[] {
+  return [...paths].sort();
+}
+
+/**
+ * Field-level differences between a supplied scope and a recorded scope.
+ * Stage/stop/file lists compare as sets (order is not scope); decisionScope
+ * compares as trimmed text. An empty result means exact replay-compatible scope.
+ */
+export function authorityScopeDifferences(
+  supplied: WorkflowAuthorityScope,
+  recorded: WorkflowAuthorityScope,
+): string[] {
+  const differences: string[] = [];
+  if (
+    sortedStageList(supplied.stages).join("\u0000") !==
+    sortedStageList(recorded.stages).join("\u0000")
+  ) {
+    differences.push("stages");
+  }
+  if (supplied.decisionScope.trim() !== recorded.decisionScope.trim()) {
+    differences.push("decisionScope");
+  }
+  if (
+    sortedPathList(supplied.fileBoundary).join("\u0000") !==
+    sortedPathList(recorded.fileBoundary).join("\u0000")
+  ) {
+    differences.push("fileBoundary");
+  }
+  if (
+    sortedStageList(supplied.reservedStops).join("\u0000") !==
+    sortedStageList(recorded.reservedStops).join("\u0000")
+  ) {
+    differences.push("reservedStops");
+  }
+  return differences;
 }
 
 function claimMessage(
@@ -246,6 +288,14 @@ export function grantAdvanceAuthority(input: {
       existing.rootSessionId === input.sessionId &&
       existing.runId === input.runId
     ) {
+      const scopeDifferences = authorityScopeDifferences(input.scope, existing.scope);
+      if (scopeDifferences.length > 0) {
+        return {
+          ok: false,
+          code: "INVALID_INPUT",
+          message: `supplied scope differs from the recorded scope (${scopeDifferences.join(", ")}); scope changes are unsupported on reuse`,
+        };
+      }
       const claim = input.messageClaims.get(input.message.messageId);
       if (claim) return { ok: true, value: { record: existing, claim } };
     }

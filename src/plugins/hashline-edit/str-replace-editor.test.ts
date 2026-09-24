@@ -1,10 +1,10 @@
 // FILE: src/plugins/hashline-edit/str-replace-editor.test.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the dsh str_replace_editor contract: view formatting, view_range validation, exact-verbatim str_replace, ambiguity line numbers, insert validation, create guard, path hints, directory listing, truncation, and view-cache drift rejection.
-//   SCOPE: Deterministic in-memory filesystem coverage of every str_replace_editor command and error path.
-//   DEPENDS: [bun:test, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/session-state.ts]
-//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
+//   PURPOSE: Verify the dsh str_replace_editor contract: view formatting, view_range validation (exact shape before dispatch, file-length in the editor), exact-verbatim str_replace, ambiguity line numbers, insert validation, create guard, path hints, directory listing, truncation, structural/command rejection at the direct entry, result-envelope production, and view-cache drift rejection.
+//   SCOPE: Deterministic in-memory filesystem coverage of every str_replace_editor command, structural rejection path, and error path.
+//   DEPENDS: [bun:test, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/session-state.ts]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Initial dsh contract coverage.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Updated view_range/missing-field expectations to the shared contract diagnostics, added direct-entry structural rejection, empty/whitespace path rejection with preserved in-name spaces, empty file_text/empty new_str acceptance, and result-envelope schema checks.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -27,6 +27,7 @@ import {
   type StrReplaceEditorFs,
   type StrReplaceEditorFsEntry,
 } from "./str-replace-editor.js";
+import { strReplaceEditorResultSchema } from "./schemas.js";
 import { SessionFileCache, type FileSnapshot } from "./session-state.js";
 
 interface FakeFile {
@@ -133,11 +134,14 @@ describe("str_replace_editor view command", () => {
       expect(eofRange.output).toContain("     3  three");
     }
 
+    // The exact length is a representable schema bound and is rejected before any
+    // filesystem access; the file-length checks below still run inside the editor.
     const badShape = await editor.execute({ command: "view", path: "/repo/a.py", view_range: [1] });
-    expect(badShape).toEqual({
-      ok: false,
-      error: "Invalid `view_range`. It should be a list of two integers.",
-    });
+    expect(badShape.ok).toBe(false);
+    if (!badShape.ok) {
+      expect(badShape.error).toContain("INVALID_INPUT");
+      expect(badShape.error).toContain("view_range");
+    }
 
     const badFirst = await editor.execute({
       command: "view",
@@ -170,7 +174,8 @@ describe("str_replace_editor view command", () => {
     });
     expect(inverted.ok).toBe(false);
     if (!inverted.ok) {
-      expect(inverted.error).toContain("should be larger or equal than its first");
+      expect(inverted.error).toContain("INVALID_INPUT");
+      expect(inverted.error).toContain("must be -1 or >= start");
     }
   });
 
@@ -285,7 +290,7 @@ describe("str_replace_editor str_replace command", () => {
     });
   });
 
-  test("missing or empty old_str return parameter errors", async () => {
+  test("missing or empty old_str are rejected by the shared command contract", async () => {
     const fs = new FakeFs();
     fs.addFile("/repo/a.py", "alpha\n");
     const editor = makeEditor(fs);
@@ -295,10 +300,11 @@ describe("str_replace_editor str_replace command", () => {
       path: "/repo/a.py",
       new_str: "x",
     });
-    expect(missing).toEqual({
-      ok: false,
-      error: "Parameter `old_str` is required for command: str_replace",
-    });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.error).toContain("INVALID_INPUT");
+      expect(missing.error).toContain("old_str: str_replace requires old_str");
+    }
 
     const empty = await editor.execute({
       command: "str_replace",
@@ -306,10 +312,11 @@ describe("str_replace_editor str_replace command", () => {
       old_str: "",
       new_str: "x",
     });
-    expect(empty).toEqual({
-      ok: false,
-      error: "Parameter `old_str` is empty for command: str_replace",
-    });
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) {
+      expect(empty.error).toContain("INVALID_INPUT");
+      expect(empty.error).toContain("old_str must be a non-empty exact string");
+    }
   });
 
   test("rejects edits when the file drifted since the last view", async () => {
@@ -388,10 +395,66 @@ describe("str_replace_editor create and insert commands", () => {
       path: "/repo/a.py",
       new_str: "x",
     });
-    expect(missingLine).toEqual({
-      ok: false,
-      error: "Parameter `insert_line` is required for command: insert",
+    expect(missingLine.ok).toBe(false);
+    if (!missingLine.ok) {
+      expect(missingLine.error).toContain("INVALID_INPUT");
+      expect(missingLine.error).toContain("insert requires an integer insert_line >= 0");
+    }
+
+    const missingNewStr = await editor.execute({
+      command: "insert",
+      path: "/repo/a.py",
+      insert_line: 0,
     });
+    expect(missingNewStr.ok).toBe(false);
+    if (!missingNewStr.ok) {
+      expect(missingNewStr.error).toContain("insert requires new_str");
+    }
+  });
+
+  test("create accepts an explicitly empty file_text", async () => {
+    const fs = new FakeFs();
+    const result = await makeEditor(fs).execute({
+      command: "create",
+      path: "/repo/empty.txt",
+      file_text: "",
+    });
+    expect(result).toEqual({
+      ok: true,
+      output: "New file created successfully at: /repo/empty.txt",
+    });
+    expect(fs.files.get("/repo/empty.txt")?.content).toBe("");
+  });
+
+  test("insert accepts an explicitly empty new_str", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "one\ntwo\n");
+    const editor = makeEditor(fs);
+    await editor.execute({ command: "view", path: "/repo/a.py" });
+
+    const result = await editor.execute({
+      command: "insert",
+      path: "/repo/a.py",
+      insert_line: 1,
+      new_str: "",
+    });
+    expect(result.ok).toBe(true);
+    expect(fs.files.get("/repo/a.py")?.content).toBe("one\n\ntwo\n");
+  });
+
+  test("str_replace defaults an omitted new_str to deletion", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "alpha\nbeta\ngamma\n");
+    const editor = makeEditor(fs);
+    await editor.execute({ command: "view", path: "/repo/a.py" });
+
+    const result = await editor.execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "beta\n",
+    });
+    expect(result.ok).toBe(true);
+    expect(fs.files.get("/repo/a.py")?.content).toBe("alpha\ngamma\n");
   });
 });
 
@@ -427,5 +490,90 @@ describe("str_replace_editor path handling", () => {
       ok: false,
       error: "The path /repo is a directory and only the `view` command can be used on directories",
     });
+  });
+});
+
+describe("str_replace_editor direct-entry contract rejection", () => {
+  test("rejects an unknown root property before any filesystem access or cache update", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "alpha\n");
+    const viewed: Array<{ path: string }> = [];
+    const editor = new StrReplaceEditor({
+      fs,
+      onViewed: (path) => viewed.push({ path }),
+      checkFreshness: () => "fresh",
+    });
+
+    const result = await editor.execute({
+      command: "view",
+      path: "/repo/a.py",
+      bogus: true,
+    } as never);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("INVALID_INPUT");
+      expect(result.error).toContain("bogus");
+    }
+    expect(viewed).toHaveLength(0);
+    expect(fs.files.get("/repo/a.py")?.content).toBe("alpha\n");
+  });
+
+  test("rejects a recognized field the selected command does not consume", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "alpha\n");
+    const result = await makeEditor(fs).execute({
+      command: "view",
+      path: "/repo/a.py",
+      old_str: "alpha",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("old_str is not consumed by command view");
+    }
+  });
+
+  test("rejects an empty or whitespace-only path without a filesystem call", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "alpha\n");
+    const viewed: Array<{ path: string }> = [];
+    const editor = new StrReplaceEditor({
+      fs,
+      onViewed: (path) => viewed.push({ path }),
+      checkFreshness: () => "fresh",
+    });
+
+    for (const badPath of ["", "   "]) {
+      const result = await editor.execute({ command: "view", path: badPath });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("path must be a non-empty path");
+      }
+    }
+    expect(viewed).toHaveLength(0);
+  });
+
+  test("preserves spaces inside a real file name", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/my file.py", "alpha\n");
+    const result = await makeEditor(fs).execute({ command: "view", path: "/repo/my file.py" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output).toContain("/repo/my file.py");
+    }
+  });
+
+  test("emits result envelopes matching the producer schema", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "alpha\n");
+    const editor = makeEditor(fs);
+
+    const view = await editor.execute({ command: "view", path: "/repo/a.py" });
+    const missing = await editor.execute({ command: "view", path: "/nope" });
+    expect(strReplaceEditorResultSchema.safeParse(view).success).toBe(true);
+    expect(strReplaceEditorResultSchema.safeParse(missing).success).toBe(true);
+    expect(
+      strReplaceEditorResultSchema.safeParse({ ok: true, output: "x", extra: true }).success,
+    ).toBe(false);
   });
 });

@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial transaction coverage.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Added staged-result guard coverage proving a rejected producer result persists/publishes nothing, leaves committed ledgers unchanged, and preserves queue serialization.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -152,7 +152,7 @@ describe("workflow transactions", () => {
       sessionId: SESSION,
       getData: () => live,
       persist: async () => ({ ok: true }),
-      operation: (staged) => {
+      operation: (_staged) => {
         // Simulate a concurrent reducer that bypasses the store wrappers by
         // mutating live data directly (e.g. a hook-driven settlement).
         const template = [...live.records.values()][0]!;
@@ -191,5 +191,63 @@ describe("workflow transactions", () => {
 
     expect(result.ok).toBe(true);
     expect(store.getWorkItem(SESSION, "wi-1")?.title).toBe("committed title");
+  });
+
+  test("a rejected staged result persists and publishes nothing and preserves the queue", async () => {
+    const store = createWorkItemStore();
+    addStandaloneItem(store, "existing");
+    const queue = new WorkflowTransactionQueue();
+    const live = store.getStoreData();
+    live.messageClaims.set("msg-1", {
+      messageId: "msg-1",
+      runId: "run-1",
+      authorityId: "auth-1",
+      claimedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const beforeRecords = live.records.size;
+    const beforeClaims = live.messageClaims.size;
+    const beforeExecutions = live.executions.size;
+    let persisted = false;
+    let persistSawInvalid = false;
+
+    const result = await runWorkflowTransaction({
+      queue,
+      sessionId: SESSION,
+      getData: () => live,
+      persist: async () => {
+        persisted = true;
+        persistSawInvalid = live.records.has(`${SESSION}::wi-999`);
+        return { ok: true };
+      },
+      operation: (staged) => {
+        const template = [...staged.records.values()][0]!;
+        staged.records.set(`${SESSION}::wi-999`, { ...template, workItemId: "wi-999" });
+        return { result: "would-publish" };
+      },
+      guardStagedResult: () => ({ ok: false, error: "RESULT_CONTRACT_INVALID: injected" }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.invalidResult).toBe(true);
+    // The staged clone never reached persistence or live state, and every
+    // committed ledger stayed exactly as it was.
+    expect(persisted).toBe(false);
+    expect(persistSawInvalid).toBe(false);
+    expect(live.records.size).toBe(beforeRecords);
+    expect(store.getWorkItem(SESSION, "wi-999")).toBeUndefined();
+    expect(live.messageClaims.size).toBe(beforeClaims);
+    expect(live.executions.size).toBe(beforeExecutions);
+
+    // The per-session queue is still usable after a rejected staged result.
+    const next = await runWorkflowTransaction({
+      queue,
+      sessionId: SESSION,
+      getData: () => live,
+      persist: async () => ({ ok: true }),
+      operation: () => ({ result: "after" }),
+      guardStagedResult: () => ({ ok: true }),
+    });
+    expect(next).toEqual({ ok: true, result: "after" });
   });
 });

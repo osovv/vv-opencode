@@ -1,19 +1,19 @@
 // FILE: src/plugins/hashline-edit/str-replace-editor.ts
-// VERSION: 0.1.0
+// VERSION: 0.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Implement the DeepSeek dsh str_replace_editor contract (view/create/str_replace/insert) as a native edit profile.
-//   SCOPE: Command dispatch, dsh-verbatim view formatting and error texts, exact-verbatim str_replace matching with occurrence line numbers, insert_line validation, create guard, absolute-path hint, directory listing, output truncation, and view-cache freshness checks.
-//   DEPENDS: [src/plugins/hashline-edit/session-state.ts]
-//   LINKS: [M-PLUGIN-HASHLINE-EDIT]
+//   SCOPE: Command dispatch, dsh-verbatim view formatting and file-dependent error texts, exact-verbatim str_replace matching with occurrence line numbers, insert_line file-length validation, create guard, absolute-path hint, directory listing, output truncation, and view-cache freshness checks. Registered argument shapes and args-only command validation come from schemas.ts; this module reruns that validation at its direct entry before any filesystem access. The model-facing description is owned by tool-description.ts and re-exported here.
+//   DEPENDS: [src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/tool-description.ts]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   STR_REPLACE_EDITOR_DESCRIPTION - Model-facing dsh tool description (verbatim, MIT attribution).
+//   STR_REPLACE_EDITOR_DESCRIPTION - Model-facing dsh tool description (verbatim, MIT attribution); re-exported from tool-description.ts.
 //   STR_REPLACE_TRUNCATION_MARKER - dsh response-clipped marker appended to truncated view output.
-//   StrReplaceEditorArgs - Tool-facing command arguments.
-//   StrReplaceEditorResult - Ok output or fail-closed error text.
+//   StrReplaceEditorArgs - Tool-facing command arguments; schema-derived from schemas.ts.
+//   StrReplaceEditorResult - Ok output or fail-closed error text; schema-derived from schemas.ts.
 //   StrReplaceEditorFs - Filesystem seam used by the editor (node:fs-backed in production, fake in tests).
 //   StrReplaceEditorFsEntry - Directory entry name and type returned by the filesystem seam.
 //   StrReplaceEditorOptions - Editor options: filesystem seam, output cap, and view-cache callbacks.
@@ -21,45 +21,32 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Ported the dsh str_replace_editor contract (deepseek-ai/deepseek-harness @ 47f94385, MIT) with an mtime/size view-cache as the replaceIfVersion CAS equivalent.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Moved the description to tool-description.ts (re-exported), derived argument/result types from the single-source contract, and rejected structural/command-invalid arguments at the direct editor entry before any filesystem access.]
 // END_CHANGE_SUMMARY
 
+import { formatContractIssues } from "../../lib/agent-tool-contract.js";
 import type { FileCacheVerdict, FileSnapshot } from "./session-state.js";
+import {
+  validateStrReplaceEditorToolInput,
+  type StrReplaceEditorResult,
+  type StrReplaceEditorToolArgs,
+} from "./schemas.js";
+import { STR_REPLACE_EDITOR_DESCRIPTION } from "./tool-description.js";
+
+export { STR_REPLACE_EDITOR_DESCRIPTION };
+export type { StrReplaceEditorResult };
+
+/** Tool-facing command arguments; schema-derived from the registered contract. */
+export type StrReplaceEditorArgs = StrReplaceEditorToolArgs;
 
 // START_BLOCK_CONSTANTS
-// Verbatim from deepseek-ai/deepseek-harness (MIT).
 export const STR_REPLACE_TRUNCATION_MARKER =
   "<response clipped><NOTE>To save on context only part of this file was been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>";
-
-export const STR_REPLACE_EDITOR_DESCRIPTION = `
-Custom editing tool for viewing, creating and editing files
-* State is persistent across command calls and discussions with the user
-* If \`path\` is a file, \`view\` displays the result of applying \`cat -n\`. If \`path\` is a directory, \`view\` lists non-hidden files and directories up to 2 levels deep
-* The \`create\` command cannot be used if the specified \`path\` already exists as a file
-* If a \`command\` generates a long output, it will be truncated and marked with \`<response clipped>\`
-
-Notes for using the \`str_replace\` command:
-* The \`old_str\` parameter should match EXACTLY one or more consecutive lines from the original file. Be mindful of whitespaces!
-* If the \`old_str\` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in \`old_str\` to make it unique
-* The \`new_str\` parameter should contain the edited lines that should replace the \`old_str\`
-`.trim();
 
 const DEFAULT_MAX_OUTPUT_CHARS = 16_000;
 // END_BLOCK_CONSTANTS
 
 // START_BLOCK_TYPES
-export interface StrReplaceEditorArgs {
-  command: "view" | "create" | "str_replace" | "insert";
-  path: string;
-  file_text?: string;
-  old_str?: string;
-  new_str?: string;
-  insert_line?: number;
-  view_range?: number[];
-}
-
-export type StrReplaceEditorResult = { ok: true; output: string } | { ok: false; error: string };
-
 export interface StrReplaceEditorFsEntry {
   name: string;
   type: "file" | "directory";
@@ -138,6 +125,14 @@ export class StrReplaceEditor {
   }
 
   async execute(args: StrReplaceEditorArgs): Promise<StrReplaceEditorResult> {
+    // Reject structural and command-invalid arguments before touching the
+    // filesystem or the view-freshness cache. The registered hook runs the same
+    // validator; this direct entry never relies on the host having done so.
+    const validation = validateStrReplaceEditorToolInput(args);
+    if (!validation.ok) {
+      return fail(formatContractIssues(validation.issues));
+    }
+
     const path = args.path;
     if (typeof path !== "string" || path.trim().length === 0) {
       return fail("path must be a non-empty string");

@@ -60,16 +60,20 @@
     <Script name="fmt:check">Runs oxfmt --check src.</Script>
     <Script name="test">Runs bun test.</Script>
     <Script name="grace:check">Validates the expected governed src and scripts file set, required semantic block pairing, malformed hash-prefixed anchors, and exactly one current LAST_CHANGE per governed file while preserving explicit raw/declaration exceptions.</Script>
-    <Script name="check">Runs typecheck, lint, fmt:check, tests, and grace:check.</Script>
-    <Script name="pack:check">Builds dist, verifies root, server plugin, and default TUI subpath exports by importing generated files, then runs npm pack --dry-run.</Script>
+    <Script name="check">Runs typecheck, lint, fmt:check, grace:check, the read-only tool-contract coverage gate, and tests.</Script>
+    <Script name="contracts:check">Runs the read-only nine-tool contract completeness gate: an independent AST census of owned registrations across src/plugins and public entry points, catalog vocabulary/dispatch/default/result checks, fixture execution through the real validators, closed-input checks, and generated-reference currency.</Script>
+    <Script name="contracts:generate">Regenerates templates/skills/vv-execute/references/tool-contracts.md from the pure catalog as a deliberate, reviewed step.</Script>
+    <Script name="contracts:host">Runs the isolated live-host contract gate: --probe runs the minimal host-seam boundary test first, and the default full matrix exercises the freshly built dist package against local loopback OpenAI-compatible and Anthropic-compatible deterministic responders. It requires a real installed OpenCode 1.18.32 binary, a current build, and the existing evidence target directory .grace/changes/active/C-AGENT-TOOL-CONTRACTS/; it only checks that this directory exists (it does not validate GRACE approval or accept an arbitrary bundle) and never creates the directory, writes an archive, or finalizes lifecycle state. It writes compatibility-evidence.json only on a full observed pass and sends no real provider or paid request.</Script>
+    <Script name="pack:check">Builds dist, verifies root, server plugin, and default TUI subpath exports by importing generated files, verifies built tool-contract assets, then runs npm pack --dry-run.</Script>
     <Script name="release:check">Runs scripts/release-check.ts to validate package identity, package version, hosted schema id, schema config const, changelog presence, and latest changelog summary.</Script>
     <Script name="release:bump">Runs scripts/release-bump.ts to guard a clean worktree, bump version, generate changelog, generate required AI release summary, update schema id, run release:check, create and push the release commit, dispatch and wait for exact-SHA CI publication, retry npm metadata and verify gitHead, then create the annotated tag and GitHub Release locally.</Script>
     <Script name="prepare">Installs lefthook hooks.</Script>
   </Scripts>
   <TestingStack>
     <ModuleLevel>bun test targeted files for lib, command, plugin, workflow, secrets, hashline, and release automation modules.</ModuleLevel>
-    <WaveLevel>bun run typecheck, bun run lint, bun run fmt:check, bun test, and bun run grace:check.</WaveLevel>
+    <WaveLevel>bun run typecheck, bun run lint, bun run fmt:check, bun test, bun run grace:check, and bun run contracts:check.</WaveLevel>
     <PhaseLevel>bun run check, bun run build, bun run pack:check, and bun run release:check when release or package consistency matters.</PhaseLevel>
+    <HostContractTesting>The agent-tool contract is proven at three distinct levels that must not be conflated: pinned SDK 1.18.2 JSON-projection and OpenAI/Anthropic/Google schema-lowering fixtures are derived host-boundary evidence; local isolated loopback OpenAI-compatible and Anthropic-compatible responders exercise the real installed OpenCode 1.18.32 host registration, definition serialization, accepted/rejected calls, and result plumbing through the built dist package; and remote paid provider acceptance and model effectiveness are not exercised at any level. Live-host evidence is produced by observed checks only and never hand-authored, and the SDK-supported minimum 1.18.2 row is fixture-only rather than smoke-tested.</HostContractTesting>
     <GraceValidation>grace lint --path . and grace status --path . validate GRACE 4 artifacts using the installed stable grace binary required by AGENTS.md.</GraceValidation>
   </TestingStack>
   <Observability>

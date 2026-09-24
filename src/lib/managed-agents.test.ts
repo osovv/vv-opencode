@@ -1,24 +1,27 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.6.0
+// VERSION: 0.7.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
-//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership and stop/recovery distinction with reserved handoffs, bounded implementer impact investigation and worker-stop semantics, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, scoped prompt resolution, and missing prompt failures.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts]
-//   LINKS: [M-CLI-MANAGED-AGENTS, V-M-CLI-MANAGED-AGENTS]
+//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership and stop/recovery distinction with reserved handoffs, bounded implementer impact investigation and worker-stop semantics, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, semantic agreement of the shipped tracked-result protocol examples with the runtime parser, scoped prompt resolution, and missing prompt failures.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts, src/plugins/workflow/protocol.ts]
+//   LINKS: [M-CLI-MANAGED-AGENTS, M-WORKFLOW-PROTOCOL, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   PROTOCOL_EXAMPLE_ID - Non-wi-1 work-item id used by the shipped protocol example fixtures.
+//   extractProtocolExample - Extracts one shipped agent result-protocol example and its top-block fields.
 //   [test scenarios] - Managed prompt behavior is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Calibrated stop/recovery/completion distinctions, reserved handoffs, repository-answerable questions, and scoped re-review guidance; superseded the automatic blocker-to-handoff-file direction.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Updated the managed agent protocol examples to the exact returned work-item id and added parser-backed agreement checks for every role terminal status. Prior: calibrated stop/recovery/completion distinctions and scoped re-review guidance.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -27,7 +30,53 @@ import {
   loadManagedAgentPromptTemplate,
   loadManagedAgentPromptText,
 } from "./managed-agents.js";
+import { loadManagedSkillReference } from "./managed-skills.js";
+import { installManagedSkillFiles, syncManagedSkillFiles } from "./opencode/agent-registrations.js";
+import type { ResolvedPaths } from "./opencode/paths.js";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
+import {
+  parseResultBlock,
+  parseWorkItemHeader,
+  describeStatusVocabulary,
+} from "../plugins/workflow/protocol.js";
+
+/** Assigned-id sample used by shipped examples; distinct from the first item `wi-1`. */
+const PROTOCOL_EXAMPLE_ID = "wi-7";
+
+/**
+ * Extract one shipped result-protocol example: its strict top-block fields and
+ * the first body line after the required blank-line separator. Throws when the
+ * template no longer contains a parseable example, so template edits must keep
+ * the example real.
+ */
+function extractProtocolExample(
+  template: string,
+  expectedId: string,
+): { output: string; topBlockFields: string[] } {
+  const lines = template.replace(/\r\n/g, "\n").split("\n");
+  const start = lines.findIndex((line) => line.trim() === `VVOC_WORK_ITEM_ID: ${expectedId}`);
+  if (start < 0) {
+    throw new Error(`agent template has no VVOC_WORK_ITEM_ID: ${expectedId} example`);
+  }
+
+  const topBlockFields: string[] = [];
+  let index = start;
+  for (; index < lines.length; index += 1) {
+    const trimmed = (lines[index] ?? "").trim();
+    if (!/^([A-Z_]+)\s*:/.test(trimmed)) break;
+    topBlockFields.push(trimmed);
+  }
+  if ((lines[index] ?? "").trim() !== "") {
+    throw new Error("protocol example is missing its blank-line body separator");
+  }
+
+  const body = (lines[index + 1] ?? "").trim();
+  if (body === "") {
+    throw new Error("protocol example is missing a body line");
+  }
+
+  return { output: `${topBlockFields.join("\n")}\n\n${body}`, topBlockFields };
+}
 
 describe("managed agent prompts", () => {
   test("loads bundled guardian template", async () => {
@@ -141,12 +190,13 @@ describe("managed agent prompts", () => {
     const template = await loadManagedAgentPromptTemplate("vv-implementer");
     expect(template).toStartWith("---\n");
     expect(template).toContain("You are the vv-implementer subagent.");
-    expect(template).toContain("VVOC_WORK_ITEM_ID: wi-1");
+    expect(template).toContain(`VVOC_WORK_ITEM_ID: ${PROTOCOL_EXAMPLE_ID}`);
     expect(template).toContain("VVOC_STATUS: DONE");
     expect(template).toContain("VVOC_ROUTE: change_with_review");
     expect(template).toContain(
       "Allowed `VVOC_STATUS` values: `DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`",
     );
+    expect(template).not.toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(template).not.toContain("Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED");
     expect(template).toContain("stabilize a compact working state");
     expect(template).toContain("project-owned overlays");
@@ -241,9 +291,10 @@ describe("managed agent prompts", () => {
     const specTemplate = await loadManagedAgentPromptTemplate("vv-spec-reviewer");
     const codeTemplate = await loadManagedAgentPromptTemplate("vv-code-reviewer");
 
-    expect(specTemplate).toContain("VVOC_WORK_ITEM_ID: wi-1");
+    expect(specTemplate).toContain(`VVOC_WORK_ITEM_ID: ${PROTOCOL_EXAMPLE_ID}`);
     expect(specTemplate).toContain("VVOC_STATUS: PASS");
     expect(specTemplate).toContain("Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`");
+    expect(specTemplate).not.toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(specTemplate).not.toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
     expect(specTemplate).toContain("[Missing|Extra|Wrong|Unproven]");
     expect(specTemplate).toContain("tightest actionable location package available");
@@ -253,9 +304,10 @@ describe("managed agent prompts", () => {
     expect(specTemplate).toContain("Reuse canonical repository terms");
     expect(specTemplate).toContain("unstated material assumption");
 
-    expect(codeTemplate).toContain("VVOC_WORK_ITEM_ID: wi-1");
+    expect(codeTemplate).toContain(`VVOC_WORK_ITEM_ID: ${PROTOCOL_EXAMPLE_ID}`);
     expect(codeTemplate).toContain("VVOC_STATUS: PASS");
     expect(codeTemplate).toContain("Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`");
+    expect(codeTemplate).not.toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(codeTemplate).not.toContain("Status: PASS | FAIL | NEEDS_CONTEXT");
     expect(codeTemplate).toContain(
       "Review only issues introduced by this change or left unresolved by it.",
@@ -269,6 +321,60 @@ describe("managed agent prompts", () => {
       "Treat route or process choices as findings only when they create a concrete engineering risk",
     );
     expect(codeTemplate).toContain("If a concern lacks a concrete failure mode");
+  });
+
+  test("shipped agent protocol examples parse for every role terminal status", async () => {
+    const cases = [
+      {
+        agent: "vv-implementer",
+        statuses: ["DONE", "DONE_WITH_CONCERNS", "NEEDS_CONTEXT", "BLOCKED"],
+        routeRequired: true,
+      },
+      {
+        agent: "vv-spec-reviewer",
+        statuses: ["PASS", "FAIL", "NEEDS_CONTEXT"],
+        routeRequired: false,
+      },
+      {
+        agent: "vv-code-reviewer",
+        statuses: ["PASS", "FAIL", "NEEDS_CONTEXT"],
+        routeRequired: false,
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const template = await loadManagedAgentPromptTemplate(testCase.agent);
+      // The reusable `wi-1` sample from the first opened item must not survive.
+      expect(template).not.toContain("VVOC_WORK_ITEM_ID: wi-1");
+
+      const { output, topBlockFields } = extractProtocolExample(template, PROTOCOL_EXAMPLE_ID);
+      const parsed = parseResultBlock({
+        agent: testCase.agent,
+        output,
+        expectedWorkItemId: PROTOCOL_EXAMPLE_ID,
+      });
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) continue;
+      expect(parsed.value.workItemId).toBe(PROTOCOL_EXAMPLE_ID);
+      expect(parsed.value.body.length).toBeGreaterThan(0);
+      expect(parsed.value.route !== undefined).toBe(testCase.routeRequired);
+      expect(topBlockFields).toHaveLength(testCase.routeRequired ? 3 : 2);
+
+      const header = parseWorkItemHeader(
+        `VVOC_WORK_ITEM_ID: ${PROTOCOL_EXAMPLE_ID}\n<assignment/>`,
+      );
+      expect(header.ok).toBe(true);
+      if (header.ok) expect(header.value).toBe(PROTOCOL_EXAMPLE_ID);
+
+      for (const status of testCase.statuses) {
+        expect(template).toContain(status);
+      }
+      // The shipped vocabulary is exactly the parser's vocabulary, not a hand-typed copy.
+      expect(template).toContain(describeStatusVocabulary(testCase.agent));
+      expect(template).toContain("no preface");
+      expect(template).toContain("blank line before the body");
+      expect(template).toContain("returned by `work_item_open`");
+    }
   });
 
   test("code reviewer template binds verdicts to evidence and material verification gaps", async () => {
@@ -399,6 +505,40 @@ describe("managed agent prompts", () => {
       }
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("managed skill reference installation", () => {
+  /** Minimal resolved-paths view: only managedSkillsDirPath is consumed by the skill installers. */
+  function skillsPaths(managedSkillsDirPath: string): ResolvedPaths {
+    return { managedSkillsDirPath } as unknown as ResolvedPaths;
+  }
+
+  test("installManagedSkillFiles copies the vv-execute tool-contracts reference into a temp scope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vvoc-managed-tool-contracts-"));
+    try {
+      const results = await installManagedSkillFiles(skillsPaths(dir), { force: false });
+      const copied = join(dir, "vv-execute", "references", "tool-contracts.md");
+      expect(existsSync(copied)).toBe(true);
+      expect(results.find((result) => result.path === copied)?.action).toBe("created");
+      expect(await readFile(copied, "utf8")).toBe(
+        await loadManagedSkillReference("vv-execute", "tool-contracts.md"),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("syncManagedSkillFiles keeps an up-to-date copied reference", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vvoc-managed-tool-contracts-sync-"));
+    try {
+      await installManagedSkillFiles(skillsPaths(dir), { force: false });
+      const copied = join(dir, "vv-execute", "references", "tool-contracts.md");
+      const synced = await syncManagedSkillFiles(skillsPaths(dir), { force: true });
+      expect(synced.find((result) => result.path === copied)?.action).toBe("kept");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

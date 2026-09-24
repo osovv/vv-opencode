@@ -36,7 +36,14 @@
 //   cloneDelegatedPlanRun - Deep clone of one registered run for staged persistence commits.
 //   checkpointBarrierUnsatisfied - Unsatisfied barriers blocking a wave's task launches.
 //   findOverlappingInFlightReview - In-flight checkpoint scope overlap detection for declared writes.
-//   getDelegatedRunView - Read-only run serialization for tooling output.
+//   CheckpointStartGateReason - Deterministic native checkpoint start rejection reasons.
+//   CheckpointStartGate - Deterministic native checkpoint start decision shared by mutation and inspection.
+//   checkpointStartGate - Pure native checkpoint start gate (excludes the host snapshot capture).
+//   CheckpointNextAction - Supported read-only next action for one native checkpoint generation.
+//   CheckpointNextActionView - Generation budget plus gate-derived next action and prerequisite.
+//   checkpointNextAction - Read-only native checkpoint progress that never suggests a rejected start.
+//   getDelegatedRunView - Read-only native plan-run serialization for tooling output.
+//   getNativeExecutionView - Authoritative read-only execution projection for one native plan run.
 //   registerDelegatedPlan - Atomically register a validated approved delegated plan.
 //   registerDelegatedPlanInStore - Store-level registration used by the plugin and tests.
 //   startDelegatedCheckpoint - Start a due checkpoint generation with a fresh fingerprint.
@@ -54,14 +61,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added bounded checkpoint recovery: stopped generations settle as historical stopped evidence, exhausted checkpoints may grant one further generation per autonomous or root-user-authorized unit, and run views expose generation budgets and next actions.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - Extracted the shared pure native checkpoint start gate (checkpointStartGate) consumed by startDelegatedCheckpointInStore and read-only guidance; checkpointNextAction now reports `blocked` with the exact unmet prerequisite instead of promising a start the gate rejects; added the authoritative read-only getNativeExecutionView and typed getDelegatedRunView against the public DTOs. Prior C-WORKFLOW-BOUNDED-RECOVERY-R1: bounded checkpoint recovery.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { DelegatedPlanDefinition, DelegatedReviewer } from "../../lib/spec-lint.js";
+import { taskContractsFromNativeDefinition } from "../../lib/workflow-contract.js";
 import { contentSha256, type LoadedDelegatedPlan } from "./checkpoint-io.js";
-import { ensureNativeExecutions } from "./execution.js";
+import { deriveTaskStatus, ensureNativeExecutions, latestAttemptView } from "./execution.js";
 import {
   currentDelegatedAcceptance,
   reworkDelegatedWorkItem,
@@ -72,6 +80,7 @@ import {
   type LookupRecoveryUserMessage,
 } from "./delegated.js";
 import { captureWorkflowSnapshot } from "./snapshots.js";
+import type { WorkflowDelegatedRunView, WorkflowExecutionView } from "./results.js";
 import {
   cloneRecord,
   createRecordLookupKey,
@@ -560,6 +569,85 @@ export interface StartDelegatedCheckpointInput {
   checkpointId: string;
 }
 
+// START_BLOCK_CHECKPOINT_START_GATE
+/** Deterministic reasons a native checkpoint generation cannot start. */
+export type CheckpointStartGateReason =
+  | "RUN_SEALED"
+  | "ALREADY_PASSED"
+  | "ALREADY_IN_REVIEW"
+  | "ATTEMPTS_EXHAUSTED"
+  | "PREREQUISITES_NOT_ACCEPTED"
+  | "OVERLAPPING_SCOPE";
+
+export interface CheckpointStartGate {
+  ok: boolean;
+  reason?: CheckpointStartGateReason;
+  message?: string;
+}
+
+/**
+ * Pure deterministic start gate shared by the real native checkpoint start
+ * mutation and read-only inspection. It covers run sealing, prior generation
+ * state, generation budget, covered-task acceptance, and overlapping scope.
+ * The host filesystem snapshot capture remains an external prerequisite that
+ * this gate never asserts.
+ */
+export function checkpointStartGate(
+  data: WorkItemStoreData,
+  run: DelegatedPlanRun,
+  checkpoint: DelegatedRunCheckpoint,
+): CheckpointStartGate {
+  if (run.status === "sealed") {
+    return { ok: false, reason: "RUN_SEALED", message: `RUN_SEALED: run ${run.runId} is complete` };
+  }
+  if (checkpoint.status === "passed") {
+    return {
+      ok: false,
+      reason: "ALREADY_PASSED",
+      message: `ALREADY_PASSED: ${checkpoint.checkpointId} passed at generation ${checkpoint.attempts}`,
+    };
+  }
+  if (checkpoint.status === "in_review") {
+    return {
+      ok: false,
+      reason: "ALREADY_IN_REVIEW",
+      message: `ALREADY_IN_REVIEW: ${checkpoint.checkpointId} generation ${checkpoint.currentReview?.generation} is in flight`,
+    };
+  }
+  if (checkpoint.attempts >= checkpointGenerationBudget(checkpoint)) {
+    return {
+      ok: false,
+      reason: "ATTEMPTS_EXHAUSTED",
+      message: `ATTEMPTS_EXHAUSTED: ${checkpoint.checkpointId} consumed ${checkpoint.attempts} of ${checkpointGenerationBudget(checkpoint)} allowed review generations; explicit recovery is required`,
+    };
+  }
+
+  const covered = currentCoveredAttemptIds(data, run, checkpoint);
+  if (!covered.ok) {
+    return {
+      ok: false,
+      reason: "PREREQUISITES_NOT_ACCEPTED",
+      message: `PREREQUISITES_NOT_ACCEPTED: covered task ${covered.taskId} has no currently accepted attempt`,
+    };
+  }
+
+  const overlapping = [...run.checkpoints.values()].find(
+    (other) =>
+      other.checkpointId !== checkpoint.checkpointId &&
+      other.status === "in_review" &&
+      other.scope.some((file) => checkpoint.scope.includes(file)),
+  );
+  if (overlapping) {
+    return {
+      ok: false,
+      reason: "OVERLAPPING_SCOPE",
+      message: `OVERLAPPING_SCOPE: checkpoint ${overlapping.checkpointId} is in review and shares declared scope files`,
+    };
+  }
+  return { ok: true };
+}
+// END_BLOCK_CHECKPOINT_START_GATE
+
 // START_CONTRACT: startDelegatedCheckpoint
 //   PURPOSE: Start a due checkpoint generation after prerequisite acceptance, capturing a fresh scope fingerprint and opening the declared reviewer set.
 //   INPUTS: { store: WorkItemStore - backing store, input: StartDelegatedCheckpointInput - session, run, and checkpoint identity }
@@ -605,25 +693,14 @@ export async function startDelegatedCheckpointInStore(
       message: `CHECKPOINT_NOT_FOUND: ${input.checkpointId} is not declared in run ${input.runId}`,
     };
   }
-  if (checkpoint.status === "passed") {
+  // Shared deterministic gate: the same rejection the read-only guidance
+  // reports, so a suggested start can never be accepted here.
+  const gate = checkpointStartGate(data, run, checkpoint);
+  if (!gate.ok) {
     return {
       ok: false,
-      errorCode: "ALREADY_PASSED",
-      message: `ALREADY_PASSED: ${input.checkpointId} passed at generation ${checkpoint.attempts}`,
-    };
-  }
-  if (checkpoint.status === "in_review") {
-    return {
-      ok: false,
-      errorCode: "ALREADY_IN_REVIEW",
-      message: `ALREADY_IN_REVIEW: ${input.checkpointId} generation ${checkpoint.currentReview?.generation} is in flight`,
-    };
-  }
-  if (checkpoint.attempts >= checkpointGenerationBudget(checkpoint)) {
-    return {
-      ok: false,
-      errorCode: "ATTEMPTS_EXHAUSTED",
-      message: `ATTEMPTS_EXHAUSTED: ${input.checkpointId} consumed ${checkpoint.attempts} of ${checkpointGenerationBudget(checkpoint)} allowed review generations; explicit recovery is required`,
+      errorCode: gate.reason as Exclude<CheckpointStartGateReason, never>,
+      message: gate.message ?? "checkpoint cannot start",
     };
   }
 
@@ -635,21 +712,6 @@ export async function startDelegatedCheckpointInStore(
       message: `PREREQUISITES_NOT_ACCEPTED: covered task ${covered.taskId} has no currently accepted attempt`,
     };
   }
-
-  const overlapping = [...run.checkpoints.values()].find(
-    (other) =>
-      other.checkpointId !== checkpoint.checkpointId &&
-      other.status === "in_review" &&
-      other.scope.some((file) => checkpoint.scope.includes(file)),
-  );
-  if (overlapping) {
-    return {
-      ok: false,
-      errorCode: "OVERLAPPING_SCOPE",
-      message: `OVERLAPPING_SCOPE: checkpoint ${overlapping.checkpointId} is in review and shares declared scope files`,
-    };
-  }
-
   const snapshot = await captureWorkflowSnapshot({
     workspaceRoot: run.workspaceRoot,
     declaredPaths: checkpoint.scope,
@@ -1819,19 +1881,34 @@ export function findOverlappingInFlightReview(
 // END_BLOCK_BARRIER_GATES
 
 // START_BLOCK_RUN_VIEW
-type CheckpointNextAction =
+/** Supported read-only next action for one native checkpoint generation. */
+export type CheckpointNextAction =
   | "start"
   | "collect_and_verify"
   | "start_next_generation"
   | "recover"
   | "recover_with_user_authorization"
-  | "passed";
+  | "passed"
+  | "blocked";
 
-function checkpointNextAction(checkpoint: DelegatedRunCheckpoint): {
+export interface CheckpointNextActionView {
   generationBudget: number;
   remainingGenerations: number;
   nextAction: CheckpointNextAction;
-} {
+  prerequisite?: string;
+}
+
+/**
+ * Read-only native checkpoint progress. A start is only suggested while the
+ * deterministic start gate accepts; otherwise the action is `blocked` with the
+ * exact unmet prerequisite. Host snapshot capture is always stated as an
+ * external prerequisite and never as already satisfied.
+ */
+export function checkpointNextAction(
+  data: WorkItemStoreData,
+  run: DelegatedPlanRun,
+  checkpoint: DelegatedRunCheckpoint,
+): CheckpointNextActionView {
   const generationBudget = checkpointGenerationBudget(checkpoint);
   const remainingGenerations = Math.max(0, generationBudget - checkpoint.attempts);
   if (checkpoint.status === "passed") {
@@ -1845,16 +1922,25 @@ function checkpointNextAction(checkpoint: DelegatedRunCheckpoint): {
     }
     return { generationBudget, remainingGenerations, nextAction: "collect_and_verify" };
   }
-  if (checkpoint.status === "pending") {
-    return { generationBudget, remainingGenerations, nextAction: "start" };
+  if (checkpoint.status === "pending" || remainingGenerations > 0) {
+    const gate = checkpointStartGate(data, run, checkpoint);
+    if (!gate.ok) {
+      return {
+        generationBudget,
+        remainingGenerations,
+        nextAction: "blocked",
+        prerequisite: gate.message ?? "the checkpoint start gate currently rejects this generation",
+      };
+    }
+    return {
+      generationBudget,
+      remainingGenerations,
+      nextAction: checkpoint.status === "pending" ? "start" : "start_next_generation",
+      prerequisite: "the host must capture a fresh checkpoint snapshot to start this generation",
+    };
   }
-  // Failed: suggest an ordinary next generation while budget remains, then
-  // bounded recovery, then user-authorized recovery after the autonomous
-  // grant is consumed. The suggestion never proposes a start the same state
-  // would immediately reject.
-  if (remainingGenerations > 0) {
-    return { generationBudget, remainingGenerations, nextAction: "start_next_generation" };
-  }
+  // Failed and out of ordinary generations: bounded recovery, then
+  // user-authorized recovery after the autonomous grant is consumed.
   const autonomousAvailable = !checkpointAutonomousGrantConsumed(checkpoint.recoveryHistory);
   return {
     generationBudget,
@@ -1863,11 +1949,11 @@ function checkpointNextAction(checkpoint: DelegatedRunCheckpoint): {
   };
 }
 
-/** Read-only run serialization for tooling output and persistence consumers. */
+/** Read-only native plan-run serialization for tooling output and persistence consumers. */
 export function getDelegatedRunView(
   data: WorkItemStoreData,
   runId: string,
-): Record<string, unknown> | undefined {
+): WorkflowDelegatedRunView | undefined {
   const run = findRun(data, runId);
   if (!run) return undefined;
   return {
@@ -1885,14 +1971,14 @@ export function getDelegatedRunView(
       workItemId: task.workItemId,
     })),
     checkpoints: [...run.checkpoints.values()].map((checkpoint) => {
-      const progress = checkpointNextAction(checkpoint);
+      const progress = checkpointNextAction(data, run, checkpoint);
       return {
         checkpointId: checkpoint.checkpointId,
         kind: checkpoint.kind,
         afterWave: checkpoint.afterWave,
-        covers: checkpoint.covers,
-        scope: checkpoint.scope,
-        reviewers: checkpoint.reviewers,
+        covers: [...checkpoint.covers],
+        scope: [...checkpoint.scope],
+        reviewers: [...checkpoint.reviewers],
         status: checkpoint.status,
         attempts: checkpoint.attempts,
         ...(checkpoint.lastOutcome ? { lastOutcome: checkpoint.lastOutcome } : {}),
@@ -1900,19 +1986,97 @@ export function getDelegatedRunView(
         remainingGenerations: progress.remainingGenerations,
         recoveryCount: checkpointRecoveryGrantCount(checkpoint.recoveryHistory),
         nextAction: progress.nextAction,
+        ...(progress.prerequisite ? { prerequisite: progress.prerequisite } : {}),
         ...(checkpoint.currentReview
           ? {
               currentReview: {
                 reviewWorkItemId: checkpoint.currentReview.reviewWorkItemId,
                 generation: checkpoint.currentReview.generation,
-                coveredAttemptIds: checkpoint.currentReview.coveredAttemptIds,
+                coveredAttemptIds: [...checkpoint.currentReview.coveredAttemptIds],
                 recordedReviewers: Object.keys(checkpoint.currentReview.results),
               },
             }
           : {}),
-        history: checkpoint.history,
+        history: checkpoint.history.map((entry) => ({ ...entry })),
       };
     }),
+  };
+}
+
+/**
+ * Authoritative read-only execution projection for one native plan run. It reads
+ * current native lifecycle/checkpoint generations and current bound work-item
+ * acceptance rather than the one-time materialized registry snapshot, and never
+ * mutates state (no `ensureNativeExecutions`). Registry authority, when present,
+ * is merged by the inspection owner.
+ */
+export function getNativeExecutionView(
+  data: WorkItemStoreData,
+  run: DelegatedPlanRun,
+): WorkflowExecutionView {
+  const contracts = taskContractsFromNativeDefinition(run.definition);
+  const tasks = contracts.map((contract) => {
+    const workItemId = run.tasks.get(contract.taskId)?.workItemId ?? "";
+    const record = workItemId ? findRecord(data, run.sessionId, workItemId) : undefined;
+    const latestAttempt = record ? latestAttemptView(record) : undefined;
+    return {
+      taskId: contract.taskId,
+      workItemId,
+      status: deriveTaskStatus(record) ?? ("pending" as const),
+      requiredReviewers: [...contract.requiredReviewers],
+      dependsOn: [...contract.dependsOn],
+      blockedBy: [...contract.blockedBy],
+      ...(latestAttempt ? { latestAttempt } : {}),
+    };
+  });
+  const checkpoints = [...run.checkpoints.values()].map((checkpoint) => {
+    const progress = checkpointNextAction(data, run, checkpoint);
+    return {
+      checkpointId: checkpoint.checkpointId,
+      kind: checkpoint.kind,
+      covers: [...checkpoint.covers],
+      requiredReviewers: [...checkpoint.reviewers],
+      status: checkpoint.status,
+      ...(checkpoint.currentReview
+        ? {
+            reviewWorkItemId: checkpoint.currentReview.reviewWorkItemId,
+            generation: checkpoint.currentReview.generation,
+          }
+        : {}),
+      recoveryCount: checkpointRecoveryGrantCount(checkpoint.recoveryHistory),
+      attempts: checkpoint.attempts,
+      generationBudget: progress.generationBudget,
+      remainingGenerations: progress.remainingGenerations,
+      ...(checkpoint.lastOutcome ? { lastOutcome: checkpoint.lastOutcome } : {}),
+      nextAction: progress.nextAction,
+      ...(progress.prerequisite ? { prerequisite: progress.prerequisite } : {}),
+      ...(checkpoint.currentReview
+        ? {
+            currentReview: {
+              reviewWorkItemId: checkpoint.currentReview.reviewWorkItemId,
+              generation: checkpoint.currentReview.generation,
+              coveredAttemptIds: [...checkpoint.currentReview.coveredAttemptIds],
+              recordedReviewers: Object.keys(checkpoint.currentReview.results),
+            },
+          }
+        : {}),
+      history: checkpoint.history.map((entry) => ({
+        generation: entry.generation,
+        outcome: entry.outcome,
+        completedAt: entry.completedAt,
+      })),
+    };
+  });
+  return {
+    runId: run.runId,
+    sessionId: run.sessionId,
+    executionKey: `native:${run.planPath}`,
+    sourceKind: "native-package",
+    goal: `Native approved plan run ${run.runId}`,
+    state: run.status === "sealed" ? "sealed" : "active",
+    revision: 1,
+    tasks,
+    checkpoints,
   };
 }
 // END_BLOCK_RUN_VIEW

@@ -1,10 +1,10 @@
 // FILE: src/plugins/web-tools/search-service.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Build the provider-neutral web_search tool: input validation, permission request, provider dispatch, and ranked Markdown rendering.
-//   SCOPE: web_search ToolDefinition factory and Markdown rendering; delegates transport to the Exa, Brave, and direct Z.AI adapters.
-//   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts, src/plugins/web-tools/providers/brave.ts, src/plugins/web-tools/providers/zai.ts]
-//   LINKS: M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-WEB-ZAI, M-WEB-HTTP, M-PLUGIN-WEB-TOOLS, V-M-WEB-SEARCH-SERVICE, DF-WEB-SEARCH
+//   PURPOSE: Build the provider-neutral web_search tool: strict contract validation with explicit execute-time defaults, permission request, provider dispatch, and ranked Markdown rendering.
+//   SCOPE: web_search ToolDefinition factory and Markdown rendering. Validates raw host-forwarded arguments through the shared web_search contract before any permission request or provider dispatch, then delegates transport to the Exa, Brave, and direct Z.AI adapters. No credential or provider arguments and no content rewriting.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/providers/exa.ts, src/plugins/web-tools/providers/brave.ts, src/plugins/web-tools/providers/zai.ts]
+//   LINKS: M-WEB-SEARCH-SERVICE, M-WEB-EXA, M-WEB-BRAVE, M-WEB-ZAI, M-WEB-HTTP, M-PLUGIN-WEB-TOOLS, M-AGENT-TOOL-CONTRACT, V-M-WEB-SEARCH-SERVICE, DF-WEB-SEARCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -15,17 +15,22 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-GRACE-INTEGRITY-AND-COVERAGE-REMEDIATION - Applied the declared count default inside execute when OpenCode omits schema defaults.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Registered web_search from the shared schemas.ts contract, validated raw args and re-applied the documented count default at the execute boundary before any permission request or dispatch.]
 // END_CHANGE_SUMMARY
 
 import { tool, type ToolDefinition } from "@opencode-ai/plugin";
+import { ContractInputError } from "../../lib/agent-tool-contract.js";
 import type { ResolvedWebSearchConfig } from "./config.js";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "./http.js";
 import { searchBrave } from "./providers/brave.js";
 import { searchExa, WebProviderError, type WebSearchResult } from "./providers/exa.js";
 import { searchZai } from "./providers/zai.js";
-
-const z = tool.schema;
+import {
+  WEB_SEARCH_TOOL_ID,
+  validateWebSearchToolInput,
+  webSearchArgs,
+  webSearchContract,
+} from "./schemas.js";
 
 /**
  * Render ranked results as Markdown: numbered entries with [title](url),
@@ -52,36 +57,29 @@ export function renderSearchMarkdown(results: WebSearchResult[]): string {
 
 /**
  * Create the web_search tool bound to the resolved search configuration.
- * execute asks permission key web_search with patterns [query], validates the credential
- * at execution time, dispatches to exa, brave, or direct zai, and returns a ToolResult with
- * title, Markdown output, and metadata { provider, region?, resultCount, credentialSource }.
+ * execute validates raw host-forwarded arguments through the shared strict contract first,
+ * so unknown keys, invalid provided values, and out-of-range counts reject with a bounded
+ * diagnostic before any permission request, credential lookup, or provider dispatch.
+ * The documented count default is re-applied here because the host forwards unparsed raw
+ * arguments. Permission uses key web_search with patterns [query], and the result reports
+ * metadata { provider, region?, resultCount, credentialSource }.
  * Missing credentials raise an actionable error naming the environment variable
  * and the web.search.apiKey config field without printing any value.
  */
 export function createWebSearchTool(resolved: ResolvedWebSearchConfig): ToolDefinition {
   return tool({
-    description:
-      "Search the web using the configured provider and return ranked results as Markdown. Use for discovering information; returns titles, URLs, snippets, and dates.",
-    args: {
-      query: z.string().min(1).describe("The search query."),
-      count: z
-        .number()
-        .int()
-        .min(1)
-        .max(20)
-        .default(8)
-        .describe("Number of results, 1 through 20, default 8."),
-      freshness: z
-        .enum(["day", "week", "month", "year"])
-        .optional()
-        .describe("Optional time window restricting results."),
-    },
+    description: webSearchContract.description,
+    args: webSearchArgs,
     async execute(args, context) {
-      const count = args.count ?? 8;
+      const validation = validateWebSearchToolInput(args);
+      if (!validation.ok) {
+        throw new ContractInputError(WEB_SEARCH_TOOL_ID, validation.issues);
+      }
+      const { query, count, freshness } = validation.data;
 
       await context.ask({
         permission: "web_search",
-        patterns: [args.query],
+        patterns: [query],
         always: [],
         metadata: { provider: resolved.provider },
       });
@@ -95,9 +93,9 @@ export function createWebSearchTool(resolved: ResolvedWebSearchConfig): ToolDefi
       }
 
       const searchInput = {
-        query: args.query,
+        query,
         count,
-        freshness: args.freshness,
+        freshness,
         credential: resolved.credential,
         abort: context.abort,
         timeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
@@ -110,7 +108,7 @@ export function createWebSearchTool(resolved: ResolvedWebSearchConfig): ToolDefi
             : await searchExa(searchInput);
 
       return {
-        title: `web_search: ${args.query}`,
+        title: `web_search: ${query}`,
         output: renderSearchMarkdown(results),
         metadata: {
           provider: resolved.provider,

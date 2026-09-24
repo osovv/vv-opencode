@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/normalize-edits.test.ts
-// VERSION: 0.3.0
+// VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify raw hashline edit normalization into typed operations.
-//   SCOPE: Replace normalization, anchored append/prepend normalization, anchor precedence, required-lines failures, null-to-empty-array conversion for inserts, unsupported-op failures, embedded-newline entry rejection, and blank-only replacement rejection.
+//   SCOPE: Replace normalization, anchored append/prepend normalization, end-anchor fallback, conflicting pos/end rejection, closed-shape unknown-key and malformed-type rejection, blank-provided-anchor rejection, required-lines failures, null-to-empty-array conversion for inserts, unsupported-op failures, embedded-newline entry rejection, and blank-only replacement rejection.
 //   DEPENDS: [bun:test, src/plugins/hashline-edit/normalize-edits.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.4.0 - Added coverage rejecting embedded newlines in array entries and blank-only replace/replace_range payloads.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Correction cycle: added direct-entry unknown-key, malformed provided-type, and provided-but-blank anchor regressions after the normalizer adopted the schema-owned closed edit shape.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -73,13 +73,48 @@ describe("hashline normalize-edits", () => {
     ]);
   });
 
-  test("prefers pos over end when both anchors are present for inserts", () => {
+  test("uses the end anchor as a fallback when pos is omitted for inserts", () => {
+    const input: RawHashlineEdit[] = [{ op: "append", end: "3#VK#ZZ", lines: ["after"] }];
+
+    expect(normalizeHashlineEdits(input)).toEqual([
+      { op: "append", pos: "3#VK#ZZ", lines: ["after"] },
+    ]);
+  });
+
+  test("accepts identical pos and end references for inserts", () => {
     const input: RawHashlineEdit[] = [
-      { op: "prepend", pos: "3#VK#ZZ", end: "7#MB#ZZ", lines: ["before"] },
+      { op: "prepend", pos: "3#VK#ZZ", end: "3#VK#ZZ", lines: ["before"] },
     ];
 
     expect(normalizeHashlineEdits(input)).toEqual([
       { op: "prepend", pos: "3#VK#ZZ", lines: ["before"] },
+    ]);
+  });
+
+  test("treats pos and end that match after anchor trimming as non-conflicting", () => {
+    const input: RawHashlineEdit[] = [
+      { op: "append", pos: "  3#VK#ZZ ", end: "3#VK#ZZ", lines: ["after"] },
+    ];
+
+    expect(normalizeHashlineEdits(input)).toEqual([
+      { op: "append", pos: "3#VK#ZZ", lines: ["after"] },
+    ]);
+  });
+
+  test("rejects conflicting pos and end references for inserts", () => {
+    const input: RawHashlineEdit[] = [
+      { op: "prepend", pos: "3#VK#ZZ", end: "7#MB#ZZ", lines: ["before"] },
+    ];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/conflicting pos and end/i);
+  });
+
+  test("allows an unanchored append for boundary insertion and file creation", () => {
+    expect(normalizeHashlineEdits([{ op: "append", lines: ["tail"] }])).toEqual([
+      { op: "append", lines: ["tail"] },
+    ]);
+    expect(normalizeHashlineEdits([{ op: "prepend", lines: ["head"] }])).toEqual([
+      { op: "prepend", lines: ["head"] },
     ]);
   });
 
@@ -89,10 +124,50 @@ describe("hashline normalize-edits", () => {
     expect(normalizeHashlineEdits(input)).toEqual([{ op: "append", pos: "2#VK#ZZ", lines: [] }]);
   });
 
-  test("rejects edits that omit lines", () => {
+  test("rejects edits that omit lines through the shared closed shape", () => {
     const input: RawHashlineEdit[] = [{ op: "replace", pos: "2#VK#ZZ" }];
 
-    expect(() => normalizeHashlineEdits(input)).toThrow(/lines is required/);
+    expect(() => normalizeHashlineEdits(input)).toThrow(/edits\[0\]\.lines/);
+  });
+
+  test("rejects unknown properties in a direct edit entry instead of stripping them", () => {
+    const input = [
+      { op: "append", pos: "2#VK#ZZ", lines: ["after"], typo: true },
+    ] as unknown as RawHashlineEdit[];
+
+    expect(() => normalizeHashlineEdits(input)).toThrow(/edits\[0\]\.typo/);
+  });
+
+  test("rejects malformed provided optional types in a direct edit entry", () => {
+    expect(() =>
+      normalizeHashlineEdits([
+        { op: "append", pos: 7, lines: ["x"] },
+      ] as unknown as RawHashlineEdit[]),
+    ).toThrow(/edits\[0\]\.pos/);
+    expect(() =>
+      normalizeHashlineEdits([
+        { op: "append", end: 7, lines: ["x"] },
+      ] as unknown as RawHashlineEdit[]),
+    ).toThrow(/edits\[0\]\.end/);
+    expect(() =>
+      normalizeHashlineEdits([{ op: "append", lines: 5 }] as unknown as RawHashlineEdit[]),
+    ).toThrow(/edits\[0\]\.lines/);
+    expect(() =>
+      normalizeHashlineEdits([{ op: "append", lines: ["ok", 5] }] as unknown as RawHashlineEdit[]),
+    ).toThrow(/edits\[0\]\.lines\[1\]/);
+  });
+
+  test("rejects a provided-but-blank optional anchor instead of treating it as absent", () => {
+    expect(() => normalizeHashlineEdits([{ op: "append", pos: "   ", lines: ["x"] }])).toThrow(
+      /pos was provided but is blank/,
+    );
+    expect(() => normalizeHashlineEdits([{ op: "prepend", end: "", lines: ["x"] }])).toThrow(
+      /end was provided but is blank/,
+    );
+    // An omitted anchor is still a legal boundary insertion.
+    expect(normalizeHashlineEdits([{ op: "append", lines: ["x"] }])).toEqual([
+      { op: "append", lines: ["x"] },
+    ]);
   });
 
   test("rejects unsupported operations", () => {

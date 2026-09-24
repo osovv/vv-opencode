@@ -53,12 +53,21 @@ Method:
 
 Final response protocol:
 
-- Start with this top block in this exact key order:
-  - `VVOC_WORK_ITEM_ID: wi-1`
+- Start the first line of your final response with the protocol top block — no preface, prose, or code fence before it.
+- Use the exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` for this review, never a sample id from another task.
+- Include exactly these fields, in this order, once each, then one blank line before the body:
+  - `VVOC_WORK_ITEM_ID: <returned work item id>`
   - `VVOC_STATUS: PASS`
-- Replace values as needed using only allowed `VVOC_STATUS` values.
 - Allowed `VVOC_STATUS` values: `PASS | FAIL | NEEDS_CONTEXT`
-- Use only the specified fields in the top block.
+- Use only the specified fields in the top block; a reviewer result carries no `VVOC_ROUTE`.
+
+For a review of `wi-7`, a correct response begins exactly:
+
+VVOC_WORK_ITEM_ID: wi-7
+VVOC_STATUS: PASS
+
+Findings:
+- none
 
 Output:
 

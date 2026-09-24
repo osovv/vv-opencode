@@ -10,9 +10,9 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   WORK_ITEM_MODES - Canonical workflow intent values accepted by work_item_open.
+//   WORK_ITEM_MODES - Canonical workflow intent values accepted by work_item_open (re-exported from the dependency-free contract).
 //   WorkItemMode - Explicit workflow intent stored on each work item.
-//   REVIEWER_ROLES - Canonical reviewer role IDs accepted by work_item_open.
+//   REVIEWER_ROLES - Canonical reviewer role IDs accepted by work_item_open (re-exported from the dependency-free contract).
 //   ReviewerRole - Domain reviewer role IDs accepted by work_item_open.
 //   ReviewerAgentName - Tracked reviewer subagent names mapped from reviewer roles.
 //   ReviewerResultStatus - Reviewer result statuses that participate in round aggregation.
@@ -49,7 +49,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Store data now carries the common execution registry and session-wide message claims, and openWorkItemInStore is shared with the registry.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Re-exported canonical WORK_ITEM_MODES/REVIEWER_ROLES from the dependency-free workflow contract and rejected non-string delegated writeScope entries instead of stringifying them.]
 // END_CHANGE_SUMMARY
 
 import type { ParsedResultBlock, TrackedAgentName } from "./protocol.js";
@@ -57,7 +57,11 @@ import type { DelegatedWorkItemState } from "./delegated.js";
 import type { DelegatedPlanRun } from "./checkpoints.js";
 import type { WorkflowExecutionRecord } from "./execution.js";
 import type { WorkflowMessageClaim } from "../../lib/workflow-contract.js";
-import { normalizeDeclaredScopePath } from "../../lib/workflow-contract.js";
+import {
+  REVIEWER_ROLES,
+  WORK_ITEM_MODES,
+  normalizeDeclaredScopePath,
+} from "../../lib/workflow-contract.js";
 import {
   getAllowedNextAgents,
   getReviewerRoleForAgent,
@@ -66,10 +70,9 @@ import {
   resolveCompletedRoundState,
 } from "./transitions.js";
 
-export const WORK_ITEM_MODES = ["implementation", "review_only", "delegated"] as const;
+/** Canonical work-item intent values; owned by the dependency-free workflow contract. */
+export { REVIEWER_ROLES, WORK_ITEM_MODES };
 export type WorkItemMode = (typeof WORK_ITEM_MODES)[number];
-
-export const REVIEWER_ROLES = ["spec", "code"] as const;
 export type ReviewerRole = (typeof REVIEWER_ROLES)[number];
 
 export type ReviewerAgentName = "vv-spec-reviewer" | "vv-code-reviewer";
@@ -477,12 +480,19 @@ export function openWorkItemInStore(
     const normalizedScope: string[] = [];
     const seenScope = new Set<string>();
     for (const declared of input.writeScope) {
-      const normalized = normalizeDeclaredScopePath(String(declared));
+      if (typeof declared !== "string") {
+        return {
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: "INVALID_INPUT: delegated writeScope entries must be strings",
+        };
+      }
+      const normalized = normalizeDeclaredScopePath(declared);
       if (!normalized.ok) {
         return {
           ok: false,
           errorCode: "INVALID_INPUT",
-          message: `INVALID_INPUT: delegated writeScope path ${JSON.stringify(String(declared))} is malformed (${normalized.reason})`,
+          message: `INVALID_INPUT: delegated writeScope path ${JSON.stringify(declared)} is malformed (${normalized.reason})`,
         };
       }
       if (seenScope.has(normalized.path)) {

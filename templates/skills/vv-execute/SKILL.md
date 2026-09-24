@@ -189,7 +189,7 @@ Every material finding from plan.xml must be enumerated explicitly in the packet
 
 <step name="dispatch">
 Open an implementation work item with work_item_open for this task (e.g. `{ key, title, mode: "implementation", requiredReviewers: ["spec", "code"] }`).
-Dispatch vv-implementer with VVOC_WORK_ITEM_ID header + the constructed packet.
+Dispatch vv-implementer with the exact returned VVOC_WORK_ITEM_ID header + the constructed packet.
 The implementer writes code, runs tests, and returns a status. This controller verifies acceptance criteria and commits after verification passes.
 </step>
 
@@ -223,8 +223,8 @@ If criteria fail → re-dispatch implementer with specific failure details.
 
 <step name="review">
 A DONE implementer moves the work item to awaiting_reviews with a review round that requires EVERY role in requiredReviewers (spec and code). Dispatch and collect ALL required reviewers before closing:
-- Dispatch vv-spec-reviewer with the VVOC_WORK_ITEM_ID header and a spec-compliance packet.
-- Dispatch vv-code-reviewer with the VVOC_WORK_ITEM_ID header and the changed code/diff.
+- Dispatch vv-spec-reviewer with the returned VVOC_WORK_ITEM_ID header and a spec-compliance packet.
+- Dispatch vv-code-reviewer with the returned VVOC_WORK_ITEM_ID header and the changed code/diff.
 Collect both results.
 - Both PASS → the work item becomes ready_to_close → proceed to commit.
 - Any FAIL → the work item returns to awaiting_implementer. Re-dispatch the implementer with the normalized reviewer findings, then repeat handle-status → verify → review (bounded by the runtime review-round limit). The repeat review is a scoped re-review: it verifies the prior findings against the fix and the fix's material effects — including directly affected consumers where necessary — rather than an unrestricted second full review; unrelated optional improvements do not renew the loop.

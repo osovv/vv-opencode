@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added recovery coverage: resume without manufactured budget, one autonomous grant then denial, root-user grants with provenance and replay rejection, report-rejection settlement, and rework/recovery interaction.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Added write-scope validation coverage proving non-string entries are rejected with their index instead of stringified.]
 // END_CHANGE_SUMMARY
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -32,6 +32,7 @@ import {
   recoverDelegatedWorkItem,
   reworkDelegatedWorkItem,
   summarizeDelegatedProgress,
+  validateDelegatedWriteScope,
   type RecoveryUserMessageSnapshot,
 } from "./delegated.js";
 
@@ -98,6 +99,25 @@ describe("delegated work-item open validation", () => {
 
     const halfPlan = openDelegated({ planRunId: "run-1" });
     expect(halfPlan.ok).toBe(false);
+  });
+
+  test("write-scope validation rejects non-string entries with their index instead of stringifying", () => {
+    const valid = validateDelegatedWriteScope(["src/lib/feature.ts"]);
+    expect(valid.ok).toBe(true);
+    if (valid.ok) expect(valid.paths).toEqual(["src/lib/feature.ts"]);
+
+    const nonString = validateDelegatedWriteScope([123 as never, "src/lib/feature.ts"]);
+    expect(nonString.ok).toBe(false);
+    if (!nonString.ok) {
+      expect(nonString.message).toContain("index 0");
+      expect(nonString.message).toContain("string");
+    }
+
+    // Stringification is gone: a previously coerced numeric entry can never
+    // become a declared scope path.
+    const opened = openDelegated({ writeScope: [123 as never] });
+    expect(opened.ok).toBe(false);
+    if (!opened.ok) expect(opened.message).toContain("must be strings");
   });
 
   test("rejects delegated fields on legacy modes and keeps their reviewer requirements", () => {

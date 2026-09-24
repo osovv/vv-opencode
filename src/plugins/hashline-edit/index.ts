@@ -1,50 +1,62 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 0.9.0
+// VERSION: 0.10.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Route per-model edit tooling: register hashline_edit and dsh str_replace_editor; resolve the session edit mode from vvoc routing config; expose exactly one edit tool per model (the host built-in edit/apply_patch for their cohorts, the plugin profiles otherwise); and transform read output with anchors for hashline sessions.
-//   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, tool.execute.before safety net, routed read transformation, hashline/str_replace_editor execution, bounded post-edit diff feedback, and editMode telemetry metadata.
-//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/validation.ts]
-//   LINKS: [M-PLUGIN-HASHLINE-EDIT]
+//   PURPOSE: Route per-model edit tooling: register hashline_edit and dsh str_replace_editor from the single-source contracts, publish their strict input JSON Schemas, validate owned-tool arguments at the hook and direct entries, resolve the session edit mode from vvoc routing config, expose exactly one edit tool per model (the host built-in edit/apply_patch for their cohorts, the plugin profiles otherwise), and transform read output with anchors for hashline sessions.
+//   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, a shared per-session model visibility guard applied first by both the tool.execute.before hook and every registered execute entry, owned tool.definition publication plus structural/branch argument guards, routed read transformation, hashline/str_replace_editor execution through the schema validators and normalizer, bounded post-edit diff feedback, and editMode telemetry metadata with a bounded reporting-failure distinction that never echoes the thrown message and never misreports an applied edit as invalid or pristine.
+//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts]
+//   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   HashlineEditPlugin - Registers routed edit tools (hashline_edit, str_replace_editor), per-model tool visibility, and the routed read-output enhancer.
+//   HashlineEditPlugin - Registers routed edit tools (hashline_edit, str_replace_editor), per-model tool visibility, owned contract hooks, and the routed read-output enhancer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.9.0 - Removed the replace profile: the plugin no longer registers an `edit` tool, so the host built-in edit serves qwen/kimi/glm cohorts with its native layers. Routing vocabulary is apply_patch|edit|str_replace_editor|hashline_edit.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Registered both edit tools from schemas.ts, published the strict input JSON Schema through tool.definition, added owned argument validation after the existing visibility denial and at direct entries, and narrowed post-write metadata reporting failures without changing literal edit, routing, or anchor semantics.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
 import { resolve } from "node:path";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
+import {
+  ContractInputError,
+  createToolDefinitionAdapter,
+  formatContractIssues,
+} from "../../lib/agent-tool-contract.js";
 import { findFirstChangedLine, summarizeEditDiff } from "./diff-summary.js";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
 import { computeAnchorHash, computeLineHash } from "./hash-computation.js";
-import { normalizeHashlineEdits, type RawHashlineEdit } from "./normalize-edits.js";
+import { normalizeHashlineEdits } from "./normalize-edits.js";
 import {
   parseHashlineEditPluginEntry,
   resolveEditMode,
   type EditMode,
   type RoutingConfig,
 } from "./routing.js";
+import {
+  editToolContracts,
+  hashlineEditArgs,
+  hashlineEditContract,
+  strReplaceEditorArgs,
+  strReplaceEditorContract,
+  validateHashlineEditToolInput,
+  validateStrReplaceEditorToolInput,
+  type HashlineEditToolArgs,
+} from "./schemas.js";
 import { SessionFileCache, SessionModelCache, type FileSnapshot } from "./session-state.js";
 import {
-  STR_REPLACE_EDITOR_DESCRIPTION,
   StrReplaceEditor,
   type StrReplaceEditorArgs,
   type StrReplaceEditorFs,
   type StrReplaceEditorFsEntry,
 } from "./str-replace-editor.js";
-import { HASHLINE_EDIT_DESCRIPTION } from "./tool-description.js";
 import type { HashlineEdit } from "./types.js";
 import { HashlineMismatchError } from "./validation.js";
 import { loadVvocConfig } from "../../lib/config-layers.js";
 
-const z = tool.schema;
 const CONTENT_OPEN_TAG = "<content>";
 const CONTENT_CLOSE_TAG = "</content>";
 const FILE_OPEN_TAG = "<file>";
@@ -85,14 +97,30 @@ function visibleToolsForMode(mode: EditMode): EditTypeTool[] {
       return [];
   }
 }
-// END_BLOCK_ROUTING_CONSTANTS
 
-type HashlineEditArgs = {
-  filePath: string;
-  edits: RawHashlineEdit[];
-  delete?: boolean;
-  rename?: string;
-};
+/**
+ * Shared per-session model visibility guard. Both the tool.execute.before hook
+ * and every registered execute entry use it, so a directly invoked registered
+ * tool cannot bypass the model routing the hook enforces. It resolves only the
+ * session's cached model identity and performs no argument inspection, filesystem
+ * access, cache update, or metadata report.
+ */
+function assertEditToolVisible(
+  toolName: EditTypeTool,
+  sessionID: string,
+  resolveMode: (sessionID: string) => EditMode,
+): void {
+  const mode = resolveMode(sessionID);
+  const visible = visibleToolsForMode(mode);
+  if (visible.includes(toolName)) {
+    return;
+  }
+  const preferred = visible[0] ?? "the host-provided edit tool (for example apply_patch)";
+  throw new Error(
+    `${toolName} is not available for this session's model (edit mode: ${mode}). Use ${preferred} instead.`,
+  );
+}
+// END_BLOCK_ROUTING_CONSTANTS
 
 type ReadToolArgs = {
   filePath?: unknown;
@@ -461,23 +489,18 @@ function transformReadOutput(output: string, sourceLines?: string[]): string {
 
 // START_BLOCK_HASHLINE_EXECUTE
 async function executeHashlineEdit(
-  args: HashlineEditArgs,
+  args: HashlineEditToolArgs,
   context: ToolContext,
   telemetry: EditTelemetry,
 ): Promise<string> {
   try {
-    const { filePath, rename, delete: deleteMode } = args;
-    if (deleteMode && rename) {
-      return "Error: delete and rename cannot be used together";
+    const validation = validateHashlineEditToolInput(args);
+    if (!validation.ok) {
+      return `Error: ${formatContractIssues(validation.issues)}`;
     }
-    if (deleteMode && args.edits.length > 0) {
-      return "Error: delete mode requires edits to be an empty array";
-    }
-    if (!deleteMode && (!Array.isArray(args.edits) || args.edits.length === 0)) {
-      return "Error: edits parameter must be a non-empty array";
-    }
+    const { filePath, rename, delete: deleteMode } = validation.data;
 
-    const edits = deleteMode ? [] : normalizeHashlineEdits(args.edits);
+    const edits = deleteMode ? [] : normalizeHashlineEdits(validation.data.edits);
     const file = Bun.file(filePath);
     const exists = await file.exists();
 
@@ -527,15 +550,24 @@ async function executeHashlineEdit(
     }
 
     const effectivePath = isMove ? targetPath! : filePath;
-    publishSuccessMetadata({
-      context,
-      filePath: effectivePath,
-      beforeContent: oldEnvelope.content,
-      afterContent: canonicalNewContent,
-      noopEdits: applyResult.noopEdits,
-      deduplicatedEdits: applyResult.deduplicatedEdits,
-      telemetry,
-    });
+    // The content write already happened. A metadata/reporting failure must not
+    // be reported as an input rejection or a pristine file: keep the truthful
+    // applied result and tell the caller to inspect before retrying. The thrown
+    // message is intentionally not echoed — it may be unbounded or sensitive.
+    let metadataReportFailed = false;
+    try {
+      publishSuccessMetadata({
+        context,
+        filePath: effectivePath,
+        beforeContent: oldEnvelope.content,
+        afterContent: canonicalNewContent,
+        noopEdits: applyResult.noopEdits,
+        deduplicatedEdits: applyResult.deduplicatedEdits,
+        telemetry,
+      });
+    } catch {
+      metadataReportFailed = true;
+    }
 
     const diffSummary = summarizeEditDiff(oldEnvelope.content, canonicalNewContent);
     const firstChangedLine = findFirstChangedLine(oldEnvelope.content, canonicalNewContent);
@@ -546,6 +578,11 @@ async function executeHashlineEdit(
       ? `Moved ${filePath} to ${rename} (${stats})`
       : `Updated ${effectivePath} (${stats})`;
     const outputParts = [headline];
+    if (metadataReportFailed) {
+      outputParts.push(
+        `Warning: the edit was applied to ${effectivePath} but reporting metadata failed; inspect the file before retrying.`,
+      );
+    }
     for (const warning of applyResult.warnings) {
       outputParts.push(`Warning: ${warning}`);
     }
@@ -586,17 +623,25 @@ async function executeStrReplaceEditor(
   }
 
   if (args.command !== "view") {
-    context.metadata({
-      title: args.path,
-      metadata: {
-        filePath: args.path,
-        path: args.path,
-        file: args.path,
-        editMode: telemetry.editMode,
-        providerID: telemetry.providerID,
-        modelID: telemetry.modelID,
-      },
-    });
+    // The editor already wrote the file. Keep the truthful success output if the
+    // metadata report fails, and direct the caller to inspect before retrying.
+    try {
+      context.metadata({
+        title: args.path,
+        metadata: {
+          filePath: args.path,
+          path: args.path,
+          file: args.path,
+          editMode: telemetry.editMode,
+          providerID: telemetry.providerID,
+          modelID: telemetry.modelID,
+        },
+      });
+    } catch {
+      // Do not echo an arbitrary thrown message (unbounded or sensitive); state
+      // only that the applied edit's report failed and that inspection precedes retry.
+      return `${result.output}\nWarning: the edit was applied to ${args.path} but reporting metadata failed; inspect the file before retrying.`;
+    }
   }
   return result.output;
 }
@@ -623,6 +668,11 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
       modelID: model?.modelID,
     };
   };
+
+  // Owned-only contract publication: the strict input JSON Schema is published
+  // through the host's observable jsonSchema member without replacing the host
+  // decoder (T-001-proven seam).
+  const toolDefinitionAdapter = createToolDefinitionAdapter([...editToolContracts]);
 
   return {
     "chat.message": async (input, output) => {
@@ -653,19 +703,22 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
       message.tools = toolsMap;
     },
 
-    "tool.execute.before": async (input) => {
+    "tool.execute.before": async (input, output) => {
       if (!isEditTypeTool(input.tool)) {
         return;
       }
-      const mode = resolveSessionMode(input.sessionID);
-      const visible = visibleToolsForMode(mode);
-      if (visible.includes(input.tool)) {
-        return;
+      // Visibility denial stays first and unchanged: a tool that this session's
+      // model must not use is refused without exposing argument-level detail.
+      assertEditToolVisible(input.tool, input.sessionID, resolveSessionMode);
+      // Allowed tool: reject structural/operation-invalid raw arguments before
+      // the handler runs. This never mutates output.args and grants no eligibility.
+      const validation =
+        input.tool === "hashline_edit"
+          ? validateHashlineEditToolInput(output.args)
+          : validateStrReplaceEditorToolInput(output.args);
+      if (!validation.ok) {
+        throw new ContractInputError(input.tool, validation.issues);
       }
-      const preferred = visible[0] ?? "the host-provided edit tool (for example apply_patch)";
-      throw new Error(
-        `${input.tool} is not available for this session's model (edit mode: ${mode}). Use ${preferred} instead.`,
-      );
     },
 
     "tool.execute.after": async (input, output) => {
@@ -695,77 +748,33 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
 
     tool: {
       hashline_edit: tool({
-        description: HASHLINE_EDIT_DESCRIPTION,
-        args: {
-          filePath: z.string().describe("Absolute path to the file to edit"),
-          delete: z.boolean().optional().describe("Delete the file instead of editing it"),
-          rename: z.string().optional().describe("Rename the file after edits are applied"),
-          edits: z
-            .array(
-              z.object({
-                op: z.enum(["replace", "replace_range", "append", "prepend"]),
-                pos: z
-                  .string()
-                  .optional()
-                  .describe("Primary anchor in LINE#HASH#ANCHOR three-part format"),
-                end: z
-                  .string()
-                  .optional()
-                  .describe(
-                    "Optional range end anchor in LINE#HASH#ANCHOR format. With end, replace covers the inclusive range pos..end; required when op is replace_range.",
-                  ),
-                lines: z
-                  .union([z.array(z.string()), z.string(), z.null()])
-                  .describe("Replacement or inserted lines as plain text content"),
-              }),
-            )
-            .describe("Hash-anchored edit operations to apply to the file"),
+        description: hashlineEditContract.description,
+        args: hashlineEditArgs,
+        execute: async (args, context) => {
+          // Direct registered execute must not bypass the session model routing
+          // the hook enforces: deny before argument details, filesystem access,
+          // cache updates, or metadata reports.
+          assertEditToolVisible("hashline_edit", context.sessionID, resolveSessionMode);
+          return executeHashlineEdit(args, context, telemetryFor(context.sessionID));
         },
-        execute: (args, context) =>
-          executeHashlineEdit(args, context, telemetryFor(context.sessionID)),
       }),
 
       str_replace_editor: tool({
-        description: STR_REPLACE_EDITOR_DESCRIPTION,
-        args: {
-          command: z
-            .enum(["view", "create", "str_replace", "insert"])
-            .describe("The command to run: view, create, str_replace, or insert"),
-          path: z.string().describe("Absolute path to file or directory"),
-          file_text: z
-            .string()
-            .optional()
-            .describe("Required parameter of create command with the content of the new file"),
-          old_str: z
-            .string()
-            .optional()
-            .describe("Required parameter of str_replace command: the exact text to replace"),
-          new_str: z
-            .string()
-            .optional()
-            .describe(
-              "Optional parameter of str_replace command with the replacement text; required for insert",
-            ),
-          insert_line: z
-            .number()
-            .int()
-            .optional()
-            .describe("Required parameter of insert command; new_str is inserted AFTER this line"),
-          view_range: z
-            .array(z.number().int())
-            .optional()
-            .describe("Optional [start, end] line range for view; end may be -1 for end of file"),
-        },
-        execute: (args, context) =>
-          executeStrReplaceEditor(
+        description: strReplaceEditorContract.description,
+        args: strReplaceEditorArgs,
+        execute: async (args, context) => {
+          assertEditToolVisible("str_replace_editor", context.sessionID, resolveSessionMode);
+          return executeStrReplaceEditor(
             args,
             context,
             context.sessionID,
             fileCache,
             telemetryFor(context.sessionID),
-          ),
+          );
+        },
       }),
     },
+    "tool.definition": toolDefinitionAdapter,
   };
 };
 // END_BLOCK_PLUGIN

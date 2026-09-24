@@ -1,10 +1,10 @@
 // FILE: src/plugins/web-tools.integration.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify WebToolsPlugin toggle behavior, canonical tool registration, runtime built-in suppression, diagnostics, and tracked-config warnings.
-//   SCOPE: Plugin-level tests using isolated vvoc project configs and stubbed OpenCode logging.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/web-tools/index.ts]
-//   LINKS: M-PLUGIN-WEB-TOOLS, V-M-PLUGIN-WEB-TOOLS, DF-WEB-SEARCH, DF-WEB-FETCH
+//   PURPOSE: Verify WebToolsPlugin toggle behavior, canonical tool registration, owned contract publication and pre-execute validation, runtime built-in suppression, diagnostics, and tracked-config warnings.
+//   SCOPE: Plugin-level tests using isolated vvoc project configs and stubbed OpenCode logging; deterministic fetch stubs where dispatch must be proven absent.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, @opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/web-tools/index.ts]
+//   LINKS: M-PLUGIN-WEB-TOOLS, V-M-PLUGIN-WEB-TOOLS, M-AGENT-TOOL-CONTRACT, DF-WEB-SEARCH, DF-WEB-FETCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -15,17 +15,19 @@
 //   createProject - Write an isolated project-layer vvoc config.
 //   createPluginInput - Build a stubbed OpenCode PluginInput.
 //   createPlugin - Instantiate WebToolsPlugin with isolated config and log capture.
+//   createToolContext - Build a tool execution context fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Covered regional Z.AI startup diagnostics without credential leakage.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Covered owned definition publication, owned-only pre-execute rejection with no permission/dispatch, and direct execute rejection while preserving toggle, suppression, and diagnostics behavior.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Config, PluginInput } from "@opencode-ai/plugin";
+import type { Config, PluginInput, ToolContext } from "@opencode-ai/plugin";
+import { ContractInputError } from "../lib/agent-tool-contract.js";
 import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
 import { applyBuiltinSuppression, WebToolsPlugin } from "./web-tools/index.js";
@@ -89,6 +91,19 @@ async function createPlugin(config: VvocConfig) {
   return { directory, logs, plugin };
 }
 
+function createToolContext(ask: ToolContext["ask"] = async () => undefined): ToolContext {
+  return {
+    sessionID: "session-1",
+    messageID: "message-1",
+    agent: "test-agent",
+    directory: "/tmp/project",
+    worktree: "/tmp/project",
+    abort: new AbortController().signal,
+    metadata: () => undefined,
+    ask,
+  };
+}
+
 describe("applyBuiltinSuppression", () => {
   test("creates permission rules and denies both built-in web tools", () => {
     const config = {} as Config;
@@ -129,6 +144,119 @@ describe("WebToolsPlugin", () => {
     const runtimeConfig = {} as Config;
     await plugin.config?.(runtimeConfig);
     expect(runtimeConfig.permission).toMatchObject({ webfetch: "deny", websearch: "deny" });
+  });
+
+  test("publishes strict input schemas for both owned tools and leaves others untouched", async () => {
+    const { plugin } = await createPlugin(createDefaultVvocConfig());
+    const definition = plugin["tool.definition"]!;
+
+    const searchOutput: Record<string, unknown> = {
+      description: "search",
+      parameters: {},
+      jsonSchema: {},
+    };
+    await definition({ toolID: "web_search" } as never, searchOutput as never);
+    const searchSchema = searchOutput.jsonSchema as Record<string, unknown>;
+    expect(searchSchema.additionalProperties).toBe(false);
+    expect(Object.keys(searchSchema.properties as Record<string, unknown>).sort()).toEqual([
+      "count",
+      "freshness",
+      "query",
+    ]);
+
+    const fetchOutput: Record<string, unknown> = {
+      description: "fetch",
+      parameters: {},
+      jsonSchema: {},
+    };
+    await definition({ toolID: "web_fetch" } as never, fetchOutput as never);
+    const fetchSchema = fetchOutput.jsonSchema as Record<string, unknown>;
+    expect(fetchSchema.additionalProperties).toBe(false);
+    expect(Object.keys(fetchSchema.properties as Record<string, unknown>).sort()).toEqual([
+      "format",
+      "timeout",
+      "url",
+    ]);
+
+    // Unowned tool ids are never republished or rejected by the owned adapter.
+    const otherOutput: Record<string, unknown> = {
+      description: "other",
+      parameters: { host: "decoder" },
+      jsonSchema: { type: "object" },
+    };
+    await definition({ toolID: "bash" } as never, otherOutput as never);
+    expect(otherOutput.jsonSchema).toEqual({ type: "object" });
+  });
+
+  test("tool.execute.before rejects invalid owned arguments before any permission or dispatch", async () => {
+    const { plugin } = await createPlugin(createDefaultVvocConfig());
+    const before = plugin["tool.execute.before"]!;
+    const originalFetch = globalThis.fetch;
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return new Response("unexpected");
+    }) as unknown as typeof fetch;
+    try {
+      const invalidCalls: Array<{ tool: string; args: Record<string, unknown> }> = [
+        { tool: "web_search", args: { query: "vvoc", count: 0 } },
+        { tool: "web_search", args: { query: "vvoc", apiKey: "never-print-this" } },
+        { tool: "web_fetch", args: { url: "file:///tmp/secret" } },
+        { tool: "web_fetch", args: { url: "https://example.test/page", timeout: 0 } },
+        { tool: "web_fetch", args: { url: "https://example.test/page", credential: "secret" } },
+      ];
+      for (const call of invalidCalls) {
+        await expect(
+          before(
+            { tool: call.tool, sessionID: "session-1", callID: "c1" } as never,
+            { args: call.args } as never,
+          ),
+        ).rejects.toBeInstanceOf(ContractInputError);
+      }
+      expect(fetched).toBe(false);
+
+      // Unrelated host or MCP tools are never intercepted.
+      await expect(
+        before(
+          { tool: "bash", sessionID: "session-1", callID: "c2" } as never,
+          { args: { command: "echo hi" } } as never,
+        ),
+      ).resolves.toBeUndefined();
+      await expect(
+        before(
+          { tool: "some_mcp_tool", sessionID: "session-1", callID: "c3" } as never,
+          { args: {} } as never,
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("direct owned execute rejects invalid arguments without a permission prompt or fetch", async () => {
+    const { plugin } = await createPlugin(createDefaultVvocConfig());
+    const originalFetch = globalThis.fetch;
+    let fetched = false;
+    let asked = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return new Response("unexpected");
+    }) as unknown as typeof fetch;
+    try {
+      const context = createToolContext(async () => {
+        asked = true;
+      });
+      await expect(
+        plugin.tool!.web_search.execute({ query: "vvoc", count: 0 } as never, context as never),
+      ).rejects.toBeInstanceOf(ContractInputError);
+      await expect(
+        plugin.tool!.web_fetch.execute({ url: "ftp://example.test/x" } as never, context as never),
+      ).rejects.toBeInstanceOf(ContractInputError);
+      expect(asked).toBe(false);
+      expect(fetched).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("logs provider names and credential sources without credential values", async () => {

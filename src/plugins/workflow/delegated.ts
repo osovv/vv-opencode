@@ -48,6 +48,9 @@
 //   delegatedRecoveryGrantCount - Number of budget-granting recovery entries in a history.
 //   delegatedAutonomousGrantConsumed - Whether the single autonomous grant is already recorded.
 //   currentDelegatedAcceptance - Currently applicable acceptance for a record.
+//   DelegatedLaunchGateReason - Item-level ordinary launch rejection reasons.
+//   DelegatedLaunchGate - Item-level ordinary launch decision shared by mutation and inspection.
+//   delegatedOrdinaryLaunchGate - Pure item-level ordinary-implementer launch gate.
 //   summarizeDelegatedProgress - Budget, terminal-state, and next-action summary for inspection.
 //   DelegatedDecisionInputValidation - Shape accepted by validateDelegatedDecisionInput.
 //   validateDelegatedWriteScope - Validates declared write-scope text into canonical normalized paths.
@@ -74,7 +77,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added bounded recovery with a single autonomous grant, replay-protected root-user message authorization, terminal report-rejection settlement preserving substantive hard stops, and recovery-aware budgets and progress summaries.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - Extracted the shared pure item-level ordinary-launch gate (delegatedOrdinaryLaunchGate) now consumed by beginDelegatedLaunchInStore and the read-only inspection guidance so a suggested launch can never disagree with the real mutation gate. Prior T-002: validateDelegatedWriteScope rejects non-string entries with their index instead of stringifying them into the declared scope.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -215,6 +218,69 @@ export function delegatedAutonomousGrantConsumed(
   return history.some((entry) => entry.kind === "autonomous_grant");
 }
 
+// START_BLOCK_DELEGATED_LAUNCH_GATE
+/** Item-level reasons an ordinary delegated implementer launch is rejected. */
+export type DelegatedLaunchGateReason =
+  | "WORK_ITEM_NOT_FOUND"
+  | "WORK_ITEM_ALREADY_CLOSED"
+  | "WRONG_MODE"
+  | "INVALID_STATE"
+  | "ATTEMPT_IN_FLIGHT"
+  | "ATTEMPTS_EXHAUSTED";
+
+/** Item-level ordinary-implementer launch decision shared by mutation and inspection. */
+export interface DelegatedLaunchGate {
+  ok: boolean;
+  reason?: DelegatedLaunchGateReason;
+  message?: string;
+}
+
+/**
+ * Pure item-level ordinary-implementer launch gate. `beginDelegatedLaunchInStore`
+ * consumes this so the real mutation and read-only inspection surface the same
+ * coded rejection and message. It never reads a store beyond the supplied record.
+ */
+export function delegatedOrdinaryLaunchGate(record: WorkItemRecord): DelegatedLaunchGate {
+  if (record.state === "closed") {
+    return {
+      ok: false,
+      reason: "WORK_ITEM_ALREADY_CLOSED",
+      message: `WORK_ITEM_ALREADY_CLOSED: ${record.workItemId} is already closed`,
+    };
+  }
+  if (record.mode !== "delegated" || !record.delegated) {
+    return {
+      ok: false,
+      reason: "WRONG_MODE",
+      message: `WRONG_MODE: ${record.workItemId} is ${record.mode}, not delegated`,
+    };
+  }
+  if (!getAllowedNextAgents(record).includes("vv-implementer")) {
+    return {
+      ok: false,
+      reason: "INVALID_STATE",
+      message: `INVALID_STATE: ${record.workItemId} is ${record.state} and cannot start an implementation attempt`,
+    };
+  }
+  const delegated = record.delegated;
+  if (delegated.attempts.some((attempt) => attempt.status === "in_flight")) {
+    return {
+      ok: false,
+      reason: "ATTEMPT_IN_FLIGHT",
+      message: `ATTEMPT_IN_FLIGHT: ${record.workItemId} already has an in-flight implementation attempt`,
+    };
+  }
+  if (delegated.attempts.length >= delegatedAttemptBudget(delegated)) {
+    return {
+      ok: false,
+      reason: "ATTEMPTS_EXHAUSTED",
+      message: `ATTEMPTS_EXHAUSTED: ${record.workItemId} consumed ${delegated.attempts.length} of ${delegatedAttemptBudget(delegated)} allowed attempts; explicit recovery or checkpoint-authorized rework is required`,
+    };
+  }
+  return { ok: true };
+}
+// END_BLOCK_DELEGATED_LAUNCH_GATE
+
 /** Currently applicable acceptance for a record: the latest unrevoked acceptance. */
 export function currentDelegatedAcceptance(
   record: WorkItemRecord,
@@ -241,12 +307,19 @@ export function validateDelegatedWriteScope(
   }
   const normalized: string[] = [];
   const seen = new Set<string>();
-  for (const declared of paths) {
-    const result = normalizeDeclaredScopePath(String(declared));
+  for (let index = 0; index < paths.length; index += 1) {
+    const declared: unknown = paths[index];
+    if (typeof declared !== "string") {
+      return {
+        ok: false,
+        message: `writeScope entry at index ${index} must be a string`,
+      };
+    }
+    const result = normalizeDeclaredScopePath(declared);
     if (!result.ok) {
       return {
         ok: false,
-        message: `writeScope path ${JSON.stringify(String(declared))} is malformed (${result.reason})`,
+        message: `writeScope path ${JSON.stringify(declared)} is malformed (${result.reason})`,
       };
     }
     if (seen.has(result.path)) {
@@ -481,6 +554,7 @@ export type DelegatedNextAction =
   | "decide"
   | "recover"
   | "recover_with_user_authorization"
+  | "launch_blocked"
   | "close"
   | "closed";
 
@@ -648,43 +722,17 @@ export function beginDelegatedLaunchInStore(
       message: `WORK_ITEM_NOT_FOUND: ${input.workItemId}`,
     };
   }
-  if (existing.state === "closed") {
+  // Shared item-level gate: the same coded rejection the read-only inspection
+  // guidance reports, so a suggested launch can never be accepted here.
+  const gate = delegatedOrdinaryLaunchGate(existing);
+  if (!gate.ok) {
     return {
       ok: false,
-      errorCode: "WORK_ITEM_ALREADY_CLOSED",
-      message: `WORK_ITEM_ALREADY_CLOSED: ${input.workItemId} is already closed`,
+      errorCode: gate.reason as Exclude<DelegatedLaunchGateReason, "WORK_ITEM_NOT_FOUND">,
+      message: gate.message ?? `INVALID_STATE: ${input.workItemId} cannot start an attempt`,
     };
   }
-  if (existing.mode !== "delegated" || !existing.delegated) {
-    return {
-      ok: false,
-      errorCode: "WRONG_MODE",
-      message: `WRONG_MODE: ${input.workItemId} is ${existing.mode}, not delegated`,
-    };
-  }
-  if (!getAllowedNextAgents(existing).includes("vv-implementer")) {
-    return {
-      ok: false,
-      errorCode: "INVALID_STATE",
-      message: `INVALID_STATE: ${input.workItemId} is ${existing.state} and cannot start an implementation attempt`,
-    };
-  }
-
-  const delegated = existing.delegated;
-  if (delegated.attempts.some((attempt) => attempt.status === "in_flight")) {
-    return {
-      ok: false,
-      errorCode: "ATTEMPT_IN_FLIGHT",
-      message: `ATTEMPT_IN_FLIGHT: ${input.workItemId} already has an in-flight implementation attempt`,
-    };
-  }
-  if (delegated.attempts.length >= delegatedAttemptBudget(delegated)) {
-    return {
-      ok: false,
-      errorCode: "ATTEMPTS_EXHAUSTED",
-      message: `ATTEMPTS_EXHAUSTED: ${input.workItemId} consumed ${delegated.attempts.length} of ${delegatedAttemptBudget(delegated)} allowed attempts; explicit recovery or checkpoint-authorized rework is required`,
-    };
-  }
+  const delegated = existing.delegated!;
 
   // A host callID is a single-shot identity within a parent session. Reusing it
   // for a new attempt — in this item or any other — would let a delayed event

@@ -1,10 +1,10 @@
 // FILE: src/plugins/workflow/tooling.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses.
-//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with delegated-mode open validation and mode-specific serialization including recovery-aware progress summaries; generic execution registration/append through an optional execution descriptor or runId; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, native plan registration, checkpoint start/verify, failed-checkpoint rework authorization, bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup, and the generic (non-native) checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions. Tool argument shapes are single-sourced from src/plugins/workflow/schemas.ts.
-//   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/execution.ts, src/plugins/workflow/authority.ts, src/plugins/workflow/schemas.ts, src/lib/workflow-contract.ts, src/plugins/workflow/state.ts]
-//   LINKS: M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY, M-PLUGIN-WORKFLOW
+//   PURPOSE: Provide work-item tooling handlers that wrap explicit workflow state operations with structured protocol-friendly responses under strict branch-aware input validation.
+//   SCOPE: work_item_open, work_item_list, and work_item_close tool definitions with standalone/generic open validation and mode-specific serialization including recovery-aware progress summaries; generic execution registration/append through an optional execution descriptor or runId with typed sources, boundaries, tasks, and checkpoints; work_item_decide and work_checkpoint control-tool definitions wrapping delegated decisions, native plan registration, checkpoint start/verify, failed-checkpoint rework authorization, bounded recover for stopped or exhausted targets with optional root-user message authorization through a read-only lookup, and the generic (non-native) checkpoint, completion, amendment, advance-authority, stage-approval, and revocation actions. Every handler validates raw arguments through validateWorkflowToolInput before dispatch or mutation and then consumes the parsed canonical values; provided-plan references/hashes are trimmed so source identity stays idempotent, run session ownership is resolved before any source-specific diagnostic or action discrimination, source-dependent known fields are rejected only after an owned run's source is resolved, authority replay/extension compares the supplied scope against the recorded scope, and unknown runs fail as lookup failures rather than missing native-only fields. Tool argument shapes are single-sourced from src/plugins/workflow/schemas.ts.
+//   DEPENDS: [src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/execution.ts, src/plugins/workflow/authority.ts, src/plugins/workflow/input-validation.ts, src/plugins/workflow/schemas.ts, src/plugins/workflow/results.ts, src/lib/agent-tool-contract.ts, src/lib/workflow-contract.ts, src/plugins/workflow/state.ts]
+//   LINKS: M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY, M-WORKFLOW-CONTRACT, M-AGENT-TOOL-CONTRACT, M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -13,8 +13,8 @@
 //   WorkflowToolContext - Minimal execution context required by workflow tools.
 //   WorkflowToolDefinition - Deterministic tool definition shape with an optionally async execute handler.
 //   DelegatedControlOptions - Optional read-only authorization lookup bound to the plugin SDK client.
-//   createWorkItemOpenTool - Creates work_item_open tool wrapper around explicit openWorkItem contract including standalone delegated tasks.
-//   createWorkItemListTool - Creates work_item_list tool wrapper with mode, round metadata, delegated acceptance and recovery state, and registered plan runs.
+//   createWorkItemOpenTool - Creates work_item_open tool wrapper around explicit openWorkItem contract including standalone delegated tasks and generic execution registration/append.
+//   createWorkItemListTool - Creates work_item_list tool wrapper returning the additive read-only inspection payload (items, plan runs, executions, loaded contract identity).
 //   createWorkItemCloseTool - Creates work_item_close tool wrapper with ready_to_close gating responses.
 //   createWorkItemDecideTool - Creates work_item_decide control wrapper around decideDelegatedWorkItem, rework authorization, and bounded recovery.
 //   createWorkCheckpointTool - Creates work_checkpoint control wrapper around plan registration, checkpoint start, verify, checkpoint recovery, and generic checkpoint/completion/amendment/authority actions.
@@ -27,24 +27,19 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-INDEX-REDUCE - Argument shapes moved to single-sourced schemas.ts with z.infer types re-exported here; accepted shapes are unchanged.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - work_item_list delegates to the read-only inspection owner; every handler that reports a delegated next action (open, failure context, recovery) now composes the same deriveDelegatedGuidance as the list so responses cannot contradict it, and generic register/amend plus checkpoint amend/complete execution views pass live store data so task status derives from current acceptance. Prior T-003: every handler result is finalized so failures carry a stable category. A missing trusted workspace root/plan loader/authorization lookup is a distinct host_context failure instead of INVALID_INPUT.]
 // END_CHANGE_SUMMARY
 
 import {
   closeWorkItem,
-  getReviewRound,
-  listWorkItems,
   openWorkItem,
   type OpenWorkItemInput,
-  type ReviewerRole,
-  type WorkItemMode,
   type WorkItemRecord,
   type WorkItemStore,
   type WorkItemStoreData,
 } from "./state.js";
 import {
   authorizeReworkFromFailedCheckpoint,
-  getDelegatedRunView,
   recoverDelegatedCheckpoint,
   registerDelegatedPlan,
   startDelegatedCheckpoint,
@@ -65,6 +60,7 @@ import {
   completeExecutionInStore,
   findExecution,
   getExecutionView,
+  latestAttemptView,
   recordGenericReviewerResultInStore,
   recoverGenericCheckpointInStore,
   putAuthorityInStore,
@@ -73,6 +69,7 @@ import {
 } from "./execution.js";
 import {
   advanceUnitsAvailable,
+  authorityScopeDifferences,
   effectiveAuthorityStages,
   extendAdvanceAuthority,
   grantAdvanceAuthority,
@@ -84,14 +81,34 @@ import {
 } from "./authority.js";
 import type { LoadedDelegatedPlan } from "./checkpoint-io.js";
 import type {
-  WorkflowAuthorityStage,
-  WorkflowExecutionBoundary,
+  WorkflowAuthorityScope,
   WorkflowExecutionSource,
   WorkflowReserveDebit,
   WorkflowReviewer,
   WorkflowTaskContract,
+  WorkflowCheckpointContract,
 } from "../../lib/workflow-contract.js";
-import type { CheckpointArgs, CloseArgs, DecideArgs, ListArgs } from "./schemas.js";
+import {
+  validateExecutionBoundary,
+  validateWorkflowCheckpointContract,
+} from "../../lib/workflow-contract.js";
+import { type ContractIssue } from "../../lib/agent-tool-contract.js";
+import { WORKFLOW_TOOL_DESCRIPTIONS, validateWorkflowToolInput } from "./input-validation.js";
+import { getWorkflowInspection, deriveDelegatedGuidance, serializeWorkItem } from "./inspection.js";
+import {
+  finalizeWorkflowResult,
+  workflowHostContextFailure,
+  workflowInputFailure,
+  type WorkflowFailureResult,
+} from "./results.js";
+import type {
+  CheckpointArgs,
+  CloseArgs,
+  DecideArgs,
+  ListArgs,
+  OpenExecutionInput,
+  OpenItemInput,
+} from "./schemas.js";
 
 // Argument shapes are single-sourced with the plugin registrations in index.ts
 // through the schemas module; re-export them here for existing importers.
@@ -120,31 +137,14 @@ export interface DelegatedControlOptions {
   }) => Promise<AuthorityMessageSnapshot | undefined>;
 }
 
-type OpenInputItem = {
-  key?: unknown;
-  title?: unknown;
-  mode?: unknown;
-  requiredReviewers?: unknown;
-  writeScope?: unknown;
-  planRunId?: unknown;
-  planTaskId?: unknown;
-  /** Generic execution task-contract fields. */
-  taskId?: unknown;
-  goal?: unknown;
-  acceptanceCriteria?: unknown;
-  verification?: unknown;
-  dependsOn?: unknown;
-  blockedBy?: unknown;
-};
-
 /**
  * work_item_open wrapper input. Deliberately looser than the registered
  * schema shape in schemas.ts: this wrapper is the defensive validator for
  * partially-shaped caller input, so item and descriptor fields stay unknown
- * here and are rejected or normalized by the wrapper itself.
+ * here and are rejected by validateWorkflowToolInput before any dispatch.
  */
 type OpenToolInput = {
-  items: OpenInputItem[];
+  items: unknown;
   /** Generic execution descriptor; mutually exclusive with runId. */
   execution?: unknown;
   /** Append tasks to an existing generic execution. */
@@ -159,100 +159,218 @@ function coerceNonEmptyString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-function isWorkItemMode(value: unknown): value is WorkItemMode {
-  return value === "implementation" || value === "review_only" || value === "delegated";
+function invalidInput(
+  tool: string,
+  sessionId: string,
+  issues: readonly ContractIssue[],
+): WorkflowFailureResult {
+  // Preserve the exact bounded tokenized issues; the early execute.before hook
+  // throws the same ContractInputError form, so hook and handler agree.
+  return workflowInputFailure(tool, sessionId, issues);
 }
 
-function isReviewerRole(value: unknown): value is ReviewerRole {
-  return value === "spec" || value === "code";
+/** A missing trusted workspace root/plan loader/authorization lookup is host context, not caller input. */
+function hostContextInvalid(
+  tool: string,
+  sessionId: string,
+  message: string,
+): WorkflowFailureResult {
+  return workflowHostContextFailure(tool, sessionId, message);
 }
 
-function canonicalizeReviewers(value: unknown): ReviewerRole[] | undefined {
-  if (!Array.isArray(value) || value.length === 0) return undefined;
-  if (!value.every(isReviewerRole)) return undefined;
-  const unique = new Set(value);
-  if (unique.size !== value.length) return undefined;
-  return [...value].sort((left, right) => {
-    if (left === right) return 0;
-    return left === "spec" ? -1 : 1;
+// START_BLOCK_RESULT_FINALIZATION
+/**
+ * Finalize one handler result so failures carry a stable category, bounded
+ * prerequisite, and (where owned state is known) concrete current-state,
+ * attempt, status, and budget context. Batch item failures are finalized too.
+ */
+function withFinalizedResult<TArgs>(
+  definition: WorkflowToolDefinition<TArgs, Record<string, unknown>>,
+): WorkflowToolDefinition<TArgs, Record<string, unknown>> {
+  const execute = definition.execute;
+  return {
+    ...definition,
+    execute: (args, context, store) => finalizeWorkflowResult(execute(args, context, store)),
+  };
+}
+
+/** Async variant of `withFinalizedResult` for control tools. */
+function withFinalizedAsyncResult<TArgs>(
+  definition: WorkflowToolDefinition<TArgs, Promise<Record<string, unknown>>>,
+): WorkflowToolDefinition<TArgs, Promise<Record<string, unknown>>> {
+  const execute = definition.execute;
+  return {
+    ...definition,
+    async execute(args, context, store) {
+      return finalizeWorkflowResult(await execute(args, context, store));
+    },
+  };
+}
+
+/**
+ * Compose the shared delegated guidance for one owned record so every response
+ * that reports a next action (list, open, failure, recovery) uses the same
+ * snapshot-level gates and can never contradict the list view.
+ */
+function delegatedGuidanceFor(store: WorkItemStore, sessionId: string, record: WorkItemRecord) {
+  return deriveDelegatedGuidance({
+    record,
+    progress: summarizeDelegatedProgress(record),
+    latest: latestAttemptView(record),
+    context: { data: store.getStoreData(), sessionId },
   });
 }
 
+/**
+ * Bounded current-state context for an owned same-session work-item failure.
+ * Read only after access checks; it never dumps the private store or foreign
+ * records, and it is composed from existing eligibility helpers.
+ */
+function ownedWorkItemFailureContext(
+  store: WorkItemStore,
+  sessionId: string,
+  workItemId: string,
+  errorCode: string,
+): Partial<WorkflowFailureResult> {
+  const record = store.getWorkItem(sessionId, workItemId);
+  if (!record) return {};
+  const context: {
+    state?: string;
+    attempt?: number;
+    attemptStatus?: string;
+    resultStatus?: string;
+    attemptBudget?: number;
+    remainingAttempts?: number;
+    recoveryCount?: number;
+    pendingReviewers?: string[];
+    prerequisite?: string;
+    nextAction?: string;
+  } = { state: record.state };
+  if (record.currentRound) {
+    context.pendingReviewers = [...record.currentRound.pendingReviewers];
+  }
+  if (record.delegated) {
+    const progress = summarizeDelegatedProgress(record);
+    const guidance = delegatedGuidanceFor(store, sessionId, record);
+    context.attemptBudget = progress.attemptBudget;
+    context.remainingAttempts = progress.remainingAttempts;
+    context.recoveryCount = progress.recoveryGrants;
+    context.nextAction = guidance.nextAction;
+    if (guidance.nextAction === "launch_blocked" && guidance.prerequisites.length > 0) {
+      context.prerequisite = guidance.prerequisites[0];
+    }
+    const attempts = record.delegated.attempts;
+    const latest = attempts.length > 0 ? attempts[attempts.length - 1] : undefined;
+    if (latest) {
+      context.attempt = latest.attempt;
+      context.attemptStatus = latest.status;
+      if (latest.resultStatus !== undefined) context.resultStatus = latest.resultStatus;
+    }
+  }
+  const prerequisite = ownedPrerequisite(record, errorCode);
+  if (prerequisite !== undefined && context.prerequisite === undefined) {
+    context.prerequisite = prerequisite;
+  }
+  return context;
+}
+
+/**
+ * Real unmet prerequisite for the record's current state and the failure code.
+ * Family-specific codes keep their precise condition; otherwise the current
+ * owned state determines the prerequisite.
+ */
+function ownedPrerequisite(record: WorkItemRecord, errorCode: string): string | undefined {
+  switch (errorCode) {
+    case "CONCERNS_DISPOSITION_REQUIRED":
+      return "an explicit concernsDisposition for the DONE_WITH_CONCERNS attempt";
+    case "UNEXPECTED_CONCERNS_DISPOSITION":
+      return "an attempt that completed DONE_WITH_CONCERNS";
+    case "INVALID_ATTEMPT":
+    case "ATTEMPT_MISMATCH":
+      return "the current completed attempt number for this work item";
+    case "ATTEMPT_NOT_TERMINAL":
+      return "a terminal targeted attempt";
+    case "ATTEMPTS_EXHAUSTED":
+      return "an explicit recovery grant or checkpoint-authorized rework";
+    case "AUTONOMOUS_GRANT_EXHAUSTED":
+      return "a recorded advance authority or a fresh root-user message";
+    default:
+      break;
+  }
+  if (record.delegated) {
+    if (record.state === "ready_to_close") return undefined;
+    if (record.state === "awaiting_acceptance") {
+      return "a controller accept/request_changes decision for the current completed attempt";
+    }
+    if (record.state === "blocked" || record.state === "needs_context") {
+      return "a bounded recovery (or an authorized advance) for the stopped attempt";
+    }
+    if (record.currentRound && record.currentRound.pendingReviewers.length > 0) {
+      return "a completed review round from every required reviewer";
+    }
+    if (currentDelegatedAcceptance(record) === undefined) {
+      return "a current controller acceptance for the latest completed attempt";
+    }
+    return "a current controller decision, recovery, or rework authorization for this delegated item";
+  }
+  if (
+    record.state === "awaiting_reviews" ||
+    (record.currentRound && record.currentRound.pendingReviewers.length > 0)
+  ) {
+    return "a completed review round from every required reviewer";
+  }
+  return undefined;
+}
+// END_BLOCK_RESULT_FINALIZATION
+
 // START_BLOCK_GENERIC_NORMALIZATION
-function isWorkflowReviewer(value: unknown): value is WorkflowReviewer {
-  return value === "spec" || value === "code";
-}
-
-function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String) : [];
-}
-
-/** Normalize one tool item into a bounded generic task contract. */
+/** Normalize one structurally validated generic task item into a bounded task contract. */
 function normalizeTaskContract(
-  item: OpenInputItem,
+  item: OpenItemInput,
 ): { ok: true; contract: WorkflowTaskContract } | { ok: false; message: string } {
   const taskId = coerceNonEmptyString(item.taskId) ?? coerceNonEmptyString(item.key);
   const title = coerceNonEmptyString(item.title) ?? taskId;
   if (!taskId || !title) {
     return { ok: false, message: "each task item requires a non-empty taskId (or key) and title" };
   }
-  if (!Array.isArray(item.requiredReviewers)) {
-    return {
-      ok: false,
-      message:
-        "requiredReviewers must be declared explicitly for each task (use [] for no independent review)",
-    };
-  }
-  const reviewers = item.requiredReviewers;
-  if (!reviewers.every(isWorkflowReviewer) || new Set(reviewers).size !== reviewers.length) {
-    return { ok: false, message: "requiredReviewers must be a unique spec/code array" };
-  }
+  // Structural validation guarantees an explicit unique spec/code reviewer array.
+  const reviewers = item.requiredReviewers as WorkflowReviewer[];
   return {
     ok: true,
     contract: {
       taskId,
       title,
       goal: coerceNonEmptyString(item.goal) ?? title,
-      acceptanceCriteria: stringList(item.acceptanceCriteria),
-      verification: stringList(item.verification),
-      writeScope: stringList(item.writeScope),
-      dependsOn: stringList(item.dependsOn),
-      blockedBy: stringList(item.blockedBy),
-      requiredReviewers: [...(reviewers as WorkflowReviewer[])],
+      acceptanceCriteria: [...(item.acceptanceCriteria ?? [])],
+      verification: [...(item.verification ?? [])],
+      writeScope: [...(item.writeScope ?? [])],
+      dependsOn: [...(item.dependsOn ?? [])],
+      blockedBy: [...(item.blockedBy ?? [])],
+      requiredReviewers: [...reviewers],
     },
   };
 }
 
-function normalizeExecutionSource(raw: unknown): WorkflowExecutionSource | undefined {
-  if (raw === null || typeof raw !== "object") return undefined;
-  const candidate = raw as Record<string, unknown>;
-  if (candidate.kind === "conversation-scoped") return { kind: "conversation-scoped" };
-  if (candidate.kind === "provided-plan") {
-    const reference = coerceNonEmptyString(candidate.reference);
-    if (!reference) return undefined;
-    const sha256 = coerceNonEmptyString(candidate.sha256);
-    return { kind: "provided-plan", reference, ...(sha256 ? { sha256 } : {}) };
+/** Convert typed checkpoint inputs into validated common checkpoint contracts. */
+function normalizeCheckpointInputContracts(
+  raw: readonly unknown[] | undefined,
+): { ok: true; contracts: WorkflowCheckpointContract[] } | { ok: false; message: string } {
+  const contracts: WorkflowCheckpointContract[] = [];
+  for (const entry of raw ?? []) {
+    const validated = validateWorkflowCheckpointContract(entry);
+    if (!validated.ok) {
+      return {
+        ok: false,
+        message: validated.problems.map((problem) => problem.message).join("; "),
+      };
+    }
+    contracts.push(validated.value);
   }
-  // Native packages must register through work_checkpoint register with a
-  // planPath; the generic descriptor never fabricates a native source.
-  return undefined;
-}
-
-function normalizeBoundary(raw: unknown): WorkflowExecutionBoundary | undefined {
-  if (raw === null || typeof raw !== "object") return undefined;
-  const candidate = raw as Record<string, unknown>;
-  const files = stringList(candidate.files);
-  const directories = stringList(candidate.directories);
-  if (files.length === 0 && directories.length === 0) return undefined;
-  return { files, directories };
-}
-
-function normalizeCheckpointContracts(raw: unknown): unknown[] {
-  return Array.isArray(raw) ? raw : [];
+  return { ok: true, contracts };
 }
 
 function taskContractsFromItems(
-  items: OpenInputItem[],
+  items: readonly OpenItemInput[],
 ): { ok: true; contracts: WorkflowTaskContract[] } | { ok: false; message: string } {
   const contracts: WorkflowTaskContract[] = [];
   for (const item of items) {
@@ -265,16 +383,34 @@ function taskContractsFromItems(
   }
   return { ok: true, contracts };
 }
+
+/**
+ * Field-specific canonicalization of a structurally validated generic source.
+ * Only the documented provided-plan reference and optional hash are trimmed, so
+ * a canonical and a whitespace-varied valid call keep the same source identity
+ * and idempotency. Native bindings and workflow identities are never rewritten.
+ */
+function canonicalizeExecutionSource(
+  source: OpenExecutionInput["source"],
+): WorkflowExecutionSource {
+  if (source.kind === "conversation-scoped") return { kind: "conversation-scoped" };
+  return {
+    kind: "provided-plan",
+    reference: source.reference.trim(),
+    ...(source.sha256 !== undefined ? { sha256: source.sha256.trim() } : {}),
+  };
+}
 // END_BLOCK_GENERIC_NORMALIZATION
 
+/** Map a structurally validated standalone item into explicit openWorkItem input. */
 function normalizeOpenInputItem(
-  item: OpenInputItem,
+  item: OpenItemInput,
   sessionId: string,
 ):
   | { ok: true; input: OpenWorkItemInput }
   | { ok: false; errorCode: "INVALID_INPUT"; message: string } {
-  const key = coerceNonEmptyString(item.key);
-  const title = coerceNonEmptyString(item.title);
+  const key = item.key.trim();
+  const title = item.title.trim();
   if (!key || !title) {
     return {
       ok: false,
@@ -282,42 +418,8 @@ function normalizeOpenInputItem(
       message: "INVALID_INPUT: key and title must be non-empty strings",
     };
   }
-  if (!isWorkItemMode(item.mode)) {
-    return {
-      ok: false,
-      errorCode: "INVALID_INPUT",
-      message: "INVALID_INPUT: mode must be implementation, review_only, or delegated",
-    };
-  }
 
   if (item.mode === "delegated") {
-    const reviewers = Array.isArray(item.requiredReviewers) ? item.requiredReviewers : [];
-    if (reviewers.length !== 0) {
-      return {
-        ok: false,
-        errorCode: "INVALID_INPUT",
-        message:
-          "INVALID_INPUT: delegated mode requires an explicitly empty requiredReviewers array",
-      };
-    }
-    const writeScope = Array.isArray(item.writeScope) ? item.writeScope.map(String) : [];
-    if (writeScope.length === 0) {
-      return {
-        ok: false,
-        errorCode: "INVALID_INPUT",
-        message:
-          "INVALID_INPUT: delegated mode requires a non-empty writeScope of workspace-relative files",
-      };
-    }
-    const planRunId = coerceNonEmptyString(item.planRunId);
-    const planTaskId = coerceNonEmptyString(item.planTaskId);
-    if ((planRunId === undefined) !== (planTaskId === undefined)) {
-      return {
-        ok: false,
-        errorCode: "INVALID_INPUT",
-        message: "INVALID_INPUT: planRunId and planTaskId must be provided together",
-      };
-    }
     return {
       ok: true,
       input: {
@@ -326,33 +428,18 @@ function normalizeOpenInputItem(
         title,
         mode: "delegated",
         requiredReviewers: [],
-        writeScope,
-        ...(planRunId && planTaskId ? { planRunId, planTaskId } : {}),
+        writeScope: [...(item.writeScope ?? [])],
+        ...(item.planRunId && item.planTaskId
+          ? { planRunId: item.planRunId, planTaskId: item.planTaskId }
+          : {}),
       },
     };
   }
 
-  const requiredReviewers = canonicalizeReviewers(item.requiredReviewers);
-  if (!requiredReviewers) {
-    return {
-      ok: false,
-      errorCode: "INVALID_INPUT",
-      message:
-        "INVALID_INPUT: requiredReviewers must be a non-empty array containing unique spec/code reviewers",
-    };
-  }
-  if (
-    item.writeScope !== undefined ||
-    item.planRunId !== undefined ||
-    item.planTaskId !== undefined
-  ) {
-    return {
-      ok: false,
-      errorCode: "INVALID_INPUT",
-      message: `INVALID_INPUT: writeScope and plan bindings are only valid for delegated mode, not ${item.mode}`,
-    };
-  }
-
+  const requiredReviewers = [...item.requiredReviewers].sort((left, right) => {
+    if (left === right) return 0;
+    return left === "spec" ? -1 : 1;
+  });
   return {
     ok: true,
     input: {
@@ -365,88 +452,28 @@ function normalizeOpenInputItem(
   };
 }
 
-function serializeWorkItem(record: WorkItemRecord): Record<string, unknown> {
-  return {
-    workItemId: record.workItemId,
-    header: `VVOC_WORK_ITEM_ID: ${record.workItemId}`,
-    key: record.key,
-    title: record.title,
-    mode: record.mode,
-    requiredReviewers: record.requiredReviewers,
-    state: record.state,
-    specReviewCount: record.specReviewCount,
-    codeReviewCount: record.codeReviewCount,
-    reviewRound: getReviewRound(record),
-    currentRound: record.currentRound,
-    ...(record.resultExcerpt ? { resultExcerpt: record.resultExcerpt } : {}),
-    completedReviewRoundCount: record.completedReviewRoundCount,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    ...(record.closedAt ? { closedAt: record.closedAt } : {}),
-    ...(record.delegated
-      ? {
-          delegated: {
-            writeScope: record.delegated.writeScope,
-            ...(record.delegated.planRunId
-              ? { planRunId: record.delegated.planRunId, planTaskId: record.delegated.planTaskId }
-              : {}),
-            attempts: record.delegated.attempts.length,
-            inFlightAttempt: record.delegated.attempts.some(
-              (attempt) => attempt.status === "in_flight",
-            ),
-            decisions: record.delegated.decisions.length,
-            accepted: currentDelegatedAcceptance(record) !== undefined,
-            acceptedAttempt: currentDelegatedAcceptance(record)?.attempt,
-            reworkCount: record.delegated.reworkHistory.length,
-            ...serializeProgress(record),
-          },
-        }
-      : {}),
-  };
-}
-
-/** Recovery-aware progress fields shared by work-item serialization. */
-function serializeProgress(record: WorkItemRecord): Record<string, unknown> {
-  const progress = summarizeDelegatedProgress(record);
-  return {
-    attemptBudget: progress.attemptBudget,
-    remainingAttempts: progress.remainingAttempts,
-    recoveryCount: progress.recoveryGrants,
-    autonomousGrantConsumed: progress.autonomousGrantConsumed,
-    reportRejectionCount: progress.reportRejectedAttempts,
-    nextAction: progress.nextAction,
-  };
-}
-
 // START_CONTRACT: createWorkItemOpenTool
-//   PURPOSE: Build work_item_open handler that supports deterministic batch idempotent open operations with explicit workflow intent.
+//   PURPOSE: Build work_item_open handler that supports deterministic batch idempotent open operations with explicit workflow intent under whole-request structural validation.
 //   INPUTS: { store: WorkItemStore - workflow in-memory store }
 //   OUTPUTS: { WorkflowToolDefinition<OpenToolInput, unknown> - executable tool definition }
-//   SIDE_EFFECTS: [Mutates in-memory work-item store through open operations]
-//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-STATE]
+//   SIDE_EFFECTS: [Mutates in-memory work-item store through open operations only after structural validation passes]
+//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-STATE, validateWorkflowToolInput]
 // END_CONTRACT: createWorkItemOpenTool
 export function createWorkItemOpenTool(
   store: WorkItemStore,
 ): WorkflowToolDefinition<OpenToolInput, Record<string, unknown>> {
-  return {
+  return withFinalizedResult({
     name: "work_item_open",
-    description:
-      "Open one or more workflow work items idempotently with explicit mode and requiredReviewers.",
+    description: WORKFLOW_TOOL_DESCRIPTIONS.work_item_open,
     execute: (args, context, overrideStore) => {
-      const inputItems = Array.isArray(args.items) ? args.items : [];
-      const runIdArg = coerceNonEmptyString(args.runId);
-      const executionArg = args.execution;
-      if (executionArg !== undefined && runIdArg !== undefined) {
-        return {
-          tool: "work_item_open",
-          sessionId: context.sessionId,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "INVALID_INPUT: execution and runId are mutually exclusive",
-        };
+      const validation = validateWorkflowToolInput("work_item_open", args);
+      if (!validation.ok) {
+        return invalidInput("work_item_open", context.sessionId, validation.issues);
       }
+      const parsed = validation.data;
+      const inputItems = parsed.items;
 
-      if (executionArg !== undefined || runIdArg !== undefined) {
+      if (parsed.execution !== undefined || parsed.runId !== undefined) {
         const s = overrideStore ?? store;
         const data = s.getStoreData();
         const contracts = taskContractsFromItems(inputItems);
@@ -460,35 +487,45 @@ export function createWorkItemOpenTool(
           };
         }
 
-        if (executionArg !== undefined) {
-          const descriptor =
-            executionArg !== null && typeof executionArg === "object"
-              ? (executionArg as Record<string, unknown>)
-              : {};
-          const executionKey = coerceNonEmptyString(descriptor.executionKey);
-          const source = normalizeExecutionSource(descriptor.source);
-          const boundary = normalizeBoundary(descriptor.boundary);
-          const goal = coerceNonEmptyString(descriptor.goal);
+        if (parsed.execution !== undefined) {
+          const descriptor = parsed.execution;
           const workspaceRoot = coerceNonEmptyString(context.workspaceRoot);
-          if (!executionKey || !source || !boundary || !goal || !workspaceRoot) {
+          if (!workspaceRoot) {
+            return hostContextInvalid(
+              "work_item_open",
+              context.sessionId,
+              "execution registration requires the trusted workspace root from the plugin context",
+            );
+          }
+          const boundary = validateExecutionBoundary(descriptor.boundary);
+          if (!boundary.ok) {
             return {
               tool: "work_item_open",
               sessionId: context.sessionId,
               ok: false,
               errorCode: "INVALID_INPUT",
-              message:
-                "INVALID_INPUT: execution requires executionKey, source, goal, boundary, and the trusted workspace root",
+              message: `INVALID_INPUT: ${boundary.problems.map((problem) => problem.message).join("; ")}`,
+            };
+          }
+          const checkpointContracts = normalizeCheckpointInputContracts(descriptor.checkpoints);
+          if (!checkpointContracts.ok) {
+            return {
+              tool: "work_item_open",
+              sessionId: context.sessionId,
+              ok: false,
+              errorCode: "INVALID_INPUT",
+              message: `INVALID_INPUT: ${checkpointContracts.message}`,
             };
           }
           const registered = registerExecutionInStore(data, {
             sessionId: context.sessionId,
             workspaceRoot,
-            executionKey,
-            source,
-            goal,
-            boundary,
+            executionKey: descriptor.executionKey.trim(),
+            source: canonicalizeExecutionSource(descriptor.source),
+            goal: descriptor.goal.trim(),
+            boundary: boundary.value,
             tasks: contracts.contracts.map((contract) => ({ contract })),
-            checkpoints: normalizeCheckpointContracts(descriptor.checkpoints) as never,
+            checkpoints: checkpointContracts.contracts,
           });
           if (!registered.ok) {
             return {
@@ -506,24 +543,16 @@ export function createWorkItemOpenTool(
             action: "register",
             runId: registered.runId,
             reused: registered.reused,
-            execution: getExecutionView(registered.execution),
+            execution: getExecutionView(registered.execution, data),
           };
         }
 
-        const amendmentId = coerceNonEmptyString(args.amendmentId);
-        const rationale = coerceNonEmptyString(args.rationale);
-        if (!runIdArg || !amendmentId || !rationale) {
-          return {
-            tool: "work_item_open",
-            sessionId: context.sessionId,
-            ok: false,
-            errorCode: "INVALID_INPUT",
-            message: "INVALID_INPUT: runId append requires amendmentId and rationale",
-          };
-        }
+        const runId = parsed.runId!.trim();
+        const amendmentId = parsed.amendmentId!.trim();
+        const rationale = parsed.rationale!;
         const appended = appendExecutionWorkInStore(data, {
           sessionId: context.sessionId,
-          runId: runIdArg,
+          runId,
           amendmentId,
           rationale,
           tasks: contracts.contracts.map((contract) => ({ contract })),
@@ -542,12 +571,14 @@ export function createWorkItemOpenTool(
           sessionId: context.sessionId,
           ok: true,
           action: "amend",
-          runId: runIdArg,
+          runId,
           revision: appended.revision,
-          execution: getExecutionView(appended.execution),
+          execution: getExecutionView(appended.execution, data),
         };
       }
 
+      // Structural validation already accepted every item; remaining per-item
+      // failures are domain outcomes (idempotency conflicts, state rules).
       const results = inputItems.map((item) => {
         const normalized = normalizeOpenInputItem(item, context.sessionId);
         if (!normalized.ok) {
@@ -558,7 +589,8 @@ export function createWorkItemOpenTool(
           };
         }
 
-        const opened = openWorkItem(overrideStore ?? store, normalized.input);
+        const targetStore = overrideStore ?? store;
+        const opened = openWorkItem(targetStore, normalized.input);
         if (!opened.ok) {
           return {
             ok: false,
@@ -571,9 +603,10 @@ export function createWorkItemOpenTool(
         return {
           ok: true,
           reused: opened.reused,
-          workItemId: opened.record.workItemId,
-          header: opened.header,
-          ...serializeWorkItem(opened.record),
+          ...serializeWorkItem(opened.record, {
+            data: targetStore.getStoreData(),
+            sessionId: context.sessionId,
+          }),
         };
       });
 
@@ -583,40 +616,32 @@ export function createWorkItemOpenTool(
         items: results,
       };
     },
-  };
+  });
 }
 
 // START_CONTRACT: createWorkItemListTool
-//   PURPOSE: Build work_item_list handler that returns current work items, explicit review-round metadata, and registered plan runs.
+//   PURPOSE: Build work_item_list handler that returns current work items, explicit review-round metadata, registered plan runs, generic/native execution views, and loaded contract identity.
 //   INPUTS: { store: WorkItemStore - workflow in-memory store }
 //   OUTPUTS: { WorkflowToolDefinition<ListArgs, unknown> - executable tool definition }
 //   SIDE_EFFECTS: [none]
-//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-STATE, M-WORKFLOW-CHECKPOINTS]
+//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-STATE, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-EXECUTION]
 // END_CONTRACT: createWorkItemListTool
 export function createWorkItemListTool(
   store: WorkItemStore,
 ): WorkflowToolDefinition<ListArgs, Record<string, unknown>> {
-  return {
+  return withFinalizedResult({
     name: "work_item_list",
-    description: "List workflow work items for the current session.",
+    description: WORKFLOW_TOOL_DESCRIPTIONS.work_item_list,
     execute: (args, context, overrideStore) => {
+      const validation = validateWorkflowToolInput("work_item_list", args);
+      if (!validation.ok) {
+        return invalidInput("work_item_list", context.sessionId, validation.issues);
+      }
       const s = overrideStore ?? store;
-      const includeClosed = args.includeClosed === true;
-      const records = listWorkItems(s, context.sessionId, { includeClosed });
-      const data = s.getStoreData();
-      const planRuns = [...data.planRuns.values()]
-        .filter((run) => run.sessionId === context.sessionId)
-        .map((run) => getDelegatedRunView(data, run.runId))
-        .filter((view): view is Record<string, unknown> => view !== undefined);
-      return {
-        tool: "work_item_list",
-        sessionId: context.sessionId,
-        includeClosed,
-        items: records.map(serializeWorkItem),
-        ...(planRuns.length > 0 ? { planRuns } : {}),
-      };
+      const includeClosed = validation.data.includeClosed === true;
+      return getWorkflowInspection(s, context.sessionId, { includeClosed });
     },
-  };
+  });
 }
 
 // START_CONTRACT: createWorkItemCloseTool
@@ -629,21 +654,16 @@ export function createWorkItemListTool(
 export function createWorkItemCloseTool(
   store: WorkItemStore,
 ): WorkflowToolDefinition<CloseArgs, Record<string, unknown>> {
-  return {
+  return withFinalizedResult({
     name: "work_item_close",
-    description: "Close a workflow work item by id when it is ready_to_close.",
+    description: WORKFLOW_TOOL_DESCRIPTIONS.work_item_close,
     execute: (args, context, overrideStore) => {
-      const s = overrideStore ?? store;
-      const workItemId = coerceNonEmptyString(args.workItemId);
-      if (!workItemId) {
-        return {
-          tool: "work_item_close",
-          sessionId: context.sessionId,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "INVALID_INPUT: workItemId must be a non-empty string",
-        };
+      const validation = validateWorkflowToolInput("work_item_close", args);
+      if (!validation.ok) {
+        return invalidInput("work_item_close", context.sessionId, validation.issues);
       }
+      const s = overrideStore ?? store;
+      const workItemId = validation.data.workItemId.trim();
 
       const closed = closeWorkItem(s, context.sessionId, workItemId);
       if (!closed.ok) {
@@ -653,6 +673,7 @@ export function createWorkItemCloseTool(
           ok: false,
           errorCode: closed.errorCode,
           message: closed.message,
+          ...ownedWorkItemFailureContext(s, context.sessionId, workItemId, closed.errorCode),
         };
       }
 
@@ -666,54 +687,38 @@ export function createWorkItemCloseTool(
         closedAt: closed.record.closedAt,
       };
     },
-  };
+  });
 }
 
 // START_CONTRACT: createWorkItemDecideTool
-//   PURPOSE: Build work_item_decide handler wrapping explicit controller acceptance, change requests, checkpoint-authorized rework, and bounded recovery.
+//   PURPOSE: Build work_item_decide handler wrapping explicit controller acceptance, change requests, checkpoint-authorized rework, and bounded recovery under branch-aware input validation.
 //   INPUTS: { store: WorkItemStore - workflow in-memory store, options?: DelegatedControlOptions - optional read-only authorization lookup }
 //   OUTPUTS: { WorkflowToolDefinition<DecideArgs, Promise<Record<string, unknown>>> - async executable control tool definition }
-//   SIDE_EFFECTS: [Mutates delegated work-item state through the domain layer]
-//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS]
+//   SIDE_EFFECTS: [Mutates delegated work-item state through the domain layer only after structural validation]
+//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, validateWorkflowToolInput]
 // END_CONTRACT: createWorkItemDecideTool
 export function createWorkItemDecideTool(
   store: WorkItemStore,
   options?: DelegatedControlOptions,
 ): WorkflowToolDefinition<DecideArgs, Promise<Record<string, unknown>>> {
-  return {
+  return withFinalizedAsyncResult({
     name: "work_item_decide",
-    description:
-      "Accept or request changes for the current completed delegated attempt, authorize bounded rework of an accepted task from a failed checkpoint, or recover a stopped or exhausted unaccepted task with a bounded diagnosis and changed condition.",
+    description: WORKFLOW_TOOL_DESCRIPTIONS.work_item_decide,
     async execute(args, context, overrideStore) {
-      const s = overrideStore ?? store;
-      const workItemId = coerceNonEmptyString(args.workItemId);
-      const decision = args.decision;
-      const rationale = typeof args.rationale === "string" ? args.rationale : "";
-      const evidence = Array.isArray(args.evidence) ? args.evidence.map(String) : [];
-
-      if (!workItemId || typeof args.attempt !== "number" || !Number.isInteger(args.attempt)) {
-        return {
-          tool: "work_item_decide",
-          sessionId: context.sessionId,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "INVALID_INPUT: workItemId and a positive integer attempt are required",
-        };
+      const validation = validateWorkflowToolInput("work_item_decide", args);
+      if (!validation.ok) {
+        return invalidInput("work_item_decide", context.sessionId, validation.issues);
       }
+      const parsed = validation.data;
+      const s = overrideStore ?? store;
+      const workItemId = parsed.workItemId.trim();
+      const decision = parsed.decision;
+      const rationale = parsed.rationale ?? "";
+      const evidence = [...(parsed.evidence ?? [])];
 
       if (decision === "rework") {
-        const runId = coerceNonEmptyString(args.runId);
-        const checkpointId = coerceNonEmptyString(args.checkpointId);
-        if (!runId || !checkpointId) {
-          return {
-            tool: "work_item_decide",
-            sessionId: context.sessionId,
-            ok: false,
-            errorCode: "INVALID_INPUT",
-            message:
-              "INVALID_INPUT: rework requires runId and checkpointId of the failed checkpoint",
-          };
-        }
+        const runId = parsed.runId!.trim();
+        const checkpointId = parsed.checkpointId!.trim();
         const reworked = authorizeReworkFromFailedCheckpoint(s, {
           sessionId: context.sessionId,
           workItemId,
@@ -728,6 +733,7 @@ export function createWorkItemDecideTool(
             ok: false,
             errorCode: reworked.errorCode,
             message: reworked.message,
+            ...ownedWorkItemFailureContext(s, context.sessionId, workItemId, reworked.errorCode),
           };
         }
         return {
@@ -743,27 +749,16 @@ export function createWorkItemDecideTool(
       }
 
       if (decision === "recover") {
-        const recoveryId = coerceNonEmptyString(args.recoveryId);
-        const diagnosis = typeof args.diagnosis === "string" ? args.diagnosis : "";
-        const changedCondition =
-          typeof args.changedCondition === "string" ? args.changedCondition : "";
-        const verification = Array.isArray(args.verification) ? args.verification.map(String) : [];
-        const userMessageId = coerceNonEmptyString(args.userMessageId);
-        const authorityId = coerceNonEmptyString(args.authorityId);
-        if (!recoveryId) {
-          return {
-            tool: "work_item_decide",
-            sessionId: context.sessionId,
-            ok: false,
-            errorCode: "INVALID_INPUT",
-            message:
-              "INVALID_INPUT: recover requires a stable recoveryId, diagnosis, changedCondition, and verification references",
-          };
-        }
+        const recoveryId = parsed.recoveryId!.trim();
+        const diagnosis = parsed.diagnosis!;
+        const changedCondition = parsed.changedCondition!;
+        const verification = [...(parsed.verification ?? [])];
+        const userMessageId = parsed.userMessageId?.trim();
+        const authorityId = parsed.authorityId?.trim();
         let advanceGrantApproved = false;
         let advanceRunId: string | undefined;
         if (authorityId) {
-          advanceRunId = coerceNonEmptyString(args.runId);
+          advanceRunId = parsed.runId?.trim();
           if (!advanceRunId) {
             return {
               tool: "work_item_decide",
@@ -810,7 +805,7 @@ export function createWorkItemDecideTool(
         const recovered = await recoverDelegatedWorkItem(s, {
           sessionId: context.sessionId,
           workItemId,
-          attempt: args.attempt,
+          attempt: parsed.attempt,
           diagnosis,
           changedCondition,
           verification,
@@ -827,6 +822,7 @@ export function createWorkItemDecideTool(
             ok: false,
             errorCode: recovered.errorCode,
             message: recovered.message,
+            ...ownedWorkItemFailureContext(s, context.sessionId, workItemId, recovered.errorCode),
           };
         }
         if (recovered.kind === "advance_grant" && advanceRunId !== undefined) {
@@ -849,6 +845,12 @@ export function createWorkItemDecideTool(
               errorCode: proposed?.code ?? "RESERVE_EXHAUSTED",
               message:
                 proposed?.message ?? "advance recovery debit could not be recorded with the grant",
+              ...ownedWorkItemFailureContext(
+                s,
+                context.sessionId,
+                workItemId,
+                proposed?.code ?? "RESERVE_EXHAUSTED",
+              ),
             };
           }
           const stored = addReserveDebitInStore(s.getStoreData(), {
@@ -863,6 +865,7 @@ export function createWorkItemDecideTool(
               ok: false,
               errorCode: stored.errorCode,
               message: stored.message,
+              ...ownedWorkItemFailureContext(s, context.sessionId, workItemId, stored.errorCode),
             };
           }
         }
@@ -877,26 +880,15 @@ export function createWorkItemDecideTool(
           attemptBudget: recovered.attemptBudget,
           remainingAttempts: recovered.remainingAttempts,
           state: recovered.record.state,
-          nextAction: summarizeDelegatedProgress(recovered.record).nextAction,
+          nextAction: delegatedGuidanceFor(s, context.sessionId, recovered.record).nextAction,
         };
       }
 
-      if (decision !== "accept" && decision !== "request_changes") {
-        return {
-          tool: "work_item_decide",
-          sessionId: context.sessionId,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "INVALID_INPUT: decision must be accept, request_changes, rework, or recover",
-        };
-      }
-
-      const concernsDisposition =
-        typeof args.concernsDisposition === "string" ? args.concernsDisposition : undefined;
+      const concernsDisposition = parsed.concernsDisposition;
       const decided = decideDelegatedWorkItem(s, {
         sessionId: context.sessionId,
         workItemId,
-        attempt: args.attempt,
+        attempt: parsed.attempt,
         decision,
         rationale,
         evidence,
@@ -909,6 +901,7 @@ export function createWorkItemDecideTool(
           ok: false,
           errorCode: decided.errorCode,
           message: decided.message,
+          ...ownedWorkItemFailureContext(s, context.sessionId, workItemId, decided.errorCode),
         };
       }
       return {
@@ -917,12 +910,12 @@ export function createWorkItemDecideTool(
         ok: true,
         action: decision,
         workItemId,
-        attempt: args.attempt,
+        attempt: parsed.attempt,
         decisionId: decided.decisionId,
         state: decided.record.state,
       };
     },
-  };
+  });
 }
 
 export interface WorkCheckpointRegisterInput {
@@ -988,33 +981,36 @@ async function executeGenericCheckpoint(options: {
       message: "execution belongs to another session",
     };
   }
-  const amendmentId = coerceNonEmptyString(args.amendmentId);
-  const rationale = coerceNonEmptyString(args.rationale);
+  const amendmentId = args.amendmentId?.trim();
+  const rationale = args.rationale?.trim();
 
   switch (args.action) {
     case "register":
     case "amend": {
-      if (!amendmentId || !rationale) {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "generic register/amend requires amendmentId and rationale",
-        };
-      }
-      const items = Array.isArray(args.tasks) ? (args.tasks as OpenInputItem[]) : [];
+      // Branch validation guarantees runId, amendmentId, and rationale for
+      // generic register/amend; tasks/checkpoints arrive as typed closed shapes.
+      const items = args.tasks ?? [];
       const contracts =
         items.length > 0 ? taskContractsFromItems(items) : { ok: true as const, contracts: [] };
       if (!contracts.ok) {
         return { ...base, ok: false, errorCode: "INVALID_INPUT", message: contracts.message };
       }
+      const checkpointContracts = normalizeCheckpointInputContracts(args.checkpoints);
+      if (!checkpointContracts.ok) {
+        return {
+          ...base,
+          ok: false,
+          errorCode: "INVALID_INPUT",
+          message: `INVALID_INPUT: ${checkpointContracts.message}`,
+        };
+      }
       const appended = appendExecutionWorkInStore(data, {
         sessionId,
         runId,
-        amendmentId,
-        rationale,
+        amendmentId: amendmentId!,
+        rationale: rationale!,
         tasks: contracts.contracts.map((contract) => ({ contract })),
-        checkpoints: normalizeCheckpointContracts(args.checkpoints) as never,
+        checkpoints: checkpointContracts.contracts,
       });
       if (!appended.ok) {
         return { ...base, ok: false, errorCode: appended.errorCode, message: appended.message };
@@ -1024,21 +1020,13 @@ async function executeGenericCheckpoint(options: {
         ok: true,
         action: "amend",
         revision: appended.revision,
-        execution: getExecutionView(appended.execution),
+        execution: getExecutionView(appended.execution, data),
       };
     }
 
     case "start": {
-      const checkpointId = coerceNonEmptyString(args.checkpointId);
-      if (!checkpointId) {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "start requires checkpointId",
-        };
-      }
-      const startFingerprint = coerceNonEmptyString(args.startFingerprint);
+      const checkpointId = args.checkpointId!.trim();
+      const startFingerprint = args.startFingerprint?.trim();
       const started = startGenericCheckpointInStore(data, {
         sessionId,
         runId,
@@ -1064,24 +1052,8 @@ async function executeGenericCheckpoint(options: {
     case "review":
     case "bind":
     case "verify": {
-      const checkpointId = coerceNonEmptyString(args.checkpointId);
-      if (!checkpointId) {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "checkpointId is required",
-        };
-      }
-      const reviewer = coerceNonEmptyString(args.reviewer);
-      if (reviewer !== undefined && reviewer !== "spec" && reviewer !== "code") {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "reviewer must be spec or code",
-        };
-      }
+      const checkpointId = args.checkpointId!.trim();
+      const reviewer = args.reviewer;
       // The reviewer status is read from the linked review_only work item's
       // recorded round; callers cannot assert a reviewer outcome directly.
       const recorded = recordGenericReviewerResultInStore(data, {
@@ -1105,21 +1077,12 @@ async function executeGenericCheckpoint(options: {
     }
 
     case "recover": {
-      const checkpointId = coerceNonEmptyString(args.checkpointId);
-      const recoveryId = coerceNonEmptyString(args.recoveryId);
-      const diagnosis = typeof args.diagnosis === "string" ? args.diagnosis : "";
-      const changedCondition =
-        typeof args.changedCondition === "string" ? args.changedCondition : "";
-      const verification = stringList(args.verification);
-      const authorityId = coerceNonEmptyString(args.authorityId);
-      if (!checkpointId || !recoveryId) {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "generic checkpoint recovery requires checkpointId and recoveryId",
-        };
-      }
+      const checkpointId = args.checkpointId!.trim();
+      const recoveryId = args.recoveryId!.trim();
+      const diagnosis = args.diagnosis!;
+      const changedCondition = args.changedCondition!;
+      const verification = [...(args.verification ?? [])];
+      const authorityId = args.authorityId?.trim();
       const checkpointBinding = execution.checkpoints.get(checkpointId);
       const stopped = checkpointBinding?.stoppedAtGeneration !== undefined;
       // Validate and reserve the advance unit BEFORE mutating the checkpoint,
@@ -1193,8 +1156,8 @@ async function executeGenericCheckpoint(options: {
       const completed = completeExecutionInStore(data, {
         sessionId,
         runId,
-        rationale: rationale ?? "Generic execution completed with controller acceptance.",
-        evidence: stringList(args.verification),
+        rationale: rationale || "Generic execution completed with controller acceptance.",
+        evidence: [...(args.verification ?? [])],
       });
       if (!completed.ok) {
         return { ...base, ok: false, errorCode: completed.errorCode, message: completed.message };
@@ -1204,21 +1167,14 @@ async function executeGenericCheckpoint(options: {
         ok: true,
         action: "complete",
         reviewStatus: completed.reviewStatus,
-        execution: getExecutionView(completed.execution),
+        execution: getExecutionView(completed.execution, data),
       };
     }
 
     case "authorize": {
-      const authorityId = coerceNonEmptyString(args.authorityId);
-      const messageId = coerceNonEmptyString(args.messageId);
-      const stagesArg = Array.isArray(args.stages) ? args.stages : [];
-      const stages = stagesArg.filter(
-        (stage): stage is WorkflowAuthorityStage =>
-          stage === "specification" ||
-          stage === "planning" ||
-          stage === "implementation" ||
-          stage === "verification",
-      );
+      const authorityId = args.authorityId!.trim();
+      const messageId = args.messageId!.trim();
+      const stages = [...(args.stages ?? [])];
       if (!authorityId || !messageId || stages.length === 0) {
         return {
           ...base,
@@ -1227,14 +1183,19 @@ async function executeGenericCheckpoint(options: {
           message: "authorize requires authorityId, messageId, and explicit stages",
         };
       }
+      const suppliedScope: WorkflowAuthorityScope = {
+        stages,
+        decisionScope: (args.decisionScope ?? "").trim(),
+        fileBoundary: [...(args.fileBoundary ?? [])],
+        reservedStops: [...(args.reservedStops ?? [])],
+      };
       const lookup = options.control?.lookupAuthorityMessage;
       if (!lookup) {
-        return {
-          ...base,
-          ok: false,
-          errorCode: "INVALID_INPUT",
-          message: "authorize requires the SDK-backed authorization lookup",
-        };
+        return hostContextInvalid(
+          "work_checkpoint",
+          sessionId,
+          "authorize requires the SDK-backed authorization lookup from the plugin context",
+        );
       }
       const message = await lookup({ sessionId, runId, messageId });
       if (!message) {
@@ -1250,6 +1211,17 @@ async function executeGenericCheckpoint(options: {
         (entry) => entry.authorityId === authorityId,
       );
       if (existingAuthority) {
+        // Idempotent reuse and finite extension never silently accept a
+        // supplied scope that contradicts the recorded scope.
+        const scopeDifferences = authorityScopeDifferences(suppliedScope, existingAuthority.scope);
+        if (scopeDifferences.length > 0) {
+          return {
+            ...base,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message: `INVALID_INPUT: supplied scope differs from the recorded scope for authority ${authorityId} (${scopeDifferences.join(", ")}); scope changes are unsupported on replay or extension`,
+          };
+        }
         if (existingAuthority.grantedByMessageId === messageId) {
           // Idempotent replay of the originating registration.
           return {
@@ -1299,18 +1271,7 @@ async function executeGenericCheckpoint(options: {
         runId,
         sessionId,
         message,
-        scope: {
-          stages,
-          decisionScope: coerceNonEmptyString(args.decisionScope) ?? "",
-          fileBoundary: stringList(args.fileBoundary),
-          reservedStops: stringList(args.reservedStops).filter(
-            (stage): stage is WorkflowAuthorityStage =>
-              stage === "specification" ||
-              stage === "planning" ||
-              stage === "implementation" ||
-              stage === "verification",
-          ),
-        },
+        scope: suppliedScope,
         existingAuthorities: execution.authority,
         messageClaims: data.messageClaims,
       });
@@ -1337,11 +1298,11 @@ async function executeGenericCheckpoint(options: {
     }
 
     case "record_approval": {
-      const authorityId = coerceNonEmptyString(args.authorityId);
-      const approvalId = coerceNonEmptyString(args.approvalId);
-      const stage = coerceNonEmptyString(args.stage) as WorkflowAuthorityStage | undefined;
-      const artifactPath = coerceNonEmptyString(args.artifactPath);
-      const artifactSha256 = coerceNonEmptyString(args.artifactSha256);
+      const authorityId = args.authorityId!.trim();
+      const approvalId = args.approvalId!.trim();
+      const stage = args.stage;
+      const artifactPath = args.artifactPath!.trim();
+      const artifactSha256 = args.artifactSha256!.trim();
       const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
       if (!authority || !approvalId || !stage || !artifactPath || !artifactSha256) {
         return {
@@ -1382,8 +1343,8 @@ async function executeGenericCheckpoint(options: {
     }
 
     case "revoke_authority": {
-      const authorityId = coerceNonEmptyString(args.authorityId);
-      const revocationId = coerceNonEmptyString(args.revocationId);
+      const authorityId = args.authorityId!.trim();
+      const revocationId = args.revocationId!.trim();
       const authority = execution.authority.find((entry) => entry.authorityId === authorityId);
       if (!authority || !revocationId) {
         return {
@@ -1393,25 +1354,22 @@ async function executeGenericCheckpoint(options: {
           message: "revoke_authority requires a recorded authorityId and a revocationId",
         };
       }
-      const stagesArg = Array.isArray(args.stages) ? args.stages : undefined;
+      // Supplied stages were validated as canonical values before any lookup;
+      // absent or empty stages keep the documented full-revocation default.
+      const narrowedStages = args.stages;
+      const reason = args.rationale?.trim();
       const revoked =
-        stagesArg === undefined || stagesArg.length === 0
+        narrowedStages === undefined || narrowedStages.length === 0
           ? revokeAdvanceAuthority({
               authority,
               revocationId,
-              reason: coerceNonEmptyString(args.rationale) ?? "revoked",
+              reason: reason || "revoked",
             })
           : narrowAdvanceAuthority({
               authority,
               revocationId,
-              reason: coerceNonEmptyString(args.rationale) ?? "narrowed",
-              narrowedStages: stagesArg.filter(
-                (stage): stage is WorkflowAuthorityStage =>
-                  stage === "specification" ||
-                  stage === "planning" ||
-                  stage === "implementation" ||
-                  stage === "verification",
-              ),
+              reason: reason || "narrowed",
+              narrowedStages: [...narrowedStages],
             });
       if (!revoked.ok) {
         return { ...base, ok: false, errorCode: revoked.code, message: revoked.message };
@@ -1449,46 +1407,55 @@ async function executeGenericCheckpoint(options: {
 }
 
 // START_CONTRACT: createWorkCheckpointTool
-//   PURPOSE: Build work_checkpoint handler wrapping plan registration, checkpoint start, fingerprint-verified outcomes, and bounded checkpoint recovery.
+//   PURPOSE: Build work_checkpoint handler wrapping plan registration, checkpoint start, fingerprint-verified outcomes, and bounded checkpoint recovery under branch-aware input validation with source-resolved run routing.
 //   INPUTS: { store: WorkItemStore - workflow in-memory store, options?: DelegatedControlOptions - optional read-only authorization lookup }
 //   OUTPUTS: { WorkflowToolDefinition<CheckpointArgs, Promise<Record<string, unknown>>> - async executable control tool definition }
-//   SIDE_EFFECTS: [Registers plan runs and mutates checkpoint state through the domain layer]
-//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED]
+//   SIDE_EFFECTS: [Registers plan runs and mutates checkpoint state through the domain layer only after structural validation]
+//   LINKS: [M-WORKFLOW-TOOLING, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED, validateWorkflowToolInput]
 // END_CONTRACT: createWorkCheckpointTool
 export function createWorkCheckpointTool(
   store: WorkItemStore,
   options?: DelegatedControlOptions,
 ): WorkflowToolDefinition<CheckpointArgs, Promise<Record<string, unknown>>> {
-  return {
+  return withFinalizedAsyncResult({
     name: "work_checkpoint",
-    description:
-      "Register an approved delegated plan, start a declared review checkpoint, verify checkpoint outcomes, or recover a stopped or generation-exhausted checkpoint; verify with complete: true seals a finished final checkpoint.",
+    description: WORKFLOW_TOOL_DESCRIPTIONS.work_checkpoint,
     async execute(args, context, overrideStore) {
+      const validation = validateWorkflowToolInput("work_checkpoint", args);
+      if (!validation.ok) {
+        return invalidInput("work_checkpoint", context.sessionId, validation.issues);
+      }
+      const parsed = validation.data;
       const s = overrideStore ?? store;
-      const action = args.action;
-      if (action === "register" && coerceNonEmptyString(args.planPath)) {
-        const planPath = coerceNonEmptyString(args.planPath)!;
+      const action = parsed.action;
+      if (action === "register" && parsed.planPath !== undefined) {
+        const planPath = parsed.planPath.trim();
         const workspaceRoot = coerceNonEmptyString(
           (context as WorkCheckpointExecuteContext).workspaceRoot,
         );
-        if (!planPath || !workspaceRoot) {
+        if (!workspaceRoot) {
+          return hostContextInvalid(
+            "work_checkpoint",
+            context.sessionId,
+            "register requires the trusted workspace root from the plugin context",
+          );
+        }
+        if (!planPath) {
           return {
             tool: "work_checkpoint",
             sessionId: context.sessionId,
             ok: false,
             errorCode: "INVALID_INPUT",
-            message: "INVALID_INPUT: register requires a planPath and the trusted workspace root",
+            message: "INVALID_INPUT: planPath must be a non-empty string",
           };
         }
         const load = (context as WorkCheckpointExecuteContext).loadPlan;
         if (typeof load !== "function") {
-          return {
-            tool: "work_checkpoint",
-            sessionId: context.sessionId,
-            ok: false,
-            errorCode: "INVALID_INPUT",
-            message: "INVALID_INPUT: register requires a plan loader bound to the plugin context",
-          };
+          return hostContextInvalid(
+            "work_checkpoint",
+            context.sessionId,
+            "register requires a plan loader bound to the plugin context",
+          );
         }
         const loaded = await load(planPath, workspaceRoot);
         if ("loadError" in loaded) {
@@ -1525,27 +1492,117 @@ export function createWorkCheckpointTool(
         };
       }
 
-      const genericRunId = coerceNonEmptyString(args.runId);
-      if (genericRunId) {
+      const runId = parsed.runId?.trim();
+      if (runId) {
         const data = s.getStoreData();
-        const execution = findExecution(data, genericRunId);
+        const execution = findExecution(data, runId);
+        const planRun = data.planRuns.get(runId);
+        // Resolve session ownership before any source-specific diagnostic or
+        // generic/native action discrimination. Both the common execution
+        // registry and the legacy/native planRun fallback are guarded, so a
+        // foreign caller cannot infer the run's source (or which fields an
+        // action consumes) from which error it receives.
+        const knownOwnerSessionId = execution?.sessionId ?? planRun?.sessionId;
+        if (knownOwnerSessionId !== undefined && knownOwnerSessionId !== context.sessionId) {
+          return {
+            tool: "work_checkpoint",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: "SESSION_MISMATCH",
+            message: "run belongs to another session",
+          };
+        }
         // Authority actions apply to any execution, including native runs;
-        // other generic actions stay on non-native executions.
+        // generic-only actions stay on non-native executions.
         const authorityAction =
           action === "authorize" || action === "record_approval" || action === "revoke_authority";
-        if (execution && (execution.source.kind !== "native-package" || authorityAction)) {
+        const genericOnlyAction =
+          action === "register" ||
+          action === "amend" ||
+          action === "review" ||
+          action === "bind" ||
+          action === "complete";
+        const nativeRun =
+          execution?.source.kind === "native-package" ||
+          (execution === undefined && planRun !== undefined);
+
+        if (genericOnlyAction && nativeRun) {
+          return {
+            tool: "work_checkpoint",
+            sessionId: context.sessionId,
+            ok: false,
+            errorCode: "INVALID_INPUT",
+            message: `INVALID_INPUT: action ${action} is not supported for native-package run ${runId}`,
+          };
+        }
+        // Source-dependent known fields: only reject them for an owned run whose
+        // source is known, so an unknown run stays a lookup failure rather than
+        // a fabricated native-argument error.
+        if (nativeRun) {
+          if (action === "start" && parsed.startFingerprint !== undefined) {
+            return invalidInput("work_checkpoint", context.sessionId, [
+              {
+                code: "invalid_value",
+                path: "startFingerprint",
+                message: "startFingerprint is only consumed by a generic checkpoint start",
+                expected: "omit startFingerprint for a native-package run",
+              },
+            ]);
+          }
+          if (action === "verify" && parsed.reviewer !== undefined) {
+            return invalidInput("work_checkpoint", context.sessionId, [
+              {
+                code: "invalid_value",
+                path: "reviewer",
+                message:
+                  "reviewer is only consumed by generic review/bind/verify; a native verify seals through complete",
+                expected: "omit reviewer for a native-package run",
+              },
+            ]);
+          }
+        } else if (execution !== undefined) {
+          if (action === "verify" && parsed.complete !== undefined) {
+            return invalidInput("work_checkpoint", context.sessionId, [
+              {
+                code: "invalid_value",
+                path: "complete",
+                message:
+                  "complete only seals a native-package final checkpoint; generic verify records linked reviewer outcomes",
+                expected: "omit complete for a generic execution",
+              },
+            ]);
+          }
+          if (action === "recover" && parsed.userMessageId !== undefined) {
+            return invalidInput("work_checkpoint", context.sessionId, [
+              {
+                code: "invalid_value",
+                path: "userMessageId",
+                message:
+                  "generic checkpoint recovery is authorized by an advance authority; a root-user message is only consumed by native-package checkpoint recovery",
+                expected: "authorityId for generic checkpoint recovery",
+              },
+            ]);
+          }
+        }
+        // Resolve the known run source before source-specific checks. Unknown
+        // runs reach executeGenericCheckpoint (or the native domain below) and
+        // are reported as lookup failures, never as missing native-only fields.
+        if (
+          authorityAction ||
+          genericOnlyAction ||
+          (execution !== undefined && execution.source.kind !== "native-package")
+        ) {
           return executeGenericCheckpoint({
             data,
             sessionId: context.sessionId,
-            runId: genericRunId,
-            args,
+            runId,
+            args: parsed,
             ...(options ? { control: options } : {}),
           });
         }
       }
 
-      const runId = coerceNonEmptyString(args.runId);
-      const checkpointId = coerceNonEmptyString(args.checkpointId);
+      const checkpointId = parsed.checkpointId?.trim();
       if (!runId || !checkpointId) {
         return {
           tool: "work_checkpoint",
@@ -1590,7 +1647,7 @@ export function createWorkCheckpointTool(
           sessionId: context.sessionId,
           runId,
           checkpointId,
-          ...(args.complete === true ? { complete: true } : {}),
+          ...(parsed.complete === true ? { complete: true } : {}),
         });
         if (!verified.ok) {
           return {
@@ -1615,23 +1672,12 @@ export function createWorkCheckpointTool(
       }
 
       if (action === "recover") {
-        const recoveryId = coerceNonEmptyString(args.recoveryId);
-        const diagnosis = typeof args.diagnosis === "string" ? args.diagnosis : "";
-        const changedCondition =
-          typeof args.changedCondition === "string" ? args.changedCondition : "";
-        const verification = Array.isArray(args.verification) ? args.verification.map(String) : [];
-        const userMessageId = coerceNonEmptyString(args.userMessageId);
-        if (!recoveryId) {
-          return {
-            tool: "work_checkpoint",
-            sessionId: context.sessionId,
-            ok: false,
-            errorCode: "INVALID_INPUT",
-            message:
-              "INVALID_INPUT: recover requires a stable recoveryId, diagnosis, changedCondition, and verification references",
-          };
-        }
-        const authorityId = coerceNonEmptyString(args.authorityId);
+        const recoveryId = parsed.recoveryId!.trim();
+        const diagnosis = parsed.diagnosis!;
+        const changedCondition = parsed.changedCondition!;
+        const verification = [...(parsed.verification ?? [])];
+        const userMessageId = parsed.userMessageId?.trim();
+        const authorityId = parsed.authorityId?.trim();
         let advanceGrantApproved = false;
         if (authorityId) {
           const execution = findExecution(s.getStoreData(), runId);
@@ -1741,5 +1787,5 @@ export function createWorkCheckpointTool(
         message: "INVALID_INPUT: action must be register, start, verify, or recover",
       };
     },
-  };
+  });
 }

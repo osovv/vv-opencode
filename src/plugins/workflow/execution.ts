@@ -29,6 +29,7 @@
 //   SplitExecutionTaskResult - Replacement outcome with descendant identities or a coded rejection.
 //   ExecutionMutationErrorCode - Coded rejection families for registry mutations.
 //   deriveExecutionRunId - Deterministic common run identity from session, key, and source.
+//   deriveTaskStatus - Derive current task lifecycle status from the bound work-item record.
 //   cloneWorkflowExecution - Deep clone of one execution record for staged commits.
 //   findExecution - Look up one execution by run id.
 //   findExecutionByKey - Look up one execution by session and stable execution key.
@@ -47,7 +48,8 @@
 //   startGenericCheckpointInStore - Start one generic checkpoint generation after covered tasks are accepted.
 //   recordGenericReviewerResultInStore - Record one reviewer outcome and settle the generation.
 //   recoverGenericCheckpointInStore - Grant one exhaustion-recovery generation under a recorded advance unit.
-//   isTaskLaunchableInStore - Whether declared dependencies and barriers allow a task launch.
+//   isTaskLaunchableInStore - Whether sealed/superseded/live/budget state, declared dependencies, and barriers allow a task launch.
+//   latestAttemptView - Bounded latest-attempt projection for execution and inspection views.
 //   completeExecutionInStore - Complete a generic execution when all tasks and obligations hold.
 //   registerExecution - Store-surface registration wrapper.
 //   appendExecutionWork - Store-surface amendment wrapper.
@@ -62,7 +64,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial common execution registry: source-independent identity, append-only amendments, lineage, and native compatibility migration.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - getExecutionView derives current task status from the bound work-item record (accepted/closed included) instead of a stale binding status and exposes latest-attempt plus checkpoint generation/outcome detail; isTaskLaunchableInStore now also rejects sealed executions, superseded tasks, live attempts, and exhausted ordinary budgets so the read-only inspection guidance and the real launch gate agree. Prior C-WORKFLOW-PLAN-INDEPENDENCE: initial common execution registry.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -90,7 +92,13 @@ import {
   type WorkflowTaskContract,
 } from "../../lib/workflow-contract.js";
 import { nativeExecutionSource } from "./checkpoint-io.js";
-import { delegatedAttemptBudget, type DelegatedWorkItemState } from "./delegated.js";
+import {
+  delegatedAttemptBudget,
+  type DelegatedAttemptStatus,
+  type DelegatedImplementerStatus,
+  type DelegatedWorkItemState,
+} from "./delegated.js";
+import type { WorkflowExecutionView } from "./results.js";
 import {
   createRecordLookupKey,
   openWorkItemInStore,
@@ -405,7 +413,10 @@ function bindingIsBoundElsewhere(
   return false;
 }
 
-function taskStatusOf(record: WorkItemRecord | undefined): WorkflowTaskStatus | undefined {
+/** Derive current task status from the bound work-item record (acceptance, live attempt, closure). */
+export function deriveTaskStatus(
+  record: WorkItemRecord | undefined,
+): WorkflowTaskStatus | undefined {
   if (!record) return undefined;
   const delegated = record.delegated;
   if (!delegated) return undefined;
@@ -414,6 +425,28 @@ function taskStatusOf(record: WorkItemRecord | undefined): WorkflowTaskStatus | 
   if (accepted) return "accepted";
   if (delegated.attempts.some((attempt) => attempt.status === "in_flight")) return "launched";
   return "pending";
+}
+
+/** Bounded latest-attempt projection shared by execution and inspection views. */
+export function latestAttemptView(record: WorkItemRecord | undefined):
+  | {
+      attempt: number;
+      status: DelegatedAttemptStatus;
+      resultStatus?: DelegatedImplementerStatus;
+      completedAt?: string;
+      reportRejected: boolean;
+    }
+  | undefined {
+  const attempts = record?.delegated?.attempts;
+  if (!attempts || attempts.length === 0) return undefined;
+  const latest = attempts[attempts.length - 1]!;
+  return {
+    attempt: latest.attempt,
+    status: latest.status,
+    ...(latest.resultStatus !== undefined ? { resultStatus: latest.resultStatus } : {}),
+    ...(latest.completedAt !== undefined ? { completedAt: latest.completedAt } : {}),
+    reportRejected: latest.status === "report_rejected",
+  };
 }
 // END_BLOCK_EXECUTION_HELPERS
 
@@ -740,7 +773,7 @@ export function registerExecutionInStore(
         contract: task,
         origin: "controller",
         revision: 1,
-        status: taskStatusOf(record) ?? "pending",
+        status: deriveTaskStatus(record) ?? "pending",
       });
       continue;
     }
@@ -1116,7 +1149,7 @@ export function adoptWorkItemsInStore(
     execution.tasks.set(entry.taskId, {
       ...binding,
       workItemId: entry.workItemId,
-      status: taskStatusOf(record) ?? binding.status,
+      status: deriveTaskStatus(record) ?? binding.status,
     });
   }
   execution.updatedAt = toIsoNow();
@@ -1479,68 +1512,88 @@ export function ensureNativeExecutions(data: WorkItemStoreData): void {
 }
 // START_CONTRACT: getExecutionView
 //   PURPOSE: Serialize one execution into a stable read-only view for tooling output.
-//   INPUTS: { execution: WorkflowExecutionRecord - registry entry }
-//   OUTPUTS: { object - plain serializable view including budget-relevant status }
+//   INPUTS: { execution: WorkflowExecutionRecord - registry entry, data?: WorkItemStoreData - optional store data for deriving current task acceptance }
+//   OUTPUTS: { WorkflowExecutionView - plain serializable view including budget-relevant status and checkpoint generation detail }
 //   SIDE_EFFECTS: [none]
-//   LINKS: [M-WORKFLOW-EXECUTION]
+//   LINKS: [M-WORKFLOW-EXECUTION, M-WORKFLOW-DELEGATED]
 // END_CONTRACT: getExecutionView
-export function getExecutionView(execution: WorkflowExecutionRecord): {
-  runId: string;
-  sessionId: string;
-  executionKey: string;
-  sourceKind: WorkflowExecutionSource["kind"];
-  goal: string;
-  state: WorkflowExecutionState;
-  revision: number;
-  tasks: Array<{
-    taskId: string;
-    workItemId: string;
-    status: WorkflowTaskStatus;
-    requiredReviewers: string[];
-    dependsOn: string[];
-    blockedBy: string[];
-  }>;
-  checkpoints: Array<{
-    checkpointId: string;
-    kind: string;
-    covers: string[];
-    requiredReviewers: string[];
-    status?: string;
-    reviewWorkItemId?: string;
-    generation?: number;
-    recoveryCount?: number;
-  }>;
-} {
+export function getExecutionView(
+  execution: WorkflowExecutionRecord,
+  data?: WorkItemStoreData,
+): WorkflowExecutionView {
+  // For native runs the plan run is the authoritative lifecycle source; the
+  // one-time materialized registry state can stay active after the run seals.
+  const nativeRun =
+    execution.source.kind === "native-package" ? data?.planRuns.get(execution.runId) : undefined;
   return {
     runId: execution.runId,
     sessionId: execution.sessionId,
     executionKey: execution.executionKey,
     sourceKind: execution.source.kind,
     goal: execution.goal,
-    state: execution.state,
+    state: nativeRun ? (nativeRun.status === "sealed" ? "sealed" : "active") : execution.state,
     revision: execution.revision,
-    tasks: [...execution.tasks.values()].map((binding) => ({
-      taskId: binding.taskId,
-      workItemId: binding.workItemId,
-      status: binding.status,
-      requiredReviewers: [...binding.contract.requiredReviewers],
-      dependsOn: [...binding.contract.dependsOn],
-      blockedBy: [...binding.contract.blockedBy],
-    })),
-    checkpoints: [...execution.checkpoints.values()].map((binding) => ({
-      checkpointId: binding.checkpointId,
-      kind: binding.contract.kind,
-      covers: [...binding.contract.covers],
-      requiredReviewers: [...binding.contract.requiredReviewers],
-      ...(binding.status ? { status: binding.status } : {}),
-      ...(binding.currentReview
-        ? {
-            reviewWorkItemId: binding.currentReview.reviewWorkItemId,
-            generation: binding.currentReview.generation,
-          }
-        : {}),
-      ...(binding.recoveryHistory ? { recoveryCount: binding.recoveryHistory.length } : {}),
-    })),
+    tasks: [...execution.tasks.values()].map((binding) => {
+      const record = data ? findRecord(data, execution.sessionId, binding.workItemId) : undefined;
+      const derivedStatus =
+        binding.status === "superseded"
+          ? "superseded"
+          : ((record ? deriveTaskStatus(record) : undefined) ?? binding.status);
+      const latestAttempt = record ? latestAttemptView(record) : undefined;
+      return {
+        taskId: binding.taskId,
+        workItemId: binding.workItemId,
+        status: derivedStatus,
+        requiredReviewers: [...binding.contract.requiredReviewers],
+        dependsOn: [...binding.contract.dependsOn],
+        blockedBy: [...binding.contract.blockedBy],
+        ...(latestAttempt ? { latestAttempt } : {}),
+      };
+    }),
+    checkpoints: [...execution.checkpoints.values()].map((binding) => {
+      const history = binding.history?.map((entry) => ({
+        generation: entry.generation,
+        outcome: entry.outcome,
+        completedAt: entry.completedAt,
+      }));
+      const lastOutcome =
+        history && history.length > 0 ? history[history.length - 1]!.outcome : undefined;
+      const advanceGrants = (binding.recoveryHistory ?? []).filter(
+        (entry) => entry.kind === "advance_grant",
+      ).length;
+      const remainingGenerations =
+        binding.attempts === undefined
+          ? undefined
+          : Math.max(0, GENERIC_CHECKPOINT_GENERATIONS + advanceGrants - binding.attempts);
+      return {
+        checkpointId: binding.checkpointId,
+        kind: binding.contract.kind,
+        covers: [...binding.contract.covers],
+        requiredReviewers: [...binding.contract.requiredReviewers],
+        ...(binding.status ? { status: binding.status } : {}),
+        ...(binding.currentReview
+          ? {
+              reviewWorkItemId: binding.currentReview.reviewWorkItemId,
+              generation: binding.currentReview.generation,
+            }
+          : {}),
+        ...(binding.recoveryHistory ? { recoveryCount: binding.recoveryHistory.length } : {}),
+        ...(binding.attempts !== undefined ? { attempts: binding.attempts } : {}),
+        ...(remainingGenerations !== undefined ? { remainingGenerations } : {}),
+        ...(lastOutcome !== undefined ? { lastOutcome } : {}),
+        ...(binding.currentReview
+          ? {
+              currentReview: {
+                reviewWorkItemId: binding.currentReview.reviewWorkItemId,
+                generation: binding.currentReview.generation,
+                coveredAttemptIds: [...binding.currentReview.coveredAttemptIds],
+                recordedReviewers: Object.keys(binding.currentReview.results),
+              },
+            }
+          : {}),
+        ...(history ? { history } : {}),
+      };
+    }),
   };
 }
 // START_BLOCK_EXECUTION_PUBLIC_WRAPPERS
@@ -2033,7 +2086,14 @@ export function isTaskLaunchableInStore(
   | { ok: true }
   | {
       ok: false;
-      reason: "TASK_NOT_FOUND" | "DEPENDENCIES_UNMET" | "BARRIER_UNSATISFIED";
+      reason:
+        | "TASK_NOT_FOUND"
+        | "EXECUTION_SEALED"
+        | "TASK_SUPERSEDED"
+        | "ATTEMPT_IN_FLIGHT"
+        | "ATTEMPTS_EXHAUSTED"
+        | "DEPENDENCIES_UNMET"
+        | "BARRIER_UNSATISFIED";
       message: string;
     } {
   const foundExecution = findExecution(data, input.runId);
@@ -2043,9 +2103,57 @@ export function isTaskLaunchableInStore(
   if (!execution || execution.sessionId !== input.sessionId) {
     return { ok: false, reason: "TASK_NOT_FOUND", message: `no execution ${input.runId}` };
   }
+  if (execution.state === "sealed") {
+    return {
+      ok: false,
+      reason: "EXECUTION_SEALED",
+      message: `execution ${input.runId} is sealed`,
+    };
+  }
+  // The native plan run is the authoritative seal source: the one-time
+  // materialized registry can stay "active" after the run itself seals.
+  if (execution.source.kind === "native-package") {
+    const nativeRun = data.planRuns.get(execution.runId);
+    if (nativeRun?.status === "sealed") {
+      return {
+        ok: false,
+        reason: "EXECUTION_SEALED",
+        message: `execution ${input.runId} is sealed`,
+      };
+    }
+  }
   const binding = execution.tasks.get(input.taskId);
   if (!binding) {
     return { ok: false, reason: "TASK_NOT_FOUND", message: `no task ${input.taskId}` };
+  }
+  if (binding.status === "superseded") {
+    return {
+      ok: false,
+      reason: "TASK_SUPERSEDED",
+      message: `task ${input.taskId} was replaced and cannot launch`,
+    };
+  }
+  // Ordinary launch budget/live-attempt status derives from the bound work-item
+  // record, matching the delegated launch gate the mutation would apply.
+  const record = findRecord(data, execution.sessionId, binding.workItemId);
+  if (record?.delegated) {
+    if (record.delegated.attempts.some((attempt) => attempt.status === "in_flight")) {
+      return {
+        ok: false,
+        reason: "ATTEMPT_IN_FLIGHT",
+        message: `ATTEMPT_IN_FLIGHT: task ${input.taskId} already has an in-flight implementation attempt`,
+      };
+    }
+    if (
+      record.state !== "closed" &&
+      record.delegated.attempts.length >= delegatedAttemptBudget(record.delegated)
+    ) {
+      return {
+        ok: false,
+        reason: "ATTEMPTS_EXHAUSTED",
+        message: `ATTEMPTS_EXHAUSTED: task ${input.taskId} consumed all ordinary implementation attempts; explicit recovery or rework is required`,
+      };
+    }
   }
   for (const dependency of binding.contract.dependsOn) {
     if (!isTaskAccepted(data, execution, dependency)) {

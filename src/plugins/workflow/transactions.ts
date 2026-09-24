@@ -13,7 +13,8 @@
 //   WorkflowPersistResult - Persistence outcome surfaced by an injected or default commit path.
 //   WorkflowPersist - Persistence callback used by the transaction boundary.
 //   WorkflowMutation - Staged result plus an optional synchronous publish step.
-//   WorkflowTransactionResult - Committed result or a fail-closed persistence error.
+//   WorkflowTransactionResult - Committed result or a fail-closed persistence/result-contract error.
+//   WorkflowStagedResultGuard - Optional producer check on a staged success before persist/publish.
 //   WorkflowTransactionQueue - Per-session serial queue for mutating workflow operations.
 //   cloneWorkItemStoreData - Deep clone of workflow store data for staging.
 //   fingerprintWorkItemStoreData - Deterministic content fingerprint used to detect concurrent live mutations.
@@ -22,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial atomic per-session transaction boundary.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Added an optional staged-result guard checked before persistence and publication; a rejected result persists/publishes nothing and is surfaced with an explicit invalidResult marker so the caller can report a truthful not_applied internal failure.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -54,7 +55,18 @@ export interface WorkflowMutation<T> {
   skipPersist?: boolean;
 }
 
-export type WorkflowTransactionResult<T> = { ok: true; result: T } | { ok: false; error: string };
+export type WorkflowTransactionResult<T> =
+  | { ok: true; result: T }
+  | { ok: false; error: string; invalidResult?: boolean };
+
+/**
+ * Optional producer-side check on a staged result that would otherwise be
+ * persisted and published. A rejection persists and publishes nothing; the
+ * caller maps it to a bounded internal result-contract failure.
+ */
+export type WorkflowStagedResultGuard<T> = (
+  result: T,
+) => { ok: true } | { ok: false; error: string };
 
 /** Deep clone of workflow store data so an operation cannot mutate live state before commit. */
 export function cloneWorkItemStoreData(data: WorkItemStoreData): WorkItemStoreData {
@@ -146,7 +158,7 @@ export function fingerprintWorkItemStoreData(data: WorkItemStoreData): string {
 
 // START_CONTRACT: runWorkflowTransaction
 //   PURPOSE: Serialize, stage, persist, and synchronously publish one workflow mutation.
-//   INPUTS: { options: queue, sessionId, getData, persist?, operation }
+//   INPUTS: { options: queue, sessionId, getData, persist?, operation, guardStagedResult? }
 //   OUTPUTS: { Promise<WorkflowTransactionResult<T>> - committed result or a fail-closed persistence error }
 //   SIDE_EFFECTS: [Persists the staged snapshot; publishes live state only after persistence succeeds]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PERSISTENCE]
@@ -157,6 +169,7 @@ export async function runWorkflowTransaction<T>(options: {
   getData: () => WorkItemStoreData;
   persist?: WorkflowPersist;
   operation: (staged: WorkItemStoreData) => WorkflowMutation<T> | Promise<WorkflowMutation<T>>;
+  guardStagedResult?: WorkflowStagedResultGuard<T>;
 }): Promise<WorkflowTransactionResult<T>> {
   const { queue, sessionId, getData } = options;
   return queue.run(sessionId, async () => {
@@ -166,6 +179,15 @@ export async function runWorkflowTransaction<T>(options: {
     if (mutation.skipPersist === true) {
       // Validation failed: persist nothing and publish nothing.
       return { ok: true, result: mutation.result };
+    }
+    if (options.guardStagedResult) {
+      // Producer contract check on the staged success before it reaches disk or
+      // live state. The operation ran on the clone, so a rejection leaves the
+      // live store and every committed ledger unchanged.
+      const guard = options.guardStagedResult(mutation.result);
+      if (!guard.ok) {
+        return { ok: false, error: guard.error, invalidResult: true };
+      }
     }
     if (fingerprintWorkItemStoreData(getData()) !== liveBefore) {
       // A concurrent mutation (including reducers that bypass the store

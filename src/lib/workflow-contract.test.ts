@@ -1,7 +1,7 @@
 // FILE: src/lib/workflow-contract.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Deterministic tests for the dependency-free common workflow contract: declared-path normalization, explicit reviewer sets, execution boundary containment, bounded task/checkpoint validation, exact-reference acyclic graph validation, and native definition adaptation.
+//   PURPOSE: Deterministic tests for the dependency-free common workflow contract: canonical enums, declared-path normalization, explicit reviewer sets, execution boundary containment (including boundary-reporting containment failures), bounded task/checkpoint validation, exact-reference acyclic graph validation, and native definition adaptation.
 //   SCOPE: Pure contract fixtures only; no filesystem, SDK, or persistence access.
 //   DEPENDS: [src/lib/workflow-contract.ts]
 //   LINKS: [M-WORKFLOW-CONTRACT]
@@ -16,11 +16,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial contract coverage.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Added canonical enum coverage and OUT_OF_BOUNDARY offending-scope-plus-boundary reporting assertions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import {
+  AUTHORITY_STAGES,
+  REVIEWER_ROLES,
+  WORK_ITEM_MODES,
   normalizeDeclaredDirectoryPath,
   normalizeDeclaredScopePath,
   normalizeReviewerSet,
@@ -72,6 +75,19 @@ function checkpoint(
     ...overrides,
   };
 }
+
+describe("canonical enum constants", () => {
+  test("exposes the canonical work-item modes, reviewer roles, and authority stages", () => {
+    expect([...WORK_ITEM_MODES]).toEqual(["implementation", "review_only", "delegated"]);
+    expect([...REVIEWER_ROLES]).toEqual(["spec", "code"]);
+    expect([...AUTHORITY_STAGES]).toEqual([
+      "specification",
+      "planning",
+      "implementation",
+      "verification",
+    ]);
+  });
+});
 
 describe("declared path normalization", () => {
   test("normalizes an explicit relative file path and trims surrounding space", () => {
@@ -218,6 +234,21 @@ describe("contract graph validation", () => {
     const codes = result.problems.map((problem) => problem.code);
     expect(codes).toContain("UNKNOWN_REFERENCE");
     expect(codes).toContain("OUT_OF_BOUNDARY");
+  });
+
+  test("reports the offending scope together with the applicable declared boundary", () => {
+    const result = validateWorkflowContractGraph({
+      tasks: [task({ writeScope: ["src/elsewhere/c.ts"] })],
+      checkpoints: [],
+      boundary: baseBoundary,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const boundaryProblem = result.problems.find((problem) => problem.code === "OUT_OF_BOUNDARY");
+    expect(boundaryProblem).toBeDefined();
+    expect(boundaryProblem?.message).toContain("src/elsewhere/c.ts");
+    expect(boundaryProblem?.message).toContain("src/lib/a.ts");
+    expect(boundaryProblem?.message).toContain("src/plugins/workflow");
   });
 
   test("rejects duplicate identities and dependency cycles", () => {

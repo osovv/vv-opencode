@@ -1,10 +1,10 @@
 // FILE: src/plugins/web-tools/index.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Register the canonical web_search and web_fetch tools and suppress OpenCode built-ins at runtime while the web-tools plugin is enabled.
-//   SCOPE: Startup vvoc snapshot use, plugin toggle handling, runtime permission suppression, tool registration, and credential-safe diagnostics.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts]
-//   LINKS: M-PLUGIN-WEB-TOOLS, M-WEB-CONFIG, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE, V-M-PLUGIN-WEB-TOOLS, DF-WEB-SEARCH, DF-WEB-FETCH
+//   PURPOSE: Register the canonical web_search and web_fetch tools, publish their strict input contracts through the owned definition seam, validate owned raw arguments before execution, and suppress OpenCode built-ins at runtime while the web-tools plugin is enabled.
+//   SCOPE: Startup vvoc snapshot use, plugin toggle handling, runtime permission suppression, tool registration, owned contract publication and pre-execute validation for the two owned tool ids only, and credential-safe diagnostics. No interception of unrelated host or MCP tools.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts]
+//   LINKS: M-PLUGIN-WEB-TOOLS, M-WEB-CONFIG, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE, M-AGENT-TOOL-CONTRACT, V-M-PLUGIN-WEB-TOOLS, DF-WEB-SEARCH, DF-WEB-FETCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -16,14 +16,22 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Added credential-safe direct Z.AI region diagnostics while preserving the canonical tool surface.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Published both web tool contracts through the owned definition adapter and added an owned-only pre-execute guard; preserved built-in suppression, explicit user overrides, and disabled-plugin behavior.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
+import { ContractInputError, createToolDefinitionAdapter } from "../../lib/agent-tool-contract.js";
 import { loadVvocConfig } from "../../lib/config-layers.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { resolveWebRuntimeConfig, warnIfSecretBearingProjectConfigTracked } from "./config.js";
 import { createWebFetchTool } from "./fetch-service.js";
+import {
+  WEB_FETCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+  validateWebFetchToolInput,
+  validateWebSearchToolInput,
+  webToolContracts,
+} from "./schemas.js";
 import { createWebSearchTool } from "./search-service.js";
 
 /** Built-in permission ids suppressed at runtime while web-tools is enabled. */
@@ -91,11 +99,29 @@ export const WebToolsPlugin: Plugin = async ({ client, directory }) => {
     });
   }
 
+  // Owned-only contract publication: the strict input JSON Schema is published through the
+  // host's observable jsonSchema member without replacing the host decoder. Unowned tool ids
+  // are left untouched.
+  const toolDefinitionAdapter = createToolDefinitionAdapter([...webToolContracts]);
+
   return {
     config: async (config) => applyBuiltinSuppression(config),
+    "tool.execute.before": async (input, output) => {
+      // Validate only the two owned tool ids; every other host or MCP tool is untouched.
+      const validation =
+        input.tool === WEB_SEARCH_TOOL_ID
+          ? validateWebSearchToolInput(output.args)
+          : input.tool === WEB_FETCH_TOOL_ID
+            ? validateWebFetchToolInput(output.args)
+            : undefined;
+      if (validation && !validation.ok) {
+        throw new ContractInputError(input.tool, validation.issues);
+      }
+    },
     tool: {
       web_search: createWebSearchTool(resolved.search),
       web_fetch: createWebFetchTool(resolved.fetch),
     },
+    "tool.definition": toolDefinitionAdapter,
   };
 };

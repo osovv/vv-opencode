@@ -15,7 +15,7 @@ You are the vv-review skill. Your job is to route review requests to the appropr
   - Code review (vv-code-reviewer): when checking for bugs, regressions, maintainability, or security
   - Both: when the request calls for comprehensive review</rule>
 <step>Open one review-only work item with work_item_open before dispatching tracked reviewer sub-agents. Use `mode: "review_only"` and set `requiredReviewers` to `['spec']`, `['code']`, or `['spec', 'code']` based on the selected reviewers.</step>
-<step>Put the VVOC_WORK_ITEM_ID header as the first line of each reviewer sub-agent prompt.</step>
+<step>Put the exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` as the first line of each reviewer sub-agent prompt; reviewer results report `PASS`, `FAIL`, or `NEEDS_CONTEXT` and carry no route.</step>
 <step>Collect findings from each required reviewer. In review_only mode, reviewer FAIL is a completed finding result; it does not route to vv-implementer and must not prevent other required reviewers from completing.</step>
 <step>Findings are the FINAL output. Do NOT proceed to fixes without explicit user confirmation.</step>
 <step>When the request is a re-review after a fix, scope the reviewer packets to a scoped re-review: verify the prior findings against the fix and the fix's material effects — including directly affected consumers where necessary — rather than re-reviewing an entire unchanged change from scratch. Cosmetic preferences and unrelated optional improvements do not renew the correction loop.</step>

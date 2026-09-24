@@ -7,12 +7,28 @@ For tracked subagents (`vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`)
    - Implementation loop: `{ key, title, mode: "implementation", requiredReviewers: ["spec", "code"] }`
    - Review-only report: `{ key, title, mode: "review_only", requiredReviewers: ["spec", "code"] }`
 2. Reuse the returned `VVOC_WORK_ITEM_ID`.
-3. Put that header as the first line in tracked subagent prompts.
+3. Put that exact header (`VVOC_WORK_ITEM_ID: <returned id>`) as the first line in tracked subagent prompts.
 4. Prefer lightweight XML-like tagged assignment bodies after the header, such as `<assignment>`, `<goal>`, `<context>`, and `<verification>`.
 5. Treat `NEEDS_CONTEXT` as a hard stop.
 6. Use `work_item_list` to inspect workflow state before retrying.
 7. Avoid free-form review loops without explicit work-item identity.
 8. In `review_only`, reviewer `FAIL` is a completed review finding result; collect all required reviewer results before closing, and do not route review-only failures to `vv-implementer`.
+
+Tracked result protocol (applies to every tracked launch):
+
+- A tracked result begins on its first line with the protocol top block — no preface, prose, or code
+  fence — followed by a blank line and the body.
+- Use the exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` for that assignment, never a sample
+  id from another task.
+- `vv-implementer` reports `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT`, or `BLOCKED` and must
+  include `VVOC_ROUTE`. `vv-spec-reviewer` and `vv-code-reviewer` report `PASS`, `FAIL`, or
+  `NEEDS_CONTEXT` and carry no route.
+- A result whose first field names a different work item is a work-item mismatch, not malformed
+  syntax; it is never relabeled to the expected id.
+- Inspect `work_item_list` before retrying so you reuse the current identity, state, attempt, and
+  budget. These common calls follow the published input schemas and need no separate execution
+  skill; `work_item_list` reports the loaded contract revision and the on-demand reference path at
+  `contract.referencePath`.
 
 Use `work_item_close` explicitly when a work item is complete.
 

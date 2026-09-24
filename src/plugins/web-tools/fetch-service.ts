@@ -1,22 +1,22 @@
 // FILE: src/plugins/web-tools/fetch-service.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Build the provider-neutral web_fetch tool: input validation, permission request, provider dispatch, and structured text or attachment results.
-//   SCOPE: web_fetch ToolDefinition factory; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters.
-//   DEPENDS: [@opencode-ai/plugin, src/plugins/web-tools/config.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
-//   LINKS: M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-WEB-EXA, M-PLUGIN-WEB-TOOLS, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
+//   PURPOSE: Build the provider-neutral web_fetch tool: strict contract validation with explicit execute-time defaults, URL scheme/shape rejection, permission request, provider dispatch, and structured text or attachment results.
+//   SCOPE: web_fetch ToolDefinition factory plus provider result mapping. Validates raw host-forwarded arguments through the shared web_fetch contract before any permission request, credential lookup, or provider dispatch; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters.
+//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
+//   LINKS: M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-WEB-EXA, M-PLUGIN-WEB-TOOLS, M-AGENT-TOOL-CONTRACT, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   WEB_FETCH_DEFAULT_TIMEOUT_SECONDS - Default per-call timeout in seconds.
-//   WEB_FETCH_MAX_TIMEOUT_SECONDS - Maximum model-configurable timeout in seconds.
+//   WEB_FETCH_DEFAULT_TIMEOUT_SECONDS - Default per-call timeout in seconds (re-exported from schemas).
+//   WEB_FETCH_MAX_TIMEOUT_SECONDS - Maximum model-configurable timeout in seconds (re-exported from schemas).
 //   createWebFetchTool - Create the web_fetch ToolDefinition bound to a resolved fetch config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Applied web_fetch format and timeout defaults inside execute when OpenCode omits schema defaults at runtime.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Registered web_fetch from the shared schemas.ts contract and validated URL shape/scheme plus re-applied the documented format/timeout defaults at the execute boundary before any permission request or dispatch.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -25,18 +25,21 @@ import {
   type ToolDefinition,
   type ToolResult,
 } from "@opencode-ai/plugin";
+import { ContractInputError } from "../../lib/agent-tool-contract.js";
 import type { ResolvedWebFetchConfig } from "./config.js";
 import { WebProviderError } from "./providers/exa.js";
 import { fetchNative, type NativeFetchOutcome } from "./providers/native-fetch.js";
 import { scrapeSpider, type SpiderOutcome } from "./providers/spider.js";
 import { fetchZai, type ZaiReaderOutcome } from "./providers/zai.js";
+import {
+  WEB_FETCH_TOOL_ID,
+  validateWebFetchToolInput,
+  webFetchArgs,
+  webFetchContract,
+  type WebFetchFormat,
+} from "./schemas.js";
 
-const z = tool.schema;
-
-export const WEB_FETCH_DEFAULT_TIMEOUT_SECONDS = 30;
-export const WEB_FETCH_MAX_TIMEOUT_SECONDS = 120;
-
-type FetchFormat = "markdown" | "text" | "html";
+export { WEB_FETCH_DEFAULT_TIMEOUT_SECONDS, WEB_FETCH_MAX_TIMEOUT_SECONDS } from "./schemas.js";
 
 // START_BLOCK_RESULT_MAPPING
 function mediaSummary(attachment: ToolAttachment): string {
@@ -46,7 +49,7 @@ function mediaSummary(attachment: ToolAttachment): string {
 
 function nativeResult(
   url: string,
-  format: FetchFormat,
+  format: WebFetchFormat,
   outcome: NativeFetchOutcome,
 ): Exclude<ToolResult, string> {
   if (outcome.kind === "media") {
@@ -66,7 +69,7 @@ function nativeResult(
 
 function spiderResult(
   url: string,
-  format: FetchFormat,
+  format: WebFetchFormat,
   credentialSource: "env" | "config",
   outcome: SpiderOutcome,
 ): Exclude<ToolResult, string> {
@@ -89,7 +92,7 @@ function spiderResult(
 
 function zaiResult(
   url: string,
-  format: FetchFormat,
+  format: WebFetchFormat,
   region: "international" | "china",
   credentialSource: "env" | "config",
   outcome: ZaiReaderOutcome,
@@ -115,49 +118,31 @@ function zaiResult(
 
 /**
  * Create the web_fetch tool bound to the resolved fetch configuration.
- * execute validates http or https schemes, asks permission key web_fetch with patterns [url],
- * routes textual extraction to native, Spider, or direct Z.AI reader, returns media as attachments with a short
- * Markdown summary in the same ToolResult, and reports metadata
+ * execute validates raw host-forwarded arguments through the shared strict contract first, so
+ * unknown keys, invalid provided values, and unsupported or malformed URLs reject with a
+ * bounded field diagnostic before any permission request, credential lookup, or provider
+ * dispatch; the documented format/timeout defaults are re-applied here because the host
+ * forwards unparsed raw arguments. Permission uses key web_fetch with patterns [url]. Textual
+ * extraction routes to native, Spider, or direct Z.AI reader; media returns as an attachment
+ * with a short Markdown summary in the same ToolResult and reports metadata
  * { provider, format, credentialSource?, status?, durationMs? }.
  * Native fetch requires no credential; Spider and Z.AI validate credentials at execution time
  * with actionable messages naming the environment variable and web.fetch.apiKey.
  */
 export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefinition {
   return tool({
-    description:
-      "Fetch a known HTTP or HTTPS URL using the configured provider. Returns Markdown, text, raw HTML, or an image/PDF attachment.",
-    args: {
-      url: z.string().min(1).describe("The HTTP or HTTPS URL to retrieve."),
-      format: z
-        .enum(["markdown", "text", "html"])
-        .default("markdown")
-        .describe("Output format for textual resources; defaults to markdown."),
-      timeout: z
-        .number()
-        .positive()
-        .max(WEB_FETCH_MAX_TIMEOUT_SECONDS)
-        .default(WEB_FETCH_DEFAULT_TIMEOUT_SECONDS)
-        .describe("Timeout in seconds, greater than 0 and at most 120."),
-    },
+    description: webFetchContract.description,
+    args: webFetchArgs,
     async execute(args, context) {
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(args.url);
-      } catch {
-        throw new Error("web_fetch requires a valid HTTP or HTTPS URL");
+      const validation = validateWebFetchToolInput(args);
+      if (!validation.ok) {
+        throw new ContractInputError(WEB_FETCH_TOOL_ID, validation.issues);
       }
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        throw new Error(
-          `web_fetch supports only HTTP and HTTPS URLs; received ${parsedUrl.protocol || "unknown scheme"}`,
-        );
-      }
-
-      const format: FetchFormat = args.format ?? "markdown";
-      const timeoutSeconds = args.timeout ?? WEB_FETCH_DEFAULT_TIMEOUT_SECONDS;
+      const { url, format, timeout: timeoutSeconds } = validation.data;
 
       await context.ask({
         permission: "web_fetch",
-        patterns: [args.url],
+        patterns: [url],
         always: [],
         metadata: { provider: resolved.provider, format },
       });
@@ -165,12 +150,12 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
       const timeoutMs = timeoutSeconds * 1000;
       if (resolved.provider === "native") {
         const outcome = await fetchNative({
-          url: args.url,
+          url,
           format,
           abort: context.abort,
           timeoutMs,
         });
-        return nativeResult(args.url, format, outcome);
+        return nativeResult(url, format, outcome);
       }
 
       if (!resolved.credential) {
@@ -185,23 +170,23 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
           throw new Error("web.fetch.region is required when provider is zai");
         }
         const outcome = await fetchZai({
-          url: args.url,
+          url,
           format,
           region: resolved.region,
           credential: resolved.credential,
           abort: context.abort,
           timeoutMs,
         });
-        return zaiResult(args.url, format, resolved.region, resolved.credential.source, outcome);
+        return zaiResult(url, format, resolved.region, resolved.credential.source, outcome);
       }
       const outcome = await scrapeSpider({
-        url: args.url,
+        url,
         format,
         credential: resolved.credential,
         abort: context.abort,
         timeoutMs,
       });
-      return spiderResult(args.url, format, resolved.credential.source, outcome);
+      return spiderResult(url, format, resolved.credential.source, outcome);
     },
   });
 }

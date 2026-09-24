@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-skills.test.ts
-// VERSION: 1.1.0
+// VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added vv-execute bounded recovery, native plan registration, and scoped re-review coverage; superseded the rework-only extension sentence.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Added exact returned work-item identity checks for the vv-execute and vv-review dispatch steps. Prior: bounded recovery, native plan registration, and scoped re-review coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -261,6 +261,23 @@ describe("managed workflow skill prompts", () => {
     );
   });
 
+  test("vv-execute and vv-review use the exact returned work-item identity", async () => {
+    const execute = await loadManagedSkillTemplate("vv-execute");
+    const review = await loadManagedSkillTemplate("vv-review");
+    const { body: executeBody } = splitFrontmatter(execute);
+    const { body: reviewBody } = splitFrontmatter(review);
+
+    for (const body of [executeBody, reviewBody]) {
+      expect(body).not.toContain("VVOC_WORK_ITEM_ID: wi-1");
+      expect(body).toContain("VVOC_WORK_ITEM_ID");
+    }
+    expect(executeBody).toContain("exact returned VVOC_WORK_ITEM_ID header");
+    expect(reviewBody).toContain(
+      "exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` as the first line",
+    );
+    expect(reviewBody).toContain("carry no route");
+  });
+
   test("managed skill text lookup prefers project and falls back to global", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-skill-home-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skill-project-"));
@@ -319,5 +336,32 @@ describe("vvoc-usage-analytics managed skill", () => {
     expect(reference).toContain("mode=ro");
     expect(reference).toContain("step-finish");
     expect(reference).toContain("1.18.x");
+  });
+});
+
+describe("vv-execute tool-contracts reference", () => {
+  test("is discovered and loads the generated catalog reference verbatim", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    const names = await listManagedSkillReferenceNames("vv-execute");
+    expect(names).toContain("tool-contracts.md");
+
+    const reference = await loadManagedSkillReference("vv-execute", "tool-contracts.md");
+    const { renderToolContractsReference } = await import("./agent-tool-catalog.js");
+    expect(reference).toBe(renderToolContractsReference());
+  });
+
+  test("the loaded reference carries the built package identity and contract revision", async () => {
+    const { loadManagedSkillReference, loadManagedSkillTemplate } =
+      await import("./managed-skills.js");
+    const reference = await loadManagedSkillReference("vv-execute", "tool-contracts.md");
+    const { PACKAGE_NAME, PACKAGE_VERSION, AGENT_TOOL_CONTRACT_REVISION } =
+      await import("./agent-tool-contract.js");
+    expect(reference).toContain(PACKAGE_NAME);
+    expect(reference).toContain(PACKAGE_VERSION);
+    expect(reference).toContain(AGENT_TOOL_CONTRACT_REVISION);
+    // The reference stays on demand: it is not inlined into the always-loaded skill text.
+    const template = await loadManagedSkillTemplate("vv-execute");
+    expect(template).not.toContain("## Tools");
   });
 });

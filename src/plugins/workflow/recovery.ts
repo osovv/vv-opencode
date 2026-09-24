@@ -16,13 +16,21 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-INDEX-REDUCE - Extracted the staged generic-transaction committer and the committed-recovery executor with capture-restore helpers from the plugin closure in index.ts into this factory module; commit ordering, rollback, and failure surfacing are unchanged.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - commitGenericToolResult takes the trusted expected tool identity and validates every owned staged success against it (missing/wrong tag, malformed nested result, and a thrown validator are fail-closed); a thrown validator is summarized safely by name without echoing its message; invalid hydration is a persistence failure and post-apply rollback throws carry persistence category plus an explicit rolled_back outcome.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
 import { createRecordLookupKey, createWorkItemStoreView, type WorkItemStore } from "./state.js";
 import { snapshotWorkflowStateChecked } from "./persistence.js";
 import { runWorkflowTransaction, WorkflowTransactionQueue } from "./transactions.js";
+import { formatContractIssues } from "../../lib/agent-tool-contract.js";
+import {
+  normalizeWorkflowFailure,
+  validateWorkflowToolResult,
+  workflowInternalResultFailure,
+  WorkflowDiagnosticError,
+  type WorkflowToolResultToolId,
+} from "./results.js";
 
 /** Plugin client shape used for failure logging. */
 type PluginClient = Parameters<Plugin>[0]["client"];
@@ -36,6 +44,7 @@ export type RecoverySupportContext = {
 export type RecoverySupport = {
   commitGenericToolResult: (
     sessionId: string,
+    toolId: WorkflowToolResultToolId,
     run: (view: WorkItemStore) => Promise<Record<string, unknown>> | Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
   executeCommittedRecovery: <T>(
@@ -56,24 +65,65 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
   // write never exposes new obligations, authority, or launch permissions.
   const workflowTransactions = new WorkflowTransactionQueue();
 
+  /**
+   * Producer contract check on a staged success before it is persisted and
+   * published. The expected tool identity comes from the trusted wrapper, not
+   * from the result itself, so a malformed success that omits or forges `tool`
+   * is rejected. A thrown validator is also fail-closed. The operation ran on
+   * the staged clone, so a rejection leaves the live store and every committed
+   * ledger entry unchanged.
+   */
+  function guardStagedWorkflowResult(
+    toolId: WorkflowToolResultToolId,
+    result: Record<string, unknown>,
+  ): { ok: true } | { ok: false; error: string } {
+    try {
+      if (result.tool !== toolId) {
+        return {
+          ok: false,
+          error: `owned staged result is not tagged for expected tool ${toolId}`,
+        };
+      }
+      const validation = validateWorkflowToolResult(toolId, result);
+      if (validation.ok) {
+        return { ok: true };
+      }
+      return { ok: false, error: formatContractIssues(validation.issues) };
+    } catch (error) {
+      // Never echo an arbitrary exception message: it can carry caller values
+      // or secrets. Report only a safe internal summary.
+      const name = error instanceof Error && error.name ? error.name : "Error";
+      return {
+        ok: false,
+        error: `owned staged result guard failed closed (${name})`,
+      };
+    }
+  }
+
   async function commitGenericToolResult(
     sessionId: string,
+    toolId: WorkflowToolResultToolId,
     run: (view: WorkItemStore) => Promise<Record<string, unknown>> | Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     const liveStore = stores.get(sessionId);
     if (!liveStore) {
-      return {
+      return normalizeWorkflowFailure({
+        tool: toolId,
+        sessionId,
         ok: false,
         errorCode: "SESSION_MISMATCH",
         message: `no live workflow store for session ${sessionId}`,
-      };
+      });
     }
     if (invalidHydrationSessions.has(sessionId)) {
-      return {
+      return normalizeWorkflowFailure({
+        tool: toolId,
+        sessionId,
         ok: false,
-        errorCode: "INVALID_STATE",
-        message: `persisted workflow state for session ${sessionId} is invalid`,
-      };
+        errorCode: "PERSISTENCE_FAILED",
+        category: "persistence",
+        message: `persisted workflow state for session ${sessionId} is invalid; refusing new mutations`,
+      });
     }
     const outcome = await runWorkflowTransaction<Record<string, unknown>>({
       queue: workflowTransactions,
@@ -87,8 +137,31 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
         }
         return { result };
       },
+      guardStagedResult: (result) => guardStagedWorkflowResult(toolId, result),
     });
     if (!outcome.ok) {
+      if (outcome.invalidResult === true) {
+        void client.app
+          .log({
+            body: {
+              service: "workflow",
+              level: "error",
+              message:
+                "[workflow][generic][BLOCK_RESULT_CONTRACT] staged result failed its contract",
+              extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
+            },
+          })
+          .catch(() => undefined);
+        // Nothing was persisted or published, so the observed outcome is
+        // not_applied; report a bounded internal contract failure rather than
+        // an INVALID_INPUT request or an unqualified retry.
+        return workflowInternalResultFailure({
+          tool: toolId,
+          sessionId,
+          message: `staged workflow result failed its public contract: ${outcome.error}`,
+          outcome: "not_applied",
+        });
+      }
       void client.app
         .log({
           body: {
@@ -99,11 +172,15 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
           },
         })
         .catch(() => undefined);
-      return {
+      return normalizeWorkflowFailure({
+        tool: toolId,
+        sessionId,
         ok: false,
         errorCode: "PERSISTENCE_FAILED",
+        category: "persistence",
         message: `generic workflow mutation could not be persisted: ${outcome.error}`,
-      };
+        outcome: "not_applied",
+      });
     }
     return outcome.result;
   }
@@ -125,8 +202,11 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
   ): Promise<T> {
     const liveStore = stores.get(sessionId);
     if (!liveStore || invalidHydrationSessions.has(sessionId)) {
-      throw new Error(
-        `CONTROL_DENIED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
+      throw new WorkflowDiagnosticError(
+        "PERSISTENCE_FAILED",
+        "persistence",
+        `PERSISTENCE_FAILED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
+        "not_applied",
       );
     }
     const restore = captureRestore();
@@ -147,8 +227,13 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
           },
         })
         .catch(() => undefined);
-      throw new Error(
+      // The mutation was applied in memory and then rolled back; report the
+      // observed outcome truthfully without promising a safe replay.
+      throw new WorkflowDiagnosticError(
+        "PERSISTENCE_FAILED",
+        "persistence",
         `PERSISTENCE_FAILED: recovery applied in memory but could not be persisted and was rolled back: ${persisted.error}`,
+        "rolled_back",
       );
     }
     return result;

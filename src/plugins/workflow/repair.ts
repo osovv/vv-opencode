@@ -1,8 +1,8 @@
 // FILE: src/plugins/workflow/repair.ts
-// VERSION: 0.2.0
+// VERSION: 0.2.1
 // START_MODULE_CONTRACT
 //   PURPOSE: Recognize resumable OpenCode task envelopes and perform one bounded same-session continuation for malformed tracked outputs, letting the original subagent finish unfinished work or truthfully correct its final report.
-//   SCOPE: OpenCode task envelope parsing, protocol-error-aware continuation prompt construction that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop status detection preserving the observed substantive stop for terminal settlement, continued-output extraction, and same-session continuation calls for tracked workflow results.
+//   SCOPE: OpenCode task envelope parsing, protocol-error-aware continuation prompt construction from the shared status/route contract that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop status detection preserving the observed substantive stop for terminal settlement, continued-output extraction, and same-session continuation calls for tracked workflow results.
 //   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-WORKFLOW-REPAIR, M-WORKFLOW-PROTOCOL, M-PLUGIN-WORKFLOW]
 //   ROLE: RUNTIME
@@ -20,12 +20,17 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added detectExplicitHardStopStatus so terminal settlement of malformed output preserves the exact observed substantive stop instead of only a boolean.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Generated the continuation status vocabulary and route requirement from the shared protocol contract and stated the first-line/no-fence rule; repair eligibility is unchanged. Prior: detectExplicitHardStopStatus preserves the exact observed substantive stop.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
 import type { Part } from "@opencode-ai/sdk";
-import type { ProtocolErrorCode, TrackedAgentName } from "./protocol.js";
+import {
+  describeStatusVocabulary,
+  resultBlockRequiresRoute,
+  type ProtocolErrorCode,
+  type TrackedAgentName,
+} from "./protocol.js";
 
 export type ResumableTaskEnvelope = {
   taskId: string;
@@ -181,21 +186,16 @@ export function buildTrackedResultRepairPrompt(options: {
   parseErrorCode?: ProtocolErrorCode;
   parseErrorMessage: string;
 }): string {
-  const statusGuidance =
-    options.agent === "vv-implementer"
-      ? "Allowed VVOC_STATUS values: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED."
-      : "Allowed VVOC_STATUS values: PASS | FAIL | NEEDS_CONTEXT.";
-  const routeGuidance =
-    options.agent === "vv-implementer"
-      ? "Include `VVOC_ROUTE` in the strict top block, consistent with the original assignment; do not invent a route that conflicts with it."
-      : "Do not include `VVOC_ROUTE`.";
+  const statusGuidance = `Allowed VVOC_STATUS values: ${describeStatusVocabulary(options.agent)}.`;
+  const requiresRoute = resultBlockRequiresRoute(options.agent);
+  const routeGuidance = requiresRoute
+    ? "Include `VVOC_ROUTE` in the strict top block, consistent with the original assignment; do not invent a route that conflicts with it."
+    : "Do not include `VVOC_ROUTE`.";
 
   const exactFormat = [
     `VVOC_WORK_ITEM_ID: ${options.workItemId}`,
     "VVOC_STATUS: <truthful status>",
-    ...(options.agent === "vv-implementer"
-      ? ["VVOC_ROUTE: <route consistent with the original assignment>"]
-      : []),
+    ...(requiresRoute ? ["VVOC_ROUTE: <route consistent with the original assignment>"] : []),
     "",
     "<brief result handoff>",
   ].join("\n");
@@ -215,6 +215,7 @@ export function buildTrackedResultRepairPrompt(options: {
     statusGuidance,
     routeGuidance,
     ...(missingBodySeparatorGuidance ? [missingBodySeparatorGuidance] : []),
+    "Begin the corrected response with the protocol block on the first line: no preface, prose, or code fences before it.",
     "Return only the corrected final response in this exact shape:",
     exactFormat,
     "Previous malformed response:",

@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial authority coverage.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Added coverage for canonical stage vocabulary validation, scope differences, and reuse rejection when a supplied scope contradicts the recorded scope.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -26,6 +26,7 @@ import type { WorkflowAuthorityRecord, WorkflowMessageClaim } from "../../lib/wo
 import {
   ADVANCE_RECOVERY_RESERVE,
   advanceUnitsAvailable,
+  authorityScopeDifferences,
   effectiveAuthorityStages,
   extendAdvanceAuthority,
   grantAdvanceAuthority,
@@ -330,6 +331,145 @@ describe("extension, narrowing, and revocation", () => {
 });
 
 describe("stage-approval provenance", () => {
+  test("rejects an invalid reserved stop or stage set at grant time", () => {
+    const claims = new Map<string, WorkflowMessageClaim>();
+    const typoStops = grantAdvanceAuthority({
+      authorityId: "auth-typo",
+      runId: "run-typo",
+      sessionId: SESSION,
+      message: message(),
+      scope: {
+        stages: ["implementation"],
+        decisionScope: "finish",
+        fileBoundary: [],
+        reservedStops: ["verificaton"] as never,
+      },
+      existingAuthorities: [],
+      messageClaims: claims,
+    });
+    expect(typoStops.ok).toBe(false);
+    if (typoStops.ok) return;
+    expect(typoStops.code).toBe("INVALID_INPUT");
+    expect(typoStops.message).toContain("reservedStops");
+
+    const mixedStages = grantAdvanceAuthority({
+      authorityId: "auth-mixed",
+      runId: "run-mixed",
+      sessionId: SESSION,
+      message: message({ messageId: "msg-mixed" }),
+      scope: {
+        stages: ["implementation", "publication"] as never,
+        decisionScope: "finish",
+        fileBoundary: [],
+        reservedStops: [],
+      },
+      existingAuthorities: [],
+      messageClaims: new Map(),
+    });
+    expect(mixedStages.ok).toBe(false);
+    if (mixedStages.ok) return;
+    expect(mixedStages.code).toBe("INVALID_INPUT");
+    expect(mixedStages.message).toContain("stages");
+    // No authority record or claim was created for either rejected grant.
+    expect(claims.size).toBe(0);
+  });
+
+  test("grant reuse rejects a supplied scope that contradicts the recorded scope", () => {
+    const { record, claims } = grant();
+    const changed = grantAdvanceAuthority({
+      authorityId: record.authorityId,
+      runId: record.runId,
+      sessionId: SESSION,
+      message: message(),
+      scope: {
+        stages: ["implementation"],
+        decisionScope: record.scope.decisionScope,
+        fileBoundary: [...record.scope.fileBoundary],
+        reservedStops: [],
+      },
+      existingAuthorities: [record],
+      messageClaims: claims,
+    });
+    expect(changed.ok).toBe(false);
+    if (changed.ok) return;
+    expect(changed.code).toBe("INVALID_INPUT");
+    expect(changed.message).toContain("stages");
+    expect(changed.message).toContain("reservedStops");
+
+    const identical = grantAdvanceAuthority({
+      authorityId: record.authorityId,
+      runId: record.runId,
+      sessionId: SESSION,
+      message: message(),
+      scope: {
+        stages: [...record.scope.stages].reverse(),
+        decisionScope: ` ${record.scope.decisionScope} `,
+        fileBoundary: [...record.scope.fileBoundary],
+        reservedStops: [...record.scope.reservedStops],
+      },
+      existingAuthorities: [record],
+      messageClaims: claims,
+    });
+    expect(identical.ok).toBe(true);
+  });
+
+  test("authorityScopeDifferences compares lists as sets and decisionScope as trimmed text", () => {
+    const recorded = {
+      stages: ["implementation", "verification"] as const,
+      decisionScope: "finish the prototype",
+      fileBoundary: ["src/lib/a.ts"],
+      reservedStops: ["specification"] as const,
+    };
+    expect(
+      authorityScopeDifferences(
+        {
+          stages: [...recorded.stages].reverse(),
+          decisionScope: ` ${recorded.decisionScope} `,
+          fileBoundary: [...recorded.fileBoundary],
+          reservedStops: [...recorded.reservedStops],
+        },
+        {
+          stages: [...recorded.stages],
+          decisionScope: recorded.decisionScope,
+          fileBoundary: [...recorded.fileBoundary],
+          reservedStops: [...recorded.reservedStops],
+        },
+      ),
+    ).toEqual([]);
+    expect(
+      authorityScopeDifferences(
+        {
+          stages: ["implementation"],
+          decisionScope: "finish the prototype",
+          fileBoundary: [],
+          reservedStops: [],
+        },
+        {
+          stages: ["implementation", "verification"],
+          decisionScope: "finish the prototype",
+          fileBoundary: ["src/lib/a.ts"],
+          reservedStops: ["specification"],
+        },
+      ),
+    ).toEqual(["stages", "fileBoundary", "reservedStops"]);
+    expect(
+      authorityScopeDifferences(
+        {
+          stages: ["implementation"],
+          decisionScope: "something else",
+          fileBoundary: [],
+          reservedStops: [],
+        },
+        {
+          stages: ["implementation"],
+          decisionScope: "finish the prototype",
+          fileBoundary: [],
+          reservedStops: [],
+        },
+      ),
+    ).toEqual(["decisionScope"]);
+  });
+
   test("allows a delegated stage while a reserved stage is denied", () => {
     const { record } = grant();
     const implementation = proposeStageApproval({

@@ -20,14 +20,19 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-INDEX-REDUCE - Extracted the primary-controller mutation guard and the recovery/authority message lookups from the plugin closure in index.ts into this factory module over explicit context; checks, error text, and retained metadata are unchanged.]
+//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Diagnostics carry a stable category: non-controller agent, child session, and workspace mismatch remain CONTROL_DENIED/authorization, a failing SDK root/session lookup is HOST_CONTEXT_UNAVAILABLE/host_context, and invalid persisted state is PERSISTENCE_FAILED/persistence. Message text is unchanged where meaningful. SDK-backed message lookups are unchanged.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
 import type { LookupRecoveryUserMessage } from "./delegated.js";
 import type { AuthorityMessageSnapshot } from "./authority.js";
+import { WorkflowDiagnosticError } from "./results.js";
 
 export const WORKFLOW_CONTROLLER_AGENT = "vv-controller";
+
+function controlDenied(message: string): WorkflowDiagnosticError {
+  return new WorkflowDiagnosticError("CONTROL_DENIED", "authorization", message);
+}
 
 /** Plugin client shape used for the pinned session lookups below. */
 type PluginClient = Parameters<Plugin>[0]["client"];
@@ -65,7 +70,9 @@ export function assertWorkflowToolAccess(agentName: string | undefined, toolName
   }
 
   const resolvedAgent = agentName?.trim() || "unknown-agent";
-  throw new Error(
+  throw new WorkflowDiagnosticError(
+    "WORKFLOW_TOOL_DENIED",
+    "authorization",
     `WORKFLOW_TOOL_DENIED: ${toolName} is only available to ${WORKFLOW_CONTROLLER_AGENT} sessions. Current agent: ${resolvedAgent}.`,
   );
 }
@@ -90,7 +97,7 @@ export function createWorkflowAuthorization(
     toolName: string,
   ): Promise<void> {
     if (!canUseWorkflowTools(agent)) {
-      throw new Error(
+      throw controlDenied(
         `CONTROL_DENIED: ${toolName} is only available to ${WORKFLOW_CONTROLLER_AGENT} sessions. Current agent: ${agent?.trim() || "unknown-agent"}.`,
       );
     }
@@ -99,7 +106,7 @@ export function createWorkflowAuthorization(
       contextWorkspace.worktree !== worktree &&
       contextWorkspace.worktree !== trustedWorkspaceRoot
     ) {
-      throw new Error(
+      throw controlDenied(
         `CONTROL_DENIED: ${toolName} workspace ${contextWorkspace.worktree} does not match the trusted plugin workspace.`,
       );
     }
@@ -108,13 +115,17 @@ export function createWorkflowAuthorization(
       contextWorkspace.directory !== undefined &&
       contextWorkspace.directory !== directory
     ) {
-      throw new Error(
+      throw controlDenied(
         `CONTROL_DENIED: ${toolName} directory ${contextWorkspace.directory} does not match the trusted plugin directory.`,
       );
     }
     if (invalidHydrationSessions.has(sessionId)) {
-      throw new Error(
-        `CONTROL_DENIED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
+      // Invalid persisted state is a persistence/host condition, not a caller
+      // authorization failure; keep the failure closed and the text explicit.
+      throw new WorkflowDiagnosticError(
+        "PERSISTENCE_FAILED",
+        "persistence",
+        `PERSISTENCE_FAILED: persisted workflow state for session ${sessionId} is invalid; resolve or remove it before new control mutations.`,
       );
     }
 
@@ -126,12 +137,16 @@ export function createWorkflowAuthorization(
       }
       parentID = response.data.parentID;
     } catch (error) {
-      throw new Error(
-        `CONTROL_DENIED: ${toolName} requires root-session identity for ${sessionId}, which could not be verified: ${(error as Error).message}`,
+      // A missing or failing SDK root/session lookup is unavailable trusted host
+      // context, not a denial of authorization.
+      throw new WorkflowDiagnosticError(
+        "HOST_CONTEXT_UNAVAILABLE",
+        "host_context",
+        `HOST_CONTEXT_UNAVAILABLE: ${toolName} requires root-session identity for ${sessionId}, which could not be verified: ${(error as Error).message}`,
       );
     }
     if (parentID !== undefined && parentID !== null && parentID !== "") {
-      throw new Error(
+      throw controlDenied(
         `CONTROL_DENIED: ${toolName} may only run in the root session; session ${sessionId} is a child of ${parentID}.`,
       );
     }
