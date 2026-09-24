@@ -1,5 +1,5 @@
 // FILE: scripts/release-summary.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide deterministic helpers for mandatory release changelog summary generation and validation.
 //   SCOPE: Environment option parsing, commit metadata and full per-commit diff formatting, restricted OpenCode config construction, JSONL event parsing, XML-like summary extraction, summary validation, retry orchestration, changelog injection, and latest changelog summary validation.
@@ -41,10 +41,10 @@
 //   SummaryValidationResult - Parsed latest changelog block validation result.
 // END_MODULE_MAP
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.0.0 - Initial module for deterministic release summary generation and validation.]
+//   LAST_CHANGE: [DIRECT-FIX - Default the release summary model to deepseek/deepseek-flash after deepseek-v4-flash started returning server errors.]
 // END_CHANGE_SUMMARY
 
-export const DEFAULT_RELEASE_SUMMARY_MODEL = "deepseek/deepseek-v4-flash";
+export const DEFAULT_RELEASE_SUMMARY_MODEL = "deepseek/deepseek-flash";
 export const DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS = 120_000;
 export const RELEASE_SUMMARY_MAX_ATTEMPTS = 3;
 export const RELEASE_SUMMARY_AGENT_NAME = "release-summary";
