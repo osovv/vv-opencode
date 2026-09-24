@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // FILE: scripts/release-bump.ts
-// VERSION: 1.3.0
+// VERSION: 1.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Prepare and push an exact-SHA release commit, wait for CI-gated npm publication, then create the annotated tag and GitHub Release with the authenticated local user.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, runs release:check, commits, pushes the current branch, dispatches publish.yml with the release version and commit SHA, waits for CI success, retries npm metadata and verifies gitHead, then creates and pushes the annotated tag plus GitHub Release locally.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, regenerates the versioned tool-contracts reference, runs release:check, commits, pushes the current branch, dispatches publish.yml with the release version and commit SHA, waits for CI success, retries npm metadata and verifies gitHead, then creates and pushes the annotated tag plus GitHub Release locally.
 //   DEPENDS: [node:fs, node:child_process, gh CLI, scripts/release-summary.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
@@ -19,6 +19,7 @@
 //   SEMVER_PATTERN - Explicit semantic-version validation pattern.
 //   SCHEMA_ID_PATTERN - Hosted schema identifier replacement pattern.
 //   ALLOWED_RELEASE_FILES - Files permitted to change during release preparation.
+//   TOOL_CONTRACTS_REFERENCE_PATH - Generated tool-contracts reference path, regenerated with the bumped version.
 //   CAPTURE_MAX_BUFFER - Maximum captured subprocess output size.
 //   PUBLISHED_METADATA_RETRY_DELAYS_MS - Bounded npm metadata retry delays.
 //   PackageJson - Package manifest fields consumed by release preparation.
@@ -40,7 +41,7 @@
 //   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
 //   prependToChangelog - Prepends a changelog entry to CHANGELOG.md, creating the file if missing.
 //   updateSchemaId - Patches only the hosted schema $id text for the new package version.
-//   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, and CHANGELOG changes before commit.
+//   assertOnlyReleaseFilesChanged - Ensures the bump leaves only package.json, schema, CHANGELOG, and the generated tool-contracts reference changes before commit.
 //   assertTagDoesNotExist - Verifies the release tag does not already exist.
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
 //   dispatchVerifiedPublishWorkflow - Pushes only the release commit branch and returns the exact-SHA publish workflow run URL.
@@ -53,7 +54,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Added bounded npm metadata retry before post-CI tag finalization.]
+//   LAST_CHANGE: [DIRECT-FIX - Regenerate the versioned tool-contracts reference during the bump and include it in the release commit so contracts:check stays current after a version change.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -75,7 +76,14 @@ const SCHEMA_PATH = fileURLToPath(new URL("../schemas/vvoc/v3.json", import.meta
 const CHANGELOG_PATH = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url));
 
 const PACKAGE_NAME = "@osovv/vv-opencode";
-const ALLOWED_RELEASE_FILES = new Set(["package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"]);
+const ALLOWED_RELEASE_FILES = new Set([
+  "package.json",
+  "schemas/vvoc/v3.json",
+  "CHANGELOG.md",
+  "templates/skills/vv-execute/references/tool-contracts.md",
+]);
+/** Regenerated during the bump because the generated reference embeds PACKAGE_VERSION. */
+const TOOL_CONTRACTS_REFERENCE_PATH = "templates/skills/vv-execute/references/tool-contracts.md";
 const CAPTURE_MAX_BUFFER = 128 * 1024 * 1024;
 const PUBLISHED_METADATA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
 const RELEASE_TYPES = new Set([
@@ -595,6 +603,17 @@ function main(): void {
   updateSchemaId(newVersion);
   // END_BLOCK_UPDATE_SCHEMA_ID
 
+  // START_BLOCK_REGENERATE_TOOL_CONTRACTS_REFERENCE
+  // The generated reference embeds PACKAGE_NAME@PACKAGE_VERSION, so a version
+  // bump makes it stale and fails contracts:check in CI unless regenerated here.
+  console.log("\nRegenerating tool-contracts reference for the new version...\n");
+  run(
+    "bun",
+    ["run", "contracts:generate"],
+    "contracts:generate failed after bump. Release aborted.",
+  );
+  // END_BLOCK_REGENERATE_TOOL_CONTRACTS_REFERENCE
+
   // START_BLOCK_RUN_RELEASE_CHECK
   console.log("\nRunning release:check...\n");
   run("bun", ["run", "release:check"], "release:check failed after bump. Release aborted.");
@@ -608,7 +627,7 @@ function main(): void {
   assertTagDoesNotExist(tagName);
 
   console.log("\nCreating release commit...\n");
-  run("git", ["add", "package.json", "schemas/vvoc/v3.json", "CHANGELOG.md"], "git add failed.");
+  run("git", ["add", "package.json", "schemas/vvoc/v3.json", "CHANGELOG.md", TOOL_CONTRACTS_REFERENCE_PATH], "git add failed.");
   run(
     "git",
     ["commit", "-m", `chore: bump version from ${currentVersion} to ${newVersion} with changelog`],
