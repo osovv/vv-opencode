@@ -1,0 +1,350 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-AGENT-TOOL-CONTRACTS>
+    <IntentSummary>Implement the approved public agent-tool contract specification across the nine existing vvoc-owned tools without changing their identities or weakening runtime enforcement. Establish a tested host boundary and reusable validation primitives; complete workflow inputs, diagnostics, results, and inspection; independently adopt the contract discipline in edit and web tools; synchronize tracked-report instructions and generated reference material; add coverage and real-host transport gates; and centrally reconcile durable GRACE state. The user approved this plan and authorized sequential execution on 2026-09-23, subject to its preflight prerequisites and reserved stops.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-WORKFLOW-CONTRACT</Value><Value>M-WORKFLOW-TOOLING</Value><Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>M-WORKFLOW-DELEGATED</Value><Value>M-WORKFLOW-CHECKPOINTS</Value><Value>M-WORKFLOW-EXECUTION</Value><Value>M-WORKFLOW-AUTHORITY</Value>
+        <Value>M-WORKFLOW-PROTOCOL</Value><Value>M-WORKFLOW-REPAIR</Value><Value>M-WORKFLOW-PERSISTENCE</Value>
+        <Value>M-PLUGIN-HASHLINE-EDIT</Value><Value>M-PLUGIN-WEB-TOOLS</Value><Value>M-WEB-SEARCH-SERVICE</Value><Value>M-WEB-FETCH-SERVICE</Value>
+        <Value>M-CLI-MANAGED-AGENTS</Value><Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/plugins/workflow/schemas.ts</Value><Value>src/plugins/workflow/tooling.ts</Value><Value>src/lib/package.ts</Value>
+      </MustExist>
+      <MustContain><File>.grace/changes/active/C-AGENT-TOOL-CONTRACTS/spec.xml</File><Text>graceVersion="4.0" status="approved"</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"@opencode-ai/plugin": "1.18.2"</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"@opencode-ai/sdk": "1.18.2"</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"check": "bun run typecheck &amp;&amp; bun run lint &amp;&amp; bun run fmt:check &amp;&amp; bun run grace:check &amp;&amp; bun test"</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>source: schema.record(schema.string(), schema.unknown())</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>mode: schema.string()</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>tasks: schema.array(schema.record(schema.string(), schema.unknown())).optional()</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/schemas.ts</File><Text>reservedStops: schema.array(schema.string()).optional()</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>if (candidate.kind === "conversation-scoped") return { kind: "conversation-scoped" };</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>INVALID_INPUT: execution requires executionKey, source, goal, boundary, and the trusted workspace root</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>reservedStops: stringList(args.reservedStops).filter(</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/tooling.ts</File><Text>const planRuns = [...data.planRuns.values()]</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>const trustedWorkspaceRoot = worktree || directory;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/authorization.ts</File><Text>const response = await client.session.get({ path: { id: sessionId } });</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/recovery.ts</File><Text>return { result, skipPersist: true };</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/transactions.ts</File><Text>const persisted = await persist(sessionId, staged);</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/delegated.ts</File><Text>export const DELEGATED_BASE_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoints.ts</File><Text>export const MAX_CHECKPOINT_REVIEW_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/authority.ts</File><Text>export const ADVANCE_RECOVERY_RESERVE = 3;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/state.ts</File><Text>export const WORK_ITEM_MODES = ["implementation", "review_only", "delegated"] as const;</Text></MustContain>
+      <MustContain><File>src/lib/workflow-contract.ts</File><Text>const withoutTrailing = trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;</Text></MustContain>
+      <MustContain><File>src/lib/workflow-contract.ts</File><Text>return boundary.directories.some((directory) =&gt; path.startsWith(`${directory}/`));</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/protocol.ts</File><Text>if (options.expectedWorkItemId &amp;&amp; options.expectedWorkItemId !== workItemId)</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/repair.ts</File><Text>"MISSING_BODY_SEPARATOR",</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>lines: z</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>.union([z.array(z.string()), z.string(), z.null()])</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/normalize-edits.ts</File><Text>const anchor = pos ?? end;</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/normalize-edits.ts</File><Text>return { op: "replace_range", pos, end, lines };</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/search-service.ts</File><Text>const count = args.count ?? 8;</Text></MustContain>
+      <MustContain><File>src/plugins/web-tools/fetch-service.ts</File><Text>const format: FetchFormat = args.format ?? "markdown";</Text></MustContain>
+      <MustContain><File>src/lib/package.ts</File><Text>export const PACKAGE_VERSION = loadPackageVersionSync();</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>`../../templates/skills/${name}/references/${referenceFileName}`</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/workflow-contract.test.ts src/plugins/workflow/authority.test.ts src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts src/plugins/workflow.execution.integration.test.ts src/plugins/hashline-edit.integration.test.ts src/plugins/web-tools.integration.test.ts src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-AGENT-TOOL-CONTRACT</Module><Module>M-WORKFLOW-CONTRACT</Module><Module>M-WORKFLOW-TOOLING</Module><Module>M-PLUGIN-WORKFLOW</Module>
+        <Module>M-WORKFLOW-STATE</Module><Module>M-WORKFLOW-TRANSITIONS</Module><Module>M-WORKFLOW-DELEGATED</Module><Module>M-WORKFLOW-CHECKPOINTS</Module>
+        <Module>M-WORKFLOW-EXECUTION</Module><Module>M-WORKFLOW-AUTHORITY</Module><Module>M-WORKFLOW-PERSISTENCE</Module><Module>M-WORKFLOW-PROTOCOL</Module><Module>M-WORKFLOW-REPAIR</Module>
+        <Module>M-PLUGIN-HASHLINE-EDIT</Module><Module>M-PLUGIN-WEB-TOOLS</Module><Module>M-WEB-SEARCH-SERVICE</Module><Module>M-WEB-FETCH-SERVICE</Module>
+        <Module>M-CLI-MANAGED-AGENTS</Module><Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/lib/agent-tool-contract.ts</Value><Value>src/lib/agent-tool-contract.test.ts</Value><Value>src/lib/agent-tool-host.test.ts</Value>
+        <Value>src/lib/agent-tool-catalog.ts</Value><Value>src/lib/agent-tool-catalog.test.ts</Value>
+        <Value>src/plugins/workflow/input-validation.ts</Value><Value>src/plugins/workflow/input-validation.test.ts</Value>
+        <Value>src/plugins/workflow/results.ts</Value><Value>src/plugins/workflow/results.test.ts</Value>
+        <Value>src/plugins/workflow/inspection.ts</Value><Value>src/plugins/workflow/inspection.test.ts</Value><Value>src/plugins/workflow/contracts.test.ts</Value>
+        <Value>src/plugins/workflow.contracts.integration.test.ts</Value>
+        <Value>src/plugins/hashline-edit/schemas.ts</Value><Value>src/plugins/hashline-edit/contracts.test.ts</Value>
+        <Value>src/plugins/web-tools/schemas.ts</Value><Value>src/plugins/web-tools/contracts.test.ts</Value>
+        <Value>scripts/check-tool-contracts.ts</Value><Value>scripts/check-tool-contracts.test.ts</Value>
+        <Value>scripts/check-tool-contracts-host.ts</Value><Value>scripts/check-tool-contracts-host.test.ts</Value>
+        <Value>templates/skills/vv-execute/references/tool-contracts.md</Value>
+        <Value>.grace/changes/active/C-AGENT-TOOL-CONTRACTS/compatibility-evidence.json</Value>
+      </MustExist>
+      <MustNotContain><File>src/plugins/workflow/schemas.ts</File><Text>schema.record(schema.string(), schema.unknown())</Text></MustNotContain>
+      <MustNotContain><File>src/plugins/workflow/tooling.ts</File><Text>INVALID_INPUT: execution requires executionKey, source, goal, boundary, and the trusted workspace root</Text></MustNotContain>
+      <MustNotContain><File>src/plugins/workflow/tooling.ts</File><Text>reservedStops: stringList(args.reservedStops).filter(</Text></MustNotContain>
+      <MustContain><File>src/plugins/workflow/delegated.ts</File><Text>export const DELEGATED_BASE_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/checkpoints.ts</File><Text>export const MAX_CHECKPOINT_REVIEW_ATTEMPTS = 2;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/authority.ts</File><Text>export const ADVANCE_RECOVERY_RESERVE = 3;</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/input-validation.ts</File><Text>validateWorkflowToolInput</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/inspection.ts</File><Text>getWorkflowInspection</Text></MustContain>
+      <MustContain><File>src/lib/agent-tool-contract.ts</File><Text>AGENT_TOOL_CONTRACT_REVISION</Text></MustContain>
+      <MustContain><File>src/lib/agent-tool-contract.ts</File><Text>PACKAGE_VERSION</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"contracts:check"</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"contracts:host"</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/agent-tool-contract.test.ts src/lib/agent-tool-host.test.ts src/lib/agent-tool-catalog.test.ts src/plugins/workflow/input-validation.test.ts src/plugins/workflow/results.test.ts src/plugins/workflow/inspection.test.ts src/plugins/workflow/contracts.test.ts src/plugins/workflow.contracts.integration.test.ts src/plugins/hashline-edit/contracts.test.ts src/plugins/web-tools/contracts.test.ts scripts/check-tool-contracts.test.ts scripts/check-tool-contracts-host.test.ts</Command>
+        <Command>bun run contracts:check</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run contracts:host</Command>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Authority and lifecycle: spec.xml is approved by the user's explicit approval on 2026-09-23. The user explicitly approved this plan and selected sequential execution on 2026-09-23 with the message "approve .grace/changes/active/C-AGENT-TOOL-CONTRACTS/plan.xml and $grace-execute it sequential". No source implementation or durable graph/verification update occurred while planning. Required reviews are not expanded into a universal spec/code pair; this plan assigns no independent reviewer, so successful delivery is controller-accepted unless a later explicit review obligation is registered and fulfilled.</Note>
+      <Note>Planning evidence: grace 4.0.7 active-baseline lint and parallel preflight passed with zero errors and warnings. A read-only check of this saved draft validated all 19 existence assertions, all 32 content assertions, target-file scope membership, and the eleven-task DAG; its two baseline leaf commands were executed directly from the XML. The test command passed 189 tests across nine files with 1075 expectations, and bun run typecheck passed. This is not the official approved-plan baseline gate. The worktree initially contained only this new change bundle; there is no competing active change.</Note>
+      <Note>GRACE limitation and reserved stop: module show reports invalid-project with assertion.phase-incompatible-command while current lint reports no findings. A superseded archived plan contains an old target lifecycle command matching this diagnostic; archived history must not be retrofitted. The CLI/navigation discrepancy is an external execution prerequisite, not permission to weaken assertions or modify old bundles. Before source execution, resolve or obtain a separately authorized resolution for this tool failure and rerun lint/status/navigation; do not treat unavailable module health as a passing check.</Note>
+      <Note>Preflight and final gates: after explicit plan approval and before observed source writes, run grace lint --path . --change C-AGENT-TOOL-CONTRACTS --assertions baseline --run-commands, then the external parallel preflight. After source writes, use selected target and final assertions externally, never current. During drafting, grammar/current checks do not execute this draft's baseline; inspect its saved content assertions and run its leaf commands without changing status to approved. GRACE lifecycle commands never appear inside MustPassCommand.</Note>
+      <Note>Host evidence: local opencode --version is 1.18.32; package.json pins plugin and SDK 1.18.2 and supports OpenCode from 1.18.2. Upstream v1.18.2 and v1.18.32 packages/opencode/src/tool/registry.ts both construct Zod objects from argument maps, use safeParse only as a predicate in the Effect parameters bridge, and forward original arguments to custom execution. v1.18.2 session/tools.ts invokes tool.execute.before before custom execution. This is source evidence, not a completed live smoke.</Note>
+      <Note>Host sources for fixtures and revalidation: https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/tool/registry.ts ; https://raw.githubusercontent.com/anomalyco/opencode/v1.18.32/packages/opencode/src/tool/registry.ts ; https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/session/tools.ts ; https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/provider/transform.ts . Record provenance for small derived fixtures; do not vendor an entire host implementation or fetch unpinned latest source during ordinary tests.</Note>
+      <Note>Structural design: add a small M-AGENT-TOOL-CONTRACT module owning shared contract descriptors, bounded issue formatting, strict runtime parsing, public result-envelope primitives, contract identity, catalog aggregation, and its checks. Each plugin retains its own schemas and action semantics. Workflow common enums and pure path/text bounds stay dependency-free in workflow-contract.ts or are re-exported from their established owners; that domain never imports the SDK or the cross-plugin catalog.</Note>
+      <Note>Publication versus execution: keep the SDK-compatible raw argument maps for registration, strict nested objects, and a strict full-object validator for actual calls. A tool.definition adapter may publish the strict root JSON Schema through the host's observable jsonSchema member, preserving parameters and decoder identity. That member is present in the inspected host but omitted from the pinned SDK hook type, so use a narrow checked boundary and a proving host probe, not an unchecked global schema replacement. If this seam cannot preserve the contract on the supported host, stop for a design decision before broad adoption.</Note>
+      <Note>Input delivery: validate raw owned-tool arguments in the existing plugin's tool.execute.before hook for early actionable errors and validate again at each execute entry before mutation/dispatch. Hooks do not mutate raw arguments or confer state eligibility. Execution uses explicitly parsed defaults/canonicalization; do not depend on the host to forward Zod's transformed result. Preserve existing task-launch hooks, edit-mode visibility denial, redaction interoperability, and authorizing guards; do not intercept unrelated host or MCP tools.</Note>
+      <Note>Workflow branch matrix: standalone implementation/review_only requires non-empty unique reviewers and disallows delegated scope/plan bindings; standalone delegated requires empty reviewers, exact-file writeScope, and paired optional native bindings. Generic open/append creates delegated task bindings, permits an explicit empty or non-empty task reviewer set, defaults taskId from key and absent goal from title, and materializes task reviewers as registered obligations. A conflicting supplied mode or native binding is rejected rather than ignored. Do not apply standalone delegated reviewer rules to generic task contracts.</Note>
+      <Note>Checkpoint matrix: native register uses planPath and the approved loader; generic register/amend appends to an existing run using amendmentId and rationale plus typed tasks/checkpoints. Start, verify, and recover preserve their native/generic preconditions. Generic review/bind/verify derive outcomes from linked reviewer records, complete seals only eligible generic work, and authority actions apply to either source. Resolve run identity/source before source-dependent validation; never disguise an unknown generic run as missing native arguments.</Note>
+      <Note>Decision and authority matrix: accept/request_changes require bounded rationale/evidence; concernsDisposition remains conditional on the recorded terminal status, not on a caller-supplied status. Rework requires its failed checkpoint binding. Recover requires stable identity, diagnosis, changed condition, and verification, with state-specific user/advance authorization remaining in the domain. Authorize, record_approval, and revoke_authority validate every supplied stage/stop before any lookup or ledger write; absent permitted fields use documented defaults, but invalid provided fields never become absent.</Note>
+      <Note>Idempotency must not hide changed constraints. Validate invalid fields even on reuse/extension paths. For authority replay or extension, supplied scope cannot silently replace or contradict the recorded scope; reject unsupported scope changes rather than dropping them or treating them as an extension. Preserve legitimate exact replay and finite extension/revocation behavior. No new reserve amount, natural-language authorization classifier, or scope broadening is introduced.</Note>
+      <Note>Diagnostics design: retain errorCode and message on workflow failures, adding category and bounded issues with tokenized paths, expected conditions, and safe value/type summaries where appropriate. Categories distinguish input, state, authorization, host context, persistence, and internal result-contract failures. Early-hook thrown diagnostics and returned handler failures share the formatter; state details require the established access checks. Never parse free-form error prose to recover lost field paths or echo full arbitrary payloads.</Note>
+      <Note>Result and inspection design: results.ts owns explicit public DTO/result schemas and types, including standalone batch envelopes that do not have a top-level ok and generic mutation envelopes that do. inspection.ts owns serialization and getWorkflowInspection, extending work_item_list additively with executions and loaded contract identity while preserving items, planRuns, and includeClosed. Expose latest attempt status, current generations, remaining allowances, assigned obligations, and bounded prerequisites; do not dump authority messages or the private store.</Note>
+      <Note>State-derived guidance: use existing delegated/checkpoint progress helpers and common execution launch/dependency checks; extract shared pure eligibility predicates only where required to keep inspection and mutation in agreement. Include barriers, scope overlap, live attempts, replaced/sealed tasks, reserved stages, and consumed authority. Eligibility that depends on future user-message provenance or filesystem freshness is a stated prerequisite, not an optimistic available=true promise.</Note>
+      <Note>Output-validation placement: schema/type producer checks and exhaustive serialization fixtures are mandatory. Validate staged workflow results before publish when runtime validation is added. Do not put a generic throw-on-output-parse wrapper after irreversible edits or already committed mutations; an internal reporting failure must preserve truthful applied/committed/unknown outcome and direct inspection rather than invite automatic replay. No new cross-plugin transaction engine is authorized.</Note>
+      <Note>Edit compatibility: preserve replace with optional end as inclusive range, replace_range alias, lines as string/string[]/null with explicit deletion semantics, append/prepend boundary insertion and supported end-anchor fallback, empty new_str deletion, and view_range ending at -1. Reject conflicting or malformed supplied fields; do not accidentally prohibit meaningful empty content or require anchors for legal boundary insertion. Existing current-file/anchor checks remain authoritative.</Note>
+      <Note>Web compatibility: preserve count=8, markdown and timeout defaults at execution time, supported output/media variants, permission keys, and provider-neutral arguments. Strict validation precedes provider calls. Do not add per-call API keys/provider selection or rewrite provider configuration. Schema bounds dropped by provider lowering must remain plainly described and runtime-enforced.</Note>
+      <Note>Reference and identity: use PACKAGE_NAME and the existing module-cached PACKAGE_VERSION from src/lib/package.ts with a new AGENT_TOOL_CONTRACT_REVISION, separate from WORKFLOW_CONTRACT_VERSION and persistence versions. work_item_list returns a bounded contract object with package identity, revision, and the package-resolved referencePath. Generate/check templates/skills/vv-execute/references/tool-contracts.md from the pure catalog; other managed instructions can point to it without invoking the native execution skill. Existing templates packaging and reference installation are reused.</Note>
+      <Note>Coverage gate design: aggregate the nine descriptors without importing the catalog back into plugin runtime modules. Discover owned registrations independently across src/plugins and public plugin entry points, not only the catalog or today's three known tool-producing plugins. Compare actual registered tool names, published discriminator values and dispatch branches against operation fixtures and checked result variants. Use the existing TypeScript development dependency for a narrow source registration/branch check where runtime enumeration cannot reveal a newly added branch. Reject unclassified owned registrations instead of silently excluding them. Self-tests add a fake tool/action, remove a fixture/result variant, introduce an opaque field, and alter a generated example to prove the checker fails.</Note>
+      <Note>Compatibility matrix: test the pinned 1.18.2 registry/input-JSON projection with provenance-bearing fixtures; exercise OpenAI-style lowering (including const-to-enum and omitted numeric/string bounds), Anthropic-style definitions, and a Google/Gemini schema-normalization fixture. Run real installed OpenCode 1.18.32 with isolated local OpenAI-compatible and Anthropic-compatible deterministic HTTP responders. These fake-provider runs prove host registration, serialization, call/result plumbing, and rejection behavior, not acceptance by a remote paid service or model effectiveness. A live 1.18.2 binary is not assumed available; do not claim every supported version was smoke-tested.</Note>
+      <Note>Host smoke isolation: scripts/check-tool-contracts-host.ts creates disposable HOME/XDG/config/workspace paths, uses only local built plugin URLs and synthetic agents/messages/credentials, and serves scripted provider responses on loopback. It must not inherit private config, global installed skills, user history, or arbitrary credential environment. It captures actual outbound definitions and inbound tool results, executes safe representative workflow/edit/web calls in the disposable workspace, checks no side effects for rejected calls, and writes bounded versioned evidence. No external provider billing or global installation is needed.</Note>
+      <Note>Host evidence and failure policy: --probe runs the minimal boundary test before other behavior work; the full contracts:host command verifies the completed built package and writes compatibility-evidence.json in this active bundle. Evidence includes actual host/package/revision, exercised cases, source fingerprints, observed projections, command outcomes, and explicit unexercised rows. Missing executable, changed unsupported host version, wrong hook ordering, inaccessible raw input, provider-protocol failure, or a failed scenario is a nonzero stop, never a skipped passing gate. Re-run after material changes; do not hand-author passing evidence.</Note>
+      <Note>DAG and write ownership: T-002, T-005, and T-006 are independent after T-001; T-003 and T-004 form the workflow result/inspection chain; T-007 synchronizes its protocol consumers; T-008 joins the completed surfaces; T-009 exercises the packaged host path; T-010 centrally applies durable projections and final README; T-011 accepts only fresh evidence. Dependencies express actual consumption, not a forced linear worker schedule. Current session policy remains direct controller work; graph independence does not authorize delegation or concurrent overlapping edits.</Note>
+      <Note>Durable ownership: add M-AGENT-TOOL-CONTRACT and V-M-AGENT-TOOL-CONTRACT to the routed indexes/main documents; own the shared helpers, catalog, host fixtures, and contract-check scripts there. Add input-validation.ts, results.ts, inspection.ts, and their tests to M-WORKFLOW-TOOLING. Existing edit/web modules own their new schema/tests. Update affected dependencies and declared data flows; reconcile already-stale workflow profile/registry descriptions only where this change directly touches them. technology.xml changes only to describe the added checks and host-contract testing.</Note>
+      <Note>Scope exclusions: persistence.ts, schema-v3 config, release scripts/workflows, presets, user installations, and unrelated historical artifacts are read-only. Persistence regression tests and its verification entry may change, but the snapshot format does not. package.json writes are limited to check/reference/host/package-validation scripts; no version, dependency, engine, export, or files-list change is planned. If implementation requires a new runtime dependency, migration, public tool identity, or wider write scope, stop for a scope decision.</Note>
+      <Note>File-local contracts, maps, blocks, and change summaries are updated before each substantive edit. The final graph/verification apply is centralized in T-010; do not claim intermediate source-only work is GRACE-complete. Own active/archive bundle paths are included only for evidence and approved lifecycle finalization, never for mutating approved baseline/task definitions as transient execution state.</Note>
+      <Note>Acceptance trace: AC-01..AC-10 are primarily T-001/T-002/T-005/T-006; AC-11..AC-14 are T-003 with T-005/T-006; AC-15..AC-17 are T-004; AC-18..AC-20 are T-007/T-008; AC-21 is T-005/T-006; AC-22..AC-24 span branch regressions and T-011; AC-25 is T-001/T-009; AC-26 is T-008; AC-27 is T-008/T-009/T-010; AC-28 is T-010/T-011. The spec is normative if any plan detail conflicts.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-AGENT-TOOL-CONTRACT /><M-WORKFLOW-CONTRACT /><M-WORKFLOW-TOOLING /><M-PLUGIN-WORKFLOW />
+        <M-WORKFLOW-STATE /><M-WORKFLOW-TRANSITIONS /><M-WORKFLOW-DELEGATED /><M-WORKFLOW-CHECKPOINTS /><M-WORKFLOW-EXECUTION /><M-WORKFLOW-AUTHORITY />
+        <M-WORKFLOW-PROTOCOL /><M-WORKFLOW-REPAIR /><M-PLUGIN-HASHLINE-EDIT /><M-PLUGIN-WEB-TOOLS /><M-WEB-SEARCH-SERVICE /><M-WEB-FETCH-SERVICE />
+        <M-CLI-MANAGED-AGENTS /><M-CLI-MANAGED-SKILLS />
+        <DF-WORKFLOW-TOOLS /><DF-WORKFLOW-EXECUTION /><DF-WORKFLOW-AUTHORITY /><DF-WORKFLOW-GUIDANCE /><DF-RESULT-PARSING />
+        <DF-HASHLINE-EDIT /><DF-WEB-SEARCH /><DF-WEB-FETCH />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-AGENT-TOOL-CONTRACT /><V-M-WORKFLOW-CONTRACT /><V-M-WORKFLOW-TOOLING /><V-M-PLUGIN-WORKFLOW />
+        <V-M-WORKFLOW-STATE /><V-M-WORKFLOW-TRANSITIONS /><V-M-WORKFLOW-DELEGATED /><V-M-WORKFLOW-CHECKPOINTS /><V-M-WORKFLOW-EXECUTION /><V-M-WORKFLOW-AUTHORITY />
+        <V-M-WORKFLOW-PROTOCOL /><V-M-WORKFLOW-REPAIR /><V-M-WORKFLOW-PERSISTENCE /><V-M-PLUGIN-HASHLINE-EDIT /><V-M-PLUGIN-WEB-TOOLS />
+        <V-M-WEB-SEARCH-SERVICE /><V-M-WEB-FETCH-SERVICE /><V-M-CLI-MANAGED-AGENTS /><V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/agent-tool-contract.ts</File><File>src/lib/agent-tool-contract.test.ts</File><File>src/lib/agent-tool-host.test.ts</File>
+      <File>src/lib/agent-tool-catalog.ts</File><File>src/lib/agent-tool-catalog.test.ts</File>
+      <File>src/lib/workflow-contract.ts</File><File>src/lib/workflow-contract.test.ts</File>
+      <File>src/plugins/workflow/schemas.ts</File><File>src/plugins/workflow/input-validation.ts</File><File>src/plugins/workflow/input-validation.test.ts</File>
+      <File>src/plugins/workflow/tooling.ts</File><File>src/plugins/workflow/contracts.test.ts</File>
+      <File>src/plugins/workflow/results.ts</File><File>src/plugins/workflow/results.test.ts</File><File>src/plugins/workflow/inspection.ts</File><File>src/plugins/workflow/inspection.test.ts</File>
+      <File>src/plugins/workflow/index.ts</File><File>src/plugins/workflow/authorization.ts</File><File>src/plugins/workflow/recovery.ts</File><File>src/plugins/workflow/transactions.ts</File><File>src/plugins/workflow/transactions.test.ts</File>
+      <File>src/plugins/workflow/state.ts</File><File>src/plugins/workflow/transitions.ts</File><File>src/plugins/workflow/delegated.ts</File><File>src/plugins/workflow/delegated.test.ts</File>
+      <File>src/plugins/workflow/checkpoints.ts</File><File>src/plugins/workflow/checkpoints.test.ts</File><File>src/plugins/workflow/execution.ts</File><File>src/plugins/workflow/execution.test.ts</File>
+      <File>src/plugins/workflow/authority.ts</File><File>src/plugins/workflow/authority.test.ts</File><File>src/plugins/workflow/persistence.test.ts</File>
+      <File>src/plugins/workflow/protocol.ts</File><File>src/plugins/workflow/repair.ts</File><File>src/plugins/workflow/system-instruction.md</File>
+      <File>src/plugins/workflow.integration.test.ts</File><File>src/plugins/workflow.delegated.integration.test.ts</File><File>src/plugins/workflow.execution.integration.test.ts</File><File>src/plugins/workflow.contracts.integration.test.ts</File>
+      <File>src/plugins/hashline-edit/schemas.ts</File><File>src/plugins/hashline-edit/contracts.test.ts</File><File>src/plugins/hashline-edit/index.ts</File>
+      <File>src/plugins/hashline-edit/normalize-edits.ts</File><File>src/plugins/hashline-edit/normalize-edits.test.ts</File><File>src/plugins/hashline-edit/str-replace-editor.ts</File><File>src/plugins/hashline-edit/str-replace-editor.test.ts</File>
+      <File>src/plugins/hashline-edit/tool-description.ts</File><File>src/plugins/hashline-edit/tool-description.test.ts</File><File>src/plugins/hashline-edit.integration.test.ts</File>
+      <File>src/plugins/web-tools/schemas.ts</File><File>src/plugins/web-tools/contracts.test.ts</File><File>src/plugins/web-tools/index.ts</File>
+      <File>src/plugins/web-tools/search-service.ts</File><File>src/plugins/web-tools/search-service.test.ts</File><File>src/plugins/web-tools/fetch-service.ts</File><File>src/plugins/web-tools/fetch-service.test.ts</File><File>src/plugins/web-tools.integration.test.ts</File>
+      <File>templates/agents/vv-controller.md</File><File>templates/agents/vv-implementer.md</File><File>templates/agents/vv-code-reviewer.md</File><File>templates/agents/vv-spec-reviewer.md</File>
+      <File>templates/skills/vv-execute/SKILL.md</File><File>templates/skills/vv-review/SKILL.md</File><File>templates/skills/vv-execute/references/tool-contracts.md</File>
+      <File>src/lib/managed-agents.test.ts</File><File>src/lib/managed-skills.test.ts</File>
+      <File>scripts/check-tool-contracts.ts</File><File>scripts/check-tool-contracts.test.ts</File><File>scripts/check-tool-contracts-host.ts</File><File>scripts/check-tool-contracts-host.test.ts</File>
+      <File>package.json</File><File>README.md</File>
+      <File>.grace/graph/index.xml</File><File>.grace/graph/main.xml</File><File>.grace/verification/index.xml</File><File>.grace/verification/main.xml</File><File>.grace/context/technology.xml</File>
+      <File>.grace/changes/active/C-AGENT-TOOL-CONTRACTS/spec.xml</File><File>.grace/changes/active/C-AGENT-TOOL-CONTRACTS/design-context.xml</File><File>.grace/changes/active/C-AGENT-TOOL-CONTRACTS/plan.xml</File><File>.grace/changes/active/C-AGENT-TOOL-CONTRACTS/compatibility-evidence.json</File>
+      <File>.grace/changes/archive/C-AGENT-TOOL-CONTRACTS/spec.xml</File><File>.grace/changes/archive/C-AGENT-TOOL-CONTRACTS/design-context.xml</File><File>.grace/changes/archive/C-AGENT-TOOL-CONTRACTS/plan.xml</File><File>.grace/changes/archive/C-AGENT-TOOL-CONTRACTS/compatibility-evidence.json</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Establish shared contract primitives and prove the supported host boundary before broad schema changes.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: new src/lib/agent-tool-contract.ts, its unit and host-projection tests, and scripts/check-tool-contracts-host.ts with its runner tests. Cover AC-01, AC-03, AC-07, AC-08, AC-11, AC-23, and the feasibility portion of AC-25. Add accurate M-AGENT-TOOL-CONTRACT file-local contracts; do not import the plugin catalog or workflow state into the generic primitives.</Criterion>
+          <Criterion>Define reusable descriptors for registered raw argument maps, strict runtime input schemas, operation/example metadata, result envelopes, bounded issue formatting, and loaded identity/revision. Known object keys are closed unless a named opaque region is explicitly justified. Keep the SDK instance and input-mode JSON projection; do not use a second Zod instance or a schema transform that hides the input shape.</Criterion>
+          <Criterion>Provide composable owned-tool definition/pre-execute guards and direct-execute validation. Definition publication does not replace the host decoder; pre-execute validation neither mutates raw input nor grants state/permission eligibility. Diagnostics preserve nested tokenized paths without exposing whole payloads.</Criterion>
+          <Criterion>Build provenance-backed host conversion fixtures and a --probe mode that runs a minimal synthetic tool through isolated OpenCode 1.18.32 and a loopback responder. Prove required descriptions/enums/nested shapes reach the actual outbound definition and top-level/nested unknown properties reach a strict rejection without side effects. Include missing defaults, malformed nested values, and the host-originated error presentation.</Criterion>
+          <Criterion>Stop before T-002/T-005/T-006 if supported hooks cannot publish/validate the intended contract or the probe loses the offending input. Do not compensate by weakening schemas, filtering values, or modifying the installed host. Record the version boundary and unresolved compatibility rows honestly.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/agent-tool-contract.test.ts src/lib/agent-tool-host.test.ts scripts/check-tool-contracts-host.test.ts</Command>
+          <Command>bun scripts/check-tool-contracts-host.ts --probe</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Complete workflow input schemas and replace lossy normalization with strict branch-aware validation.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: workflow schemas.ts, new input-validation.ts, input-validation.test.ts and contracts.test.ts, tooling.ts and registration hooks in index.ts; shared pure workflow-contract.ts and existing enum-owner re-exports where needed; authority/delegated input checks and focused integration fixtures. Cover AC-01 through AC-10, AC-22, and input regressions in AC-23/AC-24.</Criterion>
+          <Criterion>Export validateWorkflowToolInput and concrete public source/task/checkpoint structures. Derive argument types from schemas; keep internal native-package variants and host-owned context out of public input. Use canonical reviewer/stage/mode values, existing bounds, and explicit field descriptions. Native parser/domain consumers continue using the dependency-free common contract.</Criterion>
+          <Criterion>Implement the standalone/generic/native action matrix in PlanningNotes, preserving documented missing-field defaults but rejecting invalid supplied fields and incompatible combinations. Validate direct handler entry as well as registered/hook entry. Structural rejection precedes store mutation and provider/file effects; generic batches remain atomic and post-structural standalone domain outcomes remain per-item.</Criterion>
+          <Criterion>Remove String coercion, invalid-collection-to-empty fallback, opaque checkpoint casts, and stages/reservedStops filtering from caller normalization. Add mixed-valid/invalid authority stage and stop regressions including typo verificaton, asserting no new authority, message claim, debit, scope change, or launch permission, including replay and extension calls.</Criterion>
+          <Criterion>Exercise source.kind conversation, provided-plan without reference, invalid optional sha256 type, nested unknown task/checkpoint keys, explicit empty versus missing reviewer sets, conflicting generic mode/bindings, numeric path elements, file trailing separator versus normalized directory separator, and out-of-boundary paths. Preserve source identity and approved native loader checks.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/workflow-contract.test.ts src/lib/spec-lint.test.ts src/plugins/workflow/input-validation.test.ts src/plugins/workflow/contracts.test.ts src/plugins/workflow/authority.test.ts src/plugins/workflow/delegated.test.ts</Command>
+          <Command>bun test src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts src/plugins/workflow.execution.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Introduce checked workflow result variants and actionable input/state/host diagnostics without changing commit semantics.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: new workflow results.ts/results.test.ts and workflow.contracts.integration.test.ts; tooling.ts, index.ts, authorization.ts, recovery.ts, and transaction result boundaries with their tests. Cover AC-11 through AC-14, result-side AC-22/AC-23, and diagnostic AC-24. Domain error producers may add structured context in the already scoped workflow modules rather than parsing message text.</Criterion>
+          <Criterion>Represent every owned workflow response family with concrete schemas/types, retaining existing top-level and per-item envelope conventions. Add category and bounded issues to failures while keeping existing errorCode meanings and useful message prefixes where compatible. Separate unavailable host context from invalid caller input and unknown runs from native-only argument requirements.</Criterion>
+          <Criterion>State errors include the current relevant state and unmet prerequisite after authorization, without disclosing foreign records. Required/unexpected concernsDisposition, unavailable attempts, premature close, and exhausted allowance failures explain the correct operation family without automatically selecting acceptance or granting recovery.</Criterion>
+          <Criterion>Validate staged outputs before publication where runtime output checking is used. Keep legacy/delegated commit and rollback semantics explicit. Inject a post-side-effect serialization/reporting failure and verify it is never presented as an untouched INVALID_INPUT request or an invitation to replay a completed mutation. Preserve persistence failure and concurrent mutation gates.</Criterion>
+          <Criterion>Registered-tool integration tests invoke real schemas, before hooks, execute wrappers, and serialization with pinned SDK context shapes; also cover early thrown errors and direct handler failures. Negative tests assert exact state/ledger or snapshot isolation, not only error text.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/results.test.ts src/plugins/workflow/contracts.test.ts src/plugins/workflow.contracts.integration.test.ts src/plugins/workflow/transactions.test.ts src/plugins/workflow/persistence.test.ts</Command>
+          <Command>bun test src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts src/plugins/workflow.execution.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Expose complete same-session workflow inspection and truthful state-derived guidance.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: new inspection.ts/inspection.test.ts, results.ts, tooling.ts, index.ts, and minimal shared eligibility/view helpers in state/transitions/delegated/checkpoints/execution/authority with their tests. Cover AC-13 and AC-15 through AC-17 plus retained-safety AC-22.</Criterion>
+          <Criterion>Implement getWorkflowInspection and extend work_item_list with generic and native executions, exact linked IDs, latest attempt/result status, review generations, acceptance/review prerequisites, budgets, and loaded package/contract identity. Preserve items, native planRuns, recovery excerpts, and includeClosed semantics. Return only the current session's data; inspection performs no mutation, recovery, or authority-message-content lookup.</Criterion>
+          <Criterion>Derive guidance from shared pure eligibility checks consumed by real mutations/launch gates. Test awaiting acceptance, DONE_WITH_CONCERNS, live attempt, blocked dependency/checkpoint, overlapping native write, replaced task, sealed execution, stale/failed review, exhausted reserve, and reserved stage. Do not suggest an ordinary launch that its actual gate rejects.</Criterion>
+          <Criterion>Provenance/freshness/permission conditions that require later lookup are explicit prerequisites rather than claims of current authorization. Preserve finite counter values and loaded state on repeated inspection. A context-loss scenario reconstructs required IDs and decision parameters only from public list data.</Criterion>
+          <Criterion>Use cached PACKAGE_VERSION with AGENT_TOOL_CONTRACT_REVISION and a package-resolved referencePath; do not read global package versions or re-read user config. Test version identity stability after unrelated config/package changes and retain supported persistence hydration without schema migration.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/inspection.test.ts src/plugins/workflow/results.test.ts src/plugins/workflow/delegated.test.ts src/plugins/workflow/checkpoints.test.ts src/plugins/workflow/execution.test.ts src/plugins/workflow/authority.test.ts src/plugins/workflow/persistence.test.ts</Command>
+          <Command>bun test src/plugins/workflow.contracts.integration.test.ts src/plugins/workflow.execution.integration.test.ts src/plugins/workflow.delegated.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Complete both model-specific edit tool contracts while preserving literal edit semantics.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: new hashline-edit/schemas.ts/contracts.test.ts; existing index.ts, normalize-edits.ts, str-replace-editor.ts, tool-description.ts and their scoped unit/integration tests. Cover edit portions of AC-01 through AC-10, AC-14, AC-21, AC-23, and AC-24.</Criterion>
+          <Criterion>Single-source registered inputs and runtime parsing for hashline_edit and str_replace_editor with operation/command-specific requirements, explicit unknown-field rejection, and concrete result/metadata delivery contracts. Preserve the existing Error/text surface and bounded diffs rather than forcing JSON output.</Criterion>
+          <Criterion>Preserve replace with optional end, replace_range, lines:null and empty arrays for deletion, boundary append/prepend, meaningful empty new_str, and a view_range whose end element is -1. Diagnose conflicting anchors/fields without silently dropping them. Validate create/delete/rename combinations, exact view-range shape, and insertion arguments before file mutation.</Criterion>
+          <Criterion>Maintain model visibility checks before using an unavailable edit tool and current-file/anchor validation before mutation. Test invalid structural input leaves content, paths, freshness cache, and metadata unchanged; valid edits and existing stale-anchor rejection still behave as before.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit/contracts.test.ts src/plugins/hashline-edit/normalize-edits.test.ts src/plugins/hashline-edit/str-replace-editor.test.ts src/plugins/hashline-edit/tool-description.test.ts src/plugins/hashline-edit/validation.test.ts src/plugins/hashline-edit/routing.test.ts</Command>
+          <Command>bun test src/plugins/hashline-edit.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Complete provider-neutral web input/result contracts and reject invalid calls before dispatch.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: new web-tools/schemas.ts/contracts.test.ts; index.ts, search-service.ts, fetch-service.ts and their scoped unit/integration tests. Cover web portions of AC-01 through AC-10, AC-14, AC-21, AC-23, and AC-24. Provider/config/credential implementations remain outside write scope.</Criterion>
+          <Criterion>Publish and execute the same query/count/freshness and URL/format/timeout contracts, reject unknown keys and invalid provided values, and explicitly apply current defaults even when the host forwards unparsed raw arguments. Use concrete text/metadata/attachment envelope schemas with document and binary content treated as declared opaque values.</Criterion>
+          <Criterion>Invalid URL scheme/shape, format, bounds, or extraneous fields cause no fetch/provider dispatch. Valid native text, HTML, media/PDF, search, and configured provider paths retain default behavior and permission prompts. Never add credentials or provider selection to caller schemas or include secret values in diagnostics.</Criterion>
+          <Criterion>Existing builtin suppression, explicit user permission overrides, plugin-disable behavior, and provider-neutral rendering remain unchanged. Exercise schema publication and both early-hook and direct service-call validation with real SDK ToolResult shapes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/web-tools/contracts.test.ts src/plugins/web-tools/search-service.test.ts src/plugins/web-tools/fetch-service.test.ts src/plugins/web-tools/media-loader.test.ts</Command>
+          <Command>bun test src/plugins/web-tools.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Synchronize tracked-report instructions and executable protocol examples without broadening repair.</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: workflow protocol.ts/repair.ts only for shared descriptions/diagnostic context without grammar weakening; index.ts/system-instruction.md, the four scoped managed agent templates, vv-execute/vv-review skill templates, loader tests, and workflow contract/protocol integration tests. Cover AC-18 through AC-20 and protocol cases in AC-22/AC-24.</Criterion>
+          <Criterion>Use canonical status vocabularies and exact returned work-item IDs in checked examples. Explain mandatory top block, role-specific fields, blank-line body separation, mismatch versus malformed syntax, and inspect-before-retry behavior. Common calls remain understandable without loading vv-execute or selecting native planning.</Criterion>
+          <Criterion>Run examples through parseWorkItemHeader/parseResultBlock with a non-wi-1 assigned ID and through the bounded continuation checks. Test wrong identity, duplicate fields, missing separator, valid terminal statuses, and malformed explicit hard stops. Preserve one same-child continuation, no new attempt, persistent permissions, and rejected-report recovery semantics.</Criterion>
+          <Criterion>Keep profile-specific ownership instructions intact; do not install a new delegation policy, mandatory review pair, or automatic recovery. Template tests assert semantic agreement rather than only the presence of isolated enum words.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/workflow/contracts.test.ts</Command>
+          <Command>bun test src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts src/plugins/workflow.execution.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Add the nine-tool catalog, generated reference, and a self-tested completeness gate.</Title>
+        <DependsOn>T-004, T-005, T-006, T-007</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: new agent-tool-catalog.ts/test, scripts/check-tool-contracts.ts/test, the bundled tool-contracts.md reference, scoped managed loader tests, and package.json scripts only. Cover AC-01, AC-02, AC-14, AC-20, AC-23, AC-26, and packaging parts of AC-27/AC-28.</Criterion>
+          <Criterion>Catalog all actual tool registrations and supported mode/action/decision/command variants, input/output schemas, defaults, normalization policies, examples, and negative scenarios. It imports descriptor modules only and introduces no catalog-to-runtime cycle. An independent registration census covers src/plugins and public entry points; adding a tool in a new plugin or an enum/dispatch branch cannot be invisible to the check.</Criterion>
+          <Criterion>Provide contracts:check as a read-only gate, contracts:generate for deliberate reference generation, and contracts:host for the isolated host runner. Wire contracts:check into bun run check and built-reference/result checks into pack:check without changing release automation, dependencies, engines, versions, exports, or package files.</Criterion>
+          <Criterion>Use small checker self-mutations to prove missing operation fixtures, missing result variants, opaque known objects, unregistered tools, schema/default mismatch, and stale generated examples fail. Each operation's positive and negative fixtures exercise its actual validation/handler path rather than only its metadata declaration.</Criterion>
+          <Criterion>Generate concise reference tables and tested examples with the public revision from the catalog. Verify references install through the existing managed-skill reference loader and are included in the packed templates. Descriptions point to reference material without injecting the full manual. Record before/after schema/description byte sizes without claiming provider-exact token counts.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/agent-tool-catalog.test.ts scripts/check-tool-contracts.test.ts src/lib/managed-skills.test.ts</Command>
+          <Command>bun run contracts:check</Command>
+          <Command>bun run check</Command>
+          <Command>bun run pack:check</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Exercise the complete built contract through isolated OpenCode and record bounded compatibility evidence.</Title>
+        <DependsOn>T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: extend the existing new host runner and its tests plus agent-tool-host.test.ts; write compatibility-evidence.json in this active bundle. Production changes discovered here return to their owning task and scope with a named diagnosis. Cover AC-23 through AC-25 and runtime/package identity in AC-17/AC-27.</Criterion>
+          <Criterion>Run actual OpenCode 1.18.32 with the built plugins and isolated config/data against loopback OpenAI-compatible and Anthropic-compatible scripted responders. Capture model-visible definitions and tool results, verify all registered surface shapes, and execute safe representative workflow/edit/web success and failure scenarios. Wrong source, nested unknown fields, a reserved-stop typo, invalid edit operation, and invalid web bounds must reach actionable rejections without the relevant side effect.</Criterion>
+          <Criterion>Golden/source-derived projection fixtures cover the minimum 1.18.2 plugin bridge and OpenAI/Anthropic/Google schema branches; runtime evidence labels which paths were actually exercised. Preserve enums/descriptions under lowering and prove constraints omitted by the provider schema are still enforced locally. A malformed or unrecognized host result does not become a green fixture.</Criterion>
+          <Criterion>The runner proves it did not load real user config, external skills, private history, or credentials. No real provider/model request is sent. Evidence includes package/host/revision and source fingerprints and enumerates untested remote services and the unavailable live minimum-version row. Missing prerequisites or a failed case exit nonzero instead of being recorded as skipped success.</Criterion>
+          <Criterion>Re-run the completed host gate after any subsequent semantic source or descriptor change. Evidence is produced by observed checks, not manually filled with expected results; payload excerpts remain synthetic and bounded.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/agent-tool-host.test.ts scripts/check-tool-contracts-host.test.ts</Command>
+          <Command>bun run build</Command>
+          <Command>bun run contracts:host</Command>
+        </Verification>
+      </T-009>
+      <T-010>
+        <Title>Centrally reconcile public documentation and durable ownership/verification projections.</Title>
+        <DependsOn>T-009</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Scope: README.md, the graph/verification indexes and main documents, technology.xml, and final accuracy corrections to already-scoped file-local contracts/reference text. Cover AC-20, AC-27, and AC-28. Do not modify archived unrelated changes or rewrite the approved spec/plan to hide drift.</Criterion>
+          <Criterion>Add the new shared module and its verification ownership, register every new governed source/test/script path, and update affected module dependencies and data flows. Keep common workflow-contract dependency-free; link inspection/schema/result changes to the correct tooling owner. Reconcile directly affected native/generic inspection and root-controller availability descriptions with observed behavior.</Criterion>
+          <Criterion>Verification entries name the new contract tests, coverage gate, safety counterexamples, and isolated host gate. Existing persistence/recovery verification remains truthful without a snapshot-format change. technology.xml describes the new scripts and explicitly distinguishes fixtures, local host smoke, and remote-provider claims.</Criterion>
+          <Criterion>README explains the strictness/compatibility changes, error categories, state inspection, loaded version/reference discovery, supported path distinctions, and unchanged install/sync/restart behavior. It does not describe writeScope as a universal sandbox or evidence strings as mechanically proven claims.</Criterion>
+          <Criterion>External selected target lint and status/navigation must be rechecked after the durable apply. The pre-existing GRACE phase-command/navigation problem must have a real authorized resolution; no archive edits, suppressed failures, or false module-health claim are allowed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run contracts:check</Command>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-010>
+      <T-011>
+        <Title>Verify the final result against all acceptance criteria and prepare truthful lifecycle completion.</Title>
+        <DependsOn>T-010</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>No new source or durable changes are assigned here. Check AC-01 through AC-28 against the final diff, operation coverage, failure-side-effect assertions, and fresh compatibility evidence. Corrections return to their owning scoped task and invalidate affected later evidence.</Criterion>
+          <Criterion>Run every target leaf gate on the final result, including new contract tests, full check/build/package validation, and the real isolated host smoke. Confirm all nine tools/actions and structured output variants are accounted for and that public-protocol examples use the actual parsers.</Criterion>
+          <Criterion>Report preserved budgets, source/identity/authorization gates, exact unknown-field behavior, versioned references, and retained edit/web behavior only where exercised. State residual untested host/provider combinations and do not characterize deterministic fake-provider tests as model effectiveness or remote service acceptance.</Criterion>
+          <Criterion>Review the diff for unintended files, generated output edits, global config changes, private data, and persistence changes. The controller runs selected target/final GRACE gates externally after durable reconciliation; only successful gates permit approved lifecycle finalization/archive. The current plan has no independent review obligation, so completion is controller-accepted rather than independently reviewed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run contracts:check</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run contracts:host</Command>
+          <Command>git diff --check</Command>
+          <Command>git status --short --untracked-files=all</Command>
+        </Verification>
+      </T-011>
+    </ImplementationPlan>
+  </C-AGENT-TOOL-CONTRACTS>
+</GraceChangePlan>

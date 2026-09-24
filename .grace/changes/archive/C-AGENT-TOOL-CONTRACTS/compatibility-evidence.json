@@ -1,0 +1,3275 @@
+{
+  "version": 1,
+  "kind": "vvoc-tool-contract-host-compatibility",
+  "generatedAt": "2026-09-24T18:59:29.338Z",
+  "command": "bun run contracts:host",
+  "host": {
+    "opencodeVersion": "1.18.32",
+    "bunVersion": "1.3.8"
+  },
+  "package": {
+    "name": "@osovv/vv-opencode",
+    "version": "1.5.0",
+    "contractRevision": "1"
+  },
+  "pinned": {
+    "pluginSdk": "1.18.2",
+    "sdk": "1.18.2",
+    "pinnedPluginSdk": "1.18.2",
+    "pinnedSdk": "1.18.2"
+  },
+  "isolation": {
+    "scratchParent": "/tmp/opencode/tool-contracts-host",
+    "observedChildEnvKeys": [
+      "HOME",
+      "LANG",
+      "OPENCODE_CONFIG",
+      "OPENCODE_DISABLE_AUTOUPDATE",
+      "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT",
+      "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
+      "OPENCODE_DISABLE_DEFAULT_PLUGINS",
+      "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+      "OPENCODE_DISABLE_LSP_DOWNLOAD",
+      "OPENCODE_DISABLE_MODELS_FETCH",
+      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "OPENCODE_DISABLE_SHARE",
+      "OPENCODE_LOG_LEVEL",
+      "OPENCODE_PRINT_LOGS",
+      "PATH",
+      "TMPDIR",
+      "XDG_CACHE_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME"
+    ],
+    "syntheticProviderKey": true,
+    "syntheticExaCredential": true,
+    "inheritedProviderCredentials": false,
+    "childEnvCredentialKeys": [],
+    "projectConfig": "workspace/.vvoc/vvoc.json (synthetic Exa credential only)"
+  },
+  "coverage": {
+    "ownedToolIds": [
+      "work_item_open",
+      "work_item_list",
+      "work_item_close",
+      "work_item_decide",
+      "work_checkpoint",
+      "hashline_edit",
+      "str_replace_editor",
+      "web_search",
+      "web_fetch"
+    ],
+    "observedDefinitionNames": [
+      "bash",
+      "glob",
+      "grep",
+      "hashline_edit",
+      "read",
+      "skill",
+      "str_replace_editor",
+      "task",
+      "todowrite",
+      "web_fetch",
+      "web_search",
+      "work_checkpoint",
+      "work_item_close",
+      "work_item_decide",
+      "work_item_list",
+      "work_item_open",
+      "write"
+    ],
+    "allOwnedToolsObserved": true,
+    "coverageFailures": [],
+    "caseCount": 26,
+    "caseDigest": "cff30dc575a95b1e93ca1426dbd423acc3a6414cf324fdf237a402a39302fcb9"
+  },
+  "artifacts": [
+    {
+      "path": "dist/lib/agent-tool-catalog.js",
+      "sha256": "6ba48127e5a06305e58f800e234db2712a17a7ffa22b5104f44457e586d74b8e",
+      "bytes": 111063
+    },
+    {
+      "path": "dist/lib/agent-tool-contract.js",
+      "sha256": "61f89d22be01e0cb4bba91f741b5398923072f4f4ae487e2166266444f9da7b7",
+      "bytes": 19095
+    },
+    {
+      "path": "dist/lib/config-layers.js",
+      "sha256": "eb880584d9ff876553f2d0ac64031de8d905712229e2649533da12caba9023e7",
+      "bytes": 15969
+    },
+    {
+      "path": "dist/lib/env-substitution.js",
+      "sha256": "57b3b01ccfb059b584bb1364d500b520f6e068c362248dcf437c026e24651c90",
+      "bytes": 2142
+    },
+    {
+      "path": "dist/lib/model-roles.js",
+      "sha256": "445048008f70022ebf46f86b24d547b344b0bdcddbbee854806a3963209527f6",
+      "bytes": 6713
+    },
+    {
+      "path": "dist/lib/orchestration.js",
+      "sha256": "423522554f18e2ff6a637a6aafc775897f5485e86ee2495b78e9db7331ca50e7",
+      "bytes": 9136
+    },
+    {
+      "path": "dist/lib/package.js",
+      "sha256": "a94135b54a390e30bcbf4c725ecee0cacb3c968ae78809a6d816cd5f83f1d72a",
+      "bytes": 1954
+    },
+    {
+      "path": "dist/lib/plugin-toggle-config.js",
+      "sha256": "c6b90ada38dead466ed5413007f5f14b105de4d2f1770bb628331d0245cc7c72",
+      "bytes": 13334
+    },
+    {
+      "path": "dist/lib/spec-lint.js",
+      "sha256": "3eb3179741b5da96c9388047a83d9ed1d37823584a3956be421022f11aea1221",
+      "bytes": 2512
+    },
+    {
+      "path": "dist/lib/spec-lint/cross-file-rules.js",
+      "sha256": "518452214c8c3288a57f1930907927dc0673242ee324cda49e92cbaaa3e1a751",
+      "bytes": 1445
+    },
+    {
+      "path": "dist/lib/spec-lint/delegated-extraction.js",
+      "sha256": "df3adb0ed892fb1d5321af4ee4f5e6b377abc7242e168b84140cca9be61835bf",
+      "bytes": 5374
+    },
+    {
+      "path": "dist/lib/spec-lint/lint.js",
+      "sha256": "d1b20917174e1b46d24b3ff9fe573b94d42acd9503d80c9c5f222ecc18a08ce1",
+      "bytes": 3945
+    },
+    {
+      "path": "dist/lib/spec-lint/parser.js",
+      "sha256": "af9a65ea76565c31398b42709f38de215f17ff4449fbb83daee70a61b472ba06",
+      "bytes": 19606
+    },
+    {
+      "path": "dist/lib/spec-lint/plan-rules.js",
+      "sha256": "11c998bc7257b5b30c7fe480940426259b7e5194573184725b6586113f3bbc91",
+      "bytes": 35082
+    },
+    {
+      "path": "dist/lib/spec-lint/spec-rules.js",
+      "sha256": "03fd6c7fb28ef6f28d81aee2fd22b39681b8f8fab49e9dbf0daaa5fcafb27cd8",
+      "bytes": 7897
+    },
+    {
+      "path": "dist/lib/vvoc-config.js",
+      "sha256": "ba6d514810097ed835dea5ffcd13193bf4d5c78610f6d18ab6a2dcb09dabdbef",
+      "bytes": 31841
+    },
+    {
+      "path": "dist/lib/vvoc-paths.js",
+      "sha256": "64deccb9ad692cf52a65f2c4b952f0587678f5ba83a548c655dc454f0ba2ceaa",
+      "bytes": 4992
+    },
+    {
+      "path": "dist/lib/vvoc-preset-registry.js",
+      "sha256": "61f4eb28e800d412ee72044cfb8f49689206580ff500a734829864a3487619cf",
+      "bytes": 6560
+    },
+    {
+      "path": "dist/lib/workflow-contract.js",
+      "sha256": "90edd063b64e568b3c6a3e5fed40cadf4545977bb3844906b323f07833876c2e",
+      "bytes": 30458
+    },
+    {
+      "path": "dist/plugins/hashline-edit/constants.js",
+      "sha256": "7032597332542a0e59d06d7a7f1bf21711288ca3bc099cea3451865ea95eebcd",
+      "bytes": 1491
+    },
+    {
+      "path": "dist/plugins/hashline-edit/diff-summary.js",
+      "sha256": "f59324dcf96cacbaece0f27a651d3a701e078bfa581a711c9015841d11632658",
+      "bytes": 3307
+    },
+    {
+      "path": "dist/plugins/hashline-edit/edit-operation-primitives.js",
+      "sha256": "03cc54277dd8265f9c6e4c8ef928ede6e707da23cb8031a6ab17a4b39ef3a691",
+      "bytes": 6720
+    },
+    {
+      "path": "dist/plugins/hashline-edit/edit-operations.js",
+      "sha256": "d1fce60676fe4720c8073b4afc1436f45c1c0a860682e4bdc145ff30fa62a0db",
+      "bytes": 9813
+    },
+    {
+      "path": "dist/plugins/hashline-edit/edit-text-normalization.js",
+      "sha256": "0031674cd9cdf4516bff18070f06b6ef6fdc94b1efb1c5539120b2881d55bc14",
+      "bytes": 4742
+    },
+    {
+      "path": "dist/plugins/hashline-edit/file-text-canonicalization.js",
+      "sha256": "e26882c81e1f3103845354976f8315a046e13bf882e4d15eef4340cc50cf03a8",
+      "bytes": 2114
+    },
+    {
+      "path": "dist/plugins/hashline-edit/hash-computation.js",
+      "sha256": "6ba59ec78aeac2a5ea11978562f36bfaeacc82b04756ab86c29b1c2e483e8f07",
+      "bytes": 2528
+    },
+    {
+      "path": "dist/plugins/hashline-edit/index.js",
+      "sha256": "41371dbf328eae8547368851ffc7ffc7060eb377895958dcb325694987184bca",
+      "bytes": 27555
+    },
+    {
+      "path": "dist/plugins/hashline-edit/normalize-edits.js",
+      "sha256": "078d7d0c0c451b1f7dcbe46cb7f282b006b0fe4fa8296c98388e202f18a9d782",
+      "bytes": 7040
+    },
+    {
+      "path": "dist/plugins/hashline-edit/routing.js",
+      "sha256": "0729e6aa35518378adaa143408d2400027e87e8827e5bdd64bb658f75a0b82b1",
+      "bytes": 5239
+    },
+    {
+      "path": "dist/plugins/hashline-edit/schemas.js",
+      "sha256": "61a41f302011e19761dce3742064bb9831a9ff0e425eba7159421296cc77e0e3",
+      "bytes": 27649
+    },
+    {
+      "path": "dist/plugins/hashline-edit/session-state.js",
+      "sha256": "b31b67deb8c7653849a5321ecbbe5a5029f656cd109b901e2ba093ddca78ea6e",
+      "bytes": 2481
+    },
+    {
+      "path": "dist/plugins/hashline-edit/str-replace-editor.js",
+      "sha256": "2ee85e283bac2e6f30ba08152e17adf5f6058992710880a034f32abc8e24859d",
+      "bytes": 14001
+    },
+    {
+      "path": "dist/plugins/hashline-edit/tool-description.js",
+      "sha256": "07bcb72e5b5376a7a3c18687d8542baa9101e306ef6656c8fb819ac80f106d6a",
+      "bytes": 9473
+    },
+    {
+      "path": "dist/plugins/hashline-edit/validation.js",
+      "sha256": "71ad5b143f67f777d634d6c6cc89e48d69184ba72c41a23bd04ca6a5dd831d49",
+      "bytes": 9326
+    },
+    {
+      "path": "dist/plugins/web-tools/config.js",
+      "sha256": "fd01bbfbf09695a0a3405268a02e752b291add9ca65f27e3dedfca1758e32d24",
+      "bytes": 7578
+    },
+    {
+      "path": "dist/plugins/web-tools/fetch-service.js",
+      "sha256": "e9c4ecefddae04fa58c7d40efa5d732d6560e450373c1a3f33e7d2e7124c00d1",
+      "bytes": 7431
+    },
+    {
+      "path": "dist/plugins/web-tools/html-markdown.js",
+      "sha256": "631d8af0d275655473aec7ecfd42f9b8b468aac23b9b5567eddbbe0038fb2246",
+      "bytes": 2677
+    },
+    {
+      "path": "dist/plugins/web-tools/http.js",
+      "sha256": "99e083be28f5feed5a95ff768c6fe7c3b1c49c470588ee9e346c631da3744410",
+      "bytes": 5694
+    },
+    {
+      "path": "dist/plugins/web-tools/index.js",
+      "sha256": "244b5b5bac66f77b395b16edcd2973b65905896b1e75cebbc00c32caaa2d20e2",
+      "bytes": 6120
+    },
+    {
+      "path": "dist/plugins/web-tools/media-loader.js",
+      "sha256": "f4b132a9673832e25030d729f352e0e15100a40c40045a79d4c13b4fd20308cf",
+      "bytes": 6387
+    },
+    {
+      "path": "dist/plugins/web-tools/providers/brave.js",
+      "sha256": "c82da0776cc3afa1bbf67cea2a6af4dd7d1a1e7d50def24c7a9c3c5fc14a99ac",
+      "bytes": 4452
+    },
+    {
+      "path": "dist/plugins/web-tools/providers/exa.js",
+      "sha256": "b39a9a96e0490c65d42b67ec417955c3f6bf3cb12d1e428e85bb79c70c92019b",
+      "bytes": 5643
+    },
+    {
+      "path": "dist/plugins/web-tools/providers/native-fetch.js",
+      "sha256": "dc83a0bf4abfa8fc60389eaa8a05d030975d3577803617fad556ecfa5d67ba29",
+      "bytes": 4632
+    },
+    {
+      "path": "dist/plugins/web-tools/providers/spider.js",
+      "sha256": "df25d5f751cae5427f8aab271635fe64071daf0fcaeca4def912bfa64901965d",
+      "bytes": 4557
+    },
+    {
+      "path": "dist/plugins/web-tools/providers/zai.js",
+      "sha256": "f320903381fee952b47beea37358a9918ea6d52dcf1a8446765f5fa234261f23",
+      "bytes": 7633
+    },
+    {
+      "path": "dist/plugins/web-tools/schemas.js",
+      "sha256": "f24ffca8c0697d776238f7238a1725daef974c537d681e491e1c3d4a7cbb5a7a",
+      "bytes": 21352
+    },
+    {
+      "path": "dist/plugins/web-tools/search-service.js",
+      "sha256": "58ba7fc0b356f6ce8008cf93133dbb4a6959bd469fabb179fb9aa575a967c723",
+      "bytes": 5499
+    },
+    {
+      "path": "dist/plugins/workflow/authority.js",
+      "sha256": "987e543deb45c8200ccd168faaafdcc00aaa857121f8a1985ae087399d44c4b3",
+      "bytes": 20001
+    },
+    {
+      "path": "dist/plugins/workflow/authorization.js",
+      "sha256": "755fe146f1742a487b1cc416c613bcc8d6941ef24b1bae80a888154419517885",
+      "bytes": 8780
+    },
+    {
+      "path": "dist/plugins/workflow/checkpoint-io.js",
+      "sha256": "d06e544f9c60f3fd902cc8900c3ec895fe516c298f67637d67a195ca64ee0952",
+      "bytes": 9868
+    },
+    {
+      "path": "dist/plugins/workflow/checkpoints.js",
+      "sha256": "02234abdbf962424b25ae78f442898abf9bc683ce6775b22e95940825bc0aba1",
+      "bytes": 68036
+    },
+    {
+      "path": "dist/plugins/workflow/delegated.js",
+      "sha256": "15e8d60cfe7020939a25ffbd3555b2753a9765d0fd8324bc6cc5121909be4aed",
+      "bytes": 62337
+    },
+    {
+      "path": "dist/plugins/workflow/execution.js",
+      "sha256": "626f7f7a80f2f165cdead20be92d9dfa8fb1126e6cd89f838b696589c086dbc8",
+      "bytes": 83941
+    },
+    {
+      "path": "dist/plugins/workflow/index.js",
+      "sha256": "7758faa93d5fb4b0f617a42b300be080bfc4ac57b35e26d2c902ef815913885f",
+      "bytes": 83076
+    },
+    {
+      "path": "dist/plugins/workflow/input-validation.js",
+      "sha256": "4d75f615a3f8a83748bcf37b915ae338cfef89a5d03be11459931e78ef7d983e",
+      "bytes": 26727
+    },
+    {
+      "path": "dist/plugins/workflow/inspection.js",
+      "sha256": "f30a1b4eb36c8cef594e1dee20efd9345b7a7b56b1a50951df5d1db25c911d4b",
+      "bytes": 15904
+    },
+    {
+      "path": "dist/plugins/workflow/persistence.js",
+      "sha256": "f5dfc3ec65123de4ed651e1060d74329d3318046e26361189790a7a7f929b3e8",
+      "bytes": 52653
+    },
+    {
+      "path": "dist/plugins/workflow/protocol.js",
+      "sha256": "88fbed0ff26bb61dc2558c3d27a5f709e860fc968a1778adedf149679d19f8df",
+      "bytes": 11869
+    },
+    {
+      "path": "dist/plugins/workflow/recovery.js",
+      "sha256": "be339e68e166c30db26491b043f1a4c3fbd8bf3216da3e297f8ef5fab2581e79",
+      "bytes": 11022
+    },
+    {
+      "path": "dist/plugins/workflow/repair.js",
+      "sha256": "a3bf559462ab6f51bad870b3741f36be5abefaedde960b37cda15ac356fd8b03",
+      "bytes": 11758
+    },
+    {
+      "path": "dist/plugins/workflow/results.js",
+      "sha256": "102b86a95b625b08f04bc1f9e722802e0fa045915fc4d0faa73bcabcfacf64cb",
+      "bytes": 47804
+    },
+    {
+      "path": "dist/plugins/workflow/schemas.js",
+      "sha256": "dc2ee7bc5934eb40f102d49f6fc335b51004539afcb7626dc1c5ae9a86f5f22a",
+      "bytes": 21651
+    },
+    {
+      "path": "dist/plugins/workflow/snapshots.js",
+      "sha256": "229335c85035cec4b00da71b9304c18363b0fa788635b0e56ba0fb43d4fc2408",
+      "bytes": 11647
+    },
+    {
+      "path": "dist/plugins/workflow/state.js",
+      "sha256": "0004d655b07d063aa241162f1e713da69b6bc845c1a9f3fbd3badcfc1f27d1f1",
+      "bytes": 34317
+    },
+    {
+      "path": "dist/plugins/workflow/system-instruction.md",
+      "sha256": "2cfb042fccc5b7f3989da63e726908b3edbcb2a3a45f17a0b26515b3cf94589c",
+      "bytes": 3199
+    },
+    {
+      "path": "dist/plugins/workflow/tooling.js",
+      "sha256": "6e907e2ffb0f7ab3bdfd5b50fdb383758eb5631f8532327583a4a8b65683d594",
+      "bytes": 73844
+    },
+    {
+      "path": "dist/plugins/workflow/transactions.js",
+      "sha256": "50240320601a90e517bd134acf39aed2f9197c50c616dbdfc70687d5a88dfd33",
+      "bytes": 8755
+    },
+    {
+      "path": "dist/plugins/workflow/transitions.js",
+      "sha256": "69f558e52ddc74c73e9d357f24d6a53afebe114e207c1d10418ac114dd893b11",
+      "bytes": 7411
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/lib/agent-tool-catalog.ts",
+      "sha256": "828149597706766bf04e3f95c8e8716c854f2b64ab1b7465d20254b0507b91e6",
+      "bytes": 99871
+    },
+    {
+      "path": "src/lib/agent-tool-contract.ts",
+      "sha256": "579677eccfd1cd2c8300158c8a2ee8fa6929990645b251e34e5425f01634a78e",
+      "bytes": 22650
+    },
+    {
+      "path": "src/lib/agent-tool-host.test.ts",
+      "sha256": "8bcc50cbdc69c08891a4ee875156987cf76bf51f53da929bc12d839c72ec68b4",
+      "bytes": 29236
+    },
+    {
+      "path": "src/lib/config-layers.ts",
+      "sha256": "e0dc221023fb2cb27ee8e2511d3bfeb655dceeb1db8f00092564f99404ebe7f9",
+      "bytes": 18295
+    },
+    {
+      "path": "src/lib/env-substitution.ts",
+      "sha256": "ad6ce5d080b5618225b3231c4e675a27a2836ae6daecd3b988d221c26590aaf3",
+      "bytes": 2526
+    },
+    {
+      "path": "src/lib/model-roles.ts",
+      "sha256": "0b5c7b71c9cc2f9bcad1701d73e563e5397ca7850e7bd0002d753a453947045e",
+      "bytes": 8070
+    },
+    {
+      "path": "src/lib/orchestration.ts",
+      "sha256": "f117f892884edd414bffc2d7b401bb71f7cf0482dfc1a7bd72db6a96a119846c",
+      "bytes": 9933
+    },
+    {
+      "path": "src/lib/package.ts",
+      "sha256": "edd609d0612ad38af89b9bace8ce76bb72333421cf8b9051fd67a106f715afb2",
+      "bytes": 1976
+    },
+    {
+      "path": "src/lib/plugin-toggle-config.ts",
+      "sha256": "f7b9f75b68cfae6828cc59372c524e3bcf3b6f3f6291f268a8fe46464dfcd4b8",
+      "bytes": 13654
+    },
+    {
+      "path": "src/lib/spec-lint.ts",
+      "sha256": "3f49b14efbd066eef189ac593e362d56295d3df4d3e0a0ae13657e3ed49da6aa",
+      "bytes": 3059
+    },
+    {
+      "path": "src/lib/spec-lint/cross-file-rules.ts",
+      "sha256": "bb9cb187dd363faa80cca9fdfd91d2428213a505713359e694e6f91c7df7e0a3",
+      "bytes": 1465
+    },
+    {
+      "path": "src/lib/spec-lint/delegated-extraction.ts",
+      "sha256": "d1ab8dec7e8e2da1ed0696a418b49fb677a6752f9f6e3f45e1ab27d6333a541c",
+      "bytes": 5254
+    },
+    {
+      "path": "src/lib/spec-lint/lint.ts",
+      "sha256": "6a09afb4ec373ea022a50558942075c05c4fbf4249517e0439ded2e0db6ccb84",
+      "bytes": 3651
+    },
+    {
+      "path": "src/lib/spec-lint/parser.ts",
+      "sha256": "f6aee73371c91705bb77781afbd751889d079df7741b854768ecd4ed201d8cb9",
+      "bytes": 20263
+    },
+    {
+      "path": "src/lib/spec-lint/plan-rules.ts",
+      "sha256": "ba6b695bad7a19198f7930e07bf23aa035f989f0310826a94c96062a423b1dac",
+      "bytes": 31379
+    },
+    {
+      "path": "src/lib/spec-lint/spec-rules.ts",
+      "sha256": "6a2aa0f0f262dc8ad09661ffdca9faf1aa33f82495f13ba5f3552500a41ba110",
+      "bytes": 7277
+    },
+    {
+      "path": "src/lib/vvoc-config.ts",
+      "sha256": "d40bf063c5d029fe8b3d11692a80f9910f3403440ed43d86ae47804dcb79c80b",
+      "bytes": 32159
+    },
+    {
+      "path": "src/lib/vvoc-paths.ts",
+      "sha256": "17ee9df1f8ceb222a7eca9595fb95a0ee72cbcbcafecbf49201156f4cb71fcf1",
+      "bytes": 5148
+    },
+    {
+      "path": "src/lib/vvoc-preset-registry.ts",
+      "sha256": "d8bd7b41aebe2322a8aa2dbc0713be7aed428a52560cf979b5e81137ec395b3d",
+      "bytes": 6455
+    },
+    {
+      "path": "src/lib/workflow-contract.ts",
+      "sha256": "d897e680062ef856fc1c89950fcefa25dca012acbb956b28366a559103481a15",
+      "bytes": 38736
+    },
+    {
+      "path": "src/plugins/hashline-edit/constants.ts",
+      "sha256": "53004eef6635a6465d07cd2bffd332be3896baf616f8ddfe361a986d0580ad49",
+      "bytes": 1455
+    },
+    {
+      "path": "src/plugins/hashline-edit/diff-summary.ts",
+      "sha256": "7cddd5de268a93b28c6f204e150ed2cd87063c2ac6d655cb092e3d7ae8247c7e",
+      "bytes": 3392
+    },
+    {
+      "path": "src/plugins/hashline-edit/edit-operation-primitives.ts",
+      "sha256": "3d32cb18c260f8a7292445938f58d4841733143c5df329b8afc3f3689906f0f7",
+      "bytes": 7116
+    },
+    {
+      "path": "src/plugins/hashline-edit/edit-operations.ts",
+      "sha256": "612ade0c7daef6824921ebc00abfb36af583e6c1f93a2d0584f2864504823b44",
+      "bytes": 9611
+    },
+    {
+      "path": "src/plugins/hashline-edit/edit-text-normalization.ts",
+      "sha256": "85387a756ae9abf841d7d8d635d3bcc86fc4b193b4b1d0e7cad511f39707abee",
+      "bytes": 4900
+    },
+    {
+      "path": "src/plugins/hashline-edit/file-text-canonicalization.ts",
+      "sha256": "a9f62d96800acc4389386275ede29a136fa82a60240c33d967ed9feacdb2d21a",
+      "bytes": 2290
+    },
+    {
+      "path": "src/plugins/hashline-edit/hash-computation.ts",
+      "sha256": "3e706b8e7fc1587ea731c3ea9b5cdeffa0cba6e3d95ed5db3204c5bddcf0c07f",
+      "bytes": 2719
+    },
+    {
+      "path": "src/plugins/hashline-edit/index.ts",
+      "sha256": "4c9c85bab09431d0fe957cb7eb791c132881236cab577cf8c8d390b45e850541",
+      "bytes": 27572
+    },
+    {
+      "path": "src/plugins/hashline-edit/normalize-edits.ts",
+      "sha256": "9c4446723d9a0cc6bd522f36651711ec586d79032340ce1cf0dd4a1f697b0bec",
+      "bytes": 7320
+    },
+    {
+      "path": "src/plugins/hashline-edit/routing.ts",
+      "sha256": "42bf9b3c70a00ec260757cf15e90f110df069f396e6857fad48ff6d653741b25",
+      "bytes": 5663
+    },
+    {
+      "path": "src/plugins/hashline-edit/schemas.ts",
+      "sha256": "b05aaf55aa1fa975752e36785f63ed9ab1d10c75ff69f6bbee26d9bdcc5dd7b9",
+      "bytes": 28272
+    },
+    {
+      "path": "src/plugins/hashline-edit/session-state.ts",
+      "sha256": "1dfddb924785c60d58aaac08e39ea90fce05ec5ef098308a3a412cc0b9ffe92e",
+      "bytes": 2909
+    },
+    {
+      "path": "src/plugins/hashline-edit/str-replace-editor.ts",
+      "sha256": "218ada52ca4012b30449cad883cebfc104560d02526d2142f86cb77361036434",
+      "bytes": 15226
+    },
+    {
+      "path": "src/plugins/hashline-edit/tool-description.ts",
+      "sha256": "967abc6767aa1e43006716d83d897603cbada3f34dafe3ac197f749b09103848",
+      "bytes": 9430
+    },
+    {
+      "path": "src/plugins/hashline-edit/validation.ts",
+      "sha256": "2d8d73e899ef37e1e5b6157e5cf1e6d8775a302021f530ca93bc7a286fbd7954",
+      "bytes": 9534
+    },
+    {
+      "path": "src/plugins/web-tools/config.ts",
+      "sha256": "9701372ff5ef0da5489226f06e561609460644128f324fde263d6c33f7d63e2d",
+      "bytes": 9230
+    },
+    {
+      "path": "src/plugins/web-tools/fetch-service.ts",
+      "sha256": "b8204de1813bc881b759a2bdba823086cc70ac829e05654b7657463ac9b7fb0f",
+      "bytes": 7484
+    },
+    {
+      "path": "src/plugins/web-tools/html-markdown.ts",
+      "sha256": "48aefcddcc1f6cf50dc0165d8b3a5eacdf872de87efecb49c53596e1fd61e7d8",
+      "bytes": 2612
+    },
+    {
+      "path": "src/plugins/web-tools/http.ts",
+      "sha256": "dc5ea8a497c77e4699cd87393a34ca311f517db7f0a31cce92f6f088502a569c",
+      "bytes": 6381
+    },
+    {
+      "path": "src/plugins/web-tools/index.ts",
+      "sha256": "26a0d0df5381d145357640f8b8c7575978bcbcec87fbea97e3ab6e0a39ce058d",
+      "bytes": 5960
+    },
+    {
+      "path": "src/plugins/web-tools/media-loader.ts",
+      "sha256": "3739a9a0572f8f3a7a92e519e4b108956c18e571d4dad4111a49b6349083db0f",
+      "bytes": 6818
+    },
+    {
+      "path": "src/plugins/web-tools/providers/brave.ts",
+      "sha256": "c4dfa4282e75c5526461e746a36789047dc9f911a6a53c8802aa380f03f651cf",
+      "bytes": 4616
+    },
+    {
+      "path": "src/plugins/web-tools/providers/exa.ts",
+      "sha256": "48cdcb470042376d91da68ea5543f23eafd71cb8474bfbf9ff2326c0b61e30ca",
+      "bytes": 6660
+    },
+    {
+      "path": "src/plugins/web-tools/providers/native-fetch.ts",
+      "sha256": "d7a4681aab45d4a633932a40edab247ca52beb7a308d465b50f15c25ea4cbdcb",
+      "bytes": 5083
+    },
+    {
+      "path": "src/plugins/web-tools/providers/spider.ts",
+      "sha256": "ac7c6773bee4219017299079877e4566dd428e75788f95e1f2ceb7b99d5bbc10",
+      "bytes": 5111
+    },
+    {
+      "path": "src/plugins/web-tools/providers/zai.ts",
+      "sha256": "7070163dd1678975923a28d45987cab2a2a61289d8457286254216327ec0c094",
+      "bytes": 8739
+    },
+    {
+      "path": "src/plugins/web-tools/schemas.ts",
+      "sha256": "347ab1d1b5e4c35fba2f90b030adfd9e282d1fa9d2537b804753a49f279089cc",
+      "bytes": 22258
+    },
+    {
+      "path": "src/plugins/web-tools/search-service.ts",
+      "sha256": "8ac23aa753a3475142f20b4831e30cb99e50610e294861501e99094ebddce009",
+      "bytes": 5360
+    },
+    {
+      "path": "src/plugins/workflow/authority.ts",
+      "sha256": "13f47dcd6654481b17b9de37377995b7c2348b882b53d26352ed4a2eba0e39d0",
+      "bytes": 22313
+    },
+    {
+      "path": "src/plugins/workflow/authorization.ts",
+      "sha256": "6547dbbae2ef1814e604b6a33b3a78f6d01a958a2d329621c24bc419fd1421df",
+      "bytes": 10244
+    },
+    {
+      "path": "src/plugins/workflow/checkpoint-io.ts",
+      "sha256": "5c3aec7f9ed974b3bbf23811ceb47659d2014c565d4b67efe8e1eb22aaa001f5",
+      "bytes": 10755
+    },
+    {
+      "path": "src/plugins/workflow/checkpoints.ts",
+      "sha256": "f15ffbb3668f9b01443e81f1f8e8d6ae175435d9284c859b106d3b0a0f181d6d",
+      "bytes": 75490
+    },
+    {
+      "path": "src/plugins/workflow/delegated.ts",
+      "sha256": "1b60f1e342deef4058dedb9e24a6323e149ad808b0e9962b24e09329a353da9f",
+      "bytes": 72408
+    },
+    {
+      "path": "src/plugins/workflow/execution.ts",
+      "sha256": "1d15c183ac84d8844fb77b90ba3d73a16e6efbc7d89afb6ffda1e5514e5212d7",
+      "bytes": 88517
+    },
+    {
+      "path": "src/plugins/workflow/index.ts",
+      "sha256": "411082c8651d56b7b740ee63f3f10fe0725c0c80966157c17a3794a6122cdf6a",
+      "bytes": 77941
+    },
+    {
+      "path": "src/plugins/workflow/input-validation.ts",
+      "sha256": "4d897b1c115da3cc0a28f0a913190c1984126072134fc0e10fb3c31a91fbabaa",
+      "bytes": 28610
+    },
+    {
+      "path": "src/plugins/workflow/inspection.ts",
+      "sha256": "ae7905b082680c82a2876e2ecb2cf3e04173a4f2e8411679ecd4b020ebd32eeb",
+      "bytes": 17499
+    },
+    {
+      "path": "src/plugins/workflow/persistence.ts",
+      "sha256": "6585f517003d8088990cef9b7a6fa473b2643249eca82860eba05537f1b7d026",
+      "bytes": 55367
+    },
+    {
+      "path": "src/plugins/workflow/protocol.ts",
+      "sha256": "27167c58b75c2aa29ef401abf317c9ad48b1d2d7a886d96ba049bf749642c810",
+      "bytes": 13191
+    },
+    {
+      "path": "src/plugins/workflow/recovery.ts",
+      "sha256": "e7c57d0cfacfd3fbc1cbbfb1b2f97face19efad45fc49de30fd5baf0263c580d",
+      "bytes": 11588
+    },
+    {
+      "path": "src/plugins/workflow/repair.ts",
+      "sha256": "98cd1e09ed27f82817c271964299bfd0bde3f4253f6e16ef9eb67295ca1f52c8",
+      "bytes": 12200
+    },
+    {
+      "path": "src/plugins/workflow/results.ts",
+      "sha256": "70a71745ce48f7a7c76a615a204f8b49debdffcc252cf875b8f3018d5239177a",
+      "bytes": 50361
+    },
+    {
+      "path": "src/plugins/workflow/schemas.ts",
+      "sha256": "743a5bf4edfdebefcbe22c5443c7be1457ebda4e1aa77966541d5789ac98fc99",
+      "bytes": 22157
+    },
+    {
+      "path": "src/plugins/workflow/snapshots.ts",
+      "sha256": "b1b89c2eb41b7fa48c360d0d3b41164faba886f2643ede0b30de1b6f430f205b",
+      "bytes": 12970
+    },
+    {
+      "path": "src/plugins/workflow/state.ts",
+      "sha256": "2ee5b15f47b2ab15cd643b3e83073de1b39b909ed00c31d6a2849c8a1d6b4778",
+      "bytes": 41131
+    },
+    {
+      "path": "src/plugins/workflow/system-instruction.md",
+      "sha256": "2cfb042fccc5b7f3989da63e726908b3edbcb2a3a45f17a0b26515b3cf94589c",
+      "bytes": 3199
+    },
+    {
+      "path": "src/plugins/workflow/tooling.ts",
+      "sha256": "37d3f69463e263b5ee6baa5cdc25ef3212827ef57984d4ff80e26fff6d5c89b9",
+      "bytes": 68763
+    },
+    {
+      "path": "src/plugins/workflow/transactions.ts",
+      "sha256": "5c0e75f6b123889568f6231383891a8ccce0bcb6fff9d115fdf53d933529c002",
+      "bytes": 10220
+    },
+    {
+      "path": "src/plugins/workflow/transitions.ts",
+      "sha256": "45ae9f21506a225eee9e5dd8f9dcc9193e6c91ae00702ed16e39e68ade106b88",
+      "bytes": 7764
+    }
+  ],
+  "assets": [
+    {
+      "path": "node_modules/@opencode-ai/plugin/package.json",
+      "sha256": "7480796d733eec2b8a46a579a04dc417f20801d2060d22b775801d43d8edd416",
+      "bytes": 1784
+    },
+    {
+      "path": "node_modules/@opencode-ai/sdk/package.json",
+      "sha256": "0d39028e108e8e82920126e79a356a441db5483f1ac08dd00c690de69dc4f605",
+      "bytes": 1457
+    },
+    {
+      "path": "package.json",
+      "sha256": "323a42663bf82198ae582c29694f54040a00273372bd4f7e81f7594d3f036e7d",
+      "bytes": 6653
+    },
+    {
+      "path": "scripts/check-tool-contracts-host.test.ts",
+      "sha256": "5663f86b68429e0e04b5c4e2bdef741e9b51eb76a4029fa34d8febf1d455eccd",
+      "bytes": 68796
+    },
+    {
+      "path": "scripts/check-tool-contracts-host.ts",
+      "sha256": "b7af4138814c16b76bba76add218d58c6c48a79ddf67756a9ea12d87cebea943",
+      "bytes": 155527
+    },
+    {
+      "path": "templates/skills/vv-execute/references/tool-contracts.md",
+      "sha256": "8c6b222249d1a4dcf138eb38be113d850ae2e0ff54b3d0800dc8676e7e7338b6",
+      "bytes": 46006
+    }
+  ],
+  "fingerprints": {
+    "closureRoots": [
+      "dist/plugins/workflow/index.js",
+      "dist/plugins/hashline-edit/index.js",
+      "dist/plugins/web-tools/index.js",
+      "dist/lib/agent-tool-catalog.js",
+      "dist/lib/agent-tool-contract.js"
+    ],
+    "closureCaveat": "Conservative local import/re-export closure from the three built plugin roots plus the built catalog/identity modules, paired with src counterparts and extra material paths; not an exact runtime graph.",
+    "before": [
+      {
+        "path": "dist/lib/agent-tool-catalog.js",
+        "sha256": "6ba48127e5a06305e58f800e234db2712a17a7ffa22b5104f44457e586d74b8e",
+        "bytes": 111063
+      },
+      {
+        "path": "dist/lib/agent-tool-contract.js",
+        "sha256": "61f89d22be01e0cb4bba91f741b5398923072f4f4ae487e2166266444f9da7b7",
+        "bytes": 19095
+      },
+      {
+        "path": "dist/lib/config-layers.js",
+        "sha256": "eb880584d9ff876553f2d0ac64031de8d905712229e2649533da12caba9023e7",
+        "bytes": 15969
+      },
+      {
+        "path": "dist/lib/env-substitution.js",
+        "sha256": "57b3b01ccfb059b584bb1364d500b520f6e068c362248dcf437c026e24651c90",
+        "bytes": 2142
+      },
+      {
+        "path": "dist/lib/model-roles.js",
+        "sha256": "445048008f70022ebf46f86b24d547b344b0bdcddbbee854806a3963209527f6",
+        "bytes": 6713
+      },
+      {
+        "path": "dist/lib/orchestration.js",
+        "sha256": "423522554f18e2ff6a637a6aafc775897f5485e86ee2495b78e9db7331ca50e7",
+        "bytes": 9136
+      },
+      {
+        "path": "dist/lib/package.js",
+        "sha256": "a94135b54a390e30bcbf4c725ecee0cacb3c968ae78809a6d816cd5f83f1d72a",
+        "bytes": 1954
+      },
+      {
+        "path": "dist/lib/plugin-toggle-config.js",
+        "sha256": "c6b90ada38dead466ed5413007f5f14b105de4d2f1770bb628331d0245cc7c72",
+        "bytes": 13334
+      },
+      {
+        "path": "dist/lib/spec-lint.js",
+        "sha256": "3eb3179741b5da96c9388047a83d9ed1d37823584a3956be421022f11aea1221",
+        "bytes": 2512
+      },
+      {
+        "path": "dist/lib/spec-lint/cross-file-rules.js",
+        "sha256": "518452214c8c3288a57f1930907927dc0673242ee324cda49e92cbaaa3e1a751",
+        "bytes": 1445
+      },
+      {
+        "path": "dist/lib/spec-lint/delegated-extraction.js",
+        "sha256": "df3adb0ed892fb1d5321af4ee4f5e6b377abc7242e168b84140cca9be61835bf",
+        "bytes": 5374
+      },
+      {
+        "path": "dist/lib/spec-lint/lint.js",
+        "sha256": "d1b20917174e1b46d24b3ff9fe573b94d42acd9503d80c9c5f222ecc18a08ce1",
+        "bytes": 3945
+      },
+      {
+        "path": "dist/lib/spec-lint/parser.js",
+        "sha256": "af9a65ea76565c31398b42709f38de215f17ff4449fbb83daee70a61b472ba06",
+        "bytes": 19606
+      },
+      {
+        "path": "dist/lib/spec-lint/plan-rules.js",
+        "sha256": "11c998bc7257b5b30c7fe480940426259b7e5194573184725b6586113f3bbc91",
+        "bytes": 35082
+      },
+      {
+        "path": "dist/lib/spec-lint/spec-rules.js",
+        "sha256": "03fd6c7fb28ef6f28d81aee2fd22b39681b8f8fab49e9dbf0daaa5fcafb27cd8",
+        "bytes": 7897
+      },
+      {
+        "path": "dist/lib/vvoc-config.js",
+        "sha256": "ba6d514810097ed835dea5ffcd13193bf4d5c78610f6d18ab6a2dcb09dabdbef",
+        "bytes": 31841
+      },
+      {
+        "path": "dist/lib/vvoc-paths.js",
+        "sha256": "64deccb9ad692cf52a65f2c4b952f0587678f5ba83a548c655dc454f0ba2ceaa",
+        "bytes": 4992
+      },
+      {
+        "path": "dist/lib/vvoc-preset-registry.js",
+        "sha256": "61f4eb28e800d412ee72044cfb8f49689206580ff500a734829864a3487619cf",
+        "bytes": 6560
+      },
+      {
+        "path": "dist/lib/workflow-contract.js",
+        "sha256": "90edd063b64e568b3c6a3e5fed40cadf4545977bb3844906b323f07833876c2e",
+        "bytes": 30458
+      },
+      {
+        "path": "dist/plugins/hashline-edit/constants.js",
+        "sha256": "7032597332542a0e59d06d7a7f1bf21711288ca3bc099cea3451865ea95eebcd",
+        "bytes": 1491
+      },
+      {
+        "path": "dist/plugins/hashline-edit/diff-summary.js",
+        "sha256": "f59324dcf96cacbaece0f27a651d3a701e078bfa581a711c9015841d11632658",
+        "bytes": 3307
+      },
+      {
+        "path": "dist/plugins/hashline-edit/edit-operation-primitives.js",
+        "sha256": "03cc54277dd8265f9c6e4c8ef928ede6e707da23cb8031a6ab17a4b39ef3a691",
+        "bytes": 6720
+      },
+      {
+        "path": "dist/plugins/hashline-edit/edit-operations.js",
+        "sha256": "d1fce60676fe4720c8073b4afc1436f45c1c0a860682e4bdc145ff30fa62a0db",
+        "bytes": 9813
+      },
+      {
+        "path": "dist/plugins/hashline-edit/edit-text-normalization.js",
+        "sha256": "0031674cd9cdf4516bff18070f06b6ef6fdc94b1efb1c5539120b2881d55bc14",
+        "bytes": 4742
+      },
+      {
+        "path": "dist/plugins/hashline-edit/file-text-canonicalization.js",
+        "sha256": "e26882c81e1f3103845354976f8315a046e13bf882e4d15eef4340cc50cf03a8",
+        "bytes": 2114
+      },
+      {
+        "path": "dist/plugins/hashline-edit/hash-computation.js",
+        "sha256": "6ba59ec78aeac2a5ea11978562f36bfaeacc82b04756ab86c29b1c2e483e8f07",
+        "bytes": 2528
+      },
+      {
+        "path": "dist/plugins/hashline-edit/index.js",
+        "sha256": "41371dbf328eae8547368851ffc7ffc7060eb377895958dcb325694987184bca",
+        "bytes": 27555
+      },
+      {
+        "path": "dist/plugins/hashline-edit/normalize-edits.js",
+        "sha256": "078d7d0c0c451b1f7dcbe46cb7f282b006b0fe4fa8296c98388e202f18a9d782",
+        "bytes": 7040
+      },
+      {
+        "path": "dist/plugins/hashline-edit/routing.js",
+        "sha256": "0729e6aa35518378adaa143408d2400027e87e8827e5bdd64bb658f75a0b82b1",
+        "bytes": 5239
+      },
+      {
+        "path": "dist/plugins/hashline-edit/schemas.js",
+        "sha256": "61a41f302011e19761dce3742064bb9831a9ff0e425eba7159421296cc77e0e3",
+        "bytes": 27649
+      },
+      {
+        "path": "dist/plugins/hashline-edit/session-state.js",
+        "sha256": "b31b67deb8c7653849a5321ecbbe5a5029f656cd109b901e2ba093ddca78ea6e",
+        "bytes": 2481
+      },
+      {
+        "path": "dist/plugins/hashline-edit/str-replace-editor.js",
+        "sha256": "2ee85e283bac2e6f30ba08152e17adf5f6058992710880a034f32abc8e24859d",
+        "bytes": 14001
+      },
+      {
+        "path": "dist/plugins/hashline-edit/tool-description.js",
+        "sha256": "07bcb72e5b5376a7a3c18687d8542baa9101e306ef6656c8fb819ac80f106d6a",
+        "bytes": 9473
+      },
+      {
+        "path": "dist/plugins/hashline-edit/validation.js",
+        "sha256": "71ad5b143f67f777d634d6c6cc89e48d69184ba72c41a23bd04ca6a5dd831d49",
+        "bytes": 9326
+      },
+      {
+        "path": "dist/plugins/web-tools/config.js",
+        "sha256": "fd01bbfbf09695a0a3405268a02e752b291add9ca65f27e3dedfca1758e32d24",
+        "bytes": 7578
+      },
+      {
+        "path": "dist/plugins/web-tools/fetch-service.js",
+        "sha256": "e9c4ecefddae04fa58c7d40efa5d732d6560e450373c1a3f33e7d2e7124c00d1",
+        "bytes": 7431
+      },
+      {
+        "path": "dist/plugins/web-tools/html-markdown.js",
+        "sha256": "631d8af0d275655473aec7ecfd42f9b8b468aac23b9b5567eddbbe0038fb2246",
+        "bytes": 2677
+      },
+      {
+        "path": "dist/plugins/web-tools/http.js",
+        "sha256": "99e083be28f5feed5a95ff768c6fe7c3b1c49c470588ee9e346c631da3744410",
+        "bytes": 5694
+      },
+      {
+        "path": "dist/plugins/web-tools/index.js",
+        "sha256": "244b5b5bac66f77b395b16edcd2973b65905896b1e75cebbc00c32caaa2d20e2",
+        "bytes": 6120
+      },
+      {
+        "path": "dist/plugins/web-tools/media-loader.js",
+        "sha256": "f4b132a9673832e25030d729f352e0e15100a40c40045a79d4c13b4fd20308cf",
+        "bytes": 6387
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/brave.js",
+        "sha256": "c82da0776cc3afa1bbf67cea2a6af4dd7d1a1e7d50def24c7a9c3c5fc14a99ac",
+        "bytes": 4452
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/exa.js",
+        "sha256": "b39a9a96e0490c65d42b67ec417955c3f6bf3cb12d1e428e85bb79c70c92019b",
+        "bytes": 5643
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/native-fetch.js",
+        "sha256": "dc83a0bf4abfa8fc60389eaa8a05d030975d3577803617fad556ecfa5d67ba29",
+        "bytes": 4632
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/spider.js",
+        "sha256": "df25d5f751cae5427f8aab271635fe64071daf0fcaeca4def912bfa64901965d",
+        "bytes": 4557
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/zai.js",
+        "sha256": "f320903381fee952b47beea37358a9918ea6d52dcf1a8446765f5fa234261f23",
+        "bytes": 7633
+      },
+      {
+        "path": "dist/plugins/web-tools/schemas.js",
+        "sha256": "f24ffca8c0697d776238f7238a1725daef974c537d681e491e1c3d4a7cbb5a7a",
+        "bytes": 21352
+      },
+      {
+        "path": "dist/plugins/web-tools/search-service.js",
+        "sha256": "58ba7fc0b356f6ce8008cf93133dbb4a6959bd469fabb179fb9aa575a967c723",
+        "bytes": 5499
+      },
+      {
+        "path": "dist/plugins/workflow/authority.js",
+        "sha256": "987e543deb45c8200ccd168faaafdcc00aaa857121f8a1985ae087399d44c4b3",
+        "bytes": 20001
+      },
+      {
+        "path": "dist/plugins/workflow/authorization.js",
+        "sha256": "755fe146f1742a487b1cc416c613bcc8d6941ef24b1bae80a888154419517885",
+        "bytes": 8780
+      },
+      {
+        "path": "dist/plugins/workflow/checkpoint-io.js",
+        "sha256": "d06e544f9c60f3fd902cc8900c3ec895fe516c298f67637d67a195ca64ee0952",
+        "bytes": 9868
+      },
+      {
+        "path": "dist/plugins/workflow/checkpoints.js",
+        "sha256": "02234abdbf962424b25ae78f442898abf9bc683ce6775b22e95940825bc0aba1",
+        "bytes": 68036
+      },
+      {
+        "path": "dist/plugins/workflow/delegated.js",
+        "sha256": "15e8d60cfe7020939a25ffbd3555b2753a9765d0fd8324bc6cc5121909be4aed",
+        "bytes": 62337
+      },
+      {
+        "path": "dist/plugins/workflow/execution.js",
+        "sha256": "626f7f7a80f2f165cdead20be92d9dfa8fb1126e6cd89f838b696589c086dbc8",
+        "bytes": 83941
+      },
+      {
+        "path": "dist/plugins/workflow/index.js",
+        "sha256": "7758faa93d5fb4b0f617a42b300be080bfc4ac57b35e26d2c902ef815913885f",
+        "bytes": 83076
+      },
+      {
+        "path": "dist/plugins/workflow/input-validation.js",
+        "sha256": "4d75f615a3f8a83748bcf37b915ae338cfef89a5d03be11459931e78ef7d983e",
+        "bytes": 26727
+      },
+      {
+        "path": "dist/plugins/workflow/inspection.js",
+        "sha256": "f30a1b4eb36c8cef594e1dee20efd9345b7a7b56b1a50951df5d1db25c911d4b",
+        "bytes": 15904
+      },
+      {
+        "path": "dist/plugins/workflow/persistence.js",
+        "sha256": "f5dfc3ec65123de4ed651e1060d74329d3318046e26361189790a7a7f929b3e8",
+        "bytes": 52653
+      },
+      {
+        "path": "dist/plugins/workflow/protocol.js",
+        "sha256": "88fbed0ff26bb61dc2558c3d27a5f709e860fc968a1778adedf149679d19f8df",
+        "bytes": 11869
+      },
+      {
+        "path": "dist/plugins/workflow/recovery.js",
+        "sha256": "be339e68e166c30db26491b043f1a4c3fbd8bf3216da3e297f8ef5fab2581e79",
+        "bytes": 11022
+      },
+      {
+        "path": "dist/plugins/workflow/repair.js",
+        "sha256": "a3bf559462ab6f51bad870b3741f36be5abefaedde960b37cda15ac356fd8b03",
+        "bytes": 11758
+      },
+      {
+        "path": "dist/plugins/workflow/results.js",
+        "sha256": "102b86a95b625b08f04bc1f9e722802e0fa045915fc4d0faa73bcabcfacf64cb",
+        "bytes": 47804
+      },
+      {
+        "path": "dist/plugins/workflow/schemas.js",
+        "sha256": "dc2ee7bc5934eb40f102d49f6fc335b51004539afcb7626dc1c5ae9a86f5f22a",
+        "bytes": 21651
+      },
+      {
+        "path": "dist/plugins/workflow/snapshots.js",
+        "sha256": "229335c85035cec4b00da71b9304c18363b0fa788635b0e56ba0fb43d4fc2408",
+        "bytes": 11647
+      },
+      {
+        "path": "dist/plugins/workflow/state.js",
+        "sha256": "0004d655b07d063aa241162f1e713da69b6bc845c1a9f3fbd3badcfc1f27d1f1",
+        "bytes": 34317
+      },
+      {
+        "path": "dist/plugins/workflow/system-instruction.md",
+        "sha256": "2cfb042fccc5b7f3989da63e726908b3edbcb2a3a45f17a0b26515b3cf94589c",
+        "bytes": 3199
+      },
+      {
+        "path": "dist/plugins/workflow/tooling.js",
+        "sha256": "6e907e2ffb0f7ab3bdfd5b50fdb383758eb5631f8532327583a4a8b65683d594",
+        "bytes": 73844
+      },
+      {
+        "path": "dist/plugins/workflow/transactions.js",
+        "sha256": "50240320601a90e517bd134acf39aed2f9197c50c616dbdfc70687d5a88dfd33",
+        "bytes": 8755
+      },
+      {
+        "path": "dist/plugins/workflow/transitions.js",
+        "sha256": "69f558e52ddc74c73e9d357f24d6a53afebe114e207c1d10418ac114dd893b11",
+        "bytes": 7411
+      },
+      {
+        "path": "node_modules/@opencode-ai/plugin/package.json",
+        "sha256": "7480796d733eec2b8a46a579a04dc417f20801d2060d22b775801d43d8edd416",
+        "bytes": 1784
+      },
+      {
+        "path": "node_modules/@opencode-ai/sdk/package.json",
+        "sha256": "0d39028e108e8e82920126e79a356a441db5483f1ac08dd00c690de69dc4f605",
+        "bytes": 1457
+      },
+      {
+        "path": "package.json",
+        "sha256": "323a42663bf82198ae582c29694f54040a00273372bd4f7e81f7594d3f036e7d",
+        "bytes": 6653
+      },
+      {
+        "path": "scripts/check-tool-contracts-host.test.ts",
+        "sha256": "5663f86b68429e0e04b5c4e2bdef741e9b51eb76a4029fa34d8febf1d455eccd",
+        "bytes": 68796
+      },
+      {
+        "path": "scripts/check-tool-contracts-host.ts",
+        "sha256": "b7af4138814c16b76bba76add218d58c6c48a79ddf67756a9ea12d87cebea943",
+        "bytes": 155527
+      },
+      {
+        "path": "src/lib/agent-tool-catalog.ts",
+        "sha256": "828149597706766bf04e3f95c8e8716c854f2b64ab1b7465d20254b0507b91e6",
+        "bytes": 99871
+      },
+      {
+        "path": "src/lib/agent-tool-contract.ts",
+        "sha256": "579677eccfd1cd2c8300158c8a2ee8fa6929990645b251e34e5425f01634a78e",
+        "bytes": 22650
+      },
+      {
+        "path": "src/lib/agent-tool-host.test.ts",
+        "sha256": "8bcc50cbdc69c08891a4ee875156987cf76bf51f53da929bc12d839c72ec68b4",
+        "bytes": 29236
+      },
+      {
+        "path": "src/lib/config-layers.ts",
+        "sha256": "e0dc221023fb2cb27ee8e2511d3bfeb655dceeb1db8f00092564f99404ebe7f9",
+        "bytes": 18295
+      },
+      {
+        "path": "src/lib/env-substitution.ts",
+        "sha256": "ad6ce5d080b5618225b3231c4e675a27a2836ae6daecd3b988d221c26590aaf3",
+        "bytes": 2526
+      },
+      {
+        "path": "src/lib/model-roles.ts",
+        "sha256": "0b5c7b71c9cc2f9bcad1701d73e563e5397ca7850e7bd0002d753a453947045e",
+        "bytes": 8070
+      },
+      {
+        "path": "src/lib/orchestration.ts",
+        "sha256": "f117f892884edd414bffc2d7b401bb71f7cf0482dfc1a7bd72db6a96a119846c",
+        "bytes": 9933
+      },
+      {
+        "path": "src/lib/package.ts",
+        "sha256": "edd609d0612ad38af89b9bace8ce76bb72333421cf8b9051fd67a106f715afb2",
+        "bytes": 1976
+      },
+      {
+        "path": "src/lib/plugin-toggle-config.ts",
+        "sha256": "f7b9f75b68cfae6828cc59372c524e3bcf3b6f3f6291f268a8fe46464dfcd4b8",
+        "bytes": 13654
+      },
+      {
+        "path": "src/lib/spec-lint.ts",
+        "sha256": "3f49b14efbd066eef189ac593e362d56295d3df4d3e0a0ae13657e3ed49da6aa",
+        "bytes": 3059
+      },
+      {
+        "path": "src/lib/spec-lint/cross-file-rules.ts",
+        "sha256": "bb9cb187dd363faa80cca9fdfd91d2428213a505713359e694e6f91c7df7e0a3",
+        "bytes": 1465
+      },
+      {
+        "path": "src/lib/spec-lint/delegated-extraction.ts",
+        "sha256": "d1ab8dec7e8e2da1ed0696a418b49fb677a6752f9f6e3f45e1ab27d6333a541c",
+        "bytes": 5254
+      },
+      {
+        "path": "src/lib/spec-lint/lint.ts",
+        "sha256": "6a09afb4ec373ea022a50558942075c05c4fbf4249517e0439ded2e0db6ccb84",
+        "bytes": 3651
+      },
+      {
+        "path": "src/lib/spec-lint/parser.ts",
+        "sha256": "f6aee73371c91705bb77781afbd751889d079df7741b854768ecd4ed201d8cb9",
+        "bytes": 20263
+      },
+      {
+        "path": "src/lib/spec-lint/plan-rules.ts",
+        "sha256": "ba6b695bad7a19198f7930e07bf23aa035f989f0310826a94c96062a423b1dac",
+        "bytes": 31379
+      },
+      {
+        "path": "src/lib/spec-lint/spec-rules.ts",
+        "sha256": "6a2aa0f0f262dc8ad09661ffdca9faf1aa33f82495f13ba5f3552500a41ba110",
+        "bytes": 7277
+      },
+      {
+        "path": "src/lib/vvoc-config.ts",
+        "sha256": "d40bf063c5d029fe8b3d11692a80f9910f3403440ed43d86ae47804dcb79c80b",
+        "bytes": 32159
+      },
+      {
+        "path": "src/lib/vvoc-paths.ts",
+        "sha256": "17ee9df1f8ceb222a7eca9595fb95a0ee72cbcbcafecbf49201156f4cb71fcf1",
+        "bytes": 5148
+      },
+      {
+        "path": "src/lib/vvoc-preset-registry.ts",
+        "sha256": "d8bd7b41aebe2322a8aa2dbc0713be7aed428a52560cf979b5e81137ec395b3d",
+        "bytes": 6455
+      },
+      {
+        "path": "src/lib/workflow-contract.ts",
+        "sha256": "d897e680062ef856fc1c89950fcefa25dca012acbb956b28366a559103481a15",
+        "bytes": 38736
+      },
+      {
+        "path": "src/plugins/hashline-edit/constants.ts",
+        "sha256": "53004eef6635a6465d07cd2bffd332be3896baf616f8ddfe361a986d0580ad49",
+        "bytes": 1455
+      },
+      {
+        "path": "src/plugins/hashline-edit/diff-summary.ts",
+        "sha256": "7cddd5de268a93b28c6f204e150ed2cd87063c2ac6d655cb092e3d7ae8247c7e",
+        "bytes": 3392
+      },
+      {
+        "path": "src/plugins/hashline-edit/edit-operation-primitives.ts",
+        "sha256": "3d32cb18c260f8a7292445938f58d4841733143c5df329b8afc3f3689906f0f7",
+        "bytes": 7116
+      },
+      {
+        "path": "src/plugins/hashline-edit/edit-operations.ts",
+        "sha256": "612ade0c7daef6824921ebc00abfb36af583e6c1f93a2d0584f2864504823b44",
+        "bytes": 9611
+      },
+      {
+        "path": "src/plugins/hashline-edit/edit-text-normalization.ts",
+        "sha256": "85387a756ae9abf841d7d8d635d3bcc86fc4b193b4b1d0e7cad511f39707abee",
+        "bytes": 4900
+      },
+      {
+        "path": "src/plugins/hashline-edit/file-text-canonicalization.ts",
+        "sha256": "a9f62d96800acc4389386275ede29a136fa82a60240c33d967ed9feacdb2d21a",
+        "bytes": 2290
+      },
+      {
+        "path": "src/plugins/hashline-edit/hash-computation.ts",
+        "sha256": "3e706b8e7fc1587ea731c3ea9b5cdeffa0cba6e3d95ed5db3204c5bddcf0c07f",
+        "bytes": 2719
+      },
+      {
+        "path": "src/plugins/hashline-edit/index.ts",
+        "sha256": "4c9c85bab09431d0fe957cb7eb791c132881236cab577cf8c8d390b45e850541",
+        "bytes": 27572
+      },
+      {
+        "path": "src/plugins/hashline-edit/normalize-edits.ts",
+        "sha256": "9c4446723d9a0cc6bd522f36651711ec586d79032340ce1cf0dd4a1f697b0bec",
+        "bytes": 7320
+      },
+      {
+        "path": "src/plugins/hashline-edit/routing.ts",
+        "sha256": "42bf9b3c70a00ec260757cf15e90f110df069f396e6857fad48ff6d653741b25",
+        "bytes": 5663
+      },
+      {
+        "path": "src/plugins/hashline-edit/schemas.ts",
+        "sha256": "b05aaf55aa1fa975752e36785f63ed9ab1d10c75ff69f6bbee26d9bdcc5dd7b9",
+        "bytes": 28272
+      },
+      {
+        "path": "src/plugins/hashline-edit/session-state.ts",
+        "sha256": "1dfddb924785c60d58aaac08e39ea90fce05ec5ef098308a3a412cc0b9ffe92e",
+        "bytes": 2909
+      },
+      {
+        "path": "src/plugins/hashline-edit/str-replace-editor.ts",
+        "sha256": "218ada52ca4012b30449cad883cebfc104560d02526d2142f86cb77361036434",
+        "bytes": 15226
+      },
+      {
+        "path": "src/plugins/hashline-edit/tool-description.ts",
+        "sha256": "967abc6767aa1e43006716d83d897603cbada3f34dafe3ac197f749b09103848",
+        "bytes": 9430
+      },
+      {
+        "path": "src/plugins/hashline-edit/validation.ts",
+        "sha256": "2d8d73e899ef37e1e5b6157e5cf1e6d8775a302021f530ca93bc7a286fbd7954",
+        "bytes": 9534
+      },
+      {
+        "path": "src/plugins/web-tools/config.ts",
+        "sha256": "9701372ff5ef0da5489226f06e561609460644128f324fde263d6c33f7d63e2d",
+        "bytes": 9230
+      },
+      {
+        "path": "src/plugins/web-tools/fetch-service.ts",
+        "sha256": "b8204de1813bc881b759a2bdba823086cc70ac829e05654b7657463ac9b7fb0f",
+        "bytes": 7484
+      },
+      {
+        "path": "src/plugins/web-tools/html-markdown.ts",
+        "sha256": "48aefcddcc1f6cf50dc0165d8b3a5eacdf872de87efecb49c53596e1fd61e7d8",
+        "bytes": 2612
+      },
+      {
+        "path": "src/plugins/web-tools/http.ts",
+        "sha256": "dc5ea8a497c77e4699cd87393a34ca311f517db7f0a31cce92f6f088502a569c",
+        "bytes": 6381
+      },
+      {
+        "path": "src/plugins/web-tools/index.ts",
+        "sha256": "26a0d0df5381d145357640f8b8c7575978bcbcec87fbea97e3ab6e0a39ce058d",
+        "bytes": 5960
+      },
+      {
+        "path": "src/plugins/web-tools/media-loader.ts",
+        "sha256": "3739a9a0572f8f3a7a92e519e4b108956c18e571d4dad4111a49b6349083db0f",
+        "bytes": 6818
+      },
+      {
+        "path": "src/plugins/web-tools/providers/brave.ts",
+        "sha256": "c4dfa4282e75c5526461e746a36789047dc9f911a6a53c8802aa380f03f651cf",
+        "bytes": 4616
+      },
+      {
+        "path": "src/plugins/web-tools/providers/exa.ts",
+        "sha256": "48cdcb470042376d91da68ea5543f23eafd71cb8474bfbf9ff2326c0b61e30ca",
+        "bytes": 6660
+      },
+      {
+        "path": "src/plugins/web-tools/providers/native-fetch.ts",
+        "sha256": "d7a4681aab45d4a633932a40edab247ca52beb7a308d465b50f15c25ea4cbdcb",
+        "bytes": 5083
+      },
+      {
+        "path": "src/plugins/web-tools/providers/spider.ts",
+        "sha256": "ac7c6773bee4219017299079877e4566dd428e75788f95e1f2ceb7b99d5bbc10",
+        "bytes": 5111
+      },
+      {
+        "path": "src/plugins/web-tools/providers/zai.ts",
+        "sha256": "7070163dd1678975923a28d45987cab2a2a61289d8457286254216327ec0c094",
+        "bytes": 8739
+      },
+      {
+        "path": "src/plugins/web-tools/schemas.ts",
+        "sha256": "347ab1d1b5e4c35fba2f90b030adfd9e282d1fa9d2537b804753a49f279089cc",
+        "bytes": 22258
+      },
+      {
+        "path": "src/plugins/web-tools/search-service.ts",
+        "sha256": "8ac23aa753a3475142f20b4831e30cb99e50610e294861501e99094ebddce009",
+        "bytes": 5360
+      },
+      {
+        "path": "src/plugins/workflow/authority.ts",
+        "sha256": "13f47dcd6654481b17b9de37377995b7c2348b882b53d26352ed4a2eba0e39d0",
+        "bytes": 22313
+      },
+      {
+        "path": "src/plugins/workflow/authorization.ts",
+        "sha256": "6547dbbae2ef1814e604b6a33b3a78f6d01a958a2d329621c24bc419fd1421df",
+        "bytes": 10244
+      },
+      {
+        "path": "src/plugins/workflow/checkpoint-io.ts",
+        "sha256": "5c3aec7f9ed974b3bbf23811ceb47659d2014c565d4b67efe8e1eb22aaa001f5",
+        "bytes": 10755
+      },
+      {
+        "path": "src/plugins/workflow/checkpoints.ts",
+        "sha256": "f15ffbb3668f9b01443e81f1f8e8d6ae175435d9284c859b106d3b0a0f181d6d",
+        "bytes": 75490
+      },
+      {
+        "path": "src/plugins/workflow/delegated.ts",
+        "sha256": "1b60f1e342deef4058dedb9e24a6323e149ad808b0e9962b24e09329a353da9f",
+        "bytes": 72408
+      },
+      {
+        "path": "src/plugins/workflow/execution.ts",
+        "sha256": "1d15c183ac84d8844fb77b90ba3d73a16e6efbc7d89afb6ffda1e5514e5212d7",
+        "bytes": 88517
+      },
+      {
+        "path": "src/plugins/workflow/index.ts",
+        "sha256": "411082c8651d56b7b740ee63f3f10fe0725c0c80966157c17a3794a6122cdf6a",
+        "bytes": 77941
+      },
+      {
+        "path": "src/plugins/workflow/input-validation.ts",
+        "sha256": "4d897b1c115da3cc0a28f0a913190c1984126072134fc0e10fb3c31a91fbabaa",
+        "bytes": 28610
+      },
+      {
+        "path": "src/plugins/workflow/inspection.ts",
+        "sha256": "ae7905b082680c82a2876e2ecb2cf3e04173a4f2e8411679ecd4b020ebd32eeb",
+        "bytes": 17499
+      },
+      {
+        "path": "src/plugins/workflow/persistence.ts",
+        "sha256": "6585f517003d8088990cef9b7a6fa473b2643249eca82860eba05537f1b7d026",
+        "bytes": 55367
+      },
+      {
+        "path": "src/plugins/workflow/protocol.ts",
+        "sha256": "27167c58b75c2aa29ef401abf317c9ad48b1d2d7a886d96ba049bf749642c810",
+        "bytes": 13191
+      },
+      {
+        "path": "src/plugins/workflow/recovery.ts",
+        "sha256": "e7c57d0cfacfd3fbc1cbbfb1b2f97face19efad45fc49de30fd5baf0263c580d",
+        "bytes": 11588
+      },
+      {
+        "path": "src/plugins/workflow/repair.ts",
+        "sha256": "98cd1e09ed27f82817c271964299bfd0bde3f4253f6e16ef9eb67295ca1f52c8",
+        "bytes": 12200
+      },
+      {
+        "path": "src/plugins/workflow/results.ts",
+        "sha256": "70a71745ce48f7a7c76a615a204f8b49debdffcc252cf875b8f3018d5239177a",
+        "bytes": 50361
+      },
+      {
+        "path": "src/plugins/workflow/schemas.ts",
+        "sha256": "743a5bf4edfdebefcbe22c5443c7be1457ebda4e1aa77966541d5789ac98fc99",
+        "bytes": 22157
+      },
+      {
+        "path": "src/plugins/workflow/snapshots.ts",
+        "sha256": "b1b89c2eb41b7fa48c360d0d3b41164faba886f2643ede0b30de1b6f430f205b",
+        "bytes": 12970
+      },
+      {
+        "path": "src/plugins/workflow/state.ts",
+        "sha256": "2ee5b15f47b2ab15cd643b3e83073de1b39b909ed00c31d6a2849c8a1d6b4778",
+        "bytes": 41131
+      },
+      {
+        "path": "src/plugins/workflow/system-instruction.md",
+        "sha256": "2cfb042fccc5b7f3989da63e726908b3edbcb2a3a45f17a0b26515b3cf94589c",
+        "bytes": 3199
+      },
+      {
+        "path": "src/plugins/workflow/tooling.ts",
+        "sha256": "37d3f69463e263b5ee6baa5cdc25ef3212827ef57984d4ff80e26fff6d5c89b9",
+        "bytes": 68763
+      },
+      {
+        "path": "src/plugins/workflow/transactions.ts",
+        "sha256": "5c0e75f6b123889568f6231383891a8ccce0bcb6fff9d115fdf53d933529c002",
+        "bytes": 10220
+      },
+      {
+        "path": "src/plugins/workflow/transitions.ts",
+        "sha256": "45ae9f21506a225eee9e5dd8f9dcc9193e6c91ae00702ed16e39e68ade106b88",
+        "bytes": 7764
+      },
+      {
+        "path": "templates/skills/vv-execute/references/tool-contracts.md",
+        "sha256": "8c6b222249d1a4dcf138eb38be113d850ae2e0ff54b3d0800dc8676e7e7338b6",
+        "bytes": 46006
+      }
+    ],
+    "after": [
+      {
+        "path": "dist/lib/agent-tool-catalog.js",
+        "sha256": "6ba48127e5a06305e58f800e234db2712a17a7ffa22b5104f44457e586d74b8e",
+        "bytes": 111063
+      },
+      {
+        "path": "dist/lib/agent-tool-contract.js",
+        "sha256": "61f89d22be01e0cb4bba91f741b5398923072f4f4ae487e2166266444f9da7b7",
+        "bytes": 19095
+      },
+      {
+        "path": "dist/lib/config-layers.js",
+        "sha256": "eb880584d9ff876553f2d0ac64031de8d905712229e2649533da12caba9023e7",
+        "bytes": 15969
+      },
+      {
+        "path": "dist/lib/env-substitution.js",
+        "sha256": "57b3b01ccfb059b584bb1364d500b520f6e068c362248dcf437c026e24651c90",
+        "bytes": 2142
+      },
+      {
+        "path": "dist/lib/model-roles.js",
+        "sha256": "445048008f70022ebf46f86b24d547b344b0bdcddbbee854806a3963209527f6",
+        "bytes": 6713
+      },
+      {
+        "path": "dist/lib/orchestration.js",
+        "sha256": "423522554f18e2ff6a637a6aafc775897f5485e86ee2495b78e9db7331ca50e7",
+        "bytes": 9136
+      },
+      {
+        "path": "dist/lib/package.js",
+        "sha256": "a94135b54a390e30bcbf4c725ecee0cacb3c968ae78809a6d816cd5f83f1d72a",
+        "bytes": 1954
+      },
+      {
+        "path": "dist/lib/plugin-toggle-config.js",
+        "sha256": "c6b90ada38dead466ed5413007f5f14b105de4d2f1770bb628331d0245cc7c72",
+        "bytes": 13334
+      },
+      {
+        "path": "dist/lib/spec-lint.js",
+        "sha256": "3eb3179741b5da96c9388047a83d9ed1d37823584a3956be421022f11aea1221",
+        "bytes": 2512
+      },
+      {
+        "path": "dist/lib/spec-lint/cross-file-rules.js",
+        "sha256": "518452214c8c3288a57f1930907927dc0673242ee324cda49e92cbaaa3e1a751",
+        "bytes": 1445
+      },
+      {
+        "path": "dist/lib/spec-lint/delegated-extraction.js",
+        "sha256": "df3adb0ed892fb1d5321af4ee4f5e6b377abc7242e168b84140cca9be61835bf",
+        "bytes": 5374
+      },
+      {
+        "path": "dist/lib/spec-lint/lint.js",
+        "sha256": "d1b20917174e1b46d24b3ff9fe573b94d42acd9503d80c9c5f222ecc18a08ce1",
+        "bytes": 3945
+      },
+      {
+        "path": "dist/lib/spec-lint/parser.js",
+        "sha256": "af9a65ea76565c31398b42709f38de215f17ff4449fbb83daee70a61b472ba06",
+        "bytes": 19606
+      },
+      {
+        "path": "dist/lib/spec-lint/plan-rules.js",
+        "sha256": "11c998bc7257b5b30c7fe480940426259b7e5194573184725b6586113f3bbc91",
+        "bytes": 35082
+      },
+      {
+        "path": "dist/lib/spec-lint/spec-rules.js",
+        "sha256": "03fd6c7fb28ef6f28d81aee2fd22b39681b8f8fab49e9dbf0daaa5fcafb27cd8",
+        "bytes": 7897
+      },
+      {
+        "path": "dist/lib/vvoc-config.js",
+        "sha256": "ba6d514810097ed835dea5ffcd13193bf4d5c78610f6d18ab6a2dcb09dabdbef",
+        "bytes": 31841
+      },
+      {
+        "path": "dist/lib/vvoc-paths.js",
+        "sha256": "64deccb9ad692cf52a65f2c4b952f0587678f5ba83a548c655dc454f0ba2ceaa",
+        "bytes": 4992
+      },
+      {
+        "path": "dist/lib/vvoc-preset-registry.js",
+        "sha256": "61f4eb28e800d412ee72044cfb8f49689206580ff500a734829864a3487619cf",
+        "bytes": 6560
+      },
+      {
+        "path": "dist/lib/workflow-contract.js",
+        "sha256": "90edd063b64e568b3c6a3e5fed40cadf4545977bb3844906b323f07833876c2e",
+        "bytes": 30458
+      },
+      {
+        "path": "dist/plugins/hashline-edit/constants.js",
+        "sha256": "7032597332542a0e59d06d7a7f1bf21711288ca3bc099cea3451865ea95eebcd",
+        "bytes": 1491
+      },
+      {
+        "path": "dist/plugins/hashline-edit/diff-summary.js",
+        "sha256": "f59324dcf96cacbaece0f27a651d3a701e078bfa581a711c9015841d11632658",
+        "bytes": 3307
+      },
+      {
+        "path": "dist/plugins/hashline-edit/edit-operation-primitives.js",
+        "sha256": "03cc54277dd8265f9c6e4c8ef928ede6e707da23cb8031a6ab17a4b39ef3a691",
+        "bytes": 6720
+      },
+      {
+        "path": "dist/plugins/hashline-edit/edit-operations.js",
+        "sha256": "d1fce60676fe4720c8073b4afc1436f45c1c0a860682e4bdc145ff30fa62a0db",
+        "bytes": 9813
+      },
+      {
+        "path": "dist/plugins/hashline-edit/edit-text-normalization.js",
+        "sha256": "0031674cd9cdf4516bff18070f06b6ef6fdc94b1efb1c5539120b2881d55bc14",
+        "bytes": 4742
+      },
+      {
+        "path": "dist/plugins/hashline-edit/file-text-canonicalization.js",
+        "sha256": "e26882c81e1f3103845354976f8315a046e13bf882e4d15eef4340cc50cf03a8",
+        "bytes": 2114
+      },
+      {
+        "path": "dist/plugins/hashline-edit/hash-computation.js",
+        "sha256": "6ba59ec78aeac2a5ea11978562f36bfaeacc82b04756ab86c29b1c2e483e8f07",
+        "bytes": 2528
+      },
+      {
+        "path": "dist/plugins/hashline-edit/index.js",
+        "sha256": "41371dbf328eae8547368851ffc7ffc7060eb377895958dcb325694987184bca",
+        "bytes": 27555
+      },
+      {
+        "path": "dist/plugins/hashline-edit/normalize-edits.js",
+        "sha256": "078d7d0c0c451b1f7dcbe46cb7f282b006b0fe4fa8296c98388e202f18a9d782",
+        "bytes": 7040
+      },
+      {
+        "path": "dist/plugins/hashline-edit/routing.js",
+        "sha256": "0729e6aa35518378adaa143408d2400027e87e8827e5bdd64bb658f75a0b82b1",
+        "bytes": 5239
+      },
+      {
+        "path": "dist/plugins/hashline-edit/schemas.js",
+        "sha256": "61a41f302011e19761dce3742064bb9831a9ff0e425eba7159421296cc77e0e3",
+        "bytes": 27649
+      },
+      {
+        "path": "dist/plugins/hashline-edit/session-state.js",
+        "sha256": "b31b67deb8c7653849a5321ecbbe5a5029f656cd109b901e2ba093ddca78ea6e",
+        "bytes": 2481
+      },
+      {
+        "path": "dist/plugins/hashline-edit/str-replace-editor.js",
+        "sha256": "2ee85e283bac2e6f30ba08152e17adf5f6058992710880a034f32abc8e24859d",
+        "bytes": 14001
+      },
+      {
+        "path": "dist/plugins/hashline-edit/tool-description.js",
+        "sha256": "07bcb72e5b5376a7a3c18687d8542baa9101e306ef6656c8fb819ac80f106d6a",
+        "bytes": 9473
+      },
+      {
+        "path": "dist/plugins/hashline-edit/validation.js",
+        "sha256": "71ad5b143f67f777d634d6c6cc89e48d69184ba72c41a23bd04ca6a5dd831d49",
+        "bytes": 9326
+      },
+      {
+        "path": "dist/plugins/web-tools/config.js",
+        "sha256": "fd01bbfbf09695a0a3405268a02e752b291add9ca65f27e3dedfca1758e32d24",
+        "bytes": 7578
+      },
+      {
+        "path": "dist/plugins/web-tools/fetch-service.js",
+        "sha256": "e9c4ecefddae04fa58c7d40efa5d732d6560e450373c1a3f33e7d2e7124c00d1",
+        "bytes": 7431
+      },
+      {
+        "path": "dist/plugins/web-tools/html-markdown.js",
+        "sha256": "631d8af0d275655473aec7ecfd42f9b8b468aac23b9b5567eddbbe0038fb2246",
+        "bytes": 2677
+      },
+      {
+        "path": "dist/plugins/web-tools/http.js",
+        "sha256": "99e083be28f5feed5a95ff768c6fe7c3b1c49c470588ee9e346c631da3744410",
+        "bytes": 5694
+      },
+      {
+        "path": "dist/plugins/web-tools/index.js",
+        "sha256": "244b5b5bac66f77b395b16edcd2973b65905896b1e75cebbc00c32caaa2d20e2",
+        "bytes": 6120
+      },
+      {
+        "path": "dist/plugins/web-tools/media-loader.js",
+        "sha256": "f4b132a9673832e25030d729f352e0e15100a40c40045a79d4c13b4fd20308cf",
+        "bytes": 6387
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/brave.js",
+        "sha256": "c82da0776cc3afa1bbf67cea2a6af4dd7d1a1e7d50def24c7a9c3c5fc14a99ac",
+        "bytes": 4452
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/exa.js",
+        "sha256": "b39a9a96e0490c65d42b67ec417955c3f6bf3cb12d1e428e85bb79c70c92019b",
+        "bytes": 5643
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/native-fetch.js",
+        "sha256": "dc83a0bf4abfa8fc60389eaa8a05d030975d3577803617fad556ecfa5d67ba29",
+        "bytes": 4632
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/spider.js",
+        "sha256": "df25d5f751cae5427f8aab271635fe64071daf0fcaeca4def912bfa64901965d",
+        "bytes": 4557
+      },
+      {
+        "path": "dist/plugins/web-tools/providers/zai.js",
+        "sha256": "f320903381fee952b47beea37358a9918ea6d52dcf1a8446765f5fa234261f23",
+        "bytes": 7633
+      },
+      {
+        "path": "dist/plugins/web-tools/schemas.js",
+        "sha256": "f24ffca8c0697d776238f7238a1725daef974c537d681e491e1c3d4a7cbb5a7a",
+        "bytes": 21352
+      },
+      {
+        "path": "dist/plugins/web-tools/search-service.js",
+        "sha256": "58ba7fc0b356f6ce8008cf93133dbb4a6959bd469fabb179fb9aa575a967c723",
+        "bytes": 5499
+      },
+      {
+        "path": "dist/plugins/workflow/authority.js",
+        "sha256": "987e543deb45c8200ccd168faaafdcc00aaa857121f8a1985ae087399d44c4b3",
+        "bytes": 20001
+      },
+      {
+        "path": "dist/plugins/workflow/authorization.js",
+        "sha256": "755fe146f1742a487b1cc416c613bcc8d6941ef24b1bae80a888154419517885",
+        "bytes": 8780
+      },
+      {
+        "path": "dist/plugins/workflow/checkpoint-io.js",
+        "sha256": "d06e544f9c60f3fd902cc8900c3ec895fe516c298f67637d67a195ca64ee0952",
+        "bytes": 9868
+      },
+      {
+        "path": "dist/plugins/workflow/checkpoints.js",
+        "sha256": "02234abdbf962424b25ae78f442898abf9bc683ce6775b22e95940825bc0aba1",
+        "bytes": 68036
+      },
+      {
+        "path": "dist/plugins/workflow/delegated.js",
+        "sha256": "15e8d60cfe7020939a25ffbd3555b2753a9765d0fd8324bc6cc5121909be4aed",
+        "bytes": 62337
+      },
+      {
+        "path": "dist/plugins/workflow/execution.js",
+        "sha256": "626f7f7a80f2f165cdead20be92d9dfa8fb1126e6cd89f838b696589c086dbc8",
+        "bytes": 83941
+      },
+      {
+        "path": "dist/plugins/workflow/index.js",
+        "sha256": "7758faa93d5fb4b0f617a42b300be080bfc4ac57b35e26d2c902ef815913885f",
+        "bytes": 83076
+      },
+      {
+        "path": "dist/plugins/workflow/input-validation.js",
+        "sha256": "4d75f615a3f8a83748bcf37b915ae338cfef89a5d03be11459931e78ef7d983e",
+        "bytes": 26727
+      },
+      {
+        "path": "dist/plugins/workflow/inspection.js",
+        "sha256": "f30a1b4eb36c8cef594e1dee20efd9345b7a7b56b1a50951df5d1db25c911d4b",
+        "bytes": 15904
+      },
+      {
+        "path": "dist/plugins/workflow/persistence.js",
+        "sha256": "f5dfc3ec65123de4ed651e1060d74329d3318046e26361189790a7a7f929b3e8",
+        "bytes": 52653
+      },
+      {
+        "path": "dist/plugins/workflow/protocol.js",
+        "sha256": "88fbed0ff26bb61dc2558c3d27a5f709e860fc968a1778adedf149679d19f8df",
+        "bytes": 11869
+      },
+      {
+        "path": "dist/plugins/workflow/recovery.js",
+        "sha256": "be339e68e166c30db26491b043f1a4c3fbd8bf3216da3e297f8ef5fab2581e79",
+        "bytes": 11022
+      },
+      {
+        "path": "dist/plugins/workflow/repair.js",
+        "sha256": "a3bf559462ab6f51bad870b3741f36be5abefaedde960b37cda15ac356fd8b03",
+        "bytes": 11758
+      },
+      {
+        "path": "dist/plugins/workflow/results.js",
+        "sha256": "102b86a95b625b08f04bc1f9e722802e0fa045915fc4d0faa73bcabcfacf64cb",
+        "bytes": 47804
+      },
+      {
+        "path": "dist/plugins/workflow/schemas.js",
+        "sha256": "dc2ee7bc5934eb40f102d49f6fc335b51004539afcb7626dc1c5ae9a86f5f22a",
+        "bytes": 21651
+      },
+      {
+        "path": "dist/plugins/workflow/snapshots.js",
+        "sha256": "229335c85035cec4b00da71b9304c18363b0fa788635b0e56ba0fb43d4fc2408",
+        "bytes": 11647
+      },
+      {
+        "path": "dist/plugins/workflow/state.js",
+        "sha256": "0004d655b07d063aa241162f1e713da69b6bc845c1a9f3fbd3badcfc1f27d1f1",
+        "bytes": 34317
+      },
+      {
+        "path": "dist/plugins/workflow/system-instruction.md",
+        "sha256": "2cfb042fccc5b7f3989da63e726908b3edbcb2a3a45f17a0b26515b3cf94589c",
+        "bytes": 3199
+      },
+      {
+        "path": "dist/plugins/workflow/tooling.js",
+        "sha256": "6e907e2ffb0f7ab3bdfd5b50fdb383758eb5631f8532327583a4a8b65683d594",
+        "bytes": 73844
+      },
+      {
+        "path": "dist/plugins/workflow/transactions.js",
+        "sha256": "50240320601a90e517bd134acf39aed2f9197c50c616dbdfc70687d5a88dfd33",
+        "bytes": 8755
+      },
+      {
+        "path": "dist/plugins/workflow/transitions.js",
+        "sha256": "69f558e52ddc74c73e9d357f24d6a53afebe114e207c1d10418ac114dd893b11",
+        "bytes": 7411
+      },
+      {
+        "path": "node_modules/@opencode-ai/plugin/package.json",
+        "sha256": "7480796d733eec2b8a46a579a04dc417f20801d2060d22b775801d43d8edd416",
+        "bytes": 1784
+      },
+      {
+        "path": "node_modules/@opencode-ai/sdk/package.json",
+        "sha256": "0d39028e108e8e82920126e79a356a441db5483f1ac08dd00c690de69dc4f605",
+        "bytes": 1457
+      },
+      {
+        "path": "package.json",
+        "sha256": "323a42663bf82198ae582c29694f54040a00273372bd4f7e81f7594d3f036e7d",
+        "bytes": 6653
+      },
+      {
+        "path": "scripts/check-tool-contracts-host.test.ts",
+        "sha256": "5663f86b68429e0e04b5c4e2bdef741e9b51eb76a4029fa34d8febf1d455eccd",
+        "bytes": 68796
+      },
+      {
+        "path": "scripts/check-tool-contracts-host.ts",
+        "sha256": "b7af4138814c16b76bba76add218d58c6c48a79ddf67756a9ea12d87cebea943",
+        "bytes": 155527
+      },
+      {
+        "path": "src/lib/agent-tool-catalog.ts",
+        "sha256": "828149597706766bf04e3f95c8e8716c854f2b64ab1b7465d20254b0507b91e6",
+        "bytes": 99871
+      },
+      {
+        "path": "src/lib/agent-tool-contract.ts",
+        "sha256": "579677eccfd1cd2c8300158c8a2ee8fa6929990645b251e34e5425f01634a78e",
+        "bytes": 22650
+      },
+      {
+        "path": "src/lib/agent-tool-host.test.ts",
+        "sha256": "8bcc50cbdc69c08891a4ee875156987cf76bf51f53da929bc12d839c72ec68b4",
+        "bytes": 29236
+      },
+      {
+        "path": "src/lib/config-layers.ts",
+        "sha256": "e0dc221023fb2cb27ee8e2511d3bfeb655dceeb1db8f00092564f99404ebe7f9",
+        "bytes": 18295
+      },
+      {
+        "path": "src/lib/env-substitution.ts",
+        "sha256": "ad6ce5d080b5618225b3231c4e675a27a2836ae6daecd3b988d221c26590aaf3",
+        "bytes": 2526
+      },
+      {
+        "path": "src/lib/model-roles.ts",
+        "sha256": "0b5c7b71c9cc2f9bcad1701d73e563e5397ca7850e7bd0002d753a453947045e",
+        "bytes": 8070
+      },
+      {
+        "path": "src/lib/orchestration.ts",
+        "sha256": "f117f892884edd414bffc2d7b401bb71f7cf0482dfc1a7bd72db6a96a119846c",
+        "bytes": 9933
+      },
+      {
+        "path": "src/lib/package.ts",
+        "sha256": "edd609d0612ad38af89b9bace8ce76bb72333421cf8b9051fd67a106f715afb2",
+        "bytes": 1976
+      },
+      {
+        "path": "src/lib/plugin-toggle-config.ts",
+        "sha256": "f7b9f75b68cfae6828cc59372c524e3bcf3b6f3f6291f268a8fe46464dfcd4b8",
+        "bytes": 13654
+      },
+      {
+        "path": "src/lib/spec-lint.ts",
+        "sha256": "3f49b14efbd066eef189ac593e362d56295d3df4d3e0a0ae13657e3ed49da6aa",
+        "bytes": 3059
+      },
+      {
+        "path": "src/lib/spec-lint/cross-file-rules.ts",
+        "sha256": "bb9cb187dd363faa80cca9fdfd91d2428213a505713359e694e6f91c7df7e0a3",
+        "bytes": 1465
+      },
+      {
+        "path": "src/lib/spec-lint/delegated-extraction.ts",
+        "sha256": "d1ab8dec7e8e2da1ed0696a418b49fb677a6752f9f6e3f45e1ab27d6333a541c",
+        "bytes": 5254
+      },
+      {
+        "path": "src/lib/spec-lint/lint.ts",
+        "sha256": "6a09afb4ec373ea022a50558942075c05c4fbf4249517e0439ded2e0db6ccb84",
+        "bytes": 3651
+      },
+      {
+        "path": "src/lib/spec-lint/parser.ts",
+        "sha256": "f6aee73371c91705bb77781afbd751889d079df7741b854768ecd4ed201d8cb9",
+        "bytes": 20263
+      },
+      {
+        "path": "src/lib/spec-lint/plan-rules.ts",
+        "sha256": "ba6b695bad7a19198f7930e07bf23aa035f989f0310826a94c96062a423b1dac",
+        "bytes": 31379
+      },
+      {
+        "path": "src/lib/spec-lint/spec-rules.ts",
+        "sha256": "6a2aa0f0f262dc8ad09661ffdca9faf1aa33f82495f13ba5f3552500a41ba110",
+        "bytes": 7277
+      },
+      {
+        "path": "src/lib/vvoc-config.ts",
+        "sha256": "d40bf063c5d029fe8b3d11692a80f9910f3403440ed43d86ae47804dcb79c80b",
+        "bytes": 32159
+      },
+      {
+        "path": "src/lib/vvoc-paths.ts",
+        "sha256": "17ee9df1f8ceb222a7eca9595fb95a0ee72cbcbcafecbf49201156f4cb71fcf1",
+        "bytes": 5148
+      },
+      {
+        "path": "src/lib/vvoc-preset-registry.ts",
+        "sha256": "d8bd7b41aebe2322a8aa2dbc0713be7aed428a52560cf979b5e81137ec395b3d",
+        "bytes": 6455
+      },
+      {
+        "path": "src/lib/workflow-contract.ts",
+        "sha256": "d897e680062ef856fc1c89950fcefa25dca012acbb956b28366a559103481a15",
+        "bytes": 38736
+      },
+      {
+        "path": "src/plugins/hashline-edit/constants.ts",
+        "sha256": "53004eef6635a6465d07cd2bffd332be3896baf616f8ddfe361a986d0580ad49",
+        "bytes": 1455
+      },
+      {
+        "path": "src/plugins/hashline-edit/diff-summary.ts",
+        "sha256": "7cddd5de268a93b28c6f204e150ed2cd87063c2ac6d655cb092e3d7ae8247c7e",
+        "bytes": 3392
+      },
+      {
+        "path": "src/plugins/hashline-edit/edit-operation-primitives.ts",
+        "sha256": "3d32cb18c260f8a7292445938f58d4841733143c5df329b8afc3f3689906f0f7",
+        "bytes": 7116
+      },
+      {
+        "path": "src/plugins/hashline-edit/edit-operations.ts",
+        "sha256": "612ade0c7daef6824921ebc00abfb36af583e6c1f93a2d0584f2864504823b44",
+        "bytes": 9611
+      },
+      {
+        "path": "src/plugins/hashline-edit/edit-text-normalization.ts",
+        "sha256": "85387a756ae9abf841d7d8d635d3bcc86fc4b193b4b1d0e7cad511f39707abee",
+        "bytes": 4900
+      },
+      {
+        "path": "src/plugins/hashline-edit/file-text-canonicalization.ts",
+        "sha256": "a9f62d96800acc4389386275ede29a136fa82a60240c33d967ed9feacdb2d21a",
+        "bytes": 2290
+      },
+      {
+        "path": "src/plugins/hashline-edit/hash-computation.ts",
+        "sha256": "3e706b8e7fc1587ea731c3ea9b5cdeffa0cba6e3d95ed5db3204c5bddcf0c07f",
+        "bytes": 2719
+      },
+      {
+        "path": "src/plugins/hashline-edit/index.ts",
+        "sha256": "4c9c85bab09431d0fe957cb7eb791c132881236cab577cf8c8d390b45e850541",
+        "bytes": 27572
+      },
+      {
+        "path": "src/plugins/hashline-edit/normalize-edits.ts",
+        "sha256": "9c4446723d9a0cc6bd522f36651711ec586d79032340ce1cf0dd4a1f697b0bec",
+        "bytes": 7320
+      },
+      {
+        "path": "src/plugins/hashline-edit/routing.ts",
+        "sha256": "42bf9b3c70a00ec260757cf15e90f110df069f396e6857fad48ff6d653741b25",
+        "bytes": 5663
+      },
+      {
+        "path": "src/plugins/hashline-edit/schemas.ts",
+        "sha256": "b05aaf55aa1fa975752e36785f63ed9ab1d10c75ff69f6bbee26d9bdcc5dd7b9",
+        "bytes": 28272
+      },
+      {
+        "path": "src/plugins/hashline-edit/session-state.ts",
+        "sha256": "1dfddb924785c60d58aaac08e39ea90fce05ec5ef098308a3a412cc0b9ffe92e",
+        "bytes": 2909
+      },
+      {
+        "path": "src/plugins/hashline-edit/str-replace-editor.ts",
+        "sha256": "218ada52ca4012b30449cad883cebfc104560d02526d2142f86cb77361036434",
+        "bytes": 15226
+      },
+      {
+        "path": "src/plugins/hashline-edit/tool-description.ts",
+        "sha256": "967abc6767aa1e43006716d83d897603cbada3f34dafe3ac197f749b09103848",
+        "bytes": 9430
+      },
+      {
+        "path": "src/plugins/hashline-edit/validation.ts",
+        "sha256": "2d8d73e899ef37e1e5b6157e5cf1e6d8775a302021f530ca93bc7a286fbd7954",
+        "bytes": 9534
+      },
+      {
+        "path": "src/plugins/web-tools/config.ts",
+        "sha256": "9701372ff5ef0da5489226f06e561609460644128f324fde263d6c33f7d63e2d",
+        "bytes": 9230
+      },
+      {
+        "path": "src/plugins/web-tools/fetch-service.ts",
+        "sha256": "b8204de1813bc881b759a2bdba823086cc70ac829e05654b7657463ac9b7fb0f",
+        "bytes": 7484
+      },
+      {
+        "path": "src/plugins/web-tools/html-markdown.ts",
+        "sha256": "48aefcddcc1f6cf50dc0165d8b3a5eacdf872de87efecb49c53596e1fd61e7d8",
+        "bytes": 2612
+      },
+      {
+        "path": "src/plugins/web-tools/http.ts",
+        "sha256": "dc5ea8a497c77e4699cd87393a34ca311f517db7f0a31cce92f6f088502a569c",
+        "bytes": 6381
+      },
+      {
+        "path": "src/plugins/web-tools/index.ts",
+        "sha256": "26a0d0df5381d145357640f8b8c7575978bcbcec87fbea97e3ab6e0a39ce058d",
+        "bytes": 5960
+      },
+      {
+        "path": "src/plugins/web-tools/media-loader.ts",
+        "sha256": "3739a9a0572f8f3a7a92e519e4b108956c18e571d4dad4111a49b6349083db0f",
+        "bytes": 6818
+      },
+      {
+        "path": "src/plugins/web-tools/providers/brave.ts",
+        "sha256": "c4dfa4282e75c5526461e746a36789047dc9f911a6a53c8802aa380f03f651cf",
+        "bytes": 4616
+      },
+      {
+        "path": "src/plugins/web-tools/providers/exa.ts",
+        "sha256": "48cdcb470042376d91da68ea5543f23eafd71cb8474bfbf9ff2326c0b61e30ca",
+        "bytes": 6660
+      },
+      {
+        "path": "src/plugins/web-tools/providers/native-fetch.ts",
+        "sha256": "d7a4681aab45d4a633932a40edab247ca52beb7a308d465b50f15c25ea4cbdcb",
+        "bytes": 5083
+      },
+      {
+        "path": "src/plugins/web-tools/providers/spider.ts",
+        "sha256": "ac7c6773bee4219017299079877e4566dd428e75788f95e1f2ceb7b99d5bbc10",
+        "bytes": 5111
+      },
+      {
+        "path": "src/plugins/web-tools/providers/zai.ts",
+        "sha256": "7070163dd1678975923a28d45987cab2a2a61289d8457286254216327ec0c094",
+        "bytes": 8739
+      },
+      {
+        "path": "src/plugins/web-tools/schemas.ts",
+        "sha256": "347ab1d1b5e4c35fba2f90b030adfd9e282d1fa9d2537b804753a49f279089cc",
+        "bytes": 22258
+      },
+      {
+        "path": "src/plugins/web-tools/search-service.ts",
+        "sha256": "8ac23aa753a3475142f20b4831e30cb99e50610e294861501e99094ebddce009",
+        "bytes": 5360
+      },
+      {
+        "path": "src/plugins/workflow/authority.ts",
+        "sha256": "13f47dcd6654481b17b9de37377995b7c2348b882b53d26352ed4a2eba0e39d0",
+        "bytes": 22313
+      },
+      {
+        "path": "src/plugins/workflow/authorization.ts",
+        "sha256": "6547dbbae2ef1814e604b6a33b3a78f6d01a958a2d329621c24bc419fd1421df",
+        "bytes": 10244
+      },
+      {
+        "path": "src/plugins/workflow/checkpoint-io.ts",
+        "sha256": "5c3aec7f9ed974b3bbf23811ceb47659d2014c565d4b67efe8e1eb22aaa001f5",
+        "bytes": 10755
+      },
+      {
+        "path": "src/plugins/workflow/checkpoints.ts",
+        "sha256": "f15ffbb3668f9b01443e81f1f8e8d6ae175435d9284c859b106d3b0a0f181d6d",
+        "bytes": 75490
+      },
+      {
+        "path": "src/plugins/workflow/delegated.ts",
+        "sha256": "1b60f1e342deef4058dedb9e24a6323e149ad808b0e9962b24e09329a353da9f",
+        "bytes": 72408
+      },
+      {
+        "path": "src/plugins/workflow/execution.ts",
+        "sha256": "1d15c183ac84d8844fb77b90ba3d73a16e6efbc7d89afb6ffda1e5514e5212d7",
+        "bytes": 88517
+      },
+      {
+        "path": "src/plugins/workflow/index.ts",
+        "sha256": "411082c8651d56b7b740ee63f3f10fe0725c0c80966157c17a3794a6122cdf6a",
+        "bytes": 77941
+      },
+      {
+        "path": "src/plugins/workflow/input-validation.ts",
+        "sha256": "4d897b1c115da3cc0a28f0a913190c1984126072134fc0e10fb3c31a91fbabaa",
+        "bytes": 28610
+      },
+      {
+        "path": "src/plugins/workflow/inspection.ts",
+        "sha256": "ae7905b082680c82a2876e2ecb2cf3e04173a4f2e8411679ecd4b020ebd32eeb",
+        "bytes": 17499
+      },
+      {
+        "path": "src/plugins/workflow/persistence.ts",
+        "sha256": "6585f517003d8088990cef9b7a6fa473b2643249eca82860eba05537f1b7d026",
+        "bytes": 55367
+      },
+      {
+        "path": "src/plugins/workflow/protocol.ts",
+        "sha256": "27167c58b75c2aa29ef401abf317c9ad48b1d2d7a886d96ba049bf749642c810",
+        "bytes": 13191
+      },
+      {
+        "path": "src/plugins/workflow/recovery.ts",
+        "sha256": "e7c57d0cfacfd3fbc1cbbfb1b2f97face19efad45fc49de30fd5baf0263c580d",
+        "bytes": 11588
+      },
+      {
+        "path": "src/plugins/workflow/repair.ts",
+        "sha256": "98cd1e09ed27f82817c271964299bfd0bde3f4253f6e16ef9eb67295ca1f52c8",
+        "bytes": 12200
+      },
+      {
+        "path": "src/plugins/workflow/results.ts",
+        "sha256": "70a71745ce48f7a7c76a615a204f8b49debdffcc252cf875b8f3018d5239177a",
+        "bytes": 50361
+      },
+      {
+        "path": "src/plugins/workflow/schemas.ts",
+        "sha256": "743a5bf4edfdebefcbe22c5443c7be1457ebda4e1aa77966541d5789ac98fc99",
+        "bytes": 22157
+      },
+      {
+        "path": "src/plugins/workflow/snapshots.ts",
+        "sha256": "b1b89c2eb41b7fa48c360d0d3b41164faba886f2643ede0b30de1b6f430f205b",
+        "bytes": 12970
+      },
+      {
+        "path": "src/plugins/workflow/state.ts",
+        "sha256": "2ee5b15f47b2ab15cd643b3e83073de1b39b909ed00c31d6a2849c8a1d6b4778",
+        "bytes": 41131
+      },
+      {
+        "path": "src/plugins/workflow/system-instruction.md",
+        "sha256": "2cfb042fccc5b7f3989da63e726908b3edbcb2a3a45f17a0b26515b3cf94589c",
+        "bytes": 3199
+      },
+      {
+        "path": "src/plugins/workflow/tooling.ts",
+        "sha256": "37d3f69463e263b5ee6baa5cdc25ef3212827ef57984d4ff80e26fff6d5c89b9",
+        "bytes": 68763
+      },
+      {
+        "path": "src/plugins/workflow/transactions.ts",
+        "sha256": "5c0e75f6b123889568f6231383891a8ccce0bcb6fff9d115fdf53d933529c002",
+        "bytes": 10220
+      },
+      {
+        "path": "src/plugins/workflow/transitions.ts",
+        "sha256": "45ae9f21506a225eee9e5dd8f9dcc9193e6c91ae00702ed16e39e68ade106b88",
+        "bytes": 7764
+      },
+      {
+        "path": "templates/skills/vv-execute/references/tool-contracts.md",
+        "sha256": "8c6b222249d1a4dcf138eb38be113d850ae2e0ff54b3d0800dc8676e7e7338b6",
+        "bytes": 46006
+      }
+    ],
+    "drift": [],
+    "addedDeps": [],
+    "removedDeps": [],
+    "unresolved": []
+  },
+  "provenanceUrls": [
+    {
+      "id": "host-registry-v1.18.2",
+      "url": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/tool/registry.ts"
+    },
+    {
+      "id": "host-registry-v1.18.32",
+      "url": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.32/packages/opencode/src/tool/registry.ts"
+    },
+    {
+      "id": "host-session-tools-v1.18.2",
+      "url": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/session/tools.ts"
+    },
+    {
+      "id": "host-provider-transform-v1.18.2",
+      "url": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/provider/transform.ts"
+    }
+  ],
+  "cohorts": [
+    {
+      "sessionId": "openai-positive",
+      "cohortId": "openai-compatible-strreplace",
+      "transport": "openai-chat-completions",
+      "providerNpm": "@ai-sdk/openai-compatible",
+      "modelId": "vvoc-deepseek-probe",
+      "editorTool": "str_replace_editor",
+      "loweringRoute": "provider/transform.ts schema(): no branch for @ai-sdk/openai-compatible, so no OpenAI sanitizeOpenAISchema lowering; published bounds are forwarded verbatim",
+      "hostExitCode": 0,
+      "passed": 29,
+      "failed": 0,
+      "failures": [],
+      "cases": [
+        {
+          "id": "open-delegated",
+          "tool": "work_item_open",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "launch-implementer",
+          "tool": "task",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "accept",
+          "tool": "work_item_decide",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "close",
+          "tool": "work_item_close",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "list-closed",
+          "tool": "work_item_list",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "open-generic",
+          "tool": "work_item_open",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "checkpoint-amend",
+          "tool": "work_checkpoint",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "str-create",
+          "tool": "str_replace_editor",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "str-view",
+          "tool": "str_replace_editor",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        }
+      ],
+      "definitionNames": [
+        "bash",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "str_replace_editor",
+        "task",
+        "todowrite",
+        "web_fetch",
+        "web_search",
+        "work_checkpoint",
+        "work_item_close",
+        "work_item_decide",
+        "work_item_list",
+        "work_item_open",
+        "write"
+      ],
+      "projections": [
+        {
+          "name": "str_replace_editor",
+          "descriptionChars": 909,
+          "descriptionSha256": "fbf7d129f2702671de5d2c1ca4e2e8963735d4e660c5d2c56273f01d2783274b",
+          "projectionSha256": "e4e5b9e440370e4828ffb6343c1776f1cd4f704903973a90d055965d035b5c0d",
+          "propertyCount": 7,
+          "required": [
+            "command",
+            "path"
+          ],
+          "enumFields": [
+            "command"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_fetch",
+          "descriptionChars": 124,
+          "descriptionSha256": "dbc62621e6b0c01140088009948a34b5f481d2d765798d2a341be731c2091e13",
+          "projectionSha256": "5f6f17661f8eb654912143a63e2a8c6ff4edb18a9c645e4a9770193bd3a22696",
+          "propertyCount": 3,
+          "required": [
+            "url"
+          ],
+          "enumFields": [
+            "format"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_search",
+          "descriptionChars": 159,
+          "descriptionSha256": "17f096bdaedb141554ec7527b3e675c3a70e8962d5290aabdc23ffa976729ac4",
+          "projectionSha256": "86094fe8f6be4201e74fc87953fead3883401269488d6d95b897957a7674aff2",
+          "propertyCount": 3,
+          "required": [
+            "query"
+          ],
+          "enumFields": [
+            "freshness"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_checkpoint",
+          "descriptionChars": 219,
+          "descriptionSha256": "47c756ba8275325e556b0d022b8bb84f4b9eadf281b6855973b8dab265f2592a",
+          "projectionSha256": "b41521f7597c7d2676e1878da0687118e8ebf53aaf023207b4e35413c6e140a0",
+          "propertyCount": 27,
+          "required": [
+            "action"
+          ],
+          "enumFields": [
+            "action",
+            "reviewer",
+            "stage"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_close",
+          "descriptionChars": 59,
+          "descriptionSha256": "c98c2b28bdd9422d005766db397354eff26c812e02b101534427dde4d61c8827",
+          "projectionSha256": "6ab061474faa04e91c6507601ef2dc4e348ab83793f548676c8aeefeb2daa160",
+          "propertyCount": 1,
+          "required": [
+            "workItemId"
+          ],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_decide",
+          "descriptionChars": 239,
+          "descriptionSha256": "efc333490118443056a539a36748e26b32a298f417530e0a50754e6817c68642",
+          "projectionSha256": "1da28e4fffec8af74ed5d38a4638bb8861c43d37a6643217814d77ed879b4580",
+          "propertyCount": 14,
+          "required": [
+            "workItemId",
+            "attempt",
+            "decision"
+          ],
+          "enumFields": [
+            "decision"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_list",
+          "descriptionChars": 49,
+          "descriptionSha256": "3311ed29ee7ba550911a67090892e44a6611095a33f6e72350fe45ec5438c2bf",
+          "projectionSha256": "baa25489f907c30cf3f52cb060ce60592295adaa962b9fb3cec1ddf77ef38b05",
+          "propertyCount": 1,
+          "required": [],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_open",
+          "descriptionChars": 91,
+          "descriptionSha256": "5f110538b2f84214c702cce1cee068710ccb496d212da6b108580cdcdb25c174",
+          "projectionSha256": "9654fbc0aff2c9173ceb7603b237cfbddfc592f6fa94f730f7724f025e1fa740",
+          "propertyCount": 5,
+          "required": [
+            "items"
+          ],
+          "enumFields": [],
+          "closedObjectProps": [
+            "execution"
+          ]
+        }
+      ],
+      "providerRequests": {
+        "modelRequests": 12,
+        "modelRequestsWithTools": 11,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "sideEffects": {
+        "execJournalEntries": 8,
+        "rejectJournalEntries": 0,
+        "pluginErrors": [],
+        "workflowState": {
+          "exists": true,
+          "records": 3,
+          "executions": 1,
+          "itemStates": [
+            "closed",
+            "open",
+            "open"
+          ]
+        }
+      },
+      "workspaceFiles": [
+        ".vvoc/",
+        ".vvoc/vvoc.json",
+        "src/",
+        "src/created.txt",
+        "src/impl.ts"
+      ],
+      "childEnvKeys": [
+        "PATH",
+        "HOME",
+        "LANG",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "TMPDIR",
+        "OPENCODE_CONFIG",
+        "OPENCODE_DISABLE_MODELS_FETCH",
+        "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "OPENCODE_DISABLE_SHARE",
+        "OPENCODE_DISABLE_AUTOUPDATE",
+        "OPENCODE_DISABLE_LSP_DOWNLOAD",
+        "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS",
+        "OPENCODE_PRINT_LOGS",
+        "OPENCODE_LOG_LEVEL"
+      ]
+    },
+    {
+      "sessionId": "openai-negative",
+      "cohortId": "openai-compatible-strreplace",
+      "transport": "openai-chat-completions",
+      "providerNpm": "@ai-sdk/openai-compatible",
+      "modelId": "vvoc-deepseek-probe",
+      "editorTool": "str_replace_editor",
+      "loweringRoute": "provider/transform.ts schema(): no branch for @ai-sdk/openai-compatible, so no OpenAI sanitizeOpenAISchema lowering; published bounds are forwarded verbatim",
+      "hostExitCode": 0,
+      "passed": 24,
+      "failed": 0,
+      "failures": [],
+      "cases": [
+        {
+          "id": "reject-bad-source-kind",
+          "tool": "work_item_open",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "execution.source.kind",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-nested-unknown",
+          "tool": "work_item_open",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "items[0].tpyo",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-checkpoint-nested-unknown",
+          "tool": "work_checkpoint",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "tasks[0].tpyo",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-reserved-stop-typo",
+          "tool": "work_checkpoint",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "reservedStops[0]",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-str-missing-old",
+          "tool": "str_replace_editor",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "old_str",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        }
+      ],
+      "definitionNames": [
+        "bash",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "str_replace_editor",
+        "task",
+        "todowrite",
+        "web_fetch",
+        "web_search",
+        "work_checkpoint",
+        "work_item_close",
+        "work_item_decide",
+        "work_item_list",
+        "work_item_open",
+        "write"
+      ],
+      "projections": [
+        {
+          "name": "str_replace_editor",
+          "descriptionChars": 909,
+          "descriptionSha256": "fbf7d129f2702671de5d2c1ca4e2e8963735d4e660c5d2c56273f01d2783274b",
+          "projectionSha256": "e4e5b9e440370e4828ffb6343c1776f1cd4f704903973a90d055965d035b5c0d",
+          "propertyCount": 7,
+          "required": [
+            "command",
+            "path"
+          ],
+          "enumFields": [
+            "command"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_fetch",
+          "descriptionChars": 124,
+          "descriptionSha256": "dbc62621e6b0c01140088009948a34b5f481d2d765798d2a341be731c2091e13",
+          "projectionSha256": "5f6f17661f8eb654912143a63e2a8c6ff4edb18a9c645e4a9770193bd3a22696",
+          "propertyCount": 3,
+          "required": [
+            "url"
+          ],
+          "enumFields": [
+            "format"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_search",
+          "descriptionChars": 159,
+          "descriptionSha256": "17f096bdaedb141554ec7527b3e675c3a70e8962d5290aabdc23ffa976729ac4",
+          "projectionSha256": "86094fe8f6be4201e74fc87953fead3883401269488d6d95b897957a7674aff2",
+          "propertyCount": 3,
+          "required": [
+            "query"
+          ],
+          "enumFields": [
+            "freshness"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_checkpoint",
+          "descriptionChars": 219,
+          "descriptionSha256": "47c756ba8275325e556b0d022b8bb84f4b9eadf281b6855973b8dab265f2592a",
+          "projectionSha256": "b41521f7597c7d2676e1878da0687118e8ebf53aaf023207b4e35413c6e140a0",
+          "propertyCount": 27,
+          "required": [
+            "action"
+          ],
+          "enumFields": [
+            "action",
+            "reviewer",
+            "stage"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_close",
+          "descriptionChars": 59,
+          "descriptionSha256": "c98c2b28bdd9422d005766db397354eff26c812e02b101534427dde4d61c8827",
+          "projectionSha256": "6ab061474faa04e91c6507601ef2dc4e348ab83793f548676c8aeefeb2daa160",
+          "propertyCount": 1,
+          "required": [
+            "workItemId"
+          ],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_decide",
+          "descriptionChars": 239,
+          "descriptionSha256": "efc333490118443056a539a36748e26b32a298f417530e0a50754e6817c68642",
+          "projectionSha256": "1da28e4fffec8af74ed5d38a4638bb8861c43d37a6643217814d77ed879b4580",
+          "propertyCount": 14,
+          "required": [
+            "workItemId",
+            "attempt",
+            "decision"
+          ],
+          "enumFields": [
+            "decision"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_list",
+          "descriptionChars": 49,
+          "descriptionSha256": "3311ed29ee7ba550911a67090892e44a6611095a33f6e72350fe45ec5438c2bf",
+          "projectionSha256": "baa25489f907c30cf3f52cb060ce60592295adaa962b9fb3cec1ddf77ef38b05",
+          "propertyCount": 1,
+          "required": [],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_open",
+          "descriptionChars": 91,
+          "descriptionSha256": "5f110538b2f84214c702cce1cee068710ccb496d212da6b108580cdcdb25c174",
+          "projectionSha256": "9654fbc0aff2c9173ceb7603b237cfbddfc592f6fa94f730f7724f025e1fa740",
+          "propertyCount": 5,
+          "required": [
+            "items"
+          ],
+          "enumFields": [],
+          "closedObjectProps": [
+            "execution"
+          ]
+        }
+      ],
+      "providerRequests": {
+        "modelRequests": 7,
+        "modelRequestsWithTools": 6,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "sideEffects": {
+        "execJournalEntries": 0,
+        "rejectJournalEntries": 5,
+        "pluginErrors": [],
+        "workflowState": {
+          "exists": false,
+          "records": 0,
+          "executions": 0,
+          "itemStates": []
+        }
+      },
+      "workspaceFiles": [
+        ".vvoc/",
+        ".vvoc/vvoc.json",
+        "src/",
+        "src/kept.txt"
+      ],
+      "childEnvKeys": [
+        "PATH",
+        "HOME",
+        "LANG",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "TMPDIR",
+        "OPENCODE_CONFIG",
+        "OPENCODE_DISABLE_MODELS_FETCH",
+        "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "OPENCODE_DISABLE_SHARE",
+        "OPENCODE_DISABLE_AUTOUPDATE",
+        "OPENCODE_DISABLE_LSP_DOWNLOAD",
+        "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS",
+        "OPENCODE_PRINT_LOGS",
+        "OPENCODE_LOG_LEVEL"
+      ]
+    },
+    {
+      "sessionId": "anthropic-positive",
+      "cohortId": "anthropic-messages-hashline",
+      "transport": "anthropic-messages",
+      "providerNpm": "@ai-sdk/anthropic",
+      "modelId": "vvoc-probe-alpha",
+      "editorTool": "hashline_edit",
+      "loweringRoute": "anthropic SDK serializes tools as input_schema; provider/transform.ts has no anthropic schema branch, so the published schema is forwarded",
+      "hostExitCode": 0,
+      "passed": 27,
+      "failed": 0,
+      "failures": [],
+      "cases": [
+        {
+          "id": "open-implementation",
+          "tool": "work_item_open",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "list-open",
+          "tool": "work_item_list",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "hashline-append",
+          "tool": "hashline_edit",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "hashline-view",
+          "tool": "read",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "web-search-default",
+          "tool": "web_search",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "web-fetch-text",
+          "tool": "web_fetch",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        },
+        {
+          "id": "web-fetch-media",
+          "tool": "web_fetch",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "producerContract": "ok",
+          "ok": true
+        }
+      ],
+      "definitionNames": [
+        "bash",
+        "glob",
+        "grep",
+        "hashline_edit",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "web_fetch",
+        "web_search",
+        "work_checkpoint",
+        "work_item_close",
+        "work_item_decide",
+        "work_item_list",
+        "work_item_open",
+        "write"
+      ],
+      "projections": [
+        {
+          "name": "hashline_edit",
+          "descriptionChars": 6929,
+          "descriptionSha256": "12b740e2d0b5190f4d87bff0dd2047b9d3e09abaa603edb73ff4a50528d0fbf8",
+          "projectionSha256": "79d84edd0a9bbee7307a66f246753017ab860adb97116aad96751f32129a8eb0",
+          "propertyCount": 4,
+          "required": [
+            "filePath",
+            "edits"
+          ],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_fetch",
+          "descriptionChars": 124,
+          "descriptionSha256": "dbc62621e6b0c01140088009948a34b5f481d2d765798d2a341be731c2091e13",
+          "projectionSha256": "5f6f17661f8eb654912143a63e2a8c6ff4edb18a9c645e4a9770193bd3a22696",
+          "propertyCount": 3,
+          "required": [
+            "url"
+          ],
+          "enumFields": [
+            "format"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_search",
+          "descriptionChars": 159,
+          "descriptionSha256": "17f096bdaedb141554ec7527b3e675c3a70e8962d5290aabdc23ffa976729ac4",
+          "projectionSha256": "86094fe8f6be4201e74fc87953fead3883401269488d6d95b897957a7674aff2",
+          "propertyCount": 3,
+          "required": [
+            "query"
+          ],
+          "enumFields": [
+            "freshness"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_checkpoint",
+          "descriptionChars": 219,
+          "descriptionSha256": "47c756ba8275325e556b0d022b8bb84f4b9eadf281b6855973b8dab265f2592a",
+          "projectionSha256": "b41521f7597c7d2676e1878da0687118e8ebf53aaf023207b4e35413c6e140a0",
+          "propertyCount": 27,
+          "required": [
+            "action"
+          ],
+          "enumFields": [
+            "action",
+            "reviewer",
+            "stage"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_close",
+          "descriptionChars": 59,
+          "descriptionSha256": "c98c2b28bdd9422d005766db397354eff26c812e02b101534427dde4d61c8827",
+          "projectionSha256": "6ab061474faa04e91c6507601ef2dc4e348ab83793f548676c8aeefeb2daa160",
+          "propertyCount": 1,
+          "required": [
+            "workItemId"
+          ],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_decide",
+          "descriptionChars": 239,
+          "descriptionSha256": "efc333490118443056a539a36748e26b32a298f417530e0a50754e6817c68642",
+          "projectionSha256": "1da28e4fffec8af74ed5d38a4638bb8861c43d37a6643217814d77ed879b4580",
+          "propertyCount": 14,
+          "required": [
+            "workItemId",
+            "attempt",
+            "decision"
+          ],
+          "enumFields": [
+            "decision"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_list",
+          "descriptionChars": 49,
+          "descriptionSha256": "3311ed29ee7ba550911a67090892e44a6611095a33f6e72350fe45ec5438c2bf",
+          "projectionSha256": "baa25489f907c30cf3f52cb060ce60592295adaa962b9fb3cec1ddf77ef38b05",
+          "propertyCount": 1,
+          "required": [],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_open",
+          "descriptionChars": 91,
+          "descriptionSha256": "5f110538b2f84214c702cce1cee068710ccb496d212da6b108580cdcdb25c174",
+          "projectionSha256": "9654fbc0aff2c9173ceb7603b237cfbddfc592f6fa94f730f7724f025e1fa740",
+          "propertyCount": 5,
+          "required": [
+            "items"
+          ],
+          "enumFields": [],
+          "closedObjectProps": [
+            "execution"
+          ]
+        }
+      ],
+      "providerRequests": {
+        "modelRequests": 9,
+        "modelRequestsWithTools": 8,
+        "webSearchRequests": 1,
+        "webFetchRequests": 2
+      },
+      "sideEffects": {
+        "execJournalEntries": 6,
+        "rejectJournalEntries": 0,
+        "pluginErrors": [],
+        "workflowState": {
+          "exists": true,
+          "records": 1,
+          "executions": 0,
+          "itemStates": [
+            "open"
+          ]
+        }
+      },
+      "workspaceFiles": [
+        ".vvoc/",
+        ".vvoc/vvoc.json",
+        "src/",
+        "src/edit.txt"
+      ],
+      "childEnvKeys": [
+        "PATH",
+        "HOME",
+        "LANG",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "TMPDIR",
+        "OPENCODE_CONFIG",
+        "OPENCODE_DISABLE_MODELS_FETCH",
+        "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "OPENCODE_DISABLE_SHARE",
+        "OPENCODE_DISABLE_AUTOUPDATE",
+        "OPENCODE_DISABLE_LSP_DOWNLOAD",
+        "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS",
+        "OPENCODE_PRINT_LOGS",
+        "OPENCODE_LOG_LEVEL"
+      ]
+    },
+    {
+      "sessionId": "anthropic-negative",
+      "cohortId": "anthropic-messages-hashline",
+      "transport": "anthropic-messages",
+      "providerNpm": "@ai-sdk/anthropic",
+      "modelId": "vvoc-probe-alpha",
+      "editorTool": "hashline_edit",
+      "loweringRoute": "anthropic SDK serializes tools as input_schema; provider/transform.ts has no anthropic schema branch, so the published schema is forwarded",
+      "hostExitCode": 0,
+      "passed": 24,
+      "failed": 0,
+      "failures": [],
+      "cases": [
+        {
+          "id": "reject-web-count",
+          "tool": "web_search",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "count",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-web-format",
+          "tool": "web_fetch",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "format",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-web-timeout",
+          "tool": "web_fetch",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "timeout",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-hashline-op",
+          "tool": "hashline_edit",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "edits[0].op",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        },
+        {
+          "id": "reject-hashline-unknown",
+          "tool": "hashline_edit",
+          "expect": "error",
+          "observedStatus": "error",
+          "diagnosticPath": "edits[0].tpyo",
+          "rejectionLevel": "hook",
+          "producerContract": "not-applicable",
+          "ok": true
+        }
+      ],
+      "definitionNames": [
+        "bash",
+        "glob",
+        "grep",
+        "hashline_edit",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "web_fetch",
+        "web_search",
+        "work_checkpoint",
+        "work_item_close",
+        "work_item_decide",
+        "work_item_list",
+        "work_item_open",
+        "write"
+      ],
+      "projections": [
+        {
+          "name": "hashline_edit",
+          "descriptionChars": 6929,
+          "descriptionSha256": "12b740e2d0b5190f4d87bff0dd2047b9d3e09abaa603edb73ff4a50528d0fbf8",
+          "projectionSha256": "79d84edd0a9bbee7307a66f246753017ab860adb97116aad96751f32129a8eb0",
+          "propertyCount": 4,
+          "required": [
+            "filePath",
+            "edits"
+          ],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_fetch",
+          "descriptionChars": 124,
+          "descriptionSha256": "dbc62621e6b0c01140088009948a34b5f481d2d765798d2a341be731c2091e13",
+          "projectionSha256": "5f6f17661f8eb654912143a63e2a8c6ff4edb18a9c645e4a9770193bd3a22696",
+          "propertyCount": 3,
+          "required": [
+            "url"
+          ],
+          "enumFields": [
+            "format"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "web_search",
+          "descriptionChars": 159,
+          "descriptionSha256": "17f096bdaedb141554ec7527b3e675c3a70e8962d5290aabdc23ffa976729ac4",
+          "projectionSha256": "86094fe8f6be4201e74fc87953fead3883401269488d6d95b897957a7674aff2",
+          "propertyCount": 3,
+          "required": [
+            "query"
+          ],
+          "enumFields": [
+            "freshness"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_checkpoint",
+          "descriptionChars": 219,
+          "descriptionSha256": "47c756ba8275325e556b0d022b8bb84f4b9eadf281b6855973b8dab265f2592a",
+          "projectionSha256": "b41521f7597c7d2676e1878da0687118e8ebf53aaf023207b4e35413c6e140a0",
+          "propertyCount": 27,
+          "required": [
+            "action"
+          ],
+          "enumFields": [
+            "action",
+            "reviewer",
+            "stage"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_close",
+          "descriptionChars": 59,
+          "descriptionSha256": "c98c2b28bdd9422d005766db397354eff26c812e02b101534427dde4d61c8827",
+          "projectionSha256": "6ab061474faa04e91c6507601ef2dc4e348ab83793f548676c8aeefeb2daa160",
+          "propertyCount": 1,
+          "required": [
+            "workItemId"
+          ],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_decide",
+          "descriptionChars": 239,
+          "descriptionSha256": "efc333490118443056a539a36748e26b32a298f417530e0a50754e6817c68642",
+          "projectionSha256": "1da28e4fffec8af74ed5d38a4638bb8861c43d37a6643217814d77ed879b4580",
+          "propertyCount": 14,
+          "required": [
+            "workItemId",
+            "attempt",
+            "decision"
+          ],
+          "enumFields": [
+            "decision"
+          ],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_list",
+          "descriptionChars": 49,
+          "descriptionSha256": "3311ed29ee7ba550911a67090892e44a6611095a33f6e72350fe45ec5438c2bf",
+          "projectionSha256": "baa25489f907c30cf3f52cb060ce60592295adaa962b9fb3cec1ddf77ef38b05",
+          "propertyCount": 1,
+          "required": [],
+          "enumFields": [],
+          "closedObjectProps": []
+        },
+        {
+          "name": "work_item_open",
+          "descriptionChars": 91,
+          "descriptionSha256": "5f110538b2f84214c702cce1cee068710ccb496d212da6b108580cdcdb25c174",
+          "projectionSha256": "9654fbc0aff2c9173ceb7603b237cfbddfc592f6fa94f730f7724f025e1fa740",
+          "propertyCount": 5,
+          "required": [
+            "items"
+          ],
+          "enumFields": [],
+          "closedObjectProps": [
+            "execution"
+          ]
+        }
+      ],
+      "providerRequests": {
+        "modelRequests": 7,
+        "modelRequestsWithTools": 6,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "sideEffects": {
+        "execJournalEntries": 0,
+        "rejectJournalEntries": 5,
+        "pluginErrors": [],
+        "workflowState": {
+          "exists": false,
+          "records": 0,
+          "executions": 0,
+          "itemStates": []
+        }
+      },
+      "workspaceFiles": [
+        ".vvoc/",
+        ".vvoc/vvoc.json",
+        "src/",
+        "src/kept.txt"
+      ],
+      "childEnvKeys": [
+        "PATH",
+        "HOME",
+        "LANG",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "TMPDIR",
+        "OPENCODE_CONFIG",
+        "OPENCODE_DISABLE_MODELS_FETCH",
+        "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "OPENCODE_DISABLE_SHARE",
+        "OPENCODE_DISABLE_AUTOUPDATE",
+        "OPENCODE_DISABLE_LSP_DOWNLOAD",
+        "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS",
+        "OPENCODE_PRINT_LOGS",
+        "OPENCODE_LOG_LEVEL"
+      ]
+    }
+  ],
+  "unexercised": [
+    "OpenCode 1.18.2 live binary (minimum contract covered by derived registry fixtures only)",
+    "Real OpenAI (@ai-sdk/openai) schema lowering: the live openai-compatible route takes no sanitizeOpenAISchema branch; const-to-enum and dropped bounds are covered by derived fixtures only",
+    "Google/Gemini schema normalization: derived fixture only, no live Google transport",
+    "Remote paid-provider/model acceptance, model quality, and token accounting (never exercised)",
+    "work_checkpoint start/verify/review/bind/complete and work_item_decide rework/recover live branches",
+    "Native-package plan registration and native checkpoint lifecycle"
+  ],
+  "failures": []
+}
