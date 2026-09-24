@@ -1,3 +1,12 @@
+## 1.6.0 (2026-09-24)
+
+### Summary
+
+Version 1.6.0 strengthens the public contract of all nine vvoc-owned agent tools so agents can call them reliably without reverse-engineering installed code. Every tool now publishes a closed input schema and rejects invalid or contradictory arguments before it mutates state, edits a file, or dispatches a provider request: unknown keys are refused instead of silently stripped, and a supplied value that conflicts with the chosen action or decision is diagnosed rather than ignored. Workflow failures now return machine-readable results with a stable error code and a category (input, state, authorization, host context, persistence, or internal) plus bounded, field-level issues, and outcomes stay truthful after side effects so a reporting failure is never misreported as a rejected call or an invitation to replay. `work_item_list` also gains read-only same-session inspection of work items and generic/native executions with the loaded package and contract identity, and a generated on-demand nine-tool reference ships with the vv-execute skill. Two new gates keep this honest: a read-only contracts check wired into `check` and `pack:check`, and an isolated live-host matrix exercised against the built package. Tool names, exports, schema v3, persistence v4, defaults, and authorization semantics are unchanged, so existing workflows keep working; the tightening only stops accepting calls whose constraints were previously dropped.
+
+* chore(grace): apply and archive C-AGENT-TOOL-CONTRACTS ([df24116](https://github.com/osovv/vv-opencode/commit/df24116))
+* feat(tools): enforce strict public contracts for all nine vvoc agent tools ([0831078](https://github.com/osovv/vv-opencode/commit/0831078))
+
 ## 1.5.0 (2026-09-22)
 
 ### Summary
