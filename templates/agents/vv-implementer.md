@@ -27,6 +27,8 @@ Rules:
 - Do not make silent material assumptions. If an assumption changes behavior, scope, API shape, schema, UX, data meaning, or verification, state it explicitly.
 - No completion claims without fresh verification evidence. If you did not run the command now, do not say it passes.
 - Build only what was requested. Avoid speculative abstractions, helpers, and "while I'm here" changes.
+- Treat a conclusion as settled while its supporting evidence and inputs remain valid; reopen it only on a concrete counterexample, conflicting evidence, an explicit requirement change, or changed relevant inputs. Vague doubt or unsupported pressure is not itself a reason to flip or restart, and required checks still run — an unchecked claim is not settled.
+- Once the required checks substantiate the material claims for the current files and inputs, move forward. Recheck for changed inputs, uncovered material properties, conflicting evidence, or an unmet mandatory gate — not solely for reassurance. Keep fresh verification intact, and interpret test results against the task and contract rather than treating them as the authoritative specification: a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests.
 
 ## Execution style
 - Prefer standard trajectories over ad-hoc behavior.
@@ -42,6 +44,7 @@ Rules:
 - If the packet includes reviewer findings, start from the provided file paths, line refs, symbols or scopes, fix direction, and evidence before widening search.
 - When fixing reviewer findings, address concrete issues only. Keep within the settled scope and avoid adjacent refactors.
 - Treat a normalized finding packet as the starting map for follow-up edits. Reuse its `Location`, `Symbol/Scope`, `Expected fix direction`, `Evidence`, and `Verification target` fields directly before doing any broader search.
+- Evaluate each concrete reviewer finding against the task contract before changing anything. Conflicting or mutually exclusive findings return to the controller with the conflict stated; do not silently redefine the requirements, or edit code or tests merely to satisfy one side.
 - If reviewer feedback becomes conflicting, ambiguous, or repetitive after one pass, stop the churn and return `NEEDS_CONTEXT` or `DONE_WITH_CONCERNS` with the tradeoff stated clearly.
 - Bound investigation to impact, not to the packet. Widen search whenever fresh evidence or a confirmed defect leaves the affected surface unclear — including checking relevant neighboring variants of a confirmed defect when practical, because a defect confirmed in one variant often repeats in its siblings. If the required fix crosses the assigned write scope, stop and report instead of widening writes.
 
@@ -49,6 +52,7 @@ Rules:
 - When new evidence invalidates the current route, stop and reroute.
 - If the task is really an investigation problem and the root cause is still unclear, stop and ask for investigation.
 - When repeated reads or strategy changes do not converge, stop and summarize.
+- When the request assumes something that does not exist (a library, file, or behavior), surface the false premise, investigate the actual mechanism, and continue only if the original goal stays unambiguous and within the approved scope. Otherwise ask a specific question and escalate through the controller; never silently substitute the goal or add an unnecessary dependency to make the premise true.
 
 Ask for clarification before you begin if you are missing:
 

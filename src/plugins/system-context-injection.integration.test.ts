@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection.integration.test.ts
-// VERSION: 0.4.2
+// VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify universal primary guidance, including correctness obligations, and startup-selected concrete vv-controller orchestration policy injection.
-//   SCOPE: Correctness-obligations delivery, per-profile controller context, primary isolation, explore guidance, known subagent exclusion, duplicate prevention, and startup snapshot stability.
+//   PURPOSE: Verify universal primary guidance, including correctness obligations and evidence discipline, and startup-selected concrete vv-controller orchestration policy injection.
+//   SCOPE: Correctness-obligations delivery, settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, test-results-as-evidence wording, per-claim/restatement exclusions, per-profile controller context, primary isolation, explore guidance, known subagent exclusion, duplicate prevention, and startup snapshot stability.
 //   DEPENDS: [bun:test, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added calibrated assumption-discipline coverage: per-claim reasoning labels and the restatement ritual removed while material assumptions, repository-answerable resolution, and honest uncertainty remain.]
+//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added instruction-delivery coverage for settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, and test-results-as-evidence wording with per-claim/restatement exclusions. Prior: calibrated assumption-discipline coverage.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -193,6 +193,53 @@ describe("SystemContextInjectionPlugin", () => {
     expect(normalized).toContain(
       "an unverified material condition is named as unverified, never presented as a passed check",
     );
+  });
+
+  test("delivers evidence discipline with reopen triggers and false-premise handling", async () => {
+    const plugin = await SystemContextInjectionPlugin(createPluginInput());
+    const output = createOutput("build");
+
+    await plugin["chat.message"]?.(
+      {
+        sessionID: "session-1",
+        agent: undefined,
+      } as never,
+      output as never,
+    );
+
+    const systemText = output.message.system ?? "";
+    const normalized = systemText.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "When a request assumes something that does not exist (a library, file, or behavior), surface the false premise",
+    );
+    expect(normalized).toContain(
+      "never silently substitute a different goal or add an unnecessary dependency to make the premise true",
+    );
+    expect(normalized).toContain("A reopen or reroute trigger is concrete");
+    expect(normalized).toContain("Vague doubt or unsupported pressure is not itself a trigger");
+    expect(normalized).toContain(
+      "retain a supported conclusion with a brief justification and ask for a specific discrepancy only when needed",
+    );
+    expect(normalized).toContain(
+      "an explicit user change in requirements follows the existing scope and approval process rather than a factual debate",
+    );
+    expect(normalized).toContain("An unchecked claim is not settled");
+    expect(normalized).toContain(
+      "Once required checks substantiate the material claims for the current files and inputs, move forward",
+    );
+    expect(normalized).toContain(
+      "Interpret test results as evidence against the request and established contracts, not as the authoritative specification",
+    );
+    expect(normalized).toContain(
+      "a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests",
+    );
+
+    // No blanket bans on apologizing or agreeing, and no mandatory per-claim rituals.
+    for (const banned of ["Never apologize", "Do not agree", "Mark each claim"]) {
+      expect(systemText).not.toContain(banned);
+    }
+    expect(normalized).not.toContain("restate the requirement in one line in your own words");
   });
 
   test("injects primary-session system context for vv-controller", async () => {

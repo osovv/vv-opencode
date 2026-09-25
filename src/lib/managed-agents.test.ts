@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-agents.test.ts
-// VERSION: 0.7.0
+// VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
-//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership and stop/recovery distinction with reserved handoffs, bounded implementer impact investigation and worker-stop semantics, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, semantic agreement of the shipped tracked-result protocol examples with the runtime parser, scoped prompt resolution, and missing prompt failures.
+//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership with settled-conclusion reopen triggers, false-premise handling, and stop/recovery distinction with reserved handoffs, bounded implementer impact investigation with worker-stop semantics, settled evidence, false-premise escalation, and reviewer-finding conflict routing, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, semantic agreement of the shipped tracked-result protocol examples with the runtime parser, scoped prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, M-WORKFLOW-PROTOCOL, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Updated the managed agent protocol examples to the exact returned work-item id and added parser-backed agreement checks for every role terminal status. Prior: calibrated stop/recovery/completion distinctions and scoped re-review guidance.]
+//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added instruction-delivery assertions for settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, and reviewer-conflict routing with per-claim/restatement exclusions. Prior: exact returned work-item id and parser-backed terminal-status agreement.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -186,6 +186,46 @@ describe("managed agent prompts", () => {
     );
   });
 
+  test("vv-controller template keeps supported conclusions and separates pressure from evidence", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const normalized = template.replace(/\s+/g, " ");
+
+    expect(normalized).toContain("Surface a false premise instead of silently satisfying it");
+    expect(normalized).toContain(
+      "Distinguish unsupported disagreement or authority pressure from concrete new evidence",
+    );
+    expect(normalized).toContain(
+      "retain a supported conclusion with a brief justification and ask for a specific discrepancy only when needed",
+    );
+    expect(normalized).toContain(
+      "route an explicit user change in requirements through the existing scope and approval process rather than a factual debate",
+    );
+    expect(normalized).toContain(
+      "Reopen a settled conclusion or reroute on concrete triggers only",
+    );
+    expect(normalized).toContain(
+      "Vague doubt or unsupported pressure is not itself a trigger, but required checks still run — an unchecked claim is not settled",
+    );
+    expect(normalized).toContain(
+      "Move forward once the required checks substantiate the material claims for the current files and inputs",
+    );
+    expect(normalized).toContain(
+      "Interpret test results as evidence against the task and contracts",
+    );
+    expect(normalized).toContain(
+      "Keep required fresh verification, independent review, and explicit acceptance intact",
+    );
+    expect(normalized).toContain(
+      "a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests",
+    );
+
+    // No blanket bans on apologizing or agreeing, and no mandatory per-claim rituals.
+    for (const banned of ["Never apologize", "Do not agree", "Mark each claim"]) {
+      expect(template).not.toContain(banned);
+    }
+    expect(template).not.toContain("restate the requirement in one line in your own words");
+  });
+
   test("loads bundled vv-implementer template with strict top-block protocol", async () => {
     const template = await loadManagedAgentPromptTemplate("vv-implementer");
     expect(template).toStartWith("---\n");
@@ -234,6 +274,43 @@ describe("managed agent prompts", () => {
       "Never use DONE_WITH_CONCERNS to hide an unverified condition of your fix",
     );
     expect(normalized).toContain("the smallest check that would verify it");
+  });
+
+  test("vv-implementer template settles evidence and routes false premises and conflicting findings", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-implementer");
+    const normalized = template.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "Treat a conclusion as settled while its supporting evidence and inputs remain valid",
+    );
+    expect(normalized).toContain(
+      "Vague doubt or unsupported pressure is not itself a reason to flip or restart",
+    );
+    expect(normalized).toContain(
+      "Once the required checks substantiate the material claims for the current files and inputs, move forward",
+    );
+    expect(normalized).toContain(
+      "interpret test results against the task and contract rather than treating them as the authoritative specification",
+    );
+    expect(normalized).toContain(
+      "a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests",
+    );
+    expect(normalized).toContain(
+      "Evaluate each concrete reviewer finding against the task contract before changing anything",
+    );
+    expect(normalized).toContain(
+      "Conflicting or mutually exclusive findings return to the controller with the conflict stated",
+    );
+    expect(normalized).toContain("When the request assumes something that does not exist");
+    expect(normalized).toContain(
+      "never silently substitute the goal or add an unnecessary dependency to make the premise true",
+    );
+
+    // No blanket bans on apologizing or agreeing, and no mandatory per-claim rituals.
+    for (const banned of ["Never apologize", "Do not agree", "Mark each claim"]) {
+      expect(template).not.toContain(banned);
+    }
+    expect(template).not.toContain("restate the requirement in one line in your own words");
   });
 
   test("vv-implementer template carries the delegated worker contract", async () => {

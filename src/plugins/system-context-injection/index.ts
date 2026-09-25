@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.5.0
+// VERSION: 0.6.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Inject universal primary guidance, including correctness obligations for behavior changes, and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
-//   SCOPE: Universal instructions with correctness obligations and material-assumption discipline, vv-controller policy selection, explore-worker guidance, known subagent filtering, startup vvoc snapshot use, custom subagent tracking, and chat.message injection.
+//   PURPOSE: Inject universal primary guidance, including correctness obligations and evidence discipline for behavior changes, and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
+//   SCOPE: Universal instructions with correctness obligations, material-assumption discipline, settled-conclusion reopen triggers, false-premise handling, and pressure-versus-evidence distinction; vv-controller policy selection; explore-worker guidance; known subagent filtering; startup vvoc snapshot use; custom subagent tracking; and chat.message injection.
 //   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Removed mandatory per-claim reasoning labels and the restatement ritual while retaining material-assumption discipline, repository-answerable question resolution, proportional verification, and honest uncertainty.]
+//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added settled-evidence reopen triggers, false-premise handling, pressure-versus-evidence distinction, and test-results-as-evidence wording, while preserving material-assumption discipline, repository-answerable question resolution, and honest uncertainty.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -55,6 +55,7 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "If a material assumption is necessary, state it explicitly and carry its effect into the result report.",
     "If a material assumption later becomes false, stop and reroute.",
     "Resolve repository-answerable technical questions from the established code, contracts, and tests yourself; only a genuine business-semantics fork needs a user decision.",
+    "When a request assumes something that does not exist (a library, file, or behavior), surface the false premise and investigate the actual mechanism; continue only if the original goal stays unambiguous and within the approved scope, and never silently substitute a different goal or add an unnecessary dependency to make the premise true.",
     "Report honest residual uncertainty: an unverified material condition is named as unverified, never presented as a passed check.",
     "</assumption_discipline>",
   ].join("\n"),
@@ -72,6 +73,8 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "Separate write scope (what you may edit), impact scope (behavior that could change), and verification scope (what you actually check). Investigating directly affected consumers to understand impact is required; broadening writes beyond the approved scope is not — request a scope decision instead.",
     "Choose verification at the level where the risk arises. Derive test expectations from the contract and the request, not from the implementation's current output, and ground mocks in the dependency's established contract rather than in whatever makes the change pass.",
     "Report honestly what was inspected, what was reasoned about, and what was executed as a check. The absence of a discovered defect is not proof of correctness: a substantive completion claim needs observed evidence, and an unverified material condition is reported as remaining uncertainty, never presented as a passed check.",
+    "Once required checks substantiate the material claims for the current files and inputs, move forward; recheck for changed inputs, uncovered material properties, conflicting evidence, or a mandatory gate, not for reassurance alone.",
+    "Interpret test results as evidence against the request and established contracts, not as the authoritative specification: a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests.",
     "Unrelated informational or trivial documentation work needs none of this ceremony.",
     "</correctness_obligations>",
   ].join("\n"),
@@ -96,6 +99,8 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
     "Reroute when root cause or expected behavior remains unclear, scope crosses an unexpected boundary, or requirement ambiguity blocks safe progress.",
     "When rerouting, state the current route, the trigger, the next route, and why the previous route is no longer safe.",
     "A retry must carry a named diagnosis of the prior failure; a blank retry is the same attempt again.",
+    "A reopen or reroute trigger is concrete — contradictory evidence, a specific error or counterexample, changed requirements, or changed relevant inputs. Vague doubt or unsupported pressure is not itself a trigger: retain a supported conclusion with a brief justification and ask for a specific discrepancy only when needed, while an explicit user change in requirements follows the existing scope and approval process rather than a factual debate.",
+    "An unchecked claim is not settled: run the required checks before treating a conclusion as final.",
     "</reroute_on_evidence>",
   ].join("\n"),
   [
