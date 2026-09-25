@@ -1,3 +1,12 @@
+## 1.7.0 (2026-09-25)
+
+### Summary
+
+Version 1.7.0 refines the correctness and evidence discipline carried by vvoc-managed agent prompts and the universal guidance injected into primary sessions. Agents now keep an evidence-supported conclusion settled until a concrete trigger reopens it — contradictory evidence, a specific counterexample, a changed requirement, or changed relevant inputs — rather than flipping on vague doubt or unsupported pressure, and they surface false premises and investigate the actual mechanism instead of silently substituting a different goal or adding an unnecessary dependency. Test results are treated as evidence against the request and established contracts rather than as the authoritative specification, so a failing test that contradicts the agreed contract is reported rather than triggering automatic rewrites of code or tests, and conflicting or mutually exclusive reviewer findings are routed back to the controller instead of quietly redefining requirements. This matters because it keeps agent work anchored to the task contract and observed evidence, reduces churn and unrequested changes, and makes disagreements and unmet checks visible to users. In addition, the release tooling now defaults release changelog summary generation to the deepseek/deepseek-flash model, restoring reliable release summaries after the previous default began returning server errors.
+
+* feat(prompts): refine evidence-based revision discipline ([4534b81](https://github.com/osovv/vv-opencode/commit/4534b81))
+* fix(release): default release summary model to deepseek/deepseek-flash ([995656e](https://github.com/osovv/vv-opencode/commit/995656e))
+
 ## 1.6.0 (2026-09-24)
 
 ### Summary
