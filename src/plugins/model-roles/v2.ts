@@ -36,11 +36,15 @@ export interface RoleResolutionState {
   roleMap: Record<string, string>;
   defaultModelReference: string | undefined;
   titleModelReference: string | undefined;
+  /** Raw-config agent model references that v2 normalization strips from the registry. */
+  agentRoleReferences: Record<string, string>;
 }
 
 interface OpenCodeConfigShape {
   model?: unknown;
   small_model?: unknown;
+  agent?: unknown;
+  agents?: unknown;
 }
 // END_BLOCK_ROLE_RESOLUTION_STATE
 
@@ -58,7 +62,12 @@ async function loadRoleResolutionState(directory: string): Promise<RoleResolutio
       allowDefault: true,
     });
     if (!isVvocPluginEnabled(read.config, "model-roles")) {
-      return { roleMap: {}, defaultModelReference: undefined, titleModelReference: undefined };
+      return {
+        roleMap: {},
+        defaultModelReference: undefined,
+        titleModelReference: undefined,
+        agentRoleReferences: {},
+      };
     }
     const roleMap: Record<string, string> = {};
     const roles = (read.config as { roles?: unknown }).roles;
@@ -72,6 +81,7 @@ async function loadRoleResolutionState(directory: string): Promise<RoleResolutio
 
     let defaultModelReference: string | undefined;
     let titleModelReference: string | undefined;
+    const agentRoleReferences: Record<string, string> = {};
     const projectRoot = read.source.rootDir ?? directory;
     for (const name of ["opencode.json", "opencode.jsonc"] as const) {
       let text: string | undefined;
@@ -88,16 +98,31 @@ async function loadRoleResolutionState(directory: string): Promise<RoleResolutio
         if (typeof parsed.small_model === "string" && isRoleReference(parsed.small_model)) {
           titleModelReference = parsed.small_model;
         }
+        const agentMaps = [parsed.agent, parsed.agents];
+        for (const agentMap of agentMaps) {
+          if (!agentMap || typeof agentMap !== "object" || Array.isArray(agentMap)) continue;
+          for (const [agentName, entry] of Object.entries(agentMap as Record<string, unknown>)) {
+            const model = (entry as { model?: unknown } | undefined)?.model;
+            if (typeof model === "string" && isRoleReference(model)) {
+              agentRoleReferences[agentName] = model;
+            }
+          }
+        }
         break;
       } catch {
         // Unreadable project config leaves the references unset.
       }
     }
 
-    return { roleMap, defaultModelReference, titleModelReference };
+    return { roleMap, defaultModelReference, titleModelReference, agentRoleReferences };
   } catch (error) {
     console.warn(`[vvoc][model-roles] state load failed for ${directory}: ${String(error)}`);
-    return { roleMap: {}, defaultModelReference: undefined, titleModelReference: undefined };
+    return {
+      roleMap: {},
+      defaultModelReference: undefined,
+      titleModelReference: undefined,
+      agentRoleReferences: {},
+    };
   }
 }
 // END_BLOCK_LOAD_ROLE_RESOLUTION_STATE
@@ -141,15 +166,27 @@ export async function setupModelRolesV2(
 
   const agentRegistration = await adapter.ctx.agent.transform((editor) => {
     for (const agent of editor.list()) {
+      const agentId = String(agent.id);
+      const rawReference = state.agentRoleReferences[agentId];
+      if (rawReference) {
+        const resolved = resolveReferenceOrLog(
+          rawReference,
+          state.roleMap,
+          `agent.${agentId}.model`,
+        );
+        if (resolved) {
+          editor.update(agentId, (draft) => {
+            (draft as { model?: unknown }).model = resolved;
+          });
+          continue;
+        }
+      }
+
       const model = (agent as { model?: unknown }).model;
       if (typeof model !== "string" || !isRoleReference(model)) continue;
-      const resolved = resolveReferenceOrLog(
-        model,
-        state.roleMap,
-        `agent.${String(agent.id)}.model`,
-      );
+      const resolved = resolveReferenceOrLog(model, state.roleMap, `agent.${agentId}.model`);
       if (!resolved) continue;
-      editor.update(String(agent.id), (draft) => {
+      editor.update(agentId, (draft) => {
         (draft as { model?: unknown }).model = resolved;
       });
     }
@@ -189,6 +226,7 @@ export async function setupModelRolesV2(
       state.roleMap = fresh.roleMap;
       state.defaultModelReference = fresh.defaultModelReference;
       state.titleModelReference = fresh.titleModelReference;
+      state.agentRoleReferences = fresh.agentRoleReferences;
       try {
         await adapter.ctx.agent.reload();
         await adapter.ctx.model.reload();

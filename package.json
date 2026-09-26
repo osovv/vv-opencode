@@ -34,11 +34,17 @@
     "dist",
     "schemas",
     "templates",
+    "server.js",
+    "tui.js",
     "README.md",
     "CHANGELOG.md"
   ],
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
