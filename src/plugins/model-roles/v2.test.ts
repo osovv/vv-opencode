@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   AgentModel - Model value shape accepted by the fake agent editor (string reference or v2 object form).
 //   AgentEditorHarness - Mutable fake agent editor capturing updates.
 //   ModelEditorHarness - Mutable fake model editor capturing the default selection.
 //   makeAdapter - Builds a mocked v2 adapter wired to the fake editors and a watch registry.
@@ -35,10 +36,12 @@ afterAll(async () => {
   await Promise.all(tempRoots.map((root) => rm(root, { recursive: true, force: true })));
 });
 
+type AgentModel = string | { providerID: string; id: string; variant?: string };
+
 class AgentEditorHarness {
   /** Source definitions as they would come from config; replay rebuilds from these. */
-  readonly sources = new Map<string, { id: string; model?: string }>();
-  private agents = new Map<string, { id: string; model?: string }>();
+  readonly sources = new Map<string, { id: string; model?: AgentModel }>();
+  private agents = new Map<string, { id: string; model?: AgentModel }>();
 
   /** Rebuild working state from sources, mirroring v2 replay semantics. */
   rebuild() {
@@ -49,7 +52,7 @@ class AgentEditorHarness {
     return [...this.agents.values()];
   }
 
-  update(id: string, update: (draft: { id: string; model?: string }) => void) {
+  update(id: string, update: (draft: { id: string; model?: AgentModel }) => void) {
     const agent = this.agents.get(id);
     if (agent) update(agent);
   }
@@ -76,9 +79,27 @@ function makeAdapter(options?: { watchTrigger?: (fire: () => void) => void }) {
   let modelReloads = 0;
   let fireWatch: (() => void) | undefined;
 
+  const switchedModels: Array<{ sessionID: string; model: unknown }> = [];
+  const promptHooks: Array<(event: { sessionID: string }) => Promise<void> | void> = [];
   const adapter = {
     ctx: {
       location: { directory: "/tmp/proj-a", project: { id: "p" } },
+      session: {
+        hook: async (
+          _name: string,
+          callback: (event: { sessionID: string }) => Promise<void> | void,
+        ) => {
+          promptHooks.push(callback);
+          return { dispose: async () => {} };
+        },
+        get: async (input: { sessionID: string }) => ({
+          agent: "vv-role-probe",
+          sessionID: input.sessionID,
+        }),
+        switchModel: async (input: { sessionID: string; model: unknown }) => {
+          switchedModels.push({ sessionID: input.sessionID, model: input.model });
+        },
+      },
       agent: {
         transform: async (callback: (editor: AgentEditorHarness) => void) => {
           agentTransforms.push(() => callback(agentEditor));
@@ -123,6 +144,8 @@ function makeAdapter(options?: { watchTrigger?: (fire: () => void) => void }) {
     adapter,
     agentEditor,
     modelEditor,
+    promptHooks,
+    switchedModels,
     counts: {
       get agentReloads() {
         return agentReloads;
@@ -132,6 +155,10 @@ function makeAdapter(options?: { watchTrigger?: (fire: () => void) => void }) {
       },
     },
     fireWatch: () => fireWatch?.(),
+    firePrompt: async (sessionID: string) => {
+      for (const hook of promptHooks) await hook({ sessionID });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    },
   };
 }
 
@@ -139,6 +166,7 @@ async function withTempProject(setup: {
   roles?: Record<string, string>;
   model?: string;
   smallModel?: string;
+  agentModel?: string;
 }): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "vvoc-model-roles-"));
   tempRoots.push(root);
@@ -153,10 +181,13 @@ async function withTempProject(setup: {
       ...setup.roles,
     };
   await writeFile(join(root, ".vvoc", "vvoc.json"), JSON.stringify(config), "utf8");
-  if (setup.model || setup.smallModel) {
+  if (setup.model || setup.smallModel || setup.agentModel) {
     const opencode: Record<string, unknown> = {};
     if (setup.model) opencode.model = setup.model;
     if (setup.smallModel) opencode.small_model = setup.smallModel;
+    if (setup.agentModel) {
+      opencode.agent = { "vv-role-probe": { prompt: "probe", model: setup.agentModel } };
+    }
     await writeFile(join(root, "opencode.json"), JSON.stringify(opencode), "utf8");
   }
   return root;
@@ -177,9 +208,10 @@ describe("setupModelRolesV2", () => {
     // The transform replays through a reload call in this harness.
     await (adapter.ctx.agent as unknown as { reload: () => Promise<void> }).reload();
 
-    expect(agentEditor.list().find((a) => a.id === "reviewer")?.model).toBe(
-      "anthropic/claude-sonnet-4-5",
-    );
+    expect(agentEditor.list().find((a) => a.id === "reviewer")?.model).toEqual({
+      providerID: "anthropic",
+      id: "claude-sonnet-4-5",
+    });
     expect(agentEditor.list().find((a) => a.id === "build")?.model).toBe("openai/gpt-6");
     await cleanup?.();
   });
@@ -215,7 +247,10 @@ describe("setupModelRolesV2", () => {
     agentEditor.sources.set("title", { id: "title" });
     await (adapter.ctx.agent as unknown as { reload: () => Promise<void> }).reload();
 
-    expect(agentEditor.list().find((a) => a.id === "title")?.model).toBe("deepseek/deepseek-chat");
+    expect(agentEditor.list().find((a) => a.id === "title")?.model).toEqual({
+      providerID: "deepseek",
+      id: "deepseek-chat",
+    });
     await cleanup?.();
   });
 
@@ -244,7 +279,10 @@ describe("setupModelRolesV2", () => {
 
     agentEditor.sources.set("reviewer", { id: "reviewer", model: "vv-role:primary" });
     await (adapter.ctx.agent as unknown as { reload: () => Promise<void> }).reload();
-    expect(agentEditor.list().find((a) => a.id === "reviewer")?.model).toBe("z-ai/glm-5.3");
+    expect(agentEditor.list().find((a) => a.id === "reviewer")?.model).toEqual({
+      providerID: "z-ai",
+      id: "glm-5.3",
+    });
 
     // Switch the preset: rewrite the roles map and notify the watcher.
     const config = createDefaultVvocConfig() as unknown as Record<string, unknown>;
@@ -261,7 +299,52 @@ describe("setupModelRolesV2", () => {
 
     expect(counts.agentReloads).toBeGreaterThanOrEqual(2);
     expect(counts.modelReloads).toBeGreaterThanOrEqual(1);
-    expect(agentEditor.list().find((a) => a.id === "reviewer")?.model).toBe("openai/gpt-6");
+    expect(agentEditor.list().find((a) => a.id === "reviewer")?.model).toEqual({
+      providerID: "openai",
+      id: "gpt-6",
+    });
+    await cleanup?.();
+  });
+});
+
+describe("setupModelRolesV2 prompt model application", () => {
+  test("pins the role-resolved model on a session's first prompt and anchors it", async () => {
+    const project = await withTempProject({
+      roles: { smart: "openai/gpt-6-sol" },
+      agentModel: "vv-role:smart",
+    });
+    const { adapter, firePrompt, switchedModels, fireWatch } = makeAdapter();
+    const cleanup = await setupModelRolesV2({
+      ...adapter,
+      ctx: { ...adapter.ctx, location: { directory: project, project: { id: "p" } } },
+    } as V2AdapterContext);
+
+    await firePrompt("ses-a");
+    await firePrompt("ses-a");
+    expect(switchedModels).toEqual([
+      { sessionID: "ses-a", model: { providerID: "openai", id: "gpt-6-sol" } },
+    ]);
+
+    // Switch the preset; the anchored session keeps its pinned model, a new
+    // session resolves against the refreshed role map.
+    const config = createDefaultVvocConfig() as unknown as Record<string, unknown>;
+    config.roles = {
+      default: "z-ai/glm-5.3",
+      smart: "openai/gpt-6-luna",
+      fast: "z-ai/glm-5.3",
+      reviewer: "z-ai/glm-5.3",
+    };
+    await writeFile(join(project, ".vvoc", "vvoc.json"), JSON.stringify(config), "utf8");
+    fireWatch();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    await firePrompt("ses-a");
+    await firePrompt("ses-b");
+    expect(switchedModels.length).toBe(2);
+    expect(switchedModels[1]).toEqual({
+      sessionID: "ses-b",
+      model: { providerID: "openai", id: "gpt-6-luna" },
+    });
     await cleanup?.();
   });
 });

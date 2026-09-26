@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vv-role model references through OpenCode v2 replayable agent and model transforms with config-file-driven hot reload.
-//   SCOPE: v2 setup only: load the canonical role map for the plugin-load location, rewrite role-referenced agent models inside the agent transform, apply role-referenced top-level model and small_model selections through the model transform default and the built-in title agent, watch the project vvoc config and reload both domains on change, and fail closed per reference with a logged error instead of breaking the server.
+//   SCOPE: v2 setup only: load the canonical role map for the plugin-load location, rewrite role-referenced agent models inside the agent transform, apply role-referenced top-level model and small_model selections through the model transform default and the built-in title agent, pin each session's model to its role-resolved selection on the first prompt (probe-verified v2 mechanism), watch the project vvoc config and reload both domains on change, and fail closed per reference with a logged error instead of breaking the server.
 //   DEPENDS: [@opencode/plugin, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/plugin-toggle-config.ts, src/plugins/v2-runtime/setup.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES, V-M-PLUGIN-MODEL-ROLES, M-MODEL-ROLES, M-PLUGIN-V2-RUNTIME]
 //   ROLE: RUNTIME
@@ -21,7 +21,11 @@
 import type { Plugin as V2Plugin } from "@opencode/plugin";
 import type { V2AdapterContext } from "../v2-runtime/setup.js";
 import { loadVvocConfigForRead } from "../../lib/config-layers.js";
-import { isRoleReference, resolveRoleReference } from "../../lib/model-roles.js";
+import {
+  isRoleReference,
+  parseModelSelection,
+  resolveRoleReference,
+} from "../../lib/model-roles.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -148,6 +152,28 @@ function resolveReferenceOrLog(
 }
 // END_BLOCK_RESOLVE_REFERENCE
 
+// START_BLOCK_APPLY_AGENT_MODEL
+/**
+ * Apply one resolved provider/model selection to an agent draft in the v2
+ * Agent.Info object shape. The editor schema rejects plain string models, so
+ * the selection is parsed and assigned as { providerID, id } with an optional
+ * variant suffix split from the model id.
+ */
+function applyAgentModel(draft: { model?: unknown }, selection: string, fieldPath: string): void {
+  try {
+    const parsed = parseModelSelection(selection);
+    const variantMatch = /^(.+)#(.+)$/.exec(parsed.model);
+    (draft as { model?: unknown }).model = variantMatch
+      ? { providerID: parsed.provider, id: variantMatch[1], variant: variantMatch[2] }
+      : { providerID: parsed.provider, id: parsed.model };
+  } catch (error) {
+    console.error(
+      `[vvoc][model-roles] ${fieldPath} resolved an unparseable model (${selection}): ${String(error)}`,
+    );
+  }
+}
+// END_BLOCK_APPLY_AGENT_MODEL
+
 // START_BLOCK_SETUP_MODEL_ROLES_V2
 /**
  * Register the role-resolving transforms on the v2 runtime.
@@ -176,7 +202,7 @@ export async function setupModelRolesV2(
         );
         if (resolved) {
           editor.update(agentId, (draft) => {
-            (draft as { model?: unknown }).model = resolved;
+            applyAgentModel(draft, resolved, `agent.${agentId}.model`);
           });
           continue;
         }
@@ -187,7 +213,7 @@ export async function setupModelRolesV2(
       const resolved = resolveReferenceOrLog(model, state.roleMap, `agent.${agentId}.model`);
       if (!resolved) continue;
       editor.update(agentId, (draft) => {
-        (draft as { model?: unknown }).model = resolved;
+        applyAgentModel(draft, resolved, `agent.${agentId}.model`);
       });
     }
 
@@ -201,7 +227,7 @@ export async function setupModelRolesV2(
         );
         if (resolved) {
           editor.update(String(title.id), (draft) => {
-            (draft as { model?: unknown }).model = resolved;
+            applyAgentModel(draft, resolved, "small_model");
           });
         }
       }
@@ -219,6 +245,46 @@ export async function setupModelRolesV2(
     }
     editor.default.set(providerID, modelID);
   });
+
+  // START_BLOCK_PROMPT_MODEL_APPLICATION
+  // Probe-verified on OpenCode v2.0.18: external plugin agent transforms write
+  // a plugin-host registry that config-defined agents and session model
+  // selection do not read, so role references also apply through the prompt
+  // hook: the first prompt of a session pins that session's model to the
+  // role-resolved selection, which both restores the v1 behavior and anchors
+  // long-running sessions to the preset they started with. Later prompts keep
+  // the pinned selection; new sessions resolve against the current role map,
+  // which the config watcher refreshes without a server restart.
+  const appliedSessions = new Set<string>();
+  const promptRegistration = await adapter.ctx.session.hook("prompt", (event) => {
+    void (async () => {
+      try {
+        const sessionID = String(event.sessionID);
+        if (appliedSessions.has(sessionID)) return;
+        const session = await adapter.ctx.session.get({ sessionID });
+        const agent = (session as { agent?: unknown } | undefined)?.agent;
+        if (typeof agent !== "string" || !agent) return;
+        const reference = state.agentRoleReferences[agent];
+        if (!reference) return;
+        const resolved = resolveReferenceOrLog(reference, state.roleMap, `agent.${agent}.model`);
+        if (!resolved) return;
+        const parsed = parseModelSelection(resolved);
+        const variantMatch = /^(.+)#(.+)$/.exec(parsed.model);
+        await adapter.ctx.session.switchModel({
+          sessionID: event.sessionID,
+          model: {
+            providerID: parsed.provider,
+            id: variantMatch ? variantMatch[1] : parsed.model,
+            ...(variantMatch ? { variant: variantMatch[2] } : {}),
+          },
+        });
+        appliedSessions.add(sessionID);
+      } catch (error) {
+        console.warn(`[vvoc][model-roles] prompt model application failed: ${String(error)}`);
+      }
+    })();
+  });
+  // END_BLOCK_PROMPT_MODEL_APPLICATION
 
   const stopWatch = await adapter.watchConfig(directory, () => {
     void (async () => {
@@ -238,7 +304,9 @@ export async function setupModelRolesV2(
 
   return async () => {
     stopWatch();
+    await promptRegistration.dispose();
     await agentRegistration.dispose();
+    await modelRegistration.dispose();
     await modelRegistration.dispose();
   };
 }
