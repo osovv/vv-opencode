@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Register workflow tools and enforcement while injecting only startup-profile-compatible vv-controller guidance, including profile-independent control tools with bounded recovery, host-call-bound attempts, terminal report-rejection settlement, checkpoint reviewer linkage, and strict owned-tool contract publication/validation.
 //   SCOPE: work_item_open/list/close registration, profile-independent work_item_decide and work_checkpoint registration with root-session authorization and an SDK-backed read-only authorization-message lookup for user-authorized recovery, owned tool.definition publication of strict input JSON Schemas plus early validateWorkflowToolInput guards in tool.execute.before (without touching task-launch hooks), pre-dispatch structural validation of mutation tools, tracked launch validation with delegated barriers, overlapping-write gates, and authoritative native sealed-run rejection, live host-call bindings that convert supported foreground vv-implementer task launches into failed delegated attempts on confirmed host-terminal errors, result normalization and bounded same-session continuation with explicit hard-stop suppression, callID-bound delegated attempt results, terminal settlement of protocol-invalid reports as report_rejected attempts through staged persistence, checkpoint reviewer bookkeeping, round aggregation with bounded excerpts, implementation round limits, checked persistence, and profile-selected chat.message guidance. Tool argument schemas come from schemas.ts; branch-aware validation from input-validation.ts; the authorization guard and message lookups from authorization.ts; staged transactions and committed recovery from recovery.ts.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/authorization.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/input-validation.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/recovery.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/results.ts, src/plugins/workflow/schemas.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/plugins/workflow/authorization.ts, src/plugins/workflow/checkpoint-io.ts, src/plugins/workflow/checkpoints.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/input-validation.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/recovery.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/results.ts, src/plugins/workflow/schemas.ts, src/plugins/workflow/state.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/transitions.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-DELEGATED, M-AGENT-TOOL-CONTRACT, V-M-PLUGIN-WORKFLOW
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -11,10 +11,11 @@
 //
 // START_MODULE_MAP
 //   WorkflowPlugin - Registers workflow work-item tools, profile-independent control tools whose execution remains root-session gated, owned tool.definition/execute.before contract hooks, tracked task protocol enforcement with callID-bound delegated attempts, bounded recovery with durable persist-and-rollback commits, terminal report-rejection settlement, checkpoint linkage, live host-call failure bindings, and primary-session workflow guidance injection.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Appended one shared tracked result-protocol instruction, generated from protocol.ts status vocabularies, to the review-only/selective/delegated guidance so common launch/result rules and the on-demand reference path are available without the native execution skill; the profile-specific ownership text and the tracked system instruction are otherwise unchanged. Prior T-004: removed the redundant registration spread and made the native launch hook reject an authoritatively sealed plan run.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: C-AGENT-TOOL-CONTRACTS T-007 - Appended one shared tracked result-protocol instruction, generated from protocol.ts status vocabularies, to the review-only/selective/delegated guidance so common launch/result rules and the on-demand reference path are available without the native execution skill; the profile-specific ownership text and the tracked system instruction are otherwise unchanged. Prior T-004: removed the redundant registration spread and made the native launch hook reject an authoritatively sealed plan run.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -1887,3 +1888,15 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
   };
 };
 // END_BLOCK_PLUGIN_ENTRY
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupWorkflowV2 } from "./v2.js";
+
+export default defineDualPlugin({
+  id: "vvoc.workflow",
+  v1: WorkflowPlugin,
+  v2: (ctx) => setupWorkflowV2(createV2Adapter(ctx)),
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

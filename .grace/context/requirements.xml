@@ -13,6 +13,7 @@
     <Goal>Make implementation review-driven by separating focused implementation, spec review, code review, verification, and bounded retry loops.</Goal>
     <Goal>Keep shared agents and skills portable by using semantic model roles such as vv-role:smart and resolving them per machine or project.</Goal>
     <Goal>Make multi-agent work explicit through work items, tracked subagent headers, reviewer result collection, hard stops, and bounded review rounds.</Goal>
+    <Goal>Keep the plugin package dual-runtime across OpenCode v1 and v2 so the one-server memory model, per-session configuration, and restart-free preset switching are available without abandoning v1 users during the transition.</Goal>
     <Goal>Improve long-run safety with Guardian permission review, secrets redaction, hashline-backed edits, strict config validation, and clear recovery diagnostics.</Goal>
     <Goal>Provide one CLI, vvoc, for setup, sync, launch, status, diagnostics, roles, presets, plugin toggles, completions, and upgrades.</Goal>
     <Goal>Expose an honest OpenCode-native /context view that combines provider-reported usage with clearly labeled approximate category accounting.</Goal>

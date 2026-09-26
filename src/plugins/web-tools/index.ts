@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Register the canonical web_search and web_fetch tools, publish their strict input contracts through the owned definition seam, validate owned raw arguments before execution, and suppress OpenCode built-ins at runtime while the web-tools plugin is enabled.
 //   SCOPE: Startup vvoc snapshot use, plugin toggle handling, runtime permission suppression, tool registration, owned contract publication and pre-execute validation for the two owned tool ids only, and credential-safe diagnostics. No interception of unrelated host or MCP tools.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: M-PLUGIN-WEB-TOOLS, M-WEB-CONFIG, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE, M-AGENT-TOOL-CONTRACT, V-M-PLUGIN-WEB-TOOLS, DF-WEB-SEARCH, DF-WEB-FETCH
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -13,10 +13,11 @@
 //   SUPPRESSED_BUILTIN_PERMISSIONS - Built-in permission ids hidden while the plugin is enabled.
 //   applyBuiltinSuppression - Add runtime-only deny rules unless the user configured a key explicitly.
 //   WebToolsPlugin - Public plugin entry registering web_search and web_fetch.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Published both web tool contracts through the owned definition adapter and added an owned-only pre-execute guard; preserved built-in suppression, explicit user overrides, and disabled-plugin behavior.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: C-AGENT-TOOL-CONTRACTS T-006 - Published both web tool contracts through the owned definition adapter and added an owned-only pre-execute guard; preserved built-in suppression, explicit user overrides, and disabled-plugin behavior.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -125,3 +126,15 @@ export const WebToolsPlugin: Plugin = async ({ client, directory }) => {
     "tool.definition": toolDefinitionAdapter,
   };
 };
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupWebToolsV2 } from "./v2.js";
+
+export default defineDualPlugin({
+  id: "vvoc.web-tools",
+  v1: WebToolsPlugin,
+  v2: (ctx) => setupWebToolsV2(createV2Adapter(ctx)),
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

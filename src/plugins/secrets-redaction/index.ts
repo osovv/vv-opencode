@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: OpenCode plugin that redacts secrets from messages before LLM requests and restores them after.
 //   SCOPE: Startup vvoc config snapshot use plus 3 hook handlers — chat.messages.transform (text, reasoning, and tool-part state redaction), text.complete, tool.execute.before
-//   DEPENDS: src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, session, engine, patterns, restore, deep, config
+//   DEPENDS: src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, session, engine, patterns, restore, deep, config, src/plugins/v2-runtime/index.ts
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -11,10 +11,13 @@
 //
 // START_MODULE_MAP
 //   SecretsRedactionPlugin - main plugin factory function
+//   PLACEHOLDER_PREFIX - Stable placeholder prefix shared by the v1 and v2 redaction paths.
+//   redactMessageParts - Redacts text, reasoning, and tool-part state of one message in place.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.3.0 - Fixed a redaction bypass: tool-part payloads (ToolPart.state input/output/error/metadata) are now deep-redacted in chat.messages.transform; removed the dead msg.info.state path that never matched the SDK message shape.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: v1.3.0 - Fixed a redaction bypass: tool-part payloads (ToolPart.state input/output/error/metadata) are now deep-redacted in chat.messages.transform; removed the dead msg.info.state path that never matched the SDK message shape.]
 // END_CHANGE_SUMMARY
 
 import { resolveSecretsRedactionRuntimeConfig } from "./config.js";
@@ -28,7 +31,7 @@ import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { Plugin } from "@opencode-ai/plugin";
 import type { Part, TextPart, ReasoningPart, ToolPart } from "@opencode-ai/sdk/client";
 
-const PLACEHOLDER_PREFIX = "__VVOC_SECRET_";
+export const PLACEHOLDER_PREFIX = "__VVOC_SECRET_";
 
 function isTextPart(part: Part): part is TextPart {
   return part.type === "text";
@@ -42,7 +45,7 @@ function isToolPart(part: Part): part is ToolPart {
   return part.type === "tool";
 }
 
-function redactMessageParts(
+export function redactMessageParts(
   parts: Part[],
   patternSet: ReturnType<typeof buildPatternSet>,
   session: PlaceholderSession,
@@ -141,3 +144,15 @@ export const SecretsRedactionPlugin: Plugin = async (ctx) => {
     },
   };
 };
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupSecretsRedactionV2 } from "./v2.js";
+
+export default defineDualPlugin({
+  id: "vvoc.secrets-redaction",
+  v1: SecretsRedactionPlugin,
+  v2: (ctx) => setupSecretsRedactionV2(createV2Adapter(ctx)),
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

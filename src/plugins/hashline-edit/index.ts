@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Route per-model edit tooling: register hashline_edit and dsh str_replace_editor from the single-source contracts, publish their strict input JSON Schemas, validate owned-tool arguments at the hook and direct entries, resolve the session edit mode from vvoc routing config, expose exactly one edit tool per model (the host built-in edit/apply_patch for their cohorts, the plugin profiles otherwise), and transform read output with anchors for hashline sessions.
 //   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, a shared per-session model visibility guard applied first by both the tool.execute.before hook and every registered execute entry, owned tool.definition publication plus structural/branch argument guards, routed read transformation, hashline/str_replace_editor execution through the schema validators and normalizer, bounded post-edit diff feedback, and editMode telemetry metadata with a bounded reporting-failure distinction that never echoes the thrown message and never misreports an applied edit as invalid or pristine.
-//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts]
+//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -11,10 +11,24 @@
 //
 // START_MODULE_MAP
 //   HashlineEditPlugin - Registers routed edit tools (hashline_edit, str_replace_editor), per-model tool visibility, owned contract hooks, and the routed read-output enhancer.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
+//   EDIT_VISIBILITY_TOOLS - Edit tool ids whose visibility routing manages.
+//   isEditTypeTool - Type guard for the two owned edit tool ids.
+//   visibleToolsForMode - Edit tools visible for one edit mode.
+//   assertEditToolVisible - Deny a hidden edit tool for a session before argument detail.
+//   statSnapshot - File stat snapshot for the session file cache.
+//   isReadTool - Read tool id guard.
+//   isHashlineEligibleReadOutput - Guard for read outputs worth transforming.
+//   readArgFilePath - FilePath extraction from read tool arguments.
+//   readSourceLines - Source lines for read arguments when available.
+//   transformReadOutput - Routed read transformation with anchors.
+//   executeHashlineEdit - Owned hashline_edit executor.
+//   executeStrReplaceEditor - Owned str_replace_editor executor.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Registered both edit tools from schemas.ts, published the strict input JSON Schema through tool.definition, added owned argument validation after the existing visibility denial and at direct entries, and narrowed post-write metadata reporting failures without changing literal edit, routing, or anchor semantics.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: C-AGENT-TOOL-CONTRACTS T-005 - Registered both edit tools from schemas.ts, published the strict input JSON Schema through tool.definition, added owned argument validation after the existing visibility denial and at direct entries, and narrowed post-write metadata reporting failures without changing literal edit, routing, or anchor semantics.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
@@ -70,7 +84,7 @@ const PIPE_READ_LINE_PATTERN = /^\s*(\d+)\| ?(.*)$/;
 // built-in `edit` so deepseek/hashline cohorts see exactly one edit tool;
 // `apply_patch` is deliberately absent (its visibility is owned by the host
 // gate and never forced by this plugin).
-const EDIT_VISIBILITY_TOOLS = ["hashline_edit", "edit", "str_replace_editor"] as const;
+export const EDIT_VISIBILITY_TOOLS = ["hashline_edit", "edit", "str_replace_editor"] as const;
 
 // Plugin-owned edit tools only. The host built-in edit/apply_patch are never
 // registered or blocked by this plugin; they serve the `edit`/`apply_patch`
@@ -79,11 +93,11 @@ const EDIT_TYPE_TOOLS = ["hashline_edit", "str_replace_editor"] as const;
 
 type EditTypeTool = (typeof EDIT_TYPE_TOOLS)[number];
 
-function isEditTypeTool(toolName: string): toolName is EditTypeTool {
+export function isEditTypeTool(toolName: string): toolName is EditTypeTool {
   return (EDIT_TYPE_TOOLS as readonly string[]).includes(toolName);
 }
 
-function visibleToolsForMode(mode: EditMode): EditTypeTool[] {
+export function visibleToolsForMode(mode: EditMode): EditTypeTool[] {
   switch (mode) {
     case "hashline_edit":
       return ["hashline_edit"];
@@ -105,7 +119,7 @@ function visibleToolsForMode(mode: EditMode): EditTypeTool[] {
  * session's cached model identity and performs no argument inspection, filesystem
  * access, cache update, or metadata report.
  */
-function assertEditToolVisible(
+export function assertEditToolVisible(
   toolName: EditTypeTool,
   sessionID: string,
   resolveMode: (sessionID: string) => EditMode,
@@ -135,7 +149,7 @@ interface EditTelemetry {
 }
 
 // START_BLOCK_FS_HELPERS
-async function statSnapshot(filePath: string): Promise<FileSnapshot | undefined> {
+export async function statSnapshot(filePath: string): Promise<FileSnapshot | undefined> {
   try {
     const info = await stat(filePath);
     if (!info.isFile()) {
@@ -230,7 +244,7 @@ function publishSuccessMetadata(args: {
   });
 }
 
-function isReadTool(toolName: string): boolean {
+export function isReadTool(toolName: string): boolean {
   return toolName.toLowerCase() === "read";
 }
 
@@ -239,7 +253,7 @@ function isTextFileOutput(output: string): boolean {
   return COLON_READ_LINE_PATTERN.test(firstLine) || PIPE_READ_LINE_PATTERN.test(firstLine);
 }
 
-function isHashlineEligibleReadOutput(output: string): boolean {
+export function isHashlineEligibleReadOutput(output: string): boolean {
   if (!output) {
     return false;
   }
@@ -269,7 +283,7 @@ function isHashlineEligibleReadOutput(output: string): boolean {
   return isTextFileOutput(lines[0] ?? "");
 }
 
-function readArgFilePath(args: unknown): string | undefined {
+export function readArgFilePath(args: unknown): string | undefined {
   if (!args || typeof args !== "object") {
     return undefined;
   }
@@ -284,7 +298,7 @@ function readArgFilePath(args: unknown): string | undefined {
   return undefined;
 }
 
-async function readSourceLines(args: unknown): Promise<string[] | undefined> {
+export async function readSourceLines(args: unknown): Promise<string[] | undefined> {
   const filePath = readArgFilePath(args);
   if (!filePath) {
     return undefined;
@@ -414,7 +428,7 @@ function formatReadLines(
   return result;
 }
 
-function transformReadOutput(output: string, sourceLines?: string[]): string {
+export function transformReadOutput(output: string, sourceLines?: string[]): string {
   if (!output) {
     return output;
   }
@@ -488,7 +502,7 @@ function transformReadOutput(output: string, sourceLines?: string[]): string {
 }
 
 // START_BLOCK_HASHLINE_EXECUTE
-async function executeHashlineEdit(
+export async function executeHashlineEdit(
   args: HashlineEditToolArgs,
   context: ToolContext,
   telemetry: EditTelemetry,
@@ -604,7 +618,7 @@ async function executeHashlineEdit(
 // END_BLOCK_HASHLINE_EXECUTE
 
 // START_BLOCK_STR_REPLACE_EXECUTE
-async function executeStrReplaceEditor(
+export async function executeStrReplaceEditor(
   args: StrReplaceEditorArgs,
   context: ToolContext,
   sessionID: string,
@@ -778,3 +792,15 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
   };
 };
 // END_BLOCK_PLUGIN
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupHashlineEditV2 } from "./v2.js";
+
+export default defineDualPlugin({
+  id: "vvoc.hashline-edit",
+  v1: HashlineEditPlugin,
+  v2: (ctx) => setupHashlineEditV2(createV2Adapter(ctx)),
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

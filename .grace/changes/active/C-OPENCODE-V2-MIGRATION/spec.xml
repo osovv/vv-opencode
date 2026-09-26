@@ -1,0 +1,94 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-OPENCODE-V2-MIGRATION>
+    <Summary>Migrate the vv-opencode plugin package to the OpenCode v2 plugin architecture while keeping v1 (>= 1.18.29) working through the documented dual default-export pattern, redesign model-roles and presets around v2 replayable transforms with config-file reload instead of process restarts, rewrite the ./tui module on the @opencode/plugin/tui CLI plugin API, make install/init/sync/launch version-aware for v1 and v2 config fields, and prove the result end to end against a real sandboxed OpenCode v2 server.</Summary>
+    <Problem>OpenCode v2 (stable since September 2026) replaces the v1 plugin API with an incompatible Plugin.define({ id, setup(ctx) }) contract, moves TUI extension to @opencode/plugin/tui, replaces layered tui.json(c) with one global cli.json, and runs one long-lived background server with thin clients. Every vv-opencode plugin today is a v1 function plugin bound to startup-config snapshots, so none of them load in v2; preset switching requires an OpenCode restart, which under the v2 shared-server model would require restarting the server with all its sessions; and the v1-only tui.json(c) management writes config v2 no longer reads. The maintainer wants to upgrade to v2 personally for the one-server memory model and needs the package to keep v1 users working during a transition window.</Problem>
+    <Goals>
+      <Goal>Ship one package that loads in both OpenCode v1 (>= 1.18.29, via the server() object entrypoint) and v2 (>= 2.0.18, via Plugin.define setup) using the officially documented dual default-export pattern, with a loader probe that empirically verifies both runtimes load each entrypoint exactly once.</Goal>
+      <Goal>Port all eleven server plugins (guardian, hashline-edit, model-roles, system-context-injection, workflow, secrets-redaction, web-tools, tool-history-compaction, analytics, peak-hours, spec-guard) onto v2 domain APIs — tool.hook, tool.transform, session.hook prompt/context/compaction/generate, event.subscribe — preserving each plugin's current behavioral contract including fail-closed tracked-result parsing, BLOCKED and NEEDS_CONTEXT hard stops, and bounded recovery excerpts.</Goal>
+      <Goal>Resolve vvoc configuration per session location instead of one startup snapshot, so a single v2 server hosting multiple projects applies each project's plugin toggles, role maps, and context injections correctly.</Goal>
+      <Goal>Redesign model-roles and presets for v2: role references resolve through agent/model transforms, vvoc.json changes trigger domain reload() without a server restart, and a running session can be anchored to its resolved model so switching presets for new work does not retarget a long-lived autonomous session; the anchoring mechanism is chosen from an empirical experiment against a real v2 server, not from assumption.</Goal>
+      <Goal>Rewrite the ./tui module (context inspector, analytics indicator, branding footer, peak-hours banner) on @opencode/plugin/tui with equivalent user-visible features: a /context command with collection and analysis surfaces, persistent status-slot indicators, and fail-soft registration preserving the existing per-feature isolation.</Goal>
+      <Goal>Make vvoc install, init, sync, and launch version-aware: detect the installed OpenCode major line, keep writing the v1 plugin array for v1 runtimes, write or migrate to the v2 plugins field for v2 runtimes, and keep the conservative never-clobber write discipline with comments, unrelated entries, and tuple options preserved.</Goal>
+      <Goal>Provide a repeatable end-to-end harness that downloads an isolated OpenCode v2 binary, runs it with sandboxed XDG paths and a scratch project, loads the built package, and verifies plugin load status, model-role transform effects, per-session prompt behavior, and preset hot-switching through the v2 server API; no step touches the maintainer's real OpenCode v1 installation, global config, or credentials.</Goal>
+      <Goal>Keep README, package exports, GRACE graph, and GRACE verification synchronized with the dual-runtime behavior, including the new v1 floor of 1.18.29 and the v2 floor of 2.0.18.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not rewrite user configuration into native v2 shapes; v1-field compatibility and in-memory normalization remain the supported path, and native v2 config conversion stays a user-driven action outside this change.</NonGoal>
+      <NonGoal>Do not remove the patch-provider command or its presets; v2 model variants may simplify specific patches later, but this change only keeps patch-provider working under v2 normalization, it does not redesign it.</NonGoal>
+      <NonGoal>Do not change workflow persistence locations, snapshot versions, or state semantics; $XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json stays authoritative in both runtimes.</NonGoal>
+      <NonGoal>Do not implement v2-only features with no v1 equivalent (worktree strategies, integration auth methods, Effect plugin variants) in this change.</NonGoal>
+      <NonGoal>Do not publish, release, or change package versioning beyond what the migration requires; release channel decisions stay with the release policy.</NonGoal>
+      <NonGoal>Do not modify the maintainer's installed OpenCode v1 binary, its global config, or its data directories during verification.</NonGoal>
+      <NonGoal>Do not migrate analytics storage or historical opencode.db readers to v2 data locations in this change; analytics keeps its current paths and any v2 data-location follow-up is separate work.</NonGoal>
+    </NonGoals>
+    <Constraints>
+      <Constraint>The v1 support floor rises to 1.18.29 (object entrypoint support); earlier v1 releases can still consume the previous published vv-opencode versions, and the README states the floor explicitly.</Constraint>
+      <Constraint>Dependencies pin @opencode-ai/plugin and @opencode-ai/sdk at 1.18.32 and add @opencode/plugin 2.0.18; the v2 SDK import must never leak into the v1 server() path and vice versa.</Constraint>
+      <Constraint>The dual default export is the only plugin entrypoint at the package root and at each ./plugins/* subpath; no named export may remain that a v1 runtime would additionally load, preventing double registration in either runtime.</Constraint>
+      <Constraint>Per-session location resolution must be derived from session or event data (session location, project directory), never from the plugin-load location alone, and unresolved locations fail closed to disabled-plugin behavior with a logged warning rather than to enabled defaults.</Constraint>
+      <Constraint>Transform callbacks stay synchronous, cheap, and free of one-time side effects; external data is loaded before registration and domain reload() is called when it changes, matching the v2 replay contract.</Constraint>
+      <Constraint>Workflow protocol guarantees are preserved verbatim in the v2 port: explicit work-item mode, fail-closed tracked-result parsing, bounded recovery excerpts, BLOCKED and NEEDS_CONTEXT as hard stops, and root-session authorization guards.</Constraint>
+      <Constraint>TUI registration stays fail-soft per feature: one failing slot, dialog, or indicator registration never breaks the remaining TUI surface, in both runtimes.</Constraint>
+      <Constraint>All config writes remain conservative and idempotent, never removing comments, unrelated settings, unrelated plugin entries, or tuple options, and never silently migrating invalid configs.</Constraint>
+      <Constraint>The E2E harness runs only inside sandboxed XDG config/data homes and scratch project directories under the repository's designated temp area, downloads the v2 binary into an isolated path, and never writes to the user's real ~/.config/opencode or ~/.local/share/opencode.</Constraint>
+      <Constraint>Every v2 API surface used by the port must be exercised by at least one deterministic unit test with a mocked ctx, and by at least one E2E harness assertion against the real v2 server where the surface permits it.</Constraint>
+      <Constraint>Unit and integration tests must not require network access, real provider credentials, or a globally installed OpenCode v2; only the explicitly invoked E2E harness may download the v2 binary and start a server.</Constraint>
+      <Constraint>Source contracts, README, package exports, GRACE graph, and GRACE verification stay synchronized; graph ownership and verification entries are updated inside this change's lifecycle, not retroactively.</Constraint>
+    </Constraints>
+    <AcceptanceCriteria>
+      <Criterion>The package root and every ./plugins/* subpath default-export a dual entrypoint (Plugin.define spread with a stable id plus server()) that loads exactly once under OpenCode v1.18.32 and under the sandboxed v2 server, proven by loader-probe evidence in both runtimes.</Criterion>
+      <Criterion>All eleven server plugins register their v2 hooks, transforms, tools, and event subscriptions through setup(ctx) with behavior-preserving tests for each plugin's core contract (guardian tool gating, hashline edit routing and visibility, system-context injection, secrets redaction including a generate-path replacement for experimental.text.complete, web-tools registration, tool-history compaction participation, analytics event capture, peak-hours soft/hard behavior, spec-guard checks, workflow tool registration and hard stops).</Criterion>
+      <Criterion>Plugin configuration is resolved per session location in v2: two concurrent sandboxed projects with different toggles produce different behavior in their respective sessions, verified by E2E assertions.</Criterion>
+      <Criterion>Model-role resolution runs as v2 agent/model transforms: a role-referencing agent resolves to the mapped concrete model in the v2 model list, unknown roles fail closed with a logged error, and changing the vvoc.json roles file triggers reload() so the v2 server reflects the new mapping without restart, verified E2E.</Criterion>
+      <Criterion>The preset anchoring decision is documented with empirical evidence: the E2E harness demonstrates either that an in-flight session keeps its anchored model after a preset switch, or that per-session switchModel is required, and the implemented mechanism matches the demonstrated behavior.</Criterion>
+      <Criterion>The rewritten ./tui module loads under v2 CLI plugin runtime, registers a /context slash command with its inspector surface plus the analytics indicator, branding footer, and peak-hours banner in status/footer slots, and every registration remains individually fail-soft, verified by unit tests with a mocked plugin context and by E2E plugin-status evidence.</Criterion>
+      <Criterion>vvoc install and sync write the v1 plugin array for detected v1 runtimes and the v2 plugins field for detected v2 runtimes without ever removing the other version's entries, unrelated entries, comments, or tuple options; launch isolates its temporary config home for both runtime generations.</Criterion>
+      <Criterion>The v1 floor (1.18.29), v2 floor (2.0.18), dual-runtime loading, restart-free preset switching, and per-session preset anchoring are documented in README with commands and paths validated against current source.</Criterion>
+      <Criterion>The full repository gate passes: bun run check, bun run build, bun run pack:check, and the focused v2-port test suites, with no regression in existing v1-path tests beyond the documented floor raise.</Criterion>
+      <Criterion>grace lint and grace status pass with the updated graph and verification projections owning the new and changed anchors, and the final execution gate including the E2E harness run completes with recorded evidence.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-GUARDIAN />
+      <M-PLUGIN-HASHLINE-EDIT />
+      <M-PLUGIN-MODEL-ROLES />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-PLUGIN-WORKFLOW />
+      <M-PLUGIN-SECRETS-REDACTION />
+      <M-PLUGIN-WEB-TOOLS />
+      <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+      <M-PLUGIN-ANALYTICS />
+      <M-PLUGIN-PEAK-HOURS />
+      <M-PLUGIN-SPEC-GUARD />
+      <M-PLUGIN-CONTEXT-TUI />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-CONFIG-LAYERS />
+      <M-CLI-CONFIG />
+      <M-CLI-INIT />
+      <M-CLI-PRESET />
+      <M-CLI-PATCH-PROVIDER />
+      <M-MODEL-ROLES />
+      <M-VVOC-PRESET-REGISTRY />
+      <M-AGENT-TOOL-CONTRACT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/ src/lib/model-roles.test.ts src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bun run e2e:v2</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh unit-test output proves each v2 hook, transform, and tool registration against a mocked ctx with behavior preserved from the v1 contracts; loader-probe output proves single dual-entrypoint loading under real v1.18.32 and the sandboxed v2 server; the E2E harness transcript proves plugin load status, per-location toggles, role-map transform effects, prompt-path injections, preset hot-switch via reload, and the anchoring decision, all inside sandboxed XDG homes with no writes to the user's real OpenCode state; repository, build, pack, and GRACE gates pass with synchronized graph and verification projections.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user explicitly approved autonomous end-to-end execution of this migration on the migrate-to-opencode-v2 branch, including writing the spec, plan, implementation, and verification, with a fully working v2-verified result expected at the end.</Assumption>
+      <Assumption>OpenCode v2 stable (2.0.18 as of 2026-09-26) exposes @opencode/plugin and @opencode/plugin/tui with the documented Plugin.define, domain transforms, session hooks, and CLI plugin context; the v2 plugin API may still evolve and the pinned 2.0.18 SDK defines the supported surface for this change.</Assumption>
+      <Assumption>OpenCode v1 1.18.29+ loads object entrypoints through server() as documented in the official v1-to-v2 plugin migration guide; the Phase 0 loader probe against a real OpenCode 1.18.32 additionally verified that v1 invokes setup() on the same dual entrypoint through its reduced v2 bridge host whose context lacks tool, session, event, storage, app, and location, so the v2 setup path feature-detects the full v2 domain set and no-ops under the v1 bridge while server() provides the v1 behavior; named exports are never loaded when a detectable dual default export is present.</Assumption>
+      <Assumption>v1 users below 1.18.29 fall outside the support window and keep using previously published vv-opencode versions; this floor trade-off is accepted by the user as part of the approved migration direction.</Assumption>
+      <Assumption>Whether an in-flight v2 session re-resolves globally transformed agent models per request is unknown at spec time; the migration implements anchoring based on the E2E experiment outcome rather than assuming either behavior.</Assumption>
+      <Assumption>E2E probe findings against real OpenCode 2.0.18 (2026-09-26): v2 config normalization strips vv-role model strings from config-defined agents; external plugin agent transforms write a plugin-host registry that config-defined agents and session model selection do not read (probe-verified: transforms never see config agents, sessions fall back to the default model); the prompt hook plus ctx.session.switchModel is the verified mechanism for applying role-resolved models per session, applied once per session so long-running sessions stay anchored to their starting preset while new sessions resolve against the current role map; ctx.agent.list returns a location-wrapped response rather than a bare array; Model.Ref uses the object form { providerID, id, variant? }; directory-scoped plugin targets require literal server.js/tui.js modules next to the package manifest because Host.resolve does not consult the exports map for file-path targets.</Assumption>
+      <Assumption>The sandboxed E2E environment can run the v2 server without real provider credentials for all assertions that exercise plugin loading, transforms, permissions-independent hooks, and config effects; model-call-dependent behaviors are covered by unit tests with mocked ctx instead.</Assumption>
+      <Assumption>v2 reads v1 config fields including plugin arrays and provider objects with in-memory normalization, so patch-provider outputs and existing user configs remain loadable during the transition without rewriting.</Assumption>
+    </Assumptions>
+  </C-OPENCODE-V2-MIGRATION>
+</GraceChangeSpec>

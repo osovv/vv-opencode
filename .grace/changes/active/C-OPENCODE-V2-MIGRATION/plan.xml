@@ -1,0 +1,404 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-OPENCODE-V2-MIGRATION>
+    <IntentSummary>Make @osovv/vv-opencode a dual-runtime plugin package (OpenCode v1 >= 1.18.29 via server() and v2 >= 2.0.18 via Plugin.define setup) by adding a v2 runtime adapter with per-session location config resolution, porting all eleven server plugins onto v2 domain APIs with behavior-preserving tests, redesigning model-roles and presets as replayable transforms with file-watch reload and an experimentally anchored per-session model, rewriting the ./tui module on @opencode/plugin/tui, making install/init/sync/launch runtime-version aware, and proving everything with a sandboxed end-to-end v2 server harness plus the repository, pack, and GRACE gates.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-GUARDIAN</Value>
+        <Value>M-PLUGIN-HASHLINE-EDIT</Value>
+        <Value>M-PLUGIN-MODEL-ROLES</Value>
+        <Value>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value>
+        <Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>M-PLUGIN-SECRETS-REDACTION</Value>
+        <Value>M-PLUGIN-WEB-TOOLS</Value>
+        <Value>M-PLUGIN-TOOL-HISTORY-COMPACTION</Value>
+        <Value>M-PLUGIN-PEAK-HOURS</Value>
+        <Value>M-PLUGIN-SPEC-GUARD</Value>
+        <Value>M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>M-CONFIG-LAYERS</Value>
+        <Value>V-M-PLUGIN-WORKFLOW</Value>
+        <Value>V-M-PLUGIN-GUARDIAN</Value>
+        <Value>V-M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>src/index.ts</Value>
+        <Value>src/tui.tsx</Value>
+        <Value>src/plugins/guardian/index.ts</Value>
+        <Value>src/plugins/hashline-edit/index.ts</Value>
+        <Value>src/plugins/model-roles/index.ts</Value>
+        <Value>src/plugins/system-context-injection/index.ts</Value>
+        <Value>src/plugins/workflow/index.ts</Value>
+        <Value>src/plugins/secrets-redaction/index.ts</Value>
+        <Value>src/plugins/web-tools/index.ts</Value>
+        <Value>src/plugins/analytics/index.ts</Value>
+        <Value>src/plugins/peak-hours/index.ts</Value>
+        <Value>src/plugins/spec-guard/index.ts</Value>
+        <Value>src/lib/opencode/plugin-registration.ts</Value>
+        <Value>src/commands/install.ts</Value>
+        <Value>src/commands/launch.ts</Value>
+        <Value>package.json</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain>
+        <File>package.json</File>
+        <Text>@opencode-ai/plugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>WorkflowPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/workflow/index.ts</File>
+        <Text>tool.execute.before</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/secrets-redaction/index.ts</File>
+        <Text>experimental.chat.messages.transform</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/model-roles/index.ts</File>
+        <Text>config: async</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/tui.tsx</File>
+        <Text>@opencode-ai/plugin/tui</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-V2-RUNTIME</Module>
+        <Module>M-PLUGIN-GUARDIAN</Module>
+        <Module>M-PLUGIN-HASHLINE-EDIT</Module>
+        <Module>M-PLUGIN-MODEL-ROLES</Module>
+        <Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module>
+        <Module>M-PLUGIN-WORKFLOW</Module>
+        <Module>M-PLUGIN-SECRETS-REDACTION</Module>
+        <Module>M-PLUGIN-WEB-TOOLS</Module>
+        <Module>M-PLUGIN-TOOL-HISTORY-COMPACTION</Module>
+        <Module>M-PLUGIN-ANALYTICS</Module>
+        <Module>M-PLUGIN-PEAK-HOURS</Module>
+        <Module>M-PLUGIN-SPEC-GUARD</Module>
+        <Module>M-PLUGIN-CONTEXT-TUI</Module>
+        <Module>M-CONFIG-LAYERS</Module>
+        <Module>M-E2E-V2-HARNESS</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/plugins/v2-runtime/index.ts</Value>
+        <Value>src/plugins/v2-runtime/index.test.ts</Value>
+        <Value>scripts/e2e-v2.ts</Value>
+        <Value>scripts/e2e-v2.test.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>package.json</File>
+        <Text>@opencode/plugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>setupV2Plugins</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>defineDualPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/workflow/v2.ts</File>
+        <Text>tool.hook</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/secrets-redaction/v2.ts</File>
+        <Text>session.hook</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/model-roles/v2.ts</File>
+        <Text>transform</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/tui.tsx</File>
+        <Text>@opencode/plugin/tui</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>1.18.29</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>OpenCode 2</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-V2-RUNTIME />
+        <M-PLUGIN-GUARDIAN />
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-PLUGIN-MODEL-ROLES />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-PLUGIN-WORKFLOW />
+        <M-PLUGIN-SECRETS-REDACTION />
+        <M-PLUGIN-WEB-TOOLS />
+        <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <M-PLUGIN-ANALYTICS />
+        <M-PLUGIN-PEAK-HOURS />
+        <M-PLUGIN-SPEC-GUARD />
+        <M-PLUGIN-CONTEXT-TUI />
+        <M-CONFIG-LAYERS />
+        <M-CLI-CONFIG />
+        <M-CLI-INIT />
+        <M-CLI-PRESET />
+        <M-MODEL-ROLES />
+        <M-E2E-V2-HARNESS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-V2-RUNTIME />
+        <V-M-PLUGIN-GUARDIAN />
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-PLUGIN-MODEL-ROLES />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-PLUGIN-WORKFLOW />
+        <V-M-PLUGIN-SECRETS-REDACTION />
+        <V-M-PLUGIN-WEB-TOOLS />
+        <V-M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <V-M-PLUGIN-ANALYTICS />
+        <V-M-PLUGIN-PEAK-HOURS />
+        <V-M-PLUGIN-SPEC-GUARD />
+        <V-M-PLUGIN-CONTEXT-TUI />
+        <V-M-E2E-V2-HARNESS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-OPENCODE-V2-MIGRATION/plan.xml</File>
+      <File>package.json</File>
+      <File>src/index.ts</File>
+      <File>src/tui.tsx</File>
+      <File>src/plugins/v2-runtime/index.ts</File>
+      <File>src/plugins/v2-runtime/index.test.ts</File>
+      <File>src/plugins/guardian/index.ts</File>
+      <File>src/plugins/guardian/index.test.ts</File>
+      <File>src/plugins/hashline-edit/index.ts</File>
+      <File>src/plugins/hashline-edit/index.test.ts</File>
+      <File>src/plugins/model-roles/index.ts</File>
+      <File>src/plugins/model-roles/index.test.ts</File>
+      <File>src/plugins/system-context-injection/index.ts</File>
+      <File>src/plugins/system-context-injection/index.test.ts</File>
+      <File>src/plugins/workflow/index.ts</File>
+      <File>src/plugins/workflow/index.test.ts</File>
+      <File>src/plugins/workflow.integration.test.ts</File>
+      <File>src/plugins/secrets-redaction/index.ts</File>
+      <File>src/plugins/secrets-redaction/index.test.ts</File>
+      <File>src/plugins/web-tools/index.ts</File>
+      <File>src/plugins/web-tools/index.test.ts</File>
+      <File>src/plugins/tool-history-compaction/index.ts</File>
+      <File>src/plugins/tool-history-compaction/index.test.ts</File>
+      <File>src/plugins/analytics/index.ts</File>
+      <File>src/plugins/analytics/index.test.ts</File>
+      <File>src/plugins/peak-hours/index.ts</File>
+      <File>src/plugins/peak-hours/index.test.ts</File>
+      <File>src/plugins/spec-guard/index.ts</File>
+      <File>src/plugins/spec-guard/index.test.ts</File>
+      <File>src/tui/context/plugin.ts</File>
+      <File>src/tui/context/plugin.test.ts</File>
+      <File>src/tui/analytics/indicator.tsx</File>
+      <File>src/tui/branding/footer.tsx</File>
+      <File>src/tui/peak-hours/banner.tsx</File>
+      <File>src/lib/model-roles.ts</File>
+      <File>src/lib/model-roles.test.ts</File>
+      <File>src/lib/opencode/plugin-registration.ts</File>
+      <File>src/lib/opencode/plugin-registration.test.ts</File>
+      <File>src/lib/opencode/paths.ts</File>
+      <File>src/lib/config-layers.ts</File>
+      <File>src/lib/config-layers.test.ts</File>
+      <File>src/commands/install.ts</File>
+      <File>src/commands/init.ts</File>
+      <File>src/commands/launch.ts</File>
+      <File>src/commands/preset.ts</File>
+      <File>scripts/e2e-v2.ts</File>
+      <File>scripts/e2e-v2.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/context/requirements.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Foundation: dependency bump and dual-entry architecture with loader probe.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>package.json pins @opencode-ai/plugin and @opencode-ai/sdk at 1.18.32, adds @opencode/plugin at 2.0.18 as a dependency, and the lockfile installs cleanly.</Criterion>
+          <Criterion>src/index.ts default-exports the dual entrypoint built from Plugin.define({ id: "vvoc", setup }) spread plus a server() implementation aggregating the eleven v1 plugin behaviors, and no named Plugin function exports remain at the package root.</Criterion>
+          <Criterion>Each ./plugins/* subpath module default-exports its own dual entrypoint with a stable id so per-plugin consumers keep working, again without named Plugin exports.</Criterion>
+          <Criterion>A loader probe script exercises the built package under the locally installed OpenCode v1.18.32 and records evidence that the server() path loads exactly once with no double registration.</Criterion>
+          <Criterion>The v1 behavioral test suites still pass unchanged apart from import-site adjustments caused by the default-export switch.</Criterion>
+          <Criterion>MODULE_CONTRACT, MODULE_MAP, block anchors, and change summaries are updated in every touched file.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins src/lib</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>v2 runtime adapter with per-session location config resolution.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/v2-runtime exports the shared v2 adapter: plugin id registry, per-domain registration helpers, and a location-aware vvoc config resolver that derives the effective config from session or event location data rather than the plugin-load directory.</Criterion>
+          <Criterion>Unresolvable locations fail closed to disabled-plugin behavior with a logged warning; two different locations resolve to two different configs in deterministic tests with injected loaders.</Criterion>
+          <Criterion>The adapter exposes a config-watch utility that observes vvoc.json changes and invokes a caller-provided reload callback, with debouncing and error isolation, proven by tests using temp directories.</Criterion>
+          <Criterion>The root setup(ctx) wires every enabled plugin through the adapter and returns a cleanup function disposing all registrations, watchers, and timers.</Criterion>
+          <Criterion>Unit tests cover adapter wiring with a mocked ctx capturing tool.hook, tool.transform, session.hook, and event.subscribe registrations per enabled or disabled plugin toggle.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/v2-runtime/index.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Port hook-driven plugins: guardian, secrets-redaction, analytics, peak-hours, spec-guard.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>guardian registers ctx.tool.hook("execute.before") preserving its permission gate contract, tool allowlist semantics, and deny messaging, with tests using a mocked ctx and tool events.</Criterion>
+          <Criterion>secrets-redaction registers ctx.tool.hook("execute.before") and ctx.session.hook("context") for message redaction, replaces experimental.text.complete with the narrowest v2 equivalent for the generate path, and keeps fail-open redaction-error behavior with tests covering tool-part state redaction.</Criterion>
+          <Criterion>analytics subscribes through ctx.event.subscribe with abort cleanup and records the same event fields as the v1 implementation, proven by tests with a mocked event stream.</Criterion>
+          <Criterion>peak-hours registers ctx.session.hook("prompt") with soft note and hard block preserved, grace semantics re-derived from persisted session fields through v2 client calls, and fail-open schedule parsing, with injectable-clock tests.</Criterion>
+          <Criterion>spec-guard ports its validation surface onto the v2 equivalents of the hooks it uses today with behavior-preserving tests.</Criterion>
+          <Criterion>Every ported module keeps v1 behavior through server() and adds v2 behavior through setup with both paths covered by tests.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/guardian src/plugins/secrets-redaction src/plugins/analytics src/plugins/peak-hours src/plugins/spec-guard</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Port context and tool plugins: system-context-injection, hashline-edit, web-tools, tool-history-compaction.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>system-context-injection registers ctx.session.hook("context") appending its policy system blocks to event.system per session location, preserving selection logic and fail-soft behavior, with tests proving injection for matching profiles and absence for disabled toggles.</Criterion>
+          <Criterion>hashline-edit registers tool visibility through ctx.session.hook("context") editing event.tools, its custom tools through ctx.tool.transform, and its guards through ctx.tool.hook before and after, preserving per-model routing and the single-visible-edit-tool contract with table-driven tests.</Criterion>
+          <Criterion>web-tools registers fetch and search tools through ctx.tool.transform with input schemas preserved and executor signal handling added, with tests using a mocked ctx.</Criterion>
+          <Criterion>tool-history-compaction participates through the v2 compaction hook equivalent of its current behavior with tests proving bounded pruning of obsolete tool outputs.</Criterion>
+          <Criterion>Transform callbacks stay synchronous and side-effect free; external data loads before registration and reload is invoked when the location config changes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/system-context-injection src/plugins/hashline-edit src/plugins/web-tools src/plugins/tool-history-compaction</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Port the workflow plugin with protocol guarantees intact.</Title>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-004</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>workflow registers work_item_open, work_item_list, work_item_close, work_item_decide, and work_checkpoint tools through ctx.tool.transform with identical strict JSON schemas and early validation guards in tool.hook before.</Criterion>
+          <Criterion>chat.message guidance moves to ctx.session.hook with the profile-selected injection preserved; tracked result parsing stays fail-closed with bounded excerpts; BLOCKED and NEEDS_CONTEXT remain hard stops.</Criterion>
+          <Criterion>Root-session authorization guards port to v2 session identity with the same denial cases: child sessions, untrusted workspaces, and unverifiable session identity.</Criterion>
+          <Criterion>Persistence stays at $XDG_DATA_HOME/vvoc/workflow/&lt;sessionId&gt;/workflow-state.json with unchanged snapshot versions and hydration rules, verified by the existing integration test suite adapted to the v2 entrypoint.</Criterion>
+          <Criterion>The failed-attempt consumption path (host terminal errors on foreground vv-implementer launches) and the one-shot bounded continuation preserve their v1 semantics under v2 tool hooks.</Criterion>
+          <Criterion>src/plugins/workflow.integration.test.ts passes against the dual entrypoint exercising both runtimes' registration paths.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow/index.test.ts src/plugins/workflow.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Redesign model-roles and presets for v2 transforms with hot reload and session anchoring.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Role resolution runs as agent and model transforms: role-referencing agent models resolve through the role map inside transform callbacks, with unknown roles failing closed through the v1 error semantics and logging.</Criterion>
+          <Criterion>The adapter watches the effective vvoc.json for the server lifetime and calls agent.reload() and model.reload() on role or preset changes so new sessions and subsequent requests see the new mapping without a server restart.</Criterion>
+          <Criterion>The E2E anchoring experiment runs against the real v2 server and records whether an in-flight session re-resolves transformed agent models per request; the implemented anchoring (session-pinned switchModel when needed) matches the recorded behavior and is documented.</Criterion>
+          <Criterion>vvoc preset apply output no longer claims a restart is required when the target runtime is v2; the message distinguishes v1 restart semantics from v2 reload semantics.</Criterion>
+          <Criterion>Deterministic tests cover transform resolution, reload triggering from the config watcher, fail-closed unknown roles, and anchoring behavior with mocked and, where possible, real v2 surfaces.</Criterion>
+          <Criterion>v1 behavior through server() is unchanged: startup snapshot resolution with the existing restart requirement.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/model-roles src/lib/model-roles.test.ts src/commands/preset.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Rewrite the ./tui module on @opencode/plugin/tui.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/tui.tsx default-exports a Plugin.define CLI plugin from @opencode/plugin/tui with a stable id and setup registering the context inspector, analytics indicator, branding footer, and peak-hours banner.</Criterion>
+          <Criterion>The context inspector registers a /context slash command and its dialog or route surface with collection and analysis features preserved from the v1 inspector, driven through context.ui, context.keymap, and context.data equivalents.</Criterion>
+          <Criterion>The analytics indicator and branding footer attach to home.footer or home.footer.status slots and the peak-hours banner attaches to an equivalent persistent slot, each rendering the same information as in v1.</Criterion>
+          <Criterion>Every registration keeps per-feature fail-soft isolation with cleanup functions returned from setup.</Criterion>
+          <Criterion>package.json ./tui export and peer dependencies (opentui, solid-js) satisfy the @opencode/plugin/tui runtime import contract, and pack:check imports the ./tui export successfully.</Criterion>
+          <Criterion>Unit tests with a mocked CLI plugin context prove command registration, slot attachment, toggle gating, and fail-soft behavior without real terminal rendering.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Version-aware install, init, sync, and launch plus README documentation.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+          <Task>T-006</Task>
+          <Task>T-007</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>install, init, and sync detect the installed OpenCode runtime line (v1 versus v2 via binary version probing with a documented fallback) and write the pinned package into the v1 plugin array or the v2 plugins field respectively, never removing the other line's entries, comments, unrelated settings, or tuple options.</Criterion>
+          <Criterion>The TUI package registration path keeps the pinned ./tui selection working for v1 tui.json(c) and adds the v2 cli.json global plugin registration where the v2 runtime is detected, preserving conservative write discipline.</Criterion>
+          <Criterion>launch isolates its temporary config home for both runtime generations and keeps the file URL replacement behavior for local testing.</Criterion>
+          <Criterion>README documents the dual-runtime support matrix (v1 floor 1.18.29, v2 floor 2.0.18), the loader behavior, restart versus reload semantics for presets per runtime, the v2 architecture context, and every changed command path, validated line by line against current source.</Criterion>
+          <Criterion>All existing install, sync, and launch tests pass plus new tests covering both runtime detection branches and conservative writes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/install.test.ts src/lib/opencode.test.ts src/commands/launch.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Sandboxed end-to-end v2 harness and verification run.</Title>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-004</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+          <Task>T-007</Task>
+          <Task>T-008</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>scripts/e2e-v2.ts downloads an isolated OpenCode v2 binary into a repository-ignored temp path, creates sandboxed XDG config and data homes plus a scratch project, and never writes to the user's real OpenCode state.</Criterion>
+          <Criterion>The harness loads the freshly built package into the v2 server and asserts: plugin status includes the vvoc plugin id, model-role transforms resolve role references, per-location toggles produce different plugin behavior across two projects, and the prompt path reflects system-context injection.</Criterion>
+          <Criterion>The harness exercises preset hot-switching: editing vvoc.json roles changes the resolved model list without a server restart, and the anchoring behavior for an in-flight session is recorded as evidence.</Criterion>
+          <Criterion>The harness asserts the TUI plugin entry loads as a CLI plugin where the sandboxed runtime permits, or records a precise skip reason when it cannot.</Criterion>
+          <Criterion>A bun run e2e:v2 script runs the harness, its unit-testable parts (sandbox layout, assertion helpers, config generation) are covered by scripts/e2e-v2.test.ts without network access, and the full run is executed once with output recorded as final evidence.</Criterion>
+          <Criterion>The harness fails loudly with a nonzero exit on any assertion failure and prints a machine-readable summary of checks passed and skipped.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/e2e-v2.test.ts</Command>
+          <Command>bun run e2e:v2</Command>
+        </Verification>
+      </T-009>
+      <T-010>
+        <Title>Synchronize GRACE state and run the final execution gate.</Title>
+        <DependsOn>T-009</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The routed graph owns M-PLUGIN-V2-RUNTIME and M-E2E-V2-HARNESS with accurate paths, purposes, dependencies, and verification links, and every affected plugin, CLI, and config module entry reflects the dual-runtime behavior.</Criterion>
+          <Criterion>The verification projection owns V-M-PLUGIN-V2-RUNTIME and V-M-E2E-V2-HARNESS and updates affected existing entries with the new commands and scenarios including the E2E harness.</Criterion>
+          <Criterion>requirements.xml records the dual-runtime support goal and the v2 server architecture driver.</Criterion>
+          <Criterion>grace lint with baseline, target, and final assertion phases passes for C-OPENCODE-V2-MIGRATION, and grace status is healthy.</Criterion>
+          <Criterion>bun run check, bun run build, bun run pack:check, and bun run e2e:v2 all pass freshly, and git diff contains only observed-scope files with no generated dist content or secrets.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run e2e:v2</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-010>
+    </ImplementationPlan>
+  </C-OPENCODE-V2-MIGRATION>
+</GraceChangePlan>

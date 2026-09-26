@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Annotate reads and validate writes of active .vvoc spec-package XML artifacts with lint verdicts, failing writes in enforce mode only when ERROR-severity findings exist.
 //   SCOPE: Startup vvoc snapshot resolution and spec-guard entry parsing, active-vs-archive path gating, cache-backed lint runs with cross-file sibling spec resolution for plans, read annotation through tool.execute.after output mutation, write validation through tool.execute.before for full-content writes and tool.execute.after for edits, enforce throwing only on ERROR findings, and fail-open degradation to warning logs.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/spec-lint.ts, src/lib/spec-lint-cache.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/spec-lint.ts, src/lib/spec-lint-cache.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-SPEC-GUARD, M-SPEC-LINT, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -20,10 +20,11 @@
 //   lintSpecGuardFile - Runs a cache-backed lint for one artifact with its sibling spec when applicable.
 //   createSpecGuardPlugin - Builds the spec-guard server plugin with injectable dependencies.
 //   SpecGuardPlugin - Default production spec-guard server plugin.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Read-path verdicts now derive from the artifact file on disk instead of the tool's rendered output, whose envelope tags and line prefixes are host-specific.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: DIRECT-FIX - Read-path verdicts now derive from the artifact file on disk instead of the tool's rendered output, whose envelope tags and line prefixes are host-specific.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -285,3 +286,15 @@ function isWriteToolArgs(args: unknown): boolean {
 
 export const SpecGuardPlugin: Plugin = createSpecGuardPlugin();
 // END_BLOCK_PLUGIN_ENTRY
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupSpecGuardV2 } from "./v2.js";
+
+export default defineDualPlugin({
+  id: "vvoc.spec-guard",
+  v1: SpecGuardPlugin,
+  v2: (ctx) => setupSpecGuardV2(createV2Adapter(ctx)),
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY
