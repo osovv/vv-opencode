@@ -30,6 +30,8 @@ import { setupModelRolesV2 } from "../model-roles/v2.js";
 import { setupToolHistoryCompactionV2 } from "../tool-history-compaction/v2.js";
 import { setupSpecGuardV2 } from "../spec-guard/v2.js";
 import { setupSecretsRedactionV2 } from "../secrets-redaction/v2.js";
+import { setupPeakHoursV2 } from "../peak-hours/v2.js";
+import { setupWebToolsV2 } from "../web-tools/v2.js";
 
 // START_BLOCK_V2_ADAPTER_CONTEXT
 /**
@@ -63,6 +65,8 @@ export const V2_PLUGIN_SETUPS: Array<{
   { name: "tool-history-compaction", setup: (adapter) => setupToolHistoryCompactionV2(adapter) },
   { name: "spec-guard", setup: (adapter) => setupSpecGuardV2(adapter) },
   { name: "secrets-redaction", setup: (adapter) => setupSecretsRedactionV2(adapter) },
+  { name: "peak-hours", setup: (adapter) => setupPeakHoursV2(adapter) },
+  { name: "web-tools", setup: (adapter) => setupWebToolsV2(adapter) },
 ];
 // END_BLOCK_V2_PLUGIN_SETUPS
 

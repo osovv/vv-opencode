@@ -129,10 +129,12 @@ export const WebToolsPlugin: Plugin = async ({ client, directory }) => {
 
 // START_BLOCK_DUAL_SUBPATH_ENTRY
 import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupWebToolsV2 } from "./v2.js";
 
 export default defineDualPlugin({
   id: "vvoc.web-tools",
   v1: WebToolsPlugin,
-  v2: async () => {},
+  v2: (ctx) => setupWebToolsV2(createV2Adapter(ctx)),
 });
 // END_BLOCK_DUAL_SUBPATH_ENTRY
