@@ -256,31 +256,36 @@ export async function setupModelRolesV2(
   // the pinned selection; new sessions resolve against the current role map,
   // which the config watcher refreshes without a server restart.
   const appliedSessions = new Set<string>();
-  const promptRegistration = await adapter.ctx.session.hook("prompt", async (event) => {
-    try {
-      const sessionID = String(event.sessionID);
-      if (appliedSessions.has(sessionID)) return;
-      const session = await adapter.ctx.session.get({ sessionID });
-      const agent = (session as { agent?: unknown } | undefined)?.agent;
-      if (typeof agent !== "string" || !agent) return;
-      const reference = state.agentRoleReferences[agent];
-      if (!reference) return;
-      const resolved = resolveReferenceOrLog(reference, state.roleMap, `agent.${agent}.model`);
-      if (!resolved) return;
-      const parsed = parseModelSelection(resolved);
-      const variantMatch = /^(.+)#(.+)$/.exec(parsed.model);
-      await adapter.ctx.session.switchModel({
-        sessionID: event.sessionID,
-        model: {
-          providerID: parsed.provider,
-          id: variantMatch ? variantMatch[1] : parsed.model,
-          ...(variantMatch ? { variant: variantMatch[2] } : {}),
-        },
-      });
-      appliedSessions.add(sessionID);
-    } catch (error) {
-      console.warn(`[vvoc][model-roles] prompt model application failed: ${String(error)}`);
-    }
+  const promptRegistration = await adapter.ctx.session.hook("prompt", (event) => {
+    // Fire-and-forget: awaiting the switch inside admission races the first
+    // model dispatch (probe-verified — the awaited form interrupts the
+    // request), while the unawaited form lands before dispatch in practice.
+    void (async () => {
+      try {
+        const sessionID = String(event.sessionID);
+        if (appliedSessions.has(sessionID)) return;
+        const session = await adapter.ctx.session.get({ sessionID });
+        const agent = (session as { agent?: unknown } | undefined)?.agent;
+        if (typeof agent !== "string" || !agent) return;
+        const reference = state.agentRoleReferences[agent];
+        if (!reference) return;
+        const resolved = resolveReferenceOrLog(reference, state.roleMap, `agent.${agent}.model`);
+        if (!resolved) return;
+        const parsed = parseModelSelection(resolved);
+        const variantMatch = /^(.+)#(.+)$/.exec(parsed.model);
+        await adapter.ctx.session.switchModel({
+          sessionID: event.sessionID,
+          model: {
+            providerID: parsed.provider,
+            id: variantMatch ? variantMatch[1] : parsed.model,
+            ...(variantMatch ? { variant: variantMatch[2] } : {}),
+          },
+        });
+        appliedSessions.add(sessionID);
+      } catch (error) {
+        console.warn(`[vvoc][model-roles] prompt model application failed: ${String(error)}`);
+      }
+    })();
   });
   // END_BLOCK_PROMPT_MODEL_APPLICATION
 
