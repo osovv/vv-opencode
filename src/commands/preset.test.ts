@@ -636,7 +636,7 @@ describe("applyPreset", () => {
       expect(stdout).toContain("orchestration: kept (balanced)");
       expect(stdout).toContain(`Target: ${paths.vvocConfigPath}`);
       expect(stdout).toContain(
-        "Restart OpenCode to apply the changed roles or orchestration profile.",
+        "On OpenCode v1, restart OpenCode to apply the changed roles or orchestration profile. On OpenCode v2, the config watcher applies them without a restart; running sessions stay anchored to their starting preset.",
       );
       const vvocConfig = await readVvocConfig(paths);
       expect(vvocConfig?.roles.default).toBe("zai-coding-plan/vv-glm-5.3-flash-max");

@@ -322,4 +322,6 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-void main();
+if (import.meta.main) {
+  void main();
+}
