@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve vv-role references in supported OpenCode config model fields during plugin config hooks.
 //   SCOPE: Canonical role-map extraction from the shared startup vvoc config snapshot, supported field traversal, role reference resolution, structured logging, and explicit failure surfaces.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Used the shared startup vvoc config snapshot for plugin toggles and role-map loading.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: v0.3.0 - Used the shared startup vvoc config snapshot for plugin toggles and role-map loading.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -261,3 +261,13 @@ export const ModelRolesPlugin: Plugin = async ({ client, directory }) => {
   };
 };
 // END_BLOCK_PLUGIN_ENTRY
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+
+export default defineDualPlugin({
+  id: "vvoc.model-roles",
+  v1: ModelRolesPlugin,
+  v2: async () => {},
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: OpenCode plugin that redacts secrets from messages before LLM requests and restores them after.
 //   SCOPE: Startup vvoc config snapshot use plus 3 hook handlers — chat.messages.transform (text, reasoning, and tool-part state redaction), text.complete, tool.execute.before
-//   DEPENDS: src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, session, engine, patterns, restore, deep, config
+//   DEPENDS: src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, session, engine, patterns, restore, deep, config, src/plugins/v2-runtime/index.ts
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.3.0 - Fixed a redaction bypass: tool-part payloads (ToolPart.state input/output/error/metadata) are now deep-redacted in chat.messages.transform; removed the dead msg.info.state path that never matched the SDK message shape.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: v1.3.0 - Fixed a redaction bypass: tool-part payloads (ToolPart.state input/output/error/metadata) are now deep-redacted in chat.messages.transform; removed the dead msg.info.state path that never matched the SDK message shape.]
 // END_CHANGE_SUMMARY
 
 import { resolveSecretsRedactionRuntimeConfig } from "./config.js";
@@ -141,3 +141,13 @@ export const SecretsRedactionPlugin: Plugin = async (ctx) => {
     },
   };
 };
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+
+export default defineDualPlugin({
+  id: "vvoc.secrets-redaction",
+  v1: SecretsRedactionPlugin,
+  v2: async () => {},
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

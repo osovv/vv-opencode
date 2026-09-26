@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject universal primary guidance, including correctness obligations and evidence discipline for behavior changes, and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
 //   SCOPE: Universal instructions with correctness obligations, material-assumption discipline, settled-conclusion reopen triggers, false-premise handling, and pressure-versus-evidence distinction; vv-controller policy selection; explore-worker guidance; known subagent filtering; startup vvoc snapshot use; custom subagent tracking; and chat.message injection.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added settled-evidence reopen triggers, false-premise handling, pressure-versus-evidence distinction, and test-results-as-evidence wording, while preserving material-assumption discipline, repository-answerable question resolution, and honest uncertainty.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: DIRECT-FIX refine-thinking-discipline - Added settled-evidence reopen triggers, false-premise handling, pressure-versus-evidence distinction, and test-results-as-evidence wording, while preserving material-assumption discipline, repository-answerable question resolution, and honest uncertainty.]
 // END_CHANGE_SUMMARY
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
@@ -274,3 +274,13 @@ export const SystemContextInjectionPlugin: Plugin = async ({ directory }) => {
   };
 };
 // END_BLOCK_PLUGIN_ENTRY
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+
+export default defineDualPlugin({
+  id: "vvoc.system-context-injection",
+  v1: SystemContextInjectionPlugin,
+  v2: async () => {},
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

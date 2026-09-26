@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Block LLM requests whose model provider is in configured peak hours in hard mode, with dynamic off-peak provider suggestions and session-age plus subagent grace; soft mode never mutates messages.
 //   SCOPE: Startup vvoc snapshot resolution and peak-hours entry parsing, internal and subagent-like agent exemptions, persisted-session grace lookup, connected provider enumeration with bounded fallback, hard blocking through a chat.params error raised after the user message is persisted, soft pass-through without any server-side message mutation, and fail-open degradation.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/managed-agents.ts, src/lib/peak-hours.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/managed-agents.ts, src/lib/peak-hours.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-PEAK-HOURS, M-PEAK-HOURS-SCHEDULES, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Removed the soft-mode chat.message system-note injection so soft mode passes messages through untouched; peak cost state stays visible through the TUI banner only.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: DIRECT-FIX - Removed the soft-mode chat.message system-note injection so soft mode passes messages through untouched; peak cost state stays visible through the TUI banner only.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -359,3 +359,13 @@ export function createPeakHoursPlugin(
 
 export const PeakHoursPlugin: Plugin = createPeakHoursPlugin();
 // END_BLOCK_PLUGIN_ENTRY
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+
+export default defineDualPlugin({
+  id: "vvoc.peak-hours",
+  v1: PeakHoursPlugin,
+  v2: async () => {},
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

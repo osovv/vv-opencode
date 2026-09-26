@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Collect per-step token usage telemetry and session metadata into the analytics store with vvoc and OpenCode version attribution.
 //   SCOPE: Plugin toggle gating, assistant message attribution tracking, session version tracking, step-finish usage records, session records, and fail-soft event handling.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/package.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/store.ts, src/lib/analytics/types.ts]
+//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/package.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/store.ts, src/lib/analytics/types.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-ANALYTICS, M-ANALYTICS-STORE, M-ANALYTICS-TYPES, M-PLUGIN-TOGGLE-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added step-finish telemetry collection with session-derived OpenCode version attribution.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: 2026-08-19-cache-hit-rate-analytics - Added step-finish telemetry collection with session-derived OpenCode version attribution.]
 // END_CHANGE_SUMMARY
 
 import type { Event, Part } from "@opencode-ai/sdk";
@@ -186,3 +186,13 @@ function toCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 // END_BLOCK_EVENT_HANDLERS
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+
+export default defineDualPlugin({
+  id: "vvoc.analytics",
+  v1: AnalyticsPlugin,
+  v2: async () => {},
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY

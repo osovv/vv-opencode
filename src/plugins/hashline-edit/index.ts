@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Route per-model edit tooling: register hashline_edit and dsh str_replace_editor from the single-source contracts, publish their strict input JSON Schemas, validate owned-tool arguments at the hook and direct entries, resolve the session edit mode from vvoc routing config, expose exactly one edit tool per model (the host built-in edit/apply_patch for their cohorts, the plugin profiles otherwise), and transform read output with anchors for hashline sessions.
 //   SCOPE: Routing config loading, session model/file caches, chat.message tool-visibility mutation, a shared per-session model visibility guard applied first by both the tool.execute.before hook and every registered execute entry, owned tool.definition publication plus structural/branch argument guards, routed read transformation, hashline/str_replace_editor execution through the schema validators and normalizer, bounded post-edit diff feedback, and editMode telemetry metadata with a bounded reporting-failure distinction that never echoes the thrown message and never misreports an applied edit as invalid or pristine.
-//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts]
+//   DEPENDS: [@opencode-ai/plugin, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/lib/config-layers.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts, src/plugins/v2-runtime/index.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Registered both edit tools from schemas.ts, published the strict input JSON Schema through tool.definition, added owned argument validation after the existing visibility denial and at direct entries, and narrowed post-write metadata reporting failures without changing literal edit, routing, or anchor semantics.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-001 - Added the dual subpath entrypoint so the plugin loads under OpenCode v1 via server() and v2 via setup(). Prior: C-AGENT-TOOL-CONTRACTS T-005 - Registered both edit tools from schemas.ts, published the strict input JSON Schema through tool.definition, added owned argument validation after the existing visibility denial and at direct entries, and narrowed post-write metadata reporting failures without changing literal edit, routing, or anchor semantics.]
 // END_CHANGE_SUMMARY
 
 import { type Plugin, type ToolContext, tool } from "@opencode-ai/plugin";
@@ -778,3 +778,13 @@ export const HashlineEditPlugin: Plugin = async ({ directory }) => {
   };
 };
 // END_BLOCK_PLUGIN
+
+// START_BLOCK_DUAL_SUBPATH_ENTRY
+import { defineDualPlugin } from "../v2-runtime/index.js";
+
+export default defineDualPlugin({
+  id: "vvoc.hashline-edit",
+  v1: HashlineEditPlugin,
+  v2: async () => {},
+});
+// END_BLOCK_DUAL_SUBPATH_ENTRY
