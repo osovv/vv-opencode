@@ -74,7 +74,27 @@ vvoc install
 - writes the canonical `vvoc.json` config;
 - sets `vv-controller` as your default OpenCode agent, with the spec, planning, review, reflection, and handoff skills auto-triggered by request type.
 
-The TUI integration requires OpenCode `1.18.2` or newer; `vvoc status` and `vvoc doctor` report the installed host version and fail compatibility checks for older releases.
+The TUI integration requires OpenCode `1.18.2` or newer on the v1 line and OpenCode `2.0.18` or newer on the v2 line; `vvoc status` and `vvoc doctor` report the installed host version and fail compatibility checks for older releases.
+
+### OpenCode v2 support
+
+Since 2.0.0 the package is dual-runtime: the same pinned package loads under OpenCode v1 (`>= 1.18.29`, through the object `server()` entrypoint) and OpenCode v2 (`>= 2.0.18`, through `Plugin.define` `setup()`). Installing either major line with `vvoc install` / `vvoc sync` works unchanged: v2 reads the same `plugin` array fields and the same `.opencode/` layout.
+
+What changes on the v2 runtime:
+
+- **One server, many sessions.** v2 runs one background server with thin clients; vvoc plugins resolve their configuration per session location instead of one startup snapshot, so a single server can host projects with different toggles, role maps, and policies.
+- **Restart-free presets.** Changing roles or presets in `vvoc.json` takes effect through replayable transforms and a config watcher — no OpenCode restart. Each session pins its role-resolved model on its first prompt, so a long autonomous session stays anchored to its starting preset while new sessions pick up the switched one (verified end to end against a real v2 server by `bun run e2e:v2`).
+- **Role references survive config normalization.** v2 strips `vv-role:` model strings from config-defined agents; the model-roles plugin reads them from the raw project config and applies them per session.
+- **Same-name tool registration replaces built-ins.** `web_search` / `web_fetch` override the v2 built-ins while enabled and restore them when disabled.
+- **The workflow delegated continuation prompt degrades fail-closed** under the v2 prompt shape: unrecognized or unavailable continuation paths reject the attempt and never accept a report.
+
+The full v2 `/context` TUI inspector ships in a follow-up release; the v2 TUI entry registers the `/context` command with a status dialog while the complete v1 inspector keeps running on the v1 runtime.
+
+End-to-end verification against a sandboxed, real OpenCode v2 server (isolated binary, disposable XDG homes, PID-exact lifecycle):
+
+```bash
+bun run e2e:v2
+```
 
 **Want to try it without touching your global setup?** Scope everything to one project:
 
@@ -285,7 +305,7 @@ OpenCode keeps server/runtime plugins and native TUI plugins in separate configu
 
 `vvoc install`, `vvoc init`, and `vvoc sync` conservatively add the pinned base package specifier (for example `@osovv/vv-opencode@X.Y.Z`) to `tui.json(c)`; sync also migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and `[specifier, options]` tuples are preserved; malformed plugin entries fail without rewrite.
 
-Runtime plugins load the effective `vvoc.json` once during OpenCode startup and share one immutable config snapshot for the lifetime of the process. There is no live reload: restart OpenCode after changing `vvoc.json` or `tui.json(c)`.
+On the v1 runtime, plugins load the effective `vvoc.json` once during OpenCode startup and share one immutable config snapshot for the lifetime of the process; restart OpenCode after changing `vvoc.json` or `tui.json(c)`. On the v2 runtime, plugin configuration resolves per session location and role or preset changes apply through config watching without a restart (see [OpenCode v2 support](#opencode-v2-support)).
 
 ### Strict schema, loud failures
 

@@ -274,7 +274,9 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
     applied.changes.some((change) => change.action === "updated") ||
     applied.orchestration.action === "updated"
   ) {
-    console.log("Restart OpenCode to apply the changed roles or orchestration profile.");
+    console.log(
+      "On OpenCode v1, restart OpenCode to apply the changed roles or orchestration profile. On OpenCode v2, the config watcher applies them without a restart; running sessions stay anchored to their starting preset.",
+    );
   }
 }
 
