@@ -1891,10 +1891,12 @@ export const WorkflowPlugin: Plugin = async ({ client, directory, worktree }) =>
 
 // START_BLOCK_DUAL_SUBPATH_ENTRY
 import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupWorkflowV2 } from "./v2.js";
 
 export default defineDualPlugin({
   id: "vvoc.workflow",
   v1: WorkflowPlugin,
-  v2: async () => {},
+  v2: (ctx) => setupWorkflowV2(createV2Adapter(ctx)),
 });
 // END_BLOCK_DUAL_SUBPATH_ENTRY
