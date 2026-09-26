@@ -33,6 +33,7 @@ import { setupSecretsRedactionV2 } from "../secrets-redaction/v2.js";
 import { setupPeakHoursV2 } from "../peak-hours/v2.js";
 import { setupWebToolsV2 } from "../web-tools/v2.js";
 import { setupHashlineEditV2 } from "../hashline-edit/v2.js";
+import { setupGuardianV2 } from "../guardian/v2.js";
 
 // START_BLOCK_V2_ADAPTER_CONTEXT
 /**
@@ -69,6 +70,7 @@ export const V2_PLUGIN_SETUPS: Array<{
   { name: "peak-hours", setup: (adapter) => setupPeakHoursV2(adapter) },
   { name: "web-tools", setup: (adapter) => setupWebToolsV2(adapter) },
   { name: "hashline-edit", setup: (adapter) => setupHashlineEditV2(adapter) },
+  { name: "guardian", setup: (adapter) => setupGuardianV2(adapter) },
 ];
 // END_BLOCK_V2_PLUGIN_SETUPS
 

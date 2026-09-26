@@ -12,6 +12,10 @@
 // START_MODULE_MAP
 //   GuardianPlugin - Registers Guardian agent config, permission review flow, and tool/command intent capture hooks.
 //   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
+//   GUARDIAN_AGENT - Guardian agent id shared with the managed agent files.
+//   GUARDIAN_DISABLED_ENV - Env var enabling the nested-review auto-deny mode.
+//   resolveGuardianRuntimeConfig - Resolve guardian runtime config from a vvoc snapshot.
+//   reviewPermissionRequest - Full permission review flow reused by both runtimes.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -31,8 +35,8 @@ import {
 import { createGuardianConfig, type GuardianConfigOverrides } from "../../lib/vvoc-config.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
-const GUARDIAN_AGENT = "guardian";
-const GUARDIAN_DISABLED_ENV = "OPENCODE_GUARDIAN_DISABLED";
+export const GUARDIAN_AGENT = "guardian";
+export const GUARDIAN_DISABLED_ENV = "OPENCODE_GUARDIAN_DISABLED";
 const GUARDIAN_RUN_DIRECTORY = "/tmp";
 const GUARDIAN_DEBUG_LOG_PATH = "/tmp/opencode-guardian-debug.log";
 const GUARDIAN_DEBUG_ENV = "OPENCODE_GUARDIAN_DEBUG";
@@ -303,7 +307,7 @@ function resolveGuardianRoleSelection(roleMap: Record<string, string>): {
   }
 }
 
-function resolveGuardianRuntimeConfig(loaded: VvocConfigSnapshot): GuardianRuntimeConfig {
+export function resolveGuardianRuntimeConfig(loaded: VvocConfigSnapshot): GuardianRuntimeConfig {
   const sources = [loaded.source.path ?? loaded.source.kind];
   const warnings = [...loaded.warnings];
   const canonicalConfig = loaded.config;
@@ -994,7 +998,7 @@ async function replyToPermission(
 // END_BLOCK_REPLY_TO_PERMISSION_REQUEST
 
 // START_BLOCK_REVIEW_PERMISSION_REQUEST
-async function reviewPermissionRequest(
+export async function reviewPermissionRequest(
   client: Parameters<Plugin>[0]["client"],
   serverUrl: URL,
   directory: string,
@@ -1411,10 +1415,12 @@ export const GuardianPlugin: Plugin = async ({ client, directory, serverUrl }) =
 
 // START_BLOCK_DUAL_SUBPATH_ENTRY
 import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupGuardianV2 } from "./v2.js";
 
 export default defineDualPlugin({
   id: "vvoc.guardian",
   v1: GuardianPlugin,
-  v2: async () => {},
+  v2: (ctx) => setupGuardianV2(createV2Adapter(ctx)),
 });
 // END_BLOCK_DUAL_SUBPATH_ENTRY
