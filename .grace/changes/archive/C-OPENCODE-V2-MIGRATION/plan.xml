@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-OPENCODE-V2-MIGRATION>
     <IntentSummary>Make @osovv/vv-opencode a dual-runtime plugin package (OpenCode v1 >= 1.18.29 via server() and v2 >= 2.0.18 via Plugin.define setup) by adding a v2 runtime adapter with per-session location config resolution, porting all eleven server plugins onto v2 domain APIs with behavior-preserving tests, redesigning model-roles and presets as replayable transforms with file-watch reload and an experimentally anchored per-session model, rewriting the ./tui module on @opencode/plugin/tui, making install/init/sync/launch runtime-version aware, and proving everything with a sandboxed end-to-end v2 server harness plus the repository, pack, and GRACE gates.</IntentSummary>
     <BaselineAssertions>
