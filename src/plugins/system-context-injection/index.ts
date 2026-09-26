@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   SystemContextInjectionPlugin - Injects reusable system guidance into primary sessions while skipping known subagents.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

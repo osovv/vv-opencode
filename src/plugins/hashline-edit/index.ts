@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   HashlineEditPlugin - Registers routed edit tools (hashline_edit, str_replace_editor), per-model tool visibility, owned contract hooks, and the routed read-output enhancer.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

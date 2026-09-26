@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   GuardianPlugin - Registers Guardian agent config, permission review flow, and tool/command intent capture hooks.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

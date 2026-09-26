@@ -15,6 +15,7 @@
 //   buildHardBlockMessage - Composes the blocking error text with window end, wait, and suggestions.
 //   createPeakHoursPlugin - Builds the peak-hours server plugin with injectable dependencies.
 //   PeakHoursPlugin - Default production peak-hours server plugin.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

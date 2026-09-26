@@ -13,6 +13,7 @@
 //   AnalyticsPluginDependencies - Injectable enablement and append dependencies for focused tests.
 //   createAnalyticsPlugin - Builds an OpenCode server plugin with injectable dependencies.
 //   AnalyticsPlugin - Default production analytics server plugin.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   WorkflowPlugin - Registers workflow work-item tools, profile-independent control tools whose execution remains root-session gated, owned tool.definition/execute.before contract hooks, tracked task protocol enforcement with callID-bound delegated attempts, bounded recovery with durable persist-and-rollback commits, terminal report-rejection settlement, checkpoint linkage, live host-call failure bindings, and primary-session workflow guidance injection.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -13,6 +13,7 @@
 //   SUPPRESSED_BUILTIN_PERMISSIONS - Built-in permission ids hidden while the plugin is enabled.
 //   applyBuiltinSuppression - Add runtime-only deny rules unless the user configured a key explicitly.
 //   WebToolsPlugin - Public plugin entry registering web_search and web_fetch.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

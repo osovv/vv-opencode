@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   ToolHistoryCompactionPlugin - OpenCode plugin that compacts old tool outputs in the replay without touching storage or inputs.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

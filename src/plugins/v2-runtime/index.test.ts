@@ -6,8 +6,12 @@
 //   DEPENDS: [src/plugins/v2-runtime/index.ts, @opencode/plugin, @opencode-ai/plugin]
 //   LINKS: [V-M-PLUGIN-V2-RUNTIME, M-PLUGIN-V2-RUNTIME]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
+//
+// START_MODULE_MAP
+//   fakeInput - Builds a minimal v1 PluginInput for delegation tests.
+// END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
 //   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION - Added the dual-runtime foundation test suite.]

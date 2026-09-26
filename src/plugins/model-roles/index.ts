@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   ModelRolesPlugin - Resolves vv-role:* references in root, agent, and command model fields at config-hook time.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

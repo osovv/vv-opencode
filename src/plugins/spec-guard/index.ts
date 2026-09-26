@@ -20,6 +20,7 @@
 //   lintSpecGuardFile - Runs a cache-backed lint for one artifact with its sibling spec when applicable.
 //   createSpecGuardPlugin - Builds the spec-guard server plugin with injectable dependencies.
 //   SpecGuardPlugin - Default production spec-guard server plugin.
+//   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

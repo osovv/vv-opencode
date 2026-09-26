@@ -12,6 +12,7 @@
 // START_MODULE_MAP
 //   defineDualPlugin - Build a dual entrypoint whose default export serves v2 via setup(ctx) and v1 via server(input, options).
 //   mergeV1Hooks - Merge v1 hook objects into one object that runs each hook key sequentially in registration order and disposes in the same order.
+//   aggregateV1Plugins - Run v1 plugin factories sequentially with per-factory error isolation and merge their hook objects.
 //   DualPlugin - Type of the dual entrypoint: v2 Plugin shape plus the v1 server() member.
 //   V2Setup - Signature of a v2 setup function receiving the v2 plugin Context.
 // END_MODULE_MAP
