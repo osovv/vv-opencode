@@ -19,7 +19,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { aggregateV1Plugins, defineDualPlugin, mergeV1Hooks } from "./index.js";
-import { isFullV2Context, setupV2Plugins } from "./setup.js";
+import { isFullV2Context, setupV2Plugins, V2_PLUGIN_SETUPS } from "./setup.js";
 import type { Hooks, PluginInput } from "@opencode-ai/plugin";
 
 function fakeInput(): PluginInput {
@@ -220,5 +220,58 @@ describe("setupV2Plugins runtime detection", () => {
       tool: {},
     };
     expect(isFullV2Context(fullContext as never)).toBe(true);
+  });
+
+  test("wires plugin setups through the adapter with resolver and watcher, isolating failures", async () => {
+    const savedSetups = [...V2_PLUGIN_SETUPS];
+    const seen: string[] = [];
+    const cleanups: string[] = [];
+    const registrations: Array<{ domain: string; name: string }> = [];
+    const fakeSetup = (adapter: {
+      resolver: unknown;
+      watchConfig: unknown;
+      ctx: { tool: { hook: unknown }; session: { hook: unknown }; event: { subscribe: unknown } };
+    }) => {
+      seen.push("wired");
+      expect(typeof (adapter.resolver as { forDirectory: unknown }).forDirectory).toBe("function");
+      expect(typeof adapter.watchConfig).toBe("function");
+      if (typeof adapter.ctx.tool.hook === "function")
+        registrations.push({ domain: "tool", name: "hook" });
+      if (typeof adapter.ctx.session.hook === "function")
+        registrations.push({ domain: "session", name: "hook" });
+      if (typeof adapter.ctx.event.subscribe === "function")
+        registrations.push({ domain: "event", name: "subscribe" });
+      return () => {
+        cleanups.push("dispose");
+      };
+    };
+    V2_PLUGIN_SETUPS.push({ name: "probe.ok", setup: fakeSetup as never });
+    V2_PLUGIN_SETUPS.push({
+      name: "probe.failing",
+      setup: () => {
+        throw new Error("setup boom");
+      },
+    });
+
+    try {
+      const fullContext = {
+        app: {},
+        location: {},
+        options: {},
+        tool: { hook: async () => ({ dispose: async () => {} }) },
+        session: { hook: async () => ({ dispose: async () => {} }) },
+        event: { subscribe: async () => {} },
+        storage: {},
+      };
+      const cleanup = await setupV2Plugins(fullContext as never);
+      expect(seen).toEqual(["wired"]);
+      expect(registrations.length).toBe(3);
+      expect(typeof cleanup).toBe("function");
+      await cleanup?.();
+      expect(cleanups).toEqual(["dispose"]);
+    } finally {
+      V2_PLUGIN_SETUPS.length = 0;
+      V2_PLUGIN_SETUPS.push(...savedSetups);
+    }
   });
 });

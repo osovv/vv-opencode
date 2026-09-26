@@ -1,9 +1,9 @@
 // FILE: src/plugins/v2-runtime/setup.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Dispatch the v2 setup(ctx) entry for the package root across the vvoc server plugins.
-//   SCOPE: Central v2 registration seam only; individual plugin registrations attach here in later migration tasks, with per-plugin error isolation and aggregated cleanup disposal.
-//   DEPENDS: [@opencode/plugin]
+//   PURPOSE: Dispatch the v2 setup(ctx) entry for the package root across the vvoc server plugins through a shared adapter carrying per-location config resolution and config watching.
+//   SCOPE: Central v2 registration seam: the adapter context (plugin context, location resolver, config watch helper), the ordered plugin setup registry, full-v2-context feature detection, per-plugin error isolation, and aggregated reverse-order cleanup disposal.
+//   DEPENDS: [@opencode/plugin, src/plugins/v2-runtime/location-config.ts, src/plugins/v2-runtime/config-watcher.ts]
 //   LINKS: [M-PLUGIN-V2-RUNTIME, V-M-PLUGIN-V2-RUNTIME]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -12,14 +12,34 @@
 // START_MODULE_MAP
 //   setupV2Plugins - Run the v2 registrations for every vvoc server plugin against one full OpenCode v2 plugin context and return one aggregated cleanup; no-ops under the v1 v2-bridge host where the v1 runtime already calls server().
 //   V2_PLUGIN_SETUPS - Ordered registry of per-plugin v2 setup functions extended by later migration tasks.
+//   V2AdapterContext - Plugin context plus the location resolver and multiplexed config watcher shared by all vvoc plugins.
 //   isFullV2Context - Feature-detect whether a setup context carries the full OpenCode v2 domain set.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION - Created the v2 setup dispatcher seam for the dual-runtime root entrypoint.]
+//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-002 - Plugin setups now receive the shared adapter context with per-location config resolution and config watching.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin as V2Plugin } from "@opencode/plugin";
+import { createLocationResolver, type LocationResolver } from "./location-config.js";
+import { watchProjectVvocConfig } from "./config-watcher.js";
+
+// START_BLOCK_V2_ADAPTER_CONTEXT
+/**
+ * The context handed to every vvoc plugin v2 setup: the OpenCode v2 plugin
+ * context plus the shared location resolver and a multiplexed config watcher.
+ */
+export interface V2AdapterContext {
+  readonly ctx: V2Plugin.Context;
+  readonly resolver: LocationResolver;
+  /** Watch the project vvoc config effective for one directory; the returned stop function never throws. */
+  watchConfig(directory: string, onChange: () => void): Promise<() => void>;
+}
+
+type V2PluginSetup = (
+  adapter: V2AdapterContext,
+) => Promise<V2Plugin.Cleanup | void> | V2Plugin.Cleanup | void;
+// END_BLOCK_V2_ADAPTER_CONTEXT
 
 // START_BLOCK_V2_PLUGIN_SETUPS
 /**
@@ -28,7 +48,7 @@ import type { Plugin as V2Plugin } from "@opencode/plugin";
  */
 export const V2_PLUGIN_SETUPS: Array<{
   name: string;
-  setup: (context: V2Plugin.Context) => Promise<V2Plugin.Cleanup | void> | V2Plugin.Cleanup | void;
+  setup: V2PluginSetup;
 }> = [];
 // END_BLOCK_V2_PLUGIN_SETUPS
 
@@ -55,9 +75,72 @@ export function isFullV2Context(context: V2Plugin.Context): boolean {
 }
 // END_BLOCK_IS_FULL_V2_CONTEXT
 
+// START_BLOCK_CREATE_ADAPTER
+/**
+ * Build the shared adapter for one plugin context: a per-location config
+ * resolver and a config watcher multiplexer that keeps one filesystem watch
+ * per directory regardless of how many plugins subscribe to that directory.
+ */
+export function createV2Adapter(context: V2Plugin.Context): V2AdapterContext {
+  const resolver = createLocationResolver();
+  const subscriptions = new Map<string, Map<symbol, () => void>>();
+  const activeWatches = new Map<string, () => void>();
+
+  async function ensureWatched(directory: string): Promise<void> {
+    if (activeWatches.has(directory)) return;
+    const listeners = subscriptions.get(directory);
+    if (!listeners || listeners.size === 0) return;
+    const stopWatch = await watchProjectVvocConfig(directory, () => {
+      resolver.invalidate(directory);
+      for (const listener of listeners.values()) {
+        try {
+          listener();
+        } catch (error) {
+          console.warn(
+            `[vvoc][v2-runtime] config listener failed for ${directory}: ${String(error)}`,
+          );
+        }
+      }
+    });
+    activeWatches.set(directory, stopWatch);
+  }
+
+  return {
+    ctx: context,
+    resolver,
+    async watchConfig(directory, onChange) {
+      const key = Symbol("vvoc-config-listener");
+      let listeners = subscriptions.get(directory);
+      if (!listeners) {
+        listeners = new Map();
+        subscriptions.set(directory, listeners);
+      }
+      listeners.set(key, onChange);
+      await ensureWatched(directory);
+      let stopped = false;
+      return () => {
+        if (stopped) return;
+        stopped = true;
+        const current = subscriptions.get(directory);
+        if (!current) return;
+        current.delete(key);
+        if (current.size === 0) {
+          subscriptions.delete(directory);
+          const stopWatch = activeWatches.get(directory);
+          if (stopWatch) {
+            activeWatches.delete(directory);
+            stopWatch();
+          }
+        }
+      };
+    },
+  };
+}
+// END_BLOCK_CREATE_ADAPTER
+
 // START_BLOCK_SETUP_V2_PLUGINS
 /**
- * Run every registered v2 plugin setup against the context, isolating failures
+ * Run every registered v2 plugin setup against the adapter, isolating failures
  * per plugin, and return one cleanup that disposes the successful cleanups in
  * reverse registration order.
  *
@@ -67,10 +150,11 @@ export function isFullV2Context(context: V2Plugin.Context): boolean {
  */
 export async function setupV2Plugins(context: V2Plugin.Context): Promise<V2Plugin.Cleanup | void> {
   if (!isFullV2Context(context)) return undefined;
+  const adapter = createV2Adapter(context);
   const cleanups: Array<() => Promise<void> | void> = [];
   for (const entry of V2_PLUGIN_SETUPS) {
     try {
-      const cleanup = await entry.setup(context);
+      const cleanup = await entry.setup(adapter);
       if (typeof cleanup === "function") {
         cleanups.push(cleanup);
       }
