@@ -2,7 +2,7 @@
 
 Generated from the pure tool catalog. Do not edit by hand; run `bun run contracts:generate`.
 
-- Package: `@osovv/vv-opencode@2.0.0`
+- Package: `@osovv/vv-opencode@2.0.1`
 - Tool contract revision: `1`
 - Reference path: `templates/skills/vv-execute/references/tool-contracts.md`
 - Current model-facing size: descriptions 8794 bytes, published input schemas 22572 bytes

@@ -1,3 +1,12 @@
+## <small>2.0.1 (2026-09-26)</small>
+
+### Summary
+
+Version 2.0.1 closes silent parity gaps discovered in the post-release audit of the OpenCode v2 migration, tightening behavior that previously differed from the v1 runtime. Guardian now registers its tool-intent tracker and derives command intents from prompt admission metadata, and both event subscriptions filter by location directory so shared servers never cross-review projects outside their own. Peak-hours restores the static managed subagent set, keeping continuation work soft-exempt in hard mode. Secrets redaction now protects auxiliary title, generate, and compaction requests input-side, since v2 exposes no completion-output hook, so those models never observe placeholders and cannot echo them into persisted titles or summaries. Workflow bridges the v2 event stream into the shared handler, with user prompt admissions, tool failure and progress states, and session deletions driving child-freshness taints, live binding consumption, and store cleanup under the same fail-closed rules. Together these fixes make the v2 runtime behave consistently with v1, prevent placeholder leakage into generated titles, and add regression coverage through event-translation and redaction tests verified against a real v2 server.
+
+* fix(v2): close the silent v2 parity gaps from the post-release audit ([4b48034](https://github.com/osovv/vv-opencode/commit/4b48034))
+* chore(grace): apply and archive C-OPENCODE-V2-MIGRATION ([013c032](https://github.com/osovv/vv-opencode/commit/013c032))
+
 ## 2.0.0 (2026-09-26)
 
 ### Summary
