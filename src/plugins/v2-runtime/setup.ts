@@ -25,6 +25,7 @@ import type { Plugin as V2Plugin } from "@opencode/plugin";
 import { createLocationResolver, type LocationResolver } from "./location-config.js";
 import { watchProjectVvocConfig } from "./config-watcher.js";
 import { setupAnalyticsV2 } from "../analytics/v2.js";
+import { setupSystemContextInjectionV2 } from "../system-context-injection/v2.js";
 
 // START_BLOCK_V2_ADAPTER_CONTEXT
 /**
@@ -51,7 +52,10 @@ type V2PluginSetup = (
 export const V2_PLUGIN_SETUPS: Array<{
   name: string;
   setup: V2PluginSetup;
-}> = [{ name: "analytics", setup: (adapter) => setupAnalyticsV2(adapter) }];
+}> = [
+  { name: "analytics", setup: (adapter) => setupAnalyticsV2(adapter) },
+  { name: "system-context-injection", setup: (adapter) => setupSystemContextInjectionV2(adapter) },
+];
 // END_BLOCK_V2_PLUGIN_SETUPS
 
 // START_BLOCK_IS_FULL_V2_CONTEXT
