@@ -1,3 +1,28 @@
+## 2.0.0 (2026-09-26)
+
+### Summary
+
+Version 2.0.0 makes the package dual-runtime, so the same pinned install now loads under both OpenCode v1 (via the object server() entrypoint, floor raised to 1.18.29) and OpenCode v2 (via Plugin.define setup, floor 2.0.18), and vvoc install and sync work unchanged on either major line. All eleven server plugins — including Guardian, Hashline Edit, Model Roles, Workflow, Secrets Redaction, Web Tools, Tool-History Compaction, Analytics, Peak Hours, Spec Guard, and System Context Injection — were ported onto the v2 domain APIs, with configuration now resolved per session location so one shared server can host projects with different toggles, role maps, and policies. On v2, changes to vvoc.json apply through replayable transforms and a config watcher without restarting OpenCode, and each session pins its role-resolved model on the first prompt so long-running sessions stay anchored to their starting preset while new sessions pick up a switched one, verified end to end against a real sandboxed v2 server via the new bun run e2e:v2 harness. The TUI module gained a v2 entrypoint registering the /context command, README documents the dual-runtime support matrix and behaviors, and the failure semantics of existing plugins were preserved, with workflow continuation degrading fail-closed under the v2 prompt shape.
+
+* feat(analytics): port event collection to OpenCode v2 event stream (T-003 1/5) ([6b368fe](https://github.com/osovv/vv-opencode/commit/6b368fe))
+* feat(e2e): repeatable sandboxed v2 harness; TUI dual entry (T-007/T-009) ([0126f13](https://github.com/osovv/vv-opencode/commit/0126f13))
+* feat(grace): approve C-OPENCODE-V2-MIGRATION spec and plan ([2ce153a](https://github.com/osovv/vv-opencode/commit/2ce153a))
+* feat(grace): synchronize graph, verification, requirements, and harness tests (T-010) ([6cc061b](https://github.com/osovv/vv-opencode/commit/6cc061b))
+* feat(guardian): port permission review to v2 events via client shim (T-003) ([9feadfa](https://github.com/osovv/vv-opencode/commit/9feadfa))
+* feat(hashline-edit): port per-model edit routing to v2 (T-004) ([51227ec](https://github.com/osovv/vv-opencode/commit/51227ec))
+* feat(model-roles): per-session prompt model application with preset anchoring (T-006 E2E) ([e44e6ba](https://github.com/osovv/vv-opencode/commit/e44e6ba))
+* feat(model-roles): v2 transforms with restart-free preset switching (T-006) ([a68da72](https://github.com/osovv/vv-opencode/commit/a68da72))
+* feat(plugins): dual-runtime entrypoints for OpenCode v1 and v2 (T-001) ([72f3100](https://github.com/osovv/vv-opencode/commit/72f3100))
+* feat(plugins): port peak-hours and web-tools to v2 (T-003/T-004) ([0b98419](https://github.com/osovv/vv-opencode/commit/0b98419))
+* feat(plugins): port tool-history-compaction, spec-guard, secrets-redaction to v2 (T-003/T-004) ([2c2496a](https://github.com/osovv/vv-opencode/commit/2c2496a))
+* feat(system-context-injection): port guidance injection to v2 session context hook (T-004 1/4) ([7b5ec94](https://github.com/osovv/vv-opencode/commit/7b5ec94))
+* feat(v2-runtime): add server/tui package shims and raw-config agent role references ([8183077](https://github.com/osovv/vv-opencode/commit/8183077))
+* feat(v2-runtime): per-location config resolver and debounced watcher (T-002) ([dee353b](https://github.com/osovv/vv-opencode/commit/dee353b))
+* feat(workflow): bridge full enforcement surface onto v2 domains (T-005) ([ecf5763](https://github.com/osovv/vv-opencode/commit/ecf5763))
+* docs(readme): document dual-runtime v2 support matrix and behaviors (T-008) ([9104eb2](https://github.com/osovv/vv-opencode/commit/9104eb2))
+* fix(grace): complete v2-runtime module maps ([a8044c3](https://github.com/osovv/vv-opencode/commit/a8044c3))
+* fix(grace): synchronize module maps with dual entrypoint exports ([acd7024](https://github.com/osovv/vv-opencode/commit/acd7024))
+
 ## 1.7.0 (2026-09-25)
 
 ### Summary
