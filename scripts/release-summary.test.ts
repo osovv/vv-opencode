@@ -81,7 +81,9 @@ function enoentRunResult(): OpencodeRunResult {
   return { status: null, stdout: "", stderr: "", errorCode: "ENOENT" };
 }
 
-function samplePromptInput(overrides?: Partial<ReleaseSummaryPromptInput>): ReleaseSummaryPromptInput {
+function samplePromptInput(
+  overrides?: Partial<ReleaseSummaryPromptInput>,
+): ReleaseSummaryPromptInput {
   return {
     version: "1.2.3",
     changelogEntry: `## <small>1.2.3 (2026-06-13)</small>\n\n* feat: add new feature\n* fix: resolve a bug`,
@@ -120,7 +122,9 @@ describe("resolveReleaseSummaryOptions", () => {
   });
 
   test("uses VVOC_RELEASE_SUMMARY_MODEL when set", () => {
-    const options = resolveReleaseSummaryOptions({ VVOC_RELEASE_SUMMARY_MODEL: "anthropic/claude-sonnet" });
+    const options = resolveReleaseSummaryOptions({
+      VVOC_RELEASE_SUMMARY_MODEL: "anthropic/claude-sonnet",
+    });
     expect(options.model).toBe("anthropic/claude-sonnet");
     expect(options.timeoutMs).toBe(DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS);
   });
@@ -212,7 +216,9 @@ describe("buildReleaseSummaryPrompt", () => {
 
   test("instructs model not to invent facts outside provided diffs", () => {
     const prompt = buildReleaseSummaryPrompt(samplePromptInput());
-    expect(prompt).toContain("Use only the changelog entry, commit metadata, and full commit diffs");
+    expect(prompt).toContain(
+      "Use only the changelog entry, commit metadata, and full commit diffs",
+    );
     expect(prompt).toContain("Do NOT invent status names");
   });
 
@@ -263,7 +269,8 @@ describe("collectReleaseCommitMetadata", () => {
     const capture = (cmd: string, args: string[], _msg: string): string => {
       calls.push(`${cmd} ${args.join(" ")}`);
       if (cmd === "git" && args[0] === "describe") throw new Error("no tag");
-      if (cmd === "git" && args[0] === "log") return `bbbb2222aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaachore: update\n\n---GITLOG---\n`;
+      if (cmd === "git" && args[0] === "log")
+        return `bbbb2222aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaachore: update\n\n---GITLOG---\n`;
       return "";
     };
     const commits = collectReleaseCommitMetadata(capture);
@@ -353,7 +360,10 @@ describe("parseOpencodeRunJsonOutput", () => {
   });
 
   test("fails when text does not start with <summary>", () => {
-    const stdout = JSON.stringify({ type: "text", part: { type: "text", text: "No envelope here" } });
+    const stdout = JSON.stringify({
+      type: "text",
+      part: { type: "text", text: "No envelope here" },
+    });
     const result = parseOpencodeRunJsonOutput(stdout);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain("Summary envelope is invalid");
@@ -439,7 +449,9 @@ describe("validateReleaseSummary", () => {
   });
 
   test("accepts legitimate standalone model wording", () => {
-    const result = validateReleaseSummary("This release introduces a clearer configuration model for maintainers.");
+    const result = validateReleaseSummary(
+      "This release introduces a clearer configuration model for maintainers.",
+    );
     expect(result.ok).toBe(true);
   });
 
@@ -495,8 +507,7 @@ describe("injectSummaryIntoChangelogEntry", () => {
 
 describe("validateLatestChangelogSummary", () => {
   test("passes when latest entry has a valid summary", () => {
-    const changelog =
-      `## <small>1.2.3 (2026-06-13)</small>\n\n### Summary\n\nThis release makes upgrades clearer and safer.\n\n* feat: new`;
+    const changelog = `## <small>1.2.3 (2026-06-13)</small>\n\n### Summary\n\nThis release makes upgrades clearer and safer.\n\n* feat: new`;
     expect(validateLatestChangelogSummary(changelog).ok).toBe(true);
   });
 
@@ -507,14 +518,12 @@ describe("validateLatestChangelogSummary", () => {
   });
 
   test("ignores older missing summaries", () => {
-    const changelog =
-      `## <small>1.2.0 (2026-06-13)</small>\n\n### Summary\n\nA clear summary.\n\n* feat: new\n\n## <small>1.1.0 (2026-06-01)</small>\n\n* fix: old`;
+    const changelog = `## <small>1.2.0 (2026-06-13)</small>\n\n### Summary\n\nA clear summary.\n\n* feat: new\n\n## <small>1.1.0 (2026-06-01)</small>\n\n* fix: old`;
     expect(validateLatestChangelogSummary(changelog).ok).toBe(true);
   });
 
   test("fails when latest summary has fenced code", () => {
-    const changelog =
-      `## <small>1.2.0 (2026-06-13)</small>\n\n### Summary\n\nCode: \`\`\`js\nx\`\`\`\n\n* feat: new`;
+    const changelog = `## <small>1.2.0 (2026-06-13)</small>\n\n### Summary\n\nCode: \`\`\`js\nx\`\`\`\n\n* feat: new`;
     expect(validateLatestChangelogSummary(changelog).ok).toBe(false);
   });
 });
@@ -526,7 +535,9 @@ describe("validateLatestChangelogSummary", () => {
 describe("generateReleaseSummaryWithRetries", () => {
   test("returns summary on first success", () => {
     const stdout = validSummaryXml("Release adds features.");
-    const runner = makeRunner([successRunResult(JSON.stringify({ type: "text", part: { type: "text", text: stdout } }))]);
+    const runner = makeRunner([
+      successRunResult(JSON.stringify({ type: "text", part: { type: "text", text: stdout } })),
+    ]);
     const result = generateReleaseSummaryWithRetries(
       runner,
       samplePromptInput(),
@@ -590,7 +601,9 @@ describe("generateReleaseSummaryWithRetries", () => {
       runner,
       samplePromptInput(),
       { model: "test/model", timeoutMs: 120_000 },
-      () => { sleeps++; },
+      () => {
+        sleeps++;
+      },
     );
     expect(result).toBe("Fixed after timeout.");
     expect(sleeps).toBe(1);

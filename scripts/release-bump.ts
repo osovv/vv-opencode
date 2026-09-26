@@ -96,7 +96,8 @@ const RELEASE_TYPES = new Set([
   "prerelease",
 ]);
 const SEMVER_PATTERN = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const SCHEMA_ID_PATTERN = /("\$id"\s*:\s*")https:\/\/cdn\.jsdelivr\.net\/npm\/@osovv\/vv-opencode@[^"/]+\/schemas\/vvoc\/v3\.json(")/;
+const SCHEMA_ID_PATTERN =
+  /("\$id"\s*:\s*")https:\/\/cdn\.jsdelivr\.net\/npm\/@osovv\/vv-opencode@[^"/]+\/schemas\/vvoc\/v3\.json(")/;
 
 interface PackageJson {
   version?: string;
@@ -131,9 +132,7 @@ export interface PublishedReleaseFinalizationInput {
 
 /** Deterministically derives the publication channel from a bumped version. */
 export function deriveReleaseChannel(version: string): "latest" | "rc" {
-  const match = /^v?\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
-    version.trim(),
-  );
+  const match = /^v?\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(version.trim());
   const prerelease = match?.[1];
   if (prerelease) {
     const firstIdentifier = prerelease.split(".")[0] ?? "";
@@ -211,7 +210,9 @@ export function parseReleaseBumpArgs(args: string[]): {
     }
 
     console.error(`✗ Unsupported npm version option: ${arg}`);
-    console.error("  release:bump only forwards the version target plus optional --preid and --channel.");
+    console.error(
+      "  release:bump only forwards the version target plus optional --preid and --channel.",
+    );
     process.exit(1);
   }
 
@@ -224,7 +225,10 @@ export function parseReleaseBumpArgs(args: string[]): {
 }
 
 /** Derives the channel for a bumped version, rejecting an explicit channel that contradicts the derivation. */
-export function resolveReleaseChannel(newVersion: string, explicitChannel: string | undefined): "latest" | "rc" {
+export function resolveReleaseChannel(
+  newVersion: string,
+  explicitChannel: string | undefined,
+): "latest" | "rc" {
   const derived = deriveReleaseChannel(newVersion);
   if (explicitChannel !== undefined && explicitChannel !== derived) {
     console.error(
@@ -297,8 +301,15 @@ function runOpencodeSummary(request: OpencodeRunRequest): OpencodeRunResult {
     signal: result.signal,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
-    timedOut: typeof result.error === "object" && result.error !== null && "code" in result.error && result.error.code === "ETIMEDOUT",
-    errorCode: typeof result.error === "object" && result.error && "code" in result.error ? String(result.error.code) : undefined,
+    timedOut:
+      typeof result.error === "object" &&
+      result.error !== null &&
+      "code" in result.error &&
+      result.error.code === "ETIMEDOUT",
+    errorCode:
+      typeof result.error === "object" && result.error && "code" in result.error
+        ? String(result.error.code)
+        : undefined,
   };
 }
 
@@ -306,7 +317,6 @@ function runOpencodeSummary(request: OpencodeRunRequest): OpencodeRunResult {
 function sleepMs(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-
 
 /**
  * Runs conventional-changelog as a subprocess to generate a changelog entry
@@ -318,7 +328,7 @@ function generateChangelog(): string {
   return runCapture(
     "bun",
     ["x", "conventional-changelog", "-p", "conventionalcommits", "-r", "1"],
-    "conventional-changelog failed. Release aborted."
+    "conventional-changelog failed. Release aborted.",
   ).trim();
 }
 
@@ -342,10 +352,13 @@ function updateSchemaId(newVersion: string): void {
   const schemaText = readFileSync(SCHEMA_PATH, "utf8");
   let replacements = 0;
 
-  const updatedSchemaText = schemaText.replace(SCHEMA_ID_PATTERN, (_match, prefix: string, suffix: string) => {
-    replacements++;
-    return `${prefix}${expectedSchemaId}${suffix}`;
-  });
+  const updatedSchemaText = schemaText.replace(
+    SCHEMA_ID_PATTERN,
+    (_match, prefix: string, suffix: string) => {
+      replacements++;
+      return `${prefix}${expectedSchemaId}${suffix}`;
+    },
+  );
 
   if (replacements !== 1) {
     console.error(
@@ -444,7 +457,9 @@ export function dispatchVerifiedPublishWorkflow(
 export function parseWorkflowRunId(workflowOutput: string): string {
   const match = workflowOutput.match(/\/actions\/runs\/(\d+)(?:\b|\/|$)/);
   if (!match?.[1]) {
-    throw new Error(`Could not determine GitHub Actions run ID from: ${workflowOutput || "<empty output>"}`);
+    throw new Error(
+      `Could not determine GitHub Actions run ID from: ${workflowOutput || "<empty output>"}`,
+    );
   }
   return match[1];
 }
@@ -463,9 +478,7 @@ export function waitForPublishWorkflow(
 export function extractReleaseChangelogEntry(changelogText: string, version: string): string {
   const lines = changelogText.split(/\r?\n/);
   const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const releaseHeader = new RegExp(
-    `^##\\s+(?:<small>)?\\[?${escapedVersion}\\]?(?=\\s|\\(|<|$)`,
-  );
+  const releaseHeader = new RegExp(`^##\\s+(?:<small>)?\\[?${escapedVersion}\\]?(?=\\s|\\(|<|$)`);
   const start = lines.findIndex((line) => releaseHeader.test(line));
   if (start < 0) throw new Error(`CHANGELOG.md has no release entry for ${version}.`);
 
@@ -524,7 +537,16 @@ export function finalizePublishedRelease(
     ["push", "origin", input.tagName],
     `Failed to push ${input.tagName}. The package is published and the tag exists locally.`,
   );
-  const releaseArgs = ["release", "create", input.tagName, "--verify-tag", "--title", input.tagName, "--notes", releaseNotes];
+  const releaseArgs = [
+    "release",
+    "create",
+    input.tagName,
+    "--verify-tag",
+    "--title",
+    input.tagName,
+    "--notes",
+    releaseNotes,
+  ];
   if (input.channel === "rc") {
     releaseArgs.push("--prerelease");
   }
@@ -558,7 +580,11 @@ function main(): void {
 
   // START_BLOCK_RUN_NPM_VERSION
   console.log(`\nRunning: npm version --no-git-tag-version ${npmVersionArgs.join(" ")}`);
-  run("npm", ["version", "--no-git-tag-version", ...npmVersionArgs], "npm version failed. Aborting release bump.");
+  run(
+    "npm",
+    ["version", "--no-git-tag-version", ...npmVersionArgs],
+    "npm version failed. Aborting release bump.",
+  );
   // END_BLOCK_RUN_NPM_VERSION
 
   // Read new version
@@ -570,7 +596,6 @@ function main(): void {
   const channel = resolveReleaseChannel(newVersion, explicitChannel);
   console.log(`New version: ${newVersion}`);
   console.log(`Release channel: ${channel}`);
-
 
   // START_BLOCK_GENERATE_CHANGELOG
   console.log("\nGenerating changelog entry...\n");
@@ -627,7 +652,11 @@ function main(): void {
   assertTagDoesNotExist(tagName);
 
   console.log("\nCreating release commit...\n");
-  run("git", ["add", "package.json", "schemas/vvoc/v3.json", "CHANGELOG.md", TOOL_CONTRACTS_REFERENCE_PATH], "git add failed.");
+  run(
+    "git",
+    ["add", "package.json", "schemas/vvoc/v3.json", "CHANGELOG.md", TOOL_CONTRACTS_REFERENCE_PATH],
+    "git add failed.",
+  );
   run(
     "git",
     ["commit", "-m", `chore: bump version from ${currentVersion} to ${newVersion} with changelog`],

@@ -16,6 +16,7 @@
 //   createPeakHoursPlugin - Builds the peak-hours server plugin with injectable dependencies.
 //   PeakHoursPlugin - Default production peak-hours server plugin.
 //   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
+//   createKnownSubagentSet - Built-in, plugin-managed, and vvoc-managed subagent names for grace exemptions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -64,7 +65,7 @@ export type PeakHoursPluginDependencies = {
 };
 
 // START_BLOCK_AGENT_EXEMPTIONS
-function createKnownSubagentSet(): Set<string> {
+export function createKnownSubagentSet(): Set<string> {
   return new Set<string>([
     ...BUILT_IN_SUBAGENTS,
     ...PLUGIN_MANAGED_SUBAGENTS,

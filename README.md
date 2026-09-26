@@ -86,7 +86,8 @@ What changes on the v2 runtime:
 - **Restart-free presets.** Changing roles or presets in `vvoc.json` takes effect through replayable transforms and a config watcher — no OpenCode restart. Each session pins its role-resolved model on its first prompt, so a long autonomous session stays anchored to its starting preset while new sessions pick up the switched one (verified end to end against a real v2 server by `bun run e2e:v2`).
 - **Role references survive config normalization.** v2 strips `vv-role:` model strings from config-defined agents; the model-roles plugin reads them from the raw project config and applies them per session.
 - **Same-name tool registration replaces built-ins.** `web_search` / `web_fetch` override the v2 built-ins while enabled and restore them when disabled.
-- **The workflow delegated continuation prompt degrades fail-closed** under the v2 prompt shape: unrecognized or unavailable continuation paths reject the attempt and never accept a report.
+- **The workflow delegated continuation prompt degrades fail-closed** under the v2 prompt shape: unrecognized or unavailable continuation paths reject the attempt and never accept a report. The event-driven freshness rules are bridged: user-prompt admissions, tool failure and progress states, and session deletions flow into the shared handler with the same taint and cleanup semantics.
+- **Secrets redaction covers auxiliary requests input-side.** v2 has no completion-output hook, so title, generate, and compaction requests redact their messages instead — those models never observe placeholders and cannot echo them into persisted titles or summaries.
 
 The full v2 `/context` TUI inspector ships in a follow-up release; the v2 TUI entry registers the `/context` command with a status dialog while the complete v1 inspector keeps running on the v1 runtime.
 

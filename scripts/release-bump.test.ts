@@ -104,9 +104,9 @@ describe("release workflow dispatch", () => {
 
 describe("workflow run parsing", () => {
   test("extracts the run ID from gh workflow run output and rejects missing URLs", () => {
-    expect(
-      parseWorkflowRunId("https://github.com/osovv/vv-opencode/actions/runs/123456789"),
-    ).toBe("123456789");
+    expect(parseWorkflowRunId("https://github.com/osovv/vv-opencode/actions/runs/123456789")).toBe(
+      "123456789",
+    );
     expect(() => parseWorkflowRunId("")).toThrow("Could not determine GitHub Actions run ID");
   });
 });
@@ -250,9 +250,7 @@ describe("release finalization", () => {
     expect(captureAttempts).toBe(3);
     expect(waits).toEqual([1_000, 2_000]);
     expect(commands.filter((entry) => entry.mode === "capture")).toHaveLength(3);
-    expect(commands.some((entry) => entry.command === "git" && entry.args[0] === "tag")).toBe(
-      true,
-    );
+    expect(commands.some((entry) => entry.command === "git" && entry.args[0] === "tag")).toBe(true);
   });
 
   test("extracts only the requested changelog block", () => {

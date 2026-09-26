@@ -13,6 +13,7 @@
 //   setupWorkflowV2 - Bridge the full workflow surface onto one OpenCode v2 plugin context.
 //   createWorkflowClientShim - v1-shaped client over v2 domains for the workflow authorization and repair surfaces.
 //   adaptSubagentLaunchArgs - Map v2 subagent tool arguments onto the v1 task launch shape.
+//   mapV2EventToV1Shape - Translate v2 server events into the v1 event shapes the shared handler consumes.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -76,6 +77,88 @@ export function adaptSubagentLaunchArgs(input: unknown): unknown {
   };
 }
 // END_BLOCK_ADAPT_SUBAGENT_LAUNCH_ARGS
+
+// START_BLOCK_MAP_V2_EVENT_TO_V1_SHAPES
+/**
+ * Translate one v2 server event into the v1 event shape the shared workflow
+ * event handler consumes, or undefined when the event carries no workflow
+ * meaning.
+ *
+ * Mappings (verified against the v2 event schemas):
+ * - session.inbox.enqueued with a user item becomes message.updated with a
+ *   user message info, driving child-prompt freshness observation.
+ * - session.tool.failed and session.tool.progress become message.part.updated
+ *   task-tool part states, driving live delegated binding taints and the
+ *   confirmed host-terminal-error failed-attempt path; the binding lookup
+ *   inside the handler stays fail-closed for unmatched identities.
+ * - session.deleted maps directly, driving store and persistence cleanup.
+ */
+export function mapV2EventToV1Shape(
+  event: unknown,
+): { type: string; properties: Record<string, unknown> } | undefined {
+  const typed = event as {
+    type?: string;
+    data?: Record<string, unknown>;
+  };
+  const data = typed?.data ?? {};
+  switch (typed?.type) {
+    case "session.inbox.enqueued": {
+      const item = data.item as { type?: string; id?: string; sessionID?: string } | undefined;
+      if (
+        item?.type === "user" &&
+        typeof item.sessionID === "string" &&
+        typeof item.id === "string"
+      ) {
+        return {
+          type: "message.updated",
+          properties: { info: { role: "user", sessionID: item.sessionID, id: item.id } },
+        };
+      }
+      return undefined;
+    }
+    case "session.tool.failed":
+    case "session.tool.progress": {
+      const sessionID = typeof data.sessionID === "string" ? data.sessionID : undefined;
+      const callID = typeof data.id === "string" ? data.id : undefined;
+      if (!sessionID || !callID) return undefined;
+      const isError = typed.type === "session.tool.failed";
+      const metadata =
+        data.metadata && typeof data.metadata === "object"
+          ? (data.metadata as Record<string, unknown>)
+          : undefined;
+      const rawError = data.error as { message?: string } | string | undefined;
+      const errorText =
+        typeof rawError === "string"
+          ? rawError
+          : rawError && typeof rawError.message === "string"
+            ? rawError.message
+            : undefined;
+      return {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "tool",
+            tool: "task",
+            sessionID,
+            callID,
+            state: {
+              status: isError ? "error" : "running",
+              ...(errorText !== undefined ? { error: errorText } : {}),
+              ...(metadata ? { metadata } : {}),
+            },
+          },
+        },
+      };
+    }
+    case "session.deleted": {
+      if (typeof data.sessionID !== "string") return undefined;
+      return { type: "session.deleted", properties: { sessionID: data.sessionID } };
+    }
+    default:
+      return undefined;
+  }
+}
+// END_BLOCK_MAP_V2_EVENT_TO_V1_SHAPES
 
 // START_BLOCK_SETUP_WORKFLOW_V2
 /**
@@ -202,6 +285,32 @@ export async function setupWorkflowV2(adapter: V2AdapterContext): Promise<V2Plug
       return undefined;
     });
     cleanups.push(() => contextHook.dispose());
+  }
+
+  // Event bridge: route the v2 server events the shared handler consumes.
+  const eventHandler = hooks.event as
+    | ((input: { event: { type: string; properties: Record<string, unknown> } }) => Promise<void>)
+    | undefined;
+  if (eventHandler) {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        for await (const evt of adapter.ctx.event.subscribe({ signal: controller.signal })) {
+          const located = evt as { location?: { directory?: string } };
+          if (located.location?.directory && located.location.directory !== directory) continue;
+          const shaped = mapV2EventToV1Shape(evt);
+          if (!shaped) continue;
+          try {
+            await eventHandler({ event: shaped });
+          } catch (error) {
+            console.warn(`[vvoc][workflow] bridged event failed: ${String(error)}`);
+          }
+        }
+      } catch {
+        // Stream failures never break the host.
+      }
+    })();
+    cleanups.push(async () => controller.abort());
   }
 
   return async () => {

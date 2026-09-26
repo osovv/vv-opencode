@@ -627,11 +627,7 @@ function discriminatorToken(value: unknown, structural: boolean): string {
   return "present";
 }
 
-function discriminatorTokens(
-  data: unknown,
-  path: string,
-  structural: boolean,
-): string[] {
+function discriminatorTokens(data: unknown, path: string, structural: boolean): string[] {
   const tokens = resolveJsonPath(data, path.split(".")).map((value) =>
     discriminatorToken(value, structural),
   );
@@ -644,9 +640,7 @@ function branchKeyFor(entry: AgentToolCatalogEntry, data: unknown): string {
     ...entry.vocabularies.map(
       (vocab) => `${vocab.field}=${discriminatorTokens(data, vocab.field, false).join(",")}`,
     ),
-    ...structural.map(
-      (path) => `${path}=${discriminatorTokens(data, path, true).join(",")}`,
-    ),
+    ...structural.map((path) => `${path}=${discriminatorTokens(data, path, true).join(",")}`),
   ];
   return parts.join("|");
 }

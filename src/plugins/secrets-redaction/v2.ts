@@ -33,8 +33,13 @@ import { PLACEHOLDER_PREFIX, redactMessageParts } from "./index.js";
  * The v1 experimental.chat.messages.transform becomes the v2 session context
  * hook redacting the mutable request messages (including tool-part state),
  * and the v1 tool.execute.before restore keeps the identical role on the v2
- * tool hook. The v1 experimental.text.complete restore has no v2 equivalent;
- * transient ctx.session.generate results are covered by the generate hook.
+ * tool hook.
+ *
+ * The v1 experimental.text.complete output restore has NO v2 equivalent: v2
+ * exposes no completion-output hook for transient title or generate calls.
+ * The v2-native protection is input-side instead — the title, generate, and
+ * compaction hooks redact their request messages so those models never see
+ * placeholders and cannot echo them into persisted titles or summaries.
  * Pattern configuration resolves per session location, and every handler
  * failure degrades fail-open with a logged warning.
  */
@@ -53,7 +58,11 @@ export async function setupSecretsRedactionV2(
     if (!snapshot || !isVvocPluginEnabled(snapshot.config, "secrets-redaction")) return undefined;
     const existing = perLocation.get(snapshot.directory);
     if (existing) return existing;
-    const { config } = resolveSecretsRedactionRuntimeConfig({ config: snapshot.config } as never);
+    const { config } = resolveSecretsRedactionRuntimeConfig({
+      config: snapshot.config,
+      source: snapshot.source,
+      warnings: snapshot.warnings,
+    } as never);
     const entry = {
       patternSet: buildPatternSet(config.patterns),
       session: new PlaceholderSession({
@@ -65,6 +74,26 @@ export async function setupSecretsRedactionV2(
     };
     perLocation.set(snapshot.directory, entry);
     return entry;
+  }
+
+  async function redactRequestMessages(
+    sessionID: unknown,
+    messages: unknown,
+    label: string,
+  ): Promise<void> {
+    try {
+      const entry = await resolveForSession(String(sessionID));
+      if (!entry) return;
+      for (const message of (messages ?? []) as unknown as Array<{ parts?: unknown }>) {
+        redactMessageParts(
+          ((message as { parts?: unknown }).parts ?? []) as never,
+          entry.patternSet,
+          entry.session,
+        );
+      }
+    } catch (error) {
+      console.warn(`[vvoc][secrets-redaction] ${label} failed (fail-open): ${String(error)}`);
+    }
   }
 
   const contextHook = await adapter.ctx.session.hook("context", async (event) => {
@@ -100,7 +129,27 @@ export async function setupSecretsRedactionV2(
     }
   });
 
+  // START_BLOCK_AUXILIARY_REQUEST_REDACTION
+  // Input-side protection replacing the v1 text.complete output restore:
+  // title, generate, and compaction requests redact their messages so those
+  // models never observe placeholders and cannot echo them into persisted
+  // titles or summaries. This covers the v1 surface's practical exposure
+  // with the hooks v2 actually provides.
+  const auxiliaryHooks: Array<{ dispose: () => Promise<void> }> = [];
+  for (const kind of ["title", "generate", "compaction"] as const) {
+    const hook = await adapter.ctx.session.hook(kind, (event) => {
+      return redactRequestMessages(
+        (event as { sessionID?: unknown }).sessionID,
+        (event as { messages?: unknown }).messages,
+        `${kind} request redaction`,
+      );
+    });
+    auxiliaryHooks.push(hook);
+  }
+  // END_BLOCK_AUXILIARY_REQUEST_REDACTION
+
   return async () => {
+    for (const hook of auxiliaryHooks.reverse()) await hook.dispose();
     await contextHook.dispose();
     await beforeHook.dispose();
   };

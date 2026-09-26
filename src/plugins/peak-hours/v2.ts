@@ -26,7 +26,7 @@ import {
   parsePeakHoursEntry,
   suggestOffPeakProviders,
 } from "../../lib/peak-hours.js";
-import { buildHardBlockMessage } from "./index.js";
+import { buildHardBlockMessage, createKnownSubagentSet } from "./index.js";
 
 // START_BLOCK_SETUP_PEAK_HOURS_V2
 /**
@@ -41,7 +41,11 @@ import { buildHardBlockMessage } from "./index.js";
 export async function setupPeakHoursV2(
   adapter: V2AdapterContext,
 ): Promise<V2Plugin.Cleanup | void> {
-  const knownSubagents = new Set<string>();
+  // Static managed-subagent set: these agents are continuation of already
+  // admitted work and always soften. Config-defined subagents cannot be
+  // discovered through the v2 plugin-host registry (probe-verified split),
+  // so the managed names plus built-ins carry the exemption.
+  const knownSubagents = createKnownSubagentSet();
   const registration = await adapter.ctx.session.hook("context", async (event) => {
     try {
       const providerID = (event.model as { providerID?: string } | undefined)?.providerID;

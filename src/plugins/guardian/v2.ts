@@ -124,7 +124,10 @@ export async function setupGuardianV2(adapter: V2AdapterContext): Promise<V2Plug
         // Stream failures never break the host.
       }
     })();
-    return () => controller.abort();
+    return async () => {
+      controller.abort();
+      for (const dispose of cleanups.reverse()) await dispose();
+    };
   }
 
   const guardianConfig = resolveGuardianRuntimeConfig(vvoc);
@@ -143,11 +146,55 @@ export async function setupGuardianV2(adapter: V2AdapterContext): Promise<V2Plug
       cancel?: () => void;
     }
   >();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  // START_BLOCK_GUARDIAN_V2_INTENTS
+  // Tool intents: the v1 tool.execute.before tracker keeps review context
+  // about the call that triggered each permission request; without it the
+  // review prompt loses the planned-action context. A bounded clear replaces
+  // the v1 prune to keep the map from growing unbounded.
+  const intentHook = await adapter.ctx.tool.hook("execute.before", (event) => {
+    const intents = toolIntentsByCallID as Map<
+      string,
+      { sessionID: string; tool: string; callID: string; args: unknown; time: number }
+    >;
+    if (intents.size > 500) intents.clear();
+    intents.set(String(event.id), {
+      sessionID: String(event.sessionID),
+      tool: String(event.tool),
+      callID: String(event.id),
+      args: event.input,
+      time: Date.now(),
+    });
+  });
+  cleanups.push(() => intentHook.dispose());
+
+  // Best-effort command intents: v2 has no global command interception hook;
+  // prompt admission metadata carries command identity when the host sets it.
+  const promptHook = await adapter.ctx.session.hook("prompt", (event) => {
+    const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
+    const command = metadata.command ?? metadata.name;
+    if (typeof command !== "string" || !command) return;
+    const commands = latestCommandIntentBySessionID as Map<
+      string,
+      { sessionID: string; command: string; arguments: string; time: number }
+    >;
+    commands.set(String(event.sessionID), {
+      sessionID: String(event.sessionID),
+      command,
+      arguments: typeof metadata.arguments === "string" ? metadata.arguments : "",
+      time: Date.now(),
+    });
+  });
+  cleanups.push(() => promptHook.dispose());
+  // END_BLOCK_GUARDIAN_V2_INTENTS
 
   const controller = new AbortController();
   void (async () => {
     try {
       for await (const event of adapter.ctx.event.subscribe({ signal: controller.signal })) {
+        const located = event as { location?: { directory?: string } };
+        if (located.location?.directory && located.location.directory !== directory) continue;
         const typed = event as {
           type?: string;
           data?: Record<string, unknown> & { id?: string; sessionID?: string; requestID?: string };

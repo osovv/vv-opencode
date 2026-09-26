@@ -156,7 +156,9 @@ function main(): void {
   const errors = collectReleaseConsistencyErrors({ pkg, schema, changelogText });
   if (errors.length > 0) exitWithErrors(errors);
 
-  console.log(`\n✓ Release consistency check passed: ${EXPECTED_PACKAGE_NAME}@${pkg.version?.trim() ?? ""}\n`);
+  console.log(
+    `\n✓ Release consistency check passed: ${EXPECTED_PACKAGE_NAME}@${pkg.version?.trim() ?? ""}\n`,
+  );
 }
 
 if (import.meta.main) main();
