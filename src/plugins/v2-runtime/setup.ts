@@ -13,6 +13,7 @@
 //   setupV2Plugins - Run the v2 registrations for every vvoc server plugin against one full OpenCode v2 plugin context and return one aggregated cleanup; no-ops under the v1 v2-bridge host where the v1 runtime already calls server().
 //   V2_PLUGIN_SETUPS - Ordered registry of per-plugin v2 setup functions extended by later migration tasks.
 //   V2AdapterContext - Plugin context plus the location resolver and multiplexed config watcher shared by all vvoc plugins.
+//   createV2Adapter - Build the shared adapter context with the location resolver and multiplexed config watcher.
 //   isFullV2Context - Feature-detect whether a setup context carries the full OpenCode v2 domain set.
 // END_MODULE_MAP
 //

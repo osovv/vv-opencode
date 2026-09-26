@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   LocationConfigSnapshot - Effective config resolved for one directory plus source metadata and load time.
+//   LocationResolver - Resolver interface with forDirectory, forSession, invalidate, and cachedDirectories.
 //   LocationResolverOptions - Injectable loader, logger, TTL, and clock for deterministic tests.
 //   createLocationResolver - Build a per-directory caching resolver with session mapping and invalidation.
 // END_MODULE_MAP

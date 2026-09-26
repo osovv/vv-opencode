@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   FakeWatch - Handle shape exposing emit, error, and closeCount for driving the fake watcher.
 //   makeFakeWatch - Builds a controllable watch factory capturing event callbacks.
 //   sleep - Small real-timer sleep for debounce windows.
 // END_MODULE_MAP
