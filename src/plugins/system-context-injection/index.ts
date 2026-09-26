@@ -20,11 +20,7 @@
 
 import { type Config, type Plugin } from "@opencode-ai/plugin";
 import { loadVvocConfig } from "../../lib/config-layers.js";
-import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
-import {
-  resolveOrchestrationPolicy,
-  type ResolvedOrchestrationPolicy,
-} from "../../lib/orchestration.js";
+import { resolveOrchestrationPolicy } from "../../lib/orchestration.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { existsSync } from "node:fs";
 import {

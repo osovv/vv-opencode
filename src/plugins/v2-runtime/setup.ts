@@ -26,6 +26,7 @@ import { createLocationResolver, type LocationResolver } from "./location-config
 import { watchProjectVvocConfig } from "./config-watcher.js";
 import { setupAnalyticsV2 } from "../analytics/v2.js";
 import { setupSystemContextInjectionV2 } from "../system-context-injection/v2.js";
+import { setupModelRolesV2 } from "../model-roles/v2.js";
 
 // START_BLOCK_V2_ADAPTER_CONTEXT
 /**
@@ -55,6 +56,7 @@ export const V2_PLUGIN_SETUPS: Array<{
 }> = [
   { name: "analytics", setup: (adapter) => setupAnalyticsV2(adapter) },
   { name: "system-context-injection", setup: (adapter) => setupSystemContextInjectionV2(adapter) },
+  { name: "model-roles", setup: (adapter) => setupModelRolesV2(adapter) },
 ];
 // END_BLOCK_V2_PLUGIN_SETUPS
 
