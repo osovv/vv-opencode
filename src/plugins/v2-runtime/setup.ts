@@ -24,6 +24,7 @@
 import type { Plugin as V2Plugin } from "@opencode/plugin";
 import { createLocationResolver, type LocationResolver } from "./location-config.js";
 import { watchProjectVvocConfig } from "./config-watcher.js";
+import { setupAnalyticsV2 } from "../analytics/v2.js";
 
 // START_BLOCK_V2_ADAPTER_CONTEXT
 /**
@@ -44,13 +45,13 @@ type V2PluginSetup = (
 
 // START_BLOCK_V2_PLUGIN_SETUPS
 /**
- * Per-plugin v2 setup functions in the canonical v1 plugin order. Later
- * migration tasks append entries as each plugin gains its v2 registration.
+ * Per-plugin v2 setup functions in the canonical v1 plugin order. Migration
+ * tasks append entries as each plugin gains its v2 registration.
  */
 export const V2_PLUGIN_SETUPS: Array<{
   name: string;
   setup: V2PluginSetup;
-}> = [];
+}> = [{ name: "analytics", setup: (adapter) => setupAnalyticsV2(adapter) }];
 // END_BLOCK_V2_PLUGIN_SETUPS
 
 // START_BLOCK_IS_FULL_V2_CONTEXT
