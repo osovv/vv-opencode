@@ -11,6 +11,8 @@
 //
 // START_MODULE_MAP
 //   SecretsRedactionPlugin - main plugin factory function
+//   PLACEHOLDER_PREFIX - Stable placeholder prefix shared by the v1 and v2 redaction paths.
+//   redactMessageParts - Redacts text, reasoning, and tool-part state of one message in place.
 //   default - Dual subpath entrypoint: v2 setup() seam plus v1 server() delegating to the named factory.
 // END_MODULE_MAP
 //
@@ -29,7 +31,7 @@ import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import type { Plugin } from "@opencode-ai/plugin";
 import type { Part, TextPart, ReasoningPart, ToolPart } from "@opencode-ai/sdk/client";
 
-const PLACEHOLDER_PREFIX = "__VVOC_SECRET_";
+export const PLACEHOLDER_PREFIX = "__VVOC_SECRET_";
 
 function isTextPart(part: Part): part is TextPart {
   return part.type === "text";
@@ -43,7 +45,7 @@ function isToolPart(part: Part): part is ToolPart {
   return part.type === "tool";
 }
 
-function redactMessageParts(
+export function redactMessageParts(
   parts: Part[],
   patternSet: ReturnType<typeof buildPatternSet>,
   session: PlaceholderSession,
@@ -145,10 +147,12 @@ export const SecretsRedactionPlugin: Plugin = async (ctx) => {
 
 // START_BLOCK_DUAL_SUBPATH_ENTRY
 import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupSecretsRedactionV2 } from "./v2.js";
 
 export default defineDualPlugin({
   id: "vvoc.secrets-redaction",
   v1: SecretsRedactionPlugin,
-  v2: async () => {},
+  v2: (ctx) => setupSecretsRedactionV2(createV2Adapter(ctx)),
 });
 // END_BLOCK_DUAL_SUBPATH_ENTRY

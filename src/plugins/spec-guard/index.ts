@@ -289,10 +289,12 @@ export const SpecGuardPlugin: Plugin = createSpecGuardPlugin();
 
 // START_BLOCK_DUAL_SUBPATH_ENTRY
 import { defineDualPlugin } from "../v2-runtime/index.js";
+import { createV2Adapter } from "../v2-runtime/setup.js";
+import { setupSpecGuardV2 } from "./v2.js";
 
 export default defineDualPlugin({
   id: "vvoc.spec-guard",
   v1: SpecGuardPlugin,
-  v2: async () => {},
+  v2: (ctx) => setupSpecGuardV2(createV2Adapter(ctx)),
 });
 // END_BLOCK_DUAL_SUBPATH_ENTRY

@@ -42,35 +42,33 @@ export async function setupSystemContextInjectionV2(
   adapter: V2AdapterContext,
 ): Promise<V2Plugin.Cleanup | void> {
   const knownSubagents = createKnownSubagentSet();
-  const registration = await adapter.ctx.session.hook("context", (event) => {
-    void (async () => {
-      try {
-        const snapshot = await adapter.resolver.forSession(event.sessionID as string, (input) =>
-          adapter.ctx.session.get(input),
-        );
-        if (!snapshot || !isVvocPluginEnabled(snapshot.config, "system-context-injection")) {
-          return;
-        }
-
-        if (!shouldInjectForAgent(event.agent as string | undefined, knownSubagents)) {
-          return;
-        }
-
-        const policy = resolveOrchestrationPolicy(snapshot.config);
-        const contexts = getSystemContextsForAgent(event.agent as string | undefined, policy);
-        for (const context of contexts) {
-          const alreadyInjected = event.system.some(
-            (part) =>
-              part.type === "text" && typeof part.text === "string" && part.text.includes(context),
-          );
-          if (!alreadyInjected) {
-            event.system.push({ type: "text", text: context });
-          }
-        }
-      } catch (error) {
-        console.warn(`[vvoc][system-context-injection] context hook failed: ${String(error)}`);
+  const registration = await adapter.ctx.session.hook("context", async (event) => {
+    try {
+      const snapshot = await adapter.resolver.forSession(event.sessionID as string, (input) =>
+        adapter.ctx.session.get(input),
+      );
+      if (!snapshot || !isVvocPluginEnabled(snapshot.config, "system-context-injection")) {
+        return;
       }
-    })();
+
+      if (!shouldInjectForAgent(event.agent as string | undefined, knownSubagents)) {
+        return;
+      }
+
+      const policy = resolveOrchestrationPolicy(snapshot.config);
+      const contexts = getSystemContextsForAgent(event.agent as string | undefined, policy);
+      for (const context of contexts) {
+        const alreadyInjected = event.system.some(
+          (part) =>
+            part.type === "text" && typeof part.text === "string" && part.text.includes(context),
+        );
+        if (!alreadyInjected) {
+          event.system.push({ type: "text", text: context });
+        }
+      }
+    } catch (error) {
+      console.warn(`[vvoc][system-context-injection] context hook failed: ${String(error)}`);
+    }
   });
 
   return () => registration.dispose();
