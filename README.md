@@ -78,7 +78,7 @@ The TUI integration requires OpenCode `1.18.2` or newer on the v1 line and OpenC
 
 ### OpenCode v2 support
 
-Since 2.0.0 the package is dual-runtime: the same pinned package loads under OpenCode v1 (`>= 1.18.29`, through the object `server()` entrypoint) and OpenCode v2 (`>= 2.0.18`, through `Plugin.define` `setup()`). Installing either major line with `vvoc install` / `vvoc sync` works unchanged: v2 reads the same `plugin` array fields and the same `.opencode/` layout.
+Since 2.0.0 the package is dual-runtime and supports both OpenCode 1 and OpenCode 2: the same pinned package loads under OpenCode v1 (`>= 1.18.29`, through the object `server()` entrypoint) and OpenCode v2 (`>= 2.0.18`, through `Plugin.define` `setup()`). Installing either major line with `vvoc install` / `vvoc sync` works unchanged: v2 reads the same `plugin` array fields and the same `.opencode/` layout.
 
 What changes on the v2 runtime:
 

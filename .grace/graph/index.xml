@@ -27,6 +27,9 @@
         <M-PLUGIN-TOOL-HISTORY-COMPACTION />
         <M-PEAK-HOURS-SCHEDULES />
         <M-PLUGIN-PEAK-HOURS />
+        <M-PLUGIN-ANALYTICS />
+        <M-PLUGIN-V2-RUNTIME />
+        <M-E2E-V2-HARNESS />
         <M-TUI-PEAK-HOURS-BANNER />
         <M-SPEC-LINT />
         <M-PLUGIN-SPEC-GUARD />

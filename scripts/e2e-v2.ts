@@ -23,6 +23,7 @@
 //   ServerHandle - Running server handle with exact PID, port, password, and stop.
 //   record - Append and print one check outcome.
 //   switchedModel - Routing proof via the model-switched session event.
+//   buildSandboxConfigs - Pure vvoc roles and opencode plugin/agent shapes for the scratch project.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -75,39 +76,38 @@ async function downloadV2Binary(cacheDir: string): Promise<string> {
   return binaryPath;
 }
 
+/** Pure sandbox config shapes so unit tests can validate them without IO. */
+export function buildSandboxConfigs(rolesSmart: string, pluginSpecifier: string) {
+  return {
+    vvocRoles: {
+      default: "opencode/gpt-6-luna",
+      smart: rolesSmart,
+      fast: "opencode/gpt-6-luna",
+      reviewer: rolesSmart,
+    },
+    opencode: {
+      plugins: [pluginSpecifier],
+      agent: {
+        "vv-role-probe": {
+          prompt: "Probe agent whose model is a vv-role reference.",
+          model: "vv-role:smart",
+        },
+      },
+    },
+  };
+}
+
 async function prepareSandbox(root: string, rolesSmart: string) {
   const project = join(root, "project");
   await mkdir(join(project, ".vvoc"), { recursive: true });
-  const configResponse = await fetch(new URL("file:///dev/null")).catch(() => undefined);
-  void configResponse;
-  // Build the canonical vvoc config from the built package to keep schema validity.
   const { createDefaultVvocConfig } = (await import(
     join(WORKSPACE_ROOT, "dist/lib/vvoc-config.js")
   )) as { createDefaultVvocConfig: () => Record<string, unknown> };
   const vvoc = createDefaultVvocConfig();
-  (vvoc as { roles: Record<string, string> }).roles = {
-    default: "opencode/gpt-6-luna",
-    smart: rolesSmart,
-    fast: "opencode/gpt-6-luna",
-    reviewer: rolesSmart,
-  };
+  const shapes = buildSandboxConfigs(rolesSmart, `file://${WORKSPACE_ROOT.replace(/\/$/, "")}`);
+  (vvoc as { roles: Record<string, string> }).roles = shapes.vvocRoles;
   await writeFile(join(project, ".vvoc", "vvoc.json"), JSON.stringify(vvoc, null, 2));
-  await writeFile(
-    join(project, "opencode.json"),
-    JSON.stringify(
-      {
-        plugins: [`file://${WORKSPACE_ROOT.replace(/\/$/, "")}`],
-        agent: {
-          "vv-role-probe": {
-            prompt: "Probe agent whose model is a vv-role reference.",
-            model: "vv-role:smart",
-          },
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeFile(join(project, "opencode.json"), JSON.stringify(shapes.opencode, null, 2));
   return project;
 }
 
@@ -266,18 +266,14 @@ async function main() {
     );
 
     // Hot-switch the preset and verify anchoring.
-    const projectForSwitch = await prepareSandbox(root, "opencode/gpt-6-sol");
-    void projectForSwitch;
     const { createDefaultVvocConfig: rebuild } = (await import(
       join(WORKSPACE_ROOT, "dist/lib/vvoc-config.js")
     )) as { createDefaultVvocConfig: () => Record<string, unknown> };
     const switched = rebuild();
-    (switched as { roles: Record<string, string> }).roles = {
-      default: "opencode/gpt-6-luna",
-      smart: "opencode/gpt-6-luna",
-      fast: "opencode/gpt-6-luna",
-      reviewer: "opencode/gpt-6-luna",
-    };
+    (switched as { roles: Record<string, string> }).roles = buildSandboxConfigs(
+      "opencode/gpt-6-luna",
+      "",
+    ).vvocRoles;
     await writeFile(join(project, ".vvoc", "vvoc.json"), JSON.stringify(switched, null, 2));
     await new Promise((resolve) => setTimeout(resolve, 1500));
 

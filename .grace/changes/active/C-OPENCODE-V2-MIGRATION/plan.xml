@@ -91,22 +91,22 @@
       </MustContain>
       <MustContain>
         <File>src/index.ts</File>
-        <Text>server()</Text>
+        <Text>setupV2Plugins</Text>
       </MustContain>
       <MustContain>
         <File>src/index.ts</File>
-        <Text>Plugin.define</Text>
+        <Text>defineDualPlugin</Text>
       </MustContain>
       <MustContain>
-        <File>src/plugins/workflow/index.ts</File>
+        <File>src/plugins/workflow/v2.ts</File>
         <Text>tool.hook</Text>
       </MustContain>
       <MustContain>
-        <File>src/plugins/secrets-redaction/index.ts</File>
+        <File>src/plugins/secrets-redaction/v2.ts</File>
         <Text>session.hook</Text>
       </MustContain>
       <MustContain>
-        <File>src/plugins/model-roles/index.ts</File>
+        <File>src/plugins/model-roles/v2.ts</File>
         <Text>transform</Text>
       </MustContain>
       <MustContain>
