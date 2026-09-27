@@ -1,0 +1,313 @@
+{
+  "version": "1.0.0",
+  "change": "C-OPENCODE-V2-NATIVE",
+  "generatedBy": "T-003 versioned parity inventory and isolated real-host core harness",
+  "statusVocabulary": ["implemented-core", "covered-unit", "pending", "unverified-paid"],
+  "note": "Rows marked implemented-core are exercised by `bun scripts/e2e-v2.ts --core` against the packed package on the pinned host. Rows marked pending are owned by later tasks and are not claimed. A reduced core matrix is never full parity.",
+  "rows": [
+    {
+      "id": "pack.packed-artifact",
+      "surface": "Packed package tarball import and activation",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "npm/bun pack tarball installs into an isolated fixture; the packed ./plugins/model-roles subpath and actual dist/runtime load and complete setup.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles",
+      "surface": "Model-roles plugin import, activation, toggle, idle quiescence, cleanup",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "Real ModelRolesPlugin.setup runs via the shared context; idle registry has no captures or staged candidates and no reload loop.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.admission",
+      "surface": "Awaited first accepted prompt admission",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "A rejected preparation after the prompt hook binds nothing; the later valid prompt binds a durable family policy and dispatches the captured payload.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.rollback",
+      "surface": "Rejected/admission rollback without binding",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "Preparation failure leaves the family unbound instead of publishing the staged candidate.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.variants",
+      "surface": "Captured source variants on the same real model",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "One model dispatches two distinct qualified payloads (override/high and plain/minimal); final registry readback exposes the family-qualified variants.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.policy",
+      "surface": "Bound family policy versus changed configuration",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "A config change binds new work to a new snapshot while an already-bound family keeps its captured variant.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.synthetic",
+      "surface": "Owned generate/synthetic pre-admission and raw-unbound refusal",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "Pre-admission publishes an owned family before native session.generate/session.synthetic, which then dispatch the captured payload; raw unbound generate and synthetic produce zero provider dispatch and no capture.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.auxiliary",
+      "surface": "Auxiliary title child bound to the family",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "A persistent native child session is created with parentID, vvocAuxiliary kind/role metadata, and the same family capture prefix; exactly one provider dispatch is attributed to the parent, proving the native title dispatch was suppressed.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.lineage",
+      "surface": "Child/fork/worktree family lineage resolution",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "The auxiliary child, a native fork with empty parentID and fork.sessionID, and a session moved into a native worktree all resolve the host-verified root family capture and dispatch its payload before dispatch.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.explicit",
+      "surface": "Explicit-at-create and explicit switch selection provenance",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "An explicit selection at create and an explicit switch before first binding are preserved over the configured default and dispatched in the provider payload.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.model-roles.fork",
+      "surface": "Native fork with empty parentID and fork.sessionID",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "A native fork records fork.sessionID and no parentID; family lookup and the dispatched payload follow the root family.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.admission.ordering",
+      "surface": "First-accepted versus first-staged input ordering",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "With two differing-policy inputs staged on one family, the first native-accepted input binds; a fixture preparation delay after the real prompt hook controls ordering without implementing admission.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.admission.owned",
+      "surface": "Owned pre-admission gateway and prompt-candidate separation",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "admitWorkload mints its own owned candidate and publishes before native model resolution; it never publishes a prompt candidate.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.snapshot-persist",
+      "surface": "Durable family capture persistence and restart replay",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "Bound captures persist under the isolated XDG data directory; after a real host restart the same persisted session rebinds its original snapshot-qualified variant.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.replay-restart",
+      "surface": "Durable replay after service restart",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "A second owned host instance replays the persisted family capture for an existing session instead of adopting the current policy silently.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.permissions",
+      "surface": "Resource permission guard effects and create/get/reply",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "The awaited guard runs zero effects on deny and exactly one on allow, including a fast reply with no lost event; the raw request resolves allow/deny through native create/reply.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "runtime.hooks.probe",
+      "surface": "Native hook availability probe",
+      "phase": "T-003",
+      "status": "implemented-core",
+      "acceptance": "Records which native hooks register on the pinned host. Availability only, not secrets/SSE restoration parity.",
+      "command": "bun scripts/e2e-v2.ts --core"
+    },
+    {
+      "id": "plugin.guardian",
+      "surface": "Guardian approve/defer and permission review",
+      "phase": "T-005",
+      "status": "pending",
+      "acceptance": "Guardian approves only low-risk work, defers uncertainty, and uses family-bound auxiliary inference with native permission events.",
+      "command": "bun test src/plugins/guardian.integration.test.ts"
+    },
+    {
+      "id": "plugin.hashline-edit",
+      "surface": "Hashline edit routing and fresh anchor checks",
+      "phase": "T-005",
+      "status": "pending",
+      "acceptance": "Per-model edit routing, fresh hashline checks, and edit-tool visibility/execution enforcement under native schemas.",
+      "command": "bun test src/plugins/hashline-edit.integration.test.ts"
+    },
+    {
+      "id": "plugin.secrets-redaction",
+      "surface": "Secrets redaction and SSE/WS restoration",
+      "phase": "T-005",
+      "status": "pending",
+      "acceptance": "Primary and auxiliary requests redacted; split placeholders restored across SSE and WebSocket TEXT deltas with opaque frames preserved.",
+      "command": "bun test src/plugins/secrets-redaction"
+    },
+    {
+      "id": "plugin.web-tools",
+      "surface": "Web search/fetch with permission-before-network",
+      "phase": "T-005",
+      "status": "pending",
+      "acceptance": "Strict web defaults and errors, permission-before-network semantics, and scoped spec gating.",
+      "command": "bun test src/plugins/web-tools.integration.test.ts"
+    },
+    {
+      "id": "plugin.spec-guard",
+      "surface": "Spec guard scoped gating",
+      "phase": "T-005",
+      "status": "pending",
+      "acceptance": "Scoped spec gating remains effective under native lifecycle events.",
+      "command": "bun test src/plugins/spec-guard"
+    },
+    {
+      "id": "plugin.system-context-injection",
+      "surface": "System context and agent/model attribution",
+      "phase": "T-006",
+      "status": "pending",
+      "acceptance": "Guidance injection and attribution retain visible effects under native V2 lifecycle events.",
+      "command": "bun test src/plugins/system-context-injection.integration.test.ts"
+    },
+    {
+      "id": "plugin.analytics",
+      "surface": "Analytics token/cache usage",
+      "phase": "T-006",
+      "status": "pending",
+      "acceptance": "Provider-reported usage and cache accounting preserve visible effects; opaque or missing usage is not fabricated.",
+      "command": "bun test src/plugins/analytics"
+    },
+    {
+      "id": "plugin.tool-history-compaction",
+      "surface": "Tool-history compaction cutoff",
+      "phase": "T-006",
+      "status": "pending",
+      "acceptance": "Post-compaction recent tool history is preserved and the protected window is honored.",
+      "command": "bun test src/plugins/tool-history-compaction.integration.test.ts"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "surface": "Peak-hours soft/hard policy and exemptions",
+      "phase": "T-006",
+      "status": "pending",
+      "acceptance": "Hard peak denial precedes requests without killing existing work; subagent exemptions remain.",
+      "command": "bun test src/plugins/peak-hours"
+    },
+    {
+      "id": "plugin.workflow",
+      "surface": "Workflow launch/result enforcement, checkpoints, recovery, cancellation",
+      "phase": "T-004",
+      "status": "pending",
+      "acceptance": "Native subagent/session/message shapes preserve domain contracts; cancellation recovery requires Task cancelled, child MessageAbortedError, and quiescence.",
+      "command": "bun test src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts"
+    },
+    {
+      "id": "tui.context-overview",
+      "surface": "Full /context Overview/Tools/MCP collection and rendering",
+      "phase": "T-008",
+      "status": "pending",
+      "acceptance": "Real V2 TUI collection, rendering, tabs, navigation, scrolling, narrow layouts, and cleanup.",
+      "command": "bun test src/tui && bun scripts/e2e-v2.ts --tui"
+    },
+    {
+      "id": "tui.indicators-footer-banner",
+      "surface": "Cache indicator, branding footer, peak-hours banner",
+      "phase": "T-008",
+      "status": "pending",
+      "acceptance": "Indicators, footer, and banner derive from native TUI/client contracts in a real PTY.",
+      "command": "bun test src/tui"
+    },
+    {
+      "id": "cli.install-sync-init",
+      "surface": "install/init/sync/launch lifecycle",
+      "phase": "T-007",
+      "status": "pending",
+      "acceptance": "Native host version/schema/registration contracts; pinned package specifier retained in OpenCode and TUI plugin arrays.",
+      "command": "bun test src/commands"
+    },
+    {
+      "id": "cli.status-doctor-upgrade",
+      "surface": "status/doctor/upgrade surfaces",
+      "phase": "T-007",
+      "status": "pending",
+      "acceptance": "Fresh and repeated setup, invalid config, project isolation, and existing user overrides without touching live configuration.",
+      "command": "bun test src/commands"
+    },
+    {
+      "id": "cli.config-plugin-completions",
+      "surface": "config/plugin management and completions",
+      "phase": "T-007",
+      "status": "pending",
+      "acceptance": "Strict canonical vvoc v3 config, conservative idempotent writes, and native plugin toggles.",
+      "command": "bun test src/lib/vvoc-config.test.ts src/lib/opencode.test.ts"
+    },
+    {
+      "id": "presets.model-variants",
+      "surface": "Canonical presets, roles, and model variants",
+      "phase": "T-007",
+      "status": "pending",
+      "acceptance": "Remove vv-kimi surfaces; preserve prescribed residual provider patches; publish MiMo thinking correctly without PDF.",
+      "command": "bun test src/lib/model-roles.test.ts"
+    },
+    {
+      "id": "managed.agents-skills",
+      "surface": "Managed agents and skills content",
+      "phase": "T-007",
+      "status": "pending",
+      "acceptance": "Managed content and tool references use native subagent semantics.",
+      "command": "bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts"
+    },
+    {
+      "id": "contracts.tools",
+      "surface": "Strict public tool contracts",
+      "phase": "T-009",
+      "status": "pending",
+      "acceptance": "Tool-contract census and generated reference updated for native V2 names including subagent.",
+      "command": "bun run contracts:check"
+    },
+    {
+      "id": "workflow.cancellation-recovery",
+      "surface": "Cancellation recovery and finite authority",
+      "phase": "T-004",
+      "status": "pending",
+      "acceptance": "Interrupted workers survive hydration as in-flight; explicit recovery settles only with affirmative evidence and preserves historical completion timestamps.",
+      "command": "bun test src/plugins/workflow.execution.integration.test.ts"
+    },
+    {
+      "id": "package.root-assembly",
+      "surface": "Root aggregation and all standalone native exports",
+      "phase": "T-009",
+      "status": "pending",
+      "acceptance": "Every server plugin and the TUI load through native V2 exports in the packed package with no V1 SDK dependencies.",
+      "command": "bun run pack:check"
+    },
+    {
+      "id": "parity.full",
+      "surface": "Complete baseline parity acceptance",
+      "phase": "T-009/T-010",
+      "status": "pending",
+      "acceptance": "Real-host coverage for every parity row against the installed packed root and TUI; no fixture substitutes for the plugin under acceptance.",
+      "command": "bun run e2e:v2"
+    }
+  ]
+}

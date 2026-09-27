@@ -1,0 +1,485 @@
+{
+  "change": "C-OPENCODE-V2-NATIVE T-003 core real-host harness",
+  "mode": "core",
+  "generatedAt": "2026-09-27T21:11:42.826Z",
+  "host": {
+    "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
+    "sha256": "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f",
+    "version": "2.0.18",
+    "sourceCommit": "cd9a14a6b688d4021bee381dfd39d2cef9c0f862"
+  },
+  "package": {
+    "tarballPath": "/tmp/opencode/vvoc-e2e-v2-NhluUE/pack/vv-opencode-e2e.tgz",
+    "tarballSha256": "ad3ad400261b9be8b760ce9c57130b2dd59cce3af3f7d688fbdeadcb41e3f0c0",
+    "version": "1.7.0",
+    "installedDir": "/tmp/opencode/vvoc-e2e-v2-NhluUE/project/node_modules/@osovv/vv-opencode",
+    "packTool": "bun pm pack --ignore-scripts",
+    "packEquivalence": "verified npm-format tarball entrypoints present and package.json name/version match; successfully installed and loaded on the pinned host",
+    "packedEntryCount": 466
+  },
+  "isolation": {
+    "scratch": {
+      "dir": "/tmp/opencode/vvoc-e2e-v2-NhluUE",
+      "base": "/tmp/opencode",
+      "marker": "owned"
+    },
+    "envKeys": [
+      "HOME",
+      "LOOPBACK_API_KEY",
+      "OPENCODE_DISABLE_MODELS_FETCH",
+      "PATH",
+      "VVOC_E2E_ALLOWED_PROVIDERS",
+      "VVOC_E2E_CONTROL_FILE",
+      "VVOC_E2E_DELAY_MARKER",
+      "VVOC_E2E_DELAY_MS",
+      "VVOC_E2E_PROVIDER_ORIGIN",
+      "VVOC_E2E_TRACE",
+      "XDG_CACHE_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME"
+    ],
+    "env": {
+      "PATH": "[redacted]",
+      "HOME": "/tmp/opencode/vvoc-e2e-v2-NhluUE/home",
+      "XDG_CONFIG_HOME": "/tmp/opencode/vvoc-e2e-v2-NhluUE/cfg",
+      "XDG_DATA_HOME": "/tmp/opencode/vvoc-e2e-v2-NhluUE/data",
+      "XDG_STATE_HOME": "/tmp/opencode/vvoc-e2e-v2-NhluUE/state",
+      "XDG_CACHE_HOME": "/tmp/opencode/vvoc-e2e-v2-NhluUE/cache",
+      "LOOPBACK_API_KEY": "[redacted]",
+      "OPENCODE_DISABLE_MODELS_FETCH": "1",
+      "VVOC_E2E_CONTROL_FILE": "/tmp/opencode/vvoc-e2e-v2-NhluUE/trace/control.json",
+      "VVOC_E2E_PROVIDER_ORIGIN": "http://127.0.0.1:33047",
+      "VVOC_E2E_ALLOWED_PROVIDERS": "loopback",
+      "VVOC_E2E_TRACE": "/tmp/opencode/vvoc-e2e-v2-NhluUE/trace/observer.jsonl",
+      "VVOC_E2E_DELAY_MARKER": "__vvoc_e2e_delay__",
+      "VVOC_E2E_DELAY_MS": "5000"
+    },
+    "networking": "owned 127.0.0.1 provider origin only; fixture guards enforce http.request URL, model.request baseURL/provider, and WS handshake destination before dispatch"
+  },
+  "provider": {
+    "origin": "http://127.0.0.1:33047",
+    "catalog": {
+      "object": "list",
+      "data": [
+        {
+          "id": "seam-smart",
+          "object": "model",
+          "created": 1,
+          "owned_by": "loopback",
+          "name": "Seam Smart",
+          "context_window": 128000,
+          "max_output_tokens": 8192
+        },
+        {
+          "id": "seam-fast",
+          "object": "model",
+          "created": 1,
+          "owned_by": "loopback",
+          "name": "Seam Fast",
+          "context_window": 128000,
+          "max_output_tokens": 8192
+        }
+      ]
+    },
+    "requestCount": 28,
+    "distinctPayloads": [
+      {
+        "model": "seam-smart",
+        "smoke_variant": "plain",
+        "reasoning_effort": "minimal"
+      },
+      {
+        "model": "seam-smart",
+        "smoke_variant": "override",
+        "reasoning_effort": "high"
+      }
+    ]
+  },
+  "teardown": {
+    "strategy": "exact live ChildProcess handles, SIGTERM then joined SIGKILL; ownership-marked scratch removed only through guarded cleanup",
+    "ownedPids": [
+      1815088
+    ]
+  },
+  "cases": [
+    {
+      "id": "activation",
+      "title": "Packed artifact import, mandatory guards, and idle registry quiescence",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles",
+        "pack.packed-artifact"
+      ],
+      "status": "pass",
+      "detail": "packed package imported, mandatory guards registered, fresh sessions unbound",
+      "assertions": [
+        "control plane reports the packed fixture setup completed",
+        "fixture plugin id is stable (expected \"vvoc.e2e.fixture\", got \"vvoc.e2e.fixture\")",
+        "packed package preserves version 1.7.0 (expected \"1.7.0\", got \"1.7.0\")",
+        "mandatory http.request destination guard registered (expected true, got true)",
+        "mandatory model.request destination guard registered (expected true, got true)",
+        "authenticated same-instance native client challenge succeeded",
+        "durable capture registry is readable",
+        "a fresh session has no bound policy",
+        "a fresh session has no staged candidate",
+        "model.updated reload count stays bounded (4)"
+      ],
+      "failures": [],
+      "durationMs": 925,
+      "observed": {
+        "instanceId": "21eb4de15c3d0f0f74f109b50584c6c7",
+        "guardState": {
+          "http.request": true,
+          "model.request": true,
+          "experimental.ws.handshake": true
+        },
+        "eventCounts": {
+          "integration.updated": 1,
+          "model.updated": 4,
+          "provider.updated": 1,
+          "vcs.branch.updated": 1,
+          "agent.updated": 3,
+          "command.updated": 1,
+          "skill.updated": 1,
+          "websearch.updated": 1,
+          "reference.updated": 1,
+          "plugin.updated": 1,
+          "session.model.selected": 1,
+          "session.inbox.enqueued": 1,
+          "session.execution.started": 1,
+          "session.instructions.updated": 1,
+          "session.inbox.delivered": 1
+        }
+      }
+    },
+    {
+      "id": "admission",
+      "title": "Awaited admission, rejected preparation, and zero-dispatch rejection",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.admission",
+        "plugin.model-roles.rollback"
+      ],
+      "status": "pass",
+      "detail": "rejected preparation dispatched nothing; the valid prompt dispatched once and bound",
+      "assertions": [
+        "native preparation rejection is observable (status 400)",
+        "rejected preparation produced zero provider dispatch for that input",
+        "a preparation rejection after the prompt hook does not bind a family policy",
+        "valid prompt accepted (status 200)",
+        "the accepted prompt dispatched exactly once for its marker (expected 1, got 1)",
+        "the accepted prompt dispatched the source variant merged settings (override/high)",
+        "the valid prompt bound a durable family policy",
+        "session model carries the qualified override variant (41857d5d6292d815.seam-smart.override)"
+      ],
+      "failures": [],
+      "durationMs": 2979,
+      "observed": {
+        "sessionID": "ses_f1b4b0068ffe6c9QruJ9F1Kk6l",
+        "rejectedStatus": 400,
+        "variant": "41857d5d6292d815.seam-smart.override"
+      }
+    },
+    {
+      "id": "payload-variants",
+      "title": "Same model, two captured source variants, native registry readback",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.variants",
+        "runtime.model-registry"
+      ],
+      "status": "pass",
+      "detail": "two distinct qualified payloads for one model; final registry readback present",
+      "assertions": [
+        "root role uses the override variant (275aa15bbceab924.seam-smart.override)",
+        "native model.list contains the family-qualified override variant",
+        "native model.list does not contain a fabricated variant (negative control)",
+        "capture service still exposes the source variant descriptors",
+        "the override payload was actually dispatched",
+        "the same model dispatched a distinct plain/minimal payload"
+      ],
+      "failures": [],
+      "durationMs": 1641,
+      "observed": {
+        "variant": "275aa15bbceab924.seam-smart.override",
+        "registryContains": true
+      }
+    },
+    {
+      "id": "lineage-title",
+      "title": "Auxiliary title lineage and zero native title provider dispatch",
+      "phase": "T-003",
+      "parity": [
+        "runtime.lineage",
+        "plugin.model-roles.auxiliary"
+      ],
+      "status": "pass",
+      "detail": "auxiliary title is parented, family-qualified, and replaces the native title dispatch",
+      "assertions": [
+        "auxiliary work created a real parented native child",
+        "child records the family root parentID (expected \"ses_f1b4aee5dffeHrnuFcJhj1PlZb\", got \"ses_f1b4aee5dffeHrnuFcJhj1PlZb\")",
+        "child carries host-owned auxiliary kind/role metadata (expected \"{\\\"vvocAuxiliary\\\":{\\\"kind\\\":\\\"title\\\",\\\"role\\\":\\\"fast\\\"}}\", got \"{\\\"vvocAuxiliary\\\":{\\\"kind\\\":\\\"title\\\",\\\"role\\\":\\\"fast\\\"}}\")",
+        "child shares the family capture prefix (a775c40431757964)",
+        "exactly one provider dispatch is attributed to the parent (no native title dispatch) (expected 1, got 1)",
+        "the auxiliary child performed the title generation instead"
+      ],
+      "failures": [],
+      "durationMs": 3119,
+      "observed": {
+        "sessionID": "ses_f1b4aee5dffeHrnuFcJhj1PlZb",
+        "childID": "ses_3914bc28c114784b85e78187d511d773",
+        "parentDispatches": 1,
+        "childDispatches": 1
+      }
+    },
+    {
+      "id": "owned-generate-synthetic",
+      "title": "Owned pre-admission for generate/synthetic before a user prompt, raw-unbound refusal",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.synthetic",
+        "runtime.admission.owned"
+      ],
+      "status": "pass",
+      "detail": "owned generate/synthetic bound before a user prompt; raw unbound work dispatched nothing",
+      "assertions": [
+        "owned generate pre-admission published (bound)",
+        "native session.generate succeeded (200)",
+        "session.generate dispatched exactly once for its marker (expected 1, got 1)",
+        "owned generate dispatched the family captured variant payload",
+        "owned generate bound the family before any ordinary user prompt",
+        "native session.synthetic accepted (200)",
+        "owned synthetic dispatched the family captured variant payload",
+        "raw unbound session.generate is refused (500)",
+        "raw unbound generate produced zero provider dispatch",
+        "raw unbound synthetic produced zero provider dispatch",
+        "raw unbound synthetic did not bind a family (status 200)"
+      ],
+      "failures": [],
+      "durationMs": 7454,
+      "observed": {
+        "genStatus": 200,
+        "synStatus": 200,
+        "rawGenStatus": 500,
+        "rawSynStatus": 200
+      }
+    },
+    {
+      "id": "explicit-selection",
+      "title": "Explicit-at-create and explicit switch preserve the chosen selection",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.explicit"
+      ],
+      "status": "pass",
+      "detail": "explicit-at-create and explicit switch are preserved over the config default",
+      "assertions": [
+        "explicit-at-create kept the override selection (9c8d291f913de3fe.seam-smart.override)",
+        "explicit-at-create dispatched the override payload",
+        "explicit switch accepted (204)",
+        "explicit switch kept the chosen plain selection (9f4ad959bd759c57.seam-smart.plain)",
+        "explicit switch dispatched the chosen plain payload"
+      ],
+      "failures": [],
+      "durationMs": 3862,
+      "observed": {
+        "createVariant": "9c8d291f913de3fe.seam-smart.override",
+        "switchVariant": "9f4ad959bd759c57.seam-smart.plain"
+      }
+    },
+    {
+      "id": "config-mutation",
+      "title": "Bound family retains policy while changed configuration binds new work",
+      "phase": "T-003",
+      "parity": [
+        "runtime.snapshot-persist",
+        "plugin.model-roles.policy"
+      ],
+      "status": "pass",
+      "detail": "config change binds new work without mutating an already bound family",
+      "assertions": [
+        "initial family bound override (0301e76d5ae2c20b.seam-smart.override)",
+        "new work after mutation binds the new plain policy (c54a5a38e3e0c486.seam-smart.plain)",
+        "the new family capture differs from the earlier one",
+        "the already-bound family keeps its original captured variant (expected \"0301e76d5ae2c20b.seam-smart.override\", got \"0301e76d5ae2c20b.seam-smart.override\")"
+      ],
+      "failures": [],
+      "durationMs": 4714,
+      "observed": {
+        "firstVariant": "0301e76d5ae2c20b.seam-smart.override",
+        "secondVariant": "c54a5a38e3e0c486.seam-smart.plain"
+      }
+    },
+    {
+      "id": "fork-worktree",
+      "title": "Fork (empty parentID) and worktree move keep root family policy",
+      "phase": "T-003",
+      "parity": [
+        "runtime.lineage",
+        "plugin.model-roles.fork"
+      ],
+      "status": "pass",
+      "detail": "fork lineage and worktree move preserve the root family capture and payload",
+      "assertions": [
+        "native fork created (200)",
+        "forked session has an empty parentID",
+        "forked session records fork.sessionID to the source (expected \"ses_f1b4aa38dffe4MI8oV1IOIxOpP\", got \"ses_f1b4aa38dffe4MI8oV1IOIxOpP\")",
+        "host-verified family lookup resolves the fork to the root family (expected \"ses_f1b4aa38dffe4MI8oV1IOIxOpP\", got \"ses_f1b4aa38dffe4MI8oV1IOIxOpP\")",
+        "root session exposes its projectID",
+        "native worktree created (200: )",
+        "fork moved into the worktree (204)",
+        "moved fork still resolves the root family (expected \"ses_f1b4aa38dffe4MI8oV1IOIxOpP\", got \"ses_f1b4aa38dffe4MI8oV1IOIxOpP\")",
+        "moved fork keeps the root family capture (expected \"e18ec6fb14b7c93f\", got \"e18ec6fb14b7c93f\")",
+        "moved fork prompt accepted (200)",
+        "moved fork dispatched the root family captured plain payload with root lineage (fresh=[{\"variant\":\"plain\",\"marker\":true,\"session\":\"ses_f1b4aa38dffe4MI8oV1IOIxOpP\"}])"
+      ],
+      "failures": [],
+      "durationMs": 2870,
+      "observed": {
+        "rootFamily": "ses_f1b4aa38dffe4MI8oV1IOIxOpP",
+        "forkID": "ses_f1b4a9d34ffe65dX0eWJilgZca",
+        "projectID": "bbf62bed11145d2bd86592c048254d4b4639af40",
+        "movedModel": {
+          "id": "seam-smart",
+          "providerID": "loopback",
+          "variant": "e18ec6fb14b7c93f.seam-smart.plain"
+        },
+        "freshSummary": [
+          {
+            "variant": "plain",
+            "marker": true,
+            "session": "ses_f1b4aa38dffe4MI8oV1IOIxOpP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "permission-guard",
+      "title": "Resource permission guard effects: deny zero, allow one, fast reply",
+      "phase": "T-003",
+      "parity": [
+        "runtime.permissions"
+      ],
+      "status": "pass",
+      "detail": "guard produced zero effects on deny and exactly one on allow, including a fast reply",
+      "assertions": [
+        "guard created a pending native permission request",
+        "guard denied the effect (expected false, got false)",
+        "denied guard ran zero effects (expected 0, got 0)",
+        "second guard created a pending request",
+        "guard allowed the effect after the reply (expected true, got true)",
+        "allowed guard ran the effect exactly once (expected 1, got 1)",
+        "fast-reply guard created a pending request",
+        "fast reply allowed the effect (expected true, got true)",
+        "fast reply ran the effect exactly once with no lost event (expected 1, got 1)"
+      ],
+      "failures": [],
+      "durationMs": 1292,
+      "observed": {
+        "denied": {
+          "allowed": false,
+          "effects": 0,
+          "error": "Permission denied for action e2e.guard.deny."
+        },
+        "allowed": {
+          "allowed": true,
+          "effects": 1
+        },
+        "fast": {
+          "allowed": true,
+          "effects": 1
+        }
+      }
+    },
+    {
+      "id": "ordering-first-accepted",
+      "title": "First-accepted input binds over the first-staged input with a differing policy",
+      "phase": "T-003",
+      "parity": [
+        "runtime.admission.ordering"
+      ],
+      "status": "pass",
+      "detail": "first-accepted input's policy bound while the first-staged input's policy did not",
+      "assertions": [
+        "policy switch during A preparation accepted (204)",
+        "second prompt accepted (200)",
+        "first prompt request completed (200)",
+        "the first-accepted input's plain policy bound, not the first-staged override (7e9127710523fb2d.seam-smart.plain)",
+        "the bound family capture reflects the accepted plain policy"
+      ],
+      "failures": [],
+      "durationMs": 7818,
+      "observed": {
+        "session": "ses_f1b4a8d70ffecpox1Bip565mdM",
+        "variant": "7e9127710523fb2d.seam-smart.plain",
+        "aStatus": 200,
+        "bStatus": 200
+      }
+    },
+    {
+      "id": "hook-probe",
+      "title": "Native hook availability probe (no product parity claim)",
+      "phase": "T-003",
+      "parity": [
+        "runtime.hooks.probe"
+      ],
+      "status": "pass",
+      "detail": "recorded which native hooks register; availability only, not secrets/SSE restoration parity (T-005/T-009)",
+      "assertions": [
+        "hook probe endpoint answered",
+        "model.request hook is available"
+      ],
+      "failures": [],
+      "durationMs": 1,
+      "observed": {
+        "model.request": true,
+        "context": true,
+        "generate": true,
+        "compaction": true,
+        "title": true,
+        "http.request": true,
+        "http.response": true
+      }
+    },
+    {
+      "id": "replay-restart",
+      "title": "Durable root and auxiliary family replay after a real service restart",
+      "phase": "T-003",
+      "parity": [
+        "runtime.snapshot-persist",
+        "runtime.lineage"
+      ],
+      "status": "pass",
+      "detail": "persisted root and auxiliary family captures survived a real host restart",
+      "assertions": [
+        "pre-restart root family bound a snapshot variant (687ea88a967e806b.seam-smart.override)",
+        "pre-restart auxiliary family exists",
+        "pre-restart auxiliary shares the root family snapshot (expected \"687ea88a967e806b\", got \"687ea88a967e806b\")",
+        "first host instance exited before restart",
+        "packed fixture control plane re-registered on the new host instance",
+        "persisted root family capture replayed after a real service restart (expected \"687ea88a967e806b.seam-smart.override\", got \"687ea88a967e806b.seam-smart.override\")",
+        "the replayed root family dispatched its persisted variant payload after restart",
+        "persisted auxiliary family capture replayed after restart (expected \"687ea88a967e806b\", got \"687ea88a967e806b\")",
+        "auxiliary child kept its qualified variant after restart (expected \"687ea88a967e806b.seam-smart.plain\", got \"687ea88a967e806b.seam-smart.plain\")",
+        "the auxiliary family dispatched its persisted variant payload after restart"
+      ],
+      "failures": [],
+      "durationMs": 4779,
+      "observed": {
+        "rootID": "ses_f1b4a6ee6ffeAjUeUeMFg3WrqX",
+        "rootVariant": "687ea88a967e806b.seam-smart.override",
+        "rootAfterVariant": "687ea88a967e806b.seam-smart.override",
+        "auxID": "ses_0d7919aa525a871b9c4a4aedb249230d",
+        "auxVariant": "687ea88a967e806b.seam-smart.plain",
+        "restarted": true
+      }
+    }
+  ],
+  "coverageLimits": [
+    "Same-model switch emits no native event and is not a criterion.",
+    "Equal-time cross-session acceptance ordering is covered by engine/integration tests; the host case delays preparation after the real prompt hook without implementing admission.",
+    "Secrets/SSE placeholder restoration product parity belongs to T-005/T-009; this run only probes hook availability.",
+    "Full-product parity (all eleven plugins, CLI/config/setup, presets, workflow, full TUI) is not claimed; see parity.json."
+  ]
+}
