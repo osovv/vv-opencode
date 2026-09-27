@@ -2,8 +2,8 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Single source of truth for the five workflow tool argument schemas, their closed nested request structures, field descriptions, canonical enums/bounds, and the derived TypeScript argument types.
-//   SCOPE: SDK tool.schema field maps for work_item_open, work_item_list, work_item_close, work_item_decide, and work_checkpoint consumed by the plugin registrations in index.ts, the owned-tool contracts in input-validation.ts, and tooling.ts. Closed nested objects (task items, execution descriptors, boundaries, typed task/checkpoint batches), canonical mode/reviewer/stage enums, and provided-plan source variants are declared here; a bound is published only where the field's owning domain validator actually enforces it, applied after the documented trim so surrounding whitespace never rejects a canonically valid value. Unbounded collections and paths stay uncapped. No tool may declare its arguments elsewhere, and no schema transform rewrites the input projection shape.
-//   DEPENDS: [@opencode-ai/plugin, zod (types), src/lib/agent-tool-contract.ts (strictObject), src/lib/workflow-contract.ts (canonical enums and text bounds), src/plugins/workflow/delegated.ts (rationale/evidence bounds)]
+//   SCOPE: Native-tool zod schemas for work_item_open, work_item_list, work_item_close, work_item_decide, and work_checkpoint consumed by the native tool registrations in index.ts, the owned-tool contracts in input-validation.ts, and tooling.ts. Closed nested objects (task items, execution descriptors, boundaries, typed task/checkpoint batches), canonical mode/reviewer/stage enums, and provided-plan source variants are declared here; a bound is published only where the field's owning domain validator actually enforces it, applied after the documented trim so surrounding whitespace never rejects a canonically valid value. Unbounded collections and paths stay uncapped. No tool may declare its arguments elsewhere, and no schema transform rewrites the input projection shape.
+//   DEPENDS: [zod (direct runtime schemas; pinned direct dependency is T-009 package assembly), src/lib/agent-tool-contract.ts (strictObject), src/lib/workflow-contract.ts (canonical enums and text bounds), src/plugins/workflow/delegated.ts (rationale/evidence bounds)]
 //   LINKS: [M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-AGENT-TOOL-CONTRACT, M-WORKFLOW-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -26,11 +26,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Replaced opaque records/strings with closed nested structures, canonical enums, provided-plan source variants, typed task/checkpoint batches, delegated text bounds, and field descriptions; argument types remain derived from these schemas. Field descriptions state the action/decision scope enforced by the runtime matrix. Each published bound now mirrors its owning domain validator (boundedTextList counts/text, canonical bounded ids, delegated evidence/rationale limits) and is applied after trim; boundary/writeScope/scope paths and batch/reviewer/stage counts are unbounded because their owning validators are.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Replaced the V1 SDK tool.schema re-export with the direct zod instance so the same schemas feed native Tool.ValueSchema registrations; shapes and derived argument types are unchanged.]
 // END_CHANGE_SUMMARY
 
-import { tool } from "@opencode-ai/plugin";
-import type { z } from "zod";
+import { z } from "zod";
 import { strictObject } from "../../lib/agent-tool-contract.js";
 import {
   AUTHORITY_STAGES,
@@ -46,7 +45,7 @@ import {
   DELEGATED_RATIONALE_MAX_CHARS,
 } from "./delegated.js";
 
-const schema = tool.schema;
+const schema = z;
 
 /**
  * Bound helpers mirror the owning domain validator, and apply the documented

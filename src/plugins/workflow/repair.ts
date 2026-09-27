@@ -1,41 +1,41 @@
 // FILE: src/plugins/workflow/repair.ts
-// VERSION: 0.2.1
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Recognize resumable OpenCode task envelopes and perform one bounded same-session continuation for malformed tracked outputs, letting the original subagent finish unfinished work or truthfully correct its final report.
-//   SCOPE: OpenCode task envelope parsing, protocol-error-aware continuation prompt construction from the shared status/route contract that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop status detection preserving the observed substantive stop for terminal settlement, continued-output extraction, and same-session continuation calls for tracked workflow results.
-//   DEPENDS: [@opencode-ai/plugin, @opencode-ai/sdk, src/plugins/workflow/protocol.ts]
+//   PURPOSE: Recognize resumable native subagent/task envelopes and perform one bounded same-child continuation for malformed tracked outputs using the native session prompt/wait/message surface.
+//   SCOPE: Native `<subagent ...>` and legacy task envelope parsing, protocol-error-aware continuation prompt construction from the shared status/route contract that preserves work-item identity while reporting a truthful post-continuation status/route, explicit hard-stop status detection preserving the observed substantive stop for terminal settlement, continued-output extraction from native assistant messages, and one same-child continuation call. No child creation, no tool/agent override, no forged result status.
+//   DEPENDS: [@opencode/client, src/plugins/workflow/protocol.ts, src/plugins/workflow/host.ts]
 //   LINKS: [M-WORKFLOW-REPAIR, M-WORKFLOW-PROTOCOL, M-PLUGIN-WORKFLOW]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   ResumableTaskEnvelope - Recognized OpenCode resumable task wrapper metadata plus inner tracked result text.
-//   unwrapResumableTaskResult - Extracts tracked result text only from known resumable OpenCode task envelopes.
+//   ResumableTaskEnvelope - Recognized native resumable task wrapper metadata plus inner tracked result text.
+//   unwrapResumableTaskResult - Extracts tracked result text from known native/legacy subagent envelopes.
 //   buildTrackedResultRepairPrompt - Constructs the strict bounded-continuation prompt for the same child session with a truthful post-continuation status/route.
 //   hasExplicitHardStopStatus - Detects explicit BLOCKED/NEEDS_CONTEXT protocol status lines before any continuation.
 //   detectExplicitHardStopStatus - Returns the explicit BLOCKED/NEEDS_CONTEXT status line value, if any.
 //   isTrackedResultRepairEligible - Restricts the one-shot continuation to safe protocol error classes.
-//   attemptTrackedResultRepair - Continues the same child session once and returns corrected tracked result text when possible.
+//   NativeRepairClient - Narrow full-client surface (session prompt/wait + message list) used for the continuation.
+//   attemptTrackedResultRepair - Continues the same child session once and returns a NEW terminal assistant created at/after the accepted prompt.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Generated the continuation status vocabulary and route requirement from the shared protocol contract and stated the first-line/no-fence rule; repair eligibility is unchanged. Prior: detectExplicitHardStopStatus preserves the exact observed substantive stop.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 attempt 4 - Continuation requires a NEW assistant id absent before the prompt with finite created+completed, created at/after the authoritative accepted timestamp, and no terminal error; invalid acceptance timestamps fail closed (no wall-clock substitution).]
 // END_CHANGE_SUMMARY
 
-import type { Plugin } from "@opencode-ai/plugin";
-import type { Part } from "@opencode-ai/sdk";
 import {
   describeStatusVocabulary,
   resultBlockRequiresRoute,
   type ProtocolErrorCode,
   type TrackedAgentName,
 } from "./protocol.js";
+import { parseSubagentCompletionElement } from "./host.js";
 
 export type ResumableTaskEnvelope = {
   taskId: string;
   innerResult: string;
-  format: "resumable_header" | "task_element";
+  format: "subagent_element" | "resumable_header" | "task_element";
 };
 
 const RESUMABLE_TASK_ID_RE =
@@ -56,9 +56,6 @@ const TASK_ELEMENT_OPEN_RE = /^<task\s+id="([^"]+)"\s+state="([^"]+)"\s*>$/;
  * or NEEDS_CONTEXT, so natural-language text cannot suppress a continuation.
  */
 const EXPLICIT_HARD_STOP_STATUS_RE = /^\s*VVOC_STATUS\s*:\s*(BLOCKED|NEEDS_CONTEXT)\b/;
-
-const TRACKED_RESULT_CONTINUATION_SYSTEM_PROMPT =
-  "Bounded same-session workflow continuation. Preserve the original work item, assignment, role, and write scope. Finish any unfinished implementation or review work using your existing history and currently permitted tools, or, if it was already complete, correct only the final report. Report the VVOC_STATUS and VVOC_ROUTE that truthfully reflect the result after this continuation.";
 
 function parseResumableTaskEnvelope(output: string): ResumableTaskEnvelope | undefined {
   const normalizedOutput = output.replace(/\r\n/g, "\n");
@@ -106,7 +103,7 @@ function parseResumableTaskEnvelope(output: string): ResumableTaskEnvelope | und
 }
 
 /**
- * Parse the new OpenCode `<task id="ses_..." state="completed">...</task>` envelope format.
+ * Parse the legacy OpenCode `<task id="ses_..." state="completed">...</task>` envelope format.
  * Also strips any nested `<task_result>`/`</task_result>` wrapper inside the element body.
  */
 function parseTaskElementEnvelope(output: string): ResumableTaskEnvelope | undefined {
@@ -125,7 +122,6 @@ function parseTaskElementEnvelope(output: string): ResumableTaskEnvelope | undef
 
   const taskId = openTagMatch[1];
 
-  // Find closing </task> tag
   const closeTagIndex = lines.findIndex(
     (line, index) => index > firstMeaningfulIndex && line.trim() === "</task>",
   );
@@ -133,15 +129,12 @@ function parseTaskElementEnvelope(output: string): ResumableTaskEnvelope | undef
     return undefined;
   }
 
-  // Extract inner content (between open and close tags)
   let innerLines = lines.slice(firstMeaningfulIndex + 1, closeTagIndex);
 
-  // Strip outer <task_result>/</task_result> wrapper if present
   const innerFirstIdx = innerLines.findIndex((line) => line.trim().length > 0);
   if (innerFirstIdx >= 0) {
     const innerFirstTrimmed = innerLines[innerFirstIdx]?.trim() ?? "";
     if (innerFirstTrimmed === "<task_result>") {
-      // Find the closing </task_result>
       const innerCloseIdx = innerLines.findIndex(
         (line, index) => index > innerFirstIdx && line.trim() === "</task_result>",
       );
@@ -158,20 +151,31 @@ function parseTaskElementEnvelope(output: string): ResumableTaskEnvelope | undef
   };
 }
 
+/**
+ * Extract tracked result text from a known native subagent delivery envelope
+ * (`<subagent sessionID="..." state="...">...</subagent>`). Other states still
+ * unwrap so a terminal cancellation/failure body is never mistaken for a result.
+ */
+function parseSubagentElementEnvelope(output: string): ResumableTaskEnvelope | undefined {
+  const parsed = parseSubagentCompletionElement(output);
+  if (!parsed) return undefined;
+  return { taskId: parsed.sessionID, innerResult: parsed.output, format: "subagent_element" };
+}
+
 export function unwrapResumableTaskResult(output: string): {
   normalizedOutput: string;
   envelope?: ResumableTaskEnvelope;
 } {
-  // Try the new <task> element format first
-  const taskElementEnvelope = parseTaskElementEnvelope(output);
-  if (taskElementEnvelope) {
-    return {
-      normalizedOutput: taskElementEnvelope.innerResult,
-      ...(taskElementEnvelope ? { envelope: taskElementEnvelope } : {}),
-    };
+  const subagentEnvelope = parseSubagentElementEnvelope(output);
+  if (subagentEnvelope) {
+    return { normalizedOutput: subagentEnvelope.innerResult, envelope: subagentEnvelope };
   }
 
-  // Fall back to the old resumable task header format
+  const taskElementEnvelope = parseTaskElementEnvelope(output);
+  if (taskElementEnvelope) {
+    return { normalizedOutput: taskElementEnvelope.innerResult, envelope: taskElementEnvelope };
+  }
+
   const envelope = parseResumableTaskEnvelope(output);
   return {
     normalizedOutput: envelope?.innerResult ?? output,
@@ -246,18 +250,56 @@ export function isTrackedResultRepairEligible(code: ProtocolErrorCode): boolean 
   return SAFE_TRACKED_RESULT_REPAIR_CODES.has(code);
 }
 
-function extractTextParts(parts: Part[]): string {
-  return parts
-    .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
+/** Narrow native client surface used for one same-child continuation. */
+export interface NativeRepairClient {
+  readonly session: {
+    prompt(input: { readonly sessionID: string; readonly text: string }): Promise<unknown>;
+    wait(input: { readonly sessionID: string }): Promise<void>;
+  };
+  readonly message: {
+    list(input: {
+      readonly sessionID: string;
+      readonly order?: "asc" | "desc";
+      readonly limit?: number;
+      readonly type?: string;
+    }): Promise<unknown>;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** Extract the text of one native assistant message, or undefined when it has none. */
+function assistantMessageText(message: unknown): string | undefined {
+  if (!isRecord(message) || message.type !== "assistant") return undefined;
+  const content = message.content;
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .filter((part): part is { type: "text"; text: string } => {
+      return isRecord(part) && part.type === "text" && typeof part.text === "string";
+    })
     .map((part) => part.text)
     .join("")
     .trim();
+  return text === "" ? undefined : text;
 }
 
+/**
+ * Continue the SAME child session exactly once after a malformed final report.
+ * The native prompt preserves the child's agent, model, permissions and
+ * history, and this retrieves only a NEW terminal assistant created at or after
+ * the accepted prompt; an old assistant returned by a projected context view or
+ * a continuation that produced no new output is never treated as a corrected
+ * result. Any prompt or retrieval failure returns undefined.
+ */
 export async function attemptTrackedResultRepair(options: {
-  client: Parameters<Plugin>[0]["client"];
-  directory: string;
-  taskId: string;
+  client: NativeRepairClient;
+  sessionId: string;
   agent: TrackedAgentName;
   workItemId: string;
   malformedOutput: string;
@@ -265,37 +307,69 @@ export async function attemptTrackedResultRepair(options: {
   parseErrorMessage: string;
 }): Promise<string | undefined> {
   try {
-    const response = await options.client.session.prompt({
-      path: {
-        id: options.taskId,
-      },
-      query: {
-        directory: options.directory,
-      },
-      body: {
-        agent: options.agent,
-        system: TRACKED_RESULT_CONTINUATION_SYSTEM_PROMPT,
-        parts: [
-          {
-            type: "text",
-            text: buildTrackedResultRepairPrompt({
-              agent: options.agent,
-              workItemId: options.workItemId,
-              malformedOutput: options.malformedOutput,
-              parseErrorCode: options.parseErrorCode,
-              parseErrorMessage: options.parseErrorMessage,
-            }),
-          },
-        ],
-      },
+    // Record existing message identities BEFORE the prompt so a stale
+    // same-millisecond assistant can never be accepted as the continuation.
+    const beforeIds = new Set<string>();
+    const beforeList = await options.client.message.list({
+      sessionID: options.sessionId,
+      order: "desc",
+      limit: 50,
     });
-
-    if (response.error || !response.data) {
-      return undefined;
+    const beforeData =
+      isRecord(beforeList) && Array.isArray(beforeList.data)
+        ? beforeList.data
+        : Array.isArray(beforeList)
+          ? beforeList
+          : undefined;
+    if (beforeData === undefined) return undefined;
+    for (const message of beforeData) {
+      if (isRecord(message) && typeof message.id === "string") beforeIds.add(message.id);
     }
 
-    const repairedOutput = extractTextParts(response.data.parts ?? []);
-    return repairedOutput || undefined;
+    const accepted = await options.client.session.prompt({
+      sessionID: options.sessionId,
+      text: buildTrackedResultRepairPrompt({
+        agent: options.agent,
+        workItemId: options.workItemId,
+        malformedOutput: options.malformedOutput,
+        parseErrorCode: options.parseErrorCode,
+        parseErrorMessage: options.parseErrorMessage,
+      }),
+    });
+    // The native acceptance response is authoritative. An invalid/absent
+    // created timestamp is NOT replaced by wall clock; the continuation fails.
+    const acceptedRecord = isRecord(accepted) ? accepted : undefined;
+    const acceptedTime =
+      acceptedRecord && isRecord(acceptedRecord.time)
+        ? readFiniteNumber(acceptedRecord.time.created)
+        : undefined;
+    if (acceptedTime === undefined || acceptedTime <= 0) return undefined;
+
+    await options.client.session.wait({ sessionID: options.sessionId });
+    const list = await options.client.message.list({
+      sessionID: options.sessionId,
+      order: "desc",
+      limit: 50,
+      type: "assistant",
+    });
+    const data =
+      isRecord(list) && Array.isArray(list.data) ? list.data : Array.isArray(list) ? list : [];
+    for (const message of data) {
+      if (!isRecord(message) || message.type !== "assistant") continue;
+      const id = message.id;
+      // A NEW assistant: not present before the accepted continuation.
+      if (typeof id !== "string" || beforeIds.has(id)) continue;
+      const time = isRecord(message.time) ? message.time : undefined;
+      const created = time ? readFiniteNumber(time.created) : undefined;
+      const completed = time ? readFiniteNumber(time.completed) : undefined;
+      if (created === undefined || completed === undefined) continue;
+      if (created < acceptedTime) continue;
+      // A terminal error is not a corrected report.
+      if (message.error !== undefined) continue;
+      const text = assistantMessageText(message);
+      if (text !== undefined) return text;
+    }
+    return undefined;
   } catch {
     return undefined;
   }

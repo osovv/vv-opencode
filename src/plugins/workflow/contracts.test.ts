@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Contract coverage of the five registered workflow tool definitions: model-facing JSON Schema projection (closed roots, canonical enums, field descriptions, concrete source/task/checkpoint structures), SDK-shaped schema acceptance/rejection over the registered argument maps, and operation-branch accept/reject fixtures through the actual contracts.
 //   SCOPE: Contract schemas and projections only; no store mutation, plugin lifecycle, or host process.
-//   DEPENDS: [bun:test, @opencode-ai/plugin (tool.schema), src/plugins/workflow/input-validation.ts, src/plugins/workflow/schemas.ts, src/lib/agent-tool-contract.ts]
+//   DEPENDS: [bun:test, zod, src/plugins/workflow/input-validation.ts, src/plugins/workflow/schemas.ts, src/lib/agent-tool-contract.ts]
 //   LINKS: [M-WORKFLOW-TOOLING, M-AGENT-TOOL-CONTRACT, M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -20,7 +20,7 @@
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool } from "@opencode-ai/plugin";
+import { z } from "zod";
 import {
   getWorkflowToolContract,
   validateWorkflowToolInput,
@@ -89,7 +89,7 @@ describe("registered argument maps match the pinned SDK shape", () => {
       work_checkpoint: workCheckpointArgs,
     };
     for (const toolId of Object.keys(fixtures) as WorkflowToolId[]) {
-      const registered = tool.schema.object(shapes[toolId] as never);
+      const registered = z.object(shapes[toolId] as never);
       const parsed = registered.safeParse(fixtures[toolId]);
       expect(parsed.success).toBe(true);
     }

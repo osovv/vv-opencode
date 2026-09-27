@@ -1,9 +1,9 @@
 // FILE: src/plugins/workflow.contracts.integration.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Registered-workflow integration coverage for the public result contract: real schemas, before hooks, execute wrappers, and serialization with pinned SDK-shaped context; early thrown diagnostics agreeing with direct handler failures; host-context separation; foreign-session non-disclosure; staged persistence-failure isolation; and producer validation of committed outputs.
-//   SCOPE: One isolated plugin instance per case over a disposable config/data home; no live host process, no user database, no provider network.
-//   DEPENDS: [bun:test, src/plugins/workflow/index.ts, src/plugins/workflow/results.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/persistence.ts, @opencode-ai/plugin]
+//   PURPOSE: Native registered-workflow integration coverage for the public result contract: real schemas, execute.before hook guards, native tool execute wrappers, and serialization over a fake native Plugin.setup context; early thrown diagnostics agreeing with direct handler failures; host-context separation; foreign-session non-disclosure; staged persistence-failure isolation; and producer validation of committed outputs.
+//   SCOPE: One isolated native plugin instance per case over a disposable config/data home; no live host process, no user database, no provider network.
+//   DEPENDS: [bun:test, src/plugins/workflow/index.ts, src/plugins/workflow/results.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/recovery.ts, src/plugins/workflow/host.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-TOOLING, M-AGENT-TOOL-CONTRACT, M-PLUGIN-WORKFLOW, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -30,9 +30,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ContractInputError } from "../lib/agent-tool-contract.js";
-import { WorkflowPlugin } from "./workflow/index.js";
+import { loadVvocConfig } from "../lib/config-layers.js";
+import { createWorkflowPlugin } from "./workflow/index.js";
 import { getWorkflowSessionDir, hydrateWorkflowStateChecked } from "./workflow/persistence.js";
 import { createRecoverySupport } from "./workflow/recovery.js";
+import { createConsoleDiagnosticSink } from "./workflow/host.js";
 import { validateWorkflowToolResult, MAX_FAILURE_MESSAGE_CHARS } from "./workflow/results.js";
 import { createWorkItemOpenTool } from "./workflow/tooling.js";
 import { createWorkItemStore } from "./workflow/state.js";
@@ -41,43 +43,149 @@ const ROOT_AGENT = "vv-controller";
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const previousDataHome = process.env.XDG_DATA_HOME;
 
+type ContractsHarnessPlugin = {
+  tool: Record<
+    string,
+    { name: string; execute: (input: unknown, context: unknown) => Promise<unknown> } | undefined
+  >;
+  "tool.execute.before": (
+    input: { tool: string; sessionID: string; callID: string },
+    output: { args: unknown },
+  ) => Promise<void>;
+};
+
 type ContractsHarness = {
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
+  plugin: ContractsHarnessPlugin;
   logs: string[];
   parentBySession: Map<string, string | undefined>;
   sessionGetFails: { value: boolean };
+};
+
+type ContractsNativeTool = {
+  name: string;
+  execute: (input: unknown, context: unknown) => Promise<unknown>;
+};
+type ContractsFakeEditor = {
+  list: () => ContractsNativeTool[];
+  get: (id: string) => ContractsNativeTool | undefined;
+  namespace: () => void;
+  add: (tool: ContractsNativeTool) => void;
+  update: () => void;
+  remove: (id: string) => void;
 };
 
 async function createContractsHarness(): Promise<ContractsHarness> {
   const logs: string[] = [];
   const parentBySession = new Map<string, string | undefined>();
   const sessionGetFails = { value: false };
-  const plugin = await WorkflowPlugin({
-    client: {
-      app: {
-        log: async (payload: { body?: { message?: string } }) => {
-          const message = payload.body?.message;
-          if (typeof message === "string") logs.push(message);
-        },
+  const tools = new Map<
+    string,
+    { name: string; execute: (input: unknown, context: unknown) => Promise<unknown> }
+  >();
+  const beforeHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+  const afterHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+  const editor = {
+    list: () => [...tools.values()],
+    get: (id: string) => tools.get(id),
+    namespace: () => undefined,
+    add: (tool: {
+      name: string;
+      execute: (input: unknown, context: unknown) => Promise<unknown>;
+    }) => {
+      tools.set(tool.name, tool);
+    },
+    update: () => undefined,
+    remove: (id: string) => {
+      tools.delete(id);
+    },
+  };
+  const sessionInfo = (sessionID: string): Record<string, unknown> => {
+    if (sessionGetFails.value) {
+      throw new Error("upstream session lookup unavailable");
+    }
+    return {
+      id: sessionID,
+      parentID: parentBySession.get(sessionID),
+      location: { directory: "/tmp/project" },
+      time: { created: 1 },
+    };
+  };
+  const fakeClient = {
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => sessionInfo(sessionID),
+      context: async () => [],
+      message: { get: async () => undefined },
+      active: async () => ({}),
+      inbox: { list: async () => [] },
+      prompt: async () => ({}),
+      wait: async () => undefined,
+      interrupt: async () => undefined,
+    },
+    message: { list: async () => ({ data: [], cursor: {} }) },
+  };
+  const loaded = await loadVvocConfig({ cwd: "/tmp/project" });
+  const fakeRuntime = {
+    snapshots: {
+      configFor: async () => ({ vvoc: loaded.config }),
+      accept: async () => ({ status: "unbound" }),
+    },
+    client: async () => fakeClient,
+    effectiveConfig: () => ({ vvoc: loaded.config }),
+    release: async () => undefined,
+  };
+  const ctx = {
+    location: {
+      directory: "/tmp/project",
+      project: { id: "proj", directory: "/tmp/project", canonical: "/tmp/project" },
+    },
+    tool: {
+      transform: async (callback: (editor: ContractsFakeEditor) => void) => {
+        callback(editor);
+        return { dispose: async () => undefined };
       },
-      session: {
-        get: async ({ path }: { path: { id: string } }) => {
-          if (sessionGetFails.value) {
-            throw new Error("upstream session lookup unavailable");
-          }
-          return { data: { sessionID: path.id, parentID: parentBySession.get(path.id) } };
-        },
-        prompt: async () => ({ data: undefined, error: { name: "BadRequest", data: {} } }),
-        message: async () => ({ data: undefined, error: { name: "NotFound", data: {} } }),
+      hook: async (name: string, callback: (event: Record<string, unknown>) => unknown) => {
+        if (name === "execute.before") beforeHooks.push(callback);
+        else if (name === "execute.after") afterHooks.push(callback);
+        return { dispose: async () => undefined };
       },
-    } as never,
-    project: {} as never,
-    directory: "/tmp/project",
-    worktree: "/tmp/project",
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
+      list: async () => [],
+      reload: async () => undefined,
+    },
+    session: {
+      hook: async () => ({ dispose: async () => undefined }),
+    },
+    event: {
+      subscribe: () => ({
+        [Symbol.asyncIterator](): AsyncIterator<unknown> {
+          return {
+            next: () => new Promise<IteratorResult<unknown>>(() => undefined),
+          };
+        },
+      }),
+    },
+    rpc: { register: async () => ({ dispose: async () => undefined }) },
+  };
+  await createWorkflowPlugin({ acquireRuntime: async () => fakeRuntime as never }).setup(
+    ctx as never,
+  );
+  const plugin: ContractsHarnessPlugin = {
+    tool: new Proxy(
+      {},
+      { get: (_target, property: string) => tools.get(property) },
+    ) as ContractsHarnessPlugin["tool"],
+    "tool.execute.before": async (input, output) => {
+      const event: Record<string, unknown> = {
+        tool: input.tool,
+        sessionID: input.sessionID,
+        agent: "vv-controller",
+        messageID: "message-1",
+        id: input.callID,
+        input: output.args,
+      };
+      for (const hook of beforeHooks) await hook(event);
+      output.args = event.input;
+    },
+  };
   return { plugin, logs, parentBySession, sessionGetFails };
 }
 
@@ -107,7 +215,7 @@ function createToolContext(sessionID: string, agent = ROOT_AGENT) {
 }
 
 async function catchHookError(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: ContractsHarnessPlugin,
   tool: string,
   args: unknown,
   sessionID: string,
@@ -463,12 +571,12 @@ describe("staged persistence failure and producer validation", () => {
 
 // START_BLOCK_OWNED_GUARD
 describe("owned staged guard is fail-closed without an observed mutation", () => {
-  const client = { app: { log: async () => undefined } };
+  const diagnostics = createConsoleDiagnosticSink({ namespace: "workflow" });
 
   function makeSupport(sessionID: string) {
     const stores = new Map([[sessionID, createWorkItemStore()]]);
     const support = createRecoverySupport({
-      client: client as never,
+      diagnostics,
       stores,
       invalidHydrationSessions: new Set<string>(),
     });
