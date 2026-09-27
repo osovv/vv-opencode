@@ -30,17 +30,21 @@
 //   resolveConfigWriteTargets - Returns canonical global or project write paths.
 //   loadVvocConfigForRead - Loads vvoc config for CLI read/list/show commands without creating files.
 //   VvocConfigSnapshot - Immutable runtime vvoc config snapshot plus source metadata.
+//   rawOpenCodeModelIntent - Raw root/small_model/agent/command model intent from OpenCode config.
+//   readRawOpenCodeModelIntent - Conservatively read raw OpenCode model intent before native normalization.
 //   loadVvocConfig - Singleton effective vvoc config load for runtime plugins.
+//   loadEffectiveVvocConfig - Uncached effective vvoc config load for multi-location native hosts.
 //   loadEffectiveVvocConfigForRuntime - Backward-compatible alias for loadVvocConfig.
 //   resetVvocConfigForTests - Clears the runtime singleton for deterministic tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added layered dedicated tui.json(c) source and write-target resolution.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Added an uncached effective loader and a conservative raw OpenCode model-intent reader.]
 // END_CHANGE_SUMMARY
 
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { createDefaultVvocConfig, parseVvocConfigText, type VvocConfig } from "./vvoc-config.js";
 import {
   getGlobalOpencodeDir,
@@ -83,6 +87,19 @@ type RuntimeVvocConfigSignature = Readonly<{
 
 let runtimeConfigPromise: Promise<VvocConfigSnapshot> | undefined;
 let runtimeConfigSignature: RuntimeVvocConfigSignature | undefined;
+
+/**
+ * Raw OpenCode model intent before native normalization. Native config parsing
+ * strips `vv-role:` strings and resolves agents to model refs, so the plugin has
+ * to read the raw document to preserve custom agent/command/root/small_model intent.
+ */
+export type RawOpenCodeModelIntent = {
+  readonly model?: string;
+  readonly smallModel?: string;
+  readonly agents: Readonly<Record<string, string>>;
+  readonly commands: Readonly<Record<string, string>>;
+  readonly sourcePath?: string;
+};
 
 export type ProjectConfigRoot = {
   rootDir: string;
@@ -320,6 +337,78 @@ export function loadEffectiveVvocConfigForRuntime(
 ): Promise<VvocConfigSnapshot> {
   return loadVvocConfig(options);
 }
+
+/**
+ * Load the effective vvoc config without the startup singleton. Native hosts
+ * serve several locations in one process, so a keyed cache would reject the
+ * second project; the snapshot engine resolves policy per directory instead.
+ */
+export function loadEffectiveVvocConfig(
+  options: LoadVvocConfigOptions = {},
+): Promise<VvocConfigSnapshot> {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  return _doLoadVvocConfig(options, {
+    cwd,
+    configDir: normalizeOptionalSignatureValue(options.configDir),
+  });
+}
+
+// START_BLOCK_RAW_OPENCODE_INTENT
+function collectRawModelEntries(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries: Record<string, string> = {};
+  for (const [name, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const model = (entry as Record<string, unknown>).model;
+    if (typeof model === "string") entries[name] = model;
+  }
+  return entries;
+}
+
+/**
+ * Conservatively read the raw effective OpenCode config so custom agent and
+ * command model intent (including `vv-role:` strings) survives native
+ * normalization. Invalid or missing documents yield undefined so callers can
+ * fall back to native state; the reader never throws on user config.
+ */
+export async function readRawOpenCodeModelIntent(
+  cwd: string,
+): Promise<RawOpenCodeModelIntent | undefined> {
+  let source: ConfigSource;
+  try {
+    source = await resolveOpenCodeConfigSource({ scope: "effective", cwd });
+  } catch {
+    return undefined;
+  }
+  if (source.path === undefined) return undefined;
+  let text: string;
+  try {
+    text = await readFile(source.path, "utf8");
+  } catch {
+    return undefined;
+  }
+  const errors: ParseError[] = [];
+  const document: unknown = parseJsonc(text, errors, {
+    allowTrailingComma: true,
+    allowEmptyContent: true,
+  });
+  if (errors.length > 0 || !document || typeof document !== "object" || Array.isArray(document)) {
+    return undefined;
+  }
+  const record = document as Record<string, unknown>;
+  const agents = collectRawModelEntries(record.agent);
+  const commands = collectRawModelEntries(record.command);
+  if (agents === undefined || commands === undefined) return undefined;
+  return {
+    ...(typeof record.model === "string" ? { model: record.model } : {}),
+    ...(typeof record.small_model === "string" ? { smallModel: record.small_model } : {}),
+    agents,
+    commands,
+    sourcePath: source.path,
+  };
+}
+// END_BLOCK_RAW_OPENCODE_INTENT
 
 export function resetVvocConfigForTests(): void {
   runtimeConfigPromise = undefined;

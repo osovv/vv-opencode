@@ -1,8 +1,8 @@
 // FILE: src/lib/model-roles.test.ts
 // VERSION: 0.2.1
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify role ID/reference parsing, concrete model-selection parsing, built-in bindings, and role-resolution failures.
-//   SCOPE: Deterministic built-in role exposure, vv-role round-trips, model selection normalization, and explicit error-code coverage.
+//   PURPOSE: Verify role ID/reference parsing, concrete model-selection parsing (including canonical variant), built-in bindings, and role-resolution failures.
+//   SCOPE: Deterministic built-in role exposure, vv-role round-trips, model selection normalization, variant parsing, and explicit error-code coverage.
 //   DEPENDS: [bun:test, src/lib/model-roles.ts]
 //   LINKS: [M-MODEL-ROLES, V-M-MODEL-ROLES]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.0 - Updated binding expectations for reviewer and orchestrator role additions.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Added canonical provider/model#variant parsing coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -23,6 +23,7 @@ import {
   getBuiltInRoleBindings,
   isRoleReference,
   parseModelSelection,
+  parseModelSelectionWithVariant,
   resolveRoleReference,
   type ModelRolesError,
   type ModelRolesErrorCode,
@@ -140,6 +141,30 @@ describe("model selections", () => {
   test("fails malformed model selections with explicit INVALID_MODEL_SELECTION", () => {
     assertModelRolesError(
       () => parseModelSelection("openai"),
+      "INVALID_MODEL_SELECTION",
+      "modelSelection",
+    );
+  });
+
+  test("parses canonical provider/model#variant while preserving provider/model semantics", () => {
+    expect(parseModelSelectionWithVariant("xiaomi/vv-mimo-v2.6-flash-high")).toEqual({
+      provider: "xiaomi",
+      model: "vv-mimo-v2.6-flash-high",
+      normalized: "xiaomi/vv-mimo-v2.6-flash-high",
+    });
+    expect(parseModelSelectionWithVariant("xiaomi/mimo-v2.6-flash#thinking")).toEqual({
+      provider: "xiaomi",
+      model: "mimo-v2.6-flash",
+      normalized: "xiaomi/mimo-v2.6-flash",
+      variant: "thinking",
+    });
+    assertModelRolesError(
+      () => parseModelSelectionWithVariant("prov/model#"),
+      "INVALID_MODEL_SELECTION",
+      "modelSelection",
+    );
+    assertModelRolesError(
+      () => parseModelSelectionWithVariant("prov/model#a#b"),
       "INVALID_MODEL_SELECTION",
       "modelSelection",
     );

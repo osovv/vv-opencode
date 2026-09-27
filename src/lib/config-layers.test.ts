@@ -29,7 +29,9 @@ import {
   OPENCODE_TUI_CONFIG_ENV,
   VVOC_CONFIG_ENV,
   findNearestProjectConfigRoot,
+  loadEffectiveVvocConfig,
   loadVvocConfig,
+  readRawOpenCodeModelIntent,
   resolveConfigWriteTargets,
   resolveOpenCodeConfigSource,
   resolveOpenCodeTuiConfigSource,
@@ -302,6 +304,61 @@ describe("config layer resolution", () => {
       "VVOC_CONFIG_ALREADY_LOADED",
     );
     await expect(first).resolves.toMatchObject({ source: { kind: "default" } });
+  });
+
+  test("readRawOpenCodeModelIntent preserves raw role and literal intent before normalization", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-raw-intent-");
+    await mkdir(join(projectDir, ".opencode"), { recursive: true });
+    await writeFile(
+      join(projectDir, ".opencode", "opencode.json"),
+      JSON.stringify(
+        {
+          model: "vv-role:default",
+          small_model: "prov/small",
+          agent: {
+            build: { model: "vv-role:smart" },
+            explore: { model: "prov/explore-literal" },
+          },
+          command: {
+            deploy: { model: "vv-role:reviewer" },
+          },
+          // A JSONC comment exercises the conservative parser.
+        },
+        null,
+        2,
+      ).replace('"command"', '// managed commands\n  "command"'),
+      "utf8",
+    );
+
+    const intent = await readRawOpenCodeModelIntent(projectDir);
+    expect(intent?.model).toBe("vv-role:default");
+    expect(intent?.smallModel).toBe("prov/small");
+    expect(intent?.agents).toEqual({
+      build: "vv-role:smart",
+      explore: "prov/explore-literal",
+    });
+    expect(intent?.commands).toEqual({ deploy: "vv-role:reviewer" });
+    expect(intent?.sourcePath).toBe(join(projectDir, ".opencode", "opencode.json"));
+  });
+
+  test("readRawOpenCodeModelIntent ignores invalid documents instead of throwing", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-raw-invalid-");
+    await mkdir(join(projectDir, ".opencode"), { recursive: true });
+    await writeFile(join(projectDir, ".opencode", "opencode.json"), "{ not json", "utf8");
+    await expect(readRawOpenCodeModelIntent(projectDir)).resolves.toBeUndefined();
+  });
+
+  test("loadEffectiveVvocConfig resolves each location without the singleton conflict", async () => {
+    const firstDir = await createTempRoot("vvoc-layer-effective-first-");
+    const secondDir = await createTempRoot("vvoc-layer-effective-second-");
+    await writeValidVvocConfig(getProjectVvocConfigPath(firstDir));
+    await writeValidVvocConfig(getProjectVvocConfigPath(secondDir));
+
+    const first = await loadEffectiveVvocConfig({ cwd: firstDir, env: {} });
+    const second = await loadEffectiveVvocConfig({ cwd: secondDir, env: {} });
+
+    expect(first.source.path).toBe(getProjectVvocConfigPath(firstDir));
+    expect(second.source.path).toBe(getProjectVvocConfigPath(secondDir));
   });
 });
 
