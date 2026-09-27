@@ -223,6 +223,8 @@ export function decodeInboxEnqueuedEvent(event: RuntimeEvent):
       readonly sessionID: string;
       readonly inboxID: string;
       readonly itemType: string;
+      readonly created?: number | undefined;
+      readonly seq?: number | undefined;
     }
   | undefined {
   if (event.type !== "session.inbox.enqueued") return undefined;
@@ -239,15 +241,28 @@ export function decodeInboxEnqueuedEvent(event: RuntimeEvent):
     typeof (item as { type?: unknown }).type === "string"
       ? String((item as { type: string }).type)
       : "unknown";
-  return { sessionID, inboxID, itemType };
+  const created =
+    typeof event.created === "number" && Number.isFinite(event.created) ? event.created : undefined;
+  const rawSeq = event.durable?.seq;
+  const seq = typeof rawSeq === "number" && Number.isFinite(rawSeq) ? rawSeq : undefined;
+  return {
+    sessionID,
+    inboxID,
+    itemType,
+    ...(created === undefined ? {} : { created }),
+    ...(seq === undefined ? {} : { seq }),
+  };
 }
 
-/** True when the event marks an accepted workload that should commit a staged family. */
+/**
+ * True when the event is a native accepted-input admission: `session.inbox.enqueued`
+ * carrying a `user` or `synthetic` item. `session.inbox.delivered` only proves the
+ * projection moved, and `session.execution.started` can be an explicit resume, so
+ * neither alone authorizes a commit without the matching enqueued identity.
+ */
 export function isAcceptedWorkloadEvent(event: RuntimeEvent): boolean {
-  if (event.type === "session.inbox.delivered") return true;
   const enqueued = decodeInboxEnqueuedEvent(event);
   if (enqueued === undefined) return false;
-  // Control/synthetic inputs also admit work; tool continuations are not user acceptance.
   return enqueued.itemType === "user" || enqueued.itemType === "synthetic";
 }
 

@@ -10,6 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   ENDPOINT - Fixed discovered-service endpoint fixture.
+//   createFakeClient - Build an in-memory full-client double.
+//   NativeHandler - Shape of one registered native RPC handler.
+//   makeLocation - Build a structural runtime location fixture.
 //   FakeNativeHost - In-memory native host double that records discovery, registration, and client construction.
 //   MemoryCaptureStore - In-memory SnapshotStore double for snapshot-service sharing tests.
 //   createSnapshotDeps - Minimal injectable snapshot-service dependencies.
@@ -264,11 +268,12 @@ class MemoryCaptureStore implements SnapshotStore {
   async remove(familyId: string) {
     this.captures.delete(familyId);
   }
-  async readCandidate() {
-    return undefined;
+  async readCandidates() {
+    return [];
   }
   async writeCandidate() {}
   async removeCandidate() {}
+  async removeCandidates() {}
   async readMarker(familyId: string) {
     return this.markers.has(familyId);
   }
@@ -340,7 +345,7 @@ describe("acquireSnapshotService", () => {
     );
     await lease.release();
 
-    const outcome = await lease.snapshots.admit({
+    const outcome = await lease.snapshots.stage({
       sessionID: "ses_root",
       directory: "/workspace/released",
       location: {

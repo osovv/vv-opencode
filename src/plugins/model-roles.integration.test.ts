@@ -10,17 +10,31 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   AgentInfo - Native agent info type alias used by the fake context.
+//   ModelInfo - Native model info type alias used by the fake context.
+//   EventQueue - Drainable async event stream double.
 //   FakeNativeContext - Native-shaped context double with editors, sessions, hooks and an event queue.
-//   FakeRuntimeHost - In-memory discovery/authentication/client double adding session.fork.
+//   FakeRuntimeHost - In-memory discovery/authentication/client double adding session fork/import/log.
+//   tempDirs - Tracks temporary project/data roots for cleanup.
+//   previousDataHome - Saved XDG_DATA_HOME for restoration.
+//   previousVvocConfig - Saved VVOC_CONFIG for restoration.
 //   createProject - Create an isolated project with a canonical vvoc config file.
+//   writeVvoc - Write a canonical vvoc config document.
+//   writeOpenCodeConfig - Write an OpenCode config document.
+//   isolateDataHome - Point the runtime data dir at an isolated temporary root.
+//   makeBoundSession - Register a bound session view on the fake context.
+//   promptAndAccept - Stage a prompt workload and deliver its matching accepted input.
+//   boundCaptureCount - Count durable family captures under the isolated data root.
+//   REAL_HOST - Optional pinned real-host binary path.
+//   smokeDescribe - Describe-or-skip wrapper for the real-host smoke.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Covers native inbox acceptance, canonical absent/default variants, agent-aware staging, disabled-toggle no-force, post-bind explicit switches, and an optional real-host payload smoke.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Adds first-accepted ordering (reordered notification, reverse acceptance, restart, overflow, idempotence, rejected-then-valid) plus the real-host variant/parented-child/rejected-then-valid smoke.]
 // END_CHANGE_SUMMARY
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@opencode/schema/agent";
@@ -28,6 +42,8 @@ import { Model } from "@opencode/schema/model";
 import { Provider } from "@opencode/schema/provider";
 import type { DeepMutable } from "@opencode/plugin/promise/types";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
+import { getGlobalVvocDataDir } from "../lib/vvoc-paths.js";
+import { SNAPSHOT_STORE_DIR_NAME, snapshotScopeDirName } from "../runtime/snapshot-store.js";
 import { ModelRolesPlugin, registerModelRoles } from "./model-roles/index.js";
 import {
   acquireNativeSnapshotRuntime,
@@ -40,6 +56,7 @@ import {
   type AgentEditorLike,
   type ModelEditorLike,
   type ModelSelection,
+  type NativeSessionImportPayload,
   type NativeSessionView,
   type RuntimeClient,
   type RuntimeContext,
@@ -149,14 +166,25 @@ class FakeNativeContext implements NativeSnapshotContext {
   readonly switchCalls: Array<{ sessionID: string; model: ModelSelection }> = [];
   readonly updateCalls: Array<{ sessionID: string; title: string }> = [];
   readonly generateCalls: Array<{ sessionID: string; prompt: string }> = [];
-  readonly createCalls: Array<{
-    sessionID: string;
-    title?: string;
+  readonly importCalls: Array<{
+    id: string;
+    parentID: string;
+    projectID: string;
+    title: string;
     agent?: string;
     model?: { id: string; providerID: string; variant?: string };
+    metadata?: Record<string, unknown>;
+    permissions?: ReadonlyArray<{ action: string; resource: string; effect: string }>;
     location?: { directory: string };
   }> = [];
-  createdSessions = 0;
+  /** Durable log items the fake serves to `session.log` for reconciliation tests. */
+  readonly acceptedLog: Array<Record<string, unknown>> = [];
+  /**
+   * Watermark the fake log ends with: undefined -> the session id (complete),
+   * null -> no marker (truncated), any string -> that aggregate (possibly wrong).
+   */
+  logWatermark: string | null | undefined = undefined;
+  logSeq: number | undefined = undefined;
   readonly forkCalls: string[] = [];
   readonly events = new EventQueue();
   modelReloads = 0;
@@ -203,6 +231,37 @@ class FakeNativeContext implements NativeSnapshotContext {
 
   setDefault(providerID: string, modelID: string): void {
     this.defaultModel = { providerID, modelID };
+  }
+
+  /** Fake native `session.import`: create the parented child the runtime asked for. */
+  importSession(payload: NativeSessionImportPayload): { id: string } {
+    const info = payload.info;
+    this.sessions.set(info.id, {
+      id: info.id,
+      parentID: info.parentID,
+      locationDirectory: info.location.directory,
+      ...(info.agent === undefined ? {} : { agent: info.agent }),
+      ...(info.metadata === undefined ? {} : { metadata: info.metadata }),
+    });
+    if (info.model !== undefined) {
+      this.sessionModels.set(info.id, {
+        providerID: info.model.providerID,
+        modelID: info.model.id,
+        ...(info.model.variant === undefined ? {} : { variant: info.model.variant }),
+      });
+    }
+    this.importCalls.push({
+      id: info.id,
+      parentID: info.parentID,
+      projectID: info.projectID,
+      title: info.title,
+      ...(info.agent === undefined ? {} : { agent: info.agent }),
+      ...(info.model === undefined ? {} : { model: info.model }),
+      ...(info.metadata === undefined ? {} : { metadata: info.metadata }),
+      ...(info.permissions === undefined ? {} : { permissions: info.permissions }),
+      ...(payload.location === undefined ? {} : { location: payload.location }),
+    });
+    return { id: info.id };
   }
 
   private agentEditor(): AgentEditorLike {
@@ -253,47 +312,22 @@ class FakeNativeContext implements NativeSnapshotContext {
       this.modelReloads += 1;
       for (const callback of this.modelTransforms) callback(this.modelEditor());
     },
+    // Final native model collection readback used by the production wrapper.
+    list: async () => ({ data: [...this.models.values()] }),
   };
 
   readonly session = {
-    create: async (input: {
-      title?: string;
-      agent?: string;
-      model?: { id: string; providerID: string; variant?: string };
-      location?: { directory: string };
-    }) => {
-      this.createdSessions += 1;
-      const id = `aux-${this.createdSessions}`;
-      this.sessions.set(id, {
-        id,
-        locationDirectory: input.location?.directory ?? this.location.directory,
-        ...(input.agent === undefined ? {} : { agent: input.agent }),
-      });
-      if (input.model !== undefined) {
-        this.sessionModels.set(id, {
-          providerID: input.model.providerID,
-          modelID: input.model.id,
-          ...(input.model.variant === undefined ? {} : { variant: input.model.variant }),
-        });
-      }
-      this.createCalls.push({
-        sessionID: id,
-        ...(input.title === undefined ? {} : { title: input.title }),
-        ...(input.agent === undefined ? {} : { agent: input.agent }),
-        ...(input.model === undefined ? {} : { model: input.model }),
-        ...(input.location === undefined ? {} : { location: input.location }),
-      });
-      return { id };
-    },
     get: async ({ sessionID }: { sessionID: string }) => {
       const view = this.sessions.get(sessionID);
       if (view === undefined) throw new Error(`unknown session ${sessionID}`);
       const model = this.sessionModels.get(sessionID) ?? view.model;
       return {
         id: view.id,
-        ...(view.parentID === undefined ? {} : { parentID: view.parentID }),
+        parentID: view.parentID,
+        projectID: this.location.project.id,
         ...(view.forkSessionID === undefined ? {} : { fork: { sessionID: view.forkSessionID } }),
         ...(view.agent === undefined ? {} : { agent: view.agent }),
+        ...(view.metadata === undefined ? {} : { metadata: view.metadata }),
         location: { directory: view.locationDirectory ?? this.location.directory },
         ...(model === undefined
           ? {}
@@ -411,6 +445,36 @@ class FakeRuntimeHost {
           this.context.forkCalls.push(sessionID);
           return { id: `fork-${this.context.forkCalls.length}` };
         },
+        import: async (input: unknown) =>
+          this.context.importSession(input as NativeSessionImportPayload),
+        log: (input: unknown) => {
+          const sessionID =
+            typeof input === "object" && input !== null && "sessionID" in input
+              ? (input as { sessionID?: unknown }).sessionID
+              : undefined;
+          const items =
+            typeof sessionID === "string"
+              ? this.context.acceptedLog.filter((item) => item.sessionID === sessionID)
+              : [];
+          const configured = this.context.logWatermark;
+          const watermark =
+            configured === undefined
+              ? typeof sessionID === "string"
+                ? sessionID
+                : ""
+              : configured;
+          const seq = this.context.logSeq;
+          return (async function* () {
+            for (const item of items) yield item;
+            if (watermark !== null) {
+              yield {
+                type: "log.synced",
+                aggregateID: watermark,
+                ...(seq === undefined ? {} : { seq }),
+              };
+            }
+          })();
+        },
       },
     };
   }
@@ -423,6 +487,46 @@ function makeBoundSession(
   view: Partial<NativeSessionView> = {},
 ): void {
   context.sessions.set(id, { id, locationDirectory: context.location.directory, ...view });
+}
+
+/**
+ * Stage a workload from the prompt hook (with its messageID as the expected
+ * inboxID) and deliver the matching native accepted-input event, so the family
+ * publishes through the real correlated path rather than a family-only commit.
+ */
+async function promptAndAccept(
+  context: FakeNativeContext,
+  sessionID: string,
+  inboxID = `inbox-${sessionID}`,
+): Promise<void> {
+  context.acceptedLog.push({
+    type: "session.inbox.enqueued",
+    sessionID,
+    inboxID,
+    data: { sessionID, inboxID, item: { type: "user" } },
+  });
+  await context.invoke("prompt", { sessionID, messageID: inboxID });
+  context.events.push({
+    type: "session.inbox.enqueued",
+    data: { sessionID, inboxID, item: { type: "user" } },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+/** Count durable family captures written under the isolated vvoc data root. */
+async function boundCaptureCount(scopeKey: string): Promise<number> {
+  const dir = join(getGlobalVvocDataDir(), SNAPSHOT_STORE_DIR_NAME, snapshotScopeDirName(scopeKey));
+  try {
+    const entries = await readdir(dir);
+    return entries.filter(
+      (entry) =>
+        entry.endsWith(".json") &&
+        !entry.endsWith(".candidates.json") &&
+        !entry.endsWith(".bound.json"),
+    ).length;
+  } catch {
+    return 0;
+  }
 }
 
 describe("ModelRolesPlugin native delegation", () => {
@@ -503,7 +607,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
 
     expect(context.switchCalls).toHaveLength(1);
     expect(context.switchCalls[0]?.model).toEqual({
@@ -584,7 +688,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "explicit" });
+    await promptAndAccept(context, "explicit");
 
     expect(context.switchCalls[0]?.model).toEqual({ providerID: "prov", modelID: "user-pick" });
     await registration.dispose();
@@ -605,7 +709,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "bound" });
+    await promptAndAccept(context, "bound");
     await context.invoke("model.request", {
       sessionID: "bound",
       model: { id: "m1", providerID: "prov" },
@@ -619,13 +723,13 @@ describe("native snapshot runtime admission", () => {
 
     // A fresh session created after the preset switch carries the new default, so it is implicit.
     context.sessionModels.set("fresh", { providerID: "prov", modelID: "m9" });
-    await context.invoke("prompt", { sessionID: "fresh" });
+    await promptAndAccept(context, "fresh");
     const freshSwitch = context.switchCalls.at(-1);
     expect(freshSwitch?.model.providerID).toBe("prov");
     expect(freshSwitch?.model.modelID).toBe("m9");
 
     // The bound family stays frozen even after the preset switch.
-    await context.invoke("prompt", { sessionID: "bound" });
+    await promptAndAccept(context, "bound");
     const boundSwitches = context.switchCalls.filter((call) => call.sessionID === "bound");
     expect(boundSwitches).toHaveLength(1);
     expect(boundSwitches[0]?.model.modelID).toBe("m1");
@@ -645,7 +749,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -668,7 +772,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: movedHost.createDeps(),
     });
-    await moved.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(moved, "root");
 
     expect(moved.switchCalls).toHaveLength(0);
     await expect(
@@ -694,7 +798,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -737,7 +841,7 @@ describe("native snapshot runtime admission", () => {
     await registration.dispose();
   });
 
-  test("an accepted session.inbox.enqueued commits the staged family without a model.request", async () => {
+  test("only the matching session.inbox.enqueued commits the staged family", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -750,10 +854,24 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-1" });
     expect(context.switchCalls).toHaveLength(1);
     const reloadsBefore = context.modelReloads;
 
+    // A wrong inbox id must not authorize the commit.
+    context.events.push({
+      type: "session.inbox.enqueued",
+      data: { sessionID: "root", inboxID: "msg-OTHER", item: { type: "user" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(context.modelReloads).toBe(reloadsBefore);
+
+    // A bare execution.started (explicit resume) is not admission either.
+    context.events.push({ type: "session.execution.started", data: { sessionID: "root" } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(context.modelReloads).toBe(reloadsBefore);
+
+    // The exact matching enqueued input commits once.
     context.events.push({
       type: "session.inbox.enqueued",
       data: { sessionID: "root", inboxID: "msg-1", item: { type: "user" } },
@@ -761,15 +879,8 @@ describe("native snapshot runtime admission", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(context.modelReloads).toBeGreaterThan(reloadsBefore);
 
-    // A bare execution.started (explicit resume) is NOT admission and must not commit.
-    const reloadsAfter = context.modelReloads;
-    makeBoundSession(context, "resume", { model: { providerID: "prov", modelID: "m1" } });
-    context.events.push({ type: "session.execution.started", data: { sessionID: "resume" } });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(context.modelReloads).toBe(reloadsAfter);
-
     // The family is now bound: a later prompt reuses it without switching.
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     expect(context.switchCalls).toHaveLength(1);
     await registration.dispose();
   });
@@ -799,7 +910,7 @@ describe("native snapshot runtime admission", () => {
     context.events.push({ type: "config.updated" });
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    await context.invoke("prompt", { sessionID: "old-tab" });
+    await promptAndAccept(context, "old-tab");
     expect(context.switchCalls.at(-1)?.model.modelID).toBe("m9");
     await registration.dispose();
   });
@@ -817,7 +928,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -829,13 +940,26 @@ describe("native snapshot runtime admission", () => {
     };
     await context.invoke("title", event);
 
-    // A created bound child, never a fork that copies the parent agent.
+    // A real parented imported child, never a fork or a parentless create.
     expect(context.forkCalls).toEqual([]);
-    expect(context.createCalls).toHaveLength(1);
-    expect(context.createCalls[0]?.model).toEqual({ id: "m1", providerID: "prov" });
-    expect(context.updateCalls[0]?.title ?? context.createCalls[0]?.title).toContain("vvoc title");
+    expect(context.importCalls).toHaveLength(1);
+    expect(context.importCalls[0]?.parentID).toBe("root");
+    expect(context.importCalls[0]?.model).toEqual({ id: "m1", providerID: "prov" });
+    expect(context.importCalls[0]?.metadata).toEqual({
+      vvocAuxiliary: { kind: "title", role: "fast" },
+    });
     expect(context.generateCalls[0]?.prompt).toContain("fix the parser bug");
-    expect(event.result).toBe("generated:aux-1");
+    expect(event.result).toMatch(/^generated:ses_[0-9a-f]+$/);
+
+    // The imported child resolves the original family capture and its variant,
+    // even after the first lease is released and a fresh runtime is acquired.
+    const childID = context.importCalls[0]?.id as string;
+    const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: host.createDeps() });
+    expect(await runtime.snapshots.familyOf(childID)).toBe("root");
+    const rootCapture = await runtime.snapshots.configFor("root");
+    const childCapture = await runtime.snapshots.configFor(childID);
+    expect(childCapture?.snapshotId).toBe(rootCapture?.snapshotId);
+    expect(childCapture?.roleModels.default).toEqual(rootCapture?.roleModels.default);
 
     // A supplied title result must survive the later title model.request hook.
     await expect(
@@ -846,6 +970,7 @@ describe("native snapshot runtime admission", () => {
         kind: "title",
       }),
     ).resolves.toBeUndefined();
+    await runtime.release();
     await registration.dispose();
   });
 });
@@ -893,7 +1018,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     expect(context.switchCalls.at(-1)?.model.modelID).toBe("m2");
     await expect(
       context.invoke("model.request", {
@@ -920,7 +1045,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: false,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     expect(context.switchCalls).toHaveLength(0);
     await expect(
       context.invoke("model.request", {
@@ -952,7 +1077,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     expect(context.switchCalls.at(-1)?.model.modelID).toBe("m9");
     await expect(
       context.invoke("model.request", {
@@ -978,7 +1103,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -991,7 +1116,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       data: { sessionID: "root", model: { id: "m9", providerID: "prov" } },
     });
     await new Promise((resolve) => setTimeout(resolve, 15));
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     expect(context.switchCalls).toHaveLength(switchesAfterBind);
     await expect(
       context.invoke("model.request", {
@@ -1036,7 +1161,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root" });
+    await promptAndAccept(context, "root");
     // The host resolves `default` to no variant; the guard must treat them as equal.
     await expect(
       context.invoke("model.request", {
@@ -1076,6 +1201,319 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     expect(bySession.get("b")?.modelID).toBe("m2");
     await registration.dispose();
   });
+
+  test("a rejected preparation followed by a valid prompt binds the valid policy", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    context.addModel("prov", "m1");
+    context.addModel("prov", "m9");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const registration = await registerModelRoles(context, {
+      enabled: true,
+      runtimeDeps: host.createDeps(),
+    });
+    // Prompt A stages, then native preparation is rejected: no accepted event.
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-A" });
+    expect(context.switchCalls).toHaveLength(1);
+
+    // Config changes and the user sends prompt B for the same session.
+    await writeVvoc(project, { default: "prov/m9" });
+    context.events.push({ type: "config.updated" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-B" });
+    expect(context.switchCalls.at(-1)?.model.modelID).toBe("m9");
+
+    // B is accepted; A only failed to prepare and stays bounded, unconsumed.
+    context.events.push({
+      type: "session.inbox.enqueued",
+      data: { sessionID: "root", inboxID: "msg-B", item: { type: "user" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
+    await expect(
+      context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m9", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).resolves.toBeUndefined();
+
+    // A late A notification cannot change the already-bound family.
+    context.events.push({
+      type: "session.inbox.enqueued",
+      data: { sessionID: "root", inboxID: "msg-A", item: { type: "user" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
+    await registration.dispose();
+  });
+
+  test("the first accepted input wins even when its notification arrives after a later input", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    context.addModel("prov", "m1");
+    context.addModel("prov", "m9");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const registration = await registerModelRoles(context, {
+      enabled: true,
+      runtimeDeps: host.createDeps(),
+    });
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-A" });
+    await writeVvoc(project, { default: "prov/m9" });
+    context.events.push({ type: "config.updated" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-B" });
+
+    // The durable log records A accepted before B.
+    context.acceptedLog.push({
+      type: "session.inbox.enqueued",
+      sessionID: "root",
+      inboxID: "msg-A",
+      created: 10,
+      durable: { aggregateID: "root", seq: 1 },
+      data: { sessionID: "root", inboxID: "msg-A", item: { type: "user" } },
+    });
+    context.acceptedLog.push({
+      type: "session.inbox.enqueued",
+      sessionID: "root",
+      inboxID: "msg-B",
+      created: 20,
+      durable: { aggregateID: "root", seq: 2 },
+      data: { sessionID: "root", inboxID: "msg-B", item: { type: "user" } },
+    });
+    // Deliver B's live notification first; the durable order must still win.
+    context.events.push({
+      type: "session.inbox.enqueued",
+      created: 20,
+      durable: { aggregateID: "root", seq: 2 },
+      data: { sessionID: "root", inboxID: "msg-B", item: { type: "user" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
+
+    // A owns the snapshot: the m1 request is authorized, the m9 request refused.
+    await expect(
+      context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m9", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).rejects.toThrow(/does not match/);
+    await registration.dispose();
+  });
+
+  test("durable reconciliation fails closed without a verified synced watermark", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    context.addModel("prov", "m1");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const registration = await registerModelRoles(context, {
+      enabled: true,
+      runtimeDeps: host.createDeps(),
+    });
+    // Stage the prompt but drop the live accepted event.
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-1" });
+    expect(context.switchCalls).toHaveLength(1);
+    context.acceptedLog.push({
+      type: "session.inbox.enqueued",
+      sessionID: "root",
+      inboxID: "msg-1",
+      data: { sessionID: "root", inboxID: "msg-1", item: { type: "user" } },
+    });
+
+    // Truncated replay: the log ends without a synced marker.
+    context.logWatermark = null;
+    await expect(
+      context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).rejects.toThrow(/unbound/);
+
+    // Wrong aggregate watermark: the replay is for a different session.
+    context.logWatermark = "some-other-session";
+    await expect(
+      context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).rejects.toThrow(/unbound/);
+    expect(await boundCaptureCount(context.location.project.id)).toBe(0);
+
+    // A genuine matching watermark commits the staged accepted input.
+    context.logWatermark = "root";
+    await expect(
+      context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).resolves.toBeUndefined();
+    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
+    await registration.dispose();
+  }, 20000);
+
+  test("a fresh runtime reconciles a missed live event from the durable log", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    context.addModel("prov", "m1");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const registration = await registerModelRoles(context, {
+      enabled: true,
+      runtimeDeps: host.createDeps(),
+    });
+    await context.invoke("prompt", { sessionID: "root", messageID: "msg-1" });
+    // The live event was missed, but the durable log has it.
+    context.acceptedLog.push({
+      type: "session.inbox.enqueued",
+      sessionID: "root",
+      inboxID: "msg-1",
+      data: { sessionID: "root", inboxID: "msg-1", item: { type: "user" } },
+    });
+
+    const fresh = await acquireNativeSnapshotRuntime(context, { runtimeDeps: host.createDeps() });
+    const outcome = await fresh.snapshots.accept({ sessionID: "root" });
+    expect(outcome.status).toBe("bound");
+    expect((await fresh.snapshots.configFor("root"))?.snapshotId).toBeDefined();
+    await fresh.release();
+    await registration.dispose();
+  });
+
+  test("two source variants of one model capture distinct qualified overlays", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1#low", fast: "prov/m1#high" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    const model = context.addModel("prov", "m1");
+    model.settings = { reasoningEffort: "base" };
+    model.body = { base_marker: true };
+    model.variants.push({
+      id: Model.VariantID.make("low"),
+      settings: { reasoningEffort: "low" },
+      body: { tip: "low" },
+    });
+    model.variants.push({
+      id: Model.VariantID.make("high"),
+      settings: { reasoningEffort: "high" },
+      body: { tip: "high" },
+    });
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const registration = await registerModelRoles(context, {
+      enabled: true,
+      runtimeDeps: host.createDeps(),
+    });
+    await promptAndAccept(context, "root");
+
+    const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: host.createDeps() });
+    const captures = await runtime.snapshots.captures();
+    const variants = captures[0]?.variants ?? [];
+    const low = variants.find((variant) => variant.sourceVariant === "low");
+    const high = variants.find((variant) => variant.sourceVariant === "high");
+    // Base is merged with each source variant using native semantics, so two
+    // roles of the same model keep distinct qualified payloads.
+    expect(low?.settings).toEqual({ reasoningEffort: "low" });
+    expect(high?.settings).toEqual({ reasoningEffort: "high" });
+    expect(low?.body).toEqual({ base_marker: true, tip: "low" });
+    expect(high?.body).toEqual({ base_marker: true, tip: "high" });
+    expect(low?.id).not.toBe(high?.id);
+    await runtime.release();
+    await registration.dispose();
+  });
+
+  test("admitWorkload publishes an owned operation before resolution and cannot adopt a prompt candidate", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    context.addModel("prov", "m1");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const registration = await registerModelRoles(context, {
+      enabled: true,
+      runtimeDeps: host.createDeps(),
+    });
+    const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: host.createDeps() });
+    const location = {
+      directory: context.location.directory,
+      projectID: context.location.project.id,
+      canonical: context.location.project.canonical,
+    };
+    const owned = await runtime.admitWorkload({ sessionID: "root", directory: project, location });
+    expect(owned.status).toBe("bound");
+    // The late generate hook validates against the owned committed capture.
+    await expect(context.invoke("generate", { sessionID: "root" })).resolves.toBeUndefined();
+
+    // A prompt candidate cannot be published through the owned gateway.
+    const promptContext = new FakeNativeContext(project);
+    const promptHost = new FakeRuntimeHost(promptContext);
+    promptContext.addModel("prov", "m1");
+    promptContext.addModel("prov", "m9");
+    promptContext.setDefault("prov", "m1");
+    makeBoundSession(promptContext, "root2", { model: { providerID: "prov", modelID: "m1" } });
+    const promptRegistration = await registerModelRoles(promptContext, {
+      enabled: true,
+      runtimeDeps: promptHost.createDeps(),
+    });
+    const promptRuntime = await acquireNativeSnapshotRuntime(promptContext, {
+      runtimeDeps: promptHost.createDeps(),
+    });
+    // A prompt candidate for m1 is staged, then the owned gateway runs for m9.
+    await promptContext.invoke("prompt", { sessionID: "root2", messageID: "msg-1" });
+    const promptOwned = await promptRuntime.admitWorkload({
+      sessionID: "root2",
+      directory: project,
+      location,
+      selectionOverride: { providerID: "prov", modelID: "m9" },
+    });
+    expect(promptOwned.status).toBe("bound");
+    // The owned selection owns the snapshot; the prompt candidate was not adopted.
+    await expect(
+      promptContext.invoke("model.request", {
+        sessionID: "root2",
+        model: { id: "m9", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      promptContext.invoke("model.request", {
+        sessionID: "root2",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      }),
+    ).rejects.toThrow(/does not match/);
+    await promptRuntime.release();
+    await promptRegistration.dispose();
+    await runtime.release();
+    await registration.dispose();
+  }, 20000);
 });
 
 // START_BLOCK_REAL_HOST_SMOKE
@@ -1199,7 +1637,22 @@ smokeDescribe("real OpenCode 2.0.18 host smoke (actual built plugin)", () => {
             env: ["LOOPBACK_API_KEY"],
             settings: { baseURL: `http://127.0.0.1:${PORT}/v1`, provider: "loopback" },
             models: {
-              "seam-smart": { name: "Smoke Smart", settings: { reasoningEffort: "low" } },
+              "seam-smart": {
+                name: "Smoke Smart",
+                settings: { reasoningEffort: "low" },
+                variants: [
+                  {
+                    id: "override",
+                    settings: { reasoningEffort: "high" },
+                    body: { smoke_variant: "override" },
+                  },
+                  {
+                    id: "plain",
+                    settings: { reasoningEffort: "minimal" },
+                    body: { smoke_variant: "plain" },
+                  },
+                ],
+              },
               "seam-fast": { name: "Smoke Fast" },
             },
           },
@@ -1213,10 +1666,10 @@ smokeDescribe("real OpenCode 2.0.18 host smoke (actual built plugin)", () => {
       renderVvocConfig({
         ...createDefaultVvocConfig(),
         roles: {
-          default: "loopback/seam-smart",
-          smart: "loopback/seam-smart",
-          fast: "loopback/seam-fast",
-          reviewer: "loopback/seam-fast",
+          default: "loopback/seam-smart#override",
+          smart: "loopback/seam-smart#override",
+          fast: "loopback/seam-smart#plain",
+          reviewer: "loopback/seam-smart#plain",
         },
       }),
       "utf8",
@@ -1276,6 +1729,23 @@ smokeDescribe("real OpenCode 2.0.18 host smoke (actual built plugin)", () => {
     };
     const sessionID = created.data.id;
     await new Promise((resolve) => setTimeout(resolve, 1500));
+    // A first prompt whose native preparation is rejected (missing attachment)
+    // after the prompt hook stages a candidate must not block the next prompt.
+    const rejectedPrompt = await api(`/api/session/${sessionID}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: "rejected preparation",
+        files: [
+          {
+            uri: `file://${join(ROOT, "definitely-missing-attachment.txt")}`,
+            name: "missing.txt",
+          },
+        ],
+      }),
+    });
+    expect(rejectedPrompt.status).toBeGreaterThanOrEqual(400);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     await api(`/api/session/${sessionID}/prompt`, {
       method: "POST",
       body: JSON.stringify({ text: "smoke payload" }),
@@ -1300,14 +1770,141 @@ smokeDescribe("real OpenCode 2.0.18 host smoke (actual built plugin)", () => {
           JSON.parse(line) as {
             event?: string;
             model?: string;
-            body?: { reasoning_effort?: string };
+            body?: { reasoning_effort?: string; smoke_variant?: string };
           },
       );
     const dispatched = providerLines.filter((line) => line.event === "provider.request");
     expect(dispatched.length).toBeGreaterThan(0);
-    // The actual provider payload carried the snapshot-qualified variant's settings.
-    expect(dispatched.some((line) => line.body?.reasoning_effort === "low")).toBe(true);
-    expect(variant).toMatch(/\.seam-smart$/);
+    // The actual provider payload carried the source variant's merged override,
+    // not merely the base model settings.
+    expect(
+      dispatched.some(
+        (line) => line.body?.smoke_variant === "override" && line.body?.reasoning_effort === "high",
+      ),
+    ).toBe(true);
+    expect(variant).toMatch(/\.seam-smart\.override$/);
+    const snapshotPrefix = (variant ?? "").replace(/\.seam-smart\.override$/, "");
+    expect(snapshotPrefix).toMatch(/^[0-9a-f]{16}$/);
+
+    // The auxiliary title child is a REAL parented native session that resolved
+    // the same immutable family capture (same snapshot id prefix).
+    const sessionInfo = async (id: string) =>
+      (
+        (await (await api(`/api/session/${id}`)).json()) as {
+          data: {
+            id: string;
+            parentID?: string;
+            model?: { id?: string; variant?: string };
+            metadata?: Record<string, unknown>;
+          };
+        }
+      ).data;
+    const listed = (await (
+      await api(`/api/session?location[directory]=${encodeURIComponent(project)}`)
+    ).json()) as {
+      data: Array<{ id: string; parentID?: string }>;
+    };
+    const child = listed.data.find((entry) => entry.parentID === sessionID);
+    expect(child, "auxiliary child must be a parented native session").toBeDefined();
+    const childInfo = await sessionInfo((child as { id: string }).id);
+    expect(childInfo.parentID).toBe(sessionID);
+    // The child is the same model with the fast role's distinct source variant.
+    expect(childInfo.model?.variant).toMatch(
+      new RegExp(`^${snapshotPrefix}\\.seam-smart\\.plain$`),
+    );
+    expect(childInfo.metadata).toEqual({ vvocAuxiliary: { kind: "title", role: "fast" } });
+    // Two roles of one model sent two distinct qualified payloads.
+    expect(
+      dispatched.some(
+        (line) => line.body?.smoke_variant === "plain" && line.body?.reasoning_effort === "minimal",
+      ),
+    ).toBe(true);
+
+    // Changing the source policy gives NEW work a NEW snapshot while the already
+    // bound root family (and its child) keep the original captured variant/payload.
+    await writeFile(
+      join(project, ".vvoc", "vvoc.json"),
+      renderVvocConfig({
+        ...createDefaultVvocConfig(),
+        roles: {
+          default: "loopback/seam-smart#plain",
+          smart: "loopback/seam-smart#plain",
+          fast: "loopback/seam-smart#plain",
+          reviewer: "loopback/seam-smart#plain",
+        },
+      }),
+      "utf8",
+    );
+    const created2 = (await (
+      await api("/api/session", {
+        method: "POST",
+        body: JSON.stringify({ location: { directory: project } }),
+      })
+    ).json()) as { data: { id: string } };
+    const session2 = created2.data.id;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await api(`/api/session/${session2}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "smoke payload two" }),
+    });
+    const deadline2 = Date.now() + 20000;
+    let variant2: string | undefined;
+    for (;;) {
+      const info = await sessionInfo(session2);
+      variant2 = info.model?.variant;
+      if ((info as { time?: { idle?: number } }).time?.idle !== undefined) break;
+      if (Date.now() > deadline2) break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    expect(variant2).toBeDefined();
+    expect(variant2).not.toBe(variant);
+    expect(variant2).toMatch(/\.seam-smart\.plain$/);
+    const boundRoot = await sessionInfo(sessionID);
+    expect(boundRoot.model?.variant).toBe(variant);
+
+    // Real-host race control: two rapid inputs to one session still bind the
+    // current policy (per-input candidates never lose a staged input).
+    const created3 = (await (
+      await api("/api/session", {
+        method: "POST",
+        body: JSON.stringify({ location: { directory: project } }),
+      })
+    ).json()) as { data: { id: string } };
+    const session3 = created3.data.id;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await api(`/api/session/${session3}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "race one" }),
+    });
+    await api(`/api/session/${session3}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "race two" }),
+    });
+    const deadline3 = Date.now() + 20000;
+    let variant3: string | undefined;
+    for (;;) {
+      const info = await sessionInfo(session3);
+      variant3 = info.model?.variant;
+      if ((info as { time?: { idle?: number } }).time?.idle !== undefined) break;
+      if (Date.now() > deadline3) break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    expect(variant3).toMatch(/\.seam-smart\.plain$/);
+
+    // The bound family kept dispatching its original captured variant payload.
+    const afterChange = (await readFile(providerTrace, "utf8"))
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            event?: string;
+            body?: { smoke_variant?: string };
+          },
+      )
+      .filter((line) => line.event === "provider.request");
+    expect(afterChange.some((line) => line.body?.smoke_variant === "plain")).toBe(true);
+
     // A loop would have produced a flood of own-reload events.
     const observerTypes = (await readFile(observerTrace, "utf8"))
       .split("\n")

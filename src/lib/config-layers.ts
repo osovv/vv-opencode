@@ -30,7 +30,7 @@
 //   resolveConfigWriteTargets - Returns canonical global or project write paths.
 //   loadVvocConfigForRead - Loads vvoc config for CLI read/list/show commands without creating files.
 //   VvocConfigSnapshot - Immutable runtime vvoc config snapshot plus source metadata.
-//   rawOpenCodeModelIntent - Raw root/small_model/agent/command model intent from OpenCode config.
+//   RawOpenCodeModelIntent - Raw root/small_model/agent/command model intent from OpenCode config.
 //   readRawOpenCodeModelIntent - Conservatively read raw OpenCode model intent before native normalization.
 //   loadVvocConfig - Singleton effective vvoc config load for runtime plugins.
 //   loadEffectiveVvocConfig - Uncached effective vvoc config load for multi-location native hosts.

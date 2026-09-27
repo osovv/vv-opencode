@@ -19,10 +19,12 @@
 //   applyVariantRegistrations - Publish registrations onto real models present in the native editor.
 //   applyAgentPolicies - Apply snapshot-bound agent selections without overwriting explicit literal models.
 //   isManagedThinkingModel - True only for the real MiMo thinking model selection.
+//   mergeModelBodyOverlay - Merge a variant body over a base body with the pinned host's recursive semantics.
+//   mergeModelHeadersOverlay - Merge variant headers over base headers case-insensitively, variant winning.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Family-qualified variants, source-variant identity, and MiMo thinking restricted to the real #thinking model.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 6 - Added native-semantics overlay merging for base+source-variant capture.]
 // END_CHANGE_SUMMARY
 
 import { Model } from "@opencode/schema/model";
@@ -108,6 +110,56 @@ export function qualifySelection(
   );
   return variant === undefined ? selection : { ...selection, variant: variant.id };
 }
+
+// START_BLOCK_OVERLAY_MERGE
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Merge a variant body/settings overlay over a base overlay using the pinned
+ * host's `Provider.mergeOverlay` semantics: nested records merge recursively,
+ * the overlay wins on scalar conflicts, `undefined` overlay entries keep the
+ * base value, and arrays are replaced wholesale.
+ */
+export function mergeModelBodyOverlay(
+  base: Readonly<Record<string, unknown>> | undefined,
+  overlay: Readonly<Record<string, unknown>> | undefined,
+): Record<string, unknown> | undefined {
+  if (base === undefined) return overlay === undefined ? undefined : { ...overlay };
+  if (overlay === undefined) return { ...base };
+  const merged: Record<string, unknown> = {};
+  for (const key of new Set([...Object.keys(base), ...Object.keys(overlay)])) {
+    const left = base[key];
+    const right = overlay[key];
+    if (right === undefined) {
+      merged[key] = left;
+      continue;
+    }
+    merged[key] =
+      isPlainRecord(left) && isPlainRecord(right)
+        ? (mergeModelBodyOverlay(left, right) ?? {})
+        : right;
+  }
+  return merged;
+}
+
+/**
+ * Merge variant headers over base headers using the host's `mergeHeaders`
+ * semantics: header names are compared case-insensitively and the overlay wins.
+ */
+export function mergeModelHeadersOverlay(
+  base: Readonly<Record<string, string>> | undefined,
+  overlay: Readonly<Record<string, string>> | undefined,
+): Record<string, string> | undefined {
+  if (base === undefined) return overlay === undefined ? undefined : { ...overlay };
+  if (overlay === undefined) return { ...base };
+  const merged = new Map<string, [string, string]>();
+  for (const [key, value] of Object.entries(base)) merged.set(key.toLowerCase(), [key, value]);
+  for (const [key, value] of Object.entries(overlay)) merged.set(key.toLowerCase(), [key, value]);
+  return Object.fromEntries(merged.values());
+}
+// END_BLOCK_OVERLAY_MERGE
 
 // START_BLOCK_VARIANT_REGISTRY
 /** Project captures into family-specific variant registrations. */

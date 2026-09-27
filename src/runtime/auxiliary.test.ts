@@ -12,6 +12,7 @@
 // START_MODULE_MAP
 //   FakeAuxiliarySession - In-memory AuxiliarySessionApi double.
 //   makeCapture - Build a bound family capture fixture.
+//   build - Wire the auxiliary service against the fake session and a capture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -26,6 +27,7 @@ import {
   type AuxiliaryService,
   type AuxiliarySessionApi,
   type FamilyCapture,
+  type ModelSelection,
 } from "./types.js";
 
 class FakeAuxiliarySession implements AuxiliarySessionApi {
@@ -33,7 +35,10 @@ class FakeAuxiliarySession implements AuxiliarySessionApi {
     parentID: string;
     locationDirectory: string;
     title: string;
-    model?: unknown;
+    kind: "title" | "compaction" | "generate";
+    role?: string;
+    model: ModelSelection;
+    agent?: string;
   }> = [];
   readonly switches: Array<{ sessionID: string; model: unknown }> = [];
   readonly generates: Array<{ sessionID: string; prompt: string }> = [];
@@ -43,7 +48,10 @@ class FakeAuxiliarySession implements AuxiliarySessionApi {
     parentID: string;
     locationDirectory: string;
     title: string;
-    model?: unknown;
+    kind: "title" | "compaction" | "generate";
+    role?: string;
+    model: ModelSelection;
+    agent?: string;
   }) {
     this.creates.push(input);
     return { sessionID: `aux-${this.creates.length}` };
@@ -127,6 +135,7 @@ describe("createAuxiliaryService", () => {
         parentID: "ses_root",
         locationDirectory: "/project",
         title: "vvoc title",
+        kind: "title",
         model: { providerID: "prov", modelID: "m1", variant: "snap.m1" },
       },
     ]);

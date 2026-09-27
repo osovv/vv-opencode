@@ -41,10 +41,19 @@
 //   CapturedVvocConfig - Opaque deep-copied effective vvoc configuration captured for replay.
 //   CapturedModelSettings - Captured native model/provider overlay needed to replay a request payload.
 //   CaptureIntent - Explicit/implicit/staged provenance of a captured selection.
+//   CaptureIntentMode - Capture selection provenance mode.
+//   CaptureIntentSource - Native source that produced a captured selection.
+//   PermissionCreateInput - Minimal input accepted by the native permission create call.
 //   AgentPolicyBinding - Captured agent-to-role and resolved-model binding.
 //   FamilyCapture - Durable immutable policy/model capture bound to one session family.
 //   StagedCandidate - Persisted pre-dispatch admission candidate.
+//   SnapshotAcceptRequest - Correlated acceptance input for committing a staged candidate.
+//   SnapshotOwnedAdmissionRequest - Owned generated-work admission request carrying a runtime-minted operation token.
 //   SnapshotStore - Durable per-family capture and staged-candidate persistence contract.
+//   stagedCandidateKey - Stable identity of one staged candidate within a family.
+//   stagedCandidateIdentity - Stable candidate identity from its raw owner fields.
+//   AcceptedInput - One native accepted input with ordering signals for first-accepted selection.
+//   AcceptedInputReconciliation - Accepted inputs for a session plus whether the durable replay was complete.
 //   NativeSessionView - Structural native session view used for host-verified lineage.
 //   ModelEditorLike - Structural native model transform editor used for variant materialization.
 //   AgentEditorLike - Structural native agent transform editor used for snapshot-bound role selection.
@@ -56,6 +65,10 @@
 //   SnapshotLease - Per-acquisition release handle for a shared snapshot service.
 //   AuxiliaryMessageContent - Text carried by a native title request as generation input.
 //   AuxiliarySessionApi - Structural native child-session/generate boundary for auxiliary work.
+//   AuxiliaryWorkloadMetadata - Host-owned auxiliary workload metadata recorded on a child session.
+//   decodeAuxiliaryMetadata - Decode the auxiliary workload metadata from native session metadata.
+//   NativeSessionImportPayload - Typed payload forwarded to the native import route for a parented auxiliary child.
+//   decodeImportedSessionID - Decode the id of an imported native session from the unchecked client result.
 //   AuxiliaryService - Snapshot-bound auxiliary generation consumed by title and Guardian.
 //   SnapshotStoreError - Durable capture state was corrupt or unreadable, so work must fail closed.
 //   SnapshotAdmissionError - An awaited admission failed and no policy was published.
@@ -65,7 +78,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Added durable family-capture, model-registry, admission and snapshot-bound auxiliary contracts.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Added the per-input candidate store contract, accepted-input ordering/source vocabulary, owned-operation identity, and the imported parented auxiliary session seam.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -162,6 +175,10 @@ export interface RuntimeRpcClient {
 export interface RuntimeEvent {
   readonly type: string;
   readonly data?: unknown;
+  /** Native event creation time in epoch milliseconds, when supplied. */
+  readonly created?: unknown;
+  /** Native durable envelope carrying the per-aggregate sequence. */
+  readonly durable?: { readonly aggregateID?: unknown; readonly seq?: unknown } | undefined;
 }
 
 /** Structural native live-event subscription API. */
@@ -440,6 +457,20 @@ export interface StagedCandidate {
   readonly familyId: string;
   /** Session whose awaited switch applied this candidate, used for commit-failure rollback. */
   readonly sessionID: string;
+  /**
+   * Expected accepted-input identity: the native messageID supplied by the
+   * prompt hook. A commit is authorized only by an inbox enqueue with this exact
+   * inboxID (or a durable log replay proving it), never by family alone.
+   */
+  readonly inboxID?: string | undefined;
+  /**
+   * Owner token for an owned generated-work operation (for example an auxiliary
+   * child or a direct generate). Prompt candidates carry `inboxID`; owned
+   * candidates carry `operationID`; the two are never interchangeable.
+   */
+  readonly operationID?: string | undefined;
+  /** Workload the candidate was staged for (`prompt`, `generate`, ...). */
+  readonly workload?: string | undefined;
   readonly stagedAt: number;
   /** Capture content revision the candidate was staged for; a newer revision supersedes it. */
   readonly revision: string;
@@ -455,14 +486,64 @@ export interface SnapshotStore {
   read(familyId: string): Promise<FamilyCapture | undefined>;
   write(familyId: string, capture: FamilyCapture): Promise<void>;
   remove(familyId: string): Promise<void>;
-  readCandidate(familyId: string): Promise<StagedCandidate | undefined>;
+  /** All staged candidates for a family, in durable file order. */
+  readCandidates(familyId: string): Promise<readonly StagedCandidate[]>;
+  /** Insert or update the candidate with the same {@link stagedCandidateKey}. */
   writeCandidate(candidate: StagedCandidate): Promise<void>;
-  removeCandidate(familyId: string): Promise<void>;
+  /** Remove exactly the candidate with this key; leaves other owners intact. */
+  removeCandidate(familyId: string, candidateKey: string): Promise<void>;
+  /** Remove every staged candidate for a family (used once a family is bound). */
+  removeCandidates(familyId: string): Promise<void>;
   /** Durable marker proving a family was once bound, so a missing capture fails closed. */
   readMarker(familyId: string): Promise<boolean>;
   writeMarker(familyId: string): Promise<void>;
   removeMarker(familyId: string): Promise<void>;
   list(): Promise<readonly string[]>;
+}
+
+/** Stable identity of one staged candidate within a family. */
+export function stagedCandidateIdentity(input: {
+  readonly sessionID: string;
+  readonly inboxID?: string | undefined;
+  readonly operationID?: string | undefined;
+  readonly workload?: string | undefined;
+}): string {
+  return [input.sessionID, input.inboxID ?? "", input.operationID ?? "", input.workload ?? ""].join(
+    "\u0000",
+  );
+}
+
+/** Stable identity of one staged candidate within a family. */
+export function stagedCandidateKey(candidate: StagedCandidate): string {
+  return stagedCandidateIdentity(candidate);
+}
+
+/**
+ * One native accepted input reconciled from the live stream or the durable
+ * session log, with the native ordering signals used to pick the first accepted
+ * workload of a family.
+ */
+export interface AcceptedInput {
+  readonly sessionID: string;
+  readonly inboxID: string;
+  readonly itemType: string;
+  /** Native event creation time in epoch milliseconds. */
+  readonly created: number;
+  /** Native per-aggregate durable sequence, when supplied. */
+  readonly seq?: number | undefined;
+  /** Whether this entry came from a verified live event or the durable log replay. */
+  readonly source: "live" | "log";
+}
+
+/**
+ * Accepted-input reconciliation for one session. `complete` is true only when
+ * the durable log replay reached a verified matching synced watermark; an
+ * incomplete result may still carry verified live events but must not be used to
+ * order multiple candidates.
+ */
+export interface AcceptedInputReconciliation {
+  readonly inputs: readonly AcceptedInput[];
+  readonly complete: boolean;
 }
 
 /** Structural native session view used for host-verified lineage and provenance. */
@@ -474,6 +555,12 @@ export interface NativeSessionView {
   readonly model?: ModelSelection | undefined;
   /** Selected agent id, used to resolve agent-specific captured roles. */
   readonly agent?: string | undefined;
+  /**
+   * Host-persisted session metadata. Auxiliary children record their intended
+   * role/kind here so the intended selection is recoverable after a restart
+   * without an ephemeral in-process exemption.
+   */
+  readonly metadata?: Readonly<Record<string, unknown>> | undefined;
   /** True once the session has produced or received work, so a missing capture is not "fresh". */
   readonly hasActivity?: boolean | undefined;
 }
@@ -564,12 +651,46 @@ export interface SnapshotAdmissionRequest {
   /** Session model before admission, used for conditional rollback. */
   readonly before?: ModelSelection | undefined;
   /**
+   * Expected accepted-input identity for this workload: the native messageID the
+   * prompt hook received. Persisted with the candidate and required to match the
+   * later `session.inbox.enqueued` before any commit.
+   */
+  readonly inboxID?: string | undefined;
+  /**
+   * Owner token for an owned generated-work operation. Set only by the runtime's
+   * own pre-admission gateway; never by a raw external generate.
+   */
+  readonly operationID?: string | undefined;
+  /** Workload kind the candidate was staged for (`prompt`, `generate`, ...). */
+  readonly workload?: string | undefined;
+  /**
    * When false, the candidate is persisted and committed but no native model
    * switch is issued. Used when role overriding is disabled so admission records
    * policy without forcing a model change.
    */
   readonly force?: boolean | undefined;
 }
+
+/** Correlated acceptance input for committing a staged candidate. */
+export interface SnapshotAcceptRequest {
+  readonly sessionID: string;
+  /** Live enqueued inbox id; when omitted the durable session log is reconciled. */
+  readonly inboxID?: string | undefined;
+  /** Live item type (`user`/`synthetic`); when omitted the durable log decides. */
+  readonly itemType?: string | undefined;
+  /** Pre-publication validation; returning false refuses without publishing. */
+  readonly validate?: ((selection: ModelSelection) => boolean) | undefined;
+}
+
+/**
+ * Owned generated-work admission request. `operationID` is an operation token the
+ * runtime itself minted for this workload; it distinguishes owned generated work
+ * from prompt-input candidates and prevents the gateway from publishing a prompt
+ * candidate that still needs correlated native acceptance.
+ */
+export type SnapshotOwnedAdmissionRequest = SnapshotAdmissionRequest & {
+  readonly operationID: string;
+};
 
 /** Documented snapshot/config/model/auxiliary service consumed by later plugins. */
 export interface SnapshotService {
@@ -590,14 +711,37 @@ export interface SnapshotService {
    */
   stage(
     request: SnapshotAdmissionRequest,
-    materialize?: (capture: FamilyCapture, selection: ModelSelection) => Promise<void>,
+    materialize?: (
+      capture: FamilyCapture,
+      selection: ModelSelection,
+      candidateIdentity: string,
+    ) => Promise<void>,
   ): Promise<AdmissionOutcome>;
-  /** Persist the staged candidate as the accepted family capture; rolls back on failure. */
-  commit(familyId: string): Promise<AdmissionOutcome>;
+  /**
+   * Commit a stage only when workload-correlated acceptance is proven. `inboxID`/
+   * `itemType` come from a live `session.inbox.enqueued`; when omitted the service
+   * reconciles through the durable session log and fails closed unless a genuine
+   * synced watermark proves the replay complete. An explicit `validate` runs
+   * before publication so a mismatched resolved model never publishes a capture.
+   * Refuses owned candidates; those belong to `admitOwned`.
+   */
+  accept(input: SnapshotAcceptRequest): Promise<AdmissionOutcome>;
   /** True when a candidate is staged for the family. */
   hasStaged(familyId: string): Promise<boolean>;
-  /** Stage, await native selection, and commit once before dispatch. */
-  admit(request: SnapshotAdmissionRequest): Promise<AdmissionOutcome>;
+  /**
+   * Owned generated-work gateway: stage with the runtime-minted operation token,
+   * materialize the qualified variant, switch, and publish before native model
+   * resolution. It never publishes a prompt candidate and refuses when the staged
+   * candidate is no longer owned by `operationID`.
+   */
+  admitOwned(
+    request: SnapshotOwnedAdmissionRequest,
+    materialize?: (
+      capture: FamilyCapture,
+      selection: ModelSelection,
+      candidateIdentity: string,
+    ) => Promise<void>,
+  ): Promise<AdmissionOutcome>;
   /** Snapshot-bound auxiliary generation for title and Guardian work. */
   readonly auxiliary: AuxiliaryService;
   /** Release service-owned state; never stops the host. */
@@ -613,23 +757,96 @@ export interface SnapshotLease {
 
 /**
  * Structural native auxiliary-session/generate boundary. Production creates a
- * verified lineage child (fork/import with a parent) through the authenticated
- * full client; the plugin subset's `session.create` alone cannot parent.
+ * real parented native child through the authenticated full client's
+ * `session.import` (an imported session with a parentID, not a fork that copies
+ * the parent agent or the plugin subset's parentless `session.create`).
  */
 export interface AuxiliarySessionApi {
   create(input: {
+    /** Family root the imported child is parented to; `get(child).parentID` must equal it. */
     readonly parentID: string;
+    /** Directory the child is created in; reused from the family root. */
     readonly locationDirectory: string;
+    /** Nonempty child title. */
     readonly title: string;
-    /** Explicit agent to bind on the auxiliary child before generation. */
+    /** Workload kind recorded in host-owned metadata for restart recovery. */
+    readonly kind: "title" | "compaction" | "generate";
+    /** Captured role whose selection the child is bound to, when known. */
+    readonly role?: string | undefined;
+    /** Fully qualified family selection applied to the child. */
+    readonly model: ModelSelection;
+    /** Optional captured agent id to bind. */
     readonly agent?: string | undefined;
-    readonly model?: ModelSelection | undefined;
   }): Promise<{ readonly sessionID: string }>;
   switchModel(input: { readonly sessionID: string; readonly model: ModelSelection }): Promise<void>;
   generate(input: {
     readonly sessionID: string;
     readonly prompt: string;
   }): Promise<{ readonly text: string }>;
+}
+
+/**
+ * Host-owned metadata recorded on an auxiliary child so its intended role and
+ * selection are recoverable after restart without a model-only exemption.
+ */
+export interface AuxiliaryWorkloadMetadata {
+  readonly kind: "title" | "compaction" | "generate";
+  readonly role?: string | undefined;
+}
+
+/** Decode the auxiliary workload metadata embedded in native session metadata. */
+export function decodeAuxiliaryMetadata(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): AuxiliaryWorkloadMetadata | undefined {
+  if (metadata === undefined) return undefined;
+  const raw = metadata["vvocAuxiliary"];
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const record = raw as Record<string, unknown>;
+  const kind = record.kind;
+  if (kind !== "title" && kind !== "compaction" && kind !== "generate") return undefined;
+  const role = record.role;
+  if (role !== undefined && typeof role !== "string") return undefined;
+  return { kind, ...(role === undefined ? {} : { role }) };
+}
+
+/** Typed payload forwarded to the native import route for a parented auxiliary child. */
+export interface NativeSessionImportPayload {
+  readonly info: {
+    readonly id: string;
+    readonly parentID: string;
+    readonly projectID: string;
+    readonly agent?: string | undefined;
+    readonly model?:
+      | { readonly id: string; readonly providerID: string; readonly variant?: string }
+      | undefined;
+    readonly cost: number;
+    readonly tokens: {
+      readonly input: number;
+      readonly output: number;
+      readonly reasoning: number;
+      readonly cache: { readonly read: number; readonly write: number };
+    };
+    readonly time: { readonly created: number; readonly updated: number };
+    readonly title: string;
+    readonly location: { readonly directory: string };
+    readonly metadata?: Readonly<Record<string, unknown>> | undefined;
+    readonly permissions?:
+      | ReadonlyArray<{
+          readonly action: string;
+          readonly resource: string;
+          readonly effect: "allow" | "deny" | "ask";
+        }>
+      | undefined;
+  };
+  readonly messages: ReadonlyArray<unknown>;
+  readonly location: { readonly directory: string };
+}
+
+/** Decode the id of an imported native session from the unchecked client result. */
+export function decodeImportedSessionID(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const id = (value as { id?: unknown }).id;
+  return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
 /** Text carried by a native title request, retained as generation input. */

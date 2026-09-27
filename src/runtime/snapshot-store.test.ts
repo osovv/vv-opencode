@@ -12,6 +12,7 @@
 // START_MODULE_MAP
 //   makeCapture - Build a valid integrity-checked family capture fixture.
 //   tempDirs - Tracks temporary data roots for cleanup.
+//   createDataDir - Create a temporary vvoc data root for the store.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -29,7 +30,12 @@ import {
   familyCaptureIntegrity,
   snapshotScopeDirName,
 } from "./snapshot-store.js";
-import { SnapshotStoreError, type FamilyCapture, type StagedCandidate } from "./types.js";
+import {
+  SnapshotStoreError,
+  stagedCandidateKey,
+  type FamilyCapture,
+  type StagedCandidate,
+} from "./types.js";
 
 const tempDirs: string[] = [];
 
@@ -89,10 +95,10 @@ describe("createFileSnapshotStore", () => {
       capture,
     };
     await store.writeCandidate(candidate);
-    expect(await store.readCandidate("ses_1")).toEqual(candidate);
+    expect(await store.readCandidates("ses_1")).toEqual([candidate]);
     expect(await store.list()).toEqual(["ses_1"]);
-    await store.removeCandidate("ses_1");
-    expect(await store.readCandidate("ses_1")).toBeUndefined();
+    await store.removeCandidate("ses_1", stagedCandidateKey(candidate));
+    expect(await store.readCandidates("ses_1")).toEqual([]);
 
     expect(await store.readMarker("ses_1")).toBe(false);
     await store.writeMarker("ses_1");

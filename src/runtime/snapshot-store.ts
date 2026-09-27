@@ -17,10 +17,11 @@
 //   familyCaptureIntegrity - Recompute the behavior-relevant content digest of a capture.
 //   decodeFamilyCapture - Strictly validate and integrity-check a persisted family capture.
 //   decodeStagedCandidate - Strictly validate a persisted staged candidate.
+//   decodeStagedCandidates - Strictly validate a persisted staged-candidate array.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Exclude capturedAt from the behavior integrity projection so unchanged restaging keeps one stable revision and snapshot id.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Persist a bounded per-input candidate array per family with strict array decoding, so first-accepted selection never destroys an unaccepted input.]
 // END_CHANGE_SUMMARY
 
 import { createHash, randomBytes } from "node:crypto";
@@ -30,6 +31,7 @@ import { parseVvocConfigText } from "../lib/vvoc-config.js";
 import { getGlobalVvocDataDir } from "../lib/vvoc-paths.js";
 import {
   SnapshotStoreError,
+  stagedCandidateKey,
   type FamilyCapture,
   type SnapshotStore,
   type StagedCandidate,
@@ -344,6 +346,9 @@ export function decodeStagedCandidate(value: unknown): StagedCandidate | undefin
   if (typeof value.familyId !== "string" || typeof value.sessionID !== "string") return undefined;
   if (typeof value.stagedAt !== "number" || !Number.isFinite(value.stagedAt)) return undefined;
   if (typeof value.revision !== "string") return undefined;
+  if (value.inboxID !== undefined && typeof value.inboxID !== "string") return undefined;
+  if (value.operationID !== undefined && typeof value.operationID !== "string") return undefined;
+  if (value.workload !== undefined && typeof value.workload !== "string") return undefined;
   const selection = decodeSelection(value.selection);
   if (selection === undefined) return undefined;
   const before = value.before === undefined ? undefined : decodeSelection(value.before);
@@ -353,12 +358,31 @@ export function decodeStagedCandidate(value: unknown): StagedCandidate | undefin
   return deepFreeze({
     familyId: value.familyId,
     sessionID: value.sessionID,
+    ...(value.inboxID === undefined ? {} : { inboxID: value.inboxID }),
+    ...(value.operationID === undefined ? {} : { operationID: value.operationID }),
+    ...(value.workload === undefined ? {} : { workload: value.workload }),
     stagedAt: value.stagedAt,
     revision: value.revision,
     selection,
     ...(before === undefined ? {} : { before }),
     capture,
   });
+}
+
+/** Strictly validate a persisted staged-candidate array; any invalid entry fails the whole read. */
+export function decodeStagedCandidates(value: unknown): StagedCandidate[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const decoded: StagedCandidate[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const candidate = decodeStagedCandidate(entry);
+    if (candidate === undefined) return undefined;
+    const key = stagedCandidateKey(candidate);
+    if (seen.has(key)) return undefined;
+    seen.add(key);
+    decoded.push(candidate);
+  }
+  return decoded;
 }
 
 // START_BLOCK_FILE_STORE
@@ -371,8 +395,8 @@ export function createFileSnapshotStore(options: FileSnapshotStoreOptions): Snap
   );
 
   const capturePath = (familyId: string) => join(baseDir, `${encodeURIComponent(familyId)}.json`);
-  const candidatePath = (familyId: string) =>
-    join(baseDir, `${encodeURIComponent(familyId)}.candidate.json`);
+  const candidatesPath = (familyId: string) =>
+    join(baseDir, `${encodeURIComponent(familyId)}.candidates.json`);
   const markerPath = (familyId: string) =>
     join(baseDir, `${encodeURIComponent(familyId)}.bound.json`);
 
@@ -409,6 +433,18 @@ export function createFileSnapshotStore(options: FileSnapshotStoreOptions): Snap
     }
   }
 
+  async function readCandidatesFor(familyId: string): Promise<readonly StagedCandidate[]> {
+    const raw = await readJson(candidatesPath(familyId));
+    if (raw === undefined) return [];
+    const candidates = decodeStagedCandidates(raw);
+    if (candidates === undefined) {
+      throw new SnapshotStoreError(
+        `Staged admission candidates for family ${familyId} are invalid.`,
+      );
+    }
+    return candidates;
+  }
+
   return {
     async read(familyId) {
       const raw = await readJson(capturePath(familyId));
@@ -427,22 +463,26 @@ export function createFileSnapshotStore(options: FileSnapshotStoreOptions): Snap
     async remove(familyId) {
       await rm(capturePath(familyId), { force: true });
     },
-    async readCandidate(familyId) {
-      const raw = await readJson(candidatePath(familyId));
-      if (raw === undefined) return undefined;
-      const candidate = decodeStagedCandidate(raw);
-      if (candidate === undefined) {
-        throw new SnapshotStoreError(
-          `Staged admission candidate for family ${familyId} is invalid.`,
-        );
-      }
-      return candidate;
-    },
+    readCandidates: readCandidatesFor,
     async writeCandidate(candidate) {
-      await writeAtomic(candidatePath(candidate.familyId), candidate);
+      const existing = await readCandidatesFor(candidate.familyId);
+      const key = stagedCandidateKey(candidate);
+      const merged = existing.filter((entry) => stagedCandidateKey(entry) !== key);
+      merged.push(candidate);
+      await writeAtomic(candidatesPath(candidate.familyId), merged);
     },
-    async removeCandidate(familyId) {
-      await rm(candidatePath(familyId), { force: true });
+    async removeCandidate(familyId, candidateKey) {
+      const existing = await readCandidatesFor(familyId);
+      const remaining = existing.filter((entry) => stagedCandidateKey(entry) !== candidateKey);
+      if (remaining.length === existing.length) return;
+      if (remaining.length === 0) {
+        await rm(candidatesPath(familyId), { force: true });
+        return;
+      }
+      await writeAtomic(candidatesPath(familyId), remaining);
+    },
+    async removeCandidates(familyId) {
+      await rm(candidatesPath(familyId), { force: true });
     },
     async readMarker(familyId) {
       const raw = await readJson(markerPath(familyId));
@@ -468,7 +508,7 @@ export function createFileSnapshotStore(options: FileSnapshotStoreOptions): Snap
       for (const entry of entries) {
         if (
           !entry.endsWith(".json") ||
-          entry.endsWith(".candidate.json") ||
+          entry.endsWith(".candidates.json") ||
           entry.endsWith(".bound.json")
         )
           continue;

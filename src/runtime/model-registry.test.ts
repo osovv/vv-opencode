@@ -10,6 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   ModelInfo - Native model info type alias used by the editor double.
+//   AgentInfo - Native agent info type alias used by the editor double.
+//   ModelEditorFixture - In-memory native-shaped model editor fixture type.
+//   AgentEditorFixture - In-memory native-shaped agent editor fixture type.
 //   createModelEditor - Build an in-memory native-shaped model editor double.
 //   createAgentEditor - Build an in-memory native-shaped agent editor double.
 //   captureWith - Build a minimal family capture fixture.
@@ -29,6 +33,8 @@ import {
   applyVariantRegistrations,
   buildVariantRegistrations,
   managedVariantFor,
+  mergeModelBodyOverlay,
+  mergeModelHeadersOverlay,
   primarySelection,
   qualifySelection,
 } from "./model-registry.js";
@@ -263,5 +269,29 @@ describe("applyAgentPolicies", () => {
       id: Model.ID.make("chosen"),
       providerID: Provider.ID.make("user"),
     });
+  });
+});
+
+describe("mergeModelBodyOverlay / mergeModelHeadersOverlay", () => {
+  test("merges nested records with the host's overlay semantics", () => {
+    expect(mergeModelBodyOverlay({ a: { b: 1, c: 2 } }, { a: { c: 3, d: 4 } })).toEqual({
+      a: { b: 1, c: 3, d: 4 },
+    });
+    // Arrays are replaced wholesale, scalars are overridden, undefined keeps base.
+    expect(mergeModelBodyOverlay({ a: [1, 2], s: "x" }, { a: [3], s: undefined })).toEqual({
+      a: [3],
+      s: "x",
+    });
+    expect(mergeModelBodyOverlay(undefined, { a: 1 })).toEqual({ a: 1 });
+    expect(mergeModelBodyOverlay({ a: 1 }, undefined)).toEqual({ a: 1 });
+  });
+
+  test("merges headers case-insensitively with the variant winning", () => {
+    expect(mergeModelHeadersOverlay({ "X-A": "1", "X-B": "2" }, { "x-a": "3", Y: "4" })).toEqual({
+      "x-a": "3",
+      "X-B": "2",
+      Y: "4",
+    });
+    expect(mergeModelHeadersOverlay(undefined, undefined)).toBeUndefined();
   });
 });

@@ -13,6 +13,7 @@
 //   ModelRolesRegistration - Releasable plugin-owned registration.
 //   registerModelRoles - Enable or disable vvoc role overriding on the shared native snapshot runtime.
 //   ModelRolesPlugin - Native Plugin.define object for vvoc model-roles.
+//   default - Default export: the native ModelRolesPlugin object.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

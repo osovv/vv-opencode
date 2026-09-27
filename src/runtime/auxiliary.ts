@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Created bound auxiliary children with explicit model/agent instead of forks, and retained family-qualified variants and title messages.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 5 - Auxiliary children are created by the runtime as real imported parented sessions carrying host-owned workload metadata; this service records kind/role for that import.]
 // END_CHANGE_SUMMARY
 
 import { primarySelection, qualifySelection } from "./model-registry.js";
@@ -71,6 +71,8 @@ export function createAuxiliaryService(deps: AuxiliaryServiceDeps): AuxiliarySer
         parentID: capture.familyId,
         locationDirectory: capture.location.directory,
         title: `vvoc ${kind}`,
+        kind,
+        ...(role === undefined ? {} : { role }),
         model: selection,
       });
       children.set(cacheKey, created.sessionID);

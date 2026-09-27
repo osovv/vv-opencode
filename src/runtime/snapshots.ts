@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   MAX_LINEAGE_HOPS - Bound on host-verified parent/fork lineage traversal.
+//   MAX_STAGED_CANDIDATES - Bound on concurrently staged per-input candidates for one family.
 //   SnapshotCaptureInput - Inputs used to build one family capture.
 //   SnapshotServiceDeps - Injectable native boundaries for the snapshot service.
 //   defaultSnapshotDigest - Content digest used to address captures.
@@ -20,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Bind the caller-resolved (agent-aware) selection as the family model, keep the integrity revision independent of capturedAt so restaging is idempotent, allow non-forcing staged admission, and make capture+marker publication fail-closed.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Bounded per-input candidate sets; the first accepted input by native durable order wins, ordering requires a complete replay when multiple inputs are staged, and publication consumes only the winning owner.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -30,6 +31,10 @@ import { agentBindingsFrom, parseRoleSelections } from "./snapshot-config.js";
 import { familyCaptureIntegrity } from "./snapshot-store.js";
 import {
   SnapshotAdmissionError,
+  stagedCandidateIdentity,
+  stagedCandidateKey,
+  type AcceptedInput,
+  type AcceptedInputReconciliation,
   type AdmissionOutcome,
   type CapturedModelSettings,
   type EffectiveRuntimeConfig,
@@ -37,7 +42,9 @@ import {
   type ModelSelection,
   type ModelVariantCapture,
   type NativeSessionView,
+  type SnapshotAcceptRequest,
   type SnapshotAdmissionRequest,
+  type SnapshotOwnedAdmissionRequest,
   type SnapshotService,
   type SnapshotStore,
   type StagedCandidate,
@@ -45,6 +52,20 @@ import {
 
 /** Bound on host-verified parent/fork lineage traversal. */
 export const MAX_LINEAGE_HOPS = 64;
+
+/**
+ * Bound on concurrently staged per-input admission candidates for one family.
+ * Overflow fails the new stage closed rather than dropping an unaccepted input
+ * that native preparation may still accept later.
+ */
+export const MAX_STAGED_CANDIDATES = 8;
+
+/** Materialize a candidate's qualified variant before the awaited switch. */
+type Materialize = (
+  capture: FamilyCapture,
+  selection: ModelSelection,
+  candidateIdentity: string,
+) => Promise<void>;
 
 /** Inputs used to build one full-policy family capture. */
 export interface SnapshotCaptureInput {
@@ -66,6 +87,15 @@ export interface SnapshotServiceDeps {
   readSessionModel(sessionID: string): Promise<ModelSelection | undefined>;
   switchModel(input: { readonly sessionID: string; readonly model: ModelSelection }): Promise<void>;
   readonly auxiliarySession: import("./types.js").AuxiliarySessionApi;
+  /**
+   * Accepted-input reconciliation for a session from the live stream and/or the
+   * durable native session log, ordered by native event time/sequence. Returns
+   * undefined when no reliable source exists so acceptance fails closed instead
+   * of committing without evidence, or binding a later policy.
+   */
+  readonly readAcceptedInputs?:
+    | ((sessionID: string) => Promise<AcceptedInputReconciliation | undefined>)
+    | undefined;
   now?(): number;
   digest?(value: string): string;
 }
@@ -256,8 +286,29 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
   const now = deps.now ?? Date.now;
   const digest = deps.digest ?? defaultSnapshotDigest;
   const inFlightSessions = new Map<string, Promise<AdmissionOutcome>>();
-  const inFlightCommits = new Map<string, Promise<AdmissionOutcome>>();
+  const inFlightAccepts = new Map<string, Promise<AdmissionOutcome>>();
+  const inFlightOwned = new Map<string, Promise<AdmissionOutcome>>();
+  /**
+   * Per-family serialization. Candidate read/write, switch and publication are
+   * ordered so a concurrent stage cannot be lost or overwritten between an
+   * acceptance validation and its publication, and late cleanup cannot delete a
+   * newer/committed capture.
+   */
+  const familyLocks = new Map<string, Promise<unknown>>();
   let disposed = false;
+
+  function withFamilyLock<T>(familyId: string, run: () => Promise<T>): Promise<T> {
+    const previous = familyLocks.get(familyId) ?? Promise.resolve();
+    const next = previous.then(run, run);
+    familyLocks.set(
+      familyId,
+      next.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return next;
+  }
 
   const familyOf = async (sessionID: string): Promise<string> =>
     resolveSessionFamily({ sessionID, readSession: deps.readSession });
@@ -281,7 +332,7 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
   async function doStage(
     request: SnapshotAdmissionRequest,
     familyId: string,
-    materialize: ((capture: FamilyCapture, selection: ModelSelection) => Promise<void>) | undefined,
+    materialize: Materialize | undefined,
   ): Promise<AdmissionOutcome> {
     const existing = await deps.store.read(familyId);
     if (existing !== undefined) {
@@ -365,15 +416,32 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
       };
     }
 
-    // A staged candidate for the same capture revision is already switched; a newer
-    // revision (for example after a preset switch) must be re-staged and re-switched.
-    const alreadyStaged = await deps.store.readCandidate(familyId);
-    if (alreadyStaged !== undefined && alreadyStaged.revision === capture.integrity) {
+    // Per-input candidates: repeated identical input is idempotent, distinct
+    // inputs coexist up to MAX_STAGED_CANDIDATES, and the family's first
+    // accepted input decides the snapshot regardless of stage order.
+    const requestIdentity = stagedCandidateIdentity(request);
+    const candidates = await deps.store.readCandidates(familyId);
+    const sameInput = candidates.find(
+      (candidate) => stagedCandidateKey(candidate) === requestIdentity,
+    );
+    if (sameInput !== undefined && sameInput.revision === capture.integrity) {
+      // Repeated identical input: idempotent, no rewrite and no re-switch.
       return {
         status: "staged",
         familyId,
-        snapshotId: alreadyStaged.capture.snapshotId,
-        candidateSelection: alreadyStaged.selection,
+        snapshotId: sameInput.capture.snapshotId,
+        candidateSelection: sameInput.selection,
+        rollback: "none",
+      };
+    }
+    if (sameInput === undefined && candidates.length >= MAX_STAGED_CANDIDATES) {
+      // Bounded set overflow fails the new stage closed rather than dropping an
+      // unaccepted input that native preparation may still accept later.
+      return {
+        status: "rejected",
+        familyId,
+        error: `The family already holds ${candidates.length} staged candidates; refusing to drop an unaccepted input.`,
+        rollback: "none",
       };
     }
 
@@ -390,7 +458,7 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
     const selection = qualifySelection(capture, baseSelection);
     try {
       // Materialize the candidate variant before the switch so resolution finds it.
-      await materialize?.(capture, selection);
+      await materialize?.(capture, selection, requestIdentity);
     } catch (error) {
       return {
         status: "rejected",
@@ -403,6 +471,9 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
     const candidate: StagedCandidate = {
       familyId,
       sessionID: request.sessionID,
+      ...(request.inboxID === undefined ? {} : { inboxID: request.inboxID }),
+      ...(request.operationID === undefined ? {} : { operationID: request.operationID }),
+      ...(request.workload === undefined ? {} : { workload: request.workload }),
       stagedAt: now(),
       revision: capture.integrity,
       selection,
@@ -441,7 +512,8 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
         readSessionModel: deps.readSessionModel,
         switchModel: deps.switchModel,
       });
-      await deps.store.removeCandidate(familyId).catch(() => undefined);
+      // Remove only our own candidate; never another owner's.
+      await deps.store.removeCandidate(familyId, requestIdentity).catch(() => undefined);
       return {
         status: "rejected",
         familyId,
@@ -459,68 +531,216 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
     };
   }
 
-  async function doCommit(familyId: string): Promise<AdmissionOutcome> {
-    const candidate = await deps.store.readCandidate(familyId);
-    if (candidate === undefined) {
-      const existing = await deps.store.read(familyId);
-      return existing === undefined
-        ? { status: "rejected", familyId, error: "There is no staged candidate to commit." }
-        : { status: "reused", familyId, snapshotId: existing.snapshotId };
-    }
-    try {
-      await deps.store.write(familyId, candidate.capture);
-      await deps.store.writeMarker(familyId);
-    } catch (error) {
-      // Publication is capture + bound marker. If either half failed, remove a
-      // partially published capture so the next read stays fail-closed instead of
-      // silently reusing an unproven policy.
-      await deps.store.remove(familyId).catch(() => undefined);
-      // Commit failure must undo our own switch unless a newer choice replaced it.
-      const rollback = await rollbackStaged({
-        sessionID: candidate.sessionID,
-        candidate,
-        readSessionModel: deps.readSessionModel,
-        switchModel: deps.switchModel,
-      });
-      await deps.store.removeCandidate(familyId).catch(() => undefined);
+  /**
+   * Publish the exact winning candidate as the bound family capture. The
+   * candidate must still exist with the same owner identity and revision; the
+   * bound marker is written first so a crash between the two writes fails closed:
+   * a capture is never readable without its marker, and a marker without a
+   * capture is refused on the next admission instead of adopting current
+   * configuration. Cleanup removes only the winning candidate, never a newer one.
+   */
+  async function publishCandidate(
+    familyId: string,
+    expected: StagedCandidate,
+  ): Promise<AdmissionOutcome> {
+    const key = stagedCandidateKey(expected);
+    const candidates = await deps.store.readCandidates(familyId);
+    const current = candidates.find((candidate) => stagedCandidateKey(candidate) === key);
+    if (current === undefined || current.revision !== expected.revision) {
       return {
         status: "rejected",
         familyId,
-        candidateSelection: candidate.selection,
+        error: "The staged candidate changed before publication; refusing to publish.",
+        rollback: "none",
+      };
+    }
+    try {
+      await deps.store.writeMarker(familyId);
+      await deps.store.write(familyId, current.capture);
+    } catch (error) {
+      // Remove both halves so the next read cannot expose or silently reuse a
+      // partially published policy.
+      await deps.store.removeMarker(familyId).catch(() => undefined);
+      await deps.store.remove(familyId).catch(() => undefined);
+      // Publication failure must undo our own switch unless a newer choice replaced it.
+      const rollback = await rollbackStaged({
+        sessionID: current.sessionID,
+        candidate: current,
+        readSessionModel: deps.readSessionModel,
+        switchModel: deps.switchModel,
+      });
+      await deps.store.removeCandidate(familyId, key).catch(() => undefined);
+      return {
+        status: "rejected",
+        familyId,
+        candidateSelection: current.selection,
         rollback,
         error: toReason(error),
       };
     }
-    await deps.store.removeCandidate(familyId).catch(() => undefined);
+    // Consume only the winning owner.
+    await deps.store.removeCandidate(familyId, key).catch(() => undefined);
     return {
       status: "bound",
       familyId,
-      snapshotId: candidate.capture.snapshotId,
-      candidateSelection: candidate.selection,
+      snapshotId: current.capture.snapshotId,
+      candidateSelection: current.selection,
       rollback: "none",
     };
   }
 
+  /**
+   * Owned generated-work gateway. Stages with the runtime's operation token and
+   * publishes only that exact owned candidate; it never adopts a prompt
+   * candidate.
+   */
+  async function doAdmitOwned(
+    familyId: string,
+    request: SnapshotOwnedAdmissionRequest,
+    materialize: Materialize | undefined,
+  ): Promise<AdmissionOutcome> {
+    const staged = await doStage(request, familyId, materialize);
+    if (staged.status === "rejected" || staged.status === "reused") return staged;
+    const key = stagedCandidateIdentity(request);
+    const candidates = await deps.store.readCandidates(familyId);
+    const candidate = candidates.find((entry) => stagedCandidateKey(entry) === key);
+    if (candidate === undefined || candidate.operationID !== request.operationID) {
+      return {
+        status: "rejected",
+        familyId,
+        error: "The owned operation no longer owns the staged candidate.",
+        rollback: "none",
+      };
+    }
+    if (candidate.inboxID !== undefined) {
+      return {
+        status: "rejected",
+        familyId,
+        error: "Refusing to publish a prompt candidate through the owned gateway.",
+        rollback: "none",
+      };
+    }
+    return publishCandidate(familyId, candidate);
+  }
+
+  /**
+   * First-accepted publication: among every staged prompt candidate, publish the
+   * one whose native accepted input is earliest by durable event order, never the
+   * most recently staged or an arbitrary map entry. Covers delayed/missed live
+   * notifications by reconciling against the durable session log. An optional
+   * `validate` refuses a resolved model that does not belong to the winner
+   * without losing the winner's snapshot.
+   */
+  async function doAccept(
+    familyId: string,
+    request: SnapshotAcceptRequest,
+  ): Promise<AdmissionOutcome> {
+    const existing = await deps.store.read(familyId);
+    if (existing !== undefined)
+      return { status: "reused", familyId, snapshotId: existing.snapshotId };
+    const candidates = await deps.store.readCandidates(familyId);
+    const promptCandidates = candidates.filter(
+      (candidate) => candidate.inboxID !== undefined && candidate.operationID === undefined,
+    );
+    if (promptCandidates.length === 0) {
+      return {
+        status: "rejected",
+        familyId,
+        error: "There is no staged prompt candidate to accept.",
+        rollback: "none",
+      };
+    }
+    const sessions = [...new Set(promptCandidates.map((candidate) => candidate.sessionID))];
+    const reconciliation = new Map<string, AcceptedInputReconciliation | undefined>();
+    for (const sessionID of sessions) {
+      const resolved = deps.readAcceptedInputs
+        ? await deps.readAcceptedInputs(sessionID).catch(() => undefined)
+        : undefined;
+      reconciliation.set(sessionID, resolved);
+    }
+    // With more than one staged input, only a complete durable replay can prove
+    // which was accepted first; an incomplete/live-only view could bind a later
+    // policy, so fail closed until the log confirms the ordering.
+    if (promptCandidates.length > 1) {
+      for (const sessionID of sessions) {
+        const resolved = reconciliation.get(sessionID);
+        if (resolved === undefined || !resolved.complete) {
+          return {
+            status: "rejected",
+            familyId,
+            error:
+              "Cannot establish the first accepted input without a complete session log; refusing to bind a later policy.",
+            rollback: "none",
+          };
+        }
+      }
+    }
+    const eligible: Array<{ candidate: StagedCandidate; order: AcceptedInput }> = [];
+    for (const candidate of promptCandidates) {
+      const resolved = reconciliation.get(candidate.sessionID);
+      const match = resolved?.inputs.find(
+        (entry) =>
+          entry.inboxID === candidate.inboxID &&
+          (entry.itemType === "user" || entry.itemType === "synthetic"),
+      );
+      // A log-derived match is only trusted from a complete replay; a verified
+      // live native event may stand alone.
+      if (match !== undefined && (match.source === "live" || resolved?.complete === true)) {
+        eligible.push({ candidate, order: match });
+      }
+    }
+    if (eligible.length === 0) {
+      return {
+        status: "rejected",
+        familyId,
+        error: "No accepted input matching a staged workload was found.",
+        rollback: "none",
+      };
+    }
+    eligible.sort(
+      (left, right) =>
+        left.order.created - right.order.created ||
+        (left.order.seq ?? 0) - (right.order.seq ?? 0) ||
+        left.candidate.stagedAt - right.candidate.stagedAt ||
+        stagedCandidateKey(left.candidate).localeCompare(stagedCandidateKey(right.candidate)),
+    );
+    const winner = eligible[0];
+    if (request.validate !== undefined && !request.validate(winner.candidate.selection)) {
+      return {
+        status: "rejected",
+        familyId,
+        candidateSelection: winner.candidate.selection,
+        error:
+          "The resolved model does not match the first accepted candidate; refusing to publish.",
+        rollback: "none",
+      };
+    }
+    return publishCandidate(familyId, winner.candidate);
+  }
+
   async function stageWithFamily(
     request: SnapshotAdmissionRequest,
-    materialize: ((capture: FamilyCapture, selection: ModelSelection) => Promise<void>) | undefined,
+    materialize: Materialize | undefined,
   ): Promise<AdmissionOutcome> {
     const familyId = await familyOf(request.sessionID);
-    // Sessions are deduped individually: two sessions in one family each need their
-    // own switch, while a repeated call for one session shares the first attempt.
-    const sessionKey = `${familyId}\u0000${request.sessionID}`;
+    // Dedupe by exact input identity (session + inboxID/operationID/workload):
+    // concurrent distinct prompts must not share one staging promise, while a
+    // repeated identical input shares its first attempt.
+    const sessionKey = `${familyId}\u0000${stagedCandidateIdentity(request)}`;
     const pending = inFlightSessions.get(sessionKey);
     if (pending !== undefined) return pending;
-    const promise = doStage(request, familyId, materialize).finally(() => {
-      inFlightSessions.delete(sessionKey);
-    });
+    const promise = withFamilyLock(familyId, () => doStage(request, familyId, materialize)).finally(
+      () => {
+        inFlightSessions.delete(sessionKey);
+      },
+    );
     inFlightSessions.set(sessionKey, promise);
     return promise;
   }
 
   const stage = (
     request: SnapshotAdmissionRequest,
-    materialize?: (capture: FamilyCapture, selection: ModelSelection) => Promise<void>,
+    materialize?: Materialize,
   ): Promise<AdmissionOutcome> => {
     if (disposed) {
       return Promise.resolve({
@@ -533,28 +753,61 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
     return stageWithFamily(request, materialize);
   };
 
-  const commit = (familyId: string): Promise<AdmissionOutcome> => {
+  const accept = (request: SnapshotAcceptRequest): Promise<AdmissionOutcome> => {
     if (disposed) {
       return Promise.resolve({
         status: "rejected",
-        familyId,
+        familyId: request.sessionID,
         error: "The snapshot service was released.",
         rollback: "none",
       });
     }
-    const pending = inFlightCommits.get(familyId);
-    if (pending !== undefined) return pending;
-    const promise = doCommit(familyId).finally(() => {
-      inFlightCommits.delete(familyId);
-    });
-    inFlightCommits.set(familyId, promise);
-    return promise;
+    return (async () => {
+      const familyId = await familyOf(request.sessionID);
+      const key = `${familyId}\u0000${request.sessionID}\u0000${request.inboxID ?? ""}`;
+      const pending = inFlightAccepts.get(key);
+      if (pending !== undefined) return pending;
+      const promise = withFamilyLock(familyId, () => doAccept(familyId, request)).finally(() => {
+        inFlightAccepts.delete(key);
+      });
+      inFlightAccepts.set(key, promise);
+      return promise;
+    })();
   };
 
-  const admit = async (request: SnapshotAdmissionRequest): Promise<AdmissionOutcome> => {
-    const staged = await stage(request);
-    if (staged.status === "rejected" || staged.status === "reused") return staged;
-    return commit(staged.familyId);
+  const admitOwned = (
+    request: SnapshotOwnedAdmissionRequest,
+    materialize?: Materialize,
+  ): Promise<AdmissionOutcome> => {
+    if (disposed) {
+      return Promise.resolve({
+        status: "rejected",
+        familyId: request.sessionID,
+        error: "The snapshot service was released.",
+        rollback: "none",
+      });
+    }
+    if (request.operationID.length === 0) {
+      return Promise.resolve({
+        status: "rejected",
+        familyId: request.sessionID,
+        error: "An owned admission requires a non-empty operation token.",
+        rollback: "none",
+      });
+    }
+    return (async () => {
+      const familyId = await familyOf(request.sessionID);
+      const key = `${familyId}\u0000${request.sessionID}\u0000${request.operationID}`;
+      const pending = inFlightOwned.get(key);
+      if (pending !== undefined) return pending;
+      const promise = withFamilyLock(familyId, () =>
+        doAdmitOwned(familyId, request, materialize),
+      ).finally(() => {
+        inFlightOwned.delete(key);
+      });
+      inFlightOwned.set(key, promise);
+      return promise;
+    })();
   };
 
   const auxiliary = createAuxiliaryService({
@@ -582,14 +835,16 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
       );
     },
     stage,
-    commit,
-    hasStaged: async (familyId) => (await deps.store.readCandidate(familyId)) !== undefined,
-    admit,
+    accept,
+    admitOwned,
+    hasStaged: async (familyId) => (await deps.store.readCandidates(familyId)).length > 0,
     auxiliary,
     dispose() {
       disposed = true;
       inFlightSessions.clear();
-      inFlightCommits.clear();
+      inFlightAccepts.clear();
+      inFlightOwned.clear();
+      familyLocks.clear();
     },
   };
 }

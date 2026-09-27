@@ -10,8 +10,13 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   LOCATION - Shared runtime location fixture.
+//   VVOC - Default vvoc config fixture.
+//   CONFIG_A - Effective config fixture with managed and non-managed models.
+//   CONFIG_B - Effective config fixture with a different default model.
 //   MemorySnapshotStore - In-memory SnapshotStore double with failure injection.
 //   FakeNativeBoundaries - In-memory session/config/switch double.
+//   addSession - Register one session view on the fake boundaries.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -28,6 +33,8 @@ import {
 import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import {
   SnapshotAdmissionError,
+  stagedCandidateKey,
+  type AcceptedInput,
   type EffectiveRuntimeConfig,
   type FamilyCapture,
   type ModelSelection,
@@ -61,7 +68,7 @@ const CONFIG_B: EffectiveRuntimeConfig = {
 
 class MemorySnapshotStore implements SnapshotStore {
   readonly captures = new Map<string, FamilyCapture>();
-  readonly candidates = new Map<string, StagedCandidate>();
+  readonly candidates = new Map<string, StagedCandidate[]>();
   readonly markers = new Set<string>();
   failWriteCandidate = false;
   failWrite = false;
@@ -76,14 +83,25 @@ class MemorySnapshotStore implements SnapshotStore {
   async remove(familyId: string) {
     this.captures.delete(familyId);
   }
-  async readCandidate(familyId: string) {
-    return this.candidates.get(familyId);
+  async readCandidates(familyId: string) {
+    return this.candidates.get(familyId) ?? [];
   }
   async writeCandidate(candidate: StagedCandidate) {
     if (this.failWriteCandidate) throw new Error("stage failed");
-    this.candidates.set(candidate.familyId, candidate);
+    const list = this.candidates.get(candidate.familyId) ?? [];
+    const key = stagedCandidateKey(candidate);
+    this.candidates.set(candidate.familyId, [
+      ...list.filter((entry) => stagedCandidateKey(entry) !== key),
+      candidate,
+    ]);
   }
-  async removeCandidate(familyId: string) {
+  async removeCandidate(familyId: string, candidateKey: string) {
+    const list = this.candidates.get(familyId) ?? [];
+    const remaining = list.filter((entry) => stagedCandidateKey(entry) !== candidateKey);
+    if (remaining.length === 0) this.candidates.delete(familyId);
+    else this.candidates.set(familyId, remaining);
+  }
+  async removeCandidates(familyId: string) {
     this.candidates.delete(familyId);
   }
   async readMarker(familyId: string) {
@@ -105,6 +123,10 @@ class FakeNativeBoundaries {
   readonly models = new Map<string, ModelSelection>();
   readonly switchCalls: Array<{ sessionID: string; model: ModelSelection }> = [];
   config: EffectiveRuntimeConfig = CONFIG_A;
+  /** Accepted inputs (native created/seq order); undefined means the source is unavailable. */
+  accepted: ReadonlyArray<Omit<AcceptedInput, "sessionID" | "source">> | undefined = [];
+  /** Whether the durable replay for the session reached a verified watermark. */
+  acceptedComplete = true;
   switchBehavior:
     | ((input: { sessionID: string; model: ModelSelection }) => Promise<void>)
     | undefined;
@@ -122,6 +144,24 @@ class FakeNativeBoundaries {
         if (this.switchBehavior !== undefined) return this.switchBehavior(input);
         this.models.set(input.sessionID, input.model);
       },
+      ...(this.accepted === undefined
+        ? {}
+        : {
+            readAcceptedInputs: async (sessionID: string) =>
+              this.accepted === undefined
+                ? undefined
+                : {
+                    inputs: this.accepted.map((entry) => ({
+                      sessionID,
+                      inboxID: entry.inboxID,
+                      itemType: entry.itemType,
+                      created: entry.created ?? 0,
+                      ...(entry.seq === undefined ? {} : { seq: entry.seq }),
+                      source: "log" as const,
+                    })),
+                    complete: this.acceptedComplete,
+                  },
+          }),
       auxiliarySession: {
         create: async () => ({ sessionID: "ses_aux" }),
         switchModel: async () => undefined,
@@ -244,6 +284,8 @@ describe("createSnapshotService staged admission", () => {
       sessionID: "root",
       directory: "/project",
       location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
     });
     expect(staged.status).toBe("staged");
     // Family-qualified variant is activated, not the plain model.
@@ -254,8 +296,13 @@ describe("createSnapshotService staged admission", () => {
     });
     expect(await snapshots.hasStaged("root")).toBe(true);
     expect(host.store.captures.size).toBe(0);
+    host.accepted = [{ inboxID: "msg-1", itemType: "user", created: 1 }];
 
-    const committed = await snapshots.commit("root");
+    const committed = await snapshots.accept({
+      sessionID: "root",
+      inboxID: "msg-1",
+      itemType: "user",
+    });
     expect(committed.status).toBe("bound");
     expect(host.store.captures.size).toBe(1);
     expect(await snapshots.hasStaged("root")).toBe(false);
@@ -278,7 +325,12 @@ describe("createSnapshotService staged admission", () => {
     const snapshots = createSnapshotService(host.deps);
 
     host.config = CONFIG_A;
-    await snapshots.admit({ sessionID: "rootA", directory: "/project", location: LOCATION });
+    await snapshots.admitOwned({
+      sessionID: "rootA",
+      directory: "/project",
+      location: LOCATION,
+      operationID: "op-rootA",
+    });
     host.config = {
       ...CONFIG_A,
       modelSettings: [
@@ -290,7 +342,12 @@ describe("createSnapshotService staged admission", () => {
         },
       ],
     };
-    await snapshots.admit({ sessionID: "rootB", directory: "/project", location: LOCATION });
+    await snapshots.admitOwned({
+      sessionID: "rootB",
+      directory: "/project",
+      location: LOCATION,
+      operationID: "op-rootB",
+    });
 
     const variantsA = await snapshots.variants("rootA");
     const variantsB = await snapshots.variants("rootB");
@@ -307,7 +364,8 @@ describe("createSnapshotService staged admission", () => {
     host.models.set("root", { providerID: "prov", modelID: "user-pick" });
     const snapshots = createSnapshotService(host.deps);
 
-    const outcome = await snapshots.admit({
+    const outcome = await snapshots.admitOwned({
+      operationID: "op-1",
       sessionID: "root",
       directory: "/project",
       location: LOCATION,
@@ -407,10 +465,17 @@ describe("createSnapshotService staged admission", () => {
       directory: "/project",
       location: LOCATION,
       before: { providerID: "prov", modelID: "before" },
+      inboxID: "msg-1",
+      workload: "prompt",
     });
+    host.accepted = [{ inboxID: "msg-1", itemType: "user", created: 1 }];
     store.failWrite = true;
 
-    const outcome = await snapshots.commit("root");
+    const outcome = await snapshots.accept({
+      sessionID: "root",
+      inboxID: "msg-1",
+      itemType: "user",
+    });
     expect(outcome.status).toBe("rejected");
     expect(outcome.rollback).toBe("reverted");
     expect(host.models.get("root")).toEqual({ providerID: "prov", modelID: "before" });
@@ -422,12 +487,23 @@ describe("createSnapshotService staged admission", () => {
     const host = new FakeNativeBoundaries(store);
     addRoot(host);
     const snapshots = createSnapshotService(host.deps);
-    await snapshots.stage({ sessionID: "root", directory: "/project", location: LOCATION });
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+    });
+    host.accepted = [{ inboxID: "msg-1", itemType: "user", created: 1 }];
     store.failWrite = true;
     // A newer explicit choice replaced our staged switch with the same model but a different variant.
     host.models.set("root", { providerID: "prov", modelID: "m1", variant: "user-variant" });
 
-    const outcome = await snapshots.commit("root");
+    const outcome = await snapshots.accept({
+      sessionID: "root",
+      inboxID: "msg-1",
+      itemType: "user",
+    });
     expect(outcome.status).toBe("rejected");
     expect(outcome.rollback).toBe("preserved-newer-choice");
     expect(host.models.get("root")).toEqual({
@@ -496,14 +572,322 @@ describe("createSnapshotService staged admission", () => {
     addSession(host, { id: "fresh-root", locationDirectory: "/project" });
     const snapshots = createSnapshotService(host.deps);
 
-    await snapshots.admit({ sessionID: "bound-root", directory: "/project", location: LOCATION });
+    await snapshots.admitOwned({
+      sessionID: "bound-root",
+      directory: "/project",
+      location: LOCATION,
+      operationID: "op-bound",
+    });
     host.config = CONFIG_B;
 
     const bound = await snapshots.policy("bound-root");
     expect(bound?.roleModels.default).toEqual({ providerID: "prov", modelID: "m1" });
 
-    await snapshots.admit({ sessionID: "fresh-root", directory: "/project", location: LOCATION });
+    await snapshots.admitOwned({
+      sessionID: "fresh-root",
+      directory: "/project",
+      location: LOCATION,
+      operationID: "op-fresh",
+    });
     const fresh = await snapshots.policy("fresh-root");
     expect(fresh?.roleModels.default).toEqual({ providerID: "prov", modelID: "m9" });
+  });
+
+  test("the first accepted input wins even when a later input staged a changed policy", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-A",
+      workload: "prompt",
+    });
+    host.config = CONFIG_B;
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-B",
+      workload: "prompt",
+    });
+    expect(await snapshots.hasStaged("root")).toBe(true);
+
+    // Native accepted A before B regardless of which notification the pump saw first.
+    host.accepted = [
+      { inboxID: "msg-A", itemType: "user", created: 10 },
+      { inboxID: "msg-B", itemType: "user", created: 20 },
+    ];
+    const outcome = await snapshots.accept({ sessionID: "root" });
+    expect(outcome.status).toBe("bound");
+    const capture = await snapshots.policy("root");
+    expect(capture?.roleModels.default).toEqual({ providerID: "prov", modelID: "m1" });
+  });
+
+  test("reverse acceptance order binds the later policy", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-A",
+      workload: "prompt",
+    });
+    host.config = CONFIG_B;
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-B",
+      workload: "prompt",
+    });
+    // B was accepted first.
+    host.accepted = [
+      { inboxID: "msg-B", itemType: "user", created: 10 },
+      { inboxID: "msg-A", itemType: "user", created: 20 },
+    ];
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("bound");
+    const capture = await snapshots.policy("root");
+    expect(capture?.roleModels.default).toEqual({ providerID: "prov", modelID: "m9" });
+  });
+
+  test("multiple staged inputs fail closed until a complete durable replay orders them", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-A",
+      workload: "prompt",
+    });
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-B",
+      workload: "prompt",
+    });
+    // A live-only, incomplete view cannot prove the first accepted workload.
+    host.accepted = [{ inboxID: "msg-A", itemType: "user", created: 10 }];
+    host.acceptedComplete = false;
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("rejected");
+    expect(host.store.captures.size).toBe(0);
+
+    host.acceptedComplete = true;
+    host.accepted = [
+      { inboxID: "msg-A", itemType: "user", created: 10 },
+      { inboxID: "msg-B", itemType: "user", created: 20 },
+    ];
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("bound");
+    const capture = await snapshots.policy("root");
+    expect(capture?.roleModels.default).toEqual({ providerID: "prov", modelID: "m1" });
+  });
+
+  test("repeating the same input is idempotent", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+    });
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+    });
+    expect(host.store.candidates.get("root")).toHaveLength(1);
+    expect(host.switchCalls).toHaveLength(1);
+    host.accepted = [{ inboxID: "msg-1", itemType: "user", created: 1 }];
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("bound");
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("reused");
+  });
+
+  test("candidate overflow fails closed without discarding existing inputs", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    for (let index = 0; index < 8; index += 1) {
+      const staged = await snapshots.stage({
+        sessionID: "root",
+        directory: "/project",
+        location: LOCATION,
+        inboxID: `msg-${index}`,
+        workload: "prompt",
+      });
+      expect(staged.status).toBe("staged");
+    }
+    const overflow = await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-overflow",
+      workload: "prompt",
+    });
+    expect(overflow.status).toBe("rejected");
+    const candidates = host.store.candidates.get("root") ?? [];
+    expect(candidates).toHaveLength(8);
+    expect(candidates.map((entry) => entry.inboxID)).toContain("msg-0");
+  });
+
+  test("a rejected preparation followed by a valid input binds the valid policy", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-A",
+      workload: "prompt",
+    });
+    host.config = CONFIG_B;
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-B",
+      workload: "prompt",
+    });
+    // Only B is ever accepted; A's preparation failed and stays pending.
+    host.accepted = [{ inboxID: "msg-B", itemType: "user", created: 5 }];
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("bound");
+    const capture = await snapshots.policy("root");
+    expect(capture?.roleModels.default).toEqual({ providerID: "prov", modelID: "m9" });
+  });
+
+  test("concurrent distinct inputs keep independent candidates", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await Promise.all([
+      snapshots.stage({
+        sessionID: "root",
+        directory: "/project",
+        location: LOCATION,
+        inboxID: "msg-1",
+        workload: "prompt",
+      }),
+      snapshots.stage({
+        sessionID: "root",
+        directory: "/project",
+        location: LOCATION,
+        inboxID: "msg-2",
+        workload: "prompt",
+      }),
+    ]);
+    const candidates = host.store.candidates.get("root") ?? [];
+    expect(candidates).toHaveLength(2);
+    expect(candidates.map((entry) => entry.inboxID).sort()).toEqual(["msg-1", "msg-2"]);
+  });
+
+  test("publication failure leaves no readable capture and no marker", async () => {
+    const store = new MemorySnapshotStore();
+    const host = new FakeNativeBoundaries(store);
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+    });
+    host.accepted = [{ inboxID: "msg-1", itemType: "user", created: 1 }];
+    store.failWrite = true;
+    const outcome = await snapshots.accept({ sessionID: "root" });
+    expect(outcome.status).toBe("rejected");
+    expect(store.captures.size).toBe(0);
+    expect(store.markers.has("root")).toBe(false);
+    expect(await snapshots.policy("root")).toBeUndefined();
+  });
+
+  test("a fresh service reacquires both candidates and the earlier accepted input wins", async () => {
+    const store = new MemorySnapshotStore();
+    const first = new FakeNativeBoundaries(store);
+    addRoot(first);
+    const serviceA = createSnapshotService(first.deps);
+    await serviceA.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-A",
+      workload: "prompt",
+    });
+    await serviceA.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-B",
+      workload: "prompt",
+    });
+    serviceA.dispose();
+
+    const second = new FakeNativeBoundaries(store);
+    addSession(second, { id: "root", locationDirectory: "/project" });
+    second.accepted = [
+      { inboxID: "msg-A", itemType: "user", created: 10 },
+      { inboxID: "msg-B", itemType: "user", created: 20 },
+    ];
+    const serviceB = createSnapshotService(second.deps);
+    expect((await serviceB.accept({ sessionID: "root" })).status).toBe("bound");
+    const capture = await serviceB.configFor("root");
+    expect(capture?.roleModels.default).toEqual({ providerID: "prov", modelID: "m1" });
+  });
+
+  test("the owned gateway publishes its own operation and accept refuses an owned candidate", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+    await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+    });
+    const owned = await snapshots.admitOwned({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      operationID: "op-1",
+      selectionOverride: { providerID: "prov", modelID: "m9" },
+    });
+    expect(owned.status).toBe("bound");
+    const capture = await snapshots.policy("root");
+    expect(capture?.modelOverride).toEqual({ providerID: "prov", modelID: "m9" });
+    // The prompt candidate was never adopted by the owned gateway.
+    expect((await snapshots.accept({ sessionID: "root" })).status).toBe("reused");
+
+    const ownedOnly = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(ownedOnly);
+    const ownedSnapshots = createSnapshotService(ownedOnly.deps);
+    await ownedSnapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      operationID: "op-owned",
+      workload: "generate",
+    });
+    expect((await ownedSnapshots.accept({ sessionID: "root" })).status).toBe("rejected");
+    expect(
+      (
+        await ownedSnapshots.admitOwned({
+          sessionID: "root",
+          directory: "/project",
+          location: LOCATION,
+          operationID: "op-owned",
+        })
+      ).status,
+    ).toBe("bound");
   });
 });

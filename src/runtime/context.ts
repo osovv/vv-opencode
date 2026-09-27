@@ -12,14 +12,18 @@
 // START_MODULE_MAP
 //   acquireRuntime - Return a per-acquisition release lease for the runtime shared by one exact plugin context.
 //   acquireSnapshotService - Return a per-acquisition release lease for the snapshot service shared by one exact plugin context and dependency instance.
+//   NativeSessionInfoLike - Structural native session info used for lineage and provenance.
+//   NativeSnapshotHookEvents - Structural native hook event map used by the shared runtime.
 //   NativeSnapshotContext - Narrow structural native Plugin.Context used to acquire the shared snapshot runtime.
-//   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, snapshots, effective config, model reload, role override and refresh.
+//   NativeRegistration - Releasable native registration handle.
+//   NativeForkClient - Structural full client for forks, parented imports and durable session-log reconciliation.
+//   NativeSnapshotRuntimeOptions - Optional injectable native boundaries for the shared snapshot runtime.
+//   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, snapshots, effective config, model reload, role override, pre-admission gateway and refresh.
 //   acquireNativeSnapshotRuntime - Acquire the shared native snapshot runtime for an actual Plugin.Context.
-//   ManagedNativeRuntime - Internal lifecycle-managed native runtime implementation.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Native inbox acceptance, canonical absent/default variants, creation-default provenance, one agent-aware workload resolver, suffix model/agent transforms with final-registry readback, created auxiliary children with title suppression, and per-family pending variants.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Accepted inputs carry native event time/sequence and source, per-candidate pending variant materialization, and the pump/guard publish the FIRST accepted candidate (complete durable log required to order multiple staged inputs).]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -37,6 +41,8 @@ import {
   applyAgentPolicies,
   applyVariantRegistrations,
   buildVariantRegistrations,
+  mergeModelBodyOverlay,
+  mergeModelHeadersOverlay,
   primarySelection,
   qualifySelection,
 } from "./model-registry.js";
@@ -59,7 +65,12 @@ import {
   RuntimeDisposedError,
   SnapshotAdmissionError,
   SnapshotUnboundError,
+  decodeAuxiliaryMetadata,
+  decodeImportedSessionID,
   runtimeIdentity,
+  type AcceptedInput,
+  type AcceptedInputReconciliation,
+  type AdmissionOutcome,
   type AgentEditorLike,
   type AgentPolicyBinding,
   type AuxiliaryService,
@@ -68,6 +79,7 @@ import {
   type ModelEditorLike,
   type ModelSelection,
   type NativeRuntime,
+  type NativeSessionImportPayload,
   type PermissionService,
   type RuntimeClient,
   type RuntimeContext,
@@ -76,6 +88,7 @@ import {
   type RuntimeIdentity,
   type RuntimeLease,
   type RuntimeLocation,
+  type SnapshotAdmissionRequest,
   type SnapshotLease,
   type SnapshotService,
   type SnapshotStore,
@@ -283,11 +296,14 @@ export interface NativeSessionInfoLike {
   readonly id: string;
   readonly parentID?: unknown;
   readonly fork?: { readonly sessionID: unknown } | undefined;
+  readonly projectID?: unknown;
   readonly location?: { readonly directory: unknown } | undefined;
   readonly model?:
     | { readonly id: unknown; readonly providerID: unknown; readonly variant?: unknown }
     | undefined;
   readonly agent?: unknown;
+  /** Host-persisted metadata; auxiliary children record their intended role here. */
+  readonly metadata?: unknown;
   readonly time?: { readonly idle?: number | undefined } | undefined;
   readonly tokens?:
     | { readonly input?: number | undefined; readonly output?: number | undefined }
@@ -296,7 +312,7 @@ export interface NativeSessionInfoLike {
 
 /** Structural native hook events used by the shared runtime. */
 export interface NativeSnapshotHookEvents {
-  prompt: { readonly sessionID: string };
+  prompt: { readonly sessionID: string; readonly messageID?: string | undefined };
   context: { readonly sessionID: string; readonly agent?: string | undefined };
   generate: { readonly sessionID: string };
   title: { readonly sessionID: string; result?: string | undefined; messages?: unknown };
@@ -324,14 +340,6 @@ export interface NativeSnapshotContext extends RuntimeContext {
   };
   readonly session: {
     get(input: { readonly sessionID: string }): Promise<NativeSessionInfoLike>;
-    create(input: {
-      readonly title?: string | undefined;
-      readonly agent?: string | undefined;
-      readonly model?:
-        | { readonly id: string; readonly providerID: string; readonly variant?: string }
-        | undefined;
-      readonly location?: { readonly directory: string } | undefined;
-    }): Promise<{ readonly id: string }>;
     switchModel(input: {
       readonly sessionID: string;
       readonly model: {
@@ -367,10 +375,21 @@ type PluginContextSatisfiesNativeSnapshotContext = Plugin.Context extends Native
 const pluginContextSeam: PluginContextSatisfiesNativeSnapshotContext = true;
 void pluginContextSeam;
 
-/** Structural full client needed for verified auxiliary lineage children. */
+/**
+ * Structural full client needed for real native auxiliary/family work: forked
+ * children, imported parented children, and durable session-log reconciliation.
+ * The `import`/`log` parameters are intentionally `unknown` so the real
+ * authenticated `OpenCodeClient` (whose generated parameter types are not a
+ * faithful wire shape) satisfies this seam without a cast; callers pass a typed
+ * payload and decode the `unknown` result at the checked boundary.
+ */
 export interface NativeForkClient extends RuntimeClient {
   readonly session: {
     fork(input: { readonly sessionID: string }): Promise<{ readonly id: string }>;
+    /** Import a parented session; returns the created native session info. */
+    import(input: unknown, options?: unknown): Promise<unknown>;
+    /** Durable per-session event log ending in a `log.synced` marker. */
+    log(input: unknown, options?: unknown): AsyncIterable<unknown>;
   };
 }
 
@@ -387,6 +406,16 @@ export interface NativeSnapshotRuntime<Client extends NativeForkClient = OpenCod
   readonly runtime: NativeRuntime<NativeSnapshotContext, Client>;
   /** Immutable family snapshot/config/model/auxiliary service. */
   readonly snapshots: SnapshotService;
+  /**
+   * Supported pre-admission gateway for owned direct generate/synthetic work.
+   * Stages, materializes the qualified variant, switches the session, and
+   * publishes the family capture BEFORE the caller triggers native model
+   * resolution. It performs the real admission itself; it is not a "trust this
+   * arbitrary acceptance" shortcut, and unbound raw external generate remains
+   * fail-closed. Later consumers (for example Guardian's auxiliary inference and
+   * T-003) should call this rather than relying on a late generate hook.
+   */
+  admitWorkload(request: SnapshotAdmissionRequest): Promise<AdmissionOutcome>;
   /** Snapshot-bound auxiliary generation. */
   readonly auxiliary: AuxiliaryService;
   /** Lazily authenticated same-instance full native client (genuine OpenCodeClient by default). */
@@ -584,6 +613,7 @@ function toSessionView(info: NativeSessionInfoLike): import("./types.js").Native
   const locationDirectory =
     info.location === undefined ? undefined : String(info.location.directory);
   const agent = info.agent === undefined ? undefined : String(info.agent);
+  const metadata = isRecord(info.metadata) ? info.metadata : undefined;
   const hasActivity =
     info.time?.idle !== undefined ||
     (info.tokens !== undefined && (info.tokens.input ?? 0) + (info.tokens.output ?? 0) > 0);
@@ -593,6 +623,7 @@ function toSessionView(info: NativeSessionInfoLike): import("./types.js").Native
     ...(forkSessionID === undefined ? {} : { forkSessionID }),
     ...(locationDirectory === undefined ? {} : { locationDirectory }),
     ...(agent === undefined ? {} : { agent }),
+    ...(metadata === undefined ? {} : { metadata }),
     ...(model === undefined ? {} : { model }),
     ...(hasActivity ? { hasActivity: true } : {}),
   };
@@ -707,7 +738,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         creationDefaults: Map<string, ModelSelection | undefined>;
         explicitSelections: Map<string, ModelSelection>;
         pluginSwitches: Map<string, ModelSelection>;
-        ownedSessions: Map<string, ModelSelection>;
         suppressedTitles: Set<string>;
       } = {
         config: base,
@@ -726,7 +756,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         creationDefaults: new Map(),
         explicitSelections: new Map(),
         pluginSwitches: new Map(),
-        ownedSessions: new Map(),
         suppressedTitles: new Set(),
       };
 
@@ -766,28 +795,48 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         if (entries === undefined) return undefined;
         const wanted = wantedModelKeys(config);
         const captured: CapturedModelSettings[] = [];
+        const overlay = (
+          providerID: string,
+          modelID: string,
+          variant: string | undefined,
+          base: Record<string, unknown>,
+          source: Record<string, unknown>,
+        ): CapturedModelSettings => {
+          const settings = mergeModelBodyOverlay(
+            isRecord(base.settings) ? base.settings : undefined,
+            isRecord(source.settings) ? source.settings : undefined,
+          );
+          const body = mergeModelBodyOverlay(
+            isRecord(base.body) ? base.body : undefined,
+            isRecord(source.body) ? source.body : undefined,
+          );
+          const headers = mergeModelHeadersOverlay(
+            isRecord(base.headers) ? (base.headers as Record<string, string>) : undefined,
+            isRecord(source.headers) ? (source.headers as Record<string, string>) : undefined,
+          );
+          return {
+            providerID,
+            modelID,
+            ...(variant === undefined ? {} : { variant }),
+            ...(settings === undefined ? {} : { settings }),
+            ...(body === undefined ? {} : { body }),
+            ...(headers === undefined ? {} : { headers }),
+          };
+        };
         for (const entry of entries) {
           const providerID = entry.providerID;
           const modelID = entry.id;
           if (typeof providerID !== "string" || typeof modelID !== "string") continue;
           if (wanted.size > 0 && !wanted.has(`${providerID}/${modelID}`)) continue;
-          const overlay = (variant: string | undefined): CapturedModelSettings => ({
-            providerID,
-            modelID,
-            ...(variant === undefined ? {} : { variant }),
-            ...(isRecord(entry.settings) ? { settings: entry.settings } : {}),
-            ...(isRecord(entry.body) ? { body: entry.body } : {}),
-            ...(isRecord(entry.headers)
-              ? { headers: entry.headers as Record<string, string> }
-              : {}),
-          });
-          captured.push(overlay(undefined));
+          captured.push(overlay(providerID, modelID, undefined, entry, entry));
           if (Array.isArray(entry.variants)) {
             for (const variant of entry.variants) {
               if (!isRecord(variant) || typeof variant.id !== "string") continue;
               // Never re-capture our own generated variants (no accumulation).
               if (state.ownVariantIds.has(variant.id)) continue;
-              captured.push(overlay(variant.id));
+              // Each source variant gets the base merged with THAT variant's own
+              // native overlay, so two source variants of one model stay distinct.
+              captured.push(overlay(providerID, modelID, variant.id, entry, variant));
             }
           }
         }
@@ -819,6 +868,151 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       // Initialize the live config with raw OpenCode intent before any transform runs.
       state.config = await readConfig(ctx.location.directory);
 
+      /**
+       * Live accepted inputs observed on the event stream, keyed by
+       * `sessionID\0inboxID`, carrying the native event time and durable sequence
+       * used to order the first accepted workload. Merged with the durable log.
+       */
+      const liveAccepted = new Map<string, AcceptedInput>();
+
+      /**
+       * Reconcile accepted inputs for a session. Returns the verified inputs plus
+       * whether the durable log replay reached a genuine `log.synced` watermark
+       * for THIS session. A truncated/wrong/timeout replay yields `complete:false`
+       * but may still carry verified live events; callers must not order multiple
+       * candidates from an incomplete view. Returns undefined when neither source
+       * proves any acceptance.
+       */
+      const readAcceptedInputs = async (
+        sessionID: string,
+      ): Promise<AcceptedInputReconciliation | undefined> => {
+        const accepted = new Map<string, AcceptedInput>();
+        for (const entry of liveAccepted.values()) {
+          if (entry.sessionID === sessionID) accepted.set(entry.inboxID, entry);
+        }
+        let complete = false;
+        try {
+          const client = await runtime.client();
+          const stream = client.session.log(
+            { sessionID, follow: false },
+            { signal: AbortSignal.timeout(5000) },
+          );
+          for await (const item of stream) {
+            if (!isRecord(item)) continue;
+            const type = typeof item.type === "string" ? item.type : "";
+            if (type === "log.synced") {
+              const aggregateID = item.aggregateID;
+              if (typeof aggregateID !== "string" || aggregateID !== sessionID) {
+                throw new SnapshotAdmissionError(
+                  "The session log synced a different aggregate; refusing to trust the replay.",
+                );
+              }
+              const seq = item.seq;
+              if (seq !== undefined && (typeof seq !== "number" || !Number.isFinite(seq))) {
+                throw new SnapshotAdmissionError(
+                  "The session log synced with an invalid sequence; refusing to trust the replay.",
+                );
+              }
+              complete = true;
+              break;
+            }
+            const decoded = decodeInboxEnqueuedEvent({
+              type,
+              data: item.data,
+              created: item.created,
+              durable: isRecord(item.durable) ? item.durable : undefined,
+            });
+            if (decoded !== undefined && decoded.sessionID === sessionID) {
+              accepted.set(decoded.inboxID, {
+                sessionID,
+                inboxID: decoded.inboxID,
+                itemType: decoded.itemType,
+                created: decoded.created ?? Date.now(),
+                ...(decoded.seq === undefined ? {} : { seq: decoded.seq }),
+                source: "log",
+              });
+            }
+          }
+        } catch {
+          // The live entries below remain verified; the caller decides whether an
+          // incomplete view is enough (it is not, when multiple inputs are staged).
+          complete = false;
+        }
+        if (!complete && accepted.size === 0) return undefined;
+        return { inputs: [...accepted.values()], complete };
+      };
+
+      /**
+       * Create a real parented auxiliary child through the authenticated full
+       * client's `session.import`. The child carries host-owned metadata naming
+       * its intended workload role, so its selection is recoverable after restart
+       * without an ephemeral in-process exemption.
+       */
+      const importAuxiliaryChild = async (input: {
+        parentID: string;
+        locationDirectory: string;
+        title: string;
+        kind: "title" | "compaction" | "generate";
+        role?: string | undefined;
+        model: ModelSelection;
+        agent?: string | undefined;
+      }): Promise<{ readonly sessionID: string }> => {
+        const client = await runtime.client();
+        const parent = await ctx.session.get({ sessionID: input.parentID });
+        const projectID = parent.projectID === undefined ? "" : String(parent.projectID);
+        if (projectID.length === 0) {
+          throw new SnapshotAdmissionError(
+            "Auxiliary child import requires the parent session project id.",
+          );
+        }
+        const sessionID = `ses_${randomBytes(16).toString("hex")}`;
+        const now = Date.now();
+        const payload: NativeSessionImportPayload = {
+          info: {
+            id: sessionID,
+            parentID: input.parentID,
+            projectID,
+            ...(input.agent === undefined ? {} : { agent: input.agent }),
+            model: {
+              id: input.model.modelID,
+              providerID: input.model.providerID,
+              ...(input.model.variant === undefined ? {} : { variant: input.model.variant }),
+            },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: now, updated: now },
+            title: input.title,
+            location: { directory: input.locationDirectory },
+            metadata: {
+              vvocAuxiliary: {
+                kind: input.kind,
+                ...(input.role === undefined ? {} : { role: input.role }),
+              },
+            },
+            // Conservative: the auxiliary child needs generation, never tools.
+            permissions: [{ action: "*", resource: "*", effect: "deny" }],
+          },
+          messages: [],
+          location: { directory: input.locationDirectory },
+        };
+        const imported = await client.session.import(payload);
+        const importedID = decodeImportedSessionID(imported);
+        if (importedID === undefined || importedID !== sessionID) {
+          throw new SnapshotAdmissionError(
+            "Native session import did not return the expected auxiliary child id.",
+          );
+        }
+        // The parent binding must be durable before the child is used.
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          const view = toSessionView(await ctx.session.get({ sessionID }));
+          if (view.parentID === input.parentID) return { sessionID };
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        throw new SnapshotAdmissionError(
+          "Imported auxiliary child did not persist its parent lineage.",
+        );
+      };
+
       const deps: SnapshotServiceDeps = {
         store,
         ...(options?.now === undefined ? {} : { now: options.now }),
@@ -832,24 +1026,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           toSelection((await ctx.session.get({ sessionID })).model),
         switchModel: ({ sessionID, model }) =>
           ctx.session.switchModel({ sessionID, model: toRef(model) }),
+        readAcceptedInputs,
         auxiliarySession: {
-          create: async ({ title, agent, model, locationDirectory }) => {
-            // A created child with explicit model/agent is the authentic native
-            // binding path; a fork copies the parent agent and needs parent history.
-            const created = await ctx.session.create({
-              title,
-              ...(agent === undefined ? {} : { agent }),
-              ...(model === undefined ? {} : { model: toRef(model) }),
-              location: { directory: locationDirectory },
-            });
-            const sessionID = String(created.id);
-            if (sessionID.length > 0 && model !== undefined) {
-              state.ownedSessions.set(sessionID, model);
-            }
-            return { sessionID };
-          },
+          create: importAuxiliaryChild,
           switchModel: async ({ sessionID, model }) => {
-            state.ownedSessions.set(sessionID, model);
             await ctx.session.switchModel({ sessionID, model: toRef(model) });
           },
           generate: (input) => ctx.session.generate(input),
@@ -876,12 +1056,14 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
        * model list is. Returns undefined when the host exposes no list call (tests).
        */
       const materializeCandidate = async (
+        candidateIdentity: string,
         capture: import("./types.js").FamilyCapture,
         selection: ModelSelection,
       ): Promise<void> => {
         if (selection.variant === undefined) return;
-        // Materialize the staged family's variant before the switch so resolution finds it.
-        state.pendingRegistrations.set(capture.familyId, buildVariantRegistrations([capture]));
+        // Materialize this candidate's qualified variant before its switch, keyed
+        // by candidate identity so a concurrent candidate's variants are not erased.
+        state.pendingRegistrations.set(candidateIdentity, buildVariantRegistrations([capture]));
         await ctx.model.reload();
         const finalEntries = await readFinalModelEntries();
         const exists =
@@ -899,7 +1081,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
                 );
               });
         if (!exists) {
-          state.pendingRegistrations.delete(capture.familyId);
+          state.pendingRegistrations.delete(candidateIdentity);
           await ctx.model.reload();
           throw new SnapshotAdmissionError(
             `Captured variant ${selection.variant} is not materializable on ${selection.providerID}/${selection.modelID}.`,
@@ -938,7 +1120,18 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         capture: import("./types.js").FamilyCapture,
         agentID: string | undefined,
         sessionID: string,
+        metadata?: Readonly<Record<string, unknown>> | undefined,
       ): ModelSelection | undefined => {
+        // A real parented auxiliary child recovers its intended role from
+        // host-owned metadata, not an in-process exemption.
+        const auxiliary = decodeAuxiliaryMetadata(metadata);
+        if (auxiliary !== undefined) {
+          const base =
+            auxiliary.role === undefined
+              ? primarySelection(capture)
+              : capture.roleModels[auxiliary.role];
+          return base === undefined ? undefined : qualifySelection(capture, base);
+        }
         if (!state.roleOverride) return capture.modelOverride ?? capture.rootSelection;
         const explicit = state.explicitSelections.get(sessionID);
         // An explicit user choice wins exactly as chosen; never re-qualify it with the
@@ -947,17 +1140,19 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         return expectedSelection(capture, agentID);
       };
 
-      /** Commit a staged candidate for an already-accepted workload before use. */
+      /** Publish a staged candidate for an accepted workload before use. */
       const reconcileAcceptedFamily = async (sessionID: string): Promise<void> => {
         if ((await snapshots.policy(sessionID)) !== undefined) return;
-        const familyId = await snapshots.familyOf(sessionID);
-        if (!(await snapshots.hasStaged(familyId))) return;
-        const outcome = await snapshots.commit(familyId);
+        const outcome = await snapshots.accept({ sessionID });
         if (outcome.status === "bound") await refresh();
       };
 
-      const stageFor = async (sessionID: string): Promise<void> => {
+      const stageFor = async (sessionID: string, inboxID?: string): Promise<void> => {
         await ensureTransforms();
+        // Refresh the effective vvoc policy from disk before resolving the target:
+        // vvoc.json changes do not emit a host `config.updated`, and a stale
+        // candidate target would otherwise bind the previous role selection.
+        state.config = await readConfig(ctx.location.directory);
         const view = toSessionView(await ctx.session.get({ sessionID }));
         const sessionModel = view.model;
         const pluginSwitch = state.pluginSwitches.get(sessionID);
@@ -990,10 +1185,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           }
           return;
         }
-        // A candidate already staged for this family is being committed; do not
-        // rewrite it and race the commit-removal.
-        const familyId = await snapshots.familyOf(sessionID);
-        if (await snapshots.hasStaged(familyId)) return;
+        // Reconcile/restage by exact input identity. The snapshot service manages
+        // candidate ownership: a still-staged sibling workload never blocks this
+        // session's stage, and a first prompt rejected during native preparation
+        // is superseded by the next same-session prompt rather than deadlocking it.
 
         const explicitSelection = intent.mode === "explicit" ? intent.literal : undefined;
         const target = explicitSelection ?? candidateTarget(view.agent);
@@ -1010,10 +1205,12 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             ...(explicitSelection === undefined ? {} : { explicit: explicitSelection }),
             ...(selectionOverride === undefined ? {} : { selectionOverride }),
             ...(sessionModel === undefined ? {} : { before: sessionModel }),
+            ...(inboxID === undefined ? {} : { inboxID }),
+            workload: "prompt",
             force: state.roleOverride,
           },
-          async (capture, selection) => {
-            await materializeCandidate(capture, selection);
+          async (capture, selection, candidateIdentity) => {
+            await materializeCandidate(candidateIdentity, capture, selection);
             state.pluginSwitches.set(sessionID, selection);
           },
         );
@@ -1031,16 +1228,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         kind: string,
       ): Promise<void> => {
         await ensureTransforms();
-        // An auxiliary child we created and bound is admitted by construction.
-        const owned = state.ownedSessions.get(sessionID);
-        if (owned !== undefined) {
-          if (!selectionMatches(actual, owned)) {
-            throw new SnapshotAdmissionError(
-              `Resolved ${kind} model does not match the auxiliary session binding.`,
-            );
-          }
-          return;
-        }
         if (kind === "title" && state.suppressedTitles.has(sessionID)) {
           // The title hook already supplied the result; the host still runs this
           // hook before it checks `result`, so a refused dispatch here would fail
@@ -1048,13 +1235,15 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           state.suppressedTitles.delete(sessionID);
           return;
         }
+        const view = toSessionView(await ctx.session.get({ sessionID }));
+        const effectiveAgent = agentID ?? view.agent;
         const familyId = await snapshots.familyOf(sessionID);
         const capture = await snapshots.policy(sessionID);
         if (capture !== undefined) {
           const expected =
             kind === "title"
               ? titleExpectedSelection(capture)
-              : expectedForSession(capture, agentID, sessionID);
+              : expectedForSession(capture, effectiveAgent, sessionID, view.metadata);
           if (!selectionMatches(actual, expected)) {
             throw new SnapshotAdmissionError(
               `Resolved ${kind} model ${actual?.providerID ?? "?"}/${actual?.modelID ?? "?"} does not match the captured family selection for ${familyId}.`,
@@ -1062,27 +1251,46 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           }
           return;
         }
-        // No committed capture yet. A staged candidate in this family may be
-        // committed here because model.request only runs during an already
-        // accepted execution; otherwise the work is unbound and refused.
-        if (await snapshots.hasStaged(familyId)) {
-          const outcome = await snapshots.commit(familyId);
-          if (outcome.status === "rejected") {
-            throw new SnapshotAdmissionError(outcome.error ?? "Snapshot commit was rejected.");
+        // No committed capture yet. Await workload-correlated acceptance and
+        // persistence: the pump may still be committing, so retry briefly while a
+        // candidate exists. The service owns correlation and never commits
+        // arbitrary pending; the validate callback refuses a mismatched model
+        // before publication.
+        const deadline = Date.now() + 3000;
+        let lastError: string | undefined;
+        for (;;) {
+          const captureNow = await snapshots.policy(sessionID);
+          if (captureNow !== undefined) {
+            const expected =
+              kind === "title"
+                ? titleExpectedSelection(captureNow)
+                : expectedForSession(captureNow, effectiveAgent, sessionID, view.metadata);
+            if (!selectionMatches(actual, expected)) {
+              throw new SnapshotAdmissionError(
+                `Resolved ${kind} model ${actual?.providerID ?? "?"}/${actual?.modelID ?? "?"} does not match the captured family selection for ${familyId}.`,
+              );
+            }
+            return;
           }
-          const committed = await snapshots.policy(sessionID);
-          const expected =
-            committed === undefined ? undefined : expectedForSession(committed, agentID, sessionID);
-          if (!selectionMatches(actual, expected)) {
-            throw new SnapshotAdmissionError(
-              `Resolved ${kind} model does not match the committed family selection.`,
+          if (!(await snapshots.hasStaged(familyId))) {
+            throw new SnapshotUnboundError(
+              `Refusing unbound ${kind} dispatch for session ${sessionID} before a family policy is bound.`,
             );
           }
-          await refresh();
-          return;
+          const outcome = await snapshots.accept({
+            sessionID,
+            validate: (selection) => selectionMatches(actual, selection),
+          });
+          if (outcome.status === "bound" || outcome.status === "reused") {
+            await refresh();
+            return;
+          }
+          lastError = outcome.error;
+          if (Date.now() >= deadline) break;
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
         throw new SnapshotUnboundError(
-          `Refusing unbound ${kind} dispatch for session ${sessionID} before a family policy is bound.`,
+          `Refusing unbound ${kind} dispatch for session ${sessionID} before a family policy is bound (${lastError ?? "no accepted workload"}).`,
         );
       };
 
@@ -1144,11 +1352,11 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         await ctx.model.reload();
         await ctx.agent.reload();
       };
-      owned.push(await ctx.session.hook("prompt", (event) => stageFor(event.sessionID)));
-      owned.push(await ctx.session.hook("context", (event) => stageFor(event.sessionID)));
-      // `generate` resolves its model before the hook runs, so staging here is too
-      // late; owned generate paths pre-admit through the snapshot service/RPC and
-      // the hook only validates or refuses a truly unbound dispatch.
+      owned.push(
+        await ctx.session.hook("prompt", (event) => stageFor(event.sessionID, event.messageID)),
+      );
+      // `context` and `generate` resolve their model before (or around) the hook,
+      // so neither can stage; owned generate/synthetic work uses admitWorkload.
       owned.push(
         await ctx.session.hook("generate", async (event) => {
           const view = toSessionView(await ctx.session.get({ sessionID: event.sessionID }));
@@ -1215,14 +1423,21 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
               await refresh();
             }
             if (isAcceptedWorkloadEvent(event)) {
+              // Record the verified native acceptance with its event time/sequence,
+              // then let the service pick the FIRST accepted candidate across the
+              // family rather than the one whose notification arrived first.
               const enqueued = decodeInboxEnqueuedEvent(event);
-              const sessionID = enqueued?.sessionID ?? readEventSessionID(event);
-              if (sessionID === undefined) continue;
-              const familyId = await snapshots.familyOf(sessionID);
-              if (await snapshots.hasStaged(familyId)) {
-                const outcome = await snapshots.commit(familyId);
-                if (outcome.status === "bound") await refresh();
-              }
+              if (enqueued === undefined) continue;
+              liveAccepted.set(`${enqueued.sessionID}\u0000${enqueued.inboxID}`, {
+                sessionID: enqueued.sessionID,
+                inboxID: enqueued.inboxID,
+                itemType: enqueued.itemType,
+                created: enqueued.created ?? Date.now(),
+                ...(enqueued.seq === undefined ? {} : { seq: enqueued.seq }),
+                source: "live",
+              });
+              const outcome = await snapshots.accept({ sessionID: enqueued.sessionID });
+              if (outcome.status === "bound") await refresh();
             }
           }
         } catch (error) {
@@ -1241,6 +1456,20 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         client: () => runtime.client(),
         permissions: runtime.permissions,
         effectiveConfig: () => state.config,
+        async admitWorkload(request) {
+          // Supported pre-admission gateway for owned direct generate/synthetic:
+          // mint an operation token this runtime owns, then stage, materialize the
+          // qualified variant, switch and publish before the caller triggers native
+          // model resolution. It cannot publish a prompt candidate that still needs
+          // correlated native acceptance.
+          return snapshots.admitOwned(
+            { ...request, operationID: `op_${randomBytes(16).toString("hex")}` },
+            async (capture, selection, candidateIdentity) => {
+              await materializeCandidate(candidateIdentity, capture, selection);
+              state.pluginSwitches.set(request.sessionID, selection);
+            },
+          );
+        },
         async setRoleOverride(enabled) {
           state.roleOverride = enabled;
           // Immediate visible override; the suffix registration at first work
@@ -1257,12 +1486,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       throw error;
     }
   })();
-}
-
-function readEventSessionID(event: RuntimeEvent): string | undefined {
-  const data = event.data;
-  if (!isRecord(data)) return undefined;
-  return typeof data.sessionID === "string" ? data.sessionID : undefined;
 }
 
 /** Acquire the shared native snapshot runtime for an actual `Plugin.Context`. */
