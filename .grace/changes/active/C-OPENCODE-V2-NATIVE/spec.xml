@@ -1,0 +1,47 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-OPENCODE-V2-NATIVE>
+    <Summary>Full functional migration of the v1.7.0 product to native OpenCode 2.0.18, without V1 compatibility or deferred features.</Summary>
+    <Problem>The released dual-runtime attempt preserved incompatible integration assumptions and omitted user-visible functionality. A clean v1.7.0 branch preserves the domain baseline while replacing host-dependent contracts.</Problem>
+    <Goals>
+      <Goal>Preserve every v1.7.0 product capability through native V2 APIs, except the explicit changes below; preserve correct domain rules rather than obsolete host representations.</Goal>
+      <Goal>Bind a durable, immutable policy/model snapshot to a session family at its first accepted workload; new work sees current configuration without changing an already bound family.</Goal>
+      <Goal>Prove installed-package behavior with a repeatable isolated real-host harness, including failure, restart, lineage, and permission scenarios.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Base branch is v2-native at v1.7.0 (4fb6f98); preserve main and release history. Do not edit archived GRACE records or generated dist manually.</Constraint>
+      <Constraint>Supported host window is &gt;=2.0.18 &lt;2.0.19. Pin @opencode/plugin, client, schema, ai, and protocol to 2.0.18; OpenTUI core/keymap/solid to 0.5.12 and solid-js to 1.9.15.</Constraint>
+      <Constraint>The final package has no @opencode-ai dependencies, dual-runtime entrypoints, V1-shaped fake clients, unsafe compatibility casts, no-op permission requests, or silently unavailable features. Small typed internal native services are permitted.</Constraint>
+      <Constraint>Preserve canonical vvoc schema v3, configuration layering and user-owned settings, public feature/tool intent, durable workflow history, consumed budgets and authority. Config writes remain conservative and idempotent; invalid configuration fails before mutation.</Constraint>
+      <Constraint>No push, publication, package-version bump, live user-config migration, public model requests, broad process kills, or service ensure/stop. Harness uses owned exact PID handles, isolated HOME/XDG/credentials, loopback providers, and packed package artifacts.</Constraint>
+      <Constraint>The owner approved the design and explicitly delegated specification, planning, implementation and verification in message msg_0e377356e001SAwggxGxA4Jp1p. Controller-delegated stage approvals are recorded honestly under run-c565cdbac5dc6ab5; finite recovery authority does not waive acceptance or reviews.</Constraint>
+      <Constraint>Use ten bounded implementation tasks and two independent review checkpoints, midpoint and final. The controller owns architecture and acceptance; workers own implementation. Parallel execution requires disjoint exact file scopes.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Support OpenCode V1, promise compatibility beyond 2.0.18, redesign independent domain logic gratuitously, or ship a reduced V2 MVP.</NonGoal>
+      <NonGoal>Change release policy, exercise paid providers, or claim remote-provider effectiveness from loopback tests.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: All eleven server plugins and the TUI load through native V2 exports in the packed package; each plugin retains its toggles, lifecycle cleanup, public tools and intended failure behavior. No feature is replaced by a status-only placeholder.</Criterion>
+      <Criterion>AC-02: Snapshot captures include effective vvoc policies, role assignments and model overrides. Awaited admission stages, persists and commits once before dispatch, rolls back failed admission without overwriting newer explicit choices, distinguishes implicit defaults from explicit selections through native events/config watching, and binds generate/synthetic work before a first user prompt. Empty tabs remain unbound.</Criterion>
+      <Criterion>AC-03: Children, forks (including empty parentID with fork.sessionID), auxiliary title/Guardian work and moved worktrees inherit host-verified family identity before dispatch. Reload/restart replays persistent captures and snapshot-qualified variants on real model identities; changed captures alter actual request payloads. Missing or invalid policy fails closed, never by adopting current policy silently.</Criterion>
+      <Criterion>AC-04: Native same-instance full clients use only Service.discover and native registration authentication, validated by plugin-instance RPC challenge. Permissions are resource-specific, awaited before side effects, cancellation-aware, and cannot be bypassed by an empty ask implementation. Auxiliary generation is session-family-bound; title hook results bypass unbound host generation.</Criterion>
+      <Criterion>AC-05: Workflow tools, launch/result enforcement, same-child malformed-result continuation, foreground/background workers, checkpoints, recovery, finite authority, persistence and hard stops preserve their domain contracts using native subagent/session/message shapes. Cancellation recovery requires SDK-backed parent Task cancelled, child terminal MessageAbortedError and quiescence evidence. Hydration preserves in-flight attempts/budgets; explicit recovery atomically settles and recovers, with completedAt=max(parent end, child completed), not repair time.</Criterion>
+      <Criterion>AC-06: Guardian still approves only low-risk work and defers uncertainty. Secrets are redacted on primary and auxiliary requests and restored in tool execution and provider responses, including placeholders split across SSE and WebSocket TEXT deltas with bounded carry; opaque frames are preserved. Edit routing, fresh hashline checks, spec guard, and web permission-before-network semantics remain effective.</Criterion>
+      <Criterion>AC-07: System context, agent/model attribution, analytics token/cache usage, tool-history compaction, and peak-hours soft/hard policies retain their visible effects and safety exemptions under native V2 lifecycle events, tools and requests.</Criterion>
+      <Criterion>AC-08: Full /context Overview/Tools/MCP collection, honest usage/limit attribution, compaction cutoff, keyboard navigation, scrolling, narrow layouts, cleanup, cache indicator, branding footer and peak-hours banner work in the real V2 TUI.</Criterion>
+      <Criterion>AC-09: install/init/sync/launch/status/doctor/upgrade, roles/presets/orchestration, config/plugin management, completions and managed agents/skills retain their product functions. Native schemas, tool names (including subagent) and registration paths replace V1 assumptions. Test fresh and repeated setup, invalid config, project isolation and existing user overrides without touching live configuration.</Criterion>
+      <Criterion>AC-10: Use canonical provider/model#variant selections. xiaomi/mimo-v2.6-flash#thinking is a managed variant on the real model with thinking.type=enabled, not reasoningEffort=high, and no PDF declaration. Remove built-in vv-kimi preset, provider patch and completion without introducing a replacement. Preserve StepFun .ai endpoint, Codex limits and DeepSeek output-limit residual patches; preserve unrelated user overrides.</Criterion>
+      <Criterion>AC-11: A versioned parity matrix maps each baseline capability and agreed delta to executable checks. Real-host evidence identifies exact host/source/package hashes, exercises actual installed code and negative controls, and records unsupported or skipped conditions honestly. Historical seam evidence guides design but never substitutes for fresh acceptance of this code.</Criterion>
+      <Criterion>AC-12: Targeted regressions, full check/build/pack/release consistency, real-host acceptance and both independent checkpoints pass on the final relevant snapshot; README, module contracts, GRACE context/graph/verification and command gates accurately describe V2-only behavior. No source changes are committed to main or published.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-MODEL-ROLES /><M-CONFIG-LAYERS /><M-CLI-CONFIG /><M-CLI-COMMANDS /><M-CLI-PRESET /><M-CLI-PATCH-PROVIDER /><M-CLI-COMPLETION /><M-VVOC-PRESET-REGISTRY /><M-CLI-MANAGED-AGENTS /><M-CLI-MANAGED-SKILLS /><M-AGENT-TOOL-CONTRACT />
+      <M-PLUGIN-MODEL-ROLES /><M-PLUGIN-GUARDIAN /><M-PLUGIN-HASHLINE-EDIT /><M-PLUGIN-SYSTEM-CONTEXT-INJECTION /><M-PLUGIN-SECRETS-REDACTION /><M-PLUGIN-WEB-TOOLS /><M-PLUGIN-TOOL-HISTORY-COMPACTION /><M-PLUGIN-ANALYTICS /><M-PLUGIN-PEAK-HOURS /><M-PLUGIN-SPEC-GUARD /><M-PLUGIN-CONTEXT-TUI /><M-TUI-PEAK-HOURS-BANNER />
+      <M-PLUGIN-WORKFLOW /><M-WORKFLOW-DELEGATED /><M-WORKFLOW-PERSISTENCE /><M-WORKFLOW-REPAIR /><M-WORKFLOW-AUTHORITY /><M-WORKFLOW-EXECUTION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun run check</ExpectedCommand><ExpectedCommand>bun run build</ExpectedCommand><ExpectedCommand>bun run pack:check</ExpectedCommand><ExpectedCommand>bun run release:check</ExpectedCommand><ExpectedCommand>bun run e2e:v2</ExpectedCommand>
+      <ExpectedEvidence>Real OpenCode 2.0.18 binary SHA-256 10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f; source cd9a14a6b688d4021bee381dfd39d2cef9c0f862. Persisted harness, parity matrix and machine-readable fresh observations, plus midpoint and final independent review.</ExpectedEvidence>
+    </VerificationIntent>
+  </C-OPENCODE-V2-NATIVE>
+</GraceChangeSpec>
