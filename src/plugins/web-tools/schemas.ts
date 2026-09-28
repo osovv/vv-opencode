@@ -53,8 +53,7 @@
 //   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Initial single-source web input/result contracts with explicit execute-time defaults, URL scheme/shape validation before dispatch, closed provider-variant metadata schemas, and operation examples.]
 // END_CHANGE_SUMMARY
 
-import { tool } from "@opencode-ai/plugin";
-import type { z, ZodRawShape } from "zod";
+import { z, type ZodRawShape } from "zod";
 import {
   MAX_CONTRACT_ISSUES,
   MAX_ISSUE_MESSAGE_CHARS,
@@ -68,7 +67,7 @@ import {
   type OwnedToolContract,
 } from "../../lib/agent-tool-contract.js";
 
-const schema = tool.schema;
+const schema = z;
 
 // START_BLOCK_TOOL_IDS
 /** Registered tool id for provider-neutral web search. */

@@ -1,33 +1,40 @@
 // FILE: src/plugins/spec-guard/index.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Annotate reads and validate writes of active .vvoc spec-package XML artifacts with lint verdicts, failing writes in enforce mode only when ERROR-severity findings exist.
-//   SCOPE: Startup vvoc snapshot resolution and spec-guard entry parsing, active-vs-archive path gating, cache-backed lint runs with cross-file sibling spec resolution for plans, read annotation through tool.execute.after output mutation, write validation through tool.execute.before for full-content writes and tool.execute.after for edits, enforce throwing only on ERROR findings, and fail-open degradation to warning logs.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/spec-lint.ts, src/lib/spec-lint-cache.ts]
-//   LINKS: [M-PLUGIN-SPEC-GUARD, M-SPEC-LINT, M-PLUGIN-TOGGLE-CONFIG]
+//   PURPOSE: Annotate reads and validate writes of active .vvoc spec-package XML artifacts with lint verdicts, failing writes in enforce mode only when ERROR-severity findings exist, using the native OpenCode 2.0.18 tool hook boundary.
+//   SCOPE: Native Plugin.define entry, per-bound-family mode resolution from the shared snapshot capture (fail-closed when unbound), active-vs-archive path gating, cache-backed lint runs with cross-file sibling spec resolution for plans, read annotation through the native tool execute.after result, write validation through execute.before for full-content writes and execute.after for edits, enforce throwing only on ERROR findings, and fail-open degradation to warning diagnostics. No V1 plugin context, no fabricated host logger.
+//   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/spec-lint.ts, src/lib/spec-lint-cache.ts]
+//   LINKS: [M-PLUGIN-SPEC-GUARD, M-SPEC-LINT, M-PLUGIN-TOGGLE-CONFIG, M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   SpecGuardMode - Enforcement modes warn and enforce.
-//   SpecGuardPluginDependencies - Injectable mode resolver, lint cache, file reader, and logging for focused tests.
+//   SpecGuardNativeResult - Narrow native Tool.Result view mutated by the after handler.
+//   SpecGuardHookDependencies - Injectable per-session mode resolver, lint cache, file reader, and logging.
+//   SpecGuardHandlers - Native hook handlers for execute.before/after.
 //   SPEC_GUARD_VERDICT_TAG - Bounded wrapper tag for appended verdict text.
 //   SPEC_GUARD_MAX_APPENDED_FINDINGS - Cap on findings surfaced in one verdict text.
 //   isSpecGuardTargetPath - True for active .vvoc specs XML artifacts (never archived ones).
-//   specGuardPathFromArgs - Extracts the file path from read/edit/write tool args.
+//   specGuardPathFromArgs - Extracts the file path from native read/edit/write tool input.
 //   formatSpecGuardVerdict - Renders a bounded verdict line for tool output.
 //   lintSpecGuardFile - Runs a cache-backed lint for one artifact with its sibling spec when applicable.
-//   createSpecGuardPlugin - Builds the spec-guard server plugin with injectable dependencies.
-//   SpecGuardPlugin - Default production spec-guard server plugin.
+//   createSpecGuardHandlers - Builds native tool hook handlers with injectable dependencies.
+//   createSpecGuardPlugin - Builds the native spec-guard plugin with injectable runtime acquisition.
+//   SpecGuardPlugin - Default production native spec-guard plugin object.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Read-path verdicts now derive from the artifact file on disk instead of the tool's rendered output, whose envelope tags and line prefixes are host-specific.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 2 - Unknown family policy after reconciliation now refuses protected spec mutation/handoff (fail closed) while an explicit disabled capture remains off; warn/enforce behavior preserved.]
 // END_CHANGE_SUMMARY
 
-import type { Plugin } from "@opencode-ai/plugin";
-import { loadVvocConfig } from "../../lib/config-layers.js";
+import { Plugin } from "@opencode/plugin";
+import {
+  acquireNativeSnapshotRuntime,
+  type NativeSnapshotContext,
+  type NativeSnapshotRuntime,
+} from "../../runtime/context.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import {
   isSpecArchivePath,
@@ -35,21 +42,53 @@ import {
   type SpecLintVerdict,
 } from "../../lib/spec-lint.js";
 import { createSpecLintCache, type SpecLintCache } from "../../lib/spec-lint-cache.js";
+import type { FamilyCapture } from "../../runtime/types.js";
 
 // START_BLOCK_CONSTANTS
 export type SpecGuardMode = "warn" | "enforce";
+
+/** A family whose captured policy is unknown: provider/work policy could not be established. */
+export type SpecGuardPolicyMode = SpecGuardMode | "off" | "unknown";
 
 export const SPEC_GUARD_VERDICT_TAG = "[spec-guard]";
 export const SPEC_GUARD_MAX_APPENDED_FINDINGS = 5;
 const SPEC_GUARD_MAX_MESSAGE_CHARS = 160;
 const SPEC_GUARD_ARTIFACT_NAMES = new Set(["spec.xml", "plan.xml", "design-context.xml"]);
 
-export type SpecGuardPluginDependencies = {
-  mode: () => SpecGuardMode | "off";
+/** Narrow native `Tool.Result` view mutated by the execute.after handler. */
+export interface SpecGuardNativeResult {
+  output?: unknown;
+  content?: string | ReadonlyArray<Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+}
+
+/** Native tool hook event surfaces consumed by the spec-guard handlers. */
+export interface SpecGuardBeforeEvent {
+  readonly tool: string;
+  readonly sessionID: string;
+  readonly input: unknown;
+}
+
+export interface SpecGuardAfterEvent {
+  readonly tool: string;
+  readonly sessionID: string;
+  readonly input: unknown;
+  readonly status: "completed" | "error";
+  readonly result?: SpecGuardNativeResult;
+  readonly error?: unknown;
+}
+
+export type SpecGuardHookDependencies = {
+  modeFor: (sessionID: string) => Promise<SpecGuardPolicyMode>;
   cache: Pick<SpecLintCache, "lint">;
   readFile: (path: string) => Promise<string | undefined>;
   log: (level: "info" | "warn", message: string, extra?: Record<string, unknown>) => Promise<void>;
 };
+
+export interface SpecGuardHandlers {
+  before(event: SpecGuardBeforeEvent): Promise<void>;
+  after(event: SpecGuardAfterEvent): Promise<void>;
+}
 // END_BLOCK_CONSTANTS
 
 // START_BLOCK_PATH_GATE
@@ -62,7 +101,7 @@ export function isSpecGuardTargetPath(path: string): boolean {
   return /(^|\/)\.vvoc\/specs\//.test(normalized);
 }
 
-/** Extract the target file path from read/edit/write tool args across arg spellings. */
+/** Extract the target file path from native read/edit/write tool input. */
 export function specGuardPathFromArgs(args: unknown): string | undefined {
   if (!args || typeof args !== "object") return undefined;
   const candidate =
@@ -108,7 +147,7 @@ export function formatSpecGuardVerdict(verdict: SpecLintVerdict, cached: boolean
  * the engine's spec-missing warning, never to a hard failure.
  */
 export async function lintSpecGuardFile(
-  deps: SpecGuardPluginDependencies,
+  deps: SpecGuardHookDependencies,
   filePath: string,
   contentOverride?: string,
 ): Promise<{ verdict: SpecLintVerdict; cached: boolean }> {
@@ -154,128 +193,8 @@ export async function lintSpecGuardFile(
 }
 // END_BLOCK_LINT_RUN
 
-// START_BLOCK_PLUGIN_ENTRY
-async function resolveStartupMode(directory?: string): Promise<SpecGuardMode | "off"> {
-  try {
-    const vvoc = await loadVvocConfig(directory ? { cwd: directory } : undefined);
-    if (!isVvocPluginEnabled(vvoc.config, "spec-guard")) return "off";
-    const entry = vvoc.config.plugins["spec-guard"];
-    if (entry && typeof entry === "object" && entry.mode === "enforce") return "enforce";
-    return "warn";
-  } catch {
-    // Fail open: a broken config must not break tool execution.
-    return "warn";
-  }
-}
-
-async function readTextFile(path: string): Promise<string | undefined> {
-  try {
-    return await Bun.file(path).text();
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Builds the spec-guard OpenCode server plugin.
- *
- * tool.execute.after annotates reads of active spec-package artifacts with the
- * lint verdict (archived files and foreign paths are never touched) and
- * validates the post-write state of edit/write calls through the cache-backed
- * engine. tool.execute.before fails enforce-mode full-content writes that
- * would leave ERROR-severity findings; draft-status incompleteness never
- * produces ERROR findings, so incremental composition is never blocked. Every
- * guard path fails open with a warning log instead of breaking the tool.
- */
-export function createSpecGuardPlugin(
-  dependencies: Partial<SpecGuardPluginDependencies> = {},
-): Plugin {
-  return async ({ directory }) => {
-    const mode =
-      dependencies.mode !== undefined ? dependencies.mode() : await resolveStartupMode(directory);
-    if (mode === "off") return {};
-
-    const deps: SpecGuardPluginDependencies = {
-      mode: () => mode,
-      cache: await createSpecLintCache(),
-      readFile: readTextFile,
-      log: async (level, message, extra) => {
-        if (level === "warn" || process.env.DEBUG?.includes("vvoc")) {
-          console.log(
-            `[spec-guard][${level}] ${message}${extra ? ` ${JSON.stringify(extra)}` : ""}`,
-          );
-        }
-      },
-      ...dependencies,
-    };
-
-    const guard = async <T>(operation: string, run: () => Promise<T>): Promise<T | undefined> => {
-      try {
-        return await run();
-      } catch (error) {
-        // Only the deliberate enforce throw must escape this wrapper.
-        if (error instanceof Error && error.message.includes(SPEC_GUARD_VERDICT_TAG)) throw error;
-        await deps.log(
-          "warn",
-          `spec-guard ${operation} failed open: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return undefined;
-      }
-    };
-
-    return {
-      config: async () => {},
-      event: async () => {},
-      "tool.execute.before": async (_input, output) => {
-        if (deps.mode() !== "enforce") return;
-        await guard("before-write inspection", async () => {
-          const path = specGuardPathFromArgs(output.args);
-          if (!path || !isSpecGuardTargetPath(path)) return;
-          if (!isWriteToolArgs(output.args)) return;
-          const content = (output.args as Record<string, unknown>).content as unknown;
-          if (typeof content !== "string") return;
-          const { verdict } = await lintSpecGuardFile(deps, path, content);
-          if (!verdict.ok) {
-            // Proven fail path (hashline-edit precedent): throwing in before fails the tool call.
-            throw new Error(
-              `${SPEC_GUARD_VERDICT_TAG} enforce: refusing to write ${path} with ERROR-severity lint findings:\n${formatSpecGuardVerdict(verdict, false)}`,
-            );
-          }
-        });
-      },
-      "tool.execute.after": async (input, output) => {
-        if (deps.mode() === "off") return;
-        if (input.tool !== "read" && input.tool !== "edit" && input.tool !== "write") return;
-        await guard("output annotation", async () => {
-          const path = specGuardPathFromArgs(input.args);
-          if (!path || !isSpecGuardTargetPath(path)) return;
-          const currentMode = deps.mode();
-
-          if (input.tool === "read") {
-            // Lint the file from disk, never the tool's rendered output: read
-            // tool results are host-specific renderings (line-number prefixes,
-            // envelope tags), so the verdict must derive from the artifact bytes.
-            const { verdict, cached } = await lintSpecGuardFile(deps, path);
-            output.output = `${output.output}\n\n${formatSpecGuardVerdict(verdict, cached)}`;
-            return;
-          }
-
-          // edit and write: the resulting file state lives on disk now. In
-          // enforce mode an ERROR full-content write already failed in before;
-          // edits surface the verdict and a leading enforce marker.
-          const { verdict, cached } = await lintSpecGuardFile(deps, path);
-          if (currentMode === "enforce" && input.tool === "edit" && !verdict.ok) {
-            output.output = `${SPEC_GUARD_VERDICT_TAG} enforce: ${path} now contains ERROR-severity lint findings; fix them before continuing\n\n${formatSpecGuardVerdict(verdict, cached)}\n\n${output.output}`;
-            return;
-          }
-          output.output = `${output.output}\n\n${formatSpecGuardVerdict(verdict, cached)}`;
-        });
-      },
-    };
-  };
-}
-
-function isWriteToolArgs(args: unknown): boolean {
+// START_BLOCK_HANDLERS
+function isWriteToolInput(args: unknown): boolean {
   return (
     !!args &&
     typeof args === "object" &&
@@ -283,5 +202,200 @@ function isWriteToolArgs(args: unknown): boolean {
   );
 }
 
-export const SpecGuardPlugin: Plugin = createSpecGuardPlugin();
+function appendVerdict(result: SpecGuardNativeResult, text: string): void {
+  if (typeof result.content === "string") {
+    result.content = `${result.content}\n\n${text}`;
+    return;
+  }
+  if (Array.isArray(result.content)) {
+    // Native `content` arrays are re-assigned with an appended text frame so the
+    // model sees the verdict without mutating any opaque non-text frame.
+    result.content = [...result.content, { type: "text", text: `\n\n${text}` }];
+    return;
+  }
+  // A result that only carries structured output keeps its structured payload
+  // untouched; the verdict is still surfaced through the metadata channel.
+  result.metadata = { ...result.metadata, specGuard: text };
+}
+
+function prependVerdict(result: SpecGuardNativeResult, text: string): void {
+  if (typeof result.content === "string") {
+    result.content = `${text}\n\n${result.content}`;
+    return;
+  }
+  if (Array.isArray(result.content)) {
+    result.content = [{ type: "text", text: `${text}\n\n` }, ...result.content];
+    return;
+  }
+  result.metadata = { ...result.metadata, specGuard: text };
+}
+
+/**
+ * Build the native `execute.before`/`execute.after` handlers. Read verdicts are
+ * derived from the artifact bytes on disk (never the host rendering); a
+ * per-session mode that is `"off"` leaves every tool untouched. Every guard
+ * path fails open with a bounded warning except the deliberate enforce throw.
+ */
+export function createSpecGuardHandlers(deps: SpecGuardHookDependencies): SpecGuardHandlers {
+  const guard = async <T>(operation: string, run: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await run();
+    } catch (error) {
+      // Only the deliberate enforce throw must escape this wrapper.
+      if (error instanceof Error && error.message.includes(SPEC_GUARD_VERDICT_TAG)) throw error;
+      await deps.log(
+        "warn",
+        `spec-guard ${operation} failed open: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  };
+
+  return {
+    async before(event) {
+      const mode = await deps.modeFor(event.sessionID);
+      if (mode === "off") return;
+      await guard("before-write inspection", async () => {
+        const path = specGuardPathFromArgs(event.input);
+        if (!path || !isSpecGuardTargetPath(path)) return;
+        if (mode === "unknown") {
+          throw new Error(
+            `${SPEC_GUARD_VERDICT_TAG} unknown-policy: refusing to mutate ${path} because no spec-guard policy capture is bound to this session.`,
+          );
+        }
+        if (mode !== "enforce") return;
+        if (!isWriteToolInput(event.input)) return;
+        const content = (event.input as Record<string, unknown>).content as unknown;
+        if (typeof content !== "string") return;
+        const { verdict } = await lintSpecGuardFile(deps, path, content);
+        if (!verdict.ok) {
+          // Throwing in execute.before fails the native tool call before mutation.
+          throw new Error(
+            `${SPEC_GUARD_VERDICT_TAG} enforce: refusing to write ${path} with ERROR-severity lint findings:\n${formatSpecGuardVerdict(verdict, false)}`,
+          );
+        }
+      });
+    },
+
+    async after(event) {
+      const mode = await deps.modeFor(event.sessionID);
+      if (mode === "off") return;
+      if (event.tool !== "read" && event.tool !== "edit" && event.tool !== "write") return;
+      if (event.status !== "completed" || event.result === undefined) return;
+      await guard("output annotation", async () => {
+        const result = event.result as SpecGuardNativeResult;
+        const path = specGuardPathFromArgs(event.input);
+        if (!path || !isSpecGuardTargetPath(path)) return;
+        if (mode === "unknown") {
+          throw new Error(
+            `${SPEC_GUARD_VERDICT_TAG} unknown-policy: refusing to hand off ${path} because no spec-guard policy capture is bound to this session.`,
+          );
+        }
+
+        if (event.tool === "read") {
+          // Lint the file from disk, never the tool's rendered output: read
+          // tool results are host-specific renderings (line-number prefixes,
+          // envelope tags), so the verdict must derive from the artifact bytes.
+          const { verdict, cached } = await lintSpecGuardFile(deps, path);
+          appendVerdict(result, formatSpecGuardVerdict(verdict, cached));
+          return;
+        }
+
+        // edit and write: the resulting file state lives on disk now. In
+        // enforce mode an ERROR full-content write already failed in before;
+        // edits surface the verdict and a leading enforce marker.
+        const { verdict, cached } = await lintSpecGuardFile(deps, path);
+        if (mode === "enforce" && event.tool === "edit" && !verdict.ok) {
+          prependVerdict(
+            result,
+            `${SPEC_GUARD_VERDICT_TAG} enforce: ${path} now contains ERROR-severity lint findings; fix them before continuing\n\n${formatSpecGuardVerdict(verdict, cached)}`,
+          );
+          return;
+        }
+        appendVerdict(result, formatSpecGuardVerdict(verdict, cached));
+      });
+    },
+  };
+}
+// END_BLOCK_HANDLERS
+
+// START_BLOCK_PLUGIN_ENTRY
+/** Resolve the bound-family mode; unbound work fails closed to `"off"`. */
+async function resolveFamilyMode(
+  runtime: NativeSnapshotRuntime,
+  sessionID: string,
+): Promise<SpecGuardPolicyMode> {
+  const read = async (): Promise<FamilyCapture | undefined> => {
+    try {
+      return await runtime.snapshots.configFor(sessionID);
+    } catch {
+      return undefined;
+    }
+  };
+  let capture = await read();
+  if (capture === undefined) {
+    // A first accepted workload may be persisted but not yet published.
+    try {
+      await runtime.snapshots.accept({ sessionID });
+    } catch {
+      // fall through to the second read
+    }
+    capture = await read();
+  }
+  if (capture === undefined) return "unknown";
+  if (!isVvocPluginEnabled(capture.vvoc, "spec-guard")) return "off";
+  const entry = capture.vvoc.plugins?.["spec-guard"];
+  if (entry && typeof entry === "object" && entry.mode === "enforce") return "enforce";
+  return "warn";
+}
+
+function readTextFile(path: string): Promise<string | undefined> {
+  return Bun.file(path)
+    .text()
+    .then((value) => value)
+    .catch(() => undefined);
+}
+
+function createConsoleLog(): SpecGuardHookDependencies["log"] {
+  return async (level, message, extra) => {
+    if (level === "warn" || process.env.DEBUG?.includes("vvoc")) {
+      const suffix = extra === undefined ? "" : ` ${JSON.stringify(extra)}`;
+      console.log(`[spec-guard][${level}] ${message.slice(0, 1000)}${suffix}`);
+    }
+  };
+}
+
+export interface SpecGuardPluginOptions {
+  /** Test-only injectable runtime acquisition. Default acquires the real shared runtime. */
+  acquireRuntime?: (ctx: NativeSnapshotContext) => Promise<NativeSnapshotRuntime>;
+}
+
+/** Native spec-guard plugin factory; the default export uses the real shared runtime. */
+export function createSpecGuardPlugin(options: SpecGuardPluginOptions = {}): Plugin.Plugin {
+  return Plugin.define({
+    id: "vvoc.spec-guard",
+    setup: async (ctx) => {
+      const acquire =
+        options.acquireRuntime ?? ((c: NativeSnapshotContext) => acquireNativeSnapshotRuntime(c));
+      const runtime = await acquire(ctx as unknown as NativeSnapshotContext);
+      const cache = await createSpecLintCache();
+      const handlers = createSpecGuardHandlers({
+        modeFor: (sessionID) => resolveFamilyMode(runtime, sessionID),
+        cache,
+        readFile: readTextFile,
+        log: createConsoleLog(),
+      });
+      const before = await ctx.tool.hook("execute.before", (event) => handlers.before(event));
+      const after = await ctx.tool.hook("execute.after", (event) => handlers.after(event));
+      return async () => {
+        await before.dispose();
+        await after.dispose();
+        await runtime.release();
+      };
+    },
+  });
+}
+
+export const SpecGuardPlugin: Plugin.Plugin = createSpecGuardPlugin();
+export default SpecGuardPlugin;
 // END_BLOCK_PLUGIN_ENTRY

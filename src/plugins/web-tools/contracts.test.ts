@@ -27,9 +27,10 @@
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool, type ToolContext, type ToolResult } from "@opencode-ai/plugin";
+import type { ToolContext } from "@opencode/plugin/promise/tool";
 import { ContractInputError } from "../../lib/agent-tool-contract.js";
-import { createWebFetchTool } from "./fetch-service.js";
+import { createWebFetchToolForConfig } from "./fetch-service.js";
+import { createWebSearchToolForConfig, type WebPermissionGuard } from "./search-service.js";
 import { WebProviderError } from "./providers/exa.js";
 import type { FetchLike } from "./http.js";
 import {
@@ -45,16 +46,13 @@ import {
   webFetchContract,
   webFetchMediaResultSchema,
   webFetchMetadataSchema,
-  webFetchResultSchema,
   webFetchTextResultSchema,
   webSearchContract,
   webSearchMetadataSchema,
-  webSearchResultSchema,
   webToolContracts,
   validateWebFetchToolInput,
   validateWebSearchToolInput,
 } from "./schemas.js";
-import { createWebSearchTool } from "./search-service.js";
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
 
@@ -72,16 +70,29 @@ function propertiesOf(projection: Record<string, unknown>): Record<string, unkno
   return properties as Record<string, unknown>;
 }
 
-function createContext(ask: ToolContext["ask"] = async () => undefined): ToolContext {
+function createContext(): ToolContext {
   return {
     sessionID: "session-1",
-    messageID: "message-1",
     agent: "test-agent",
-    directory: "/tmp/project",
-    worktree: "/tmp/project",
-    abort: new AbortController().signal,
-    metadata: () => undefined,
-    ask,
+    messageID: "message-1",
+    id: "call-1",
+    signal: new AbortController().signal,
+    progress: async () => undefined,
+  } as unknown as ToolContext;
+}
+
+interface RecordingPermission extends WebPermissionGuard {
+  readonly calls: Array<{ action: string; resources: ReadonlyArray<string> }>;
+}
+
+function createPermission(): RecordingPermission {
+  const calls: Array<{ action: string; resources: ReadonlyArray<string> }> = [];
+  return {
+    calls,
+    async guard(input, effect) {
+      calls.push({ action: input.action, resources: input.resources });
+      return effect();
+    },
   };
 }
 
@@ -93,13 +104,6 @@ async function withFetch<T>(fetchImpl: FetchLike, run: () => Promise<T>): Promis
   } finally {
     globalThis.fetch = originalFetch;
   }
-}
-
-function structuredResult(result: ToolResult): Exclude<ToolResult, string> {
-  if (typeof result === "string") {
-    throw new Error("expected a structured tool result");
-  }
-  return result;
 }
 
 const searchAccepts: Array<Record<string, unknown>> = [
@@ -217,10 +221,10 @@ describe("registered argument maps and published projection", () => {
   });
 
   test("registered maps parse through the pinned SDK schema instance with defaults", () => {
-    const searchSdk = tool.schema.object(webSearchContract.registeredArgs as never);
-    expect(searchSdk.safeParse({ query: "vvoc" }).success).toBe(true);
-    const fetchSdk = tool.schema.object(webFetchContract.registeredArgs as never);
-    expect(fetchSdk.safeParse({ url: "https://example.test" }).success).toBe(true);
+    expect(webSearchContract.runtimeSchema.safeParse({ query: "vvoc" }).success).toBe(true);
+    expect(webFetchContract.runtimeSchema.safeParse({ url: "https://example.test" }).success).toBe(
+      true,
+    );
 
     const search = webSearchContract.safeParse({ query: "vvoc" });
     expect(search.success).toBe(true);
@@ -470,14 +474,17 @@ describe("closed result metadata and attachment producer schemas", () => {
   });
 });
 
-describe("result schemas validate real service outputs", () => {
-  test("web_search output validates and unknown injected fields fail", async () => {
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "exa-secret", source: "env" },
-    });
+describe("native results carry declared metadata and content", () => {
+  test("web_search output is a string with declared provider metadata and rejects drift", async () => {
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "exa-secret", source: "env" },
+      },
+      createPermission(),
+    );
     const result = await withFetch(
       async () =>
         new Response(
@@ -491,43 +498,47 @@ describe("result schemas validate real service outputs", () => {
         ),
       () => definition.execute({ query: "vvoc", count: 2 }, createContext()),
     );
-    const structured = structuredResult(result);
-    expect(webSearchResultSchema.safeParse(structured).success).toBe(true);
-    expect(
-      webSearchResultSchema.safeParse({
-        ...structured,
-        metadata: { ...(structured.metadata as Record<string, unknown>), extra: 1 },
-      }).success,
-    ).toBe(false);
+    expect(typeof result.output).toBe("string");
+    expect(result.content).toBe(result.output);
+    expect(webSearchMetadataSchema.safeParse(result.metadata).success).toBe(true);
+    expect(webSearchMetadataSchema.safeParse({ ...result.metadata, extra: 1 }).success).toBe(false);
   });
 
-  test("web_fetch text and media outputs validate across providers", async () => {
-    const native = createWebFetchTool({ provider: "native" });
-    const spider = createWebFetchTool({
-      provider: "spider",
-      envVar: "SPIDER_API_KEY",
-      configField: "web.fetch.apiKey",
-      credential: { value: "spider-secret", source: "config" },
-    });
-    const zai = createWebFetchTool({
-      provider: "zai",
-      region: "international",
-      envVar: "ZAI_API_KEY",
-      configField: "web.fetch.apiKey",
-      credential: { value: "zai-secret", source: "env" },
-    });
+  test("web_fetch text and media outputs carry valid metadata and native file frames across providers", async () => {
+    const native = createWebFetchToolForConfig({ provider: "native" }, createPermission());
+    const spider = createWebFetchToolForConfig(
+      {
+        provider: "spider",
+        envVar: "SPIDER_API_KEY",
+        configField: "web.fetch.apiKey",
+        credential: { value: "spider-secret", source: "config" },
+      },
+      createPermission(),
+    );
+    const zai = createWebFetchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        envVar: "ZAI_API_KEY",
+        configField: "web.fetch.apiKey",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      createPermission(),
+    );
+    const frames = (result: { content: string | ReadonlyArray<Record<string, unknown>> }) =>
+      Array.isArray(result.content) ? result.content.filter((frame) => frame.type === "file") : [];
 
     const nativeText = await withFetch(
       async () => new Response("plain body", { headers: { "content-type": "text/plain" } }),
       () => native.execute({ url: "https://example.test/page" }, createContext()),
     );
-    expect(webFetchResultSchema.safeParse(structuredResult(nativeText)).success).toBe(true);
+    expect(webFetchMetadataSchema.safeParse(nativeText.metadata).success).toBe(true);
 
     const nativeMedia = await withFetch(
       async () => new Response(PNG_BYTES, { headers: { "content-type": "image/png" } }),
       () => native.execute({ url: "https://example.test/image.png" }, createContext()),
     );
-    expect(webFetchResultSchema.safeParse(structuredResult(nativeMedia)).success).toBe(true);
+    expect(frames(nativeMedia)[0]).toMatchObject({ type: "file", mime: "image/png" });
 
     const spiderText = await withFetch(
       async (url) =>
@@ -536,13 +547,13 @@ describe("result schemas validate real service outputs", () => {
           : new Response("<html>probe</html>", { headers: { "content-type": "text/html" } }),
       () => spider.execute({ url: "https://example.test/page", format: "html" }, createContext()),
     );
-    expect(webFetchResultSchema.safeParse(structuredResult(spiderText)).success).toBe(true);
+    expect(webFetchMetadataSchema.safeParse(spiderText.metadata).success).toBe(true);
 
     const spiderMedia = await withFetch(
       async () => new Response(PNG_BYTES, { headers: { "content-type": "image/png" } }),
       () => spider.execute({ url: "https://example.test/image.png" }, createContext()),
     );
-    expect(webFetchResultSchema.safeParse(structuredResult(spiderMedia)).success).toBe(true);
+    expect(frames(spiderMedia)).toHaveLength(1);
 
     const zaiText = await withFetch(
       async (url) =>
@@ -557,13 +568,13 @@ describe("result schemas validate real service outputs", () => {
           : new Response("<html>probe</html>", { headers: { "content-type": "text/html" } }),
       () => zai.execute({ url: "https://example.test/page" }, createContext()),
     );
-    expect(webFetchResultSchema.safeParse(structuredResult(zaiText)).success).toBe(true);
+    expect(webFetchMetadataSchema.safeParse(zaiText.metadata).success).toBe(true);
 
     const zaiMedia = await withFetch(
       async () => new Response(PNG_BYTES, { headers: { "content-type": "image/png" } }),
       () => zai.execute({ url: "https://example.test/image.png" }, createContext()),
     );
-    expect(webFetchResultSchema.safeParse(structuredResult(zaiMedia)).success).toBe(true);
+    expect(frames(zaiMedia)).toHaveLength(1);
   });
 });
 
@@ -571,12 +582,15 @@ describe("bounded structural and provider error identity", () => {
   test("invalid direct web_search call rejects before permission or dispatch without leaking values", async () => {
     let asked = false;
     let fetched = false;
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "never-print-this", source: "env" },
-    });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "never-print-this", source: "env" },
+      },
+      createPermission(),
+    );
     const error = await withFetch(
       async () => {
         fetched = true;
@@ -585,9 +599,7 @@ describe("bounded structural and provider error identity", () => {
       () =>
         definition.execute(
           { query: "vvoc", count: 0, apiKey: "never-print-this" },
-          createContext(async () => {
-            asked = true;
-          }),
+          createContext(),
         ),
     ).catch((caught) => caught);
 
@@ -603,12 +615,9 @@ describe("bounded structural and provider error identity", () => {
   });
 
   test("invalid direct web_fetch call rejects URL and credential fields before permission or dispatch", async () => {
-    let asked = false;
     let fetched = false;
-    const definition = createWebFetchTool({ provider: "native" });
-    const context = createContext(async () => {
-      asked = true;
-    });
+    const definition = createWebFetchToolForConfig({ provider: "native" }, createPermission());
+    const context = createContext();
     const run = (args: Record<string, unknown>) =>
       withFetch(
         async () => {
@@ -633,17 +642,19 @@ describe("bounded structural and provider error identity", () => {
     expect(credentialError.issues.some((issue) => issue.path === "credential")).toBe(true);
     expect(String(credentialError.message)).not.toContain("never-print-this");
 
-    expect(asked).toBe(false);
     expect(fetched).toBe(false);
   });
 
   test("provider errors keep WebProviderError identity and never print the credential", async () => {
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "never-print-this", source: "env" },
-    });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "never-print-this", source: "env" },
+      },
+      createPermission(),
+    );
     const error = await withFetch(
       async () => new Response("denied", { status: 401 }),
       () => definition.execute({ query: "vvoc" }, createContext()),
