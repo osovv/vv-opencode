@@ -25,7 +25,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Added the installed tier, installed paths, and installed-surface checks to parity row mapping and evidence so `--full` fails whenever any mandatory row is unverified.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Added the installed and installed-aggregate tiers with per-row observed outcomes, installed paths, and per-check evidence so `--full` fails whenever any mandatory row is unverified or observed failing.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added installed-artifact parity mapping and evidence assembly.]
 // END_CHANGE_SUMMARY
 
@@ -55,18 +55,21 @@ export interface RowResult {
   readonly surface: string;
   readonly status: string;
   readonly outcome: RowOutcome;
-  readonly tier: "core" | "tui" | "installed" | "none";
+  readonly tier: "core" | "tui" | "installed" | "aggregate" | "none";
   readonly detail?: string;
 }
 
 /** The installed-artifact tiers that can verify a row. */
-export const FULL_TIERS = ["core", "tui", "installed"] as const;
+export const FULL_TIERS = ["core", "tui", "installed", "aggregate"] as const;
 
 /** Which installed tier a row command belongs to, if any. */
-export function tierForCommand(command: string): "core" | "tui" | "installed" | undefined {
+export function tierForCommand(
+  command: string,
+): "core" | "tui" | "installed" | "aggregate" | undefined {
   if (command.includes("--core")) return "core";
   if (command.includes("--tui")) return "tui";
   if (command.includes("--installed")) return "installed";
+  if (command.includes("--aggregate")) return "aggregate";
   return undefined;
 }
 
@@ -81,6 +84,7 @@ export function evaluateParityRows(
     readonly coreOk: boolean;
     readonly tuiOk: boolean | undefined;
     readonly installedOk: boolean | undefined;
+    readonly aggregateOutcomes?: Readonly<Record<string, boolean>> | undefined;
   },
 ): RowResult[] {
   return rows.map((row) => {
@@ -92,6 +96,19 @@ export function evaluateParityRows(
         status: row.status,
         tier,
         outcome: input.coreOk ? "pass" : "fail",
+      };
+    }
+    if (tier === "aggregate") {
+      const observed = input.aggregateOutcomes?.[row.id];
+      return {
+        id: row.id,
+        surface: row.surface,
+        status: row.status,
+        tier,
+        outcome: observed === true ? "pass" : observed === false ? "fail" : "unverified",
+        ...(observed === undefined
+          ? { detail: "installed aggregate tier did not observe this row" }
+          : {}),
       };
     }
     if (tier === "installed") {
@@ -168,6 +185,7 @@ export interface ParityEvidenceInput {
   readonly dependencyHashes: Readonly<Record<string, string>>;
   readonly installedPaths?: Readonly<Record<string, string>> | undefined;
   readonly installedSurface?: readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[] | undefined;
+  readonly aggregateChecks?: readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[] | undefined;
   readonly coreSummary: { readonly cases: number; readonly failed: number } | undefined;
   readonly tuiSummary: { readonly scenarios: number; readonly failed: number } | undefined;
   readonly limits: readonly string[];
@@ -197,6 +215,7 @@ export function buildParityEvidence(input: ParityEvidenceInput): Record<string, 
     dependencies: input.dependencyHashes,
     installedPaths: input.installedPaths ?? {},
     installedSurface: input.installedSurface ?? [],
+    aggregateChecks: input.aggregateChecks ?? [],
     tiers: {
       core: input.coreSummary ?? null,
       tui: input.tuiSummary ?? null,

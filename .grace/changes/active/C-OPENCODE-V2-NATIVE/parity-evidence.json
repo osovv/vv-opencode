@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-09-28T19:39:21.919Z",
+  "generatedAt": "2026-09-28T19:55:36.013Z",
   "change": "C-OPENCODE-V2-NATIVE",
   "host": {
     "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
@@ -29,20 +29,20 @@
     "zod": "4.1.8"
   },
   "installedPaths": {
-    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@clack/prompts",
-    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/ai",
-    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/client",
-    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/plugin",
-    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/protocol",
-    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/schema",
-    "ajv": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/ajv",
-    "citty": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/citty",
-    "effect": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/effect",
-    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/htmlparser2",
-    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/jsonc-parser",
-    "turndown": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/turndown",
-    "zod": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/zod",
-    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@osovv/vv-opencode"
+    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@clack/prompts",
+    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/ai",
+    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/client",
+    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/plugin",
+    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/protocol",
+    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/schema",
+    "ajv": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/ajv",
+    "citty": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/citty",
+    "effect": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/effect",
+    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/htmlparser2",
+    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/jsonc-parser",
+    "turndown": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/turndown",
+    "zod": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/zod",
+    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@osovv/vv-opencode"
   },
   "installedSurface": [
     {
@@ -86,6 +86,18 @@
       "detail": "globalInit=0 projectInit=0 sync=0/0 idempotent=true invalidRefusedBeforeWrite=true"
     }
   ],
+  "aggregateChecks": [
+    {
+      "id": "plugin.system-context-injection",
+      "ok": true,
+      "detail": "providerRequests=3 injectedGuidance=true"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "ok": false,
+      "detail": "softSecondPromptDispatches=3 hardSecondPromptDispatches=1"
+    }
+  ],
   "tiers": {
     "core": {
       "cases": 12,
@@ -98,9 +110,9 @@
   },
   "totals": {
     "rows": 38,
-    "verified": 26,
+    "verified": 27,
     "failed": 0,
-    "unverified": 12
+    "unverified": 11
   },
   "rows": [
     {
@@ -265,10 +277,9 @@
     {
       "id": "plugin.system-context-injection",
       "surface": "System context and agent/model attribution",
-      "status": "pending",
-      "tier": "none",
-      "outcome": "unverified",
-      "detail": "no installed-artifact tier covers this row"
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
     },
     {
       "id": "plugin.analytics",

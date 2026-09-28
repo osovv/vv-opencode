@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Resolves rows across the core, real-PTY TUI, and installed-surface tiers from the core summary's installed checks, and records the installed paths and native limits in parity evidence.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Resolves rows across the core, real-PTY TUI, installed-surface, and installed-aggregate tiers, records installed paths plus per-check observations and native limits in parity evidence, and never promotes an unobserved aggregate row.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added the installed-artifact full runner that reuses the packed core and real-PTY TUI tiers, records exact host/package/dependency hashes, and refuses to pass while any mandatory parity row is unverified.]
 // END_CHANGE_SUMMARY
 
@@ -162,11 +162,16 @@ export async function runFull(
   }
 
   const installedSummary = coreSummary.installedSurface;
+  const aggregateOutcomes: Record<string, boolean> = {};
+  for (const check of coreSummary.aggregateChecks ?? []) {
+    aggregateOutcomes[check.id] = check.ok;
+  }
 
   const results = evaluateParityRows(rows, {
     coreOk: coreSummary.ok,
     tuiOk: tuiSummary?.ok,
     installedOk: installedSummary?.ok,
+    aggregateOutcomes,
   });
   const failures = mandatoryRowFailures(results);
 
@@ -187,6 +192,7 @@ export async function runFull(
     dependencyHashes: coreSummary.installed?.resolvedDependencies ?? {},
     installedPaths: coreSummary.installed?.loadedPaths,
     installedSurface: installedSummary?.checks,
+    aggregateChecks: coreSummary.aggregateChecks,
     coreSummary: { cases: coreSummary.cases.length, failed: coreFailed },
     tuiSummary: tuiSummary
       ? {

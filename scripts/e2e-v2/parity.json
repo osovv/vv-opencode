@@ -191,9 +191,9 @@
       "id": "plugin.system-context-injection",
       "surface": "System context and agent/model attribution",
       "phase": "T-006",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Guidance injection and attribution retain visible effects under native V2 lifecycle events.",
-      "command": "bun test src/plugins/system-context-injection.integration.test.ts"
+      "command": "bun scripts/e2e-v2.ts --aggregate"
     },
     {
       "id": "plugin.analytics",
@@ -216,7 +216,7 @@
       "surface": "Peak-hours soft/hard policy and exemptions",
       "phase": "T-006",
       "status": "pending",
-      "acceptance": "Hard peak denial precedes requests without killing existing work; subagent exemptions remain.",
+      "acceptance": "Hard peak denial precedes provider dispatch without killing existing work; subagent exemptions remain. (Installed aggregate attempt observed hard mode still dispatching; see parity-evidence aggregateChecks.)",
       "command": "bun test src/plugins/peak-hours"
     },
     {

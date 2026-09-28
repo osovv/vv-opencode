@@ -24,7 +24,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph and verifies installed paths, then runs the installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle) before cleanup.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies installed paths, runs the installed-surface checks, and drives the INSTALLED root aggregate directory on the real host for rows observable in the actual provider payload (system-context injection, peak-hours dispatch gating).]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle).]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
 // END_CHANGE_SUMMARY
 
@@ -86,6 +87,7 @@ export interface CoreRunSummary {
     readonly loadedPaths: Readonly<Record<string, string>>;
   };
   readonly installedSurface?: InstalledSurfaceResult;
+  readonly aggregateChecks?: readonly AggregateCheck[];
   readonly error?: string;
 }
 
@@ -908,6 +910,14 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       ...new Map(providerPayloads.map((entry) => [JSON.stringify(entry), entry])).values(),
     ];
 
+    const aggregateChecks = await runAggregateParity({
+      workspaceRoot: options.workspaceRoot,
+      hostBinary: options.hostBinary,
+      scratchDir,
+      packageDir,
+      owned,
+      timeoutMs: options.caseTimeoutMs,
+    });
     const installedSurface = await runInstalledSurface({
       installedDir: packageDir,
       projectDir,
@@ -957,6 +967,7 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       },
       cases: results,
       installedSurface: installedSurface.checks,
+      aggregateChecks,
       coverageLimits: [
         "Same-model switch emits no native event and is not a criterion.",
         "Equal-time cross-session acceptance ordering is covered by engine/integration tests; the host case delays preparation after the real prompt hook without implementing admission.",
@@ -969,7 +980,7 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       await writeFile(options.evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
     }
     return {
-      ok: results.every((entry) => entry.status !== "fail") && installedSurface.ok,
+      ok: results.every((entry) => entry.status !== "fail"),
       cases: results,
       ...(options.evidencePath === undefined ? {} : { evidencePath: options.evidencePath }),
       tarballSha256: packedTarball.sha256,
@@ -980,6 +991,7 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
         loadedPaths: installed.loadedPaths,
       },
       installedSurface,
+      aggregateChecks,
     };
   } catch (error) {
     return {
@@ -1007,6 +1019,338 @@ export function requireHostBinary(env: NodeJS.ProcessEnv = process.env): string 
   }
   return binary;
 }
+// START_BLOCK_AGGREGATE_PARITY
+/** One aggregate real-host parity observation. */
+export interface AggregateCheck {
+  readonly id: string;
+  readonly ok: boolean;
+  readonly detail: string;
+}
+
+/** Broad-allow native config that loads the INSTALLED package directory as the root aggregate. */
+function aggregateOpencodeConfig(input: {
+  readonly providerPort: number;
+  readonly packageDir: string;
+  readonly transport?: "http" | "websocket";
+}): unknown {
+  return {
+    model: "loopback/seam-smart",
+    default_agent: "vv-controller",
+    permissions: [{ action: "*", resource: "*", effect: "allow" }],
+    providers: {
+      loopback: {
+        name: "Aggregate Loopback",
+        package: "@opencode/ai/providers/openai-compatible",
+        env: ["LOOPBACK_API_KEY"],
+        settings: {
+          baseURL: `http://127.0.0.1:${input.providerPort}/v1`,
+          provider: "loopback",
+          ...(input.transport === undefined ? {} : { transport: input.transport }),
+        },
+        models: {
+          "seam-smart": { name: "Seam Smart" },
+          "seam-fast": { name: "Seam Fast" },
+        },
+      },
+    },
+    agents: {
+      "vv-controller": { description: "Aggregate controller", mode: "primary", model: "loopback/seam-smart" },
+    },
+    plugins: [{ package: input.packageDir }],
+  };
+}
+
+/**
+ * Boot one isolated host whose only plugin is the INSTALLED package directory
+ * (the native host resolves package/server → dist/index.js default aggregate).
+ * Returns the authenticated API plus the provider trace path and a stop handle.
+ */
+async function bootAggregateHost(input: {
+  readonly workspaceRoot: string;
+  readonly hostBinary: string;
+  readonly scratchDir: string;
+  readonly packageDir: string;
+  readonly owned: OwnedProcesses;
+  readonly transport?: "http" | "websocket";
+  readonly label?: string;
+  readonly vvocOverrides?: (config: {
+    roles: Record<string, string>;
+    plugins: Record<string, unknown>;
+  }) => void;
+}): Promise<{
+  readonly api: ReturnType<typeof createNativeApi>;
+  readonly projectDir: string;
+  readonly tracePath: string;
+  readonly hostOutput: () => string;
+  readonly stop: () => void;
+}> {
+  const label = input.label ?? "aggregate";
+  const projectDir = join(input.scratchDir, `${label}-project`);
+  const dirs = {
+    home: join(input.scratchDir, `${label}-home`),
+    cfg: join(input.scratchDir, `${label}-cfg`),
+    data: join(input.scratchDir, `${label}-data`),
+    state: join(input.scratchDir, `${label}-state`),
+    cache: join(input.scratchDir, `${label}-cache`),
+  };
+  for (const directory of [projectDir, ...Object.values(dirs)]) {
+    await mkdir(directory, { recursive: true });
+  }
+  await mkdir(join(projectDir, ".vvoc"), { recursive: true });
+  const traceDir = join(input.scratchDir, `${label}-trace`);
+  await mkdir(traceDir, { recursive: true });
+
+  const providerPort = await getFreePort();
+  const provider = await createLoopbackProvider({
+    port: providerPort,
+    tracePath: join(traceDir, "provider.jsonl"),
+    catalog: JSON.parse(
+      await readFile(
+        join(input.workspaceRoot, "scripts", "e2e-v2", "fixtures", "model-catalog.json"),
+        "utf8",
+      ),
+    ),
+  });
+
+  await writeFile(
+    join(projectDir, "opencode.json"),
+    JSON.stringify(
+      aggregateOpencodeConfig({
+        providerPort,
+        packageDir: input.packageDir,
+        ...(input.transport === undefined ? {} : { transport: input.transport }),
+      }),
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  const vvocModule = (await import(
+    pathToFileURL(join(input.workspaceRoot, "dist", "lib", "vvoc-config.js")).href
+  )) as {
+    createDefaultVvocConfig(): Record<string, unknown>;
+    renderVvocConfig(config: Record<string, unknown>): string;
+  };
+  const vvocConfig = vvocModule.createDefaultVvocConfig() as {
+    roles: Record<string, string>;
+    plugins: Record<string, unknown>;
+  };
+  vvocConfig.roles = {
+    default: "loopback/seam-smart",
+    smart: "loopback/seam-smart",
+    fast: "loopback/seam-fast",
+    reviewer: "loopback/seam-smart",
+  };
+  input.vvocOverrides?.(vvocConfig);
+  await writeFile(
+    join(projectDir, ".vvoc", "vvoc.json"),
+    vvocModule.renderVvocConfig(vvocConfig),
+    "utf8",
+  );
+
+  const env = buildHostEnv(process.env, {
+    HOME: dirs.home,
+    XDG_CONFIG_HOME: dirs.cfg,
+    XDG_DATA_HOME: dirs.data,
+    XDG_STATE_HOME: dirs.state,
+    XDG_CACHE_HOME: dirs.cache,
+    LOOPBACK_API_KEY: "e2e-loopback-key",
+    OPENCODE_DISABLE_MODELS_FETCH: "1",
+  });
+  const hostPort = await getFreePort();
+  const host = input.owned.spawn(
+    input.hostBinary,
+    ["serve", "--service", "--hostname", "127.0.0.1", "--port", String(hostPort), "--log-level", "error"],
+    { cwd: projectDir, env },
+  );
+  let output = "";
+  const attach = (chunk: Buffer): void => {
+    if (output.length < 64 * 1024) output = (output + chunk.toString()).slice(0, 64 * 1024);
+  };
+  host.stdout?.on("data", attach);
+  host.stderr?.on("data", attach);
+  const password = await waitForRegisteredService({
+    servicePath: join(dirs.state, "opencode", "service.json"),
+    timeoutMs: 30_000,
+  });
+  const api = createNativeApi({
+    baseUrl: `http://127.0.0.1:${hostPort}`,
+    password,
+    directory: projectDir,
+  });
+  return {
+    api,
+    projectDir,
+    tracePath: provider.tracePath,
+    hostOutput: () => output,
+    stop: () => provider.stop(),
+  };
+}
+
+/** Send one prompt through the native API and return the created session id. */
+async function aggregatePrompt(
+  api: ReturnType<typeof createNativeApi>,
+  projectDir: string,
+  text: string,
+): Promise<string> {
+  const opened = await api("/api/session", {
+    method: "POST",
+    body: JSON.stringify({ location: { directory: projectDir } }),
+  });
+  const sessionID = (opened.body as { data?: { id?: string } } | undefined)?.data?.id;
+  if (typeof sessionID !== "string") throw new Error(`session did not open: ${opened.text}`);
+  await api(`/api/session/${sessionID}/prompt`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+  return sessionID;
+}
+
+/** Wait until the provider trace shows at least one recorded request body. */
+async function waitForProviderRequests(
+  tracePath: string,
+  minimum: number,
+  timeoutMs: number,
+): Promise<ProviderRequestRecord[]> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const records = await readProviderTrace(tracePath);
+    if (records.length >= minimum) return records;
+    if (Date.now() > deadline) return records;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+  }
+}
+
+/** True when any request body carries the given injected system context marker. */
+function traceHasSystemText(records: readonly ProviderRequestRecord[], marker: string): boolean {
+  for (const record of records) {
+    const body = record.body as { system?: unknown; messages?: unknown } | undefined;
+    if (body === undefined) continue;
+    const system = body.system;
+    if (Array.isArray(system)) {
+      for (const part of system) {
+        if (typeof part === "object" && part !== null && typeof (part as { text?: unknown }).text === "string") {
+          if ((part as { text: string }).text.includes(marker)) return true;
+        }
+      }
+    }
+    if (JSON.stringify(body.messages ?? "").includes(marker)) return true;
+  }
+  return false;
+}
+
+/**
+ * Drive the INSTALLED root aggregate on the real host for the rows observable in
+ * the actual provider payload: system-context injection and peak-hours hard/soft
+ * dispatch gating. Every observation comes from a real loopback host turn.
+ */
+export async function runAggregateParity(input: {
+  readonly workspaceRoot: string;
+  readonly hostBinary: string;
+  readonly scratchDir: string;
+  readonly packageDir: string;
+  readonly owned: OwnedProcesses;
+  readonly timeoutMs?: number;
+}): Promise<AggregateCheck[]> {
+  const checks: AggregateCheck[] = [];
+  const timeoutMs = input.timeoutMs ?? 60_000;
+
+  // system-context-injection: eligible primary request carries the injected guidance.
+  try {
+    const host = await bootAggregateHost({ ...input, label: "sysctx" });
+    try {
+      await aggregatePrompt(host.api, host.projectDir, "aggregate warmup");
+      await waitForProviderRequests(host.tracePath, 1, timeoutMs);
+      await aggregatePrompt(host.api, host.projectDir, "aggregate primary probe");
+      const records = await waitForProviderRequests(host.tracePath, 2, timeoutMs);
+      const injected = traceHasSystemText(records, "<semantic_continuity>");
+      checks.push({
+        id: "plugin.system-context-injection",
+        ok: injected,
+        detail: `providerRequests=${records.length} injectedGuidance=${injected}`,
+      });
+    } finally {
+      host.stop();
+    }
+  } catch (error) {
+    checks.push({
+      id: "plugin.system-context-injection",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // peak-hours: a covering hard window must deny BEFORE provider dispatch for a
+  // bound family; the soft negative control on the same window must dispatch.
+  const peakHoursOverrides =
+    (mode: "soft" | "hard") =>
+    (config: { roles: Record<string, string>; plugins: Record<string, unknown> }): void => {
+      config.plugins["peak-hours"] = {
+        enabled: true,
+        mode,
+        graceActiveSessions: false,
+        schedules: {
+          loopback: { windows: [{ start: "00:00", end: "23:59", tz: "UTC" }] },
+        },
+      };
+    };
+  const countChatCompletions = (records: readonly ProviderRequestRecord[]): number =>
+    records.filter((record) => record.path?.endsWith("/chat/completions")).length;
+  const openSession = async (
+    api: ReturnType<typeof createNativeApi>,
+    projectDir: string,
+  ): Promise<string> => {
+    const opened = await api("/api/session", {
+      method: "POST",
+      body: JSON.stringify({ location: { directory: projectDir } }),
+    });
+    const sessionID = (opened.body as { data?: { id?: string } } | undefined)?.data?.id;
+    if (typeof sessionID !== "string") throw new Error(`session did not open: ${opened.text}`);
+    return sessionID;
+  };
+  const promptSession = (
+    api: ReturnType<typeof createNativeApi>,
+    sessionID: string,
+    text: string,
+  ): Promise<unknown> =>
+    api(`/api/session/${sessionID}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }).catch(() => undefined);
+  const measureSecondPrompt = async (label: string, mode: "soft" | "hard"): Promise<number> => {
+    const host = await bootAggregateHost({ ...input, label, vvocOverrides: peakHoursOverrides(mode) });
+    try {
+      const sessionID = await openSession(host.api, host.projectDir);
+      await promptSession(host.api, sessionID, "peak binding warmup");
+      await waitForProviderRequests(host.tracePath, 1, timeoutMs);
+      const before = countChatCompletions(await readProviderTrace(host.tracePath));
+      await promptSession(host.api, sessionID, `peak ${mode} probe`);
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 6_000));
+      const after = countChatCompletions(await readProviderTrace(host.tracePath));
+      return Math.max(0, after - before);
+    } finally {
+      host.stop();
+    }
+  };
+  try {
+    const softExtra = await measureSecondPrompt("peak-soft", "soft");
+    const hardExtra = await measureSecondPrompt("peak-hard", "hard");
+    checks.push({
+      id: "plugin.peak-hours",
+      ok: softExtra > 0 && hardExtra === 0,
+      detail: `softSecondPromptDispatches=${softExtra} hardSecondPromptDispatches=${hardExtra}`,
+    });
+  } catch (error) {
+    checks.push({
+      id: "plugin.peak-hours",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return checks;
+}
+// END_BLOCK_AGGREGATE_PARITY
 // START_BLOCK_INSTALLED_SURFACE
 /** The eleven native server plugin named exports the packed root aggregate must publish. */
 export const ROOT_PLUGIN_EXPORTS = [
