@@ -3,8 +3,8 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Command-line entry for the v2 real-host acceptance harness with explicit core, full, TUI, and inventory modes.
-//   SCOPE: Argument parsing, parity inventory listing, explicit full-mode refusal until all parity groups exist, delegation to the real-PTY TUI tier, and delegation to the packed core run with bounded stdout and nonzero exit codes. It has no import-time side effects.
-//   DEPENDS: [node:fs, node:path, scripts/e2e-v2.ts, scripts/e2e-v2/core.ts, scripts/e2e-v2/tui.ts]
+//   SCOPE: Argument parsing, parity inventory listing, delegation to the full installed-artifact runner, delegation to the real-PTY TUI tier, and delegation to the packed core run with bounded stdout and nonzero exit codes. It has no import-time side effects.
+//   DEPENDS: [node:fs, node:path, scripts/e2e-v2/core.ts, scripts/e2e-v2/full.ts, scripts/e2e-v2/tui.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
 //   MAP_MODE: EXPORTS
@@ -19,14 +19,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Replaced the non-passing TUI scaffold with the real-PTY `--tui` tier and added an injectable runTui dependency.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 - Added the mode-aware harness entry that refuses full parity until T-004..T-010 land.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Wired the default `--full` mode to the installed-artifact full runner that writes parity evidence and fails while any mandatory parity row is unverified.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 - Replaced the non-passing TUI scaffold with the real-PTY `--tui` tier and added an injectable runTui dependency. T-003 - Added the mode-aware harness entry that refuses full parity until T-004..T-010 land.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCore, requireHostBinary, type CoreRunSummary } from "./e2e-v2/core.js";
+import { runFull, type FullRunSummary } from "./e2e-v2/full.js";
 import { runTuiAcceptance, type TuiAcceptanceResult } from "./e2e-v2/tui.js";
 
 /** Selected harness mode. */
@@ -49,6 +50,13 @@ export interface CliDeps {
     readonly scratchBase: string;
     readonly keepScratch?: boolean;
   }) => Promise<TuiAcceptanceResult>) | undefined;
+  readonly runFull?: ((options: {
+    readonly workspaceRoot: string;
+    readonly hostBinary: string;
+    readonly scratchBase: string;
+    readonly evidencePath: string;
+    readonly keepScratch?: boolean;
+  }) => Promise<FullRunSummary>) | undefined;
   readonly hostBinary?: string | undefined;
   readonly requireHost?: (() => string) | undefined;
   readonly scratchBase?: string | undefined;
@@ -125,11 +133,49 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return 0;
   }
   if (mode === "full") {
-    deps.stdout(
-      "full parity acceptance is not implemented yet: core covers only the packed model-role runtime.",
-    );
-    deps.stdout("remaining parity groups are owned by T-004 through T-010; run --core for the current tier.");
-    return 2;
+    let hostBinary = deps.hostBinary;
+    if (hostBinary === undefined) {
+      try {
+        hostBinary = (deps.requireHost ?? requireHostBinary)();
+      } catch (error) {
+        deps.stdout(error instanceof Error ? error.message : String(error));
+        return 2;
+      }
+    }
+    const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
+    const evidencePath =
+      deps.evidencePath ??
+      join(
+        deps.workspaceRoot,
+        ".grace",
+        "changes",
+        "active",
+        "C-OPENCODE-V2-NATIVE",
+        "parity-evidence.json",
+      );
+    const runner =
+      deps.runFull ??
+      ((options: Parameters<NonNullable<CliDeps["runFull"]>>[0]) => runFull(options));
+    const summary = await runner({
+      workspaceRoot: deps.workspaceRoot,
+      hostBinary,
+      scratchBase,
+      evidencePath,
+      keepScratch: keep,
+    });
+    if (json) {
+      deps.stdout(JSON.stringify(summary, null, 2));
+    } else {
+      for (const row of summary.rows) {
+        deps.stdout(`[${row.outcome.toUpperCase()}] ${row.id} — ${row.surface}`);
+      }
+      for (const failure of summary.failures) deps.stdout(`not verified: ${failure}`);
+      if (summary.error !== undefined) deps.stdout(`harness error: ${summary.error}`);
+      const verified = summary.rows.filter((row) => row.outcome === "pass").length;
+      deps.stdout(`parity totals: ${verified} verified, ${summary.failures.length} not verified`);
+      if (summary.evidencePath !== undefined) deps.stdout(`evidence: ${summary.evidencePath}`);
+    }
+    return summary.ok ? 0 : 1;
   }
 
   // core mode

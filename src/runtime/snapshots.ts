@@ -2,8 +2,8 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Build durable immutable family policy captures from full effective vvoc configuration plus native model overlays, and admit sessions through a staged awaited native model switch that is committed only at the accepted request boundary.
-//   SCOPE: Host-verified parent/fork family resolution, content-addressed full-policy capture construction, staged-candidate persistence, family-qualified awaited switchModel admission, commit at acceptance with rollback that preserves a newer choice, idempotent/concurrent deduplication that preserves rejection, variant derivation, and the documented SnapshotService consumed by later plugins. No host discovery, no client authentication, no permission flow, no stateless generation.
-//   DEPENDS: [node:crypto, src/runtime/auxiliary.ts, src/runtime/model-registry.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/types.ts]
+//   SCOPE: Host-verified parent/fork family resolution, content-addressed full-policy capture construction, staged-candidate persistence, family-qualified awaited switchModel admission, commit at acceptance with rollback that preserves a newer choice, idempotent/concurrent deduplication that preserves rejection, force-escalation reconciliation of an identical input, cross-context publication serialization through the app/location coordinator, variant derivation, and the documented SnapshotService consumed by later plugins. No host discovery, no client authentication, no permission flow, no stateless generation.
+//   DEPENDS: [node:crypto, src/runtime/auxiliary.ts, src/runtime/coordination.ts, src/runtime/model-registry.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -21,11 +21,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Bounded per-input candidate sets; the first accepted input by native durable order wins, ordering requires a complete replay when multiple inputs are staged, and publication consumes only the winning owner.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - An exact-input force:false then force:true escalation reconciles the required materialization/switch without overwriting a newer explicit choice, an optional caller-supplied admission config is used verbatim, and an app/location coordinator serializes publication so concurrent acceptors across distinct contexts write the family capture once.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
 import { createAuxiliaryService } from "./auxiliary.js";
+import type { HostCoordination } from "./coordination.js";
 import { managedVariantFor, primarySelection, qualifySelection } from "./model-registry.js";
 import { agentBindingsFrom, parseRoleSelections } from "./snapshot-config.js";
 import { familyCaptureIntegrity } from "./snapshot-store.js";
@@ -98,6 +99,12 @@ export interface SnapshotServiceDeps {
     | undefined;
   now?(): number;
   digest?(value: string): string;
+  /**
+   * Cross-context coordinator keyed by the native host app/location object
+   * identity. When present, per-family publication is serialized across every
+   * participating service so concurrent acceptors publish a capture exactly once.
+   */
+  readonly coordination?: HostCoordination | undefined;
 }
 
 // START_BLOCK_CAPTURE_CONSTRUCTION
@@ -292,12 +299,17 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
    * Per-family serialization. Candidate read/write, switch and publication are
    * ordered so a concurrent stage cannot be lost or overwritten between an
    * acceptance validation and its publication, and late cleanup cannot delete a
-   * newer/committed capture.
+   * newer/committed capture. When a cross-context coordinator is present the lock
+   * is shared by every participating service, so two acceptors in distinct native
+   * contexts publish the family capture exactly once.
    */
   const familyLocks = new Map<string, Promise<unknown>>();
   let disposed = false;
 
   function withFamilyLock<T>(familyId: string, run: () => Promise<T>): Promise<T> {
+    if (deps.coordination !== undefined) {
+      return deps.coordination.withFamilyLock(familyId, run);
+    }
     const previous = familyLocks.get(familyId) ?? Promise.resolve();
     const next = previous.then(run, run);
     familyLocks.set(
@@ -371,7 +383,10 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
 
     let config: EffectiveRuntimeConfig;
     try {
-      config = await deps.loadConfig(request.directory);
+      // One coherent admission config: when the caller assembled it from a single
+      // read, use that exact value so the candidate target and the family capture
+      // cannot observe two different vvoc snapshots.
+      config = request.admissionConfig ?? (await deps.loadConfig(request.directory));
     } catch (error) {
       return {
         status: "rejected",
@@ -425,7 +440,30 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
       (candidate) => stagedCandidateKey(candidate) === requestIdentity,
     );
     if (sameInput !== undefined && sameInput.revision === capture.integrity) {
-      // Repeated identical input: idempotent, no rewrite and no re-switch.
+      // Repeated identical input is idempotent. When a caller escalates to
+      // force:true after an earlier force:false stage, the required materialization
+      // and awaited switch are reconciled here instead of returning early with zero
+      // switches, while a newer explicit choice is never overwritten.
+      if (request.force === true) {
+        const newerExplicit =
+          request.explicit !== undefined && !sameSelection(request.explicit, sameInput.selection);
+        const current = await deps.readSessionModel(request.sessionID).catch(() => undefined);
+        const alreadyApplied = current !== undefined && sameSelection(current, sameInput.selection);
+        if (!newerExplicit && !alreadyApplied) {
+          try {
+            await materialize?.(sameInput.capture, sameInput.selection, requestIdentity);
+            await deps.switchModel({ sessionID: request.sessionID, model: sameInput.selection });
+          } catch (error) {
+            return {
+              status: "rejected",
+              familyId,
+              candidateSelection: sameInput.selection,
+              error: toReason(error),
+              rollback: "none",
+            };
+          }
+        }
+      }
       return {
         status: "staged",
         familyId,

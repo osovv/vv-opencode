@@ -1,9 +1,9 @@
 // FILE: scripts/e2e-v2.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the v2 harness mode contract, scratch and process safety guards, allow-listed environments, parity inventory shape, and that the fixture plugin forwards to the real runtime with mandatory guards and correct cleanup.
-//   SCOPE: Argument parsing, full/TUI refusal, missing-host refusal, injected core exit codes, loopback/scratch/cleanup guards, actual scratch creation and removal, env allow-list and redaction, live-handle owner refusal, parity.json vocabulary, fixture guard forwarding and failure cleanup.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, scripts/e2e-v2.ts, scripts/e2e-v2/fixtures/plugin.ts, scripts/e2e-v2/host.ts]
+//   PURPOSE: Verify the v2 harness mode contract, scratch and process safety guards, allow-listed environments, parity inventory shape, installed-artifact full-runner row gating and evidence, and that the fixture plugin forwards to the real runtime with mandatory guards and correct cleanup.
+//   SCOPE: Argument parsing, full/TUI refusal, missing-host refusal, injected core exit codes, installed-artifact parity-row outcomes and mandatory-row failures, loopback/scratch/cleanup guards, actual scratch creation and removal, env allow-list and redaction, live-handle owner refusal, parity.json vocabulary, fixture guard forwarding and failure cleanup.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, scripts/e2e-v2.ts, scripts/e2e-v2/full.ts, scripts/e2e-v2/full-cases.ts, scripts/e2e-v2/fixtures/plugin.ts, scripts/e2e-v2/host.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -16,7 +16,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-003 correction - Added real scratch removal guards, env redaction, exited-handle refusal, and fixture failure-cleanup tests.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Covered the installed-artifact full runner: installed-tier row mapping, mandatory-row gating, evidence totals, and the CLI --full exit behavior.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Added real scratch removal guards, env redaction, exited-handle refusal, and fixture failure-cleanup tests.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -25,6 +26,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs, runCli } from "./e2e-v2.js";
 import { createHarnessPlugin } from "./e2e-v2/fixtures/plugin.js";
+import {
+  buildParityEvidence,
+  evaluateParityRows,
+  mandatoryRowFailures,
+  tierForCommand,
+  type ParityRow,
+} from "./e2e-v2/full-cases.js";
+import { readParityInventory, runFull } from "./e2e-v2/full.js";
 import {
   OwnedProcesses,
   assertLoopbackHttpUrl,
@@ -155,11 +164,17 @@ describe("harness argument and mode contract", () => {
       workspaceRoot: process.cwd(),
       stdout: (line) => lines.push(line),
       runCore: async () => {
-        throw new Error("runCore must not be called in full mode");
+        throw new Error("runCore must not be called directly in full mode");
       },
+      hostBinary: "/tmp/pinned-opencode",
+      runFull: async () => ({
+        ok: false,
+        rows: [],
+        failures: ["contracts.tools: unverified (no installed-artifact tier covers this row)"],
+      }),
     });
     expect(status).not.toBe(0);
-    expect(lines.join("\n")).toContain("full parity acceptance is not implemented");
+    expect(lines.join("\n")).toContain("not verified: contracts.tools");
   });
 
   test("tui mode reports success only for observed passing scenarios", async () => {
@@ -499,5 +514,114 @@ describe("fixture plugin forwarding", () => {
     expect(body.effects).toBe(1);
     expect(calls).toContain("permissions.guard");
     await cleanup();
+  });
+});
+
+describe("full installed-artifact parity runner", () => {
+  const rows: ParityRow[] = [
+    { id: "core.a", surface: "core", phase: "T", status: "implemented-core", acceptance: "x", command: "bun scripts/e2e-v2.ts --core" },
+    { id: "tui.a", surface: "tui", phase: "T", status: "pending", acceptance: "x", command: "bun scripts/e2e-v2.ts --tui" },
+    { id: "unit.a", surface: "unit", phase: "T", status: "pending", acceptance: "x", command: "bun test x" },
+  ];
+
+  test("maps commands to installed tiers and never promotes a unit row", () => {
+    expect(tierForCommand("bun scripts/e2e-v2.ts --core")).toBe("core");
+    expect(tierForCommand("bun scripts/e2e-v2.ts --tui")).toBe("tui");
+    expect(tierForCommand("bun test src/x.test.ts")).toBeUndefined();
+    const results = evaluateParityRows(rows, { coreOk: true, tuiOk: undefined });
+    expect(results.find((row) => row.id === "core.a")?.outcome).toBe("pass");
+    expect(results.find((row) => row.id === "tui.a")?.outcome).toBe("unverified");
+    expect(results.find((row) => row.id === "unit.a")?.outcome).toBe("unverified");
+    const failures = mandatoryRowFailures(results);
+    expect(failures).toContain("tui.a: unverified (TUI tier was not run)");
+    expect(failures.some((failure) => failure.startsWith("unit.a"))).toBe(true);
+    expect(failures.some((failure) => failure.startsWith("core.a"))).toBe(false);
+  });
+
+  test("the real inventory has 38 rows and full parity stays unverified until every tier lands", async () => {
+    const inventory = readParityInventory(process.cwd());
+    expect(inventory).toHaveLength(38);
+    const dir = await scratch();
+    const evidencePath = join(dir, "parity-evidence.json");
+    const summary = await runFull(
+      {
+        workspaceRoot: process.cwd(),
+        hostBinary: "/tmp/pinned-opencode",
+        scratchBase: dir,
+        evidencePath,
+      },
+      {
+        runCore: async () => ({ ok: true, cases: [], tarballSha256: "deadbeef" }),
+        runTui: async () => ({
+          ok: true,
+          implemented: true,
+          sourceCommit: "x",
+          scenarios: [],
+          note: "ok",
+        }),
+        hostSha256: async () => "host-hash",
+        writeEvidence: async (path, document) => {
+          await writeFile(path, JSON.stringify(document), "utf8");
+        },
+      },
+    );
+    expect(summary.ok).toBe(false);
+    expect(summary.failures.length).toBeGreaterThan(0);
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8")) as {
+      totals: { rows: number; verified: number; unverified: number };
+      host: { binarySha256: string };
+    };
+    expect(evidence.totals.rows).toBe(38);
+    expect(evidence.totals.verified).toBeGreaterThan(0);
+    expect(evidence.totals.unverified).toBeGreaterThan(0);
+    expect(evidence.host.binarySha256).toBe("host-hash");
+  });
+
+  test("fails closed when the pinned host is unavailable", async () => {
+    const dir = await scratch();
+    const summary = await runFull(
+      { workspaceRoot: process.cwd(), hostBinary: "/missing", scratchBase: dir, evidencePath: join(dir, "e.json") },
+      { hostSha256: async () => { throw new Error("missing host"); } },
+    );
+    expect(summary.ok).toBe(false);
+    expect(summary.error).toContain("pinned host is unavailable");
+  });
+
+  test("the CLI --full mode returns nonzero when mandatory rows are unverified", async () => {
+    const dir = await scratch();
+    const lines: string[] = [];
+    const status = await runCli(["--full", "--json"], {
+      workspaceRoot: process.cwd(),
+      stdout: (line) => lines.push(line),
+      runCore: async () => ({ ok: true, cases: [] }),
+      runFull: async () => ({
+        ok: false,
+        rows: [],
+        failures: ["unit.a: unverified"],
+        evidencePath: join(dir, "e.json"),
+      }),
+      hostBinary: "/tmp/pinned-opencode",
+    });
+    expect(status).toBe(1);
+    expect(lines.join("\n")).toContain("unit.a: unverified");
+  });
+
+  test("buildParityEvidence summarizes verified, failed, and unverified rows", () => {
+    const document = buildParityEvidence({
+      rows: evaluateParityRows(rows, { coreOk: false, tuiOk: true }),
+      hostBinary: "/bin",
+      hostBinarySha256: "h",
+      hostSourceCommit: "c",
+      hostVersion: "2.0.18",
+      tarballSha256: undefined,
+      packageName: "p",
+      packageVersion: "1.0.0",
+      dependencyHashes: {},
+      coreSummary: { cases: 1, failed: 1 },
+      tuiSummary: undefined,
+      limits: [],
+      generatedAt: "now",
+    });
+    expect(document.totals).toMatchObject({ rows: 3, verified: 1, failed: 1, unverified: 1 });
   });
 });

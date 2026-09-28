@@ -78,7 +78,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Added the per-input candidate store contract, accepted-input ordering/source vocabulary, owned-operation identity, and the imported parented auxiliary session seam.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added the immutable caller-supplied admission config to SnapshotAdmissionRequest and the native app coordination identity to RuntimeContext.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Added the per-input candidate store contract, accepted-input ordering/source vocabulary, owned-operation identity, and the imported parented auxiliary session seam.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -150,6 +151,12 @@ export interface RuntimeRpcRegistrar {
 export interface RuntimeContext {
   readonly location: RuntimeLocation;
   readonly rpc: RuntimeRpcRegistrar;
+  /**
+   * Native app object copied from the host instance, used only as a cross-context
+   * coordination identity. Optional so a context without it still acquires a
+   * runtime; distinct contexts copied from one host share the same app reference.
+   */
+  readonly app?: object | undefined;
 }
 
 /** Location and cancellation options for an authenticated client RPC call. */
@@ -669,6 +676,14 @@ export interface SnapshotAdmissionRequest {
    * policy without forcing a model change.
    */
   readonly force?: boolean | undefined;
+  /**
+   * One immutable admission config assembled by the caller from a single coherent
+   * read (fresh vvoc + raw intent + provenance-aware native agent inputs +
+   * bindings + overlays). When present the service derives the candidate target
+   * and the family capture from this exact value instead of re-reading config,
+   * so a concurrent vvoc change cannot make the target and capture disagree.
+   */
+  readonly admissionConfig?: EffectiveRuntimeConfig | undefined;
 }
 
 /** Correlated acceptance input for committing a staged candidate. */

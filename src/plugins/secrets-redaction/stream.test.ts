@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added WebSocket regression coverage for a placeholder split across two complete SSE events in distinct frames, a mid-line data-line split that must not gain a newline, a complete unterminated JSON line, interleaved lanes across frames, and terminal flush/reset.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added category-grammar transport coverage: lowercase/punctuation split across SSE and Unicode/over-long split across WebSocket frames, plus an unrecognized-placeholder disabled control. PREVIOUS: [wi-7 - WebSocket regression coverage for split placeholders, mid-line splits, unterminated JSON lines, interleaved lanes, and terminal flush/reset.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -481,5 +481,55 @@ describe("restoreProviderFrame", () => {
     expect(terminal).toContain(head);
     expect(terminal.indexOf(head)).toBeLessThan(terminal.indexOf("[DONE]"));
     expect(state.sse).toBeNull();
+  });
+});
+
+describe("placeholder category grammar across transports", () => {
+  function categorySession(category: string, value: string) {
+    const session = new PlaceholderSession({
+      prefix: "__VVOC_SECRET_",
+      ttlMs: 0,
+      maxMappings: 100,
+      secret: "unit-test-secret",
+    });
+    return { session, placeholder: session.getOrCreatePlaceholder(value, category) };
+  }
+
+  test("lowercase and punctuation categories restore when split across SSE events", () => {
+    for (const category of ["lowercase", "custom-key", "dotted.key", "mixedCase9"]) {
+      const { session, placeholder } = categorySession(category, `secret-${category}`);
+      const stream = createSseRestoreStream(session);
+      const [head, tail] = splitAt(placeholder, 8);
+      const output = `${stream.push(chatChunk(`hello ${head}`))}${stream.push(chatChunk(`${tail} world`))}${stream.push("data: [DONE]\n\n")}${stream.flush()}`;
+      expect(output).toContain(`secret-${category}`);
+      expect(output).not.toContain(placeholder);
+    }
+  });
+
+  test("Unicode and over-long categories restore when split across WebSocket frames", () => {
+    for (const category of ["подпись", "a".repeat(200), "!!!", "IPV4"]) {
+      const value = `secret-${category.length}`;
+      const { session, placeholder } = categorySession(category, value);
+      const state = createFrameRestoreState(session);
+      const [head, tail] = splitAt(placeholder, 7);
+      const first = restoreProviderFrame(
+        session,
+        JSON.stringify({ type: "response.output_text.delta", delta: `hi ${head}` }),
+        state,
+      );
+      const second = restoreProviderFrame(
+        session,
+        JSON.stringify({ type: "response.output_text.delta", delta: `${tail} bye` }),
+        state,
+      );
+      expect(`${first}${second}`).toContain(value);
+    }
+  });
+
+  test("an unrecognized placeholder from another session stays untouched (disabled control)", () => {
+    const { session } = categorySession("lowercase", "secret-one");
+    const other = categorySession("lowercase", "secret-two");
+    const restorer = new TextDeltaRestorer(session);
+    expect(`${restorer.push(other.placeholder)}${restorer.flush()}`).toBe(other.placeholder);
   });
 });

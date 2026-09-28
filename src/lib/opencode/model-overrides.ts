@@ -43,7 +43,6 @@ import {
   parseObjectDocument,
   readAgentOverride,
   readModelIntentEnvelope,
-  readNonEmptyString,
   readOptionalObject,
   readOptionalText,
   renderJson,

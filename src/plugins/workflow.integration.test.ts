@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
 //   SCOPE: Protocol parsing, result excerpts, bounded continuation guidance and host-permission preservation, canonical result-status/identity agreement across orchestration profiles, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
-//   DEPENDS: [bun:test, node:fs, node:path, @opencode-ai/sdk/v2/types, zod, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
+//   DEPENDS: [bun:test, node:fs, node:path, zod, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PERSISTENCE, V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW, V-M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -50,7 +50,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import type { PermissionRule } from "@opencode-ai/sdk/v2/types";
+/** Native permission rule shape (`@opencode/schema/permission` Rule): action/resource/effect. */
+interface PermissionRule {
+  readonly action: string;
+  readonly resource: string;
+  readonly effect: "allow" | "deny" | "ask";
+}
 import { z } from "zod";
 import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
@@ -420,8 +425,8 @@ describe("workflow repair", () => {
   test("native continuation prompt carries no tool, agent, or system override", async () => {
     const host = createNativeRepairDouble({
       rules: [
-        { permission: "edit", action: "ask", pattern: "src/**" },
-        { permission: "bash", action: "deny", pattern: "*" },
+        { action: "edit", effect: "ask", resource: "src/**" },
+        { action: "bash", effect: "deny", resource: "*" },
       ],
     });
 
@@ -442,11 +447,11 @@ describe("workflow repair", () => {
 
   test("continuation returns the corrected native assistant text", async () => {
     const persistentRules: PermissionRule[] = [
-      { permission: "edit", action: "ask", pattern: "src/plugins/**" },
-      { permission: "bash", action: "deny", pattern: "rm *" },
-      { permission: "read", action: "allow", pattern: "*" },
-      { permission: "webfetch", action: "allow", pattern: "*" },
-      { permission: "work_item_decide", action: "deny", pattern: "*" },
+      { action: "edit", effect: "ask", resource: "src/plugins/**" },
+      { action: "bash", effect: "deny", resource: "rm *" },
+      { action: "read", effect: "allow", resource: "*" },
+      { action: "webfetch", effect: "allow", resource: "*" },
+      { action: "work_item_decide", effect: "deny", resource: "*" },
     ];
     const host = createNativeRepairDouble({
       rules: persistentRules,
@@ -478,8 +483,8 @@ describe("workflow repair", () => {
 
   test("continuation failures return undefined without mutating persistent permissions", async () => {
     const persistentRules: PermissionRule[] = [
-      { permission: "edit", action: "allow", pattern: "src/**" },
-      { permission: "bash", action: "ask", pattern: "*" },
+      { action: "edit", effect: "allow", resource: "src/**" },
+      { action: "bash", effect: "ask", resource: "*" },
     ];
     const repairOptions = (client: NativeRepairDouble["client"]) => ({
       client,

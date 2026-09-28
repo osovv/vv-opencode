@@ -20,10 +20,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Staged/commit admission, full capture, family-qualified variants and concurrency coverage.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added force-escalation reconciliation, coordinated single-publish, and uncoordinated double-publish negative-control coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { coordinateHost } from "./coordination.js";
 import {
   buildFamilyCapture,
   createSnapshotService,
@@ -72,12 +73,18 @@ class MemorySnapshotStore implements SnapshotStore {
   readonly markers = new Set<string>();
   failWriteCandidate = false;
   failWrite = false;
+  writeCount = 0;
+  writeDelayMs = 0;
 
   async read(familyId: string) {
     return this.captures.get(familyId);
   }
   async write(familyId: string, capture: FamilyCapture) {
+    if (this.writeDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.writeDelayMs));
+    }
     if (this.failWrite) throw new Error("commit failed");
+    this.writeCount += 1;
     this.captures.set(familyId, capture);
   }
   async remove(familyId: string) {
@@ -889,5 +896,112 @@ describe("createSnapshotService staged admission", () => {
         })
       ).status,
     ).toBe("bound");
+  });
+
+  test("a force:true escalation of an identical input reconciles the required switch", async () => {
+    const host = new FakeNativeBoundaries(new MemorySnapshotStore());
+    addRoot(host);
+    const snapshots = createSnapshotService(host.deps);
+
+    const first = await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+      force: false,
+    });
+    expect(first.status).toBe("staged");
+    expect(host.switchCalls).toHaveLength(0);
+
+    // The same input escalates to force:true; the required materialization/switch
+    // must happen instead of returning early with zero switches.
+    const second = await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+      force: true,
+    });
+    expect(second.status).toBe("staged");
+    expect(host.switchCalls).toHaveLength(1);
+    expect(host.switchCalls[0]?.model.modelID).toBe("m1");
+
+    // An already-applied identical escalation stays idempotent.
+    const third = await snapshots.stage({
+      sessionID: "root",
+      directory: "/project",
+      location: LOCATION,
+      inboxID: "msg-1",
+      workload: "prompt",
+      force: true,
+    });
+    expect(third.status).toBe("staged");
+    expect(host.switchCalls).toHaveLength(1);
+  });
+
+  test("coordinated services publish a concurrent first binding exactly once", async () => {
+    const store = new MemorySnapshotStore();
+    store.writeDelayMs = 5;
+    const coordination = coordinateHost({ app: {}, location: {} });
+    const first = new FakeNativeBoundaries(store);
+    addRoot(first);
+    const second = new FakeNativeBoundaries(store);
+    addSession(second, { id: "root", locationDirectory: "/project" });
+    const accepted = [{ inboxID: "msg-1", itemType: "user" as const, created: 1 }];
+    first.accepted = accepted;
+    second.accepted = accepted;
+
+    const serviceA = createSnapshotService({ ...first.deps, coordination });
+    const serviceB = createSnapshotService({ ...second.deps, coordination });
+    for (const service of [serviceA, serviceB]) {
+      const staged = await service.stage({
+        sessionID: "root",
+        directory: "/project",
+        location: LOCATION,
+        inboxID: "msg-1",
+        workload: "prompt",
+      });
+      expect(staged.status).toBe("staged");
+    }
+
+    const [left, right] = await Promise.all([
+      serviceA.accept({ sessionID: "root" }),
+      serviceB.accept({ sessionID: "root" }),
+    ]);
+    expect([left.status, right.status].sort()).toEqual(["bound", "reused"]);
+    expect(store.writeCount).toBe(1);
+  });
+
+  test("uncoordinated services can double-publish a concurrent first binding (negative control)", async () => {
+    const store = new MemorySnapshotStore();
+    store.writeDelayMs = 5;
+    const first = new FakeNativeBoundaries(store);
+    addRoot(first);
+    const second = new FakeNativeBoundaries(store);
+    addSession(second, { id: "root", locationDirectory: "/project" });
+    const accepted = [{ inboxID: "msg-1", itemType: "user" as const, created: 1 }];
+    first.accepted = accepted;
+    second.accepted = accepted;
+
+    const serviceA = createSnapshotService(first.deps);
+    const serviceB = createSnapshotService(second.deps);
+    for (const service of [serviceA, serviceB]) {
+      await service.stage({
+        sessionID: "root",
+        directory: "/project",
+        location: LOCATION,
+        inboxID: "msg-1",
+        workload: "prompt",
+      });
+    }
+    await Promise.all([
+      serviceA.accept({ sessionID: "root" }),
+      serviceB.accept({ sessionID: "root" }),
+    ]);
+    // Without a shared lock both acceptors publish, which is exactly the defect the
+    // coordinator lock prevents.
+    expect(store.writeCount).toBeGreaterThan(1);
   });
 });

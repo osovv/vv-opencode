@@ -20,15 +20,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Added context-identity snapshot-service sharing and released-state coverage.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added coherent-admission binding coverage: a role-managed agent is recomputed from the fresh role, raw intent wins, and an unmanaged agent keeps its native literal.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { Plugin } from "@opencode/plugin";
-import { acquireRuntime, acquireSnapshotService } from "./context.js";
+import { acquireRuntime, acquireSnapshotService, rebuildAgentBindings } from "./context.js";
 import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import type { SnapshotServiceDeps } from "./snapshots.js";
-import type { FamilyCapture, SnapshotStore } from "./types.js";
+import type { EffectiveRuntimeConfig, FamilyCapture, SnapshotStore } from "./types.js";
 import {
   RuntimeDisposedError,
   SUPPORTED_SERVICE_VERSION,
@@ -355,6 +355,46 @@ describe("acquireSnapshotService", () => {
       },
     });
     expect(outcome.status).toBe("rejected");
+  });
+});
+
+describe("coherent admission bindings", () => {
+  const vvoc = createDefaultVvocConfig();
+
+  test("recomputes a role-managed agent from the fresh role over a stale vvoc-applied literal", () => {
+    const cached = [
+      { agentID: "build", role: "smart", selection: { providerID: "prov", modelID: "m1" } },
+    ];
+    const fresh: EffectiveRuntimeConfig = {
+      roles: { smart: "prov/m2" },
+      agentRoles: { build: "smart" },
+      vvoc,
+    };
+    expect(rebuildAgentBindings(cached, fresh)).toEqual([
+      { agentID: "build", role: "smart", selection: { providerID: "prov", modelID: "m2" } },
+    ]);
+  });
+
+  test("preserves genuine raw OpenCode intent over the fresh role", () => {
+    const cached = [
+      { agentID: "build", role: "smart", selection: { providerID: "prov", modelID: "m1" } },
+    ];
+    const fresh: EffectiveRuntimeConfig = {
+      roles: { smart: "prov/m2" },
+      agentRoles: { build: "smart" },
+      vvoc,
+      rawIntent: { agents: { build: "prov/m9" }, commands: {} },
+    };
+    const binding = rebuildAgentBindings(cached, fresh).find((entry) => entry.agentID === "build");
+    expect(binding?.selection).toEqual({ providerID: "prov", modelID: "m9" });
+  });
+
+  test("keeps a genuine native literal for an agent vvoc does not role-manage", () => {
+    const cached = [{ agentID: "custom", selection: { providerID: "prov", modelID: "m3" } }];
+    const fresh: EffectiveRuntimeConfig = { roles: { smart: "prov/m2" }, agentRoles: {}, vvoc };
+    expect(rebuildAgentBindings(cached, fresh)).toEqual([
+      { agentID: "custom", selection: { providerID: "prov", modelID: "m3" } },
+    ]);
   });
 });
 // END_BLOCK_SNAPSHOT_SERVICE_ACQUISITION

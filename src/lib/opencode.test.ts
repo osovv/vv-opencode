@@ -1839,11 +1839,6 @@ describe("native schema verification", () => {
   });
 });
 
-function ensureOpenCodeConfigTextForTest(text: string): void {
-  // ensurePackageConfigText parses + asserts the native document before editing.
-  ensurePackageConfigText(text);
-}
-
 describe("native schema preflight", () => {
   const malformed: Array<[string, Record<string, unknown>]> = [
     ["providers as an array", { providers: [] }],

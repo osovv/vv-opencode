@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Load supported images and PDFs as base64 file attachments for the web tools fetch path.
 //   SCOPE: MIME and magic-byte identification, base64 data-URL attachment construction, filename derivation, and rejection of unsupported or oversized payloads.
-//   DEPENDS: [src/plugins/web-tools/http.ts, @opencode-ai/plugin]
+//   DEPENDS: [src/plugins/web-tools/http.ts]
 //   LINKS: [M-WEB-MEDIA-LOADER, M-WEB-HTTP, M-WEB-NATIVE-FETCH, M-WEB-SPIDER]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -22,7 +22,7 @@
 //   LAST_CHANGE: [v1.0.0 - Initial direct media attachment loader for the unified web tools.]
 // END_CHANGE_SUMMARY
 
-import type { ToolAttachment } from "@opencode-ai/plugin";
+import type { OwnedToolAttachment } from "../../lib/agent-tool-contract.js";
 import {
   DEFAULT_MEDIA_MAX_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,
@@ -159,14 +159,14 @@ function resolveMimeType(
 // START_CONTRACT: mediaAttachmentFromBytes
 //   PURPOSE: Build a base64 data-URL file attachment from already-fetched bytes.
 //   INPUTS: { bytes: payload; source: url, declaredContentType, optional maxBytes }
-//   OUTPUTS: { ToolAttachment - type file, mime, data URL, filename }
+//   OUTPUTS: { OwnedToolAttachment - type file, mime, data URL, filename }
 //   SIDE_EFFECTS: none; performs no network I/O
 //   LINKS: M-WEB-NATIVE-FETCH, M-WEB-SPIDER
 // END_CONTRACT: mediaAttachmentFromBytes
 export function mediaAttachmentFromBytes(
   bytes: Uint8Array,
   source: { url: string; declaredContentType?: string; maxBytes?: number },
-): ToolAttachment {
+): OwnedToolAttachment {
   const maxBytes = source.maxBytes ?? DEFAULT_MEDIA_MAX_BYTES;
   if (bytes.byteLength > maxBytes) {
     throw new WebHttpError("OVERSIZED", `media payload exceeded ${maxBytes} bytes`);
@@ -194,14 +194,14 @@ export function mediaAttachmentFromBytes(
 // START_CONTRACT: loadMediaAttachment
 //   PURPOSE: Fetch a URL through the bounded transport and return it as an attachment when supported.
 //   INPUTS: { input: url, optional abort, timeoutMs, maxBytes; fetchImpl: injectable fetch }
-//   OUTPUTS: { ToolAttachment }
+//   OUTPUTS: { OwnedToolAttachment }
 //   SIDE_EFFECTS: performs network I/O through fetchImpl
 //   LINKS: M-WEB-HTTP
 // END_CONTRACT: loadMediaAttachment
 export async function loadMediaAttachment(
   input: { url: string; abort?: AbortSignal; timeoutMs?: number; maxBytes?: number },
   fetchImpl?: FetchLike,
-): Promise<ToolAttachment> {
+): Promise<OwnedToolAttachment> {
   const maxBytes = input.maxBytes ?? DEFAULT_MEDIA_MAX_BYTES;
   const response = await requestBounded(
     {

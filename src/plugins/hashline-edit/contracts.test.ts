@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Contract coverage of the two registered edit tool definitions: model-facing JSON Schema projection (closed roots, closed nested edits, canonical enums, field descriptions), SDK-shaped schema acceptance/rejection, operation/command branch accept/reject fixtures, and concrete metadata/result producer schemas.
 //   SCOPE: Pure contract schemas and validators only; no filesystem, session cache, plugin lifecycle, or host process.
-//   DEPENDS: [bun:test, @opencode-ai/plugin (tool.schema), src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/routing.ts]
+//   DEPENDS: [bun:test, zod, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/tool-description.ts, src/plugins/hashline-edit/routing.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -21,7 +21,7 @@
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool } from "@opencode-ai/plugin";
+import { z } from "zod";
 import {
   HASHLINE_EDIT_OPS,
   editToolContracts,
@@ -91,7 +91,7 @@ const hashlineRejects: Array<Record<string, unknown>> = [
 
 describe("registered argument maps match the pinned SDK shape", () => {
   test("each registered shape parses a valid fixture through the SDK schema instance", () => {
-    const hashline = tool.schema.object(hashlineEditArgs as never);
+    const hashline = z.object(hashlineEditArgs as never);
     expect(
       hashline.safeParse({
         filePath: "/tmp/a.ts",
@@ -99,7 +99,7 @@ describe("registered argument maps match the pinned SDK shape", () => {
       }).success,
     ).toBe(true);
 
-    const str = tool.schema.object(strReplaceEditorArgs as never);
+    const str = z.object(strReplaceEditorArgs as never);
     expect(str.safeParse({ command: "view", path: "/tmp/a.ts", view_range: [1, -1] }).success).toBe(
       true,
     );

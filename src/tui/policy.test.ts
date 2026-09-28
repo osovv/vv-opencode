@@ -154,9 +154,7 @@ describe("createRpcPolicyFetch", () => {
   test("rejects a malformed reply and requests no catalog", async () => {
     const seen: Array<{ includeCatalog?: boolean }> = [];
     const fetchPolicy = createRpcPolicyFetch(async (input) => {
-      seen.push({
-        ...(input.includeCatalog === undefined ? {} : { includeCatalog: input.includeCatalog }),
-      });
+      seen.push(input.includeCatalog === undefined ? {} : { includeCatalog: input.includeCatalog });
       return { not: "a result" };
     });
     expect(await fetchPolicy({ directory: "/selected" })).toBeUndefined();

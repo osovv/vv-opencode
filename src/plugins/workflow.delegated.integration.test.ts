@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, bounded recovery, terminal report-rejection settlement, and legacy-profile isolation.
 //   SCOPE: Native Plugin.setup fixtures over a fake native context: delegated-only tool registration, root/fork/workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify/recover through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, native event-delivered host-terminal launch failures with sticky exclusions and persistence recovery, same-child malformed-result continuation through native session.prompt/wait/context, pre-checkpoint bounded recovery after exhaustion with autonomous denial and root-user message extension plus replay rejection, terminal malformed hard-stop settlement as a rejected report with a reachable recovery path, staged recovery persistence failure that keeps launches blocked, native background synthetic settlement, evidence-gated explicit cancellation recovery with historical timestamps, final completion refusing skipped reviewers after checkpoint recovery, and old-profile regressions.
-//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, @opencode-ai/sdk (native tool/state shapes), src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
+//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -39,10 +39,10 @@
 //   finishTask - Drives the tool.execute.after hook for one tracked result.
 //   finishTaskWithRawOutput - Drives the after hook with raw tracked task output for continuation tests.
 //   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
-//   taskToolPart - Builds a real SDK-shaped ToolPart for one parent task call.
-//   taskPartUpdated - Wraps a ToolPart in a real message.part.updated event.
-//   runningState - Builds a real SDK-shaped running ToolState with host metadata.
-//   errorState - Builds a real SDK-shaped error ToolState with a host error.
+//   taskToolPart - Builds a native-shaped parent task tool part for one parent task call.
+//   taskPartUpdated - Wraps a task tool part in a message.part.updated event.
+//   runningState - Builds a native-shaped running tool state with host metadata.
+//   errorState - Builds a native-shaped error tool state with a host error.
 //   emitPart - Delivers one message.part.updated event through the plugin event hook.
 //   listItems - Reads the current work-item list through the real tool.
 //   decide - Calls work_item_decide with a stub controller context.
@@ -60,7 +60,22 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolPart, ToolStateError, ToolStateRunning } from "@opencode-ai/sdk";
+/** Native parent task part projection used by the delegated event fixtures. */
+interface TaskToolPartState {
+  readonly status: "running" | "error";
+  readonly error?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+/** Native parent task tool part projection (id/session/state) used before the event is emitted. */
+interface TaskToolPart {
+  readonly id: string;
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly type: "tool";
+  readonly callID: string;
+  readonly tool: string;
+  readonly state: TaskToolPartState;
+}
 import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
@@ -804,19 +819,19 @@ async function launchTaskWithArgs(
   );
 }
 
-function runningState(metadata: Record<string, unknown>, start = 1): ToolStateRunning {
-  return { status: "running", input: {}, metadata, time: { start } };
+function runningState(metadata: Record<string, unknown>): TaskToolPartState {
+  return { status: "running", metadata };
 }
 
-function errorState(error: string, metadata: Record<string, unknown>): ToolStateError {
-  return { status: "error", input: {}, error, metadata, time: { start: 1, end: 2 } };
+function errorState(error: string, metadata: Record<string, unknown>): TaskToolPartState {
+  return { status: "error", error, metadata };
 }
 
 function taskToolPart(
   parentSessionId: string,
   callId: string,
-  state: ToolStateRunning | ToolStateError,
-): ToolPart {
+  state: TaskToolPartState,
+): TaskToolPart {
   return {
     id: `part-${callId}`,
     sessionID: parentSessionId,
@@ -828,7 +843,7 @@ function taskToolPart(
   };
 }
 
-async function emitPart(harness: DelegatedPluginHarness, part: ToolPart): Promise<void> {
+async function emitPart(harness: DelegatedPluginHarness, part: TaskToolPart): Promise<void> {
   if (part.tool !== "task") return;
   const state = part.state as { status?: string; error?: string; metadata?: unknown };
   if (state.status === "error") {

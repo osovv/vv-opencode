@@ -2,8 +2,8 @@
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime, the snapshot service, and the centralized native snapshot runtime (client/permissions/snapshots/config/model/auxiliary) consumed by every later native plugin.
-//   SCOPE: Context-identity reference-counted runtime/snapshot registries, per-acquisition idempotent release leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, core stage/commit/guard/title hook registration, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No service discovery until a client is requested, no location-only sharing, no global configuration singleton, no parallel fake runtime, and no V1 compatibility facade.
-//   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/snapshots.ts, src/runtime/types.ts]
+//   SCOPE: Context-identity reference-counted runtime/snapshot registries, per-acquisition idempotent release leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, coherent single-read admission configuration (fresh vvoc + raw intent + rebuilt provenance-aware agent bindings passed to both target and capture), cross-context app/location coordination, core stage/commit/guard/title hook registration, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No service discovery until a client is requested, no location-only sharing, no global configuration singleton, no parallel fake runtime, and no V1 compatibility facade.
+//   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/coordination.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/snapshots.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -20,11 +20,12 @@
 //   NativeSnapshotRuntimeOptions - Optional injectable native boundaries for the shared snapshot runtime.
 //   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, snapshots, effective config, model reload, role override, pre-admission gateway and refresh.
 //   acquireNativeSnapshotRuntime - Acquire the shared native snapshot runtime for an actual Plugin.Context.
+//   rebuildAgentBindings - Recompute agent bindings from a freshly read policy without trusting a cached vvoc-applied selection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Registers the read-only context-inspection RPC (registered catalog plus allowlisted family/current-runtime policy) inside the shared runtime and includes it in owned cleanup.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - The event pump contains failures per event (bounded credential-safe diagnostics) instead of ending the only subscription and clears the health flag on a successful config event; stageFor resolves an already-bound family's immutable capture before reading the mutable current config, so an invalid vvoc never fails a bound family while a new unbound candidate still fails closed and recovers.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - One coherent admission config: bindings are rebuilt from the fresh role map plus raw intent so a vvoc role change with no config.updated selects and captures the new model; the same value drives the candidate target and the family capture for prompt and owned work, and services share an app/location-identity coordinator.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 - Registers the read-only context-inspection RPC (registered catalog plus allowlisted family/current-runtime policy) inside the shared runtime and includes it in owned cleanup.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -38,6 +39,7 @@ import {
   ROLE_REFERENCE_PREFIX,
 } from "../lib/model-roles.js";
 import { acquireNativeClient, nativeRuntimeDeps, type NativeClientAcquisition } from "./client.js";
+import { coordinateHost } from "./coordination.js";
 import {
   applyAgentPolicies,
   applyVariantRegistrations,
@@ -610,6 +612,52 @@ function captureAgentBindings(
   return [...bindings.values()];
 }
 
+/**
+ * Recompute agent bindings from a freshly read config without trusting a cached
+ * selection that vvoc itself may have applied under a previous role set. A
+ * vvoc-role-managed agent's selection is recomputed from the current role model,
+ * raw OpenCode intent still wins, and an agent with no role keeps its genuine
+ * native literal. This is what makes `vvoc.json` role changes take effect on the
+ * first unbound workload even when the host emits no `config.updated`.
+ */
+export function rebuildAgentBindings(
+  cached: ReadonlyArray<AgentPolicyBinding>,
+  config: EffectiveRuntimeConfig,
+): AgentPolicyBinding[] {
+  const roleModels = parseRoleSelections(config.roles);
+  const rawAgents = config.rawIntent?.agents ?? {};
+  const byAgent = new Map<string, AgentPolicyBinding>();
+  for (const binding of cached) byAgent.set(binding.agentID, binding);
+  for (const agentID of Object.keys(config.agentRoles)) {
+    if (!byAgent.has(agentID)) byAgent.set(agentID, { agentID });
+  }
+  const result = new Map<string, AgentPolicyBinding>();
+  for (const [agentID, binding] of byAgent) {
+    const role = config.agentRoles[agentID] ?? binding.role;
+    const roleSelection = role === undefined ? undefined : roleModels[role];
+    // A role-managed agent's authority is the current role model; the cached
+    // selection may already carry a vvoc-applied model from an older role set.
+    const selection = roleSelection ?? binding.selection;
+    result.set(agentID, {
+      agentID,
+      ...(role === undefined ? {} : { role }),
+      ...(selection === undefined ? {} : { selection }),
+    });
+  }
+  for (const [agentID, raw] of Object.entries(rawAgents)) {
+    const resolved = resolveRawIntent(raw, roleModels);
+    const native = result.get(agentID) ?? byAgent.get(agentID);
+    const role = resolved.role ?? native?.role;
+    const selection = resolved.selection ?? native?.selection;
+    result.set(agentID, {
+      agentID,
+      ...(role === undefined ? {} : { role }),
+      ...(selection === undefined ? {} : { selection }),
+    });
+  }
+  return [...result.values()];
+}
+
 function readDefaultModel(editor: ModelEditorLike): ModelSelection | undefined {
   const ref = editor.default.get();
   return ref === undefined ? undefined : { providerID: ref.providerID, modelID: ref.modelID };
@@ -881,11 +929,18 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         const rootRaw = rawIntent?.model;
         const rootResolved =
           rootRaw === undefined ? undefined : resolveRawIntent(rootRaw, roleModels).selection;
+        // Bindings are recomputed from THIS read's roles + raw intent + the cached
+        // genuine native literals, so a fresh vvoc role is reflected without trusting
+        // a selection vvoc previously applied to the native agent entry.
+        const agentBindings = rebuildAgentBindings(state.agentBindings, {
+          ...vvoc,
+          ...(rawIntent === undefined ? {} : { rawIntent }),
+        });
         const baseConfig: EffectiveRuntimeConfig = {
           ...vvoc,
           ...(rawIntent === undefined ? {} : { rawIntent }),
           ...(rootResolved === undefined ? {} : { rootDefault: rootResolved }),
-          agentBindings: state.agentBindings,
+          agentBindings,
           modelSettings: state.modelSettings,
           ...(state.nativeDefault === undefined ? {} : { nativeDefault: state.nativeDefault }),
         };
@@ -1047,6 +1102,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       const deps: SnapshotServiceDeps = {
         store,
         ...(options?.now === undefined ? {} : { now: options.now }),
+        // Distinct plugin contexts copied from one host share the native app/location
+        // object identity, so their snapshot services share one per-family
+        // publication lock without sharing any client, registration or disposal.
+        coordination: coordinateHost({ app: ctx.app, location: ctx.location }),
         loadConfig: async (directory) => {
           const fresh = await readConfig(directory);
           state.config = fresh;
@@ -1127,15 +1186,16 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
       /** Unbound candidate selection for a session's agent from the live policy. */
       const candidateTarget = (agentID: string | undefined): ModelSelection | undefined => {
+        const bindings = state.config.agentBindings ?? [];
         if (agentID !== undefined) {
-          const binding = state.agentBindings.find((agent) => agent.agentID === agentID);
+          const binding = bindings.find((agent) => agent.agentID === agentID);
           if (binding?.selection !== undefined) return binding.selection;
         }
         const roleModels = parseRoleSelections(state.config.roles);
         if (roleModels.default !== undefined) return roleModels.default;
         if (state.config.rootDefault !== undefined) return state.config.rootDefault;
         for (const selection of Object.values(roleModels)) return selection;
-        for (const binding of state.agentBindings) {
+        for (const binding of bindings) {
           if (binding.selection !== undefined) return binding.selection;
         }
         return state.config.nativeDefault;
@@ -1217,8 +1277,11 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         }
         // Only a truly unbound candidate needs the freshest current config:
         // vvoc.json changes do not emit a host `config.updated`, and a stale
-        // candidate target would otherwise bind the previous role selection.
-        state.config = await readConfig(ctx.location.directory);
+        // candidate target would otherwise bind the previous role selection. The
+        // SAME immutable value is passed into the service so its capture cannot
+        // re-read a different vvoc snapshot than the target was derived from.
+        const admissionConfig = await readConfig(ctx.location.directory);
+        state.config = admissionConfig;
         // Reconcile/restage by exact input identity. The snapshot service manages
         // candidate ownership: a still-staged sibling workload never blocks this
         // session's stage, and a first prompt rejected during native preparation
@@ -1236,6 +1299,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             sessionID,
             directory: ctx.location.directory,
             location: runtimeIdentity(ctx.location),
+            admissionConfig,
             ...(explicitSelection === undefined ? {} : { explicit: explicitSelection }),
             ...(selectionOverride === undefined ? {} : { selectionOverride }),
             ...(sessionModel === undefined ? {} : { before: sessionModel }),
@@ -1532,9 +1596,16 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           // mint an operation token this runtime owns, then stage, materialize the
           // qualified variant, switch and publish before the caller triggers native
           // model resolution. It cannot publish a prompt candidate that still needs
-          // correlated native acceptance.
+          // correlated native acceptance. The same coherent config that drives the
+          // target is passed to the service so owned work obeys the same rule.
+          const admissionConfig = await readConfig(request.directory);
+          state.config = admissionConfig;
           return snapshots.admitOwned(
-            { ...request, operationID: `op_${randomBytes(16).toString("hex")}` },
+            {
+              ...request,
+              admissionConfig,
+              operationID: `op_${randomBytes(16).toString("hex")}`,
+            },
             async (capture, selection, candidateIdentity) => {
               await materializeCandidate(candidateIdentity, capture, selection);
               state.pluginSwitches.set(request.sessionID, selection);

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Fetch HTTP and HTTPS resources directly and dispatch the body to media, HTML conversion, or plain text passthrough.
 //   SCOPE: Redirect following and size limits via the bounded transport, MIME and signature sniffing, local HTML conversion, and rejection of unsupported binaries.
-//   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/html-markdown.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts, @opencode-ai/plugin]
+//   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/html-markdown.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-NATIVE-FETCH, M-WEB-HTTP, M-WEB-HTML-MARKDOWN, M-WEB-MEDIA-LOADER]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -18,7 +18,7 @@
 //   LAST_CHANGE: [v1.0.0 - Initial native fetch provider with local conversion.]
 // END_CHANGE_SUMMARY
 
-import type { ToolAttachment } from "@opencode-ai/plugin";
+import type { OwnedToolAttachment } from "../../../lib/agent-tool-contract.js";
 import { convertHtmlToMarkdown, convertHtmlToText } from "../html-markdown.js";
 import {
   DEFAULT_MEDIA_MAX_BYTES,
@@ -44,7 +44,7 @@ export type NativeFetchOutcome =
     }
   | {
       kind: "media";
-      attachment: ToolAttachment;
+      attachment: OwnedToolAttachment;
       finalUrl: string;
       status: number;
     };

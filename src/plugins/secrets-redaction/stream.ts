@@ -23,7 +23,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - WebSocket TEXT frames now share one long-lived line stream: a partial line/event/lane carry survives frame boundaries and is reset only on a recognized global terminal, so a placeholder split across frames restores and no newline is injected into a mid-line frame; a complete unterminated `data:` JSON line is re-serialized with its canonical newline.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Placeholder recognizers now accept the full token-safe category grammar ([A-Za-z0-9_]+) so split lowercase/digit/punctuation/Unicode/long-category placeholders restore across SSE and WebSocket frames.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE wi-7 - WebSocket TEXT frames now share one long-lived line stream: a partial line/event/lane carry survives frame boundaries and is reset only on a recognized global terminal, so a placeholder split across frames restores and no newline is injected into a mid-line frame; a complete unterminated `data:` JSON line is re-serialized with its canonical newline.]
 // END_CHANGE_SUMMARY
 
 import { restoreText } from "./restore.js";
@@ -37,9 +38,10 @@ const MAX_LINE_BUFFER_CHARS = 64 * 1024;
 const MAX_PENDING_TERMINAL_CHARS = 64 * 1024;
 const MAX_LANES = 64;
 const MAX_BUFFERED_RESPONSE_CHARS = 8 * 1024 * 1024;
-const COMPLETE_PLACEHOLDER_RE = /^__VVOC_SECRET_[A-Z_]+_[0-9a-f]{12}(?:_\d+)?__$/;
-const PARTIAL_PLACEHOLDER_RE = /^__VVOC_SECRET_[A-Z_]*(?:_[0-9a-f]{0,12}(?:_\d{0,6})?_{0,2})?$/;
-const GLOBAL_PLACEHOLDER_RE = /__VVOC_SECRET_[A-Z_]+_[0-9a-f]{12}(?:_\d+)?__/g;
+const COMPLETE_PLACEHOLDER_RE = /^__VVOC_SECRET_[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\d+)?__$/;
+const PARTIAL_PLACEHOLDER_RE =
+  /^__VVOC_SECRET_[A-Za-z0-9_]*(?:_[0-9a-f]{0,12}(?:_\d{0,6})?_{0,2})?$/;
+const GLOBAL_PLACEHOLDER_RE = /__VVOC_SECRET_[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\d+)?__/g;
 
 // START_BLOCK_TEXT_RESTORER
 /** True when `value` is a non-empty, incomplete prefix of a valid placeholder. */

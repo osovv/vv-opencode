@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Prove shared contract primitives against small provenance-backed fixtures of the pinned OpenCode host tool boundary and its provider schema lowering.
 //   SCOPE: Derived registry/definition/execute/provider-transform fixtures only — not a vendored host implementation and not a live host run (see scripts/check-tool-contracts-host.ts and `bun run contracts:host`).
-//   DEPENDS: [bun:test, @opencode-ai/plugin, src/lib/agent-tool-contract]
+//   DEPENDS: [bun:test, src/lib/agent-tool-contract]
 //   LINKS: [M-AGENT-TOOL-CONTRACT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -30,7 +30,7 @@
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool } from "@opencode-ai/plugin";
+import { z as schema } from "zod";
 import {
   ContractHostCompatibilityError,
   ContractInputError,
@@ -72,7 +72,7 @@ const PROVENANCE = {
     "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/provider/transform.ts",
 } as const;
 
-const schema = tool.schema;
+/** The direct zod instance shared by the derived contract fixtures (see the host provenance below). */
 
 function makeHostProbeContract() {
   return defineOwnedToolContract({

@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 6 - Gates execute.after on status/result before any path/stat/cache/I/O so a failed native read cannot bless freshness, and selects external boundaries by native target kind with the outside project root (metadata-only Project.root) instead of the caller worktree.]
+//   LAST_CHANGE: [T-009 - Detects genuine Effect Schema codecs via Schema.isSchema before the isPlainRecord gate in nativeToolJsonSchema, so a callable effect@4 codec is converted through Schema.toJsonSchemaDocument instead of being rejected as non-plain-record.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -141,12 +141,22 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Serialize a genuine registered native tool input ValueSchema to JSON Schema
- * using only public SDK/Effect APIs, mirroring the pinned host projection:
- * Standard JSON Schema (`~standard.jsonSchema.input`), Zod (`zod/v4/core`),
- * Effect Schema (`Schema.toJsonSchemaDocument`), or a literal JSON schema.
+ * using only public SDK/Effect APIs, mirroring the pinned host projection.
+ * Effect Schema codecs are detected first because an Effect codec is a callable
+ * value, not a plain record; the plain-record gate below applies only to the
+ * Standard JSON Schema (`~standard.jsonSchema.input`), Zod (`zod/v4/core`) and
+ * literal JSON schema shapes.
  */
 export function nativeToolJsonSchema(input: unknown): Record<string, unknown> | undefined {
   if (input === undefined || input === null) return undefined;
+  if (Schema.isSchema(input)) {
+    const document = Schema.toJsonSchemaDocument(input);
+    const schema = document.schema as Record<string, unknown>;
+    const definitions = document.definitions as Record<string, unknown> | undefined;
+    return definitions !== undefined && Object.keys(definitions).length > 0
+      ? { ...schema, $defs: definitions }
+      : schema;
+  }
   if (!isPlainRecord(input)) return undefined;
   const standard = (input as { "~standard"?: unknown })["~standard"];
   if (isPlainRecord(standard)) {
@@ -163,14 +173,6 @@ export function nativeToolJsonSchema(input: unknown): Record<string, unknown> | 
       >;
     }
     return input;
-  }
-  if (Schema.isSchema(input)) {
-    const document = Schema.toJsonSchemaDocument(input);
-    const schema = document.schema as Record<string, unknown>;
-    const definitions = document.definitions as Record<string, unknown> | undefined;
-    return definitions !== undefined && Object.keys(definitions).length > 0
-      ? { ...schema, $defs: definitions }
-      : schema;
   }
   // A literal JSON schema is already in the host's expected shape.
   return input;

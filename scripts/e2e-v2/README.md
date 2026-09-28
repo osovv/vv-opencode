@@ -42,21 +42,21 @@ Override the binary with `VVOC_E2E_V2_HOST`; override the scratch root with
 ## Modes
 
 ```bash
-bun scripts/e2e-v2.ts --core    # packed core real-host tier (this task)
+bun run e2e:v2                 # full installed-artifact parity (packed core + real-PTY TUI)
+bun scripts/e2e-v2.ts --core    # packed core real-host tier
 bun scripts/e2e-v2.ts --list    # print the parity inventory by phase/status
 bun scripts/e2e-v2.ts --tui     # real-PTY TUI tier for the actual built TUI
-bun scripts/e2e-v2.ts           # full parity: refuses explicitly until T-004..T-010
-bun scripts/e2e-v2.ts --core --json --keep   # JSON summary, keep the scratch dir
+bun scripts/e2e-v2.ts           # same as --full
+bun scripts/e2e-v2.ts --full --json --keep   # JSON summary, keep the scratch dir
 ```
 
 `--core` exits non-zero on a missing/invalid host or any failed case. `--tui`
 runs the actual built TUI inside a real PTY against an isolated standalone host
-and exits non-zero unless every observed scenario passes. The default full mode
-still exits non-zero on purpose: a reduced core matrix is never reported as full
-parity.
-
-> `package.json` (`bun run e2e:v2`) is not modified by this task; wiring the script
-> is part of T-009. Until then use the direct `bun scripts/e2e-v2.ts` command.
+and exits non-zero unless every observed scenario passes. `--full` runs both
+installed tiers, resolves every parity row, writes
+`.grace/changes/active/C-OPENCODE-V2-NATIVE/parity-evidence.json`, and exits
+non-zero while any mandatory parity row is unverified. A reduced core matrix is
+never reported as full parity.
 
 ## Core case matrix (`--core`)
 
@@ -108,8 +108,9 @@ actual built TUI in a real PTY (a narrow fixture composing the actual built
 reports only observed scenarios: `/context` Overview/Tools/MCP navigation,
 narrow resize, key-driven scrolling, close/reopen, a visible peak-hours banner,
 cache indicator and branding footer, a controlled collection failure without the
-server bridge, and explicit-disabled negative controls. `--full` still refuses
-until every parity group lands.
+server bridge, and explicit-disabled negative controls. `--full` aggregates both
+installed tiers and fails, with machine-readable evidence, while any mandatory
+parity row has no installed-artifact tier; it never promotes a pending row.
 
 ## Module map
 
@@ -122,5 +123,7 @@ until every parity group lands.
 | `fixtures/model-catalog.json` | Deterministic loopback model catalog |
 | `cases.ts` | Core case descriptors and observable assertions |
 | `core.ts` | Core orchestration, driver, and evidence writer |
+| `full.ts` | Installed-artifact full runner: tiers, row resolution, evidence |
+| `full-cases.ts` | Parity-row/tier mapping and parity-evidence assembly |
 | `tui.ts` | Real-PTY TUI tier (actual built TUI, screen-buffer assertions) |
 | `parity.json` | Baseline surface inventory with phase and status |

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Single source of the two vvoc-owned web tool contracts: registered raw argument maps, strict runtime schemas with explicit execute-time defaults, args-only URL/shape validation, model-facing descriptions, operation examples, concrete search/fetch result metadata/attachment producer schemas, and the owned contracts consumed by the definition and pre-execute publication seam.
 //   SCOPE: Pure contract declarations and args-only validation for web_search and web_fetch: unknown-key rejection, provided-value typing/enum/bounds checks, representable URL scheme/shape checks, and closed result-envelope schemas for the actual provider delivery variants. No network I/O, permission request, credential resolution, provider selection, dispatch, or content rewriting; the services keep transport and credential redaction authority.
-//   DEPENDS: [@opencode-ai/plugin, zod (types), src/lib/agent-tool-contract.ts]
+//   DEPENDS: [zod (types), src/lib/agent-tool-contract.ts]
 //   LINKS: [M-PLUGIN-WEB-TOOLS, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS

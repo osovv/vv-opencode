@@ -1,28 +1,30 @@
 // FILE: src/lib/agent-tool-contract.test.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify shared agent-tool contract primitives: strict unknown-key rejection, bounded/escaped diagnostics, non-coercion, typed output inference, identity, fail-closed definition/pre-execute adapters, and SDK-compatible result envelopes.
+//   PURPOSE: Verify shared agent-tool contract primitives: strict unknown-key rejection, bounded/escaped diagnostics, non-coercion, typed output inference, identity, fail-closed definition/pre-execute adapters, and native Tool.Result envelope mapping.
 //   SCOPE: Pure unit tests over src/lib/agent-tool-contract.ts with synthetic descriptors only.
-//   DEPENDS: [bun:test, src/lib/agent-tool-contract]
+//   DEPENDS: [bun:test, zod, @opencode/plugin/promise/tool, @opencode/schema/tool, src/lib/agent-tool-contract]
 //   LINKS: [M-AGENT-TOOL-CONTRACT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   schema - The pinned host tool.schema helper shared by the contract fixtures.
+//   schema - The direct zod instance shared by the contract fixtures.
 //   makeProbeContract - Builds a representative closed probe contract used across cases.
 //   typedDefaultsContract - Contract with required defaults and literal enums for inference tests.
-//   resultEnvelopeFixture - tool() registration whose execute returns ownedToolResult with attachments.
-//   bareToolContext - Minimal pinned SDK ToolContext fixture for direct-execute cases.
+//   toNativeToolResult - Map the host-neutral owned envelope to a native Tool.Result file content.
+//   resultEnvelopeFixture - Native promise Tool.Info whose execute returns the mapped owned envelope.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS - Correction cycle: fail-closed definition rejection evidence, typed inference without casts, SDK ToolResult assignment fixture, escaped paths, and union path counterexamples.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Replaced the V1 tool()/ToolContext fixture with a native promise Tool.Info fixture that maps the owned envelope to a native Tool.Result file content part.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool, type ToolContext } from "@opencode-ai/plugin";
+import type { Info } from "@opencode/plugin/promise/tool";
+import type { Tool } from "@opencode/schema/tool";
+import { z as schema } from "zod";
 import {
   AGENT_TOOL_CONTRACT_REVISION,
   ContractHostCompatibilityError,
@@ -44,9 +46,8 @@ import {
   summarizeReceivedValue,
   toContractIssues,
   validateOwnedToolResult,
+  type OwnedToolResult,
 } from "./agent-tool-contract.js";
-
-const schema = tool.schema;
 
 function makeProbeContract() {
   return defineOwnedToolContract({
@@ -84,31 +85,36 @@ function typedDefaultsContract() {
   });
 }
 
-/** Compile-time fixture: execute return must be assignable to the pinned SDK ToolResult. */
-const resultEnvelopeFixture = tool({
-  description: "Result envelope assignment fixture",
-  args: { label: schema.string() },
-  execute: async (_args, _context: ToolContext) => {
-    return ownedToolResult("fixture-output", {
-      title: "fixture",
-      metadata: { opaqueRegion: { anything: true } },
-      attachments: [{ type: "file", mime: "text/plain", url: "file:///tmp/a.txt" }],
-    });
-  },
-});
-
-function bareToolContext(): ToolContext {
+/** Map the host-neutral owned envelope to a native Tool.Result with a file content part. */
+function toNativeToolResult(envelope: OwnedToolResult): Tool.Result {
+  const content = envelope.attachments?.map((attachment) => ({
+    type: "file" as const,
+    uri: attachment.url,
+    mime: attachment.mime,
+    ...(attachment.filename === undefined ? {} : { name: attachment.filename }),
+  }));
   return {
-    sessionID: "ses_test",
-    messageID: "msg_test",
-    agent: "build",
-    directory: "/tmp",
-    worktree: "/tmp",
-    abort: new AbortController().signal,
-    metadata: () => {},
-    ask: async () => {},
+    output: envelope.output,
+    ...(envelope.metadata === undefined ? {} : { metadata: envelope.metadata }),
+    ...(content === undefined ? {} : { content }),
   };
 }
+
+/** Compile-time fixture: a native promise Tool.Info whose execute maps the owned envelope. */
+const resultEnvelopeFixture: Info = {
+  name: "result_envelope_fixture",
+  description: "Result envelope assignment fixture",
+  input: schema.object({ label: schema.string() }),
+  output: schema.string(),
+  execute: async () =>
+    toNativeToolResult(
+      ownedToolResult("fixture-output", {
+        title: "fixture",
+        metadata: { opaqueRegion: { anything: true } },
+        attachments: [{ type: "file", mime: "text/plain", url: "file:///tmp/a.txt" }],
+      }),
+    ),
+};
 
 describe("agent-tool-contract identity", () => {
   test("exposes revision and cached package identity", () => {
@@ -157,12 +163,16 @@ describe("typed reuse (schema-inferred output, no casts)", () => {
     expect(parsed.label).toBe("alpha");
   });
 
-  test("tool() execute accepts ownedToolResult with attachments without casts", async () => {
-    const result = await resultEnvelopeFixture.execute({ label: "x" }, bareToolContext());
-    expect(typeof result).toBe("object");
-    if (typeof result === "string") throw new Error("expected structured result");
+  test("native tool execute maps ownedToolResult attachments to a Tool.Result file part", async () => {
+    const result = await resultEnvelopeFixture.execute({ label: "x" } as never, undefined as never);
     expect(result.output).toBe("fixture-output");
-    expect(result.attachments?.[0]).toMatchObject({ type: "file", mime: "text/plain" });
+    expect(Array.isArray(result.content)).toBe(true);
+    const content = Array.isArray(result.content) ? result.content : [];
+    expect(content[0]).toMatchObject({
+      type: "file",
+      mime: "text/plain",
+      uri: "file:///tmp/a.txt",
+    });
   });
 });
 

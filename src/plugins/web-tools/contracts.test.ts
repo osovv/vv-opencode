@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Contract coverage of the two registered web tool definitions: model-facing JSON Schema projection (closed roots, provider-neutral fields, representable enums/bounds/defaults/descriptions), SDK-shaped accept/reject fixtures through the actual validators, execute-time default application, closed result metadata/attachment producer schemas checked against real service outputs, and bounded structural/provider error identity.
 //   SCOPE: Pure contract schemas and validators plus deterministic mocked-transport service calls; no live provider calls and no real credentials.
-//   DEPENDS: [bun:test, @opencode-ai/plugin, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts, src/plugins/web-tools/providers/exa.ts]
+//   DEPENDS: [bun:test, zod, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/search-service.ts, src/plugins/web-tools/fetch-service.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-PLUGIN-WEB-TOOLS, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE, M-AGENT-TOOL-CONTRACT, V-M-PLUGIN-WEB-TOOLS]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS

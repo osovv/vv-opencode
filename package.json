@@ -34,11 +34,17 @@
     "dist",
     "schemas",
     "templates",
+    "server.js",
+    "tui.js",
     "README.md",
     "CHANGELOG.md"
   ],
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
@@ -102,9 +108,10 @@
     "contracts:check": "bun scripts/check-tool-contracts.ts",
     "contracts:generate": "bun scripts/check-tool-contracts.ts --generate",
     "contracts:host": "bun scripts/check-tool-contracts-host.ts",
+    "e2e:v2": "bun scripts/e2e-v2.ts --full",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run grace:check && bun run contracts:check && bun test",
-    "pack:check": "bun run build && bun -e \"const root = await import('./dist/index.js'); if (!('GuardianPlugin' in root)) throw new Error('dist root export missing GuardianPlugin'); if (!('HashlineEditPlugin' in root)) throw new Error('dist root export missing HashlineEditPlugin'); if (!('ModelRolesPlugin' in root)) throw new Error('dist root export missing ModelRolesPlugin'); if (!('SystemContextInjectionPlugin' in root)) throw new Error('dist root export missing SystemContextInjectionPlugin'); if (!('WorkflowPlugin' in root)) throw new Error('dist root export missing WorkflowPlugin'); if (!('SecretsRedactionPlugin' in root)) throw new Error('dist root export missing SecretsRedactionPlugin'); if (!('WebToolsPlugin' in root)) throw new Error('dist root export missing WebToolsPlugin'); if (!('AnalyticsPlugin' in root)) throw new Error('dist root export missing AnalyticsPlugin'); if (!('PeakHoursPlugin' in root)) throw new Error('dist root export missing PeakHoursPlugin'); if (!('SpecGuardPlugin' in root)) throw new Error('dist root export missing SpecGuardPlugin'); const tui = await import('./dist/tui.js'); if (!tui.default || typeof tui.default.tui !== 'function') throw new Error('dist TUI export missing default tui module'); await import('./dist/plugins/guardian/index.js'); await import('./dist/plugins/hashline-edit/index.js'); await import('./dist/plugins/model-roles/index.js'); await import('./dist/plugins/system-context-injection/index.js'); await import('./dist/plugins/workflow/index.js'); await import('./dist/plugins/secrets-redaction/index.js'); await import('./dist/plugins/web-tools/index.js'); await import('./dist/plugins/analytics/index.js'); await import('./dist/plugins/peak-hours/index.js'); await import('./dist/plugins/spec-guard/index.js')\" && bun scripts/check-tool-contracts.ts --packed",
+    "pack:check": "bun run build && bun scripts/check-package.ts && bun scripts/check-tool-contracts.ts --packed",
     "tui:local": "bun scripts/tui-local.ts",
     "release:check": "bun scripts/release-check.ts",
     "release:bump": "bun scripts/release-bump.ts",
@@ -117,13 +124,13 @@
     "@opencode/plugin": "2.0.18",
     "@opencode/protocol": "2.0.18",
     "@opencode/schema": "2.0.18",
-    "@opencode-ai/plugin": "1.18.2",
-    "@opencode-ai/sdk": "1.18.2",
     "ajv": "^8.17.1",
     "citty": "0.2.2",
+    "effect": "4.0.0-rc.112",
     "htmlparser2": "^12.0.0",
     "jsonc-parser": "3.3.1",
-    "turndown": "^7.2.4"
+    "turndown": "^7.2.4",
+    "zod": "4.1.8"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",

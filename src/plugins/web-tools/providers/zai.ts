@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Call the documented Z.AI international or Zhipu China Tool API directly for provider-neutral web search and reader extraction.
 //   SCOPE: Explicit region endpoint selection, bearer-authenticated search and reader requests, response normalization, direct media-first fetch dispatch, and provider error mapping without MCP behavior.
-//   DEPENDS: [src/plugins/web-tools/config.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts, @opencode-ai/plugin]
+//   DEPENDS: [src/plugins/web-tools/config.ts, src/plugins/web-tools/http.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-ZAI, M-WEB-HTTP, M-WEB-MEDIA-LOADER, M-WEB-SEARCH-SERVICE, M-WEB-FETCH-SERVICE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -19,7 +19,7 @@
 //   LAST_CHANGE: [C-ZAI-DIRECT-WEB-PROVIDERS - Added direct international and China search and reader Tool API integration.]
 // END_CHANGE_SUMMARY
 
-import type { ToolAttachment } from "@opencode-ai/plugin";
+import type { OwnedToolAttachment } from "../../../lib/agent-tool-contract.js";
 import type { VvocWebRegion } from "../../../lib/vvoc-config.js";
 import type { WebProviderCredential } from "../config.js";
 import {
@@ -78,7 +78,7 @@ export type ZaiReaderOutcome =
     }
   | {
       kind: "media";
-      attachment: ToolAttachment;
+      attachment: OwnedToolAttachment;
       metadata: Record<string, never>;
     };
 
