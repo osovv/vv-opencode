@@ -46,6 +46,7 @@ import {
   assertSupportedOpenCodeRuntime,
   isSupportedOpenCodeVersion,
   parseGuardianConfigText,
+  readManagedAgentModels,
   readOpenCodeAgentModel,
   readOpenCodeDefaultModel,
   readVvocConfig,
@@ -56,6 +57,7 @@ import {
   syncManagedSkillFiles,
   syncVvocConfig,
   writeGuardianConfig,
+  writeManagedAgentModel,
   writeOpenCodeAgentModel,
   writeOpenCodeDefaultModel,
   writeProviderBaseUrl,
@@ -1678,6 +1680,25 @@ describe("managed agent user ownership", () => {
       await syncManagedAgentPrompts(paths, { force: true });
       expect(await readFile(guardianPath, "utf8")).toBe(guardian);
       await expect(readFile(controllerPath, "utf8")).rejects.toBeDefined();
+
+      // The resulting native document is valid and carries the effective
+      // inline overrides (the unit-level mirror of the real /api/agent check).
+      const schemaRequire = createRequire(import.meta.resolve("@opencode/schema/config"));
+      const decodeConfig = (
+        schemaRequire("effect") as {
+          Schema: { decodeUnknownSync: (target: unknown) => (input: unknown) => unknown };
+        }
+      ).Schema.decodeUnknownSync(NativeConfig.Info);
+      const decoded = decodeConfig(
+        JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")),
+      ) as {
+        agents?: Record<string, { system?: string; steps?: number; permissions?: unknown[] }>;
+      };
+      expect(decoded.agents?.["vv-controller"]?.system).toBe("custom inline system");
+      expect(decoded.agents?.guardian?.steps).toBe(7);
+      expect(decoded.agents?.guardian?.permissions).toEqual([
+        { action: "edit", resource: "*", effect: "allow" },
+      ]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -1814,6 +1835,401 @@ describe("native schema verification", () => {
     ] as const) {
       const frontmatter = getManagedNativeAgentFrontmatter(name);
       expect(() => decodeAgent({ ...frontmatter, system: "prompt body" })).not.toThrow();
+    }
+  });
+});
+
+function ensureOpenCodeConfigTextForTest(text: string): void {
+  // ensurePackageConfigText parses + asserts the native document before editing.
+  ensurePackageConfigText(text);
+}
+
+describe("native schema preflight", () => {
+  const malformed: Array<[string, Record<string, unknown>]> = [
+    ["providers as an array", { providers: [] }],
+    [
+      "model limit context as a string",
+      { providers: { x: { models: { m: { limit: { context: "big" } } } } } },
+    ],
+    ["agent permissions as a string", { agents: { a: { permissions: "nope" } } }],
+    ["agent mode literal", { agents: { a: { mode: "bogus" } } }],
+  ];
+
+  for (const [name, document] of malformed) {
+    test(`rejects malformed native config before writes: ${name}`, () => {
+      const text = JSON.stringify(document, null, 2) + "\n";
+      expect(() => ensurePackageConfigText(text)).toThrow(
+        "document does not satisfy the pinned native OpenCode 2.0.18 config schema",
+      );
+    });
+  }
+
+  test("sync and asset install refuse a malformed existing config with no writes", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preflight-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preflight-project-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      const malformedText = '{ "providers": [] }\n';
+      await writeFile(paths.opencodeConfigPath, malformedText, "utf8");
+
+      await expect(syncManagedAgentRegistrations(paths)).rejects.toThrow(
+        "does not satisfy the pinned native OpenCode 2.0.18 config schema",
+      );
+      await expect(installManagedAgentPrompts(paths, { force: true })).rejects.toThrow(
+        "document does not satisfy the pinned native OpenCode 2.0.18 config schema",
+      );
+      // Byte-unchanged config and no generated assets.
+      expect(await readFile(paths.opencodeConfigPath, "utf8")).toBe(malformedText);
+      await expect(
+        readFile(join(paths.managedAgentsDirPath, "guardian.md"), "utf8"),
+      ).rejects.toBeDefined();
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a structural error even when an unrelated token is present, before writes", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preflight-token-"));
+    const projectDir = await mkdtemp(join(tmpdir(), "vvoc-preflight-token-project-"));
+    const prevSecret = process.env.VVOC_SECRET;
+    process.env.VVOC_SECRET = "supersecretvalue";
+    try {
+      const text = JSON.stringify({ providers: [], note: "{env:VVOC_SECRET}" }, null, 2) + "\n";
+      let message = "";
+      expect(() => ensurePackageConfigText(text)).toThrow();
+      try {
+        ensurePackageConfigText(text);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect(message).toContain("does not satisfy the pinned native OpenCode 2.0.18 config schema");
+      expect(message).not.toContain("supersecretvalue");
+
+      const paths = await resolvePaths({
+        scope: "project",
+        cwd: projectDir,
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(paths.opencodeConfigPath, text, "utf8");
+      await expect(syncManagedAgentRegistrations(paths)).rejects.toThrow();
+      await expect(installManagedAgentPrompts(paths, { force: true })).rejects.toThrow();
+      expect(await readFile(paths.opencodeConfigPath, "utf8")).toBe(text);
+      await expect(
+        readFile(join(paths.managedAgentsDirPath, "guardian.md"), "utf8"),
+      ).rejects.toBeDefined();
+    } finally {
+      if (prevSecret === undefined) delete process.env.VVOC_SECRET;
+      else process.env.VVOC_SECRET = prevSecret;
+      await rm(configHome, { recursive: true, force: true });
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an invalid nested field alongside a valid secret token", () => {
+    const prevSecret = process.env.VVOC_SECRET;
+    process.env.VVOC_SECRET = "anothersecret";
+    try {
+      const text =
+        JSON.stringify(
+          {
+            providers: { x: { models: { m: { limit: { context: "big" } } } } },
+            note: "{env:VVOC_SECRET}",
+          },
+          null,
+          2,
+        ) + "\n";
+      let message = "";
+      try {
+        ensurePackageConfigText(text);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect(message).toContain("does not satisfy the pinned native OpenCode 2.0.18 config schema");
+      expect(message).not.toContain("anothersecret");
+    } finally {
+      if (prevSecret === undefined) delete process.env.VVOC_SECRET;
+      else process.env.VVOC_SECRET = prevSecret;
+    }
+  });
+
+  test("fails closed when a missing env token yields an invalid model", () => {
+    const prev = process.env.VVOC_UNSET_MODEL;
+    delete process.env.VVOC_UNSET_MODEL;
+    try {
+      expect(() => ensurePackageConfigText('{ "model": "{env:VVOC_UNSET_MODEL}" }\n')).toThrow(
+        "document does not satisfy the pinned native OpenCode 2.0.18 config schema",
+      );
+    } finally {
+      if (prev !== undefined) process.env.VVOC_UNSET_MODEL = prev;
+    }
+  });
+
+  test("resolves a valid env model and preserves the original token on write", () => {
+    const prev = process.env.VVOC_MODEL;
+    process.env.VVOC_MODEL = "openai/gpt-5.6-terra#high";
+    try {
+      const output = ensurePackageConfigText('{ "model": "{env:VVOC_MODEL}" }\n');
+      expect(output).toContain("{env:VVOC_MODEL}");
+    } finally {
+      if (prev === undefined) delete process.env.VVOC_MODEL;
+      else process.env.VVOC_MODEL = prev;
+    }
+  });
+
+  test("resolves a source-relative file ref from the declaring config dir, not cwd", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preflight-file-"));
+    try {
+      await writeFile(join(configHome, "model.txt"), "openai/gpt-5.6-terra#high\n", "utf8");
+      const text = '{ "model": "{file:./model.txt}" }\n';
+      expect(() =>
+        ensurePackageConfigText(text, PACKAGE_NAME, { configDir: configHome }),
+      ).not.toThrow();
+      const output = ensurePackageConfigText(text, PACKAGE_NAME, { configDir: configHome });
+      expect(output).toContain("{file:./model.txt}");
+
+      // A different (cwd-like) directory without the file must not be used.
+      const otherDir = await mkdtemp(join(tmpdir(), "vvoc-preflight-other-"));
+      try {
+        let message = "";
+        try {
+          ensurePackageConfigText(text, PACKAGE_NAME, { configDir: otherDir });
+        } catch (error) {
+          message = error instanceof Error ? error.message : String(error);
+        }
+        expect(message).toContain("unresolved {file:} reference");
+        expect(message).not.toContain("model.txt");
+      } finally {
+        await rm(otherDir, { recursive: true, force: true });
+      }
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts valid native user extras and a real agent system file", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-preflight-extras-"));
+    try {
+      await writeFile(join(configHome, "prompt.md"), "You are a helper.\n", "utf8");
+      const text =
+        JSON.stringify(
+          {
+            plugins: [{ package: "custom/plugin", options: { custom: { nested: [1, 2, 3] } } }],
+            "my-user-field": true,
+            permissions: [{ action: "*", resource: "*", effect: "allow" }],
+            agents: { a: { system: "{file:./prompt.md}" } },
+          },
+          null,
+          2,
+        ) + "\n";
+      expect(() =>
+        ensurePackageConfigText(text, PACKAGE_NAME, { configDir: configHome }),
+      ).not.toThrow();
+      const output = ensurePackageConfigText(text, PACKAGE_NAME, { configDir: configHome });
+      expect(output).toContain("{file:./prompt.md}");
+      expect(output).toContain('"my-user-field": true');
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("modelIntent regression: string plugin entries and managed agent models", () => {
+  const STRING_ENTRY_CONFIG =
+    JSON.stringify({ plugins: ["@osovv/vv-opencode@1.7.0"] }, null, 2) + "\n";
+
+  test("upgrades a string managed entry in place instead of appending a duplicate", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-intent-string-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(paths.opencodeConfigPath, STRING_ENTRY_CONFIG, "utf8");
+
+      await writeOpenCodeDefaultModel(paths, "model", {
+        model: "vv-role:default",
+        ensureEntry: false,
+      });
+      const content = await readFile(paths.opencodeConfigPath, "utf8");
+      const parsed = JSON.parse(content) as { plugins?: unknown[] };
+
+      expect(parsed.plugins).toHaveLength(1);
+      expect(parsed.plugins?.[0]).toMatchObject({
+        options: { modelIntent: { model: "vv-role:default" } },
+      });
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("vv-role:default");
+      // A subsequent sync-style rewrite must not see conflicting managed entries.
+      expect(() => ensurePackageConfigText(content)).not.toThrow();
+      expect(ensurePackageConfigText(ensurePackageConfigText(content))).toBe(
+        ensurePackageConfigText(content),
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves ordered directives and unrelated options while writing intent", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-intent-order-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify(
+          {
+            plugins: [
+              "-remove-me",
+              { package: "other-plugin", options: { keep: true } },
+              "@osovv/vv-opencode@1.7.0",
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      await writeOpenCodeAgentModel(paths, "build", { model: "vv-role:smart", ensureEntry: true });
+      const parsed = JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
+        plugins?: Array<string | { package: string; options?: Record<string, unknown> }>;
+      };
+      expect(parsed.plugins?.[0]).toBe("-remove-me");
+      expect(parsed.plugins?.[1]).toEqual({ package: "other-plugin", options: { keep: true } });
+      expect(parsed.plugins?.[2]).toMatchObject({
+        options: { modelIntent: { agents: { build: "vv-role:smart" } } },
+      });
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("managed agent role ref goes to the envelope and a literal to native agents", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-agent-model-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(paths.opencodeConfigPath, STRING_ENTRY_CONFIG, "utf8");
+
+      await writeManagedAgentModel(paths, "vv-controller", {
+        model: "vv-role:smart",
+        ensureEntry: true,
+      });
+      const roleDoc = JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
+        agents?: Record<string, { model?: string }>;
+        plugins?: Array<{
+          package?: string;
+          options?: { modelIntent?: { agents?: Record<string, string> } };
+        }>;
+      };
+      expect(roleDoc.agents?.["vv-controller"]?.model).toBeUndefined();
+      expect(roleDoc.plugins?.[0]?.options?.modelIntent?.agents?.["vv-controller"]).toBe(
+        "vv-role:smart",
+      );
+      expect(await readFile(paths.opencodeConfigPath, "utf8")).not.toContain(
+        '"agents": {\n      "vv-controller": {\n        "model": "vv-role:smart"',
+      );
+      expect((await readManagedAgentModels(paths))["vv-controller"]).toBe("vv-role:smart");
+
+      await writeManagedAgentModel(paths, "vv-controller", {
+        model: "openai/gpt-5.6-sol#xhigh",
+        ensureEntry: false,
+      });
+      const literalDoc = JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
+        agents?: Record<string, { model?: string }>;
+        plugins?: Array<{ options?: { modelIntent?: unknown } }>;
+      };
+      expect(literalDoc.agents?.["vv-controller"]?.model).toBe("openai/gpt-5.6-sol#xhigh");
+      expect(literalDoc.plugins?.[0]?.options?.modelIntent).toBeUndefined();
+      expect((await readManagedAgentModels(paths))["vv-controller"]).toBe(
+        "openai/gpt-5.6-sol#xhigh",
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("native model struct readers", () => {
+  test("normalizes provider/model/variant structs across public readers", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-struct-read-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify(
+          {
+            model: { providerID: "openai", model: "gpt-6-astra", variant: "max" },
+            agents: {
+              "vv-controller": {
+                model: { providerID: "openai", model: "gpt-5.6-sol", variant: "xhigh" },
+              },
+              build: { model: "openai/gpt-5.6-terra#high" },
+            },
+            plugins: [
+              {
+                package: "@osovv/vv-opencode@1.7.0",
+                options: { modelIntent: { agents: { enhancer: "vv-role:smart" } } },
+              },
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      expect(await readOpenCodeDefaultModel(paths, "model")).toBe("openai/gpt-6-astra#max");
+      expect(await readOpenCodeAgentModel(paths, "build")).toBe("openai/gpt-5.6-terra#high");
+      const managed = await readManagedAgentModels(paths);
+      expect(managed["vv-controller"]).toBe("openai/gpt-5.6-sol#xhigh");
+      // Envelope role intent still surfaces for a managed agent without a literal.
+      expect(managed["enhancer"]).toBe("vv-role:smart");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an invalid model struct instead of silently defaulting", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-struct-invalid-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify({ model: { providerID: "openai" } }, null, 2) + "\n",
+        "utf8",
+      );
+      await expect(readOpenCodeDefaultModel(paths, "model")).rejects.toThrow(
+        "expected model selection model id",
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
     }
   });
 });

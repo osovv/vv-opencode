@@ -237,7 +237,9 @@ export async function inspectInstallation(
   if (opencodeText) {
     try {
       const document = parseObjectDocument(opencodeText, paths.opencodeConfigPath);
-      assertNativeOpenCodeDocument(document, paths.opencodeConfigPath);
+      assertNativeOpenCodeDocument(document, paths.opencodeConfigPath, {
+        configDir: dirname(paths.opencodeConfigPath),
+      });
       plugins = readPluginEntries(document, paths.opencodeConfigPath);
       pluginConfigured = plugins.some((entry) =>
         isManagedPackageTarget(typeof entry === "string" ? entry : entry.package),

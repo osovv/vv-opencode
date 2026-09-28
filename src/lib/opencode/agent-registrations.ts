@@ -51,7 +51,10 @@ import {
   loadManagedSkillReference,
   loadManagedSkillTemplate,
 } from "../managed-skills.js";
+import { isRoleReference } from "../model-roles.js";
+import { getPinnedPackageSpecifier } from "../package.js";
 import {
+  applyModelIntent,
   assertNativeOpenCodeDocument,
   ensureOpenCodeConfigText,
   ensureTrailingNewline,
@@ -60,6 +63,7 @@ import {
   OPENCODE_SCHEMA_URL,
   parseObjectDocument,
   readAgentOverride,
+  readModelIntentEnvelope,
   readNativeAgents,
   readOptionalText,
   readSkillsArray,
@@ -69,6 +73,7 @@ import {
   updateAgentEntryText,
   writeText,
   type JsonObject,
+  type NativeValidationContext,
   type WriteResult,
 } from "./shared-utils.js";
 import { getGlobalOpencodeSkillsDir, getGlobalVvocDir, getVvocSkillsDir } from "../vvoc-paths.js";
@@ -103,7 +108,7 @@ export function ensureManagedAgentRegistrationsConfigText(
   }
 
   const document = parseObjectDocument(text, "OpenCode config");
-  assertNativeOpenCodeDocument(document, "OpenCode config");
+  assertNativeOpenCodeDocument(document, "OpenCode config", assetValidationContext(paths));
   let nextText = text;
 
   if (!Object.hasOwn(document, "$schema")) {
@@ -269,19 +274,35 @@ type InlineAgentOverride = {
 };
 
 /** Reads native inline `agents.<id>` overrides that must stay effective over generated markdown. */
+function assetValidationContext(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+): NativeValidationContext {
+  return typeof paths.opencodeConfigPath === "string" && paths.opencodeConfigPath
+    ? { configDir: dirname(paths.opencodeConfigPath) }
+    : {};
+}
+
+/** Fail closed on a malformed existing config before any asset write. */
+async function assertOpencodeConfigForAssets(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath">,
+): Promise<void> {
+  if (typeof paths.opencodeConfigPath !== "string" || !paths.opencodeConfigPath) return;
+  const text = await readOptionalText(paths.opencodeConfigPath);
+  if (!text) return;
+  const document = parseObjectDocument(text, paths.opencodeConfigPath);
+  assertNativeOpenCodeDocument(document, paths.opencodeConfigPath, assetValidationContext(paths));
+}
+
 async function readInlineManagedAgentOverrides(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
 ): Promise<Map<ManagedAgentPromptName, InlineAgentOverride>> {
   const overrides = new Map<ManagedAgentPromptName, InlineAgentOverride>();
+  if (typeof paths.opencodeConfigPath !== "string" || !paths.opencodeConfigPath) return overrides;
   const text = await readOptionalText(paths.opencodeConfigPath);
   if (!text) return overrides;
-  let agents: Record<string, JsonObject>;
-  try {
-    const document = parseObjectDocument(text, paths.opencodeConfigPath);
-    agents = readNativeAgents(document, paths.opencodeConfigPath);
-  } catch {
-    return overrides;
-  }
+  const document = parseObjectDocument(text, paths.opencodeConfigPath);
+  assertNativeOpenCodeDocument(document, paths.opencodeConfigPath);
+  const agents = readNativeAgents(document, paths.opencodeConfigPath);
   for (const agentName of MANAGED_NATIVE_AGENT_NAMES) {
     const entry = agents[agentName];
     if (!entry) continue;
@@ -354,6 +375,7 @@ export async function installManagedAgentPrompts(
   paths: ResolvedPaths,
   options: { force: boolean },
 ): Promise<WriteResult[]> {
+  await assertOpencodeConfigForAssets(paths);
   const results: WriteResult[] = [];
   const inlineOverrides = await readInlineManagedAgentOverrides(paths);
   const inlineSystem = await resolveInlineSystemActions(paths, inlineOverrides);
@@ -405,6 +427,7 @@ export async function syncManagedAgentPrompts(
   paths: ResolvedPaths,
   options: { force: boolean },
 ): Promise<WriteResult[]> {
+  await assertOpencodeConfigForAssets(paths);
   const results: WriteResult[] = [];
   const inlineOverrides = await readInlineManagedAgentOverrides(paths);
   const inlineSystem = await resolveInlineSystemActions(paths, inlineOverrides);
@@ -534,6 +557,7 @@ export async function installManagedSkillFiles(
   paths: ResolvedPaths,
   options: { force: boolean },
 ): Promise<WriteResult[]> {
+  await assertOpencodeConfigForAssets(paths);
   const results: WriteResult[] = [];
 
   for (const skillName of MANAGED_SKILL_NAMES) {
@@ -567,6 +591,7 @@ export async function syncManagedSkillFiles(
   paths: ResolvedPaths,
   options: { force: boolean },
 ): Promise<WriteResult[]> {
+  await assertOpencodeConfigForAssets(paths);
   const results: WriteResult[] = [];
 
   for (const skillName of MANAGED_SKILL_NAMES) {
@@ -640,9 +665,23 @@ export async function readManagedAgentOverrides(
 
   const document = parseObjectDocument(currentText, paths.opencodeConfigPath);
   const agentMap = readAgentMap(document, paths.opencodeConfigPath);
+  const envelope = readModelIntentEnvelope(document);
+  const envelopeAgents = envelope?.agents;
 
   for (const definition of MANAGED_OPENCODE_AGENTS) {
-    overrides[definition.name] = readAgentOverride(agentMap[definition.name], definition.name);
+    const literal = readAgentOverride(agentMap[definition.name], definition.name);
+    if (literal.model !== undefined) {
+      overrides[definition.name] = literal;
+      continue;
+    }
+    const envelopeModel =
+      envelopeAgents && typeof envelopeAgents === "object" && !Array.isArray(envelopeAgents)
+        ? (envelopeAgents as Record<string, unknown>)[definition.name]
+        : undefined;
+    overrides[definition.name] =
+      typeof envelopeModel === "string" && envelopeModel.trim()
+        ? { model: envelopeModel.trim() }
+        : {};
   }
 
   return overrides;
@@ -674,26 +713,40 @@ export async function writeManagedAgentModel(
     return { action: "kept", path: paths.opencodeConfigPath };
   }
 
-  const document = parseObjectDocument(baseText, paths.opencodeConfigPath);
-  const agentMap = readAgentMap(document, paths.opencodeConfigPath);
-  const currentEntry = agentMap[agentName];
+  const specifier = await getPinnedPackageSpecifier();
+  const model = options.model?.trim() || undefined;
+  let nextText: string;
 
-  if (!currentEntry && !options.ensureEntry) {
-    return { action: "kept", path: paths.opencodeConfigPath };
-  }
-
-  const nextEntry = { ...currentEntry };
-
-  if (options.model) {
-    nextEntry.model = options.model;
+  if (model !== undefined && isRoleReference(model)) {
+    // Role intent never becomes a native model literal; keep it in the envelope.
+    nextText = applyModelIntent(
+      baseText,
+      specifier,
+      paths.opencodeConfigPath,
+      {
+        agents: { [agentName]: model },
+      },
+      assetValidationContext(paths),
+    );
+    nextText = clearManagedAgentLiteralModel(nextText, paths.opencodeConfigPath, agentName);
   } else {
-    delete nextEntry.model;
+    nextText = applyModelIntent(
+      baseText,
+      specifier,
+      paths.opencodeConfigPath,
+      {
+        agents: { [agentName]: null },
+      },
+      assetValidationContext(paths),
+    );
+    nextText = updateManagedAgentLiteralModel(nextText, paths.opencodeConfigPath, agentName, model);
   }
 
-  const nextText =
-    Object.keys(nextEntry).length === 0
-      ? removeAgentEntryText(baseText, agentName)
-      : updateAgentEntryText(baseText, agentName, nextEntry);
+  assertNativeOpenCodeDocument(
+    parseObjectDocument(nextText, paths.opencodeConfigPath),
+    paths.opencodeConfigPath,
+    assetValidationContext(paths),
+  );
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -705,6 +758,34 @@ export async function writeManagedAgentModel(
     path: paths.opencodeConfigPath,
   };
 }
+
+function updateManagedAgentLiteralModel(
+  text: string,
+  label: string,
+  agentName: string,
+  model: string | undefined,
+): string {
+  const document = parseObjectDocument(text, label);
+  const agentMap = readAgentMap(document, label);
+  const nextEntry = { ...agentMap[agentName] };
+  if (model === undefined) delete nextEntry.model;
+  else nextEntry.model = model;
+  return Object.keys(nextEntry).length === 0
+    ? removeAgentEntryText(text, agentName)
+    : updateAgentEntryText(text, agentName, nextEntry);
+}
+
+function clearManagedAgentLiteralModel(text: string, label: string, agentName: string): string {
+  const document = parseObjectDocument(text, label);
+  const agentMap = readAgentMap(document, label);
+  const current = agentMap[agentName];
+  if (current === undefined || current.model === undefined) return text;
+  const nextEntry = { ...current };
+  delete nextEntry.model;
+  return Object.keys(nextEntry).length === 0
+    ? removeAgentEntryText(text, agentName)
+    : updateAgentEntryText(text, agentName, nextEntry);
+}
 // END_BLOCK_MANAGED_AGENT_MODEL_IO
 
 // START_BLOCK_MANAGED_AGENT_HELPERS
@@ -712,12 +793,18 @@ export function readAgentMap(document: JsonObject, label: string): Record<string
   return readNativeAgents(document, label);
 }
 
-export function ensureAgentConfigText(text: string | undefined): string {
-  return ensureAgentConfigTextInternal(text);
+export function ensureAgentConfigText(
+  text: string | undefined,
+  context: NativeValidationContext = {},
+): string {
+  return ensureAgentConfigTextInternal(text, context);
 }
 
-function ensureAgentConfigTextInternal(text: string | undefined): string {
-  const nextText = ensureOpenCodeConfigText(text);
+function ensureAgentConfigTextInternal(
+  text: string | undefined,
+  context: NativeValidationContext,
+): string {
+  const nextText = ensureOpenCodeConfigText(text, context);
   const document = parseObjectDocument(nextText, "OpenCode config");
   const currentAgents = readAgentMap(document, "OpenCode config");
   let nextAgentText = nextText;

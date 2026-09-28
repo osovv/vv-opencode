@@ -567,7 +567,13 @@ describe("applyPatchProviderPreset", () => {
     }
   });
 
-  test("preserves a user variant across every shipped preset", async () => {
+  test("preserves a user variant across every shipped preset and stays natively decodable", async () => {
+    const schemaRequire = createRequire(import.meta.resolve("@opencode/schema/config"));
+    const nativeDecode = (
+      schemaRequire("effect") as {
+        Schema: { decodeUnknownSync: (target: unknown) => (input: unknown) => unknown };
+      }
+    ).Schema.decodeUnknownSync(NativeConfig.Info);
     for (const presetName of [
       "stepfun-ai",
       "codex",
@@ -618,6 +624,7 @@ describe("applyPatchProviderPreset", () => {
         };
         const variants = parsed.providers?.[preset.providerID]?.models?.[modelKey]?.variants ?? [];
         expect(variants.some((variant) => variant.id === "user-custom")).toBe(true);
+        expect(() => nativeDecode(parsed)).not.toThrow();
       } finally {
         await rm(configHome, { recursive: true, force: true });
       }

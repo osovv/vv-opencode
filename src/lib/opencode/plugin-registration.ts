@@ -25,6 +25,7 @@
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify } from "jsonc-parser";
+import { dirname } from "node:path";
 import { getPinnedPackageSpecifier, PACKAGE_NAME, PACKAGE_VERSION } from "../package.js";
 import {
   assertNativeOpenCodeDocument,
@@ -34,6 +35,7 @@ import {
   readOptionalText,
   readPluginEntries,
   renderJson,
+  type NativeValidationContext,
   writeText,
   type JsonObject,
   type OpenCodePluginEntry,
@@ -82,6 +84,7 @@ const JSON_FORMAT = {
 export function ensurePackageConfigText(
   text: string | undefined,
   packageSpecifier = PACKAGE_NAME,
+  context: NativeValidationContext = {},
 ): string {
   if (!text?.trim()) {
     return renderJson({
@@ -91,7 +94,7 @@ export function ensurePackageConfigText(
   }
 
   const document = parseObjectDocument(text, "OpenCode config");
-  assertNativeOpenCodeDocument(document, "OpenCode config");
+  assertNativeOpenCodeDocument(document, "OpenCode config", context);
   const currentPlugins = readPluginEntries(document, "OpenCode config");
   let nextText = text;
 
@@ -125,7 +128,9 @@ export async function ensurePackageInstalled(paths: ResolvedPaths): Promise<{
   changed: boolean;
 }> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
-  const nextText = ensurePackageConfigText(currentText, await getPinnedPackageSpecifier());
+  const nextText = ensurePackageConfigText(currentText, await getPinnedPackageSpecifier(), {
+    configDir: dirname(paths.opencodeConfigPath),
+  });
 
   if (currentText === nextText) {
     return { path: paths.opencodeConfigPath, changed: false };

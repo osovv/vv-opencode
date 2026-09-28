@@ -47,6 +47,7 @@ import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { createDefaultVvocConfig, parseVvocConfigText, type VvocConfig } from "./vvoc-config.js";
+import { MODEL_INTENT_OPTION_KEY, normalizeNativeModelSelection } from "./opencode/shared-utils.js";
 import { PACKAGE_NAME } from "./package.js";
 import {
   getGlobalOpencodeDir,
@@ -60,8 +61,7 @@ export const VVOC_CONFIG_ENV = "VVOC_CONFIG";
 export const OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG";
 export const OPENCODE_CONFIG_DIR_ENV = "OPENCODE_CONFIG_DIR";
 
-/** Option key on the vvoc `plugins` entry that carries custom/root/command role intent. */
-export const MODEL_INTENT_OPTION_KEY = "modelIntent";
+export { MODEL_INTENT_OPTION_KEY, normalizeNativeModelSelection } from "./opencode/shared-utils.js";
 
 export type ConfigWriteScope = "global" | "project";
 export type ConfigReadScope = ConfigWriteScope | "effective";
@@ -324,22 +324,6 @@ export function loadEffectiveVvocConfig(
 }
 
 // START_BLOCK_RAW_OPENCODE_INTENT
-/** Normalizes a native model selection string or struct into `provider/model#variant`. */
-export function normalizeNativeModelSelection(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed === "" ? undefined : trimmed;
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  if (typeof record.providerID !== "string" || typeof record.model !== "string") return undefined;
-  const provider = record.providerID.trim();
-  const model = record.model.trim();
-  if (!provider || !model) return undefined;
-  const variant = typeof record.variant === "string" ? record.variant.trim() : "";
-  return variant ? `${provider}/${model}#${variant}` : `${provider}/${model}`;
-}
-
 function readEnvelopeString(value: unknown, label: string): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !value.trim()) {

@@ -26,30 +26,31 @@
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify } from "jsonc-parser";
-import { MODEL_INTENT_OPTION_KEY } from "../config-layers.js";
+import { dirname } from "node:path";
 import { isRoleReference } from "../model-roles.js";
 import { getPinnedPackageSpecifier } from "../package.js";
 import { ensureAgentConfigText, readAgentMap } from "./agent-registrations.js";
-import { isManagedPackageTarget } from "./plugin-registration.js";
 import type { ResolvedPaths } from "./paths.js";
 import {
+  applyModelIntent,
   assertNativeOpenCodeDocument,
   ensureOpenCodeConfigText,
   ensureTrailingNewline,
   isJsonObject,
   mergeJsonObjects,
+  normalizeNativeModelSelection,
   OPENCODE_SCHEMA_URL,
   parseObjectDocument,
   readAgentOverride,
+  readModelIntentEnvelope,
   readNonEmptyString,
   readOptionalObject,
   readOptionalText,
-  readPluginEntries,
   renderJson,
   updateAgentEntryText,
   writeText,
   type JsonObject,
-  type OpenCodePluginEntry,
+  type NativeValidationContext,
   type WriteResult,
 } from "./shared-utils.js";
 
@@ -66,91 +67,6 @@ const ENVELOPE_DEFAULT_MODEL_KEYS: Record<OpenCodeDefaultModelKey, "model" | "sm
   model: "model",
   small_model: "smallModel",
 };
-
-// START_BLOCK_MODEL_INTENT_ENVELOPE
-function setOrDelete(target: JsonObject, key: string, value: string | undefined): void {
-  if (value === undefined || value === "") {
-    delete target[key];
-    return;
-  }
-  target[key] = value;
-}
-
-function pruneIntent(intent: JsonObject): void {
-  for (const nestedKey of ["agents", "commands"]) {
-    const nested = intent[nestedKey];
-    if (isJsonObject(nested) && Object.keys(nested).length === 0) {
-      delete intent[nestedKey];
-    }
-  }
-}
-
-/**
- * Apply a mutation to the vvoc-owned `plugins[].options.modelIntent` envelope,
- * preserving the managed entry's other options and every unrelated plugin entry
- * and its order. Creates the pinned vvoc entry only when there is intent to
- * write; removes the envelope when it becomes empty.
- */
-function withModelIntent(
-  text: string,
-  specifier: string,
-  label: string,
-  apply: (intent: JsonObject) => void,
-): string {
-  const document = parseObjectDocument(text, label);
-  assertNativeOpenCodeDocument(document, label);
-  const entries = readPluginEntries(document, label);
-  const index = entries.findIndex(
-    (entry) => typeof entry === "object" && isManagedPackageTarget(entry.package),
-  );
-  const managed = index === -1 ? undefined : entries[index];
-  const options: JsonObject =
-    managed && typeof managed === "object" && isJsonObject(managed.options)
-      ? { ...managed.options }
-      : {};
-  const intent: JsonObject = isJsonObject(options[MODEL_INTENT_OPTION_KEY])
-    ? { ...(options[MODEL_INTENT_OPTION_KEY] as JsonObject) }
-    : {};
-
-  apply(intent);
-  pruneIntent(intent);
-  if (Object.keys(intent).length === 0) {
-    delete options[MODEL_INTENT_OPTION_KEY];
-  } else {
-    options[MODEL_INTENT_OPTION_KEY] = intent;
-  }
-
-  let nextEntries: OpenCodePluginEntry[];
-  if (index === -1) {
-    if (options[MODEL_INTENT_OPTION_KEY] === undefined) return text;
-    nextEntries = [...entries, { package: specifier, options }];
-  } else {
-    const nextEntry: { package: string; options?: JsonObject } = { package: specifier };
-    if (Object.keys(options).length > 0) nextEntry.options = options;
-    nextEntries = entries.map((entry, entryIndex) => (entryIndex === index ? nextEntry : entry));
-  }
-
-  const nextText = applyEdits(
-    text,
-    modify(text, ["plugins"], nextEntries, { formattingOptions: JSON_FORMAT }),
-  );
-  return ensureTrailingNewline(applyEdits(nextText, format(nextText, undefined, JSON_FORMAT)));
-}
-
-function readModelIntentEnvelope(document: JsonObject): JsonObject | undefined {
-  const plugins = document.plugins;
-  if (!Array.isArray(plugins)) return undefined;
-  for (const entry of plugins) {
-    if (!isJsonObject(entry)) continue;
-    if (typeof entry.package !== "string" || !isManagedPackageTarget(entry.package)) continue;
-    const options = entry.options;
-    if (!isJsonObject(options)) continue;
-    const intent = options[MODEL_INTENT_OPTION_KEY];
-    if (isJsonObject(intent)) return intent;
-  }
-  return undefined;
-}
-// END_BLOCK_MODEL_INTENT_ENVELOPE
 
 export async function readOpenCodeAgentModel(
   paths: Pick<ResolvedPaths, "opencodeConfigPath">,
@@ -206,7 +122,7 @@ export async function readOpenCodeDefaultModel(
 
   const nativeValue = document.model;
   if (key === "model" && nativeValue !== undefined) {
-    return readNonEmptyString(nativeValue, `${paths.opencodeConfigPath}: model`);
+    return normalizeNativeModelSelection(nativeValue, `${paths.opencodeConfigPath}: model`);
   }
 
   const intent = readModelIntentEnvelope(document);
@@ -226,9 +142,11 @@ export async function writeOpenCodeAgentModel(
     return { action: "kept", path: paths.opencodeConfigPath };
   }
 
+  const configDir = dirname(paths.opencodeConfigPath);
+  const context = { configDir };
   const baseText = options.ensureEntry
-    ? ensureAgentConfigText(currentText)
-    : (currentText ?? ensureOpenCodeConfigText(currentText));
+    ? ensureAgentConfigText(currentText, context)
+    : (currentText ?? ensureOpenCodeConfigText(currentText, context));
   const specifier = await getPinnedPackageSpecifier();
   const model = options.model?.trim() || undefined;
   let nextText: string;
@@ -236,22 +154,33 @@ export async function writeOpenCodeAgentModel(
   if (model !== undefined && isRoleReference(model)) {
     // Role intent never becomes a native model literal; it is preserved in the envelope.
     nextText = clearNativeAgentModel(baseText, paths.opencodeConfigPath, agentName);
-    nextText = withModelIntent(nextText, specifier, paths.opencodeConfigPath, (intent) => {
-      const agents = isJsonObject(intent.agents) ? { ...intent.agents } : {};
-      setOrDelete(agents, agentName, model);
-      if (Object.keys(agents).length === 0) delete intent.agents;
-      else intent.agents = agents;
-    });
+    nextText = applyModelIntent(
+      nextText,
+      specifier,
+      paths.opencodeConfigPath,
+      {
+        agents: { [agentName]: model },
+      },
+      context,
+    );
   } else {
     nextText = updateNativeAgentModel(baseText, paths.opencodeConfigPath, agentName, model);
-    nextText = withModelIntent(nextText, specifier, paths.opencodeConfigPath, (intent) => {
-      if (!isJsonObject(intent.agents)) return;
-      const agents = { ...intent.agents };
-      delete agents[agentName];
-      if (Object.keys(agents).length === 0) delete intent.agents;
-      else intent.agents = agents;
-    });
+    nextText = applyModelIntent(
+      nextText,
+      specifier,
+      paths.opencodeConfigPath,
+      {
+        agents: { [agentName]: null },
+      },
+      context,
+    );
   }
+
+  assertNativeOpenCodeDocument(
+    parseObjectDocument(nextText, paths.opencodeConfigPath),
+    paths.opencodeConfigPath,
+    context,
+  );
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -274,7 +203,8 @@ export async function writeOpenCodeDefaultModel(
     return { action: "kept", path: paths.opencodeConfigPath };
   }
 
-  const baseText = currentText ?? ensureOpenCodeConfigText(currentText);
+  const context = { configDir: dirname(paths.opencodeConfigPath) };
+  const baseText = currentText ?? ensureOpenCodeConfigText(currentText, context);
   const specifier = await getPinnedPackageSpecifier();
   const envelopeKey = ENVELOPE_DEFAULT_MODEL_KEYS[key];
   const model = options.model?.trim() || undefined;
@@ -282,19 +212,35 @@ export async function writeOpenCodeDefaultModel(
 
   if (key === "model" && model !== undefined && !isRoleReference(model)) {
     nextText = updateTopLevelStringFieldText(baseText, "model", model);
-    nextText = withModelIntent(nextText, specifier, paths.opencodeConfigPath, (intent) => {
-      delete intent.model;
-    });
+    nextText = applyModelIntent(
+      nextText,
+      specifier,
+      paths.opencodeConfigPath,
+      { model: null },
+      context,
+    );
   } else {
     if (key === "model") {
       nextText = updateTopLevelStringFieldText(baseText, "model", undefined);
     } else {
       nextText = baseText;
     }
-    nextText = withModelIntent(nextText, specifier, paths.opencodeConfigPath, (intent) => {
-      setOrDelete(intent, envelopeKey, model);
-    });
+    nextText = applyModelIntent(
+      nextText,
+      specifier,
+      paths.opencodeConfigPath,
+      {
+        [envelopeKey]: model ?? null,
+      } as { model?: string | null; smallModel?: string | null },
+      context,
+    );
   }
+
+  assertNativeOpenCodeDocument(
+    parseObjectDocument(nextText, paths.opencodeConfigPath),
+    paths.opencodeConfigPath,
+    context,
+  );
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -337,7 +283,9 @@ export async function writeOpenCodeProviderObject(
   value: JsonObject,
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
-  const nextText = ensureProviderObjectConfigText(currentText, providerID, value);
+  const nextText = ensureProviderObjectConfigText(currentText, providerID, value, {
+    configDir: dirname(paths.opencodeConfigPath),
+  });
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -355,6 +303,7 @@ export function ensureProviderBaseUrlConfigText(
   text: string | undefined,
   providerID: string,
   baseURL: string,
+  context: NativeValidationContext = {},
 ): string {
   if (!text?.trim()) {
     return renderJson({
@@ -370,7 +319,7 @@ export function ensureProviderBaseUrlConfigText(
   }
 
   const document = parseObjectDocument(text, "OpenCode config");
-  assertNativeOpenCodeDocument(document, "OpenCode config");
+  assertNativeOpenCodeDocument(document, "OpenCode config", context);
   const currentProviders = readProviderMap(document, "OpenCode config");
   const currentProvider = currentProviders[providerID];
   const currentSettings = currentProvider
@@ -406,7 +355,9 @@ export async function writeProviderBaseUrl(
   baseURL: string,
 ): Promise<WriteResult> {
   const currentText = await readOptionalText(paths.opencodeConfigPath);
-  const nextText = ensureProviderBaseUrlConfigText(currentText, providerID, baseURL);
+  const nextText = ensureProviderBaseUrlConfigText(currentText, providerID, baseURL, {
+    configDir: dirname(paths.opencodeConfigPath),
+  });
 
   if ((currentText ?? "") === nextText) {
     return { action: "kept", path: paths.opencodeConfigPath };
@@ -444,6 +395,7 @@ function ensureProviderObjectConfigText(
   text: string | undefined,
   providerID: string,
   value: JsonObject,
+  context: NativeValidationContext = {},
 ): string {
   if (!text?.trim()) {
     return renderJson({
@@ -455,7 +407,7 @@ function ensureProviderObjectConfigText(
   }
 
   const document = parseObjectDocument(text, "OpenCode config");
-  assertNativeOpenCodeDocument(document, "OpenCode config");
+  assertNativeOpenCodeDocument(document, "OpenCode config", context);
   const currentProviders = readProviderMap(document, "OpenCode config");
   const currentValue = currentProviders[providerID];
   const nextValue = currentValue ? mergeProviderObject(currentValue, value) : value;
