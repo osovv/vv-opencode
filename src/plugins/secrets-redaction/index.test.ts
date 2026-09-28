@@ -1,7 +1,7 @@
 // FILE: src/plugins/secrets-redaction/index.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native-boundary behavioral tests for the SecretsRedactionPlugin handlers: context redaction including configured and placeholder-resolved web apiKey values, tool-part payload redaction, http.response stream restoration, tool-input restoration, and strict per-family disabled/unknown policy behavior.
+//   PURPOSE: Native-boundary behavioral tests for the SecretsRedactionPlugin handlers: context redaction including configured and placeholder-resolved web apiKey values, tool-part payload redaction, http.response stream restoration, tool-input restoration, strict per-family disabled/unknown policy behavior, and per-native-session WebSocket framing lifecycle (handshake discard, abandoned-stream isolation, same-family session independence, production hook registration).
 //   SCOPE: Invoke the native hook handlers with pinned message/system/stream shapes through createSecretsRedactionRegistration with an injected strict family policy resolver; pure web apiKey rule tests are retained.
 //   DEPENDS: bun:test, src/lib/vvoc-config.ts, src/plugins/secrets-redaction/config.ts, src/plugins/secrets-redaction/index.ts
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
@@ -13,6 +13,7 @@
 //   EMAIL - Stable email secret fixture.
 //   PLACEHOLDER_PATTERN - Expected redacted email placeholder shape.
 //   makeRegistration - Build native handlers with an injected family policy resolution.
+//   createSecretsRedactionPlugin - Plugin factory under test for production hook registration.
 //   REAL_HOST - Pinned host binary from VVOC_E2E_V2_HOST; the gated smoke is skipped when unset.
 //   realHostDescribe - describe when a real host is configured, describe.skip otherwise.
 //   ContextPart - Context message content part fixture.
@@ -32,7 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 2 - Removed the prompt-handler assertion surface and covered strict disabled/unknown family policy (unknown blocks provider-bound redaction).]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE MID-REPAIR-2 - Added per-native-session WebSocket framing regressions: a handshake discards a terminal-less SSE stream and abandoned partial carries so later JSON frames restore, a >512-session same-family fan-out never evicts an active carry, two same-family sessions keep independent framing while sharing mappings, and production setup's registered handshake/receive callbacks are invoked through an abort/retry with every hook disposer observed.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -46,7 +47,11 @@ import {
   type VvocConfig,
 } from "../../lib/vvoc-config.js";
 import { resolveSecretsRedactionRuntimeConfig, webApiKeyKeywordRules } from "./config.js";
-import { createSecretsRedactionRegistration, type SecretsRedactionRegistration } from "./index.js";
+import {
+  createSecretsRedactionPlugin,
+  createSecretsRedactionRegistration,
+  type SecretsRedactionRegistration,
+} from "./index.js";
 
 const EMAIL = "qa-redaction-check-884271@example.invalid";
 const PLACEHOLDER_PATTERN = /__VVOC_SECRET_EMAIL_[0-9a-f]{12}__/;
@@ -82,6 +87,7 @@ type PolicyMode = "enabled" | "disabled" | "unknown";
 function makeRegistration(
   web?: VvocConfig["web"],
   mode: PolicyMode = "enabled",
+  familyKey: (sessionID: string) => string = (sessionID) => `family-${sessionID}`,
 ): SecretsRedactionRegistration {
   const vvoc = secretsVvoc(web, mode === "disabled");
   const resolved = resolveSecretsRedactionRuntimeConfig({
@@ -93,7 +99,7 @@ function makeRegistration(
     configFor: async (sessionID) => {
       if (mode === "unknown") return undefined;
       if (mode === "disabled") return "disabled";
-      return { key: `family-${sessionID}`, config: resolved.config };
+      return { key: familyKey(sessionID), config: resolved.config };
     },
     log: () => undefined,
   });
@@ -299,6 +305,236 @@ describe("SecretsRedactionPlugin", () => {
     const input = { command: `echo ${EMAIL}` };
     await registration.handlers.toolBefore({ sessionID: "s1", tool: "bash", input });
     expect(input.command).toBe(`echo ${EMAIL}`);
+  });
+});
+
+describe("SecretsRedactionPlugin WebSocket framing lifecycle", () => {
+  test("a new handshake discards a terminal-less SSE stream so later JSON frames restore", async () => {
+    const registration = makeRegistration();
+    const placeholder = await firstPlaceholder(registration);
+
+    // Begin SSE-over-WS and end it without [DONE] or a global terminal frame.
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+    await registration.handlers.wsReceive({
+      sessionID: "s1",
+      frame: `data: ${JSON.stringify({
+        choices: [
+          { delta: { content: `abandoned ${placeholder.slice(0, 8)}` }, finish_reason: null },
+        ],
+      })}\n`,
+    });
+
+    // A later model call crosses a new handshake before its frames arrive.
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+    const frame = JSON.stringify({
+      choices: [{ delta: { content: `restored ${placeholder}` }, finish_reason: null }],
+    });
+    const first = { sessionID: "s1", frame };
+    const second = { sessionID: "s1", frame };
+    await registration.handlers.wsReceive(first);
+    await registration.handlers.wsReceive(second);
+
+    expect(first.frame.length).toBeGreaterThan(0);
+    expect(second.frame.length).toBeGreaterThan(0);
+    expect(first.frame).toContain(EMAIL);
+    expect(second.frame).toContain(EMAIL);
+    expect(first.frame).not.toContain("__VVOC_SECRET_");
+    expect(second.frame).not.toContain("__VVOC_SECRET_");
+  });
+
+  test("an abandoned partial plain-text carry does not contaminate the next request", async () => {
+    const registration = makeRegistration();
+    const placeholder = await firstPlaceholder(registration);
+
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+    await registration.handlers.wsReceive({
+      sessionID: "s1",
+      frame: `held ${placeholder.slice(0, 10)}`,
+    });
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+
+    const next = { sessionID: "s1", frame: `next ${placeholder} done` };
+    await registration.handlers.wsReceive(next);
+
+    expect(next.frame).toBe(`next ${EMAIL} done`);
+  });
+
+  test("an abandoned partial JSON lane carry does not contaminate the next request", async () => {
+    const registration = makeRegistration();
+    const placeholder = await firstPlaceholder(registration);
+
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+    await registration.handlers.wsReceive({
+      sessionID: "s1",
+      frame: JSON.stringify({
+        choices: [{ delta: { content: `cut ${placeholder.slice(0, 9)}` }, finish_reason: null }],
+      }),
+    });
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+
+    const next = {
+      sessionID: "s1",
+      frame: JSON.stringify({
+        choices: [{ delta: { content: placeholder }, finish_reason: null }],
+      }),
+    };
+    await registration.handlers.wsReceive(next);
+
+    const parsed = JSON.parse(next.frame) as {
+      choices: Array<{ delta: { content: string } }>;
+    };
+    expect(parsed.choices[0]!.delta.content).toBe(EMAIL);
+  });
+
+  test("two same-family sessions keep independent framing while sharing mappings", async () => {
+    const registration = makeRegistration(undefined, "enabled", () => "family-shared");
+    // The placeholder is created through s1 but the family map is shared with s2.
+    const placeholder = await firstPlaceholder(registration);
+
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+    await registration.handlers.wsReceive({
+      sessionID: "s1",
+      frame: `data: ${JSON.stringify({
+        choices: [{ delta: { content: `s1 ${placeholder.slice(0, 8)}` }, finish_reason: null }],
+      })}\n`,
+    });
+    await registration.handlers.wsHandshake({ sessionID: "s2" });
+    await registration.handlers.wsReceive({
+      sessionID: "s2",
+      frame: `s2 ${placeholder.slice(0, 10)}`,
+    });
+
+    // Resetting s1 must not disturb s2's pending carry.
+    await registration.handlers.wsHandshake({ sessionID: "s1" });
+    const s1Next = {
+      sessionID: "s1",
+      frame: JSON.stringify({
+        choices: [{ delta: { content: `s1 done ${placeholder}` }, finish_reason: null }],
+      }),
+    };
+    await registration.handlers.wsReceive(s1Next);
+    const s2Next = { sessionID: "s2", frame: `${placeholder.slice(10)} done` };
+    await registration.handlers.wsReceive(s2Next);
+
+    expect(s1Next.frame).toContain(EMAIL);
+    expect(s1Next.frame).not.toContain("__VVOC_SECRET_");
+    expect(s2Next.frame).toBe(`${EMAIL} done`);
+  });
+
+  test("a fan-out of many unrelated same-family sessions never evicts an active carry", async () => {
+    const registration = makeRegistration(undefined, "enabled", () => "family-shared");
+    const placeholder = await firstPlaceholder(registration);
+
+    // The active session holds an incomplete placeholder carry.
+    await registration.handlers.wsHandshake({ sessionID: "active" });
+    const opened = { sessionID: "active", frame: placeholder.slice(0, 10) };
+    await registration.handlers.wsReceive(opened);
+
+    // Hundreds of unrelated same-family sessions each consume their own framing
+    // state. None of them may reset or evict the active session's carry.
+    for (let index = 0; index < 512; index += 1) {
+      const sessionID = `unrelated-${index}`;
+      await registration.handlers.wsHandshake({ sessionID });
+      await registration.handlers.wsReceive({ sessionID, frame: "unrelated" });
+    }
+
+    const completed = { sessionID: "active", frame: placeholder.slice(10) };
+    await registration.handlers.wsReceive(completed);
+
+    // The first session's carry survived the fan-out and completed its placeholder.
+    expect(completed.frame).toBe(EMAIL);
+  });
+});
+
+describe("SecretsRedactionPlugin registration", () => {
+  test("registered socket callbacks run the abort/retry handshake reset and every hook disposes", async () => {
+    type HookCallback = (event: Record<string, unknown>) => unknown;
+    const capture = { familyId: "family-shared", vvoc: secretsVvoc() };
+    const sessionHooks = new Map<string, HookCallback>();
+    const disposed: string[] = [];
+    let released = false;
+    const fakeRuntime = {
+      snapshots: {
+        configFor: async () => capture,
+        accept: async () => ({ status: "unbound" }),
+      },
+      release: async () => {
+        released = true;
+      },
+    };
+    const fakeContext = {
+      session: {
+        hook: async (name: string, callback: HookCallback) => {
+          sessionHooks.set(name, callback);
+          return { dispose: async () => void disposed.push(`session:${name}`) };
+        },
+      },
+      tool: {
+        hook: async (name: string, _callback: HookCallback) => ({
+          dispose: async () => void disposed.push(`tool:${name}`),
+        }),
+      },
+    };
+    const plugin = createSecretsRedactionPlugin({
+      acquireRuntime: async () => fakeRuntime as never,
+      log: () => undefined,
+    });
+
+    const cleanup = await plugin.setup(fakeContext as never);
+
+    const context = sessionHooks.get("context");
+    const handshake = sessionHooks.get("experimental.ws.handshake");
+    const receive = sessionHooks.get("experimental.ws.receive");
+    expect(typeof context).toBe("function");
+    expect(typeof handshake).toBe("function");
+    expect(typeof receive).toBe("function");
+
+    // Produce the placeholder through the registered redaction callback.
+    const messages: ContextMessage[] = [
+      { role: "user", content: [{ type: "text", text: `x ${EMAIL}` }] },
+    ];
+    await context!({ sessionID: "s1", messages });
+    const placeholder = messages[0]!.content[0]!.text!.match(PLACEHOLDER_PATTERN)![0];
+
+    // An abandoned SSE attempt, then a retry crosses a fresh handshake.
+    await handshake!({ sessionID: "s1" });
+    await receive!({
+      sessionID: "s1",
+      frame: `data: ${JSON.stringify({
+        choices: [
+          { delta: { content: `abandoned ${placeholder.slice(0, 8)}` }, finish_reason: null },
+        ],
+      })}\n`,
+    });
+    await handshake!({ sessionID: "s1" });
+    const retry = {
+      sessionID: "s1",
+      frame: JSON.stringify({
+        choices: [{ delta: { content: `retry ${placeholder}` }, finish_reason: null }],
+      }),
+    };
+    await receive!(retry);
+
+    // The registered handshake reset must let the retry's JSON frame restore.
+    expect(retry.frame.length).toBeGreaterThan(0);
+    expect(retry.frame).toContain(EMAIL);
+    expect(retry.frame).not.toContain("__VVOC_SECRET_");
+    expect(released).toBe(false);
+
+    await cleanup?.();
+    expect([...disposed].sort()).toEqual(
+      [
+        "session:compaction",
+        "session:context",
+        "session:experimental.ws.handshake",
+        "session:experimental.ws.receive",
+        "session:generate",
+        "session:http.response",
+        "session:title",
+        "tool:execute.before",
+      ].sort(),
+    );
+    expect(released).toBe(true);
   });
 });
 

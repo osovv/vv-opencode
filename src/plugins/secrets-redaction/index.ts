@@ -2,7 +2,7 @@
 // VERSION: 2.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Native OpenCode 2.0.18 plugin that redacts secrets from provider-bound request hooks (context/generate/compaction/title) and restores them in native tool inputs and streamed provider responses, strictly under the immutable policy capture bound to the session's family.
-//   SCOPE: Native Plugin.define entry, strict per-family policy resolution through snapshot accept reconciliation BEFORE provider dispatch (unknown policy blocks provider-bound work; only an explicit captured disabled policy is a no-redaction path), family-scoped placeholder state with TTL/max bounds and cleanup, redaction of system text and message text/reasoning/tool-call/tool-result/metadata fields, native tool input restoration, SSE/non-SSE http.response restoration, experimental.ws.receive frame restoration, and credential-safe diagnostics. It never mutates the persisted user prompt, never falls back to the current or default config, and never formats a fabricated host logger.
+//   SCOPE: Native Plugin.define entry, strict per-family policy resolution through snapshot accept reconciliation BEFORE provider dispatch (unknown policy blocks provider-bound work; only an explicit captured disabled policy is a no-redaction path), family-scoped placeholder state with TTL/max bounds and cleanup, per-native-session WebSocket framing discarded at each experimental.ws.handshake request boundary (so an abandoned stream cannot poison later frames) while family placeholder mappings stay shared, redaction of system text and message text/reasoning/tool-call/tool-result/metadata fields, native tool input restoration, SSE/non-SSE http.response restoration, experimental.ws.receive frame restoration, and credential-safe diagnostics. It never mutates the persisted user prompt, never falls back to the current or default config, and never formats a fabricated host logger.
 //   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/runtime/types.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts, src/plugins/secrets-redaction/config.ts, src/plugins/secrets-redaction/patterns.ts, src/plugins/secrets-redaction/engine.ts, src/plugins/secrets-redaction/deep.ts, src/plugins/secrets-redaction/session.ts, src/plugins/secrets-redaction/stream.ts]
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, M-NATIVE-RUNTIME, V-M-PLUGIN-SECRETS-REDACTION, DF-SECRETS-REDACTION]
 //   ROLE: RUNTIME
@@ -25,11 +25,12 @@
 //   SecretsToolBeforeEvent - Native tool execute.before input surface.
 //   SecretsHttpResponseEvent - Native http.response surface.
 //   SecretsWsReceiveEvent - Native experimental.ws.receive frame surface.
+//   SecretsWsHandshakeEvent - Native experimental.ws.handshake per-model-call request boundary surface.
 //   default - Default export alias of SecretsRedactionPlugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 2 - Removed the persisted-prompt mutation, resolved policy strictly through accept reconciliation before provider dispatch, blocked provider-bound work on unknown policy, keyed state by family id (no current/default fallback), and restored streamed SSE/non-SSE bodies via content-type-aware transforms.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE MID-REPAIR-2 - WebSocket frame restoration state is keyed per native session instead of per family, and an experimental.ws.handshake handler discards only that session's abandoned framing at each model call, so a terminal-less SSE stream can no longer swallow later JSON frames and two same-family sessions no longer mix carries; family-wide placeholder mappings remain intentionally shared.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -117,6 +118,14 @@ export interface SecretsWsReceiveEvent {
   readonly sessionID: string;
   frame: string;
 }
+
+/**
+ * Native `experimental.ws.handshake` event: the request boundary a WebSocket-backed
+ * model call crosses once, before the session socket is selected or reused.
+ */
+export interface SecretsWsHandshakeEvent {
+  readonly sessionID: string;
+}
 // END_BLOCK_NATIVE_EVENTS
 
 /** Native hook handlers for context/generate/compaction/title/tool/http/ws. */
@@ -126,6 +135,7 @@ export interface SecretsRedactionHandlers {
   compaction(event: SecretsContextEvent): Promise<void>;
   title(event: SecretsContextEvent): Promise<void>;
   httpResponse(event: SecretsHttpResponseEvent): Promise<void>;
+  wsHandshake(event: SecretsWsHandshakeEvent): Promise<void>;
   wsReceive(event: SecretsWsReceiveEvent): Promise<void>;
   toolBefore(event: SecretsToolBeforeEvent): Promise<void>;
 }
@@ -264,6 +274,20 @@ function createHandlers(deps: SecretsRedactionDependencies): {
     return stateFromResolution(resolved);
   };
 
+  /**
+   * Restore framing isolated to one native session. The session's family map is
+   * shared across sessions, but partial carries, lane restorers and SSE framing
+   * must never cross a session boundary.
+   */
+  const frameStateFor = (sessionID: string, session: PlaceholderSession): FrameRestoreState => {
+    let frames = frameState.get(sessionID);
+    if (frames === undefined) {
+      frames = createFrameRestoreState(session);
+      frameState.set(sessionID, frames);
+    }
+    return frames;
+  };
+
   const redactProviderEvent = async (event: SecretsContextEvent): Promise<void> => {
     const state = await requireState(event.sessionID);
     if (state === undefined) return;
@@ -288,17 +312,20 @@ function createHandlers(deps: SecretsRedactionDependencies): {
         headers: event.response.headers,
       });
     },
+    async wsHandshake(event) {
+      // `experimental.ws.handshake` runs once per model call before the session
+      // socket is selected or reused. Discard only this session's abandoned
+      // framing so a terminal-less SSE stream or partial carry cannot poison a
+      // later request; family placeholder mappings are deliberately untouched.
+      frameState.delete(event.sessionID);
+    },
     async wsReceive(event) {
       // A missing policy never blocks socket frames (they may not be provider text),
       // but no restoration happens without a trustworthy family map.
       const resolved = await deps.configFor(event.sessionID);
       if (resolved === "disabled" || resolved === undefined) return;
       const state = stateFromResolution(resolved);
-      let frames = frameState.get(resolved.key);
-      if (frames === undefined) {
-        frames = createFrameRestoreState(state.session);
-        frameState.set(resolved.key, frames);
-      }
+      const frames = frameStateFor(event.sessionID, state.session);
       event.frame = restoreProviderFrame(state.session, event.frame, frames);
     },
     async toolBefore(event) {
@@ -404,6 +431,7 @@ export function createSecretsRedactionPlugin(
         ctx.session.hook("compaction", (event) => h.compaction(event as never)),
         ctx.session.hook("title", (event) => h.title(event as never)),
         ctx.session.hook("http.response", (event) => h.httpResponse(event as never)),
+        ctx.session.hook("experimental.ws.handshake", (event) => h.wsHandshake(event as never)),
         ctx.session.hook("experimental.ws.receive", (event) => h.wsReceive(event as never)),
         ctx.tool.hook("execute.before", (event) => h.toolBefore(event as never)),
       ]);
