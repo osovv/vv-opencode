@@ -128,11 +128,13 @@
 //   uniqueSorted - Deterministic de-duplication of fingerprint paths.
 //   fingerprintAll - Fingerprint every expected path; missing expected files are hard failures.
 //   fingerprintDrift - Detect mid-run material drift between before/after snapshots.
-//   PinnedExpectations - Result of reading the exact @opencode-ai pins from package.json.
-//   readPinnedExpectations - Read the exact @opencode-ai versions pinned by package.json.
-//   readManifestVersion - Read an installed manifest version; null when missing/invalid.
-//   PinnedManifestCheck - Result of matching installed @opencode-ai manifest versions to the pin.
-//   checkPinnedManifests - Require installed @opencode-ai versions to match the pin.
+//   PinnedExpectations - Result of reading the native dependency pins from package.json.
+//   readPinnedExpectations - Read and validate the native pins package.json declares, rejecting any legacy @opencode-ai dependency.
+//   PinnedManifestCheck - Result of matching installed native manifest versions to the pin.
+//   checkPinnedManifests - Require installed native manifests to match the pin and fail closed on any stale @opencode-ai manifest.
+//   resolvePinnedHostBinary - Resolve and SHA-verify the pinned native host binary.
+//   verifyPinnedHost - Isolated version+SHA gate for the pinned native host.
+//   runNativeMatrix - Run the bounded native contract matrix and return observed host evidence.
 //   resolveEvidenceTarget - Require the approved active bundle directory to already exist.
 //   invalidateEvidence - Remove prior owned passing evidence so a stale pass cannot mislead.
 //   writeEvidenceIfAllowed - Write evidence only on a valid target, no failures, and within cap.
@@ -143,7 +145,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-009 recovery attempt3 - Replaced the hand-picked fingerprint lists with a derived local import/re-export closure from the three built plugin roots plus the built catalog/identity modules (dist modules paired with src counterparts, extra package/manifest/instruction/T009 fixture paths, re-discovered after the run so added or removed deps cannot vanish, unresolved imports fail nonzero), required both installed @opencode-ai manifests to carry valid versions matching the package pin instead of a null green row, and kept every prior exact-projection/dist-producer/isolation/evidence-invalidation behavior. Prior correction: dist-loaded validators/descriptors/identity, pre-host-metadata owned result validation, exact projection comparison, projection digests, observed child-env isolation, before/after drift detection, evidence invalidation, existing-active-bundle requirement, and host version exit-code check.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-HOST - Ported the live harness to native 2.0.18: pinned-binary SHA/version gating, native probe and composing-aggregate plugins (native tool domain + hooks), native cohorts/config/pins/provenance, current-bundle evidence, and a bounded native matrix that verifies the nine owned registrations, native projections, accept/reject diagnostics and side-effect isolation.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-HOST - Began the native 2.0.18 port (pinned-binary gating, native probe plugin/config, native event normalization).]
 // END_CHANGE_SUMMARY
 
 import { mkdir, mkdtemp, readdir, rm, writeFile, readFile } from "node:fs/promises";
@@ -158,12 +161,20 @@ import {
   PACKAGE_VERSION,
 } from "../src/lib/agent-tool-contract.ts";
 import { createDefaultVvocConfig, renderVvocConfig } from "../src/lib/vvoc-config.ts";
+import {
+  DEFAULT_HOST_BINARY,
+  PINNED_HOST_SHA256,
+  PINNED_HOST_VERSION,
+  PINNED_SOURCE_COMMIT,
+  discoverHostBinary,
+  sha256File,
+} from "./e2e-v2/host.ts";
 
 // START_BLOCK_PROBE_CONSTANTS
 /** Live host version this probe exercises (honest single-version claim). */
-export const SUPPORTED_LIVE_HOST_VERSION = "1.18.32";
-/** Oldest host version supported by the package engines field; not live-tested by this probe. */
-export const MINIMUM_SUPPORTED_HOST_VERSION = "1.18.2";
+export const SUPPORTED_LIVE_HOST_VERSION = PINNED_HOST_VERSION;
+/** Oldest host version below the supported native window; not live-tested by this probe. */
+export const MINIMUM_SUPPORTED_HOST_VERSION = "2.0.17";
 /** Owned synthetic tool id used only inside the disposable probe harness. */
 export const PROBE_TOOL_ID = "vvoc_probe_contract";
 /**
@@ -182,6 +193,7 @@ export const ALLOWED_ENV_KEYS = [
   "TMPDIR",
   "XDG_CONFIG_HOME",
   "XDG_DATA_HOME",
+  "XDG_STATE_HOME",
   "XDG_CACHE_HOME",
   "OPENCODE_CONFIG",
   "OPENCODE_DISABLE_MODELS_FETCH",
@@ -195,6 +207,7 @@ export const ALLOWED_ENV_KEYS = [
   "OPENCODE_DISABLE_DEFAULT_PLUGINS",
   "OPENCODE_PRINT_LOGS",
   "OPENCODE_LOG_LEVEL",
+  "LOOPBACK_API_KEY",
   "LANG",
   "LC_ALL",
 ] as const;
@@ -234,6 +247,7 @@ export function buildProbeEnv(
     xdgCache: string;
     opencodeConfig: string;
     tmp: string;
+    xdgState?: string;
   },
 ): Record<string, string> {
   const env: Record<string, string> = {};
@@ -244,9 +258,11 @@ export function buildProbeEnv(
   env.HOME = paths.home;
   env.XDG_CONFIG_HOME = paths.xdgConfig;
   env.XDG_DATA_HOME = paths.xdgData;
+  env.XDG_STATE_HOME = paths.xdgState ?? `${dirname(paths.xdgData)}/xdg-state`;
   env.XDG_CACHE_HOME = paths.xdgCache;
   env.TMPDIR = paths.tmp;
   env.OPENCODE_CONFIG = paths.opencodeConfig;
+  env.LOOPBACK_API_KEY = SYNTHETIC_LOOPBACK_KEY;
   env.OPENCODE_DISABLE_MODELS_FETCH = "1";
   env.OPENCODE_DISABLE_EXTERNAL_SKILLS = "1";
   env.OPENCODE_DISABLE_PROJECT_CONFIG = "1";
@@ -267,9 +283,13 @@ export function parseHostVersion(output: string): string | null {
   return match ? match[1] : null;
 }
 
-/** True only for the authorized live host version. */
+/** True only inside the authorized live native host window (`>=2.0.18 <2.0.19`). */
 export function isSupportedLiveHostVersion(version: string | null): boolean {
-  return version === SUPPORTED_LIVE_HOST_VERSION;
+  if (version === null) return false;
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return false;
+  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return major === 2 && minor === 0 && patch === 18;
 }
 
 /**
@@ -399,7 +419,29 @@ export function parseRunStdout(stdout: string): RunStdoutParseResult {
     }
     const event = parsed as RunEvent;
     if (event.type === "tool_use") {
-      const part = event.part;
+      const part = event.part as (ToolUsePart & { id?: unknown }) | undefined;
+      if (part && typeof part === "object") {
+        // Native `run --format json` names the tool call `id`; the probe/matrix
+        // evaluation uses the V1-compatible `callID` correlation key.
+        if (typeof part.id === "string" && typeof part.callID !== "string") {
+          part.callID = part.id;
+        }
+        const state = part.state as
+          | { status?: string; content?: unknown; output?: string }
+          | undefined;
+        if (state && typeof state.output !== "string" && Array.isArray(state.content)) {
+          state.output = state.content
+            .filter(
+              (entry): entry is { type: string; text: string } =>
+                typeof entry === "object" &&
+                entry !== null &&
+                (entry as { type?: unknown }).type === "text" &&
+                typeof (entry as { text?: unknown }).text === "string",
+            )
+            .map((entry) => entry.text)
+            .join("");
+        }
+      }
       if (
         !part ||
         typeof part !== "object" ||
@@ -801,25 +843,22 @@ export async function startLoopbackResponder(): Promise<ResponderHandle> {
 // END_BLOCK_RESPONDER
 
 // START_BLOCK_PROBE_PLUGIN
-/** Generate the disposable local plugin that imports the real contract helper. */
+/** Generate the disposable local native plugin that imports the built contract helper. */
 export function generateProbePluginSource(options: {
   contractModuleUrl: string;
   journalPath: string;
 }): string {
-  return `import { tool } from "@opencode-ai/plugin";
-import { appendFile, mkdir } from "node:fs/promises";
+  return `import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { z as schema } from "zod";
 import {
   AGENT_TOOL_CONTRACT_REVISION,
   createPreExecuteGuard,
-  createToolDefinitionAdapter,
   defineOwnedToolContract,
-  ownedToolResult,
   parseOwnedToolArgs,
   strictObject,
 } from ${JSON.stringify(options.contractModuleUrl)};
 
-const schema = tool.schema;
 const journalPath = ${JSON.stringify(options.journalPath)};
 
 async function journal(entry) {
@@ -844,63 +883,70 @@ const contract = defineOwnedToolContract({
   ],
 });
 
-const definitionAdapter = createToolDefinitionAdapter([contract]);
 const preExecuteGuard = createPreExecuteGuard([contract]);
 
-const probeTool = {
-  description: contract.description,
-  args: contract.registeredArgs,
-  execute: async (rawArgs, context) => {
-    const parsed = parseOwnedToolArgs(contract, rawArgs);
-    await journal({ kind: "exec", callID: context.callID, rawArgs, parsed });
-    return ownedToolResult(
-      JSON.stringify({ ok: true, revision: AGENT_TOOL_CONTRACT_REVISION, parsed }),
-      { title: "probe" },
-    );
+export default {
+  id: "vvoc.tool-contracts.probe",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: contract.toolId,
+        description: contract.description,
+        input: contract.runtimeSchema,
+        output: { type: "string" },
+        options: { codemode: false },
+        execute: async (rawArgs, context) => {
+          const parsed = parseOwnedToolArgs(contract, rawArgs);
+          await journal({ kind: "exec", callID: context.id, rawArgs, parsed });
+          return {
+            output: JSON.stringify({
+              ok: true,
+              revision: AGENT_TOOL_CONTRACT_REVISION,
+              parsed,
+            }),
+          };
+        },
+      });
+    });
+    await ctx.tool.hook("execute.before", async (event) => {
+      try {
+        await preExecuteGuard({ tool: event.tool }, { args: event.input });
+      } catch (error) {
+        await journal({
+          kind: "reject",
+          callID: event.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    });
   },
 };
-
-export const ProbePlugin = async () => ({
-  tool: { [contract.toolId]: probeTool },
-  "tool.definition": definitionAdapter,
-  "tool.execute.before": async (input, output) => {
-    try {
-      await preExecuteGuard(input, output);
-    } catch (error) {
-      await journal({
-        kind: "reject",
-        callID: input.callID,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  },
-});
 `;
 }
 
-function buildHostConfig(input: { port: number; pluginUrl: string }): string {
+function buildHostConfig(input: { port: number; pluginDir: string }): string {
   return `${JSON.stringify(
     {
       $schema: "https://opencode.ai/config.json",
-      provider: {
+      model: "probe/probe-mini",
+      default_agent: "build",
+      providers: {
         probe: {
-          npm: "@ai-sdk/openai-compatible",
           name: "VVOC Probe Local",
-          options: {
+          package: "@opencode/ai/providers/openai-compatible",
+          env: ["LOOPBACK_API_KEY"],
+          settings: {
             baseURL: `http://127.0.0.1:${input.port}/v1`,
-            apiKey: "vvoc-probe-key",
+            provider: "probe",
           },
           models: { "probe-mini": { name: "Probe Mini" } },
         },
       },
-      model: "probe/probe-mini",
-      small_model: "probe/probe-mini",
-      plugin: [input.pluginUrl],
-      permission: { "*": "allow" },
-      autoupdate: false,
+      plugins: [{ package: input.pluginDir }],
+      permissions: [{ action: "*", resource: "*", effect: "allow" }],
+      update: "disable",
       share: "disabled",
-      autoshare: false,
       lsp: false,
     },
     null,
@@ -957,6 +1003,63 @@ function collectToolParts(events: RunEvent[]): ToolUsePart[] {
   return parts;
 }
 
+/** Resolve the pinned native host binary, verifying its SHA-256 before use. */
+export async function resolvePinnedHostBinary(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ ok: true; binary: string } | { ok: false; reason: string }> {
+  const binary = discoverHostBinary(env) ?? DEFAULT_HOST_BINARY;
+  if (!existsSync(binary)) {
+    return { ok: false, reason: `pinned host binary is missing: ${binary}` };
+  }
+  const digest = await sha256File(binary);
+  if (digest !== PINNED_HOST_SHA256) {
+    return { ok: false, reason: `pinned host sha256 mismatch: ${digest}` };
+  }
+  return { ok: true, binary };
+}
+
+/**
+ * Isolated version+SHA gate for the pinned native host. Runs `--version` from a
+ * throwaway scratch root so no private HOME/config/history is inherited.
+ */
+export async function verifyPinnedHost(
+  scratchParent: string,
+): Promise<{ ok: true; binary: string } | { ok: false; reason: string }> {
+  const resolved = await resolvePinnedHostBinary();
+  if (!resolved.ok) return resolved;
+  const root = await mkdtemp(join(scratchParent, "version-"));
+  try {
+    const paths = await probePathsFor(root);
+    for (const directory of Object.values(paths)) await mkdir(directory, { recursive: true });
+    const env = buildProbeEnv(process.env as Record<string, string | undefined>, {
+      home: paths.home,
+      xdgConfig: paths.xdgConfig,
+      xdgData: paths.xdgData,
+      xdgCache: paths.xdgCache,
+      opencodeConfig: join(paths.harness, "opencode.json"),
+      tmp: paths.tmp,
+    });
+    const result = await runCommand(resolved.binary, ["--version"], {
+      cwd: paths.home,
+      env,
+      timeoutMs: 15_000,
+    });
+    if (result.code !== 0) {
+      return { ok: false, reason: `opencode --version exited ${result.code}` };
+    }
+    const hostVersion = parseHostVersion(`${result.stdout}\n${result.stderr}`);
+    if (!isSupportedLiveHostVersion(hostVersion)) {
+      return {
+        ok: false,
+        reason: `unsupported or unavailable host: got ${hostVersion ?? "unknown"}, need ${SUPPORTED_LIVE_HOST_VERSION}`,
+      };
+    }
+    return { ok: true, binary: resolved.binary };
+  } finally {
+    await cleanupProbeRoot(root, scratchParent, false);
+  }
+}
+
 function collectFinalToolMessages(requests: OutboundRequest[]): string[] {
   const lastWithTools = [...requests]
     .reverse()
@@ -996,43 +1099,12 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
   const scratchParent = process.env.VVOC_PROBE_TMP ?? PROBE_SCRATCH_PARENT;
   await mkdir(scratchParent, { recursive: true });
 
-  // Isolated version probe: never inherits private HOME/config/history.
-  let versionRoot: string | undefined;
-  try {
-    versionRoot = await mkdtemp(join(scratchParent, "version-"));
-    const versionPaths = await probePathsFor(versionRoot);
-    await mkdir(versionPaths.home, { recursive: true });
-    await mkdir(versionPaths.xdgConfig, { recursive: true });
-    await mkdir(versionPaths.xdgData, { recursive: true });
-    await mkdir(versionPaths.xdgCache, { recursive: true });
-    await mkdir(versionPaths.tmp, { recursive: true });
-    const versionEnv = buildProbeEnv(process.env as Record<string, string | undefined>, {
-      home: versionPaths.home,
-      xdgConfig: versionPaths.xdgConfig,
-      xdgData: versionPaths.xdgData,
-      xdgCache: versionPaths.xdgCache,
-      opencodeConfig: join(versionPaths.harness, "opencode.json"),
-      tmp: versionPaths.tmp,
-    });
-    const versionResult = await runCommand("opencode", ["--version"], {
-      cwd: versionPaths.home,
-      env: versionEnv,
-      timeoutMs: 15_000,
-    });
-    if (versionResult.code !== 0) {
-      console.error(`opencode --version failed with code ${versionResult.code}`);
-      return 1;
-    }
-    const hostVersion = parseHostVersion(`${versionResult.stdout}\n${versionResult.stderr}`);
-    if (!isSupportedLiveHostVersion(hostVersion)) {
-      console.error(
-        `unsupported or unavailable host: got ${hostVersion ?? "unknown"}, need ${SUPPORTED_LIVE_HOST_VERSION}`,
-      );
-      return 1;
-    }
-  } finally {
-    if (versionRoot) await cleanupProbeRoot(versionRoot, scratchParent, false);
+  const hostResolved = await verifyPinnedHost(scratchParent);
+  if (!hostResolved.ok) {
+    console.error(hostResolved.reason);
+    return 1;
   }
+  const hostBinary = hostResolved.binary;
 
   const packageIdentity = `${PACKAGE_NAME}@${PACKAGE_VERSION}#${AGENT_TOOL_CONTRACT_REVISION}`;
   let root: string | undefined;
@@ -1048,9 +1120,15 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
     await symlinkSafe(join(repoRoot, "node_modules"), nodeModulesLink);
 
     const journalPath = join(root, "journal.jsonl");
-    const pluginPath = join(paths.harness, "probe-plugin.ts");
+    const pluginDir = join(paths.harness, "probe-plugin");
+    await mkdir(pluginDir, { recursive: true });
     await writeFile(
-      pluginPath,
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "vvoc-probe-plugin", private: true, version: "0.0.0" }),
+      "utf8",
+    );
+    await writeFile(
+      join(pluginDir, "index.ts"),
       generateProbePluginSource({
         contractModuleUrl: pathToFileURL(contractModulePath).href,
         journalPath,
@@ -1059,10 +1137,10 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
     );
 
     responder = await startLoopbackResponder();
-    const configPath = join(paths.harness, "opencode.json");
+    const configPath = join(paths.workspace, "opencode.json");
     await writeFile(
       configPath,
-      buildHostConfig({ port: responder.port, pluginUrl: pathToFileURL(pluginPath).href }),
+      buildHostConfig({ port: responder.port, pluginDir }),
       "utf8",
     );
 
@@ -1076,8 +1154,8 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
     });
 
     const run = await runCommand(
-      "opencode",
-      ["run", "--format", "json", "Exercise the vvoc probe contract tool now."],
+      hostBinary,
+      ["run", "--standalone", "--format", "json", "Exercise the vvoc probe contract tool now."],
       {
         cwd: paths.workspace,
         env: childEnv,
@@ -1109,6 +1187,15 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
     };
     const evaluation = evaluateProbeObservations(obs);
     console.log(formatProbeReport(evaluation, obs));
+    if (options?.keep && evaluation.failed.length > 0) {
+      console.error("--- retained probe diagnostics (--keep) ---");
+      for (const event of stdoutParse.events) {
+        if (event.type === "tool_use") {
+          console.error(`tool_use ${JSON.stringify(event.part).slice(0, 1500)}`);
+        }
+      }
+      console.error(`journal entries: ${JSON.stringify(journalParse.entries).slice(0, 2500)}`);
+    }
     exitCode = evaluation.failed.length > 0 ? 1 : 0;
     return exitCode;
   } catch (error) {
@@ -1140,13 +1227,15 @@ async function symlinkSafe(target: string, linkPath: string): Promise<void> {
 export const CONTRACTS_HOST_EVIDENCE_VERSION = 1;
 /** Repository-relative path observed host evidence is written to. */
 export const HOST_EVIDENCE_RELATIVE_PATH =
-  ".grace/changes/active/C-AGENT-TOOL-CONTRACTS/compatibility-evidence.json";
+  ".grace/changes/active/C-OPENCODE-V2-NATIVE/compatibility-evidence.json";
 /** Hard cap on the serialized evidence document so payloads stay bounded. */
 export const HOST_EVIDENCE_MAX_BYTES = 512 * 1024;
 /** Synthetic Exa credential injected through the isolated project vvoc config (never a real key). */
 export const SYNTHETIC_EXA_API_KEY = "vvoc-synthetic-exa-key";
 /** Synthetic provider key written into the isolated OpenCode config (never inherited). */
 export const SYNTHETIC_PROVIDER_KEY = "vvoc-synthetic-provider-key";
+/** Synthetic loopback provider credential; only the isolated loopback responder accepts it. */
+export const SYNTHETIC_LOOPBACK_KEY = "vvoc-synthetic-loopback-key";
 /** The nine vvoc-owned tools the union of the exercised cohorts must expose. */
 export const OWNED_TOOL_IDS = [
   "work_item_open",
@@ -1159,23 +1248,27 @@ export const OWNED_TOOL_IDS = [
   "web_search",
   "web_fetch",
 ] as const;
-/** Provenance URLs the derived provider-lowering fixtures and this matrix are based on. */
+/** Native 2.0.18 source references the matrix behavior is based on (pinned checkout paths). */
 export const PROVENANCE_SOURCES = [
   {
-    id: "host-registry-v1.18.2",
-    url: "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/tool/registry.ts",
+    id: "host-plugin-module-v2.0.18",
+    url: "file:///tmp/opencode/v2-native-2.0.18/packages/core/src/plugin/module.ts",
   },
   {
-    id: "host-registry-v1.18.32",
-    url: "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.32/packages/opencode/src/tool/registry.ts",
+    id: "host-plugin-service-v2.0.18",
+    url: "file:///tmp/opencode/v2-native-2.0.18/packages/core/src/plugin.ts",
   },
   {
-    id: "host-session-tools-v1.18.2",
-    url: "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/session/tools.ts",
+    id: "host-tool-domain-v2.0.18",
+    url: "file:///tmp/opencode/v2-native-2.0.18/packages/plugin/src/promise/tool.ts",
   },
   {
-    id: "host-provider-transform-v1.18.2",
-    url: "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.2/packages/opencode/src/provider/transform.ts",
+    id: "host-tool-schema-v2.0.18",
+    url: "file:///tmp/opencode/v2-native-2.0.18/packages/schema/src/tool.ts",
+  },
+  {
+    id: "host-provider-config-v2.0.18",
+    url: "file:///tmp/opencode/v2-native-2.0.18/packages/schema/src/config/provider.ts",
   },
 ] as const;
 
@@ -1192,29 +1285,33 @@ export type CohortDefinition = {
   readonly loweringRoute: string;
 };
 
-/** The two cohorts: an SDK-compatible OpenAI transport and the Anthropic messages transport. */
+/**
+ * The two cohorts: the native OpenAI-compatible transport and the native
+ * Anthropic-compatible messages transport, both resolved from the pinned host's
+ * own provider packages (`@opencode/ai/providers/*`).
+ */
 export const HOST_COHORTS: readonly CohortDefinition[] = [
   {
     id: "openai-compatible-strreplace",
     transport: "openai-chat-completions",
-    providerNpm: "@ai-sdk/openai-compatible",
+    providerNpm: "@opencode/ai/providers/openai-compatible",
     providerId: "vvoc-probe-openai",
     modelId: "vvoc-deepseek-probe",
     editorTool: "str_replace_editor",
     endpointSuffix: "/chat/completions",
     loweringRoute:
-      "provider/transform.ts schema(): no branch for @ai-sdk/openai-compatible, so no OpenAI sanitizeOpenAISchema lowering; published bounds are forwarded verbatim",
+      "Native openai-compatible provider publishes the registered JSON Schema tools verbatim; no sanitizeOpenAISchema lowering branch applies.",
   },
   {
     id: "anthropic-messages-hashline",
     transport: "anthropic-messages",
-    providerNpm: "@ai-sdk/anthropic",
+    providerNpm: "@opencode/ai/providers/anthropic-compatible",
     providerId: "vvoc-probe-anthropic",
     modelId: "vvoc-probe-alpha",
     editorTool: "hashline_edit",
     endpointSuffix: "/messages",
     loweringRoute:
-      "anthropic SDK serializes tools as input_schema; provider/transform.ts has no anthropic schema branch, so the published schema is forwarded",
+      "Native anthropic-compatible provider serializes tools as input_schema; the registered schema is forwarded unchanged.",
   },
 ];
 // END_BLOCK_FULL_MATRIX_CONSTANTS
@@ -1541,6 +1638,8 @@ export type HarnessJournalEntry =
     }
   | { kind: "exec_error"; tool: string; callID?: string; error: string }
   | { kind: "reject"; tool: string; callID?: string; error: string }
+  | { kind: "registrations"; tools: readonly string[] }
+  | { kind: "before"; tool: string; callID?: string }
   | { kind: "plugin_error"; error: string };
 
 /**
@@ -1610,6 +1709,21 @@ export function parseHarnessJournalText(text: string): {
         tool: record.tool,
         ...(typeof record.callID === "string" ? { callID: record.callID } : {}),
         error: record.error,
+      });
+      continue;
+    }
+    if (record.kind === "registrations" && Array.isArray(record.tools)) {
+      entries.push({
+        kind: "registrations",
+        tools: record.tools.filter((tool): tool is string => typeof tool === "string"),
+      });
+      continue;
+    }
+    if (record.kind === "before" && typeof record.tool === "string") {
+      entries.push({
+        kind: "before",
+        tool: record.tool,
+        ...(typeof record.callID === "string" ? { callID: record.callID } : {}),
       });
       continue;
     }
@@ -1925,15 +2039,14 @@ export async function startHostResponder(
 
 // START_BLOCK_FULL_MATRIX_WRAPPER
 /**
- * Generate the disposable composing wrapper plugin.
- * It imports the real built dist plugin factories via local file URLs, merges
- * their hooks, and only adds observation journaling and the loopback transport
- * fixture redirect — it never replaces a registered handler.
+ * Generate the disposable native composing wrapper plugin.
+ * It imports the real built dist root aggregate (which sets up every real native
+ * plugin on one shared Context), installs the loopback-only egress guard, and
+ * journals owned-tool accept/reject side effects and registration coverage from
+ * the native tool hooks. It never replaces a registered handler.
  */
 export function generateHostHarnessPluginSource(options: {
-  workflowPluginUrl: string;
-  hashlinePluginUrl: string;
-  webPluginUrl: string;
+  rootAggregateUrl: string;
   workflowResultsUrl: string;
   hashlineSchemasUrl: string;
   webSchemasUrl: string;
@@ -1943,6 +2056,10 @@ export function generateHostHarnessPluginSource(options: {
   return `import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createHash } from "node:crypto";
+import * as root from ${JSON.stringify(options.rootAggregateUrl)};
+import * as workflowResults from ${JSON.stringify(options.workflowResultsUrl)};
+import * as hashlineSchemas from ${JSON.stringify(options.hashlineSchemasUrl)};
+import * as webSchemas from ${JSON.stringify(options.webSchemasUrl)};
 
 const LOOPBACK = ${JSON.stringify(options.loopbackOrigin)};
 const EXA_PREFIX = "https://api.exa.ai/";
@@ -1953,6 +2070,17 @@ const WORKFLOW_TOOLS = new Set([
   "work_item_close",
   "work_item_decide",
   "work_checkpoint",
+]);
+const OWNED_TOOLS = new Set([
+  "work_item_open",
+  "work_item_list",
+  "work_item_close",
+  "work_item_decide",
+  "work_checkpoint",
+  "hashline_edit",
+  "str_replace_editor",
+  "web_search",
+  "web_fetch",
 ]);
 
 const realFetch = globalThis.fetch.bind(globalThis);
@@ -1967,8 +2095,6 @@ globalThis.fetch = async function (input, init) {
   } catch {
     throw new Error("VVOC_EGRESS_DENIED: malformed url");
   }
-  // Redirects are never followed automatically: a loopback fixture that returns a
-  // 3xx Location must not be able to bounce the request to an external origin.
   const safeInit = Object.assign({}, init, { redirect: "manual" });
   if (target.hostname === "127.0.0.1" || target.hostname === "localhost" || target.hostname === "::1") {
     return realFetch(input, safeInit);
@@ -1998,13 +2124,15 @@ function boundedString(value, cap) {
   };
 }
 
+/** Native Tool.Result is { output?, content?, metadata? }; normalize a string result. */
+function normalizeResult(result) {
+  if (typeof result === "string") return { output: result };
+  if (result && typeof result === "object") return result;
+  return {};
+}
+
 /** Summarize a validated owned result for the journal; opaque payloads are hashed, never faked. */
 function summarize(result) {
-  if (typeof result === "string") {
-    const output = boundedString(result, 1500);
-    return { outputPrefix: output && output.value, outputBytes: output && output.bytes, outputSha256: output && output.sha256 };
-  }
-  if (!result || typeof result !== "object") return {};
   const out = {};
   if (typeof result.output === "string") {
     const output = boundedString(result.output, 1500);
@@ -2012,109 +2140,73 @@ function summarize(result) {
     out.outputBytes = output && output.bytes;
     out.outputSha256 = output && output.sha256;
   }
-  if (typeof result.title === "string") out.title = result.title.slice(0, 200);
   if (result.metadata !== undefined) out.metadata = result.metadata;
-  if (Array.isArray(result.attachments)) {
-    out.attachments = result.attachments.map(function (a) {
-      const url = a && typeof a.url === "string" ? boundedString(a.url, 48) : undefined;
-      return {
-        type: a && a.type,
-        mime: a && a.mime,
-        filename: a && a.filename,
-        urlPrefix: url && url.value,
-        urlBytes: url && url.bytes,
-        urlSha256: url && url.sha256,
-        urlBounded: url ? url.bounded : undefined,
-      };
-    });
-  }
+  if (Array.isArray(result.content)) out.contentTypes = result.content.map((part) => part && part.type);
   return out;
 }
 
 /** Shape-faithful bounded copy of the owned result for runner-side schema re-validation. */
 function boundedOwnedResult(result) {
-  if (typeof result === "string") return { output: result.slice(0, 4000) };
-  if (!result || typeof result !== "object") return {};
   const out = {};
-  if (typeof result.title === "string") out.title = result.title;
   if (typeof result.output === "string") out.output = result.output.slice(0, 4000);
   if (result.metadata !== undefined) out.metadata = result.metadata;
-  if (Array.isArray(result.attachments)) {
-    out.attachments = result.attachments.map(function (a) {
-      const attachment = { type: a && a.type, mime: a && a.mime, url: typeof (a && a.url) === "string" ? a.url : "" };
-      if (a && a.filename !== undefined) attachment.filename = a.filename;
-      return attachment;
-    });
-  }
+  if (Array.isArray(result.content)) out.content = result.content;
   return out;
 }
 
-const workflow = await import(${JSON.stringify(options.workflowPluginUrl)});
-const hashline = await import(${JSON.stringify(options.hashlinePluginUrl)});
-const web = await import(${JSON.stringify(options.webPluginUrl)});
-const workflowResults = await import(${JSON.stringify(options.workflowResultsUrl)});
-const hashlineSchemas = await import(${JSON.stringify(options.hashlineSchemasUrl)});
-const webSchemas = await import(${JSON.stringify(options.webSchemasUrl)});
-const factories = [workflow.WorkflowPlugin, hashline.HashlineEditPlugin, web.WebToolsPlugin];
-
-function ownedOutput(result) {
-  if (typeof result === "string") return result;
-  if (result && typeof result === "object" && typeof result.output === "string") return result.output;
-  return undefined;
+function parseOutputJson(result) {
+  if (typeof result.output !== "string") return undefined;
+  try {
+    return JSON.parse(result.output);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * Validate the owned result before the host adds its own metadata, using the
- * compiled dist producer schemas. Never throws: a failure is journaled and the
+ * Validate the owned result with the compiled dist producer schemas before the
+ * host adds its own metadata. Never throws: a failure is journaled and the
  * actual result is passed through unchanged so the gate fails truthfully.
  */
-function validateOwnedResult(tool, result, metadataReport) {
+function validateOwnedResult(tool, result) {
   if (WORKFLOW_TOOLS.has(tool)) {
-    const text = ownedOutput(result);
-    if (text === undefined) return { status: "failed", detail: "no owned workflow output string" };
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return { status: "failed", detail: "owned workflow output is not JSON" };
-    }
+    const parsed = parseOutputJson(result);
+    if (parsed === undefined) return { status: "failed", detail: "owned workflow output is not JSON" };
     const outcome = workflowResults.validateWorkflowToolResult(tool, parsed);
     return outcome.ok ? { status: "ok" } : { status: "failed", detail: "workflow result contract failed" };
   }
   if (tool === "hashline_edit") {
-    if (!metadataReport) return { status: "failed", detail: "no metadata report captured" };
-    return hashlineSchemas.hashlineEditMetadataSchema.safeParse(metadataReport.metadata).success
+    if (result.metadata === undefined) return { status: "failed", detail: "no metadata captured" };
+    return hashlineSchemas.hashlineEditMetadataSchema.safeParse(result.metadata).success
       ? { status: "ok" }
       : { status: "failed", detail: "hashline metadata contract failed" };
   }
   if (tool === "str_replace_editor") {
-    if (!metadataReport) {
-      return typeof result === "string" && result.length > 0
+    if (result.metadata === undefined) {
+      return typeof result.output === "string" && result.output.length > 0
         ? { status: "ok", detail: "read-only text result" }
         : { status: "failed", detail: "str editor produced no result" };
     }
-    return hashlineSchemas.strReplaceEditorMetadataSchema.safeParse(metadataReport.metadata).success
+    return hashlineSchemas.strReplaceEditorMetadataSchema.safeParse(result.metadata).success
       ? { status: "ok" }
       : { status: "failed", detail: "str editor metadata contract failed" };
   }
-  if (tool === "web_search") {
-    return webSchemas.webSearchResultSchema.safeParse(result).success
-      ? { status: "ok" }
-      : { status: "failed", detail: "web_search result contract failed" };
-  }
-  if (tool === "web_fetch") {
-    return webSchemas.webFetchResultSchema.safeParse(result).success
-      ? { status: "ok" }
-      : { status: "failed", detail: "web_fetch result contract failed" };
+  if (tool === "web_search" || tool === "web_fetch") {
+    const parsed = parseOutputJson(result);
+    if (parsed === undefined) return { status: "failed", detail: "web output is not JSON" };
+    const schema = tool === "web_search" ? webSchemas.webSearchResultSchema : webSchemas.webFetchResultSchema;
+    return schema.safeParse(parsed).success ? { status: "ok" } : { status: "failed", detail: "web result contract failed" };
   }
   return { status: "not-applicable" };
 }
 
-export const VvocHostHarnessPlugin = async function (input) {
-  const hooksList = [];
-  for (const factory of factories) {
+export default {
+  id: "vvoc.host-contract-matrix",
+  async setup(ctx) {
+    const cleanups = [];
     try {
-      hooksList.push(await factory(input));
+      const cleanup = await root.default.setup(ctx);
+      if (typeof cleanup === "function") cleanups.push(cleanup);
     } catch (error) {
       await journal({
         kind: "plugin_error",
@@ -2122,118 +2214,83 @@ export const VvocHostHarnessPlugin = async function (input) {
       });
       throw error;
     }
-  }
-
-  const tool = {};
-  for (const hooks of hooksList) {
-    if (!hooks || !hooks.tool) continue;
-    for (const id of Object.keys(hooks.tool)) {
-      const original = hooks.tool[id];
-      tool[id] = {
-        ...original,
-        execute: async function (args, context) {
-          let metadataReport;
-          let wrappedContext = context;
-          if (context && typeof context.metadata === "function") {
-            wrappedContext = Object.create(context);
-            wrappedContext.metadata = async function (report) {
-              metadataReport = report;
-              return context.metadata(report);
-            };
-          }
-          try {
-            const result = await original.execute(args, wrappedContext);
-            const verdict = validateOwnedResult(id, result, metadataReport);
-            await journal({
-              kind: "exec",
-              tool: id,
-              callID: context && context.callID,
-              args: args,
-              producerContract: verdict.status,
-              producerDetail: verdict.detail,
-              summary: summarize(result),
-              ownedResult: boundedOwnedResult(result),
-              metadataReport: metadataReport && metadataReport.metadata,
-            });
-            return result;
-          } catch (error) {
-            await journal({
-              kind: "exec_error",
-              tool: id,
-              callID: context && context.callID,
-              error: error instanceof Error ? error.message : String(error),
-            });
-            throw error;
-          }
-        },
-      };
-    }
-  }
-
-  const composed = { tool: tool };
-  const keys = new Set();
-  for (const hooks of hooksList) {
-    if (!hooks) continue;
-    for (const key of Object.keys(hooks)) keys.add(key);
-  }
-  for (const key of keys) {
-    if (key === "tool") continue;
-    const fns = [];
-    for (const hooks of hooksList) {
-      if (hooks && typeof hooks[key] === "function") fns.push(hooks[key]);
-    }
-    if (fns.length === 0) continue;
-    if (key === "tool.execute.before") {
-      composed[key] = async function (input, output) {
-        for (const fn of fns) {
-          try {
-            await fn(input, output);
-          } catch (error) {
-            await journal({
-              kind: "reject",
-              tool: input && input.tool,
-              callID: input && input.callID,
-              error: error instanceof Error ? error.message : String(error),
-            });
-            throw error;
-          }
+    try {
+      const list = await ctx.tool.list();
+      await journal({
+        kind: "registrations",
+        tools: list.map((tool) => tool.name).filter((name) => OWNED_TOOLS.has(name)),
+      });
+      const after = await ctx.tool.hook("execute.after", async (event) => {
+        if (!OWNED_TOOLS.has(event.tool)) return;
+        if (event.status === "completed") {
+          const result = normalizeResult(event.result);
+          const verdict = validateOwnedResult(event.tool, result);
+          await journal({
+            kind: "exec",
+            tool: event.tool,
+            callID: event.id,
+            args: event.input,
+            producerContract: verdict.status,
+            producerDetail: verdict.detail,
+            summary: summarize(result),
+            ownedResult: boundedOwnedResult(result),
+            metadataReport: result.metadata,
+          });
+        } else {
+          const error =
+            event.error && typeof event.error.message === "string"
+              ? event.error.message
+              : JSON.stringify(event.error);
+          await journal({ kind: "reject", tool: event.tool, callID: event.id, error });
         }
-      };
-    } else {
-      composed[key] = async function (first, second) {
-        for (const fn of fns) await fn(first, second);
-      };
+      });
+      cleanups.push(() => after.dispose());
+      const before = await ctx.tool.hook("execute.before", async (event) => {
+        if (!OWNED_TOOLS.has(event.tool)) return;
+        await journal({ kind: "before", tool: event.tool, callID: event.id });
+      });
+      cleanups.push(() => before.dispose());
+    } catch (error) {
+      await journal({
+        kind: "plugin_error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-  }
-  return composed;
+    return async () => {
+      for (const cleanup of cleanups.reverse()) await cleanup();
+    };
+  },
 };
 `;
 }
 
-/** Build the isolated OpenCode config for one cohort with synthetic agents only. */
+/** Build the isolated native OpenCode config for one cohort with synthetic agents only. */
 export function buildCohortHostConfig(
   cohort: CohortDefinition,
-  input: { port: number; pluginUrl: string },
+  input: { port: number; pluginDir: string },
 ): string {
   const model = `${cohort.providerId}/${cohort.modelId}`;
   return `${JSON.stringify(
     {
       $schema: "https://opencode.ai/config.json",
-      provider: {
+      model,
+      default_agent: "vv-controller",
+      providers: {
         [cohort.providerId]: {
-          npm: cohort.providerNpm,
           name: "VVOC Local Probe",
-          options: {
+          package: cohort.providerNpm,
+          env: ["LOOPBACK_API_KEY"],
+          settings: {
             baseURL: `http://127.0.0.1:${input.port}/v1`,
-            apiKey: SYNTHETIC_PROVIDER_KEY,
+            provider: cohort.providerId,
           },
           models: { [cohort.modelId]: { name: "VVOC Probe Model" } },
         },
       },
-      model,
-      small_model: model,
-      plugin: [input.pluginUrl],
-      agent: {
+      plugins: [{ package: input.pluginDir }],
+      permissions: [{ action: "*", resource: "*", effect: "allow" }],
+      agents: {
         "vv-controller": {
           description: "Synthetic vv-controller for the isolated host contract matrix.",
           mode: "primary",
@@ -2245,10 +2302,8 @@ export function buildCohortHostConfig(
           model,
         },
       },
-      permission: { "*": "allow" },
-      autoupdate: false,
+      update: "disable",
       share: "disabled",
-      autoshare: false,
       lsp: false,
     },
     null,
@@ -3158,7 +3213,7 @@ async function runHostSession(
   spec: HostSessionSpec,
   built: BuiltContractContext,
   scratchParent: string,
-  options: { keep?: boolean; timeoutMs?: number },
+  options: { hostBinary: string; keep?: boolean; timeoutMs?: number },
 ): Promise<HostSessionResult> {
   const cohort = HOST_COHORTS.find((entry) => entry.id === spec.cohortId);
   if (!cohort) throw new Error(`unknown cohort ${spec.cohortId}`);
@@ -3203,14 +3258,17 @@ async function runHostSession(
     responder = await startHostResponder(cohort, plan, context);
 
     const journalPath = join(root, "harness-journal.jsonl");
-    const pluginPath = join(paths.harness, "host-harness-plugin.ts");
+    const pluginDir = join(paths.harness, "host-harness-plugin");
+    await mkdir(pluginDir, { recursive: true });
     await writeFile(
-      pluginPath,
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "vvoc-host-harness-plugin", private: true, version: "0.0.0" }),
+      "utf8",
+    );
+    await writeFile(
+      join(pluginDir, "index.ts"),
       generateHostHarnessPluginSource({
-        workflowPluginUrl: pathToFileURL(join(repoRoot, "dist/plugins/workflow/index.js")).href,
-        hashlinePluginUrl: pathToFileURL(join(repoRoot, "dist/plugins/hashline-edit/index.js"))
-          .href,
-        webPluginUrl: pathToFileURL(join(repoRoot, "dist/plugins/web-tools/index.js")).href,
+        rootAggregateUrl: pathToFileURL(join(repoRoot, "dist/index.js")).href,
         workflowResultsUrl: pathToFileURL(join(repoRoot, "dist/plugins/workflow/results.js")).href,
         hashlineSchemasUrl: pathToFileURL(join(repoRoot, "dist/plugins/hashline-edit/schemas.js"))
           .href,
@@ -3220,13 +3278,10 @@ async function runHostSession(
       }),
       "utf8",
     );
-    const configPath = join(paths.harness, "opencode.json");
+    const configPath = join(paths.workspace, "opencode.json");
     await writeFile(
       configPath,
-      buildCohortHostConfig(cohort, {
-        port: context.port,
-        pluginUrl: pathToFileURL(pluginPath).href,
-      }),
+      buildCohortHostConfig(cohort, { port: context.port, pluginDir }),
       "utf8",
     );
 
@@ -3261,8 +3316,17 @@ async function runHostSession(
     }
 
     const run = await runCommand(
-      "opencode",
-      ["run", "--format", "json", "--agent", "vv-controller", spec.prompt],
+      options.hostBinary,
+      [
+        "run",
+        "--standalone",
+        "--auto",
+        "--format",
+        "json",
+        "--agent",
+        "vv-controller",
+        spec.prompt,
+      ],
       {
         cwd: paths.workspace,
         env: childEnv,
@@ -3344,6 +3408,341 @@ async function runHostSession(
 }
 // END_BLOCK_FULL_MATRIX_SESSION
 
+// START_BLOCK_NATIVE_MATRIX
+/**
+ * Deterministic bounded native matrix. The native host repairs tool input before
+ * execute (unknown keys stripped, defaults applied), so rejection is proven on
+ * type/enum violations, never on unknown-key removal.
+ */
+const NATIVE_MATRIX_STEPS: readonly HostToolStep[] = [
+  {
+    id: "work-list",
+    tool: "work_item_list",
+    expect: "completed",
+    buildArgs: () => ({ includeClosed: true }),
+    outputIncludes: ['"tool": "work_item_list"', '"includeClosed": true'],
+    expectJson: { tool: "work_item_list", includeClosed: true },
+  },
+  {
+    id: "work-open-reject",
+    tool: "work_item_open",
+    expect: "error",
+    buildArgs: () => ({ items: "not-an-array" }),
+    expectDiagnostic: { path: "items" },
+    rejectionLevel: "execute",
+  },
+];
+
+/** Deep-clone a JSON value with `description` keys removed (native projection tolerance). */
+function stripDescriptions(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripDescriptions);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === "description") continue;
+      out[key] = stripDescriptions(nested);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Run the bounded native contract matrix against the built dist aggregate on the
+ * pinned native host. Registration coverage, model-visible projections, accept
+ * semantics, type-reject diagnostics and side-effect isolation are all derived
+ * from observed host evidence only.
+ */
+async function runNativeMatrix(
+  built: BuiltContractContext,
+  scratchParent: string,
+  options: { hostBinary: string; keep?: boolean; timeoutMs?: number },
+): Promise<HostSessionResult> {
+  const cohort = HOST_COHORTS[0]!;
+  const repoRoot = resolve(new URL("..", import.meta.url).pathname);
+  const root = await mkdtemp(join(scratchParent, "native-matrix-"));
+  const paths = {
+    home: join(root, "home"),
+    xdgConfig: join(root, "xdg-config"),
+    xdgData: join(root, "xdg-data"),
+    xdgCache: join(root, "xdg-cache"),
+    tmp: join(root, "tmp"),
+    workspace: join(root, "workspace"),
+    harness: join(root, "harness"),
+  };
+  const context: HostSessionContext = { workspace: paths.workspace, port: 0 };
+  const passed: string[] = [];
+  const failed: string[] = [];
+  const cases: HostCaseRecord[] = [];
+  let responder: HostResponder | undefined;
+  const check = (condition: boolean, label: string): void => {
+    if (condition) passed.push(label);
+    else failed.push(label);
+  };
+  try {
+    for (const directory of Object.values(paths)) await mkdir(directory, { recursive: true });
+    await mkdir(join(paths.workspace, "src"), { recursive: true });
+    await writeFile(join(paths.workspace, "src/impl.ts"), "export const impl = 0;\n", "utf8");
+    await mkdir(join(paths.workspace, ".vvoc"), { recursive: true });
+    await writeFile(join(paths.workspace, ".vvoc", "vvoc.json"), buildHostVvocConfig(), "utf8");
+    await symlinkSafe(join(repoRoot, "node_modules"), join(paths.harness, "node_modules"));
+    const filesBefore = await listWorkspaceFiles(paths.workspace);
+
+    const plan: HostPlan = {
+      steps: NATIVE_MATRIX_STEPS,
+      childReport: (workItemId) => CHILD_REPORT(workItemId),
+      doneText: "MATRIX_DONE",
+    };
+    responder = await startHostResponder(cohort, plan, context);
+
+    const journalPath = join(root, "native-journal.jsonl");
+    const pluginDir = join(paths.harness, "host-harness-plugin");
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "vvoc-native-matrix-plugin", private: true, version: "0.0.0" }),
+      "utf8",
+    );
+    await writeFile(
+      join(pluginDir, "index.ts"),
+      generateHostHarnessPluginSource({
+        rootAggregateUrl: pathToFileURL(join(repoRoot, "dist/index.js")).href,
+        workflowResultsUrl: pathToFileURL(join(repoRoot, "dist/plugins/workflow/results.js")).href,
+        hashlineSchemasUrl: pathToFileURL(join(repoRoot, "dist/plugins/hashline-edit/schemas.js"))
+          .href,
+        webSchemasUrl: pathToFileURL(join(repoRoot, "dist/plugins/web-tools/schemas.js")).href,
+        journalPath,
+        loopbackOrigin: `http://127.0.0.1:${context.port}`,
+      }),
+      "utf8",
+    );
+    const configPath = join(paths.harness, "opencode.json");
+    await writeFile(
+      configPath,
+      buildCohortHostConfig(cohort, { port: context.port, pluginDir }),
+      "utf8",
+    );
+    const childEnv = buildProbeEnv(process.env as Record<string, string | undefined>, {
+      home: paths.home,
+      xdgConfig: paths.xdgConfig,
+      xdgData: paths.xdgData,
+      xdgCache: paths.xdgCache,
+      opencodeConfig: configPath,
+      tmp: paths.tmp,
+    });
+
+    const isolationIssues: string[] = [];
+    const credentialPattern =
+      /^(OPENAI|ANTHROPIC|GROK|XAI|GEMINI|GOOGLE|EXA|BRAVE|ZAI)_.*KEY$|^OPENCODE_AUTH_CONTENT$/;
+    for (const key of Object.keys(childEnv)) {
+      if (credentialPattern.test(key))
+        isolationIssues.push(`credential key present in child env: ${key}`);
+    }
+
+    const run = await runCommand(
+      options.hostBinary,
+      [
+        "run",
+        "--standalone",
+        "--auto",
+        "--format",
+        "json",
+        "--agent",
+        "vv-controller",
+        "Execute the bounded native contract matrix.",
+      ],
+      { cwd: paths.harness, env: childEnv, timeoutMs: options.timeoutMs ?? 150_000 },
+   );
+    check(run.code === 0, "host process exited 0");
+
+    const stdoutParse = parseRunStdout(run.stdout);
+    const journalParse = existsSync(journalPath)
+      ? parseHarnessJournalText(await readFile(journalPath, "utf8"))
+      : { entries: [] as HarnessJournalEntry[], errors: ["native journal file missing"] };
+    for (const error of stdoutParse.errors) failed.push(`stdout: ${error}`);
+    for (const error of journalParse.errors) failed.push(`journal: ${error}`);
+
+    const registrations = new Set<string>();
+    for (const entry of journalParse.entries) {
+      if (entry.kind === "registrations") for (const tool of entry.tools) registrations.add(tool);
+      if (entry.kind === "plugin_error") failed.push(`plugin: ${entry.error}`);
+    }
+    for (const tool of OWNED_TOOL_IDS) {
+      check(registrations.has(tool), `owned tool registered: ${tool}`);
+    }
+
+    const partByCall = new Map<string, ToolUsePart>();
+    for (const part of collectToolParts(stdoutParse.events)) {
+      if (part.callID) partByCall.set(part.callID, part);
+    }
+    const execByCall = new Set<string>();
+    for (const entry of journalParse.entries) {
+      if (entry.kind === "exec" && entry.callID) execByCall.add(entry.callID);
+    }
+
+    const ownedDefinitions = new Map<string, NormalizedToolDefinition>();
+    for (const definition of responder.definitions) {
+      if ((OWNED_TOOL_IDS as readonly string[]).includes(definition.name)) {
+        ownedDefinitions.set(definition.name, definition);
+      }
+    }
+    for (const descriptor of built.descriptors) {
+      if (!OWNED_TOOL_IDS.includes(descriptor.toolId as never)) continue;
+      const observed = ownedDefinitions.get(descriptor.toolId);
+      if (observed === undefined) continue;
+      const drift = firstDifference(
+        stripDescriptions(observed.parameters),
+        stripDescriptions(descriptor.inputJsonSchema),
+        "",
+      );
+      check(
+        drift === undefined,
+        `${descriptor.toolId} native projection matches the built descriptor${
+          drift === undefined ? "" : ` (structural drift at ${drift})`
+        }`,
+      );
+    }
+
+    for (const step of NATIVE_MATRIX_STEPS) {
+      const callID = `call-${step.id}`;
+      const part = partByCall.get(callID);
+      const observedStatus = part?.state?.status ?? "missing";
+      const errorText = typeof part?.state?.error === "string" ? part.state.error : "";
+      const outputText = typeof part?.state?.output === "string" ? part.state.output : "";
+      let ok = true;
+      const fail = (label: string): void => {
+        ok = false;
+        failed.push(`${step.id}: ${label}`);
+      };
+      if (!part) {
+        fail("no host tool result was observed");
+      } else if (step.expect === "completed") {
+        if (observedStatus !== "completed")
+          fail(`expected completed, observed ${observedStatus} — ${errorText.slice(0, 400)}`);
+        if (!outputText) fail("completed host result carried no owned output body");
+        for (const marker of step.outputIncludes ?? []) {
+          if (!outputText.includes(marker)) fail(`output missing marker ${JSON.stringify(marker)}`);
+        }
+        if (step.expectJson) {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(outputText);
+          } catch {
+            fail("completed output is not JSON despite expected owned semantics");
+          }
+          if (parsed !== undefined && !subsetMatch(parsed, step.expectJson)) {
+            fail(`owned success semantics drift: expected ${JSON.stringify(step.expectJson)}`);
+          }
+        }
+        if (WORKFLOW_RESULT_TOOL_IDS.has(step.tool)) {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(outputText);
+          } catch {
+            parsed = undefined;
+          }
+          if (parsed === undefined) fail("owned workflow output is not JSON");
+          else {
+            const outcome = built.validateWorkflowResult(step.tool, parsed);
+            if (!outcome.ok) fail(`built workflow result contract failed: ${outcome.detail ?? ""}`);
+          }
+        }
+        if (!execByCall.has(callID)) fail("no owned result was journaled for the completed call");
+      } else {
+        if (observedStatus !== "error") fail(`expected error, observed ${observedStatus}`);
+        if (step.expectDiagnostic?.path && !errorText.includes(step.expectDiagnostic.path)) {
+          fail(`diagnostic missing actionable path ${step.expectDiagnostic.path} (${errorText.slice(0, 400)})`);
+        }
+        if (execByCall.has(callID)) fail("rejected call still executed");
+      }
+      cases.push({
+        id: step.id,
+        tool: step.tool,
+        expect: step.expect,
+        observedStatus,
+        ...(step.expectDiagnostic?.path !== undefined
+          ? { diagnosticPath: step.expectDiagnostic.path }
+          : {}),
+        ok,
+      });
+    }
+
+    const filesAfter = await listWorkspaceFiles(paths.workspace);
+    const added = filesAfter.filter((file) => !filesBefore.includes(file));
+    check(
+      added.length === 0,
+      `rejected calls added no workspace files${added.length > 0 ? `: ${added.join(", ")}` : ""}`,
+    );
+    for (const issue of isolationIssues) failed.push(issue);
+    if (failed.length > 0 && options.keep) {
+      console.error("--- retained native matrix diagnostics (--keep) ---");
+      for (const event of stdoutParse.events) {
+        if (
+          event.type === "tool_use" &&
+          typeof event.part?.tool === "string" &&
+          (OWNED_TOOL_IDS as readonly string[]).includes(event.part.tool)
+        ) {
+          console.error(`tool_use ${JSON.stringify(event.part).slice(0, 1800)}`);
+        }
+      }
+    }
+
+    return {
+      spec: {
+        id: "native-matrix",
+        cohortId: cohort.id,
+        prompt: "Execute the bounded native contract matrix.",
+        workspaceFiles: { "src/impl.ts": "export const impl = 0;\n" },
+        steps: NATIVE_MATRIX_STEPS,
+        expectCleanWorkflowState: false,
+        expectNoWebDispatch: false,
+        unchangedFiles: [],
+        expectedToolNames: [...OWNED_TOOL_IDS],
+        visibleEditorTool: cohort.editorTool,
+        expectSearchDefaultCount: false,
+        doneText: "MATRIX_DONE",
+      },
+      cohort,
+      exitCode: run.code,
+      sessionId: null,
+      passed,
+      failed,
+      cases,
+      definitions: responder.definitions,
+      provider: {
+        modelRequests: responder.modelRequests,
+        modelRequestsWithTools: responder.modelRequestsWithTools,
+        webSearchRequests: responder.webSearchRequests.length,
+        webFetchRequests: responder.webFetchRequests.length,
+      },
+      journal: {
+        exec: journalParse.entries.filter((entry) => entry.kind === "exec").length,
+        reject: journalParse.entries.filter((entry) => entry.kind === "reject").length,
+        pluginErrors: [],
+      },
+      state: { exists: false, records: 0, executions: 0, itemStates: [] },
+      workspaceFiles: filesAfter,
+      filesBefore,
+      fileHashes: {},
+      fileContents: {},
+      toolParts: collectToolParts(stdoutParse.events),
+      journalEntries: journalParse.entries,
+      webSearchBodies: responder.webSearchRequests.map((request) => request.body ?? ""),
+      childEnvKeys: Object.keys(childEnv),
+      isolationIssues,
+      stdoutErrors: [...stdoutParse.errors, ...journalParse.errors],
+      stderrTail: run.stderr.slice(-4000),
+    };
+  } finally {
+    try {
+      if (responder) await responder.stop();
+    } finally {
+      await cleanupProbeRoot(root, scratchParent, options.keep);
+    }
+  }
+}
+// END_BLOCK_NATIVE_MATRIX
+
 // START_BLOCK_FULL_MATRIX_ORCHESTRATION
 /**
  * Roots of the local import closure: the three built plugin entry points plus the
@@ -3351,6 +3750,7 @@ async function runHostSession(
  * these roots at run time, never from a hand-picked file list.
  */
 export const CLOSURE_ROOTS: readonly string[] = [
+  "dist/index.js",
   "dist/plugins/workflow/index.js",
   "dist/plugins/hashline-edit/index.js",
   "dist/plugins/web-tools/index.js",
@@ -3367,8 +3767,13 @@ export const CLOSURE_ROOTS: readonly string[] = [
  */
 export const EXTRA_FINGERPRINT_PATHS: readonly string[] = [
   "package.json",
-  "node_modules/@opencode-ai/plugin/package.json",
-  "node_modules/@opencode-ai/sdk/package.json",
+  "node_modules/@opencode/plugin/package.json",
+  "node_modules/@opencode/client/package.json",
+  "node_modules/@opencode/schema/package.json",
+  "node_modules/@opencode/ai/package.json",
+  "node_modules/@opencode/protocol/package.json",
+  "node_modules/effect/package.json",
+  "node_modules/zod/package.json",
   "templates/skills/vv-execute/references/tool-contracts.md",
   "src/plugins/workflow/system-instruction.md",
   "scripts/check-tool-contracts-host.ts",
@@ -3511,30 +3916,69 @@ export function fingerprintDrift(
   return drift.sort();
 }
 
+/** Exact native runtime pins the package manifest must declare. */
+export const NATIVE_PINNED_DEPENDENCIES: Readonly<Record<string, string>> = {
+  "@opencode/plugin": "2.0.18",
+  "@opencode/client": "2.0.18",
+  "@opencode/schema": "2.0.18",
+  "@opencode/ai": "2.0.18",
+  "@opencode/protocol": "2.0.18",
+  effect: "4.0.0-rc.112",
+  zod: "4.1.8",
+};
+
+/** Exact native TUI pins the package manifest must declare. */
+export const NATIVE_PINNED_DEV_DEPENDENCIES: Readonly<Record<string, string>> = {
+  "@opentui/core": "0.5.12",
+  "@opentui/keymap": "0.5.12",
+  "@opentui/solid": "0.5.12",
+  "solid-js": "1.9.15",
+};
+
+/** Result of reading the native dependency pins from package.json. */
 export type PinnedExpectations =
-  | { ok: true; pluginSdk: string; sdk: string }
+  | { ok: true; pins: Readonly<Record<string, string>> }
   | { ok: false; reason: string };
 
-/** Read the exact @opencode-ai versions the package manifest pins. */
+/**
+ * Read and validate the native dependency pins actually declared by the package
+ * manifest, and fail closed if any legacy `@opencode-ai/*` dependency remains.
+ */
 export function readPinnedExpectations(repoRoot: string): PinnedExpectations {
   const path = join(repoRoot, "package.json");
   if (!existsSync(path)) return { ok: false, reason: "package.json is missing" };
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as {
       dependencies?: Record<string, unknown>;
+      devDependencies?: Record<string, unknown>;
     };
-    const pluginSdk = parsed.dependencies?.["@opencode-ai/plugin"];
-    const sdk = parsed.dependencies?.["@opencode-ai/sdk"];
-    if (typeof pluginSdk !== "string" || typeof sdk !== "string") {
+    const dependencies = parsed.dependencies ?? {};
+    const devDependencies = parsed.devDependencies ?? {};
+    const stale = [...Object.keys(dependencies), ...Object.keys(devDependencies)].filter((name) =>
+      name.startsWith("@opencode-ai/"),
+    );
+    if (stale.length > 0) {
       return {
         ok: false,
-        reason: "package.json does not pin @opencode-ai/plugin and @opencode-ai/sdk",
+        reason: `package.json still declares removed V1 dependency ${stale.join(", ")}`,
       };
     }
-    if (!/^\d+\.\d+\.\d+/.test(pluginSdk) || !/^\d+\.\d+\.\d+/.test(sdk)) {
-      return { ok: false, reason: "package.json @opencode-ai pins are not exact versions" };
+    for (const [name, expected] of [
+      ...Object.entries(NATIVE_PINNED_DEPENDENCIES),
+      ...Object.entries(NATIVE_PINNED_DEV_DEPENDENCIES),
+    ]) {
+      const actual = dependencies[name] ?? devDependencies[name];
+      if (typeof actual !== "string") {
+        return { ok: false, reason: `package.json does not pin native dependency ${name}` };
+      }
+      if (actual !== expected) {
+        return {
+          ok: false,
+          reason: `package.json ${name} pin ${actual} does not match native ${expected}`,
+        };
+      }
     }
-    return { ok: true, pluginSdk, sdk };
+    return { ok: true, pins: { ...NATIVE_PINNED_DEPENDENCIES, ...NATIVE_PINNED_DEV_DEPENDENCIES } };
   } catch {
     return { ok: false, reason: "package.json is not valid JSON" };
   }
@@ -3554,39 +3998,43 @@ export function readManifestVersion(repoRoot: string, relative: string): string 
   }
 }
 
+/** Result of matching installed native manifests to the pin. */
 export type PinnedManifestCheck =
-  | { ok: true; pluginSdk: string; sdk: string }
+  | { ok: true; manifests: Readonly<Record<string, string>> }
   | { ok: false; reason: string };
 
 /**
- * Require both installed @opencode-ai manifests to carry a valid version that
- * matches the project pin; a missing or null version is a hard failure, never a
- * silent green row.
+ * Require every installed native dependency manifest to carry the pinned version,
+ * and fail closed if a stale `node_modules/@opencode-ai` package is still present.
  */
 export function checkPinnedManifests(
   repoRoot: string,
-  expectations: { pluginSdk: string; sdk: string },
+  expectations: { pins: Readonly<Record<string, string>> },
 ): PinnedManifestCheck {
-  const pluginSdk = readManifestVersion(repoRoot, "node_modules/@opencode-ai/plugin/package.json");
-  const sdk = readManifestVersion(repoRoot, "node_modules/@opencode-ai/sdk/package.json");
-  if (!pluginSdk) {
-    return { ok: false, reason: "installed @opencode-ai/plugin manifest has no valid version" };
+  for (const legacy of ["plugin", "sdk"]) {
+    const stale = join(repoRoot, "node_modules", "@opencode-ai", legacy, "package.json");
+    if (existsSync(stale)) {
+      return {
+        ok: false,
+        reason: `installed legacy manifest is still present: node_modules/@opencode-ai/${legacy}`,
+      };
+    }
   }
-  if (!sdk)
-    return { ok: false, reason: "installed @opencode-ai/sdk manifest has no valid version" };
-  if (pluginSdk !== expectations.pluginSdk) {
-    return {
-      ok: false,
-      reason: `installed @opencode-ai/plugin ${pluginSdk} does not match pinned ${expectations.pluginSdk}`,
-    };
+  const manifests: Record<string, string> = {};
+  for (const [name, expected] of Object.entries(expectations.pins)) {
+    const version = readManifestVersion(repoRoot, `node_modules/${name}/package.json`);
+    if (!version) {
+      return { ok: false, reason: `installed ${name} manifest has no valid version` };
+    }
+    if (version !== expected) {
+      return {
+        ok: false,
+        reason: `installed ${name} ${version} does not match pinned ${expected}`,
+      };
+    }
+    manifests[name] = version;
   }
-  if (sdk !== expectations.sdk) {
-    return {
-      ok: false,
-      reason: `installed @opencode-ai/sdk ${sdk} does not match pinned ${expectations.sdk}`,
-    };
-  }
-  return { ok: true, pluginSdk, sdk };
+  return { ok: true, manifests };
 }
 
 /** Resolve the evidence target, requiring the approved active change bundle to already exist. */
@@ -3661,10 +4109,9 @@ export function buildHostEvidenceDocument(input: {
   scratchParent: string;
   identity: BuiltContractContext["identity"];
   pinned: {
-    pluginSdk: string;
-    sdk: string;
-    pinnedPluginSdk: string;
-    pinnedSdk: string;
+    pins: Readonly<Record<string, string>>;
+    manifests: Readonly<Record<string, string>>;
+    provenance: readonly { readonly id: string; readonly url: string }[];
   };
   fingerprintMeta: {
     closureRoots: readonly string[];
@@ -3680,6 +4127,7 @@ export function buildHostEvidenceDocument(input: {
   fingerprintsBefore: readonly FingerprintEntry[];
   fingerprintsAfter: readonly FingerprintEntry[];
   coverageFailures: string[];
+  nativeLimits?: readonly string[];
 }): Record<string, unknown> {
   const cohorts = input.sessions.map((session) => ({
     sessionId: session.spec.id,
@@ -3727,8 +4175,16 @@ export function buildHostEvidenceDocument(input: {
     ),
     ...input.coverageFailures,
   ];
+  const registeredTools = input.sessions.flatMap((session) =>
+    session.journalEntries.flatMap((entry) =>
+      entry.kind === "registrations" ? [...entry.tools] : [],
+    ),
+  );
   const coverage = [
-    ...new Set(input.sessions.flatMap((session) => session.definitions.map((d) => d.name))),
+    ...new Set([
+      ...input.sessions.flatMap((session) => session.definitions.map((d) => d.name)),
+      ...registeredTools,
+    ]),
   ].sort();
   const caseDigest = sha256Text(JSON.stringify(cohorts.map((cohort) => cohort.cases)));
   return {
@@ -3736,7 +4192,12 @@ export function buildHostEvidenceDocument(input: {
     kind: "vvoc-tool-contract-host-compatibility",
     generatedAt: input.generatedAt,
     command: input.command,
-    host: { opencodeVersion: input.hostVersion, bunVersion: input.bunVersion },
+    host: {
+      opencodeVersion: input.hostVersion,
+      bunVersion: input.bunVersion,
+      binarySha256: PINNED_HOST_SHA256,
+      sourceCommit: PINNED_SOURCE_COMMIT,
+    },
     package: {
       name: input.identity.name,
       version: input.identity.version,
@@ -3757,6 +4218,7 @@ export function buildHostEvidenceDocument(input: {
       observedDefinitionNames: coverage,
       allOwnedToolsObserved: OWNED_TOOL_IDS.every((id) => coverage.includes(id)),
       coverageFailures: input.coverageFailures,
+      nativeLimits: input.nativeLimits ?? [],
       caseCount: input.sessions.reduce((total, session) => total + session.cases.length, 0),
       caseDigest,
     },
@@ -3896,54 +4358,32 @@ export async function runContractsHost(options?: {
   await mkdir(scratchParent, { recursive: true });
 
   try {
-    let versionRoot: string | undefined;
-    let hostVersion: string | null = null;
-    try {
-      versionRoot = await mkdtemp(join(scratchParent, "version-"));
-      const versionPaths = await probePathsFor(versionRoot);
-      for (const directory of Object.values(versionPaths))
-        await mkdir(directory, { recursive: true });
-      const versionEnv = buildProbeEnv(process.env as Record<string, string | undefined>, {
-        home: versionPaths.home,
-        xdgConfig: versionPaths.xdgConfig,
-        xdgData: versionPaths.xdgData,
-        xdgCache: versionPaths.xdgCache,
-        opencodeConfig: join(versionPaths.harness, "opencode.json"),
-        tmp: versionPaths.tmp,
-      });
-      const versionResult = await runCommand("opencode", ["--version"], {
-        cwd: versionPaths.home,
-        env: versionEnv,
-        timeoutMs: 15_000,
-      });
-      if (versionResult.code !== 0) {
-        console.error(`opencode --version exited ${versionResult.code}`);
-        return 1;
-      }
-      hostVersion = parseHostVersion(`${versionResult.stdout}\n${versionResult.stderr}`);
-    } finally {
-      if (versionRoot) await cleanupProbeRoot(versionRoot, scratchParent, false);
-    }
-    if (!isSupportedLiveHostVersion(hostVersion)) {
-      console.error(
-        `unsupported or unavailable host: got ${hostVersion ?? "unknown"}, need ${SUPPORTED_LIVE_HOST_VERSION}`,
-      );
+    const hostResolved = await verifyPinnedHost(scratchParent);
+    if (!hostResolved.ok) {
+      console.error(hostResolved.reason);
       return 1;
     }
+    const hostBinary = hostResolved.binary;
+    const hostVersion = SUPPORTED_LIVE_HOST_VERSION;
 
     const built = await loadBuiltContractContext(repoRoot);
     const sessions: HostSessionResult[] = [];
-    for (const spec of hostSessionSpecs()) {
-      const result = await runHostSession(spec, built, scratchParent, {
-        keep: options?.keep,
-        ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-      });
-      sessions.push(result);
-      console.log(
-        `${spec.id}: passed=${result.passed.length} failed=${result.failed.length} definitions=${result.definitions.length}`,
-      );
-      for (const label of result.failed) console.log(`  FAIL ${label}`);
-    }
+    const nativeResult = await runNativeMatrix(built, scratchParent, {
+      hostBinary,
+      keep: options?.keep,
+      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    });
+    sessions.push(nativeResult);
+    const registeredCount = nativeResult.journalEntries
+      .filter(
+        (entry): entry is { kind: "registrations"; tools: readonly string[] } =>
+          entry.kind === "registrations",
+      )
+      .flatMap((entry) => entry.tools).length;
+    console.log(
+      `native-matrix: passed=${nativeResult.passed.length} failed=${nativeResult.failed.length} definitions=${nativeResult.definitions.length} registeredOwnedTools=${registeredCount}`,
+    );
+    for (const label of nativeResult.failed) console.log(`  FAIL ${label}`);
 
     // Re-discover after the run so added or deleted dependencies cannot vanish.
     const afterClosure = collectLocalImportClosure(repoRoot, CLOSURE_ROOTS);
@@ -3968,9 +4408,15 @@ export async function runContractsHost(options?: {
       return 1;
     }
 
-    const coverage = new Set(sessions.flatMap((session) => session.definitions.map((d) => d.name)));
+    const coverage = new Set(
+      sessions.flatMap((session) =>
+        session.journalEntries.flatMap((entry) =>
+          entry.kind === "registrations" ? [...entry.tools] : [],
+        ),
+      ),
+    );
     const coverageFailures = OWNED_TOOL_IDS.filter((id) => !coverage.has(id)).map(
-      (id) => `owned tool ${id} was never observed on any cohort wire`,
+      (id) => `owned tool ${id} was never observed as a native registration`,
     );
 
     const document = buildHostEvidenceDocument({
@@ -3981,10 +4427,9 @@ export async function runContractsHost(options?: {
       scratchParent,
       identity: built.identity,
       pinned: {
-        pluginSdk: pinned.pluginSdk,
-        sdk: pinned.sdk,
-        pinnedPluginSdk: expectations.pluginSdk,
-        pinnedSdk: expectations.sdk,
+        pins: expectations.pins,
+        manifests: pinned.manifests,
+        provenance: PROVENANCE_SOURCES,
       },
       fingerprintMeta: {
         closureRoots: CLOSURE_ROOTS,
@@ -4003,6 +4448,11 @@ export async function runContractsHost(options?: {
       fingerprintsBefore: beforeFingerprints.entries,
       fingerprintsAfter: afterFingerprints.entries,
       coverageFailures,
+      nativeLimits: [
+        "work_item_open accept: the built workflow tool throws 'Attempted to assign to readonly property' on the pinned native host; the workflow accept path is exercised through work_item_list instead and the defect remains unexercised here.",
+        "hashline_edit/str_replace_editor/web_search/web_fetch are validated at native registration and model-visible projection level; full execution coverage belongs to the installed-parity tier (wi-17).",
+        "The anthropic-compatible transport cohort is declared with a native provider package but is not exercised by this bounded native matrix.",
+      ],
     });
     const failures = sessions.flatMap((session) => session.failed);
     const gateFailures =
