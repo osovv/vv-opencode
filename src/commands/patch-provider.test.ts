@@ -49,21 +49,6 @@ describe("resolvePatchProviderPreset", () => {
       summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
     });
   });
-  test("returns the built-in kimi alias patch", () => {
-    expect(resolvePatchProviderPreset("kimi")).toMatchObject({
-      kind: "provider-object",
-      providerID: "kimi-for-coding",
-      summary: "provider.kimi-for-coding.models.vv-kimi-k3-max patched",
-    });
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("kimi") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-kimi-k3-max"].id).toBe("k3");
-    expect(value.models["vv-kimi-k3-max"].options.reasoningEffort).toBe("max");
-  });
-
   test("returns the built-in alibaba alias patch", () => {
     expect(resolvePatchProviderPreset("alibaba")).toMatchObject({
       kind: "provider-object",
@@ -240,7 +225,7 @@ describe("resolvePatchProviderPreset", () => {
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba, zai, xiaomi. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, alibaba, zai, xiaomi. Compatibility aliases: openai",
     );
   });
 });
@@ -453,28 +438,6 @@ describe("applyPatchProviderPreset", () => {
       await rm(configHome, { recursive: true, force: true });
     }
   });
-  test("writes the global kimi alias patch idempotently", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
-
-    try {
-      const first = await applyPatchProviderPreset("kimi", {
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-      const second = await applyPatchProviderPreset("kimi", {
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
-      expect(first.result.action).toBe("created");
-      expect(second.result.action).toBe("kept");
-      expect(content).toContain("vv-kimi-k3-max");
-      expect(content).toContain("kimi-k3");
-    } finally {
-      await rm(configHome, { recursive: true, force: true });
-    }
-  });
-
   test("writes the global alibaba alias patch idempotently", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
@@ -629,14 +592,12 @@ describe("applyPatchProviderPreset", () => {
         "stepfun-ai",
         "codex",
         "deepseek",
-        "kimi",
         "alibaba",
         "zai",
         "xiaomi",
       ]);
       expect(results.map((entry) => entry.result.action)).toEqual([
         "created",
-        "updated",
         "updated",
         "updated",
         "updated",

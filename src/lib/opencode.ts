@@ -10,8 +10,8 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   resolvePaths, ensurePackageConfigText, ensureTuiPackageConfigText, ensureTuiPackageInstalled, ensureManagedAgentRegistrationsConfigText, syncManagedAgentRegistrations, installManagedAgentPrompts, syncManagedAgentPrompts, installManagedSkillFiles, syncManagedSkillFiles, ensureManagedSkillSymlink, readManagedAgentModels, readManagedAgentOverrides, readOpenCodeAgentModel, readOpenCodeAgentOverride, readOpenCodeDefaultModel, writeOpenCodeAgentModel, writeOpenCodeDefaultModel, writeOpenCodeProviderObject, writeManagedAgentModel, ensurePackageInstalled, ensureProviderBaseUrlConfigText, writeProviderBaseUrl, readVvocConfig, installVvocConfig, syncVvocConfig, writeGuardianConfig, inspectOpenCodeRuntime, isTuiOpenCodeVersionCompatible, extractOpenCodeVersion, inspectInstallation, inspectInstallationForScope, describeWriteResult - Public functions of the former monolith, now owned by zone modules.
-//   CLI_NAME, PACKAGE_NAME, OPENCODE_SCHEMA_URL, OPENCODE_TUI_SCHEMA_URL, TUI_PACKAGE_SPECIFIER, MINIMUM_TUI_OPENCODE_VERSION - Public constants owned by zone modules and package.ts.
+//   resolvePaths, ensurePackageConfigText, ensureTuiPackageConfigText, ensureTuiPackageInstalled, ensureManagedAgentRegistrationsConfigText, syncManagedAgentRegistrations, installManagedAgentPrompts, syncManagedAgentPrompts, installManagedSkillFiles, syncManagedSkillFiles, ensureManagedSkillSymlink, readManagedAgentModels, readManagedAgentOverrides, readOpenCodeAgentModel, readOpenCodeAgentOverride, readOpenCodeDefaultModel, writeOpenCodeAgentModel, writeOpenCodeDefaultModel, writeOpenCodeProviderObject, writeManagedAgentModel, ensurePackageInstalled, ensureProviderBaseUrlConfigText, writeProviderBaseUrl, readVvocConfig, installVvocConfig, syncVvocConfig, writeGuardianConfig, inspectOpenCodeRuntime, assertSupportedOpenCodeRuntime, extractOpenCodeVersion, inspectInstallation, inspectInstallationForScope, describeWriteResult - Public functions of the former monolith, now owned by zone modules.
+//   CLI_NAME, PACKAGE_NAME, OPENCODE_SCHEMA_URL, OPENCODE_TUI_SCHEMA_URL, TUI_PACKAGE_SPECIFIER, MIN_SUPPORTED_OPENCODE_VERSION, MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE, SUPPORTED_OPENCODE_VERSION_RANGE, isSupportedOpenCodeVersion - Public constants/functions owned by zone modules and package.ts.
 //   Scope, ResolvedPaths, WriteResult, TuiPluginEntry, OpenCodeDefaultModelKey, ManagedAgentModelMap, OpenCodeAgentOverride, ManagedAgentOverrideMap, OpenCodeRuntimeInspection, InstallationInspection, GuardianConfigOverrides - Public types owned by zone modules and vvoc-config.ts.
 // END_MODULE_MAP
 //
@@ -40,7 +40,10 @@ export {
 } from "./opencode/plugin-registration.js";
 export {
   TUI_PACKAGE_SPECIFIER,
-  MINIMUM_TUI_OPENCODE_VERSION,
+  MIN_SUPPORTED_OPENCODE_VERSION,
+  MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE,
+  SUPPORTED_OPENCODE_VERSION_RANGE,
+  isSupportedOpenCodeVersion,
 } from "./opencode/plugin-registration.js";
 export type { TuiPluginEntry } from "./opencode/plugin-registration.js";
 
@@ -82,7 +85,7 @@ export {
 
 export {
   inspectOpenCodeRuntime,
-  isTuiOpenCodeVersionCompatible,
+  assertSupportedOpenCodeRuntime,
   extractOpenCodeVersion,
   inspectInstallation,
   inspectInstallationForScope,

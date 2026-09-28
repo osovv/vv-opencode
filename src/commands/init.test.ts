@@ -23,7 +23,17 @@ import {
   VVOC_CONFIG_SCHEMA_URL,
   VVOC_CONFIG_VERSION,
 } from "../lib/vvoc-config.js";
-import { resolvePaths, TUI_PACKAGE_SPECIFIER } from "../lib/opencode.js";
+import {
+  resolvePaths,
+  SUPPORTED_OPENCODE_VERSION_RANGE,
+  TUI_PACKAGE_SPECIFIER,
+} from "../lib/opencode.js";
+
+const SUPPORTED_RUNTIME = async () => ({
+  version: "2.0.18",
+  supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+  versionSupported: true,
+});
 
 test("resolvePaths - global scope resolves correctly", async () => {
   const result = await resolvePaths({ scope: "global", cwd: "/tmp/test" });
@@ -54,6 +64,7 @@ describe("init scenarios", () => {
         cwd: tmpDir,
         configDir: configHome,
         nonInteractive: true,
+        inspectRuntime: SUPPORTED_RUNTIME,
       });
 
       const { readFileSync, existsSync } = await import("node:fs");
@@ -151,6 +162,7 @@ describe("init scenarios", () => {
         cwd: tmpDir,
         configDir: configHome,
         nonInteractive: true,
+        inspectRuntime: SUPPORTED_RUNTIME,
       });
 
       const { readFileSync } = await import("node:fs");
@@ -164,6 +176,7 @@ describe("init scenarios", () => {
         cwd: tmpDir,
         configDir: configHome,
         nonInteractive: true,
+        inspectRuntime: SUPPORTED_RUNTIME,
       });
 
       const afterOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");

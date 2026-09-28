@@ -26,7 +26,9 @@ import { parse } from "jsonc-parser";
 import {
   OPENCODE_SCHEMA_URL,
   OPENCODE_TUI_SCHEMA_URL,
-  MINIMUM_TUI_OPENCODE_VERSION,
+  MIN_SUPPORTED_OPENCODE_VERSION,
+  MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE,
+  SUPPORTED_OPENCODE_VERSION_RANGE,
   PACKAGE_NAME,
   TUI_PACKAGE_SPECIFIER,
   ensureManagedAgentRegistrationsConfigText,
@@ -40,7 +42,8 @@ import {
   installVvocConfig,
   inspectInstallation,
   inspectOpenCodeRuntime,
-  isTuiOpenCodeVersionCompatible,
+  assertSupportedOpenCodeRuntime,
+  isSupportedOpenCodeVersion,
   parseGuardianConfigText,
   readVvocConfig,
   renderGuardianConfig,
@@ -138,36 +141,84 @@ describe("ensureTuiPackageConfigText", () => {
 });
 
 describe("OpenCode runtime compatibility", () => {
-  test("accepts the minimum stable OpenCode version and newer releases", () => {
-    expect(isTuiOpenCodeVersionCompatible(MINIMUM_TUI_OPENCODE_VERSION)).toBe(true);
-    expect(isTuiOpenCodeVersionCompatible("1.19.0")).toBe(true);
-    expect(isTuiOpenCodeVersionCompatible("2.0.0")).toBe(true);
+  test("accepts only the exact supported host window", () => {
+    expect(MIN_SUPPORTED_OPENCODE_VERSION).toBe("2.0.18");
+    expect(MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE).toBe("2.0.19");
+    expect(SUPPORTED_OPENCODE_VERSION_RANGE).toBe(">=2.0.18 <2.0.19");
+    expect(isSupportedOpenCodeVersion("2.0.18")).toBe(true);
+    expect(isSupportedOpenCodeVersion("v2.0.18")).toBe(true);
   });
 
-  test("rejects old, prerelease-minimum, and malformed versions", () => {
-    expect(isTuiOpenCodeVersionCompatible("1.17.20")).toBe(false);
-    expect(isTuiOpenCodeVersionCompatible("1.18.2-beta.1")).toBe(false);
-    expect(isTuiOpenCodeVersionCompatible("latest")).toBe(false);
+  test("rejects older, newer, prerelease, and malformed versions", () => {
+    expect(isSupportedOpenCodeVersion("2.0.17")).toBe(false);
+    expect(isSupportedOpenCodeVersion("2.0.19")).toBe(false);
+    expect(isSupportedOpenCodeVersion("2.1.0")).toBe(false);
+    expect(isSupportedOpenCodeVersion("1.18.33")).toBe(false);
+    expect(isSupportedOpenCodeVersion("2.0.18-beta.1")).toBe(false);
+    expect(isSupportedOpenCodeVersion("2.0.18-rc.1")).toBe(false);
+    expect(isSupportedOpenCodeVersion("latest")).toBe(false);
   });
 
-  test("inspects compatible and incompatible command output deterministically", async () => {
-    const compatible = await inspectOpenCodeRuntime(async () => ({
+  test("inspects supported and unsupported command output deterministically", async () => {
+    const supported = await inspectOpenCodeRuntime(async () => ({
       exitCode: 0,
-      stdout: "v1.18.2\n",
+      stdout: "v2.0.18\n",
       stderr: "",
     }));
-    const incompatible = await inspectOpenCodeRuntime(async () => ({
+    const older = await inspectOpenCodeRuntime(async () => ({
       exitCode: 0,
-      stdout: "1.17.20\n",
+      stdout: "1.18.33\n",
+      stderr: "",
+    }));
+    const newer = await inspectOpenCodeRuntime(async () => ({
+      exitCode: 0,
+      stdout: "2.0.19\n",
+      stderr: "",
+    }));
+    const prerelease = await inspectOpenCodeRuntime(async () => ({
+      exitCode: 0,
+      stdout: "2.0.18-rc.1\n",
       stderr: "",
     }));
 
-    expect(compatible).toEqual({
-      version: "1.18.2",
-      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
-      tuiCompatible: true,
+    expect(supported).toEqual({
+      version: "2.0.18",
+      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+      versionSupported: true,
     });
-    expect(incompatible.tuiCompatible).toBe(false);
+    expect(older.versionSupported).toBe(false);
+    expect(newer.versionSupported).toBe(false);
+    expect(prerelease.versionSupported).toBe(false);
+  });
+
+  test("assertSupportedOpenCodeRuntime refuses out-of-window and unavailable hosts", async () => {
+    const supported = await assertSupportedOpenCodeRuntime(async () => ({
+      version: "2.0.18",
+      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+      versionSupported: true,
+    }));
+    expect(supported.version).toBe("2.0.18");
+
+    await expect(
+      assertSupportedOpenCodeRuntime(async () => ({
+        version: "1.18.33",
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+        versionSupported: false,
+      })),
+    ).rejects.toThrow("OpenCode 1.18.33 is not supported");
+    await expect(
+      assertSupportedOpenCodeRuntime(async () => ({
+        version: "2.0.19",
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+        versionSupported: false,
+      })),
+    ).rejects.toThrow("OpenCode 2.0.19 is not supported");
+    await expect(
+      assertSupportedOpenCodeRuntime(async () => ({
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+        error: "opencode --version failed: ENOENT",
+      })),
+    ).rejects.toThrow("OpenCode host is not verifiable");
   });
 });
 
@@ -735,7 +786,6 @@ describe("canonical vvoc config helpers", () => {
         "vv-codex",
         "vv-zai",
         "vv-deepseek",
-        "vv-kimi",
         "vv-alibaba",
         "vv-osovv-ds",
         "vv-osovv-mimo",
@@ -1486,13 +1536,13 @@ describe("inspectInstallation", () => {
 
       const incompatible = await inspectInstallation(paths, {
         runtime: {
-          version: "1.17.20",
-          minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
-          tuiCompatible: false,
+          version: "1.18.33",
+          supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+          versionSupported: false,
         },
       });
       expect(incompatible.problems).toContain(
-        "OpenCode 1.17.20 is incompatible with /context; 1.18.2 or newer is required",
+        "OpenCode 1.18.33 is not supported; vvoc requires >=2.0.18 <2.0.19",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });

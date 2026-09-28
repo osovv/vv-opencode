@@ -10,10 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   OpenCodeRuntimeInspection - Installed OpenCode version and TUI compatibility snapshot.
+//   OpenCodeRuntimeInspection - Installed OpenCode version and supported-window snapshot.
 //   InstallationInspection - Current OpenCode runtime/TUI and vvoc installation status snapshot.
-//   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates TUI compatibility.
-//   isTuiOpenCodeVersionCompatible - Compares an OpenCode version with the managed TUI minimum.
+//   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates the exact supported window.
+//   assertSupportedOpenCodeRuntime - Fails closed on an unverifiable or out-of-window host before any write.
 //   extractOpenCodeVersion - Extracts the first semantic version found in `opencode --version` output.
 //   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
 //   inspectInstallationForScope - Reads installation state using strict/effective layered source resolution.
@@ -21,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-MODULE-SPLIT - Extracted runtime inspection, installation inspection, role-reference diagnostics, and write-result formatting from the former src/lib/opencode.ts monolith into this zone module.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Replaced the V1 TUI minimum with the exact native supported window and added a fail-closed runtime assertion for setup flows.]
 // END_CHANGE_SUMMARY
 
 import { dirname } from "node:path";
@@ -46,19 +46,20 @@ import { parseObjectDocument, readOptionalText, type WriteResult } from "./share
 import { resolvePaths, type ResolvedPaths } from "./paths.js";
 import {
   isPackagePluginSpecifier,
+  isSupportedOpenCodeVersion,
   isTuiPackageSpecifier,
-  MINIMUM_TUI_OPENCODE_VERSION,
   readPluginList,
   readTuiPluginList,
   readTuiPluginName,
+  SUPPORTED_OPENCODE_VERSION_RANGE,
   TUI_PACKAGE_SPECIFIER,
   type TuiPluginEntry,
 } from "./plugin-registration.js";
 
 export type OpenCodeRuntimeInspection = {
   version?: string;
-  minimumTuiVersion: string;
-  tuiCompatible?: boolean;
+  supportedRange: string;
+  versionSupported?: boolean;
   error?: string;
 };
 
@@ -118,7 +119,7 @@ export async function inspectOpenCodeRuntime(
     if (result.exitCode !== 0) {
       const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
       return {
-        minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
         error: `opencode --version failed: ${detail}`,
       };
     }
@@ -126,37 +127,46 @@ export async function inspectOpenCodeRuntime(
     const version = extractOpenCodeVersion(`${result.stdout}\n${result.stderr}`);
     if (!version) {
       return {
-        minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
         error: "opencode --version did not return a semantic version",
       };
     }
 
     return {
       version,
-      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
-      tuiCompatible: isTuiOpenCodeVersionCompatible(version),
+      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+      versionSupported: isSupportedOpenCodeVersion(version),
     };
   } catch (error) {
     return {
-      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
       error: error instanceof Error ? error.message : String(error),
     };
   }
 }
 
-export function isTuiOpenCodeVersionCompatible(version: string): boolean {
-  const current = parseSemanticVersion(version);
-  const minimum = parseSemanticVersion(MINIMUM_TUI_OPENCODE_VERSION);
-  if (!current || !minimum) return false;
-
-  for (let index = 0; index < 3; index += 1) {
-    const currentPart = current.parts[index] ?? 0;
-    const minimumPart = minimum.parts[index] ?? 0;
-    if (currentPart > minimumPart) return true;
-    if (currentPart < minimumPart) return false;
+// START_CONTRACT: assertSupportedOpenCodeRuntime
+//   PURPOSE: Fail closed on an unverifiable or out-of-window OpenCode host before any runtime/TUI/vvoc/agent/skill write.
+//   INPUTS: { inspect: () => Promise<OpenCodeRuntimeInspection> - Injectable runtime inspector for tests. }
+//   OUTPUTS: { OpenCodeRuntimeInspection - The verified runtime snapshot when the host is in the supported window. }
+//   SIDE_EFFECTS: Runs `opencode --version` through the default inspector; throws on failure or unsupported version.
+//   LINKS: [fn-inspectOpenCodeRuntime, const-SUPPORTED_OPENCODE_VERSION_RANGE]
+// END_CONTRACT: assertSupportedOpenCodeRuntime
+export async function assertSupportedOpenCodeRuntime(
+  inspect: () => Promise<OpenCodeRuntimeInspection> = inspectOpenCodeRuntime,
+): Promise<OpenCodeRuntimeInspection> {
+  const runtime = await inspect();
+  if (runtime.error) {
+    throw new Error(
+      `OpenCode host is not verifiable: ${runtime.error}. vvoc requires ${SUPPORTED_OPENCODE_VERSION_RANGE}.`,
+    );
   }
-
-  return !current.prerelease || Boolean(minimum.prerelease);
+  if (runtime.versionSupported !== true) {
+    throw new Error(
+      `OpenCode ${runtime.version ?? "unknown"} is not supported. vvoc requires ${SUPPORTED_OPENCODE_VERSION_RANGE}.`,
+    );
+  }
+  return runtime;
 }
 
 async function runOpenCodeVersionCommand(): Promise<{
@@ -185,18 +195,6 @@ export function extractOpenCodeVersion(output: string): string | undefined {
   return match?.[1];
 }
 
-function parseSemanticVersion(
-  value: string,
-): { parts: [number, number, number]; prerelease?: string } | undefined {
-  const match = value
-    .trim()
-    .match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
-  if (!match) return undefined;
-  return {
-    parts: [Number(match[1]), Number(match[2]), Number(match[3])],
-    prerelease: match[4],
-  };
-}
 // END_BLOCK_INSPECT_OPENCODE_RUNTIME
 
 // START_BLOCK_INSPECT_INSTALLATION_STATE
@@ -207,14 +205,14 @@ export async function inspectInstallation(
   const warnings: string[] = [];
   const problems: string[] = [];
   const runtime = options.runtime ?? {
-    minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+    supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
   };
 
   if (runtime.error) {
     problems.push(`OpenCode version unavailable: ${runtime.error}`);
-  } else if (runtime.tuiCompatible === false) {
+  } else if (runtime.versionSupported === false) {
     problems.push(
-      `OpenCode ${runtime.version ?? "unknown"} is incompatible with /context; ${runtime.minimumTuiVersion} or newer is required`,
+      `OpenCode ${runtime.version ?? "unknown"} is not supported; vvoc requires ${runtime.supportedRange}`,
     );
   }
 

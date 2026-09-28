@@ -55,7 +55,6 @@ const VVOC_PATCH_PROVIDER_PRESETS = [
   "stepfun-ai",
   "codex",
   "deepseek",
-  "kimi",
   "alibaba",
   "zai",
   "xiaomi",

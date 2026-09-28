@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conditional OPENCODE_TUI_CONFIG selection for existing managed TUI files.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight before spawning OpenCode.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -31,6 +31,7 @@ import {
   resolveVvocConfigSource,
   type ConfigSource,
 } from "../lib/config-layers.js";
+import { assertSupportedOpenCodeRuntime, type OpenCodeRuntimeInspection } from "../lib/opencode.js";
 
 export type LaunchScope = "effective" | "project" | "global";
 
@@ -119,7 +120,10 @@ export async function runLaunch(options: {
   configDir?: string;
   passthroughArgs: string[];
   spawn?: (plan: LaunchPlan) => Promise<number>;
+  inspectRuntime?: () => Promise<OpenCodeRuntimeInspection>;
 }): Promise<number> {
+  // Preflight: refuse to launch against an unverifiable or out-of-window host.
+  await assertSupportedOpenCodeRuntime(options.inspectRuntime);
   const plan = await buildLaunchPlan(options);
   if (options.spawn) {
     return options.spawn(plan);

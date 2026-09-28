@@ -22,9 +22,15 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import syncCommand from "./sync.js";
+import { runSync } from "./sync.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { TUI_PACKAGE_SPECIFIER } from "../lib/opencode.js";
+import { SUPPORTED_OPENCODE_VERSION_RANGE, TUI_PACKAGE_SPECIFIER } from "../lib/opencode.js";
+
+const SUPPORTED_RUNTIME = {
+  version: "2.0.18",
+  supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+  versionSupported: true,
+};
 
 test("sync command rejects invalid existing global vvoc config without rewriting it", async () => {
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-invalid-global-"));
@@ -106,11 +112,7 @@ test("sync command rejects malformed existing TUI config without rewriting it", 
 });
 
 async function runSyncCommand(args: Record<string, unknown>): Promise<void> {
-  await (syncCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }).run(
-    {
-      args,
-    },
-  );
+  await runSync(args, { inspectRuntime: async () => SUPPORTED_RUNTIME });
 }
 
 async function captureConsoleLog(fn: () => Promise<void>): Promise<void> {

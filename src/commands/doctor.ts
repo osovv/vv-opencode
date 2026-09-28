@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.1.2 - Added installed OpenCode version and managed TUI compatibility diagnostics.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Diagnosed the exact supported OpenCode host window instead of a V1 TUI minimum.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -55,9 +55,9 @@ export default defineCommand({
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
     console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
-    console.log(`OpenCode TUI minimum: ${inspection.runtime.minimumTuiVersion}`);
+    console.log(`OpenCode supported range: ${inspection.runtime.supportedRange}`);
     console.log(
-      `OpenCode TUI compatible: ${inspection.runtime.tuiCompatible === undefined ? "unknown" : inspection.runtime.tuiCompatible ? "yes" : "no"}`,
+      `OpenCode supported: ${inspection.runtime.versionSupported === undefined ? "unknown" : inspection.runtime.versionSupported ? "yes" : "no"}`,
     );
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(

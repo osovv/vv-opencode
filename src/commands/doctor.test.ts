@@ -77,7 +77,7 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     expect(stdout).toContain(`OpenCode TUI source: project ${paths.opencodeTuiConfigPath}`);
     expect(stdout).toContain("OpenCode TUI config parse: ok");
     expect(stdout).toContain("OpenCode version:");
-    expect(stdout).toContain("OpenCode TUI minimum: 1.18.2");
+    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <2.0.19");
     expect(stdout).toContain("TUI package configured: yes");
     expect(stderr).toContain("Problems:");
     expect(stderr).toContain(

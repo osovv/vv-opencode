@@ -2,7 +2,7 @@
 // VERSION: 0.10.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
-//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (codex, deepseek, kimi, alibaba, zai, xiaomi), and CLI output.
+//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (stepfun-ai, codex, deepseek, alibaba, zai, xiaomi), and CLI output.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: M-CLI-PATCH-PROVIDER, M-CLI-COMPLETION, M-CLI-CONFIG
 //   ROLE: RUNTIME
@@ -207,28 +207,6 @@ const OPENAI_PATCH = {
   },
 } as const satisfies Record<string, unknown>;
 
-const KIMI_PATCH = {
-  models: {
-    "vv-kimi-k3-max": {
-      name: "VV Kimi K3 Max",
-      id: "k3",
-      variants: {},
-      limit: {
-        context: 1048576,
-        output: 131072,
-      },
-      modalities: {
-        input: ["text", "image", "video"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-      },
-    },
-  },
-} as const satisfies Record<string, unknown>;
-
 const ALIBABA_PATCH = {
   models: {
     "vv-qwen3.8-max-xhigh": {
@@ -408,12 +386,6 @@ const PATCH_PROVIDER_PRESETS = {
     providerID: "deepseek",
     value: DEEPSEEK_PATCH,
     summary: "provider.deepseek.models.vv-deepseek flash aliases patched",
-  },
-  kimi: {
-    kind: "provider-object",
-    providerID: "kimi-for-coding",
-    value: KIMI_PATCH,
-    summary: "provider.kimi-for-coding.models.vv-kimi-k3-max patched",
   },
   alibaba: {
     kind: "provider-object",

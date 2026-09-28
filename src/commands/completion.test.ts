@@ -137,13 +137,11 @@ test("completion scripts - contain patch-provider presets", () => {
   expect(generateZshCompletion()).toContain("_vvoc_patch_provider_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_patch_provider_cmds");
   expect(generateBashCompletion()).toContain(
-    'local commands="stepfun-ai codex deepseek kimi alibaba zai xiaomi all"',
+    'local commands="stepfun-ai codex deepseek alibaba zai xiaomi all"',
   );
-  expect(generateZshCompletion()).toContain(
-    "stepfun-ai codex deepseek kimi alibaba zai xiaomi all",
-  );
+  expect(generateZshCompletion()).toContain("stepfun-ai codex deepseek alibaba zai xiaomi all");
   expect(generateFishCompletion()).toContain(
-    "echo stepfun-ai codex deepseek kimi alibaba zai xiaomi all",
+    "echo stepfun-ai codex deepseek alibaba zai xiaomi all",
   );
 });
 
@@ -154,13 +152,13 @@ test("completion scripts - contain preset commands and default preset names", ()
   expect(generateFishCompletion()).toContain("__vvoc_preset_cmds");
   expect(generateFishCompletion()).toContain("__vvoc_preset_names");
   expect(generateBashCompletion()).toContain(
-    "list show vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "list show vv-codex vv-zai vv-deepseek vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateZshCompletion()).toContain(
-    "vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "vv-codex vv-zai vv-deepseek vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
   expect(generateFishCompletion()).toContain(
-    "echo vv-codex vv-zai vv-deepseek vv-kimi vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
+    "echo vv-codex vv-zai vv-deepseek vv-alibaba vv-osovv-ds vv-osovv-mimo vv-osovv-zai vv-osovv-qwen vv-astra-solo vv-astra-workers",
   );
 });
 

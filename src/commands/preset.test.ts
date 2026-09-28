@@ -32,7 +32,6 @@ describe("preset helpers", () => {
       "vv-codex",
       "vv-zai",
       "vv-deepseek",
-      "vv-kimi",
       "vv-alibaba",
       "vv-osovv-ds",
       "vv-osovv-mimo",
@@ -86,13 +85,6 @@ describe("preset helpers", () => {
         smart: "deepseek/vv-deepseek-flash-max",
         reviewer: "deepseek/vv-deepseek-flash-max",
         profile: "balanced",
-      },
-      "vv-kimi": {
-        default: "kimi-for-coding/k3",
-        fast: "kimi-for-coding/kimi-for-coding-highspeed",
-        smart: "kimi-for-coding/vv-kimi-k3-max",
-        reviewer: "kimi-for-coding/kimi-for-coding",
-        profile: "single-session",
       },
       "vv-alibaba": {
         default: "alibaba-token-plan/qwen3.8-max",
@@ -170,7 +162,6 @@ describe("preset helpers", () => {
       "vv-codex": "single-session",
       "vv-zai": "balanced",
       "vv-deepseek": "balanced",
-      "vv-kimi": "single-session",
       "vv-alibaba": "single-session",
       "vv-osovv-ds": "single-session",
       "vv-osovv-mimo": "single-session",
@@ -191,7 +182,6 @@ describe("preset helpers", () => {
       "vv-astra-workers",
       "vv-codex",
       "vv-deepseek",
-      "vv-kimi",
       "vv-osovv-ds",
       "vv-osovv-mimo",
       "vv-osovv-qwen",
@@ -352,7 +342,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-ds, vv-osovv-mimo, vv-osovv-qwen, vv-osovv-zai, vv-zai",
+        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-osovv-ds, vv-osovv-mimo, vv-osovv-qwen, vv-osovv-zai, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });

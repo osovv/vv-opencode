@@ -22,6 +22,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildLaunchPlan, runLaunch } from "./launch.js";
+import { SUPPORTED_OPENCODE_VERSION_RANGE } from "../lib/opencode.js";
+
+const SUPPORTED_RUNTIME = async () => ({
+  version: "2.0.18",
+  supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+  versionSupported: true,
+});
 
 describe("launch planning", () => {
   test("effective scope selects nearest project OpenCode and vvoc configs", async () => {
@@ -91,6 +98,7 @@ describe("launch planning", () => {
         scope: "project",
         cwd: projectDir,
         passthroughArgs: ["run", "hello"],
+        inspectRuntime: SUPPORTED_RUNTIME,
         spawn: async (plan) => {
           expect(plan.command).toEqual(["opencode", "run", "hello"]);
           expect(plan.env.OPENCODE_CONFIG).toContain(".opencode/opencode.json");

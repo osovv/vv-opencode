@@ -59,16 +59,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
     },
     orchestration: { profile: "balanced" },
   },
-  "vv-kimi": {
-    description: "Starter Kimi Coding Plan role assignments for built-in vvoc roles.",
-    agents: {
-      default: "kimi-for-coding/k3",
-      fast: "kimi-for-coding/kimi-for-coding-highspeed",
-      smart: "kimi-for-coding/vv-kimi-k3-max",
-      reviewer: "kimi-for-coding/kimi-for-coding",
-    },
-    orchestration: { profile: "single-session" },
-  },
   "vv-alibaba": {
     description: "Starter Alibaba token plan role assignments for built-in vvoc roles.",
     agents: {

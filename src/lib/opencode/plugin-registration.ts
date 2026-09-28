@@ -11,7 +11,10 @@
 //
 // START_MODULE_MAP
 //   TUI_PACKAGE_SPECIFIER - Pinned base package specifier registered in tui.json(c) so OpenCode selects its ./tui export.
-//   MINIMUM_TUI_OPENCODE_VERSION - Minimum OpenCode host version supported by the managed TUI plugin.
+//   MIN_SUPPORTED_OPENCODE_VERSION - Lowest supported native OpenCode host version.
+//   MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE - First unsupported native OpenCode host version (exclusive upper bound).
+//   SUPPORTED_OPENCODE_VERSION_RANGE - Human-readable exact supported native OpenCode host window.
+//   isSupportedOpenCodeVersion - True only for the exact supported native OpenCode host window (no prereleases).
 //   TuiPluginEntry - Supported TUI plugin string or tuple entry.
 //   ensurePackageConfigText - Ensures OpenCode config contains the pinned vvoc plugin specifier.
 //   ensureTuiPackageConfigText - Ensures TUI config contains the pinned vvoc base package while preserving tuple options.
@@ -25,7 +28,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-MODULE-SPLIT - Extracted runtime/TUI plugin pinning and plugin-list normalization from the former src/lib/opencode.ts monolith into this zone module.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Replaced the V1 TUI minimum with the exact native supported host window and a shared window predicate.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify } from "jsonc-parser";
@@ -45,7 +48,34 @@ import {
 import type { ResolvedPaths } from "./paths.js";
 
 export const TUI_PACKAGE_SPECIFIER = `${PACKAGE_NAME}@${PACKAGE_VERSION}`;
-export const MINIMUM_TUI_OPENCODE_VERSION = "1.18.2";
+export const MIN_SUPPORTED_OPENCODE_VERSION = "2.0.18";
+export const MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE = "2.0.19";
+export const SUPPORTED_OPENCODE_VERSION_RANGE = `>=${MIN_SUPPORTED_OPENCODE_VERSION} <${MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE}`;
+
+// START_CONTRACT: isSupportedOpenCodeVersion
+//   PURPOSE: Accept only the exact pinned native OpenCode host window, rejecting older, newer, and prerelease builds.
+//   INPUTS: { version: string - `opencode --version` semantic version, optionally v-prefixed. }
+//   OUTPUTS: { boolean - True only for 2.0.18 with no prerelease suffix. }
+//   SIDE_EFFECTS: none
+//   LINKS: [const-MIN_SUPPORTED_OPENCODE_VERSION]
+// END_CONTRACT: isSupportedOpenCodeVersion
+export function isSupportedOpenCodeVersion(version: string): boolean {
+  const match = version
+    .trim()
+    .match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
+  if (!match) return false;
+  // Prerelease builds are outside the supported stable window.
+  if (match[4] !== undefined) return false;
+
+  const current = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+  const minimum = [2, 0, 18] as const;
+  const maximum = [2, 0, 19] as const;
+  const compare = (left: readonly number[], right: readonly number[]): number =>
+    (left[0] ?? 0) - (right[0] ?? 0) ||
+    (left[1] ?? 0) - (right[1] ?? 0) ||
+    (left[2] ?? 0) - (right[2] ?? 0);
+  return compare(current, minimum) >= 0 && compare(current, maximum) < 0;
+}
 
 const JSON_FORMAT = {
   insertSpaces: true,
