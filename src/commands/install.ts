@@ -24,7 +24,6 @@ import {
   describeWriteResult,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
-  ensureTuiPackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
@@ -79,11 +78,9 @@ export async function runInstall(
   await assertSupportedOpenCodeRuntime(options.inspectRuntime);
   await readVvocConfig(paths);
   const opencode = await ensurePackageInstalled(paths);
-  const tui = await ensureTuiPackageInstalled(paths);
   const managedAgents = await syncManagedAgentRegistrations(paths);
 
   console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
-  console.log(describeWriteResult(tui));
   console.log(
     `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
   );

@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode/inspection.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: OpenCode host compatibility diagnostics and source-aware installation inspection.
-//   SCOPE: opencode --version execution and semantic-version TUI compatibility comparison, installation-state inspection across runtime/TUI/vvoc config files with role-reference resolution and orchestration profile, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
+//   PURPOSE: Native OpenCode host compatibility diagnostics and source-aware installation inspection.
+//   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
 //   DEPENDS: [node:path, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -11,26 +11,27 @@
 //
 // START_MODULE_MAP
 //   OpenCodeRuntimeInspection - Installed OpenCode version and supported-window snapshot.
-//   InstallationInspection - Current OpenCode runtime/TUI and vvoc installation status snapshot.
+//   InstallationInspection - Current native OpenCode package and vvoc installation status snapshot.
 //   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates the exact supported window.
 //   assertSupportedOpenCodeRuntime - Fails closed on an unverifiable or out-of-window host before any write.
 //   extractOpenCodeVersion - Extracts the first semantic version found in `opencode --version` output.
-//   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
+//   inspectInstallation - Reads current native OpenCode/vvoc installation state for status and doctor commands.
 //   inspectInstallationForScope - Reads installation state using strict/effective layered source resolution.
 //   describeWriteResult - Formats config write outcomes for CLI output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Replaced the V1 TUI minimum with the exact native supported window and added a fail-closed runtime assertion for setup flows.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Migrated inspection to native plugins/agents/skills and replaced the dedicated tui.json status with a config-derived combined-package registration report.]
 // END_CHANGE_SUMMARY
 
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import {
+  readRawOpenCodeModelIntent,
   resolveOpenCodeConfigSource,
-  resolveOpenCodeTuiConfigSource,
   resolveVvocConfigSource,
   type ConfigReadScope,
   type ConfigSource,
+  type RawOpenCodeModelIntent,
 } from "../config-layers.js";
 import { BUILTIN_ROLE_NAMES, ROLE_REFERENCE_PREFIX } from "../model-roles.js";
 import { resolveOrchestrationPolicy, type OrchestrationProfile } from "../orchestration.js";
@@ -41,19 +42,20 @@ import {
   type SecretsRedactionConfig,
 } from "../vvoc-config.js";
 import { PACKAGE_NAME } from "../package.js";
-import { getVvocAgentsDir, getVvocSkillsDir } from "../vvoc-paths.js";
-import { parseObjectDocument, readOptionalText, type WriteResult } from "./shared-utils.js";
+import { getVvocSkillsDir } from "../vvoc-paths.js";
+import {
+  assertNativeOpenCodeDocument,
+  parseObjectDocument,
+  readOptionalText,
+  readPluginEntries,
+  type OpenCodePluginEntry,
+  type WriteResult,
+} from "./shared-utils.js";
 import { resolvePaths, type ResolvedPaths } from "./paths.js";
 import {
-  isPackagePluginSpecifier,
+  isManagedPackageTarget,
   isSupportedOpenCodeVersion,
-  isTuiPackageSpecifier,
-  readPluginList,
-  readTuiPluginList,
-  readTuiPluginName,
   SUPPORTED_OPENCODE_VERSION_RANGE,
-  TUI_PACKAGE_SPECIFIER,
-  type TuiPluginEntry,
 } from "./plugin-registration.js";
 
 export type OpenCodeRuntimeInspection = {
@@ -72,15 +74,17 @@ export type InstallationInspection = {
     alternates: string[];
     parseError?: string;
     pluginConfigured: boolean;
-    plugins: string[];
+    plugins: OpenCodePluginEntry[];
   };
+  /**
+   * The combined native package is registered once in native `plugins`; whether
+   * the live host advertises `features.tui` is inventory state and cannot be
+   * verified from config alone, so it is reported as a config-derived
+   * registration plus an explicit limit note.
+   */
   tui: {
-    path: string;
-    exists: boolean;
-    alternates: string[];
-    parseError?: string;
-    pluginConfigured: boolean;
-    plugins: TuiPluginEntry[];
+    registered: boolean;
+    note: string;
   };
   vvoc: {
     path: string;
@@ -105,6 +109,9 @@ export type InstallationInspection = {
   warnings: string[];
   problems: string[];
 };
+
+const TUI_REGISTRATION_NOTE =
+  "TUI capability is advertised by the live native host plugin inventory; config inspection alone cannot confirm loadability.";
 
 // START_BLOCK_INSPECT_OPENCODE_RUNTIME
 export async function inspectOpenCodeRuntime(
@@ -222,43 +229,22 @@ export async function inspectInstallation(
     );
   }
 
-  if (paths.opencodeTuiAlternatePaths.length > 0) {
-    warnings.push(
-      `multiple OpenCode TUI config files exist: ${[paths.opencodeTuiConfigPath, ...paths.opencodeTuiAlternatePaths].join(", ")}`,
-    );
-  }
-
   const opencodeText = await readOptionalText(paths.opencodeConfigPath);
   let opencodeParseError: string | undefined;
-  let plugins: string[] = [];
+  let plugins: OpenCodePluginEntry[] = [];
   let pluginConfigured = false;
 
   if (opencodeText) {
     try {
       const document = parseObjectDocument(opencodeText, paths.opencodeConfigPath);
-      plugins = readPluginList(document, paths.opencodeConfigPath);
-      pluginConfigured = plugins.some(isPackagePluginSpecifier);
+      assertNativeOpenCodeDocument(document, paths.opencodeConfigPath);
+      plugins = readPluginEntries(document, paths.opencodeConfigPath);
+      pluginConfigured = plugins.some((entry) =>
+        isManagedPackageTarget(typeof entry === "string" ? entry : entry.package),
+      );
     } catch (error) {
       opencodeParseError = error instanceof Error ? error.message : String(error);
       problems.push(opencodeParseError);
-    }
-  }
-
-  const tuiText = await readOptionalText(paths.opencodeTuiConfigPath);
-  let tuiParseError: string | undefined;
-  let tuiPlugins: TuiPluginEntry[] = [];
-  let tuiPluginConfigured = false;
-
-  if (tuiText) {
-    try {
-      const document = parseObjectDocument(tuiText, paths.opencodeTuiConfigPath);
-      tuiPlugins = readTuiPluginList(document, paths.opencodeTuiConfigPath);
-      tuiPluginConfigured = tuiPlugins.some((entry) =>
-        isTuiPackageSpecifier(readTuiPluginName(entry)),
-      );
-    } catch (error) {
-      tuiParseError = error instanceof Error ? error.message : String(error);
-      problems.push(tuiParseError);
     }
   }
 
@@ -285,8 +271,7 @@ export async function inspectInstallation(
   const unresolvedRoleReferences =
     opencodeText && !opencodeParseError
       ? collectUnresolvedRoleReferences(
-          opencodeText,
-          paths.opencodeConfigPath,
+          await readRawOpenCodeModelIntent(paths.cwd).catch(() => undefined),
           vvocConfig?.roles ?? {},
         )
       : [];
@@ -299,9 +284,6 @@ export async function inspectInstallation(
 
   if (!pluginConfigured) {
     problems.push(`${PACKAGE_NAME} is not configured in ${paths.opencodeConfigPath}`);
-  }
-  if (!tuiPluginConfigured) {
-    problems.push(`${TUI_PACKAGE_SPECIFIER} is not configured in ${paths.opencodeTuiConfigPath}`);
   }
   if (!vvocText) {
     problems.push(`vvoc config is missing at ${paths.vvocConfigPath}`);
@@ -319,12 +301,8 @@ export async function inspectInstallation(
       plugins,
     },
     tui: {
-      path: paths.opencodeTuiConfigPath,
-      exists: Boolean(tuiText),
-      alternates: paths.opencodeTuiAlternatePaths,
-      parseError: tuiParseError,
-      pluginConfigured: tuiPluginConfigured,
-      plugins: tuiPlugins,
+      registered: pluginConfigured,
+      note: TUI_REGISTRATION_NOTE,
     },
     vvoc: {
       path: paths.vvocConfigPath,
@@ -359,17 +337,11 @@ export async function inspectInstallationForScope(options: {
 }): Promise<
   InstallationInspection & {
     opencodeSource: ConfigSource;
-    opencodeTuiSource: ConfigSource;
     vvocSource: ConfigSource;
   }
 > {
-  const [opencodeSource, opencodeTuiSource, vvocSource, runtime] = await Promise.all([
+  const [opencodeSource, vvocSource, runtime] = await Promise.all([
     resolveOpenCodeConfigSource({
-      scope: options.scope,
-      cwd: options.cwd,
-      configDir: options.configDir,
-    }),
-    resolveOpenCodeTuiConfigSource({
       scope: options.scope,
       cwd: options.cwd,
       configDir: options.configDir,
@@ -398,19 +370,20 @@ export async function inspectInstallationForScope(options: {
     configDir: options.configDir,
   });
   const opencodeConfigPath = opencodeSource.path ?? fallbackPaths.opencodeConfigPath;
-  const opencodeTuiConfigPath = opencodeTuiSource.path ?? fallbackPaths.opencodeTuiConfigPath;
   const vvocConfigPath = vvocSource.path ?? fallbackPaths.vvocConfigPath;
+  const opencodeBaseDir = dirname(opencodeConfigPath);
+  const vvocBaseDir = dirname(vvocConfigPath);
   const scopedPaths: ResolvedPaths = {
     ...fallbackPaths,
-    opencodeBaseDir: dirname(opencodeConfigPath),
-    vvocBaseDir: dirname(vvocConfigPath),
+    opencodeBaseDir,
+    vvocBaseDir,
     opencodeConfigPath,
-    opencodeTuiConfigPath,
     vvocConfigPath,
     opencodeAlternatePaths: [],
-    opencodeTuiAlternatePaths: [],
-    managedAgentsDirPath: getVvocAgentsDir(dirname(vvocConfigPath)),
-    managedSkillsDirPath: getVvocSkillsDir(dirname(vvocConfigPath)),
+    managedAgentsDirPath: join(opencodeBaseDir, "agents"),
+    managedSkillsDirPath: getVvocSkillsDir(vvocBaseDir),
+    opencodeSkillsDirPath: join(opencodeBaseDir, "skills"),
+    vvocAgentsDirPath: join(vvocBaseDir, "agents"),
   };
 
   const inspection = await inspectInstallation(scopedPaths, { runtime });
@@ -425,7 +398,6 @@ export async function inspectInstallationForScope(options: {
     },
     scope: options.scope,
     opencodeSource,
-    opencodeTuiSource,
     vvocSource,
   };
 }
@@ -446,6 +418,9 @@ export function describeWriteResult(result: WriteResult): string {
       break;
     case "skipped":
       message = `Skipped ${result.path}`;
+      break;
+    case "deleted":
+      message = `Deleted ${result.path}`;
       break;
   }
 
@@ -478,12 +453,11 @@ function listRoleAssignments(roles: Record<string, string>): Array<{
 }
 
 function collectUnresolvedRoleReferences(
-  opencodeText: string,
-  label: string,
+  intent: RawOpenCodeModelIntent | undefined,
   roleMap: Record<string, string>,
 ): Array<{ fieldPath: string; roleRef: string; roleId: string }> {
-  const document = parseObjectDocument(opencodeText, label);
   const unresolved: Array<{ fieldPath: string; roleRef: string; roleId: string }> = [];
+  if (!intent) return unresolved;
 
   const collectFromField = (fieldPath: string, value: unknown) => {
     if (typeof value !== "string") {
@@ -500,24 +474,14 @@ function collectUnresolvedRoleReferences(
     }
   };
 
-  collectFromField("model", document.model);
-  collectFromField("small_model", document.small_model);
+  collectFromField("modelIntent.model", intent.model);
+  collectFromField("modelIntent.smallModel", intent.smallModel);
 
-  for (const parentName of ["agent", "command"] as const) {
-    const parent = document[parentName];
-    if (!parent || typeof parent !== "object" || Array.isArray(parent)) {
-      continue;
-    }
-
-    for (const [entryName, entry] of Object.entries(parent as Record<string, unknown>)) {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        continue;
-      }
-      collectFromField(
-        `${parentName}.${entryName}.model`,
-        (entry as Record<string, unknown>).model,
-      );
-    }
+  for (const [name, model] of Object.entries(intent.agents)) {
+    collectFromField(`modelIntent.agents.${name}`, model);
+  }
+  for (const [name, model] of Object.entries(intent.commands)) {
+    collectFromField(`modelIntent.commands.${name}`, model);
   }
 
   return unresolved;

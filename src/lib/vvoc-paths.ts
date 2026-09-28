@@ -75,8 +75,24 @@ export function getCacheHome(cacheHomeOverride?: string): string {
   return join(homedir(), ".cache");
 }
 
+/**
+ * Resolves the global OpenCode config/asset root. An explicit `configHomeOverride`
+ * (the CLI `--config-dir`, an alternate XDG config home) wins by appending
+ * `opencode`; otherwise the native `OPENCODE_CONFIG_DIR` replaces the whole root
+ * (it is the root itself, not a parent of an `opencode` suffix); otherwise the
+ * XDG config home plus `opencode`.
+ */
 export function getGlobalOpencodeDir(configHomeOverride?: string): string {
-  return join(getConfigHome(configHomeOverride), "opencode");
+  if (typeof configHomeOverride === "string" && configHomeOverride.trim()) {
+    return join(configHomeOverride.trim(), "opencode");
+  }
+
+  const nativeRoot = process.env.OPENCODE_CONFIG_DIR;
+  if (typeof nativeRoot === "string" && nativeRoot.trim()) {
+    return resolve(nativeRoot.trim());
+  }
+
+  return join(getConfigHome(), "opencode");
 }
 
 export function getGlobalOpencodeSkillsDir(configHomeOverride?: string): string {

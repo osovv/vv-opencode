@@ -147,10 +147,10 @@ describe("model selections", () => {
   });
 
   test("parses canonical provider/model#variant while preserving provider/model semantics", () => {
-    expect(parseModelSelectionWithVariant("xiaomi/vv-mimo-v2.6-flash-high")).toEqual({
+    expect(parseModelSelectionWithVariant("xiaomi/mimo-v2.6-flash")).toEqual({
       provider: "xiaomi",
-      model: "vv-mimo-v2.6-flash-high",
-      normalized: "xiaomi/vv-mimo-v2.6-flash-high",
+      model: "mimo-v2.6-flash",
+      normalized: "xiaomi/mimo-v2.6-flash",
     });
     expect(parseModelSelectionWithVariant("xiaomi/mimo-v2.6-flash#thinking")).toEqual({
       provider: "xiaomi",

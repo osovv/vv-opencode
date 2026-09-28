@@ -23,11 +23,7 @@ import {
   VVOC_CONFIG_SCHEMA_URL,
   VVOC_CONFIG_VERSION,
 } from "../lib/vvoc-config.js";
-import {
-  resolvePaths,
-  SUPPORTED_OPENCODE_VERSION_RANGE,
-  TUI_PACKAGE_SPECIFIER,
-} from "../lib/opencode.js";
+import { resolvePaths, SUPPORTED_OPENCODE_VERSION_RANGE } from "../lib/opencode.js";
 
 const SUPPORTED_RUNTIME = async () => ({
   version: "2.0.18",
@@ -71,11 +67,10 @@ describe("init scenarios", () => {
       const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
 
       expect(paths.opencodeConfigPath).toBe(join(tmpDir, ".opencode", "opencode.json"));
-      expect(paths.opencodeTuiConfigPath).toBe(join(tmpDir, ".opencode", "tui.json"));
       expect(paths.vvocConfigPath).toBe(join(tmpDir, ".vvoc", "vvoc.json"));
       expect(existsSync(paths.opencodeConfigPath)).toBe(true);
-      expect(existsSync(paths.opencodeTuiConfigPath)).toBe(true);
       expect(existsSync(paths.vvocConfigPath)).toBe(true);
+      expect(existsSync(join(tmpDir, ".opencode", "tui.json"))).toBe(false);
       expect(existsSync(paths.managedAgentsDirPath + "/guardian.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/vv-controller.md")).toBe(true);
       expect(existsSync(paths.managedAgentsDirPath + "/enhancer.md")).toBe(true);
@@ -95,41 +90,40 @@ describe("init scenarios", () => {
       expect(existsSync(join(tmpDir, ".vvoc", "secrets-redaction.config.json"))).toBe(false);
 
       const opencodeContent = readFileSync(paths.opencodeConfigPath, "utf8");
-      const tuiContent = readFileSync(paths.opencodeTuiConfigPath, "utf8");
       const vvocContent = readFileSync(paths.vvocConfigPath, "utf8");
       const opencodeConfig = JSON.parse(opencodeContent) as {
-        model: string;
-        small_model: string;
-        default_agent: string;
-        agent: Record<string, { model?: string; prompt?: string }>;
-        command: Record<string, { agent?: string }>;
-        skills?: { paths?: string[] };
+        model?: unknown;
+        small_model?: unknown;
+        default_agent?: string;
+        agent?: unknown;
+        agents?: unknown;
+        plugins?: Array<string | { package: string }>;
+        skills?: string[];
       };
       const vvocConfig = parseVvocConfigText(vvocContent, paths.vvocConfigPath);
-      const tuiConfig = JSON.parse(tuiContent) as { plugin?: string[] };
 
       expect(opencodeContent).toContain("@osovv/vv-opencode");
-      expect(tuiConfig.plugin).toContain(TUI_PACKAGE_SPECIFIER);
-      expect(opencodeConfig.model).toBe("vv-role:default");
-      expect(opencodeConfig.small_model).toBe("vv-role:fast");
+      expect(
+        opencodeConfig.plugins?.some((entry) =>
+          typeof entry === "string"
+            ? entry.includes("vv-opencode")
+            : entry.package.includes("vv-opencode"),
+        ),
+      ).toBe(true);
+      expect(opencodeConfig.model).toBeUndefined();
+      expect(opencodeConfig.small_model).toBeUndefined();
+      expect(opencodeConfig.agent).toBeUndefined();
+      expect(opencodeConfig.agents).toBeUndefined();
       expect(opencodeConfig.default_agent).toBe("vv-controller");
-      expect(opencodeConfig.agent.build).toBeUndefined();
-      expect(opencodeConfig.agent.plan).toBeUndefined();
-      expect(opencodeConfig.agent.general).toBeUndefined();
-      expect(opencodeConfig.agent.explore?.model).toBe("vv-role:fast");
-      expect(opencodeConfig.agent["vv-controller"]?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent.enhancer?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent["vv-implementer"]?.model).toBe("vv-role:default");
-      expect(opencodeConfig.agent["vv-spec-reviewer"]?.model).toBe("vv-role:reviewer");
-      expect(opencodeConfig.agent["vv-code-reviewer"]?.model).toBe("vv-role:reviewer");
-      expect(opencodeConfig.agent.investigator?.model).toBe("vv-role:smart");
-      expect(opencodeConfig.agent["vv-controller"]?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent.enhancer?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent["vv-implementer"]?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent["vv-spec-reviewer"]?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent["vv-code-reviewer"]?.prompt).toContain("{file:");
-      expect(opencodeConfig.agent.investigator?.prompt).toContain("{file:");
-      expect(opencodeConfig.skills?.paths).toContain("../.vvoc/skills");
+      expect(opencodeConfig.skills).toContain(".vvoc/skills");
+
+      const controllerMarkdown = readFileSync(
+        join(paths.managedAgentsDirPath, "vv-controller.md"),
+        "utf8",
+      );
+      expect(controllerMarkdown).toContain("mode: primary");
+      expect(controllerMarkdown).toContain("Managed by vvoc");
+      expect(controllerMarkdown).not.toContain("prompt:");
 
       expect(vvocConfig.version).toBe(VVOC_CONFIG_VERSION);
       expect(vvocConfig.$schema).toBe(VVOC_CONFIG_SCHEMA_URL);
@@ -168,7 +162,6 @@ describe("init scenarios", () => {
       const { readFileSync } = await import("node:fs");
       const paths = await resolvePaths({ scope: "project", cwd: tmpDir, configDir: configHome });
       const beforeOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
-      const beforeTui = readFileSync(paths.opencodeTuiConfigPath, "utf8");
       const beforeVvoc = readFileSync(paths.vvocConfigPath, "utf8");
 
       await runInit({
@@ -180,10 +173,8 @@ describe("init scenarios", () => {
       });
 
       const afterOpenCode = readFileSync(paths.opencodeConfigPath, "utf8");
-      const afterTui = readFileSync(paths.opencodeTuiConfigPath, "utf8");
       const afterVvoc = readFileSync(paths.vvocConfigPath, "utf8");
       expect(afterOpenCode).toBe(beforeOpenCode);
-      expect(afterTui).toBe(beforeTui);
       expect(afterVvoc).toBe(beforeVvoc);
     } finally {
       rmSync(configHome, { recursive: true, force: true });

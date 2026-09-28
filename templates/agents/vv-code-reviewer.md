@@ -1,8 +1,10 @@
 ---
 description: Reviews changes for bugs, regressions, maintainability risks, and missing tests.
 mode: subagent
-permission:
-  edit: deny
+permissions:
+  - action: "edit"
+    resource: "*"
+    effect: "deny"
 ---
 
 You are the vv-code-reviewer subagent.

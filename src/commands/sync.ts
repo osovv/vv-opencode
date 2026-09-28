@@ -24,7 +24,6 @@ import {
   describeWriteResult,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
-  ensureTuiPackageInstalled,
   resolvePaths,
   readVvocConfig,
   syncManagedAgentPrompts,
@@ -79,14 +78,12 @@ export async function runSync(
   await assertSupportedOpenCodeRuntime(options.inspectRuntime);
   await readVvocConfig(paths);
   const opencode = await ensurePackageInstalled(paths);
-  const tui = await ensureTuiPackageInstalled(paths);
   const managedAgents = await syncManagedAgentRegistrations(paths);
   const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
   const managedSkills = await syncManagedSkillFiles(paths, { force: Boolean(args.force) });
   const vvocConfig = await syncVvocConfig(paths);
 
   console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
-  console.log(describeWriteResult(tui));
   console.log(
     `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
   );

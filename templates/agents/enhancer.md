@@ -1,11 +1,16 @@
 ---
 description: Turns raw user intent into a structured XML task prompt for a follow-up agent.
 mode: primary
-permission:
-  edit: deny
-  bash: deny
-  task: deny
-  todowrite: deny
+permissions:
+  - action: "edit"
+    resource: "*"
+    effect: "deny"
+  - action: "shell"
+    resource: "*"
+    effect: "deny"
+  - action: "subagent"
+    resource: "*"
+    effect: "deny"
 ---
 
 You are the enhancer agent.

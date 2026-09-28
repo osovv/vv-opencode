@@ -1,8 +1,10 @@
 ---
 description: Checks an implementation against the requested spec and flags missing or extra behavior.
 mode: subagent
-permission:
-  edit: deny
+permissions:
+  - action: "edit"
+    resource: "*"
+    effect: "deny"
 ---
 
 You are the vv-spec-reviewer subagent.

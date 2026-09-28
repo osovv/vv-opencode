@@ -49,9 +49,6 @@ export default defineCommand({
       `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
     );
     console.log(
-      `OpenCode TUI source: ${inspection.opencodeTuiSource.kind}${inspection.opencodeTuiSource.path ? ` ${inspection.opencodeTuiSource.path}` : ""}`,
-    );
-    console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
     console.log(`Orchestration profile: ${inspection.orchestration.profile ?? "unknown"}`);
@@ -63,12 +60,8 @@ export default defineCommand({
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(`OpenCode config exists: ${inspection.opencode.exists ? "yes" : "no"}`);
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
-    console.log(`OpenCode TUI config: ${inspection.tui.path}`);
-    console.log(`OpenCode TUI config exists: ${inspection.tui.exists ? "yes" : "no"}`);
-    console.log(
-      `OpenCode TUI config parse: ${inspection.tui.parseError ? inspection.tui.parseError : inspection.tui.exists ? "ok" : "missing"}`,
-    );
-    console.log(`TUI package configured: ${inspection.tui.pluginConfigured ? "yes" : "no"}`);
+    console.log(`TUI package registered: ${inspection.tui.registered ? "yes" : "no"}`);
+    console.log(`TUI capability note: ${inspection.tui.note}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(`vvoc config exists: ${inspection.vvoc.exists ? "yes" : "no"}`);
     console.log(

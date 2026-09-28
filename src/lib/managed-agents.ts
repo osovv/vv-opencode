@@ -14,8 +14,12 @@
 //   ManagedPrimaryAgentName - Canonical vvoc-managed primary agent names.
 //   ManagedOpenCodeAgentName - Canonical vvoc-managed OpenCode agent registration names.
 //   ManagedAgentPromptName - Canonical vvoc-managed agent prompt names including Guardian.
+//   ManagedAgentPermissionRule - Native OpenCode permission rule shape for managed agents.
 //   ManagedSubagentDefinition - Metadata used to register a managed subagent in OpenCode config.
 //   ManagedPrimaryAgentDefinition - Metadata used to register a managed primary agent in OpenCode config.
+//   MANAGED_NATIVE_AGENT_NAMES - Managed agent names written as native discovered markdown.
+//   ManagedNativeAgentFrontmatter - Native frontmatter metadata for a discovered managed agent.
+//   getManagedNativeAgentFrontmatter - Returns native frontmatter metadata for a managed agent.
 //   MANAGED_SUBAGENT_NAMES - Ordered managed subagent names.
 //   MANAGED_PRIMARY_AGENT_NAMES - Ordered managed primary agent names.
 //   MANAGED_OPENCODE_AGENT_NAMES - Ordered managed OpenCode agent registration names.
@@ -61,12 +65,19 @@ export const MANAGED_AGENT_PROMPT_NAMES = ["guardian", ...MANAGED_OPENCODE_AGENT
 
 export type ManagedAgentPromptName = (typeof MANAGED_AGENT_PROMPT_NAMES)[number];
 
+/** Native OpenCode 2.0.18 permission rule shape. */
+export type ManagedAgentPermissionRule = {
+  action: string;
+  resource: string;
+  effect: "allow" | "deny" | "ask";
+};
+
 export type ManagedSubagentDefinition = {
   name: ManagedSubagentName;
   description: string;
   promptFileName: `${ManagedSubagentName}.md`;
   mode: "subagent";
-  permission?: Record<string, unknown>;
+  permissions?: readonly ManagedAgentPermissionRule[];
 };
 
 export type ManagedPrimaryAgentDefinition = {
@@ -74,8 +85,14 @@ export type ManagedPrimaryAgentDefinition = {
   description: string;
   promptFileName: `${ManagedPrimaryAgentName}.md`;
   mode: "primary";
-  permission?: Record<string, unknown>;
+  permissions?: readonly ManagedAgentPermissionRule[];
 };
+
+const DENY_ALL = (action: string): ManagedAgentPermissionRule => ({
+  action,
+  resource: "*",
+  effect: "deny",
+});
 
 export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
   {
@@ -90,27 +107,21 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
       "Checks an implementation against the requested spec and flags missing or extra behavior.",
     promptFileName: "vv-spec-reviewer.md",
     mode: "subagent",
-    permission: {
-      edit: "deny",
-    },
+    permissions: [DENY_ALL("edit")],
   },
   {
     name: "vv-code-reviewer",
     description: "Reviews changes for bugs, regressions, maintainability risks, and missing tests.",
     promptFileName: "vv-code-reviewer.md",
     mode: "subagent",
-    permission: {
-      edit: "deny",
-    },
+    permissions: [DENY_ALL("edit")],
   },
   {
     name: "investigator",
     description: "Investigates bugs and unclear behavior before implementation work begins.",
     promptFileName: "investigator.md",
     mode: "subagent",
-    permission: {
-      edit: "deny",
-    },
+    permissions: [DENY_ALL("edit")],
   },
 ];
 
@@ -127,14 +138,25 @@ export const MANAGED_PRIMARY_AGENTS: readonly ManagedPrimaryAgentDefinition[] = 
     description: "Turns raw user intent into a structured XML prompt for a follow-up agent.",
     promptFileName: "enhancer.md",
     mode: "primary",
-    permission: {
-      edit: "deny",
-      bash: "deny",
-      task: "deny",
-      todowrite: "deny",
-    },
+    permissions: [DENY_ALL("edit"), DENY_ALL("shell"), DENY_ALL("subagent")],
   },
 ];
+
+/**
+ * Native agent markdown is discovered for every managed prompt name, including
+ * guardian, which is both a native subagent and the Guardian plugin's system
+ * prompt source.
+ */
+export const MANAGED_NATIVE_AGENT_NAMES = MANAGED_AGENT_PROMPT_NAMES;
+
+/** Native frontmatter metadata for a managed discovered agent markdown file. */
+export type ManagedNativeAgentFrontmatter = {
+  description: string;
+  mode: "primary" | "subagent";
+  hidden?: boolean;
+  steps?: number;
+  permissions?: readonly ManagedAgentPermissionRule[];
+};
 
 export const MANAGED_OPENCODE_AGENTS = [...MANAGED_PRIMARY_AGENTS, ...MANAGED_SUBAGENTS] as const;
 
@@ -156,6 +178,42 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   ["vv-code-reviewer", "vv-code-reviewer.md"],
   ["investigator", "investigator.md"],
 ]);
+
+const GUARDIAN_NATIVE_FRONTMATTER: ManagedNativeAgentFrontmatter = {
+  description: "Risk assessment agent used by the Guardian plugin for permission reviews.",
+  mode: "subagent",
+  hidden: true,
+  steps: 2,
+  permissions: [DENY_ALL("edit"), DENY_ALL("shell"), DENY_ALL("webfetch")],
+};
+
+const MANAGED_NATIVE_AGENT_FRONTMATTER: Record<
+  ManagedAgentPromptName,
+  ManagedNativeAgentFrontmatter
+> = {
+  guardian: GUARDIAN_NATIVE_FRONTMATTER,
+  ...Object.fromEntries(
+    MANAGED_OPENCODE_AGENTS.map((definition) => [
+      definition.name,
+      {
+        description: definition.description,
+        mode: definition.mode,
+        ...(definition.permissions === undefined ? {} : { permissions: definition.permissions }),
+      } satisfies ManagedNativeAgentFrontmatter,
+    ]),
+  ),
+} as Record<ManagedAgentPromptName, ManagedNativeAgentFrontmatter>;
+
+/** Native frontmatter for a managed discovered agent markdown file. */
+export function getManagedNativeAgentFrontmatter(
+  name: ManagedAgentPromptName,
+): ManagedNativeAgentFrontmatter {
+  const frontmatter = MANAGED_NATIVE_AGENT_FRONTMATTER[name];
+  if (!frontmatter) {
+    throw new Error(`unknown managed native agent: ${name}`);
+  }
+  return frontmatter;
+}
 
 export function isManagedSubagentName(value: string): value is ManagedSubagentName {
   return MANAGED_SUBAGENT_MAP.has(value as ManagedSubagentName);

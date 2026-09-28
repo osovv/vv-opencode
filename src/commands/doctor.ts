@@ -49,9 +49,6 @@ export default defineCommand({
       `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
     );
     console.log(
-      `OpenCode TUI source: ${inspection.opencodeTuiSource.kind}${inspection.opencodeTuiSource.path ? ` ${inspection.opencodeTuiSource.path}` : ""}`,
-    );
-    console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
     console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
@@ -64,16 +61,10 @@ export default defineCommand({
       `OpenCode config parse: ${inspection.opencode.parseError ? inspection.opencode.parseError : "ok"}`,
     );
     console.log(
-      `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.join(", ") : "<none>"}`,
+      `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.map((entry) => (typeof entry === "string" ? entry : entry.package)).join(", ") : "<none>"}`,
     );
-    console.log(`OpenCode TUI config: ${inspection.tui.path}`);
-    console.log(
-      `OpenCode TUI config parse: ${inspection.tui.parseError ? inspection.tui.parseError : inspection.tui.exists ? "ok" : "missing"}`,
-    );
-    console.log(
-      `Configured TUI plugins: ${inspection.tui.plugins.length > 0 ? inspection.tui.plugins.map((entry) => (typeof entry === "string" ? entry : entry[0])).join(", ") : "<none>"}`,
-    );
-    console.log(`TUI package configured: ${inspection.tui.pluginConfigured ? "yes" : "no"}`);
+    console.log(`TUI package registered: ${inspection.tui.registered ? "yes" : "no"}`);
+    console.log(`TUI capability note: ${inspection.tui.note}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(
       `vvoc config parse: ${inspection.vvoc.parseError ? inspection.vvoc.parseError : inspection.vvoc.exists ? "ok" : "missing"}`,

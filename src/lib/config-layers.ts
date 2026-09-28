@@ -1,9 +1,9 @@
 // FILE: src/lib/config-layers.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Resolve vvoc, OpenCode runtime, and OpenCode TUI config layers for global, project, and effective scopes.
-//   SCOPE: Env override handling, ancestor project-root discovery, project write-root selection, global fallback paths, dedicated TUI config selection, singleton runtime vvoc loading, and source metadata.
-//   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts]
+//   PURPOSE: Resolve vvoc and native OpenCode config layers for global, project, and effective scopes.
+//   SCOPE: Env override handling, ancestor project-root discovery, project write-root selection, global fallback paths, singleton runtime vvoc loading, native modelIntent intent extraction, and source metadata.
+//   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts]
 //   LINKS: [M-CONFIG-LAYERS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -12,7 +12,7 @@
 // START_MODULE_MAP
 //   VVOC_CONFIG_ENV - Environment variable name for explicit vvoc config selection.
 //   OPENCODE_CONFIG_ENV - Environment variable name for explicit OpenCode config selection.
-//   OPENCODE_TUI_CONFIG_ENV - Environment variable name for explicit OpenCode TUI config selection.
+//   OPENCODE_CONFIG_DIR_ENV - Native environment variable that replaces the global OpenCode root.
 //   ConfigWriteScope - Supported write scopes for mutating commands.
 //   ConfigReadScope - Supported read scopes for list/show/diagnostic commands.
 //   ConfigSourceKind - Source kind labels for selected config sources.
@@ -26,12 +26,13 @@
 //   resolveProjectOpenCodeConfigPath - Selects the canonical project .opencode/opencode.json(c) path.
 //   resolveVvocConfigSource - Resolves vvoc source metadata for global, project, or effective reads.
 //   resolveOpenCodeConfigSource - Resolves OpenCode source metadata for global, project, or effective reads.
-//   resolveOpenCodeTuiConfigSource - Resolves OpenCode TUI source metadata for global, project, or effective reads.
 //   resolveConfigWriteTargets - Returns canonical global or project write paths.
 //   loadVvocConfigForRead - Loads vvoc config for CLI read/list/show commands without creating files.
 //   VvocConfigSnapshot - Immutable runtime vvoc config snapshot plus source metadata.
-//   RawOpenCodeModelIntent - Raw root/small_model/agent/command model intent from OpenCode config.
-//   readRawOpenCodeModelIntent - Conservatively read raw OpenCode model intent before native normalization.
+//   MODEL_INTENT_OPTION_KEY - Option key on the vvoc plugins entry carrying role intent.
+//   RawOpenCodeModelIntent - Raw root/agent/command model intent from the native modelIntent envelope.
+//   normalizeNativeModelSelection - Normalizes a native model selection string or struct to provider/model#variant.
+//   readRawOpenCodeModelIntent - Conservatively read layered native model intent before native normalization.
 //   loadVvocConfig - Singleton effective vvoc config load for runtime plugins.
 //   loadEffectiveVvocConfig - Uncached effective vvoc config load for multi-location native hosts.
 //   loadEffectiveVvocConfigForRuntime - Backward-compatible alias for loadVvocConfig.
@@ -39,13 +40,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Added an uncached effective loader and a conservative raw OpenCode model-intent reader.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Removed the dedicated TUI config layer and re-pointed the raw intent reader at the native vvoc plugins modelIntent envelope.]
 // END_CHANGE_SUMMARY
 
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { createDefaultVvocConfig, parseVvocConfigText, type VvocConfig } from "./vvoc-config.js";
+import { PACKAGE_NAME } from "./package.js";
 import {
   getGlobalOpencodeDir,
   getGlobalVvocConfigPath,
@@ -56,7 +58,10 @@ import {
 
 export const VVOC_CONFIG_ENV = "VVOC_CONFIG";
 export const OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG";
-export const OPENCODE_TUI_CONFIG_ENV = "OPENCODE_TUI_CONFIG";
+export const OPENCODE_CONFIG_DIR_ENV = "OPENCODE_CONFIG_DIR";
+
+/** Option key on the vvoc `plugins` entry that carries custom/root/command role intent. */
+export const MODEL_INTENT_OPTION_KEY = "modelIntent";
 
 export type ConfigWriteScope = "global" | "project";
 export type ConfigReadScope = ConfigWriteScope | "effective";
@@ -105,7 +110,6 @@ export type ProjectConfigRoot = {
   rootDir: string;
   vvocConfigPath?: string;
   opencodeConfigPath?: string;
-  opencodeTuiConfigPath?: string;
 };
 
 export type ConfigLayerOptions = {
@@ -120,12 +124,10 @@ export type ConfigWriteTargets = {
   opencodeBaseDir: string;
   vvocBaseDir: string;
   opencodeConfigPath: string;
-  opencodeTuiConfigPath: string;
   vvocConfigPath: string;
 };
 
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
-const OPENCODE_TUI_CONFIG_FILE_NAMES = ["tui.json", "tui.jsonc"] as const;
 
 // START_BLOCK_PROJECT_LAYER_DISCOVERY
 export async function findNearestProjectConfigRoot(
@@ -136,15 +138,13 @@ export async function findNearestProjectConfigRoot(
   while (true) {
     const vvocConfigPath = getProjectVvocConfigPath(currentDir);
     const opencodeConfigPath = await findExistingProjectOpenCodeConfigPath(currentDir);
-    const opencodeTuiConfigPath = await findExistingProjectOpenCodeTuiConfigPath(currentDir);
     const hasVvocConfig = await pathExists(vvocConfigPath);
 
-    if (hasVvocConfig || opencodeConfigPath || opencodeTuiConfigPath) {
+    if (hasVvocConfig || opencodeConfigPath) {
       return {
         rootDir: currentDir,
         vvocConfigPath: hasVvocConfig ? vvocConfigPath : undefined,
         opencodeConfigPath,
-        opencodeTuiConfigPath,
       };
     }
 
@@ -226,30 +226,6 @@ export async function resolveOpenCodeConfigSource(
   return resolveGlobalOpenCodeSource(options.configDir);
 }
 
-export async function resolveOpenCodeTuiConfigSource(
-  options: ConfigLayerOptions & { scope: ConfigReadScope },
-): Promise<ConfigSource> {
-  if (options.scope === "global") {
-    return resolveGlobalOpenCodeTuiSource(options.configDir);
-  }
-
-  if (options.scope === "project") {
-    return resolveProjectOpenCodeTuiSource(options.cwd);
-  }
-
-  const envSource = readEnvConfigSource(options.env, OPENCODE_TUI_CONFIG_ENV);
-  if (envSource) {
-    return envSource;
-  }
-
-  const projectSource = await resolveProjectOpenCodeTuiSource(options.cwd);
-  if (projectSource.kind === "project") {
-    return projectSource;
-  }
-
-  return resolveGlobalOpenCodeTuiSource(options.configDir);
-}
-
 export async function resolveConfigWriteTargets(
   options: ConfigLayerOptions & { scope: ConfigWriteScope },
 ): Promise<ConfigWriteTargets> {
@@ -263,9 +239,6 @@ export async function resolveConfigWriteTargets(
       opencodeBaseDir,
       vvocBaseDir: getGlobalVvocDir(options.configDir),
       opencodeConfigPath,
-      opencodeTuiConfigPath: await selectExistingPath(
-        OPENCODE_TUI_CONFIG_FILE_NAMES.map((name) => join(opencodeBaseDir, name)),
-      ),
       vvocConfigPath: getGlobalVvocConfigPath(options.configDir),
     };
   }
@@ -278,9 +251,6 @@ export async function resolveConfigWriteTargets(
     opencodeBaseDir,
     vvocBaseDir: dirname(getProjectVvocConfigPath(projectRoot)),
     opencodeConfigPath: await resolveProjectOpenCodeConfigPath(projectRoot),
-    opencodeTuiConfigPath:
-      (await findExistingProjectOpenCodeTuiConfigPath(projectRoot)) ??
-      join(opencodeBaseDir, "tui.json"),
     vvocConfigPath: getProjectVvocConfigPath(projectRoot),
   };
 }
@@ -354,37 +324,140 @@ export function loadEffectiveVvocConfig(
 }
 
 // START_BLOCK_RAW_OPENCODE_INTENT
-function collectRawModelEntries(value: unknown): Record<string, string> | undefined {
-  if (value === undefined) return {};
+/** Normalizes a native model selection string or struct into `provider/model#variant`. */
+export function normalizeNativeModelSelection(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.providerID !== "string" || typeof record.model !== "string") return undefined;
+  const provider = record.providerID.trim();
+  const model = record.model.trim();
+  if (!provider || !model) return undefined;
+  const variant = typeof record.variant === "string" ? record.variant.trim() : "";
+  return variant ? `${provider}/${model}#${variant}` : `${provider}/${model}`;
+}
+
+function readEnvelopeString(value: unknown, label: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${label}: modelIntent value must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function readEnvelopeMap(value: unknown, label: string): Record<string, string> {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label}: modelIntent map must be an object`);
+  }
   const entries: Record<string, string> = {};
   for (const [name, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
-    const model = (entry as Record<string, unknown>).model;
-    if (typeof model === "string") entries[name] = model;
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new Error(`${label}: modelIntent.${name} must be a non-empty string`);
+    }
+    entries[name] = entry.trim();
   }
   return entries;
 }
 
-/**
- * Conservatively read the raw effective OpenCode config so custom agent and
- * command model intent (including `vv-role:` strings) survives native
- * normalization. Invalid or missing documents yield undefined so callers can
- * fall back to native state; the reader never throws on user config.
- */
-export async function readRawOpenCodeModelIntent(
-  cwd: string,
-): Promise<RawOpenCodeModelIntent | undefined> {
-  let source: ConfigSource;
-  try {
-    source = await resolveOpenCodeConfigSource({ scope: "effective", cwd });
-  } catch {
-    return undefined;
+/** Reads the vvoc-owned modelIntent envelope strictly, validating its own shape. */
+function readModelIntentEnvelopeStrict(
+  document: Record<string, unknown>,
+  label: string,
+): {
+  model?: string;
+  smallModel?: string;
+  agents: Record<string, string>;
+  commands: Record<string, string>;
+} {
+  const plugins = document.plugins;
+  if (!Array.isArray(plugins)) return { agents: {}, commands: {} };
+  for (const entry of plugins) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const packageName = record.package;
+    if (typeof packageName !== "string" || !isManagedPackageName(packageName)) continue;
+    const options = record.options;
+    if (options === undefined) continue;
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+      throw new Error(`${label}: plugins options must be an object`);
+    }
+    const envelope = (options as Record<string, unknown>)[MODEL_INTENT_OPTION_KEY];
+    if (envelope === undefined) continue;
+    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+      throw new Error(`${label}: plugins options.${MODEL_INTENT_OPTION_KEY} must be an object`);
+    }
+    const env = envelope as Record<string, unknown>;
+    const intentLabel = `${label}: ${MODEL_INTENT_OPTION_KEY}`;
+    return {
+      model: readEnvelopeString(env.model, `${intentLabel}.model`),
+      smallModel: readEnvelopeString(env.smallModel, `${intentLabel}.smallModel`),
+      agents: readEnvelopeMap(env.agents, `${intentLabel}.agents`),
+      commands: readEnvelopeMap(env.commands, `${intentLabel}.commands`),
+    };
   }
-  if (source.path === undefined) return undefined;
+  return { agents: {}, commands: {} };
+}
+
+function collectNativeAgentSelections(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entries: Record<string, string> = {};
+  for (const [name, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const selection = normalizeNativeModelSelection((entry as Record<string, unknown>).model);
+    if (selection !== undefined) entries[name] = selection;
+  }
+  return entries;
+}
+
+function isManagedPackageName(value: string): boolean {
+  return (
+    value === PACKAGE_NAME ||
+    value.startsWith(`${PACKAGE_NAME}@`) ||
+    value === `${PACKAGE_NAME}/tui` ||
+    (value.startsWith(`${PACKAGE_NAME}@`) && value.endsWith("/tui"))
+  );
+}
+
+type IntentLayer = {
+  model?: string;
+  smallModel?: string;
+  agents: Record<string, string>;
+  commands: Record<string, string>;
+};
+
+function mergeIntentLayer(target: IntentLayer, layer: IntentLayer): void {
+  if (layer.model !== undefined) target.model = layer.model;
+  if (layer.smallModel !== undefined) target.smallModel = layer.smallModel;
+  Object.assign(target.agents, layer.agents);
+  Object.assign(target.commands, layer.commands);
+}
+
+function layerFromDocument(document: Record<string, unknown>, label: string): IntentLayer {
+  const envelope = readModelIntentEnvelopeStrict(document, label);
+  const nativeAgents = collectNativeAgentSelections(document.agents);
+  const nativeCommands = collectNativeAgentSelections(document.commands);
+  // A native explicit literal in the same document wins over role intent.
+  const nativeModel = normalizeNativeModelSelection(document.model);
+  return {
+    ...(nativeModel !== undefined
+      ? { model: nativeModel }
+      : envelope.model !== undefined
+        ? { model: envelope.model }
+        : {}),
+    ...(envelope.smallModel !== undefined ? { smallModel: envelope.smallModel } : {}),
+    agents: { ...envelope.agents, ...nativeAgents },
+    commands: { ...envelope.commands, ...nativeCommands },
+  };
+}
+
+async function readJsoncDocument(path: string): Promise<Record<string, unknown> | undefined> {
   let text: string;
   try {
-    text = await readFile(source.path, "utf8");
+    text = await readFile(path, "utf8");
   } catch {
     return undefined;
   }
@@ -396,16 +469,120 @@ export async function readRawOpenCodeModelIntent(
   if (errors.length > 0 || !document || typeof document !== "object" || Array.isArray(document)) {
     return undefined;
   }
-  const record = document as Record<string, unknown>;
-  const agents = collectRawModelEntries(record.agent);
-  const commands = collectRawModelEntries(record.command);
-  if (agents === undefined || commands === undefined) return undefined;
+  return document as Record<string, unknown>;
+}
+
+/** Files loaded from one directory in native name order (jsonc ranks above json). */
+async function configFilesInDirectory(directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const name of OPENCODE_CONFIG_FILE_NAMES) {
+    const candidate = join(directory, name);
+    if (await pathExists(candidate)) files.push(candidate);
+  }
+  return files;
+}
+
+/**
+ * Ordered native config candidates lowest-to-highest precedence, mirroring the
+ * pinned host (core/config/discovery.ts, core/config.ts): global root (replaced
+ * by OPENCODE_CONFIG_DIR), explicit OPENCODE_CONFIG document, ancestor direct
+ * files, ancestor `.opencode` directories, then OPENCODE_CONFIG_CONTENT.
+ */
+async function collectNativeIntentCandidates(cwd: string): Promise<string[]> {
+  // OPENCODE_CONFIG_DIR replaces the native global root; otherwise XDG config
+  // home plus opencode. The global root must not re-enter through the ancestor
+  // walk (mirrors the pinned host's ConfigDiscovery.visible filter).
+  const globalRoot = resolve(getGlobalOpencodeDir());
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  const push = async (path: string): Promise<void> => {
+    if (seen.has(path)) return;
+    seen.add(path);
+    candidates.push(path);
+  };
+
+  for (const file of await configFilesInDirectory(globalRoot)) await push(file);
+
+  const explicit = process.env.OPENCODE_CONFIG?.trim();
+  if (explicit) {
+    const explicitPath = resolve(explicit);
+    if (await pathExists(explicitPath)) await push(explicitPath);
+  }
+
+  const ancestors: string[] = [];
+  let current = resolve(cwd);
+  while (true) {
+    ancestors.push(current);
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  const rootToNearest = [...ancestors].reverse();
+
+  for (const directory of rootToNearest) {
+    if (directory === globalRoot) continue;
+    for (const file of await configFilesInDirectory(directory)) await push(file);
+  }
+  for (const directory of rootToNearest) {
+    if (directory === globalRoot) continue;
+    for (const file of await configFilesInDirectory(join(directory, ".opencode"))) await push(file);
+  }
+
+  return candidates;
+}
+
+/**
+ * Reads the layered native effective model intent so a vvoc role envelope in a
+ * lower-precedence document is not lost because a higher-precedence document
+ * exists with an unrelated setting. Native higher-precedence explicit
+ * selections win. Malformed vvoc-owned intent fails loudly instead of silently
+ * falling back; unrelated malformed documents are skipped.
+ */
+export async function readRawOpenCodeModelIntent(
+  cwd: string,
+): Promise<RawOpenCodeModelIntent | undefined> {
+  let candidates: string[];
+  try {
+    candidates = await collectNativeIntentCandidates(cwd);
+  } catch {
+    return undefined;
+  }
+
+  const merged: IntentLayer = { agents: {}, commands: {} };
+  let sourcePath: string | undefined;
+  let sawDocument = false;
+
+  for (const path of candidates) {
+    const document = await readJsoncDocument(path);
+    if (document === undefined) continue;
+    sawDocument = true;
+    const layer = layerFromDocument(document, path);
+    mergeIntentLayer(merged, layer);
+    sourcePath = path;
+  }
+
+  const content = process.env.OPENCODE_CONFIG_CONTENT;
+  if (typeof content === "string" && content.trim()) {
+    const errors: ParseError[] = [];
+    const parsed: unknown = parseJsonc(content, errors, {
+      allowTrailingComma: true,
+      allowEmptyContent: true,
+    });
+    if (errors.length === 0 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const layer = layerFromDocument(parsed as Record<string, unknown>, "OPENCODE_CONFIG_CONTENT");
+      mergeIntentLayer(merged, layer);
+      sourcePath = "OPENCODE_CONFIG_CONTENT";
+    }
+  }
+
+  if (!sawDocument && sourcePath === undefined) return undefined;
+
   return {
-    ...(typeof record.model === "string" ? { model: record.model } : {}),
-    ...(typeof record.small_model === "string" ? { smallModel: record.small_model } : {}),
-    agents,
-    commands,
-    sourcePath: source.path,
+    ...(merged.model === undefined ? {} : { model: merged.model }),
+    ...(merged.smallModel === undefined ? {} : { smallModel: merged.smallModel }),
+    agents: merged.agents,
+    commands: merged.commands,
+    ...(sourcePath === undefined ? {} : { sourcePath }),
   };
 }
 // END_BLOCK_RAW_OPENCODE_INTENT
@@ -544,20 +721,6 @@ async function resolveProjectOpenCodeSource(cwd: string): Promise<ConfigSource> 
   };
 }
 
-async function resolveProjectOpenCodeTuiSource(cwd: string): Promise<ConfigSource> {
-  const root = await findNearestProjectConfigRoot(cwd);
-  if (root?.opencodeTuiConfigPath) {
-    return { kind: "project", path: root.opencodeTuiConfigPath, rootDir: root.rootDir };
-  }
-
-  return {
-    kind: "missing",
-    path: root ? join(getProjectOpencodeDir(root.rootDir), "tui.json") : undefined,
-    rootDir: root?.rootDir,
-    reason: "project OpenCode TUI config missing; run vvoc install --scope project",
-  };
-}
-
 async function resolveGlobalVvocSource(configDir?: string): Promise<ConfigSource> {
   const path = getGlobalVvocConfigPath(configDir);
   return (await pathExists(path))
@@ -574,18 +737,6 @@ async function resolveGlobalOpenCodeSource(configDir?: string): Promise<ConfigSo
         kind: "missing",
         path: join(baseDir, "opencode.json"),
         reason: "global OpenCode config missing",
-      };
-}
-
-async function resolveGlobalOpenCodeTuiSource(configDir?: string): Promise<ConfigSource> {
-  const baseDir = getGlobalOpencodeDir(configDir);
-  const path = await findExistingOpenCodeTuiConfigPath(baseDir);
-  return path
-    ? { kind: "global", path }
-    : {
-        kind: "missing",
-        path: join(baseDir, "tui.json"),
-        reason: "global OpenCode TUI config missing",
       };
 }
 
@@ -606,12 +757,6 @@ async function findExistingProjectOpenCodeConfigPath(
   return findExistingOpenCodeConfigPath(getProjectOpencodeDir(projectRoot));
 }
 
-async function findExistingProjectOpenCodeTuiConfigPath(
-  projectRoot: string,
-): Promise<string | undefined> {
-  return findExistingOpenCodeTuiConfigPath(getProjectOpencodeDir(projectRoot));
-}
-
 async function findExistingOpenCodeConfigPath(baseDir: string): Promise<string | undefined> {
   for (const name of OPENCODE_CONFIG_FILE_NAMES) {
     const candidate = join(baseDir, name);
@@ -622,14 +767,13 @@ async function findExistingOpenCodeConfigPath(baseDir: string): Promise<string |
   return undefined;
 }
 
-async function findExistingOpenCodeTuiConfigPath(baseDir: string): Promise<string | undefined> {
-  for (const name of OPENCODE_TUI_CONFIG_FILE_NAMES) {
-    const candidate = join(baseDir, name);
-    if (await pathExists(candidate)) {
-      return candidate;
-    }
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
-  return undefined;
 }
 
 async function selectExistingPath(candidates: string[]): Promise<string> {
@@ -639,13 +783,4 @@ async function selectExistingPath(candidates: string[]): Promise<string> {
     }
   }
   return candidates[0];
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
