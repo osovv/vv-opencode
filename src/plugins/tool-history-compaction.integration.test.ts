@@ -1,189 +1,305 @@
 // FILE: src/plugins/tool-history-compaction.integration.test.ts
-// VERSION: 0.1.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify ToolHistoryCompactionPlugin registration: transform hook presence, disabled no-op, config-driven behavior, and end-to-end in-memory compaction on SDK-shaped parts.
-//   SCOPE: Plugin registration, project vvoc config seeding, transform hook invocation, and mutation isolation.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/tool-history-compaction/index.ts]
+//   PURPOSE: Verify the native ToolHistoryCompactionPlugin contract: unconditional context-hook registration, per-bound-family capture gating, native message compaction, unknown/disabled no-op, and cleanup.
+//   SCOPE: Native-boundary tests with an injected shared-runtime seam, a recording native session hook, native @opencode/ai messages, and lifecycle release.
+//   DEPENDS: [bun:test, @opencode/ai, src/lib/vvoc-config.ts, src/plugins/tool-history-compaction/index.ts, src/plugins/tool-history-compaction/prune.ts]
 //   LINKS: [M-PLUGIN-TOOL-HISTORY-COMPACTION, V-M-PLUGIN-TOOL-HISTORY-COMPACTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   previousConfigHome - Preserved XDG_CONFIG_HOME for test cleanup.
-//   createPluginInput - Builds an isolated OpenCode plugin input fixture.
-//   FixtureToolPart - SDK-shaped completed tool part fixture type.
-//   createToolPart - Builds an SDK-shaped completed tool part.
-//   writeProjectVvocConfig - Seeds a project .vvoc/vvcoc.json overriding the plugin entry.
+//   captureFor - Builds a fake family capture from a vvoc config.
+//   createHarness - Builds a native plugin harness with an injected runtime seam.
+//   createToolMessage - Builds a native message carrying one textual tool result.
+//   outputOf - Reads a native tool result text value back out.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.1.0 - Initial plugin registration and transform behavior tests.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 - Rewrote the V1 experimental transform integration tests over native session context hooks and captured policy.]
 // END_CHANGE_SUMMARY
 
-import type { Part } from "@opencode-ai/sdk";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Message, ToolCallPart, ToolResultPart, type ContentPart } from "@opencode/ai";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetVvocConfigForTests } from "../lib/config-layers.js";
-import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { ToolHistoryCompactionPlugin } from "./tool-history-compaction/index.js";
+import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
+import { createToolHistoryCompactionPlugin } from "./tool-history-compaction/index.js";
 import { PRUNE_MARKER } from "./tool-history-compaction/prune.js";
 
-const previousConfigHome = process.env.XDG_CONFIG_HOME;
+const previousDataHome = process.env.XDG_DATA_HOME;
+let scratchDataHome = "";
 
-beforeEach(() => {
-  resetVvocConfigForTests();
-  process.env.XDG_CONFIG_HOME = join(tmpdir(), `vvoc-thc-empty-config-${process.pid}`);
+beforeAll(() => {
+  scratchDataHome = mkdtempSync(join(tmpdir(), "vvoc-thc-it-data-"));
+  process.env.XDG_DATA_HOME = scratchDataHome;
 });
 
-afterEach(() => {
-  resetVvocConfigForTests();
-  if (previousConfigHome === undefined) {
-    delete process.env.XDG_CONFIG_HOME;
-  } else {
-    process.env.XDG_CONFIG_HOME = previousConfigHome;
-  }
+afterAll(() => {
+  if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME;
+  else process.env.XDG_DATA_HOME = previousDataHome;
+  if (scratchDataHome) rmSync(scratchDataHome, { recursive: true, force: true });
 });
 
-function createPluginInput(directory: string) {
-  return {
-    client: {} as never,
-    project: {} as never,
-    directory,
-    worktree: directory,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  };
-}
-type FixtureToolPart = Part & {
-  type: "tool";
-  callID: string;
-  tool: string;
-  state: {
-    status: "completed";
-    input: Record<string, unknown>;
-    output: string;
-    time?: { compacted?: number };
-  };
+type NativeContextEvent = {
+  sessionID: string;
+  agent?: string;
+  system?: unknown[];
+  messages: Message[];
 };
+type SessionHandler = (event: NativeContextEvent) => Promise<void> | void;
 
-function createToolPart(tool: string, output: string): FixtureToolPart {
-  return {
-    id: `part-${tool}-${Math.random()}`,
-    sessionID: "sess",
-    messageID: "msg",
-    type: "tool",
-    callID: `call-${tool}`,
-    tool,
-    state: {
-      status: "completed",
-      input: { filePath: "/repo/lib.ts" },
-      output,
-      title: tool,
-      metadata: {},
-      time: { start: 1, end: 2 },
+function configFor(entry: unknown): VvocConfig {
+  const config = createDefaultVvocConfig();
+  config.plugins = { ...config.plugins, "tool-history-compaction": entry as never };
+  return config;
+}
+
+async function createHarness(
+  config: VvocConfig,
+  options: {
+    policy?: "enabled" | "unknown";
+    resolve?: (sessionID: string) => { familyId: string; vvoc: VvocConfig } | undefined;
+    clientThrows?: boolean;
+    /** Stored session-context messages returned by the authenticated client. */
+    sessionContextMessages?: unknown[];
+  } = {},
+) {
+  const policy = options.policy ?? "enabled";
+  const hooks = new Map<string, SessionHandler>();
+  let released = false;
+  const capture = { familyId: "fam-1", vvoc: config };
+  const fakeRuntime = {
+    snapshots: {
+      configFor: async (sessionID: string) => {
+        if (options.resolve !== undefined) return options.resolve(sessionID);
+        return policy === "unknown" ? undefined : capture;
+      },
+      accept: async () => ({ status: "unbound" }),
+    },
+    client: async () => {
+      if (options.clientThrows) throw new Error("client unavailable");
+      return { session: { context: async () => options.sessionContextMessages ?? [] } };
+    },
+    release: async () => {
+      released = true;
     },
   };
+  const fakeContext = {
+    location: {
+      directory: "/tmp/project",
+      project: { id: "proj", directory: "/tmp/project", canonical: "/tmp/project" },
+    },
+    session: {
+      hook: async (name: string, callback: SessionHandler) => {
+        hooks.set(name, callback);
+        return { dispose: async () => undefined };
+      },
+    },
+  };
+  const plugin = createToolHistoryCompactionPlugin({
+    acquireRuntime: async () => fakeRuntime as never,
+    log: () => undefined,
+  });
+  const cleanup = (await plugin.setup(fakeContext as never)) as () => Promise<void>;
+  const runContext = async (messages: Message[], sessionID = "s1") => {
+    const handler = hooks.get("context");
+    if (handler === undefined) throw new Error("no context hook registered");
+    const event: NativeContextEvent = { sessionID, agent: "build", messages };
+    await handler(event);
+    return event;
+  };
+  return { hooks, runContext, isReleased: () => released, cleanup };
 }
 
-async function writeProjectVvocConfig(directory: string, pluginsEntry: unknown): Promise<void> {
-  const doc = JSON.parse(renderVvocConfig(createDefaultVvocConfig())) as {
-    plugins: Record<string, unknown>;
-  };
-  doc.plugins["tool-history-compaction"] = pluginsEntry;
-  await mkdir(join(directory, ".vvoc"), { recursive: true });
-  await writeFile(
-    join(directory, ".vvoc", "vvoc.json"),
-    JSON.stringify(doc, null, 2) + "\n",
-    "utf8",
-  );
+let seq = 0;
+function createToolMessage(
+  tool: string,
+  output: string,
+  input: Record<string, unknown> = {},
+  id = `m${seq}`,
+): Message {
+  seq += 1;
+  const callId = `call-${seq}`;
+  const content: ContentPart[] = [];
+  // The native read tool needs its call input to recover the covered file.
+  if (tool === "read") content.push(ToolCallPart.make({ id: callId, name: tool, input }));
+  content.push(ToolResultPart.make({ id: callId, name: tool, result: output, resultType: "text" }));
+  return Message.make({ id, role: "assistant", content });
 }
+
+function outputOf(message: Message): unknown {
+  for (const part of message.content) {
+    if (part.type === "tool-result") return (part.result as { value?: unknown }).value;
+  }
+  return undefined;
+}
+
+function inputOf(message: Message): unknown {
+  for (const part of message.content) {
+    if (part.type === "tool-call") return part.input;
+  }
+  return undefined;
+}
+
+const BIG = "y".repeat(10_000);
+const LONG_READ = "1: alpha\n2: beta " + "z".repeat(3000);
 
 describe("ToolHistoryCompactionPlugin", () => {
-  test("enabled plugin registers the transform hook", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "thc-hook-"));
-    try {
-      const plugin = await ToolHistoryCompactionPlugin(createPluginInput(directory));
-      expect(typeof plugin["experimental.chat.messages.transform"]).toBe("function");
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+  test("registers the context hook unconditionally, even when the capture is disabled", async () => {
+    const enabled = await createHarness(configFor({ enabled: true }));
+    expect(enabled.hooks.has("context")).toBe(true);
+    const disabled = await createHarness(configFor(false));
+    expect(disabled.hooks.has("context")).toBe(true);
   });
 
-  test("disabled plugin registers no hooks", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "thc-disabled-"));
-    try {
-      await writeProjectVvocConfig(directory, false);
-      const plugin = await ToolHistoryCompactionPlugin(createPluginInput(directory));
-      expect(plugin).toEqual({});
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  test("transform hook compacts only the in-memory copy, preserving inputs and structure", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "thc-transform-"));
-    try {
-      await writeProjectVvocConfig(directory, {
+  test("compacts only the in-memory native messages for an enabled capture", async () => {
+    const harness = await createHarness(
+      configFor({
         enabled: true,
         protectLastCalls: 0,
         protectRecentMessages: 0,
-      });
-      const plugin = await ToolHistoryCompactionPlugin(createPluginInput(directory));
-      const hook = plugin["experimental.chat.messages.transform"]!;
+        savePrunedOutput: false,
+      }),
+    );
+    const oldRead = createToolMessage("read", LONG_READ, { path: "/repo/lib.ts" }, "m-old");
+    const oldBash = createToolMessage("bash", BIG, {}, "m-mid");
+    const recent = createToolMessage("bash", "recent", {}, "m-recent");
 
-      const oldRead = createToolPart("read", "1| alpha\n2| beta " + "z".repeat(3000));
-      const oldBash = createToolPart("bash", "y".repeat(10_000));
-      const recent = createToolPart("bash", "recent");
-      const messages = [
-        { info: { id: "m-old" }, parts: [oldRead, oldBash] },
-        { info: { id: "m-recent" }, parts: [recent] },
-      ];
+    const inputBefore = JSON.stringify(inputOf(oldBash));
+    const idsBefore = oldBash.content.map((part) =>
+      part.type === "tool-call" || part.type === "tool-result" ? part.id : undefined,
+    );
+    await harness.runContext([oldRead, oldBash, recent]);
 
-      const inputBefore = JSON.stringify(oldRead.state.input);
-      const callIDsBefore = [oldRead.callID, oldBash.callID, recent.callID];
-      const output = { messages } as Parameters<typeof hook>[1];
-      await hook({}, output);
-
-      // recent call untouched; old bash pruned; old read slimmed to a header
-      expect(recent.state.output).toBe("recent");
-      expect(oldBash.state.output).toContain(PRUNE_MARKER);
-      expect(oldRead.state.output).toBe("[Read /repo/lib.ts, lines 1-2]");
-      // inputs and callIDs never change
-      expect(JSON.stringify(oldRead.state.input)).toBe(inputBefore);
-      expect([oldRead.callID, oldBash.callID, recent.callID]).toEqual(callIDsBefore);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+    expect(outputOf(recent)).toBe("recent");
+    expect(outputOf(oldBash)).toContain(PRUNE_MARKER);
+    expect(outputOf(oldRead)).toBe("[Read /repo/lib.ts, lines 1-2]");
+    expect(JSON.stringify(inputOf(oldBash))).toBe(inputBefore);
+    expect(
+      oldBash.content.map((part) =>
+        part.type === "tool-call" || part.type === "tool-result" ? part.id : undefined,
+      ),
+    ).toEqual(idsBefore);
   });
 
-  test("custom config from project vvoc.json drives behavior", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "thc-config-"));
-    try {
-      await writeProjectVvocConfig(directory, {
+  test("custom captured config from the family drives behavior (readSlim off)", async () => {
+    const harness = await createHarness(
+      configFor({
         enabled: true,
         readSlim: false,
         protectLastCalls: 0,
         protectRecentMessages: 0,
-      });
-      const plugin = await ToolHistoryCompactionPlugin(createPluginInput(directory));
-      const hook = plugin["experimental.chat.messages.transform"]!;
+        savePrunedOutput: false,
+      }),
+    );
+    const oldRead = createToolMessage(
+      "read",
+      "1: alpha\n2: beta " + "z".repeat(6000),
+      { path: "/repo/lib.ts" },
+      "m-old",
+    );
+    const recent = createToolMessage("bash", "recent", {}, "m-recent");
+    await harness.runContext([oldRead, recent]);
 
-      const oldRead = createToolPart("read", "1| alpha\n2| beta " + "z".repeat(6000));
-      const messages = [
-        { info: { id: "m-old" }, parts: [oldRead] },
-        { info: { id: "m-recent" }, parts: [createToolPart("bash", "recent")] },
-      ];
-      await hook({}, { messages } as Parameters<typeof hook>[1]);
+    const output = outputOf(oldRead) as string;
+    expect(output.startsWith("[Read ")).toBe(false);
+    expect(output).toContain(PRUNE_MARKER);
+  });
 
-      // readSlim off: old read is pruned by size, not slimmed
-      expect(oldRead.state.output.startsWith("[Read ")).toBe(false);
-      expect(oldRead.state.output).toContain(PRUNE_MARKER);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+  test("a disabled capture compacts nothing", async () => {
+    const harness = await createHarness(configFor(false));
+    const message = createToolMessage("bash", BIG, {}, "m-old");
+    await harness.runContext([message]);
+    expect(outputOf(message)).toBe(BIG);
+  });
+
+  test("an unknown family policy compacts nothing (no invented policy)", async () => {
+    const harness = await createHarness(configFor({ enabled: true }), { policy: "unknown" });
+    const message = createToolMessage("bash", BIG, {}, "m-old");
+    await harness.runContext([message]);
+    expect(outputOf(message)).toBe(BIG);
+  });
+
+  test("mixed captured families compact only the enabled family", async () => {
+    const enabled = configFor({
+      enabled: true,
+      protectLastCalls: 0,
+      protectRecentMessages: 0,
+      savePrunedOutput: false,
+    });
+    const disabled = configFor(false);
+    const harness = await createHarness(enabled, {
+      resolve: (sessionID) =>
+        sessionID === "s-enabled"
+          ? { familyId: "fam-a", vvoc: enabled }
+          : { familyId: "fam-b", vvoc: disabled },
+    });
+    const enabledMessage = createToolMessage("bash", BIG, {}, "m-a");
+    const disabledMessage = createToolMessage("bash", BIG, {}, "m-b");
+    // A newer companion message keeps the huge result outside the always-protected newest slot.
+    await harness.runContext(
+      [enabledMessage, createToolMessage("bash", "recent-a", {}, "m-ra")],
+      "s-enabled",
+    );
+    await harness.runContext(
+      [disabledMessage, createToolMessage("bash", "recent-b", {}, "m-rb")],
+      "s-disabled",
+    );
+
+    expect(outputOf(enabledMessage)).toContain(PRUNE_MARKER);
+    expect(outputOf(disabledMessage)).toBe(BIG);
+  });
+
+  test("a message-time acquisition failure still compacts using array-position ordering", async () => {
+    const harness = await createHarness(
+      configFor({
+        enabled: true,
+        protectLastCalls: 0,
+        protectRecentMessages: 0,
+        savePrunedOutput: false,
+      }),
+      { clientThrows: true },
+    );
+    const old = createToolMessage("bash", BIG, {}, "m-old");
+    const recent = createToolMessage("bash", "recent", {}, "m-recent");
+    await harness.runContext([old, recent]);
+    expect(outputOf(old)).toContain(PRUNE_MARKER);
+    expect(outputOf(recent)).toBe("recent");
+  });
+
+  test("authenticated stored-message recency correlates the window by source id, not array position", async () => {
+    // Array order puts the OLDER source last; only real stored times can protect
+    // the newest logical source. This exercises the default fetchMessageTimes path
+    // with an encoded numeric session.context envelope.
+    const harness = await createHarness(
+      configFor({
+        enabled: true,
+        protectLastCalls: 0,
+        protectRecentMessages: 1,
+        savePrunedOutput: false,
+      }),
+      {
+        sessionContextMessages: [
+          { id: "m-new", time: { created: 9000 } },
+          { id: "m-old", time: { created: 1000 } },
+        ],
+      },
+    );
+    const newer = createToolMessage("bash", BIG, {}, "m-new");
+    const older = createToolMessage("bash", BIG, {}, "m-old");
+    await harness.runContext([newer, older]);
+
+    expect(outputOf(newer)).toBe(BIG);
+    expect(outputOf(older)).toContain(PRUNE_MARKER);
+  });
+
+  test("cleanup disposes the hook and releases the shared runtime", async () => {
+    const harness = await createHarness(configFor({ enabled: true }));
+    expect(harness.isReleased()).toBe(false);
+    await harness.cleanup();
+    expect(harness.isReleased()).toBe(true);
   });
 });

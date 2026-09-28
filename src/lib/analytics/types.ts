@@ -11,7 +11,7 @@
 //
 // START_MODULE_MAP
 //   UsageTokens - Token counters for one completed model step.
-//   UsageRecord - One persisted step-finish observation deduped by partID last-write-wins.
+//   UsageRecord - One persisted native model-step observation deduped by partID last-write-wins.
 //   SessionRecord - Latest known session metadata deduped by sessionID last-write-wins.
 //   AnalyticsRecord - Union of persistable analytics record kinds.
 //   AnalyticsGroupKey - Grouping keys supported by the analytics CLI.
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-cache-hit-rate-analytics - Added canonical analytics record and metric types.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 - Clarified that partID carries the durable native session.step.ended event id; the record shape and dedupe contract are unchanged.]
 // END_CHANGE_SUMMARY
 
 /** Token counters for one completed model step. All values are non-negative integers. */
@@ -37,7 +37,13 @@ export type UsageTokens = {
   cacheWrite: number;
 };
 
-/** One persisted step-finish observation. Readers dedupe by partID last-write-wins. */
+/**
+ * One persisted native model-step observation. Readers dedupe by partID
+ * last-write-wins; the native analytics plugin carries the durable
+ * `session.step.ended` event id here (the stable step identity replacing the V1
+ * step-finish part id), so historical `prt_*` and current `evt_*` records stay
+ * mutually exclusive and readable.
+ */
 export type UsageRecord = {
   kind: "usage";
   /** ISO timestamp of the observation (event delivery time, UTC). */

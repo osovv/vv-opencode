@@ -1,36 +1,39 @@
 // FILE: src/plugins/system-context-injection/index.ts
-// VERSION: 0.6.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Inject universal primary guidance, including correctness obligations and evidence discipline for behavior changes, and one startup-resolved concrete orchestration policy into vv-controller without polluting subagent prompts.
-//   SCOPE: Universal instructions with correctness obligations, material-assumption discipline, settled-conclusion reopen triggers, false-premise handling, and pressure-versus-evidence distinction; vv-controller policy selection; explore-worker guidance; known subagent filtering; startup vvoc snapshot use; custom subagent tracking; and chat.message injection.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-paths.ts]
-//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS]
+//   PURPOSE: Inject universal primary guidance, including correctness obligations and evidence discipline for behavior changes, and one bound-family-resolved concrete orchestration policy into vv-controller without polluting subagent prompts, through the native session context hook.
+//   SCOPE: Universal instructions with correctness obligations, material-assumption discipline, settled-conclusion reopen triggers, false-premise handling, and pressure-versus-evidence distinction; vv-controller policy selection from the immutable captured family config; the explore-subagent guidance exception even though native registry mode is subagent; built-in, managed and native-registry subagent exclusion for every other agent; internal title/summary/compaction exclusion; per-request agent-mode reads that never poison on transient failure; idempotent injection into native system parts; lifecycle cleanup. Skill-path registration is NOT delivered here: the old runtime config.skills.paths registration has no native plugin config-transform surface, and the native document `skills: string[]` install/sync writes are owned by T007.
+//   DEPENDS: [@opencode/plugin, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/runtime/context.ts, src/runtime/types.ts]
+//   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS, M-NATIVE-RUNTIME, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SystemContextInjectionPlugin - Injects reusable system guidance into primary sessions while skipping known subagents.
+//   SystemContextInjectionPluginOptions - Optional injectable runtime acquisition and diagnostic sink for tests.
+//   createSystemContextInjectionPlugin - Native plugin factory; the default export acquires the real shared runtime.
+//   SystemContextInjectionPlugin - Default production native system-context-injection plugin object.
+//   default - Default export alias of SystemContextInjectionPlugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added settled-evidence reopen triggers, false-premise handling, pressure-versus-evidence distinction, and test-results-as-evidence wording, while preserving material-assumption discipline, repository-answerable question resolution, and honest uncertainty.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 attempt 2 - Explore receives its role guidance despite native subagent mode; every other subagent is excluded; agent mode is read fresh per query; skill-path delivery is explicitly handed to T007.]
 // END_CHANGE_SUMMARY
 
-import { type Config, type Plugin } from "@opencode-ai/plugin";
-import { loadVvocConfig } from "../../lib/config-layers.js";
+import { SystemPart } from "@opencode/ai";
+import { Plugin } from "@opencode/plugin";
 import { MANAGED_SUBAGENT_NAMES } from "../../lib/managed-agents.js";
 import {
   resolveOrchestrationPolicy,
   type ResolvedOrchestrationPolicy,
 } from "../../lib/orchestration.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
-import { existsSync } from "node:fs";
 import {
-  getGlobalOpencodeSkillsDir,
-  getProjectVvocDir,
-  getVvocSkillsDir,
-} from "../../lib/vvoc-paths.js";
+  acquireNativeSnapshotRuntime,
+  type NativeSnapshotContext,
+  type NativeSnapshotRuntime,
+} from "../../runtime/context.js";
+import type { FamilyCapture } from "../../runtime/types.js";
 
 const BUILT_IN_SUBAGENTS = ["general"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
@@ -147,39 +150,44 @@ const EXPLORE_SYSTEM_CONTEXTS = [
   ].join("\n"),
 ] as const;
 
-type AgentConfigShape = {
-  mode?: unknown;
-};
+export interface SystemContextInjectionPluginOptions {
+  /** Test-only injectable runtime acquisition. Default acquires the real shared runtime. */
+  acquireRuntime?: (ctx: NativeSnapshotContext) => Promise<NativeSnapshotRuntime>;
+}
 
 // START_BLOCK_AGENT_FILTERS
 function createKnownSubagentSet(): Set<string> {
   return new Set([...BUILT_IN_SUBAGENTS, ...PLUGIN_MANAGED_SUBAGENTS, ...MANAGED_SUBAGENT_NAMES]);
 }
 
-function syncConfiguredSubagents(config: Config, knownSubagents: Set<string>): void {
-  for (const [name, definition] of Object.entries(config.agent ?? {})) {
-    if ((definition as AgentConfigShape | undefined)?.mode === "subagent") {
-      knownSubagents.add(name);
-    }
-  }
+function isInternalPrimaryAgent(agentName: string): boolean {
+  return (INTERNAL_PRIMARY_AGENTS as readonly string[]).includes(agentName);
 }
 
-function shouldInjectForAgent(agentName: string | undefined, knownSubagents: Set<string>): boolean {
-  if (!agentName) {
-    return false;
-  }
-  if (knownSubagents.has(agentName)) {
-    return false;
-  }
-  if (INTERNAL_PRIMARY_AGENTS.includes(agentName as (typeof INTERNAL_PRIMARY_AGENTS)[number])) {
-    return false;
-  }
+async function shouldInjectForAgent(
+  agentName: string | undefined,
+  knownSubagents: Set<string>,
+  agentMode: (agent: string) => Promise<"subagent" | "primary" | "all" | undefined>,
+): Promise<boolean> {
+  if (!agentName) return false;
+  // The built-in explore worker is a native subagent but intentionally receives
+  // its own role guidance; it is the one subagent that is not excluded here.
+  if (agentName === EXPLORE_SUBAGENT) return true;
+  if (knownSubagents.has(agentName)) return false;
+  if (isInternalPrimaryAgent(agentName)) return false;
   if (
     SELF_SUFFICIENT_PRIMARY_AGENTS.includes(
       agentName as (typeof SELF_SUFFICIENT_PRIMARY_AGENTS)[number],
     )
   ) {
     return false;
+  }
+  // A custom agent registered as a native subagent is excluded by its real mode,
+  // not by name alone.
+  try {
+    if ((await agentMode(agentName)) === "subagent") return false;
+  } catch {
+    // A registry lookup failure leaves the name-based decision in force.
   }
   return true;
 }
@@ -200,77 +208,123 @@ function getSystemContextsForAgent(
 // END_BLOCK_AGENT_FILTERS
 
 // START_BLOCK_SYSTEM_CONTEXT_FORMATTING
-function hasInjectedContext(existingSystem: string | undefined, context: string): boolean {
-  return typeof existingSystem === "string" && existingSystem.includes(context);
+/** Native system part text already carrying the context, if any. */
+function hasInjectedContext(parts: ReadonlyArray<{ text?: unknown }>, context: string): boolean {
+  return parts.some((part) => typeof part.text === "string" && part.text.includes(context));
 }
 
+/**
+ * Append each context to the native system parts exactly once. Existing parts
+ * and their order are preserved; only the provider-context copy the model is
+ * about to receive is changed, never the stored user prompt.
+ */
 function appendSystemContexts(
-  existingSystem: string | undefined,
+  system: Array<{ type: "text"; text: string }>,
   contexts: readonly string[],
-): string {
-  const parts: string[] = [];
-
-  if (typeof existingSystem === "string" && existingSystem.trim()) {
-    parts.push(existingSystem.trim());
-  }
-
+): void {
   for (const context of contexts) {
-    if (!hasInjectedContext(existingSystem, context)) {
-      parts.push(context);
-    }
+    if (hasInjectedContext(system, context)) continue;
+    system.push(SystemPart.make(context));
   }
-
-  return parts.join("\n\n");
 }
 // END_BLOCK_SYSTEM_CONTEXT_FORMATTING
 
-// START_BLOCK_PLUGIN_ENTRY
-export const SystemContextInjectionPlugin: Plugin = async ({ directory }) => {
-  const vvoc = await loadVvocConfig({ cwd: directory });
-  if (!isVvocPluginEnabled(vvoc.config, "system-context-injection")) return {};
-  const policy = resolveOrchestrationPolicy(vvoc.config);
-  const knownSubagents = createKnownSubagentSet();
-  const projectRoot = vvoc.source.rootDir ?? directory;
-
-  return {
-    config: async (config) => {
-      syncConfiguredSubagents(config, knownSubagents);
-      const configRecord = config as Record<string, unknown>;
-      const skills = (configRecord.skills ?? {}) as Record<string, unknown>;
-      const skillsPaths = (skills.paths ?? []) as string[];
-      const shouldAvoidGlobalSkills = vvoc.source.kind === "project" || vvoc.source.kind === "env";
-
-      if (!shouldAvoidGlobalSkills) {
-        // Register the global OpenCode skills directory — vvoc sync creates a symlink there
-        const opencodeSkillsDir = getGlobalOpencodeSkillsDir();
-        if (!skillsPaths.includes(opencodeSkillsDir)) {
-          skills.paths = [...skillsPaths, opencodeSkillsDir];
-          configRecord.skills = skills;
-        }
-      }
-
-      // Register project-local skills dir when it exists
-      const projectSkillsDir = getVvocSkillsDir(getProjectVvocDir(projectRoot));
-      const currentPaths = (skills.paths ?? []) as string[];
-      if (
-        vvoc.source.kind !== "default" &&
-        existsSync(projectSkillsDir) &&
-        !currentPaths.includes(projectSkillsDir)
-      ) {
-        skills.paths = [...currentPaths, projectSkillsDir];
-        configRecord.skills = skills;
-      }
-    },
-    "chat.message": async (_input, output) => {
-      if (!shouldInjectForAgent(output.message.agent, knownSubagents)) {
-        return;
-      }
-
-      output.message.system = appendSystemContexts(
-        output.message.system,
-        getSystemContextsForAgent(output.message.agent, policy),
-      );
-    },
+// START_BLOCK_POLICY
+async function resolveCapturedConfig(
+  runtime: NativeSnapshotRuntime,
+  sessionID: string,
+): Promise<FamilyCapture["vvoc"] | undefined> {
+  const read = async (): Promise<FamilyCapture | undefined> => {
+    try {
+      return await runtime.snapshots.configFor(sessionID);
+    } catch {
+      return undefined;
+    }
   };
-};
+  let capture = await read();
+  if (capture === undefined) {
+    try {
+      await runtime.snapshots.accept({ sessionID });
+    } catch {
+      // fall through to the second read; absence is unknown policy below
+    }
+    capture = await read();
+  }
+  if (capture === undefined) return undefined;
+  if (!isVvocPluginEnabled(capture.vvoc, "system-context-injection")) return undefined;
+  return capture.vvoc;
+}
+// END_BLOCK_POLICY
+
+// START_BLOCK_PLUGIN_ENTRY
+/** Native plugin factory; the default export acquires the real shared runtime. */
+export function createSystemContextInjectionPlugin(
+  options: SystemContextInjectionPluginOptions = {},
+): Plugin.Plugin {
+  return Plugin.define({
+    id: "vvoc.system-context-injection",
+    setup: async (ctx) => {
+      const acquire =
+        options.acquireRuntime ?? ((c: NativeSnapshotContext) => acquireNativeSnapshotRuntime(c));
+      const runtime = await acquire(ctx);
+      const knownSubagents = createKnownSubagentSet();
+
+      /**
+       * Read one agent's native registry mode. The read is intentionally fresh on
+       * every query: a transient registry failure must not poison later requests,
+       * and a newly configured subagent or a changed mode must take effect without
+       * a process restart. Returns undefined when the agent is unknown or the
+       * registry is unavailable.
+       */
+      const agentMode = async (
+        agent: string,
+      ): Promise<"subagent" | "primary" | "all" | undefined> => {
+        try {
+          const result = (await ctx.agent.list()) as unknown;
+          const data = Array.isArray(result)
+            ? result
+            : ((result as { data?: unknown } | undefined)?.data ?? undefined);
+          if (!Array.isArray(data)) return undefined;
+          for (const item of data) {
+            if (typeof item !== "object" || item === null) continue;
+            const record = item as { id?: unknown; mode?: unknown };
+            if (String(record.id) !== agent) continue;
+            if (record.mode === "subagent" || record.mode === "primary" || record.mode === "all") {
+              return record.mode;
+            }
+            return undefined;
+          }
+          return undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
+      const registration = await ctx.session.hook("context", async (event) => {
+        try {
+          if (!Array.isArray(event.system)) return;
+          const agentName = event.agent === undefined ? undefined : String(event.agent);
+          if (!(await shouldInjectForAgent(agentName, knownSubagents, agentMode))) return;
+          const config = await resolveCapturedConfig(runtime, String(event.sessionID));
+          if (config === undefined) return;
+          const policy = resolveOrchestrationPolicy(config);
+          appendSystemContexts(
+            event.system as Array<{ type: "text"; text: string }>,
+            getSystemContextsForAgent(agentName, policy),
+          );
+        } catch {
+          // Guidance injection must never fail a model request.
+        }
+      });
+
+      return async () => {
+        await registration.dispose();
+        await runtime.release();
+      };
+    },
+  });
+}
+
+export const SystemContextInjectionPlugin: Plugin.Plugin = createSystemContextInjectionPlugin();
+export default SystemContextInjectionPlugin;
 // END_BLOCK_PLUGIN_ENTRY
