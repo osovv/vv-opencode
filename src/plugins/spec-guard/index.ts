@@ -36,7 +36,7 @@
 
 import { Plugin } from "@opencode/plugin";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   acquireNativeSnapshotRuntime,
   type NativeSnapshotContext,

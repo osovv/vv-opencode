@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 attempt 4 - Registers tools/hooks stably and gates execution/visibility/guidance per bound family (configFor with an accept reconciliation, fail-closed when unbound/disabled; no current-config execution authority); cancellation requires native record/array quiescence and positive exact timestamps with a newer aborted child terminal; background delivery validates native metadata and parent session.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - Tracked/delegated/reviewer launches are staged, persisted, then published so a failed write refuses before native execution and leaves attempt/budget/reviewer state intact; the event pump contains per-event handler failures with bounded diagnostics; a rejected lazy client acquisition is retried instead of cached forever; foreground bounded-continuation acquisition/repair failures are contained locally so the original-output report_rejected path settles instead of leaving the attempt in_flight.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -43,6 +43,7 @@ import {
   createWorkflowResultExcerpt,
   beginTrackedLaunch,
   createWorkItemStore,
+  createWorkItemStoreView,
   getReviewRound,
   getWorkItem,
   revertReviewerLaunch,
@@ -50,6 +51,11 @@ import {
   type WorkItemRecord,
   type WorkItemStore,
 } from "./state.js";
+import {
+  runWorkflowTransaction,
+  WorkflowTransactionQueue,
+  type WorkflowMutation,
+} from "./transactions.js";
 import {
   applyDelegatedLaunchFailure,
   applyDelegatedReportRejection,
@@ -270,6 +276,24 @@ function delegatedLaunchBindingKey(sessionId: string, callId: string): string {
 }
 // END_BLOCK_DELEGATED_FAILURE_BINDING_TYPES
 
+// START_BLOCK_LAUNCH_MUTATION_TYPES
+/**
+ * Outcome of the staged launch transition. `applied` means the domain change
+ * was persisted and published; the `*-rejected` variants are validation
+ * refusals that persisted and published nothing.
+ */
+type LaunchOutcome =
+  | { kind: "applied"; delegatedAttempt?: number }
+  | {
+      kind: "tracked-rejected";
+      errorCode: string;
+      message: string;
+      allowedAgents: string[];
+    }
+  | { kind: "delegated-rejected"; errorCode: string; message: string }
+  | { kind: "reviewer-rejected"; errorCode: string; message: string };
+// END_BLOCK_LAUNCH_MUTATION_TYPES
+
 function appendSystemInstruction(existingSystem: string | undefined, instruction: string): string {
   if (!existingSystem?.trim()) {
     return instruction;
@@ -458,8 +482,19 @@ async function setupWorkflow(
   const runtime = await acquire(ctx as unknown as NativeSnapshotContext);
   // The authenticated full client is acquired LAZILY: authenticating it during
   // plugin setup can deadlock host activation, so only a real lookup triggers it.
+  // A rejected acquisition is NOT cached forever: the share is reset so a later
+  // lookup can authenticate again instead of permanently poisoning all callers.
   let clientPromise: Promise<WorkflowClient> | undefined;
-  const getClient = (): Promise<WorkflowClient> => (clientPromise ??= runtime.client());
+  const getClient = (): Promise<WorkflowClient> => {
+    if (clientPromise === undefined) {
+      const pending = runtime.client();
+      clientPromise = pending;
+      void pending.catch(() => {
+        if (clientPromise === pending) clientPromise = undefined;
+      });
+    }
+    return clientPromise;
+  };
   const directory = ctx.location.directory;
   const trustedWorkspaceRoot = ctx.location.project?.directory ?? directory;
   // Registration is STABLE and independent of startup config. Execution,
@@ -516,6 +551,10 @@ async function setupWorkflow(
   const diagnostics: WorkflowDiagnosticSink = createConsoleDiagnosticSink({
     namespace: "workflow",
   });
+  // Serializes launch-state mutations with the same staged persist-then-publish
+  // boundary used by recovery: a launch never advances live attempt/budget/
+  // reviewer state without a durable snapshot of that transition.
+  const workflowTransactions = new WorkflowTransactionQueue();
 
   // START_BLOCK_PERSISTENCE_SETUP
   // Each session (main or subagent) gets its own isolated store.
@@ -1414,7 +1453,7 @@ async function setupWorkflow(
   // END_BLOCK_PLUGIN_TOOLS
 
   // START_BLOCK_TOOL_EXECUTE_BEFORE
-  const beforeRegistration = await ctx.tool.hook("execute.before", (event) => {
+  const beforeRegistration = await ctx.tool.hook("execute.before", async (event) => {
     // Owned workflow tools get strict structural plus branch validation on
     // the raw forwarded arguments before their handlers run. This runs before
     // the subagent early return and never mutates event.input.
@@ -1536,30 +1575,8 @@ async function setupWorkflow(
       throw new Error(createRoundLimitMessage(workItem, attemptedRound));
     }
 
-    const launched = beginTrackedLaunch(sessionStore, {
-      sessionId: event.sessionID,
-      workItemId: workItem.workItemId,
-      agent: subagentType,
-    });
-    if (!launched.ok) {
-      diagnostics.log({
-        level: "warn",
-        message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
-        extra: {
-          sessionID: event.sessionID,
-          agent: subagentType,
-          workItemId: workItem.workItemId,
-          state: workItem.state,
-          allowedNextAgents,
-          reason: launched.errorCode,
-        },
-      });
-      throw new Error(
-        `${INVALID_NEXT_AGENT_MARKER} LAUNCH_REJECTED_INVALID_TRANSITION: ${workItem.workItemId} in state ${workItem.state} only allows ${launched.allowedAgents.join(", ") || "no tracked agent"}. ${launched.message}`,
-      );
-    }
-
-    // START_BLOCK_DELEGATED_LAUNCH_BINDING
+    // Read-only pre-launch gates: they never mutate state, so they stay on the
+    // live snapshot and refuse before any staged transaction begins.
     if (workItem.mode === "delegated" && subagentType === "vv-implementer") {
       const data = sessionStore.getStoreData();
       const planRunId = workItem.delegated?.planRunId;
@@ -1595,43 +1612,170 @@ async function setupWorkflow(
           );
         }
       }
-      const delegatedLaunch = beginDelegatedLaunch(sessionStore, {
-        sessionId: event.sessionID,
-        workItemId: workItem.workItemId,
-        callId: String(event.id),
-      });
-      if (!delegatedLaunch.ok) {
-        diagnostics.log({
-          level: "warn",
-          message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
-          extra: {
-            sessionID: event.sessionID,
-            agent: subagentType,
-            workItemId: workItem.workItemId,
-            reason: delegatedLaunch.errorCode,
-          },
+    }
+
+    // The launch transition is STAGED: begin the tracked/delegated/reviewer
+    // domain change on a cloned store, persist that snapshot atomically, and
+    // only then publish it plus the in-memory host-call binding. A failed write
+    // refuses the launch BEFORE the native subagent executes and leaves the
+    // original attempt/budget/reviewer state untouched.
+    const parsedLaunchInput =
+      workItem.mode === "delegated" && subagentType === "vv-implementer"
+        ? readNativeSubagentInput(event.input)
+        : undefined;
+    const launchEligibility = parsedLaunchInput
+      ? evaluateFreshExclusiveLaunch(parsedLaunchInput)
+      : { eligible: false as const, reason: "resume_session" as const };
+
+    const launchTransaction = await runWorkflowTransaction<LaunchOutcome>({
+      queue: workflowTransactions,
+      sessionId: event.sessionID,
+      getData: () => sessionStore.getStoreData(),
+      persist: async (sessionId, data) => {
+        if (invalidHydrationSessions.has(sessionId)) {
+          return {
+            ok: false,
+            error: `persisted workflow state for session ${sessionId} is invalid; refusing to overwrite it`,
+          };
+        }
+        return snapshotWorkflowStateChecked(sessionId, data);
+      },
+      operation: (stagedData): WorkflowMutation<LaunchOutcome> => {
+        const stagedStore = createWorkItemStoreView(stagedData);
+        const launched = beginTrackedLaunch(stagedStore, {
+          sessionId: event.sessionID,
+          workItemId: workItem.workItemId,
+          agent: subagentType,
         });
-        throw new Error(
-          `LAUNCH_REJECTED_DELEGATED_${delegatedLaunch.errorCode}: ${delegatedLaunch.message}`,
-        );
-      }
-      const parsedInput = readNativeSubagentInput(event.input);
-      const eligibility = parsedInput
-        ? evaluateFreshExclusiveLaunch(parsedInput)
-        : { eligible: false as const, reason: "resume_session" as const };
+        if (!launched.ok) {
+          return {
+            result: {
+              kind: "tracked-rejected",
+              errorCode: launched.errorCode,
+              message: launched.message,
+              allowedAgents: launched.allowedAgents,
+            },
+            skipPersist: true,
+          };
+        }
+
+        // START_BLOCK_DELEGATED_LAUNCH_BINDING
+        if (workItem.mode === "delegated" && subagentType === "vv-implementer") {
+          const delegatedLaunch = beginDelegatedLaunch(stagedStore, {
+            sessionId: event.sessionID,
+            workItemId: workItem.workItemId,
+            callId: String(event.id),
+          });
+          if (!delegatedLaunch.ok) {
+            return {
+              result: {
+                kind: "delegated-rejected",
+                errorCode: delegatedLaunch.errorCode,
+                message: delegatedLaunch.message,
+              },
+              skipPersist: true,
+            };
+          }
+          return { result: { kind: "applied", delegatedAttempt: delegatedLaunch.attempt } };
+        }
+
+        if (subagentType === "vv-implementer") {
+          return { result: { kind: "applied" } };
+        }
+
+        const reviewerRole = getReviewerRoleForAgent(subagentType);
+        if (reviewerRole) {
+          const linked = findCheckpointByReviewItem(event.sessionID, workItem.workItemId);
+          if (linked) {
+            const bound = recordCheckpointReviewerLaunch(stagedStore, {
+              runId: linked.run.runId,
+              checkpointId: linked.checkpointId,
+              reviewer: reviewerRole,
+              callId: String(event.id),
+            });
+            if (!bound.ok) {
+              return {
+                result: {
+                  kind: "reviewer-rejected",
+                  errorCode: bound.errorCode,
+                  message: bound.message,
+                },
+                skipPersist: true,
+              };
+            }
+          }
+        }
+        return { result: { kind: "applied" } };
+        // END_BLOCK_DELEGATED_LAUNCH_BINDING
+      },
+    });
+
+    if (!launchTransaction.ok) {
+      diagnostics.log({
+        level: "error",
+        message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch persistence failed",
+        extra: {
+          sessionID: event.sessionID,
+          workItemId: workItem.workItemId,
+          agent: subagentType,
+          error: launchTransaction.error.slice(0, 300),
+        },
+      });
+      throw new Error(
+        `LAUNCH_PERSISTENCE_FAILED: ${workItem.workItemId} launch was refused because its transition could not be persisted: ${launchTransaction.error}`,
+      );
+    }
+
+    const launch = launchTransaction.result;
+    if (launch.kind === "tracked-rejected") {
+      diagnostics.log({
+        level: "warn",
+        message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
+        extra: {
+          sessionID: event.sessionID,
+          agent: subagentType,
+          workItemId: workItem.workItemId,
+          state: workItem.state,
+          allowedNextAgents,
+          reason: launch.errorCode,
+        },
+      });
+      throw new Error(
+        `${INVALID_NEXT_AGENT_MARKER} LAUNCH_REJECTED_INVALID_TRANSITION: ${workItem.workItemId} in state ${workItem.state} only allows ${launch.allowedAgents.join(", ") || "no tracked agent"}. ${launch.message}`,
+      );
+    }
+    if (launch.kind === "delegated-rejected") {
+      diagnostics.log({
+        level: "warn",
+        message: "[workflow][launchValidation][BLOCK_VALIDATE_LAUNCH] launch rejected",
+        extra: {
+          sessionID: event.sessionID,
+          agent: subagentType,
+          workItemId: workItem.workItemId,
+          reason: launch.errorCode,
+        },
+      });
+      throw new Error(`LAUNCH_REJECTED_DELEGATED_${launch.errorCode}: ${launch.message}`);
+    }
+    if (launch.kind === "reviewer-rejected") {
+      throw new Error(`LAUNCH_REJECTED_CHECKPOINT_REVIEW: ${launch.errorCode}: ${launch.message}`);
+    }
+
+    // Publish the live host-call binding only after the durable commit.
+    if (workItem.mode === "delegated" && subagentType === "vv-implementer") {
       delegatedLaunchBindings.set(delegatedLaunchBindingKey(event.sessionID, String(event.id)), {
         sessionId: event.sessionID,
         callId: String(event.id),
         workItemId: workItem.workItemId,
-        attempt: delegatedLaunch.attempt,
-        eligible: eligibility.eligible,
-        ...(eligibility.eligible ? {} : { ineligibleReason: eligibility.reason }),
+        attempt: launch.delegatedAttempt ?? 0,
+        eligible: launchEligibility.eligible,
+        ...(launchEligibility.eligible ? {} : { ineligibleReason: launchEligibility.reason }),
         afterHookEntered: false,
-        ...("resumedChildSessionId" in eligibility &&
-        eligibility.resumedChildSessionId !== undefined
-          ? { childSessionId: eligibility.resumedChildSessionId }
+        ...("resumedChildSessionId" in launchEligibility &&
+        launchEligibility.resumedChildSessionId !== undefined
+          ? { childSessionId: launchEligibility.resumedChildSessionId }
           : {}),
-        background: parsedInput?.background === true,
+        background: parsedLaunchInput?.background === true,
         settled: false,
       });
     } else if (subagentType === "vv-implementer") {
@@ -1646,33 +1790,7 @@ async function setupWorkflow(
         background: false,
         settled: false,
       });
-    } else {
-      const reviewerRole = getReviewerRoleForAgent(subagentType);
-      if (reviewerRole) {
-        const linked = findCheckpointByReviewItem(event.sessionID, workItem.workItemId);
-        if (linked) {
-          const bound = recordCheckpointReviewerLaunch(sessionStore, {
-            runId: linked.run.runId,
-            checkpointId: linked.checkpointId,
-            reviewer: reviewerRole,
-            callId: String(event.id),
-          });
-          if (!bound.ok) {
-            revertReviewerLaunch(sessionStore, {
-              sessionId: event.sessionID,
-              workItemId: workItem.workItemId,
-              agent: subagentType,
-            });
-            throw new Error(
-              `LAUNCH_REJECTED_CHECKPOINT_REVIEW: ${bound.errorCode}: ${bound.message}`,
-            );
-          }
-        }
-      }
     }
-    // END_BLOCK_DELEGATED_LAUNCH_BINDING
-
-    snapshotSession(event.sessionID);
 
     diagnostics.log({
       level: "info",
@@ -1840,15 +1958,37 @@ async function setupWorkflow(
             attempt: 1,
           },
         });
-        const repairedOutput = await attemptTrackedResultRepair({
-          client: await getClient(),
-          sessionId: repairChildId,
-          agent: subagentType,
-          workItemId,
-          malformedOutput: unwrapped.normalizedOutput,
-          parseErrorCode: parsed.error.code,
-          parseErrorMessage: parsed.error.message,
-        });
+        // Client acquisition and the bounded continuation are contained LOCALLY:
+        // a rejected lazy client or a continuation failure must not escape the
+        // after hook, which would leave the attempt in_flight. Falling through
+        // lets the existing original-output protocol path settle a truthful
+        // report_rejected with the original excerpt and hard-stop rules.
+        let repairedOutput: string | undefined;
+        try {
+          repairedOutput = await attemptTrackedResultRepair({
+            client: await getClient(),
+            sessionId: repairChildId,
+            agent: subagentType,
+            workItemId,
+            malformedOutput: unwrapped.normalizedOutput,
+            parseErrorCode: parsed.error.code,
+            parseErrorMessage: parsed.error.message,
+          });
+        } catch (error) {
+          diagnostics.log({
+            level: "warn",
+            message:
+              "[workflow][resultParsing][BLOCK_PARSE_RESULT] bounded continuation unavailable",
+            extra: {
+              sessionID: sessionId,
+              agent: subagentType,
+              workItemId,
+              taskId: repairChildId,
+              reason: parsed.error.code,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        }
         if (repairedOutput) {
           effectiveNormalizedOutput = repairedOutput;
           parsed = parseResultBlock({
@@ -2168,70 +2308,86 @@ async function setupWorkflow(
   const pump = (async () => {
     try {
       for await (const event of ctx.event.subscribe({ signal: lifecycle.signal })) {
-        const type = typeof event.type === "string" ? event.type : "";
-        const data = isRecord(event.data) ? (event.data as Record<string, unknown>) : undefined;
-        if (type === "session.synthetic" && data) {
-          const text = data.text;
-          const parentSessionId = data.sessionID;
-          if (typeof text === "string" && typeof parentSessionId === "string") {
-            await handleBackgroundDelivery(parentSessionId, text, data.metadata);
-          }
-          continue;
-        }
-        if (type === "session.tool.failed" && data) {
-          const sessionID = data.sessionID;
-          const callID = data.id;
-          const error = isRecord(data.error) ? data.error : undefined;
-          const message = typeof error?.message === "string" ? error.message : undefined;
-          if (
-            typeof sessionID === "string" &&
-            typeof callID === "string" &&
-            message !== undefined
-          ) {
-            observeAfterMetadata(sessionID, callID, data.metadata);
-            const failure = parseSubagentToolFailure(message);
-            if (failure) handleSubagentToolTermination(sessionID, callID, failure, message);
-          }
-          continue;
-        }
-        if (
-          (type === "session.tool.called" ||
-            type === "session.tool.progress" ||
-            type === "session.tool.success") &&
-          data
-        ) {
-          const sessionID = data.sessionID;
-          const callID = data.id;
-          if (typeof sessionID === "string" && typeof callID === "string") {
-            observeAfterMetadata(sessionID, callID, data.metadata);
-          }
-          continue;
-        }
-        if (type === "session.inbox.enqueued" && data) {
-          const sessionID = data.sessionID;
-          const inboxID = data.inboxID;
-          if (typeof sessionID === "string" && typeof inboxID === "string") {
-            observeChildPrompt(sessionID, inboxID);
-          }
-          continue;
-        }
-        if (type === "session.deleted" && data) {
-          const sessionID = data.sessionID;
-          if (typeof sessionID === "string") {
-            for (const [key, binding] of delegatedLaunchBindings) {
-              if (binding.sessionId === sessionID) delegatedLaunchBindings.delete(key);
+        // Contain every handler failure PER EVENT: a rejected client acquisition,
+        // malformed background result, or cleanup error must not end the only
+        // subscription and silently stop later completion/failure/deletion work.
+        try {
+          const type = typeof event.type === "string" ? event.type : "";
+          const data = isRecord(event.data) ? (event.data as Record<string, unknown>) : undefined;
+          if (type === "session.synthetic" && data) {
+            const text = data.text;
+            const parentSessionId = data.sessionID;
+            if (typeof text === "string" && typeof parentSessionId === "string") {
+              await handleBackgroundDelivery(parentSessionId, text, data.metadata);
             }
-            childPromptMessageIds.delete(sessionID);
-            resumedChildSessions.delete(sessionID);
-            stores.delete(sessionID);
-            invalidHydrationSessions.delete(sessionID);
-            await deleteWorkflowSessionDir(sessionID);
-            diagnostics.log({
-              level: "info",
-              message: "[workflow][sessionCleanup][BLOCK_SESSION_CLEANUP] deleted",
-              extra: { sessionID },
-            });
+            continue;
           }
+          if (type === "session.tool.failed" && data) {
+            const sessionID = data.sessionID;
+            const callID = data.id;
+            const error = isRecord(data.error) ? data.error : undefined;
+            const message = typeof error?.message === "string" ? error.message : undefined;
+            if (
+              typeof sessionID === "string" &&
+              typeof callID === "string" &&
+              message !== undefined
+            ) {
+              observeAfterMetadata(sessionID, callID, data.metadata);
+              const failure = parseSubagentToolFailure(message);
+              if (failure) handleSubagentToolTermination(sessionID, callID, failure, message);
+            }
+            continue;
+          }
+          if (
+            (type === "session.tool.called" ||
+              type === "session.tool.progress" ||
+              type === "session.tool.success") &&
+            data
+          ) {
+            const sessionID = data.sessionID;
+            const callID = data.id;
+            if (typeof sessionID === "string" && typeof callID === "string") {
+              observeAfterMetadata(sessionID, callID, data.metadata);
+            }
+            continue;
+          }
+          if (type === "session.inbox.enqueued" && data) {
+            const sessionID = data.sessionID;
+            const inboxID = data.inboxID;
+            if (typeof sessionID === "string" && typeof inboxID === "string") {
+              observeChildPrompt(sessionID, inboxID);
+            }
+            continue;
+          }
+          if (type === "session.deleted" && data) {
+            const sessionID = data.sessionID;
+            if (typeof sessionID === "string") {
+              for (const [key, binding] of delegatedLaunchBindings) {
+                if (binding.sessionId === sessionID) delegatedLaunchBindings.delete(key);
+              }
+              childPromptMessageIds.delete(sessionID);
+              resumedChildSessions.delete(sessionID);
+              stores.delete(sessionID);
+              invalidHydrationSessions.delete(sessionID);
+              await deleteWorkflowSessionDir(sessionID);
+              diagnostics.log({
+                level: "info",
+                message: "[workflow][sessionCleanup][BLOCK_SESSION_CLEANUP] deleted",
+                extra: { sessionID },
+              });
+            }
+          }
+        } catch (error) {
+          const data = isRecord(event.data) ? (event.data as Record<string, unknown>) : undefined;
+          diagnostics.log({
+            level: "error",
+            message: "[workflow][eventPump][BLOCK_EVENT_PUMP] contained handler failure",
+            extra: {
+              eventType: typeof event.type === "string" ? event.type : "unknown",
+              ...(typeof data?.sessionID === "string" ? { sessionID: data.sessionID } : {}),
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
         }
       }
     } catch {

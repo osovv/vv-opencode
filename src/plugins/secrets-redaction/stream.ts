@@ -2,7 +2,7 @@
 // VERSION: 2.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Restore placeholders that arrive split across streamed provider text deltas while preserving opaque, binary and tool-protocol frames byte-for-byte.
-//   SCOPE: Bounded carry-aware text restoration, SSE `data:` event decoding for recognized OpenAI chat/Responses, Anthropic and Gemini text shapes (streaming and non-streaming), per-lane carries scoped by response/choice/block/item/channel identity, lane-scoped terminal handling (block/choice/item end flushes only that lane; [DONE]/response.completed/message_stop ends the response), minimal single-lane carry synthesis that never duplicates sibling lanes, bounded line/lane/pending buffers, WebSocket TEXT-frame restoration with terminal-boundary state reset, and safe buffered restoration for non-SSE JSON/text responses. Unknown or unrecognized frames and original separators pass through unchanged; the module never regex-rewrites a whole JSON document and never appends free text to a protocol stream.
+//   SCOPE: Bounded carry-aware text restoration, SSE `data:` event decoding for recognized OpenAI chat/Responses, Anthropic and Gemini text shapes (streaming and non-streaming), per-lane carries scoped by response/choice/block/item/channel identity, lane-scoped terminal handling (block/choice/item end flushes only that lane; [DONE]/response.completed/message_stop ends the response), minimal single-lane carry synthesis that never duplicates sibling lanes, bounded line/lane/pending buffers, WebSocket TEXT-frame restoration that shares one long-lived line stream across frames (a partial line, event or lane carry survives frame boundaries; reset only on a recognized global terminal), and safe buffered restoration for non-SSE JSON/text responses. Unknown or unrecognized frames and original separators pass through unchanged; the module never regex-rewrites a whole JSON document and never appends free text to a protocol stream.
 //   DEPENDS: [src/plugins/secrets-redaction/session.ts, src/plugins/secrets-redaction/restore.ts]
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION, DF-SECRETS-REDACTION]
 //   ROLE: RUNTIME
@@ -16,14 +16,14 @@
 //   createSseRestoreStream - Build an SSE restore transformer for one session's mapping.
 //   restoreNonSseBody - Restore recognized text in a complete non-SSE JSON/text body.
 //   createResponseByteTransform - Pick SSE or buffered JSON/text restoration by content type.
-//   FrameRestoreState - Persistent per-connection frame carries with terminal-boundary reset.
+//   FrameRestoreState - Persistent per-connection frame carries reset only on a recognized terminal.
 //   createFrameRestoreState - Build per-connection frame restore state.
-//   restoreProviderFrame - Restore one WebSocket TEXT frame using per-lane carries.
+//   restoreProviderFrame - Restore one WebSocket TEXT frame over a long-lived line/lane carry.
 //   createSseByteTransform - Byte-level SSE transform stream restoring split placeholders.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 3 - Lane-scoped terminals flush only the ended block/choice/item lane before its terminal frame, synthesizing a minimal single-lane delta so sibling text is never duplicated; global [DONE]/response.completed/message_stop alone ends the response; pending/line/lane buffers are bounded and evicted lanes flush their pending suffix.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - WebSocket TEXT frames now share one long-lived line stream: a partial line/event/lane carry survives frame boundaries and is reset only on a recognized global terminal, so a placeholder split across frames restores and no newline is injected into a mid-line frame; a complete unterminated `data:` JSON line is re-serialized with its canonical newline.]
 // END_CHANGE_SUMMARY
 
 import { restoreText } from "./restore.js";
@@ -585,6 +585,44 @@ export class SseRestoreStream {
     return output;
   }
 
+  /** True once a global response terminal (`[DONE]`/completed/message_stop) was seen. */
+  get terminal(): boolean {
+    return this.terminalSeen;
+  }
+
+  /**
+   * Process the trailing buffered line only when it is already a complete,
+   * recognized `data:` payload. Used by frame-oriented transports (WebSocket)
+   * where a complete JSON line may arrive without a terminating newline; the
+   * line is re-serialized with its canonical newline, never with raw bytes
+   * spliced into a mid-line frame. Incomplete or unrecognized buffers are left
+   * untouched so streaming carry survives until the real terminal/end.
+   */
+  drainUnterminatedLine(): string {
+    if (this.terminalSeen) return "";
+    const line = this.lineBuffer;
+    if (line === "" || line.includes("\n")) return "";
+    const match = /^data:(?: )?(.*)$/.exec(line);
+    if (match === null) return "";
+    const payload = match[1] ?? "";
+    if (payload !== "[DONE]") {
+      try {
+        if (!isObject(JSON.parse(payload))) return "";
+      } catch {
+        return "";
+      }
+    }
+    this.lineBuffer = "";
+    if (this.isGlobalTerminalLine(line)) {
+      const output = this.flushAllLanes();
+      this.terminalSeen = true;
+      this.pendingTerminal += `${line}\n`;
+      return output;
+    }
+    const transformed = this.transformDataLine(line, "\n");
+    return transformed.prefix + this.takePendingEventLine() + transformed.output;
+  }
+
   flush(): string {
     let output = this.flushAllLanes();
     output += this.takePendingEventLine();
@@ -718,10 +756,12 @@ function resetFrameState(state: FrameRestoreState, session: PlaceholderSession):
 
 /**
  * Restore one WebSocket TEXT frame. Recognized JSON deltas restore by lane with
- * a persistent carry so a placeholder split across frames completes; SSE-over-WS
- * frames reuse the line stream. A global terminal recognized frame flushes the
- * SSE carry first and then resets all per-connection state so it cannot bleed
- * into the next request. Lane-scoped block/choice ends clear only that lane.
+ * a persistent carry so a placeholder split across frames completes; SSE-framed
+ * text reuses one long-lived line stream so a partial line, event, or lane
+ * carry survives every frame boundary until the actual terminal/end. State is
+ * reset only on a recognized global terminal, never per frame, so a split
+ * placeholder is never abandoned or re-decoded against a reset carry and no
+ * bytes (including a missing newline) are injected into a mid-line frame.
  * Frames that match no recognized protocol shape are returned unchanged,
  * preserving opaque/binary/tool-protocol frames.
  */
@@ -730,12 +770,19 @@ export function restoreProviderFrame(
   frame: string,
   state: FrameRestoreState,
 ): string {
-  if (/^data:(?: |$)/m.test(frame)) {
+  // A frame that opens an SSE-over-WS stream, or any continuation frame while
+  // one is active, is fed to the single long-lived line stream. The stream is
+  // only left on a recognized global terminal, so a split line/event/carry
+  // survives frame boundaries instead of being reset per frame.
+  if (state.sse !== null || /^data:(?: |$)/m.test(frame)) {
     state.sse ??= new SseRestoreStream(session);
-    const output = state.sse.push(frame.endsWith("\n") ? frame : `${frame}\n`);
-    const flushed = state.sse.flush();
-    resetFrameState(state, session);
-    return `${output}${flushed}`;
+    let output = state.sse.push(frame);
+    output += state.sse.drainUnterminatedLine();
+    if (state.sse.terminal) {
+      output += state.sse.flush();
+      resetFrameState(state, session);
+    }
+    return output;
   }
 
   let parsed: unknown;

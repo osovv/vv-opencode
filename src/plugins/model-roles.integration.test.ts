@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify the native ModelRolesPlugin and the production acquireNativeSnapshotRuntime wrapper against native-shaped transforms, hooks, lineage, provenance, config updates and auxiliary fork work.
-//   SCOPE: Native Plugin.define export shape, disabled role override, shared-Context acquisition, staged admission and commit at the accepted inbox boundary, all-kind unbound refusal, agent-aware role selection, initial explicit/implicit provenance, post-bind explicit choices, config.updated reconfiguration, created auxiliary title children, and an optional isolated real OpenCode 2.0.18 host smoke loading the actual built plugin against a loopback provider (skipped unless VVOC_E2E_V2_HOST is set).
+//   SCOPE: Native Plugin.define export shape, disabled role override, shared-Context acquisition, staged admission and commit at the accepted inbox boundary, all-kind unbound refusal, agent-aware role selection, initial explicit/implicit provenance, post-bind explicit choices, config.updated reconfiguration, per-event event-pump error containment and recovery (invalid and transient config reads followed by valid lifecycle events), created auxiliary title children, and an optional isolated real OpenCode 2.0.18 host smoke loading the actual built plugin against a loopback provider (skipped unless VVOC_E2E_V2_HOST is set).
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, @opencode/schema/agent, @opencode/schema/model, @opencode/schema/provider, src/lib/vvoc-config.ts, src/plugins/model-roles/index.ts, src/runtime/context.ts, src/runtime/types.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES, M-NATIVE-RUNTIME, V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: TEST
@@ -25,12 +25,13 @@
 //   makeBoundSession - Register a bound session view on the fake context.
 //   promptAndAccept - Stage a prompt workload and deliver its matching accepted input.
 //   boundCaptureCount - Count durable family captures under the isolated data root.
+//   waitFor - Poll a predicate until it holds or the bounded deadline elapses.
 //   REAL_HOST - Optional pinned real-host binary path.
 //   smokeDescribe - Describe-or-skip wrapper for the real-host smoke.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Adds first-accepted ordering (reordered notification, reverse acceptance, restart, overflow, idempotence, rejected-then-valid) plus the real-host variant/parented-child/rejected-then-valid smoke.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - Added event-pump per-event containment coverage (invalid/transient config reads followed by valid lifecycle events) and a bound-family isolation regression: an invalid mutable current config does not fail or re-adopt an already-bound family, a new unbound session fails closed, and both recover after the config is fixed.]
 // END_CHANGE_SUMMARY
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
@@ -529,6 +530,15 @@ async function boundCaptureCount(scopeKey: string): Promise<number> {
   }
 }
 
+/** Poll a predicate until it holds or the bounded deadline elapses. */
+async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 describe("ModelRolesPlugin native delegation", () => {
   test("exposes a native Plugin.define object", () => {
     expect(typeof ModelRolesPlugin).toBe("object");
@@ -734,6 +744,161 @@ describe("native snapshot runtime admission", () => {
     expect(boundSwitches).toHaveLength(1);
     expect(boundSwitches[0]?.model.modelID).toBe("m1");
     await registration.dispose();
+  });
+
+  test("the event pump contains an invalid config event and recovers on a fixed one", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    const deps = host.createDeps();
+    context.addModel("prov", "m1");
+    context.addModel("prov", "m9");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: deps });
+    await runtime.setRoleOverride(true);
+    try {
+      await promptAndAccept(context, "root");
+      await context.invoke("model.request", {
+        sessionID: "root",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      });
+      const switchesAfterBind = context.switchCalls.length;
+
+      // Break the on-disk config so a config.updated read throws.
+      await writeFile(join(project, ".vvoc", "vvoc.json"), "{ this is not valid json", "utf8");
+      context.events.push({ type: "config.updated" });
+      await waitFor(() => runtime.lastConfigError() !== undefined);
+      expect(runtime.lastConfigError()).toBeDefined();
+      // The mutable current config keeps the last fully-read value, never a partial read.
+      expect(runtime.effectiveConfig()).toBeDefined();
+
+      // A lifecycle event delivered while the config is invalid is still observed.
+      context.events.push({
+        type: "session.model.selected",
+        data: { sessionID: "root", model: { id: "m9", providerID: "prov" } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 15));
+
+      // Fix the config; the same live pump recovers without a restart.
+      await writeVvoc(project, { default: "prov/m1" });
+      context.events.push({ type: "config.updated" });
+      await waitFor(() => runtime.lastConfigError() === undefined);
+      expect(runtime.lastConfigError()).toBeUndefined();
+
+      // The intervening model.selected was processed: the explicit m9 survives.
+      await promptAndAccept(context, "root");
+      expect(context.switchCalls.length).toBe(switchesAfterBind);
+      await expect(
+        context.invoke("model.request", {
+          sessionID: "root",
+          model: { id: "m9", providerID: "prov" },
+          kind: "primary",
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("the event pump survives a transient refresh failure and processes later events", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    const deps = host.createDeps();
+    context.addModel("prov", "m1");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m1" } });
+
+    const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: deps });
+    await runtime.setRoleOverride(true);
+    const modelEditor = context.model as unknown as { reload: () => Promise<void> };
+    const originalReload = modelEditor.reload.bind(context.model);
+    let failNextReload = true;
+    modelEditor.reload = async () => {
+      if (failNextReload) {
+        failNextReload = false;
+        throw new Error("transient model reload failure");
+      }
+      return originalReload();
+    };
+    try {
+      context.events.push({ type: "config.updated" });
+      await waitFor(() => runtime.lastConfigError() !== undefined);
+      expect(runtime.lastConfigError()).toBeDefined();
+
+      // The subscription is alive: a lifecycle event and a second config event both process.
+      context.events.push({
+        type: "session.created",
+        data: { sessionID: "root", model: { id: "m1", providerID: "prov" } },
+      });
+      context.events.push({ type: "config.updated" });
+      await waitFor(() => runtime.lastConfigError() === undefined);
+      expect(runtime.lastConfigError()).toBeUndefined();
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("a bound family ignores an invalid current config while a new unbound family fails closed", async () => {
+    await isolateDataHome();
+    const project = await createProject({ default: "prov/m1" });
+    const context = new FakeNativeContext(project);
+    const host = new FakeRuntimeHost(context);
+    const deps = host.createDeps();
+    context.addModel("prov", "m1");
+    context.setDefault("prov", "m1");
+    makeBoundSession(context, "bound", { model: { providerID: "prov", modelID: "m1" } });
+
+    const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: deps });
+    await runtime.setRoleOverride(true);
+    try {
+      // Bind family A and record the capture-backed switch.
+      await promptAndAccept(context, "bound");
+      await context.invoke("model.request", {
+        sessionID: "bound",
+        model: { id: "m1", providerID: "prov" },
+        kind: "primary",
+      });
+      const switchesAfterBind = context.switchCalls.length;
+
+      // Corrupt only the MUTABLE current config; the bound capture stays valid.
+      await writeFile(join(project, ".vvoc", "vvoc.json"), "{ broken current config", "utf8");
+
+      // The already-bound workload keeps using its immutable capture: no new
+      // switch, no failure, and no adoption of the invalid current config.
+      await promptAndAccept(context, "bound");
+      expect(context.switchCalls.length).toBe(switchesAfterBind);
+      await expect(
+        context.invoke("model.request", {
+          sessionID: "bound",
+          model: { id: "m1", providerID: "prov" },
+          kind: "primary",
+        }),
+      ).resolves.toBeUndefined();
+
+      // A brand-new unbound session must fail closed while the config is invalid.
+      makeBoundSession(context, "newborn", { model: { providerID: "prov", modelID: "m1" } });
+      const refused = await context
+        .invoke("prompt", { sessionID: "newborn", messageID: "msg-newborn" })
+        .then(() => undefined)
+        .catch((error: Error) => error);
+      expect(refused).toBeDefined();
+
+      // Fixing the config lets the same pump and the new session recover.
+      await writeVvoc(project, { default: "prov/m1" });
+      context.events.push({ type: "config.updated" });
+      await waitFor(() => runtime.lastConfigError() === undefined);
+      expect(runtime.lastConfigError()).toBeUndefined();
+      await promptAndAccept(context, "newborn", "inbox-newborn");
+      expect(context.switchCalls.some((call) => call.sessionID === "newborn")).toBe(true);
+    } finally {
+      await runtime.release();
+    }
   });
 
   test("a fresh runtime at a moved worktree finds the root capture and does not re-bind", async () => {

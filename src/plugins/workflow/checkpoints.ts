@@ -61,7 +61,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - Extracted the shared pure native checkpoint start gate (checkpointStartGate) consumed by startDelegatedCheckpointInStore and read-only guidance; checkpointNextAction now reports `blocked` with the exact unmet prerequisite instead of promising a start the gate rejects; added the authoritative read-only getNativeExecutionView and typed getDelegatedRunView against the public DTOs. Prior C-WORKFLOW-BOUNDED-RECOVERY-R1: bounded checkpoint recovery.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - authorizeReworkFromFailedCheckpoint now routes a run missing from the native plan registry through the common execution registry (conversation-scoped/provided-plan), validating session/run/task membership, failed (non-stopped) checkpoint status, current covered acceptance and the public attempt identity; native plan-run rework is unchanged.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -69,7 +69,14 @@ import { readFile } from "node:fs/promises";
 import type { DelegatedPlanDefinition, DelegatedReviewer } from "../../lib/spec-lint.js";
 import { taskContractsFromNativeDefinition } from "../../lib/workflow-contract.js";
 import { contentSha256, type LoadedDelegatedPlan } from "./checkpoint-io.js";
-import { deriveTaskStatus, ensureNativeExecutions, latestAttemptView } from "./execution.js";
+import {
+  deriveTaskStatus,
+  ensureNativeExecutions,
+  findExecution,
+  latestAttemptView,
+  type WorkflowCheckpointBinding,
+  type WorkflowExecutionRecord,
+} from "./execution.js";
 import {
   currentDelegatedAcceptance,
   reworkDelegatedWorkItem,
@@ -1372,6 +1379,8 @@ export type AuthorizeReworkResult =
         | "HARD_STOP_CHECKPOINT"
         | "TASK_NOT_COVERED"
         | "WORK_ITEM_NOT_BOUND"
+        | "NOT_ACCEPTED"
+        | "STALE_ATTEMPT"
         | "REWORK_REJECTED";
       message: string;
     };
@@ -1382,14 +1391,158 @@ export interface AuthorizeReworkInput {
   checkpointId: string;
   workItemId: string;
   reason: string;
+  /**
+   * Public attempt identity the caller believes is the accepted result to
+   * reopen. When provided it must match the item's current accepted attempt so
+   * a stale attempt number can never silently target a newer accepted result.
+   */
+  attempt?: number;
+}
+
+/** Reject a rework whose public attempt does not match the current acceptance. */
+function reworkAcceptanceMismatch(
+  record: WorkItemRecord,
+  attempt: number | undefined,
+): AuthorizeReworkResult | undefined {
+  if (attempt === undefined) return undefined;
+  const acceptance = currentDelegatedAcceptance(record);
+  if (!acceptance || acceptance.revokedAt) {
+    return {
+      ok: false,
+      errorCode: "NOT_ACCEPTED",
+      message: `NOT_ACCEPTED: ${record.workItemId} has no currently applicable acceptance to revoke`,
+    };
+  }
+  if (acceptance.attempt !== attempt) {
+    return {
+      ok: false,
+      errorCode: "STALE_ATTEMPT",
+      message: `STALE_ATTEMPT: rework targets attempt ${attempt} but the current accepted attempt is ${acceptance.attempt}`,
+    };
+  }
+  return undefined;
+}
+
+/** Apply the guarded rework reducer to one authorized failed-checkpoint target. */
+function applyAuthorizedRework(
+  data: WorkItemStoreData,
+  input: AuthorizeReworkInput,
+): AuthorizeReworkResult {
+  const reworked = reworkDelegatedWorkItem({ getStoreData: () => data } as WorkItemStore, {
+    sessionId: input.sessionId,
+    workItemId: input.workItemId,
+    planRunId: input.runId,
+    failedCheckpointId: input.checkpointId,
+    reason: input.reason,
+  });
+  if (!reworked.ok) {
+    return {
+      ok: false,
+      errorCode: "REWORK_REJECTED",
+      message: `REWORK_REJECTED: ${reworked.message}`,
+    };
+  }
+  return { ok: true, reworkId: reworked.reworkId, grantedAttempts: reworked.grantedAttempts };
+}
+
+/** True when a generic checkpoint's latest settled generation is a hard stop, not a FAIL. */
+function genericCheckpointStopped(checkpoint: WorkflowCheckpointBinding): boolean {
+  if (checkpoint.stoppedAtGeneration !== undefined) return true;
+  const history = checkpoint.history ?? [];
+  return history.length > 0 && history[history.length - 1]?.outcome === "stopped";
+}
+
+/**
+ * Authorize rework against a generic (conversation-scoped or provided-plan)
+ * execution in the common registry. The native package path stays on the
+ * registered plan run; this path never manufactures a plan-run binding.
+ */
+function authorizeGenericReworkFromFailedCheckpoint(
+  data: WorkItemStoreData,
+  execution: WorkflowExecutionRecord,
+  input: AuthorizeReworkInput,
+): AuthorizeReworkResult {
+  if (execution.sessionId !== input.sessionId) {
+    return {
+      ok: false,
+      errorCode: "SESSION_MISMATCH",
+      message: `SESSION_MISMATCH: run ${input.runId} belongs to session ${execution.sessionId}`,
+    };
+  }
+  if (execution.state === "sealed") {
+    return {
+      ok: false,
+      errorCode: "RUN_SEALED",
+      message: `RUN_SEALED: run ${input.runId} is complete; rework requires a new change`,
+    };
+  }
+  const checkpoint = execution.checkpoints.get(input.checkpointId);
+  if (!checkpoint) {
+    return {
+      ok: false,
+      errorCode: "CHECKPOINT_NOT_FOUND",
+      message: `CHECKPOINT_NOT_FOUND: ${input.checkpointId}`,
+    };
+  }
+  if (checkpoint.status !== "failed") {
+    return {
+      ok: false,
+      errorCode: "CHECKPOINT_NOT_FAILED",
+      message: `CHECKPOINT_NOT_FAILED: ${input.checkpointId} is ${checkpoint.status ?? "pending"}`,
+    };
+  }
+  if (genericCheckpointStopped(checkpoint)) {
+    return {
+      ok: false,
+      errorCode: "HARD_STOP_CHECKPOINT",
+      message: `HARD_STOP_CHECKPOINT: ${input.checkpointId} stopped on NEEDS_CONTEXT; resolve the hard stop first`,
+    };
+  }
+  const binding = [...execution.tasks.values()].find(
+    (task) => task.workItemId === input.workItemId,
+  );
+  if (!binding) {
+    return {
+      ok: false,
+      errorCode: "WORK_ITEM_NOT_BOUND",
+      message: `WORK_ITEM_NOT_BOUND: ${input.workItemId} is not a task of run ${input.runId}`,
+    };
+  }
+  if (!checkpoint.contract.covers.includes(binding.taskId)) {
+    return {
+      ok: false,
+      errorCode: "TASK_NOT_COVERED",
+      message: `TASK_NOT_COVERED: ${input.checkpointId} does not cover task ${binding.taskId}`,
+    };
+  }
+  const record = findRecord(data, input.sessionId, input.workItemId);
+  if (!record || record.mode !== "delegated" || !record.delegated) {
+    return {
+      ok: false,
+      errorCode: "WORK_ITEM_NOT_BOUND",
+      message: `WORK_ITEM_NOT_BOUND: ${input.workItemId} is not a delegated work item`,
+    };
+  }
+  // A record still bound to a different registered plan run is never reopened
+  // through a generic execution mutation.
+  if (record.delegated.planRunId !== undefined && record.delegated.planRunId !== input.runId) {
+    return {
+      ok: false,
+      errorCode: "WORK_ITEM_NOT_BOUND",
+      message: `WORK_ITEM_NOT_BOUND: ${input.workItemId} is not bound to run ${input.runId}`,
+    };
+  }
+  const mismatch = reworkAcceptanceMismatch(record, input.attempt);
+  if (mismatch) return mismatch;
+  return applyAuthorizedRework(data, input);
 }
 
 // START_CONTRACT: authorizeReworkFromFailedCheckpoint
-//   PURPOSE: Validate a failed-checkpoint rework authorization for a covered accepted task and apply the guarded rework reducer.
-//   INPUTS: { store: WorkItemStore - backing store, input: AuthorizeReworkInput - run, checkpoint, work item, and bounded reason }
+//   PURPOSE: Validate a failed-checkpoint rework authorization for a covered accepted task and apply the guarded rework reducer, routing native plan runs and generic executions through the common registry.
+//   INPUTS: { store: WorkItemStore - backing store, input: AuthorizeReworkInput - run, checkpoint, work item, attempt, and bounded reason }
 //   OUTPUTS: { AuthorizeReworkResult - applied rework or a coded rejection }
 //   SIDE_EFFECTS: [Reopens the covered delegated item via reworkDelegatedWorkItem]
-//   LINKS: [M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED, reworkDelegatedWorkItem]
+//   LINKS: [M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-DELEGATED, M-WORKFLOW-EXECUTION, reworkDelegatedWorkItem]
 // END_CONTRACT: authorizeReworkFromFailedCheckpoint
 export function authorizeReworkFromFailedCheckpoint(
   store: WorkItemStore,
@@ -1404,7 +1557,13 @@ export function authorizeReworkFromFailedCheckpointInStore(
 ): AuthorizeReworkResult {
   const run = findRun(data, input.runId);
   if (!run) {
-    return { ok: false, errorCode: "RUN_NOT_FOUND", message: `RUN_NOT_FOUND: ${input.runId}` };
+    // Conversation-scoped / provided-plan runs live only in the common
+    // execution registry; route their rework through that same registry.
+    const execution = findExecution(data, input.runId);
+    if (!execution) {
+      return { ok: false, errorCode: "RUN_NOT_FOUND", message: `RUN_NOT_FOUND: ${input.runId}` };
+    }
+    return authorizeGenericReworkFromFailedCheckpoint(data, execution, input);
   }
   if (run.sessionId !== input.sessionId) {
     return {
@@ -1466,22 +1625,10 @@ export function authorizeReworkFromFailedCheckpointInStore(
       message: `TASK_NOT_COVERED: ${input.checkpointId} does not cover task ${record.delegated.planTaskId}`,
     };
   }
+  const mismatch = reworkAcceptanceMismatch(record, input.attempt);
+  if (mismatch) return mismatch;
 
-  const reworked = reworkDelegatedWorkItem({ getStoreData: () => data } as WorkItemStore, {
-    sessionId: input.sessionId,
-    workItemId: input.workItemId,
-    planRunId: input.runId,
-    failedCheckpointId: input.checkpointId,
-    reason: input.reason,
-  });
-  if (!reworked.ok) {
-    return {
-      ok: false,
-      errorCode: "REWORK_REJECTED",
-      message: `REWORK_REJECTED: ${reworked.message}`,
-    };
-  }
-  return { ok: true, reworkId: reworked.reworkId, grantedAttempts: reworked.grantedAttempts };
+  return applyAuthorizedRework(data, input);
 }
 
 // START_CONTRACT: recoverDelegatedCheckpoint

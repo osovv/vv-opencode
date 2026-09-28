@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify split-placeholder restoration across streamed text deltas and exact preservation of opaque/binary/tool-protocol frames for SSE, byte-level SSE, non-SSE JSON/text bodies and WebSocket TEXT frames.
-//   SCOPE: TextDeltaRestorer carry semantics, per-lane SseRestoreStream restoration for OpenAI chat/Responses, Anthropic and Gemini shapes, terminal-aware flushing before the held terminal frame, CRLF opaque passthrough, bounded buffers, non-SSE body restoration, and WebSocket terminal-state reset.
+//   SCOPE: TextDeltaRestorer carry semantics, per-lane SseRestoreStream restoration for OpenAI chat/Responses, Anthropic and Gemini shapes, terminal-aware flushing before the held terminal frame, CRLF opaque passthrough, bounded buffers, non-SSE body restoration, and WebSocket frame restoration across frame boundaries (complete SSE events, mid-line data-line splits with no injected newline, unterminated complete lines, interleaved lanes, terminal flush/reset).
 //   DEPENDS: [bun:test, src/plugins/secrets-redaction/session.ts, src/plugins/secrets-redaction/stream.ts]
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION, DF-SECRETS-REDACTION]
 //   ROLE: TEST
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 2 - Added CRLF passthrough, terminal flush, lane interleaving, oversized buffer, non-SSE JSON/text and WebSocket terminal-reset coverage.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added WebSocket regression coverage for a placeholder split across two complete SSE events in distinct frames, a mid-line data-line split that must not gain a newline, a complete unterminated JSON line, interleaved lanes across frames, and terminal flush/reset.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -397,5 +397,89 @@ describe("restoreProviderFrame", () => {
     ]) {
       expect(restoreProviderFrame(session, frame, state)).toBe(frame);
     }
+  });
+
+  test("restores a placeholder split across two complete SSE events in distinct WebSocket frames", () => {
+    const { session, a } = makeSession();
+    const state = createFrameRestoreState(session);
+    const [head, tail] = splitAt(a, 7);
+    const event = (content: string): string =>
+      `data: ${JSON.stringify({
+        id: "c",
+        model: "m",
+        choices: [{ index: 0, delta: { content }, finish_reason: null }],
+      })}\n\n`;
+    const output =
+      restoreProviderFrame(session, event(`hi ${head}`), state) +
+      restoreProviderFrame(session, event(`${tail} bye`), state);
+    // Carry persisted across the frame boundary instead of resetting per frame.
+    expect(output).toContain(SECRET_A);
+    expect(output).not.toContain(a);
+  });
+
+  test("does not inject a newline into a data line split across WebSocket frames", () => {
+    const { session, a } = makeSession();
+    const state = createFrameRestoreState(session);
+    const [head, tail] = splitAt(a, 9);
+    const first = `data: {"id":"c","model":"m","choices":[{"index":0,"delta":{"content":"cut ${head}`;
+    const second = `${tail} tail"},"finish_reason":null}]}\n\n`;
+    const output =
+      restoreProviderFrame(session, first, state) + restoreProviderFrame(session, second, state);
+    const dataLines = output.split("\n").filter((line) => line.startsWith("data:"));
+    expect(dataLines).toHaveLength(1);
+    expect(dataLines[0]).toContain(SECRET_A);
+    expect(output).not.toContain(a);
+  });
+
+  test("restores a complete JSON data line that arrives without a trailing newline", () => {
+    const { session, a } = makeSession();
+    const state = createFrameRestoreState(session);
+    const [head, tail] = splitAt(a, 9);
+    const first = `data: {"choices":[{"delta":{"content":"part ${head}`;
+    const second = `${tail}} more"}}]}`;
+    const output =
+      restoreProviderFrame(session, first, state) + restoreProviderFrame(session, second, state);
+    const nonEmpty = output.split("\n").filter((line) => line.trim() !== "");
+    expect(nonEmpty).toHaveLength(1);
+    expect(nonEmpty[0]).toContain(SECRET_A);
+    expect(output).not.toContain(a);
+  });
+
+  test("keeps independent lanes across WebSocket frames", () => {
+    const { session, a, b } = makeSession();
+    const state = createFrameRestoreState(session);
+    const [aHead, aTail] = splitAt(a, 8);
+    const [bHead, bTail] = splitAt(b, 8);
+    const event = (contentA: string, contentB: string): string =>
+      `data: ${JSON.stringify({
+        id: "c",
+        model: "m",
+        choices: [
+          { index: 0, delta: { content: contentA }, finish_reason: null },
+          { index: 1, delta: { content: contentB }, finish_reason: null },
+        ],
+      })}\n\n`;
+    const output =
+      restoreProviderFrame(session, event(`A ${aHead}`, `B ${bHead}`), state) +
+      restoreProviderFrame(session, event(`${aTail} done`, `${bTail} done`), state);
+    expect(output).toContain(SECRET_A);
+    expect(output).toContain(SECRET_B);
+  });
+
+  test("a terminal frame flushes the carry and resets connection state", () => {
+    const { session, a } = makeSession();
+    const state = createFrameRestoreState(session);
+    const [head] = splitAt(a, 6);
+    const partial = `data: ${JSON.stringify({
+      id: "c",
+      model: "m",
+      choices: [{ index: 0, delta: { content: `tail ${head}` }, finish_reason: null }],
+    })}\n\n`;
+    restoreProviderFrame(session, partial, state);
+    expect(state.sse).not.toBeNull();
+    const terminal = restoreProviderFrame(session, "data: [DONE]\n\n", state);
+    expect(terminal).toContain(head);
+    expect(terminal.indexOf(head)).toBeLessThan(terminal.indexOf("[DONE]"));
+    expect(state.sse).toBeNull();
   });
 });

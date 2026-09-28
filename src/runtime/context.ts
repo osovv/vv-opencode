@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Accepted inputs carry native event time/sequence and source, per-candidate pending variant materialization, and the pump/guard publish the FIRST accepted candidate (complete durable log required to order multiple staged inputs).]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - The event pump contains failures per event (bounded credential-safe diagnostics) instead of ending the only subscription and clears the health flag on a successful config event; stageFor resolves an already-bound family's immutable capture before reading the mutable current config, so an invalid vvoc never fails a bound family while a new unbound candidate still fails closed and recovers.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -633,6 +633,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+const PUMP_ERROR_MAX_CHARS = 500;
+const PLACEHOLDER_TOKEN_RE = /__VVOC_SECRET_[A-Z_]+_[0-9a-f]{12}(?:_\d+)?__/g;
+
+/**
+ * Bounded, credential-safe diagnostic for one contained event-pump failure. The
+ * raw thrown value is never stored verbatim: placeholder tokens are redacted and
+ * the result is capped so an error carrying configuration text cannot leak or
+ * grow without bound.
+ */
+function describePumpError(error: unknown): string {
+  const raw =
+    error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : typeof error === "string"
+        ? error
+        : "unknown error";
+  const redacted = raw.replace(PLACEHOLDER_TOKEN_RE, "[redacted]");
+  return redacted.length > PUMP_ERROR_MAX_CHARS
+    ? `${redacted.slice(0, PUMP_ERROR_MAX_CHARS)}…`
+    : redacted;
+}
+
 function extractTitleMessages(messages: unknown): ReadonlyArray<{ role: string; text: string }> {
   const extracted: Array<{ role: string; text: string }> = [];
   if (!Array.isArray(messages)) return extracted;
@@ -1149,10 +1171,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
       const stageFor = async (sessionID: string, inboxID?: string): Promise<void> => {
         await ensureTransforms();
-        // Refresh the effective vvoc policy from disk before resolving the target:
-        // vvoc.json changes do not emit a host `config.updated`, and a stale
-        // candidate target would otherwise bind the previous role selection.
-        state.config = await readConfig(ctx.location.directory);
         const view = toSessionView(await ctx.session.get({ sessionID }));
         const sessionModel = view.model;
         const pluginSwitch = state.pluginSwitches.get(sessionID);
@@ -1166,6 +1184,9 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
         const existing = await snapshots.policy(sessionID);
         if (existing !== undefined) {
+          // A bound family owns an immutable capture, so its policy/model handling
+          // never consults the mutable current config. Resolve it before any fresh
+          // read: an invalid on-disk vvoc must not fail an already-bound family.
           // A session model that changed outside our own switch is a user choice and
           // must survive, even if the event pump has not recorded it yet.
           const baseExpected = expectedSelection(existing, view.agent);
@@ -1185,6 +1206,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           }
           return;
         }
+        // Only a truly unbound candidate needs the freshest current config:
+        // vvoc.json changes do not emit a host `config.updated`, and a stale
+        // candidate target would otherwise bind the previous role selection.
+        state.config = await readConfig(ctx.location.directory);
         // Reconcile/restage by exact input identity. The snapshot service manages
         // candidate ownership: a still-staged sibling workload never blocks this
         // session's stage, and a first prompt rejected during native preparation
@@ -1401,48 +1426,66 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
       // One native event pump: creation provenance, explicit choice capture, config
       // refresh and the accepted-input boundary all share a single subscription.
+      // Failures are contained PER EVENT: a bad config/refresh/accept never ends
+      // the only subscription, so later session.created/model.selected/inbox
+      // events are still observed and a later config event recovers the health
+      // flag once the invalid input is fixed.
       const pump = (async () => {
         try {
           for await (const event of ctx.event.subscribe({ signal: lifecycle.signal })) {
-            const created = decodeSessionCreatedEvent(event);
-            if (created !== undefined) {
-              state.creationModels.set(created.sessionID, created.model);
-              // Record the default in force at creation, not a later changed default.
-              state.creationDefaults.set(created.sessionID, state.nativeDefault);
-            }
-            const selected = decodeModelSelectedEvent(event);
-            if (selected !== undefined) {
-              const pluginSwitch = state.pluginSwitches.get(selected.sessionID);
-              if (pluginSwitch === undefined || !sameModelSelection(selected.model, pluginSwitch)) {
-                // The host emits this only for a real change, so it is a user choice.
-                state.explicitSelections.set(selected.sessionID, selected.model);
+            try {
+              const created = decodeSessionCreatedEvent(event);
+              if (created !== undefined) {
+                state.creationModels.set(created.sessionID, created.model);
+                // Record the default in force at creation, not a later changed default.
+                state.creationDefaults.set(created.sessionID, state.nativeDefault);
               }
-            }
-            if (isConfigUpdateEvent(event)) {
-              state.config = await readConfig(ctx.location.directory);
-              await refresh();
-            }
-            if (isAcceptedWorkloadEvent(event)) {
-              // Record the verified native acceptance with its event time/sequence,
-              // then let the service pick the FIRST accepted candidate across the
-              // family rather than the one whose notification arrived first.
-              const enqueued = decodeInboxEnqueuedEvent(event);
-              if (enqueued === undefined) continue;
-              liveAccepted.set(`${enqueued.sessionID}\u0000${enqueued.inboxID}`, {
-                sessionID: enqueued.sessionID,
-                inboxID: enqueued.inboxID,
-                itemType: enqueued.itemType,
-                created: enqueued.created ?? Date.now(),
-                ...(enqueued.seq === undefined ? {} : { seq: enqueued.seq }),
-                source: "live",
-              });
-              const outcome = await snapshots.accept({ sessionID: enqueued.sessionID });
-              if (outcome.status === "bound") await refresh();
+              const selected = decodeModelSelectedEvent(event);
+              if (selected !== undefined) {
+                const pluginSwitch = state.pluginSwitches.get(selected.sessionID);
+                if (
+                  pluginSwitch === undefined ||
+                  !sameModelSelection(selected.model, pluginSwitch)
+                ) {
+                  // The host emits this only for a real change, so it is a user choice.
+                  state.explicitSelections.set(selected.sessionID, selected.model);
+                }
+              }
+              if (isConfigUpdateEvent(event)) {
+                // Assign only after a fully successful read so a partially read
+                // invalid config never becomes the mutable current config that
+                // already bound families consult.
+                state.config = await readConfig(ctx.location.directory);
+                await refresh();
+                // A successful config event is the recovery signal.
+                state.configError = undefined;
+              }
+              if (isAcceptedWorkloadEvent(event)) {
+                // Record the verified native acceptance with its event time/sequence,
+                // then let the service pick the FIRST accepted candidate across the
+                // family rather than the one whose notification arrived first.
+                const enqueued = decodeInboxEnqueuedEvent(event);
+                if (enqueued === undefined) continue;
+                liveAccepted.set(`${enqueued.sessionID}\u0000${enqueued.inboxID}`, {
+                  sessionID: enqueued.sessionID,
+                  inboxID: enqueued.inboxID,
+                  itemType: enqueued.itemType,
+                  created: enqueued.created ?? Date.now(),
+                  ...(enqueued.seq === undefined ? {} : { seq: enqueued.seq }),
+                  source: "live",
+                });
+                const outcome = await snapshots.accept({ sessionID: enqueued.sessionID });
+                if (outcome.status === "bound") await refresh();
+              }
+            } catch (error) {
+              // Contain one event's failure and keep observing later events.
+              state.configError = describePumpError(error);
             }
           }
         } catch (error) {
           // A closed/failed native stream is recorded, never silently swallowed.
-          state.configError = error instanceof Error ? error.message : String(error);
+          // There is no reconnect loop: cleanup aborts the subscription.
+          state.configError = describePumpError(error);
         }
       })();
       void pump;

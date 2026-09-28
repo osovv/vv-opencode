@@ -43,7 +43,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 attempt 5 - Extended the gated real-host smoke with a full tracked launch/malformed/continuation/DONE scenario and a readiness-gated backed-off startup that waits for the real app agent/model registry before session create, reusing scripts/e2e-v2/host.ts helpers read-only via dynamic import.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added event-pump per-event containment coverage: a throwing event is logged as a bounded contained failure and a later session.deleted is still processed by the live subscription.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -2473,6 +2473,29 @@ describe("workflow plugin integration", () => {
         expect(normalized).toContain(status);
       }
     }
+  });
+
+  test("contains a throwing event and keeps processing later lifecycle events", async () => {
+    const { emit, logs } = await createWorkflowPluginHarness();
+    const throwingData: Record<string, unknown> = {
+      sessionID: "session-pump-fault",
+      id: "call-pump-fault",
+    };
+    // A transient throw while a handler reads one event's metadata.
+    Object.defineProperty(throwingData, "metadata", {
+      enumerable: true,
+      get() {
+        throw new Error("transient metadata failure");
+      },
+    });
+    emit({ type: "session.tool.success", data: throwingData });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The pump must still observe this deletion; a killed subscription would not.
+    emit({ type: "session.deleted", data: { sessionID: "session-pump-fault" } });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(logs.some((line) => line.includes("contained handler failure"))).toBe(true);
+    expect(logs.some((line) => line.includes("[workflow][sessionCleanup]"))).toBe(true);
   });
 });
 

@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - WorkflowToolContext carries a cancellationSettled marker so the cancellation-recovery transaction can resume a just-settled cancelled attempt; the public tool schema is unchanged. Prior T-004: work_item_list delegates to the read-only inspection owner.
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - work_item_decide rework now passes the public attempt identity into failed-checkpoint authorization so a stale attempt is refused instead of silently targeting the current accepted result.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -731,6 +731,7 @@ export function createWorkItemDecideTool(
           runId,
           checkpointId,
           reason: rationale,
+          attempt: parsed.attempt,
         });
         if (!reworked.ok) {
           return {

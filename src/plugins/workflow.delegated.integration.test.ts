@@ -52,7 +52,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Native register/start/verify/rework/accept/request_changes/recover outputs produced through the registered helpers are now asserted against the closed result schemas; a failing session lookup and invalid persisted state assert their host_context/persistence categories. Earlier T-002 correction added registered-wrapper diagnostics for native/generic run routing, planPath/runId conflicts, unknown-run lookup failures, source-only field rejection, cross-session no-source-detail refusal, and normalized-runId staged fail-closed routing.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - Added staged-launch persistence coverage, a lazy-client-acquisition retry regression, and a foreground malformed-report regression: a client-acquisition failure during bounded continuation still settles report_rejected with the original excerpt (never in_flight/DONE), a later acquisition succeeds, and later session.deleted events still process.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -156,6 +156,8 @@ interface DelegatedPluginHarness {
   planPath: string;
   sessions: Map<string, StubSession>;
   sessionGetFails: boolean;
+  /** Simulates a transient failure acquiring the lazy authenticated full client. */
+  clientAcquireFails: boolean;
   promptCalls: DelegatedPromptCall[];
   promptResponses: string[];
   /** Identity/timing snapshots served by the native session.context lookup. */
@@ -435,6 +437,7 @@ async function createDelegatedPluginHarness(
     planPath: "",
     sessions,
     sessionGetFails: false,
+    clientAcquireFails: false,
     promptCalls,
     promptResponses,
     userMessages,
@@ -585,7 +588,12 @@ async function createDelegatedPluginHarness(
       configFor: async () => defaultCapture,
       accept: async () => ({ status: "unbound" }),
     },
-    client: async () => fakeClient,
+    client: async () => {
+      if (harness.clientAcquireFails) {
+        throw new Error("transient client acquisition failure");
+      }
+      return fakeClient;
+    },
     effectiveConfig: () => ({ vvoc: loaded.config }),
     release: async () => undefined,
   };
@@ -3180,6 +3188,153 @@ describe("terminal report rejection and checkpoint recovery integration", () => 
 });
 // END_BLOCK_RECOVERY_INTEGRATION_TESTS
 
+// START_BLOCK_LAUNCH_PERSISTENCE_TESTS
+/**
+ * A launch mutates live attempt/budget/reviewer state, so it must not proceed
+ * unless that transition is durably persisted. Each launch family is staged,
+ * persisted, then published; a failed write refuses before any child runs and
+ * leaves the original state intact.
+ */
+describe("staged launch persistence", () => {
+  function occupyStatePath(): string {
+    const statePath = join(getWorkflowSessionDir(ROOT_SESSION), "workflow-state.json");
+    rmSync(statePath, { recursive: true, force: true });
+    mkdirSync(statePath, { recursive: true });
+    return statePath;
+  }
+
+  test("a delegated launch refuses without a durable attempt and persists on success", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+
+    const statePath = occupyStatePath();
+    const refused = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-persist-fail",
+      "vv-implementer",
+      workItemId,
+    )
+      .then(() => undefined)
+      .catch((error: Error) => error.message);
+    expect(String(refused)).toContain("LAUNCH_PERSISTENCE_FAILED");
+
+    // No attempt is exposed and the live item did not advance.
+    let item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(0);
+    expect(item?.state).toBe("open");
+
+    // After I/O recovery the same launch persists the consumed attempt.
+    rmSync(statePath, { recursive: true, force: true });
+    await launchTask(harness, ROOT_SESSION, "call-persist-ok", "vv-implementer", workItemId);
+    item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+    expect(item?.delegated?.attempts).toBe(1);
+
+    // A fresh plugin instance hydrates the persisted in-flight attempt.
+    const rehydrated = await createDelegatedPluginHarness(workspaceRoot);
+    const hydrated = (await listItems(rehydrated)).items.find(
+      (entry) => entry.workItemId === workItemId,
+    );
+    expect(hydrated?.delegated?.inFlightAttempt).toBe(true);
+    expect(hydrated?.delegated?.attempts).toBe(1);
+  });
+
+  test("a reviewer launch refuses without a durable in-flight reviewer", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const openedRaw = await harness.plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "review-persist",
+            title: "Review persistence",
+            mode: "review_only",
+            requiredReviewers: ["spec"],
+          },
+        ],
+      } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const opened = parseToolJson<{
+      items?: Array<{ ok: boolean; workItemId?: string }>;
+    }>(openedRaw ?? "{}");
+    const openedItem = opened.items?.[0];
+    expect(openedItem?.ok).toBe(true);
+    const workItemId = openedItem?.workItemId ?? "";
+    expect(workItemId).toBeTruthy();
+    expect((await listItems(harness)).items.find((e) => e.workItemId === workItemId)?.state).toBe(
+      "awaiting_reviews",
+    );
+
+    const statePath = occupyStatePath();
+    const refused = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-reviewer-fail",
+      "vv-spec-reviewer",
+      workItemId,
+    )
+      .then(() => undefined)
+      .catch((error: Error) => error.message);
+    expect(String(refused)).toContain("LAUNCH_PERSISTENCE_FAILED");
+
+    // The refused launch was not published: the same reviewer can still be
+    // launched after I/O recovery (an in-memory in-flight mark would reject it).
+    rmSync(statePath, { recursive: true, force: true });
+    await launchTask(harness, ROOT_SESSION, "call-reviewer-ok", "vv-spec-reviewer", workItemId);
+    const listed = await listItems(harness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("awaiting_reviews");
+  });
+
+  test("an ordinary tracked launch refuses without a durable transition", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const openedRaw = await harness.plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "impl-persist",
+            title: "Implementation persistence",
+            mode: "implementation",
+            requiredReviewers: ["code"],
+          },
+        ],
+      } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const opened = parseToolJson<{ items?: Array<{ ok: boolean; workItemId?: string }> }>(
+      openedRaw ?? "{}",
+    );
+    const workItemId = opened.items?.[0]?.workItemId ?? "";
+    expect(opened.items?.[0]?.ok).toBe(true);
+    expect(workItemId).toBeTruthy();
+
+    const statePath = occupyStatePath();
+    const refused = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-impl-fail",
+      "vv-implementer",
+      workItemId,
+    )
+      .then(() => undefined)
+      .catch((error: Error) => error.message);
+    expect(String(refused)).toContain("LAUNCH_PERSISTENCE_FAILED");
+
+    // After I/O recovery the ordinary launch proceeds.
+    rmSync(statePath, { recursive: true, force: true });
+    await launchTask(harness, ROOT_SESSION, "call-impl-ok", "vv-implementer", workItemId);
+    const item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("open");
+  });
+});
+// END_BLOCK_LAUNCH_PERSISTENCE_TESTS
+
 // START_BLOCK_NATIVE_CANCELLATION_RECOVERY_TESTS
 describe("native background settlement and explicit cancellation recovery", () => {
   async function harnessWithTask(): Promise<{
@@ -3468,3 +3623,102 @@ describe("native background settlement and explicit cancellation recovery", () =
   });
 });
 // END_BLOCK_NATIVE_CANCELLATION_RECOVERY_TESTS
+
+// START_BLOCK_LAZY_CLIENT_RETRY_TESTS
+describe("lazy client acquisition recovery", () => {
+  test("a rejected acquisition is retried instead of cached forever", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const decide = harness.plugin.tool?.work_item_decide;
+    expect(decide).toBeDefined();
+    const call = async () => {
+      try {
+        return await decide!.execute(
+          {
+            workItemId: "wi-missing",
+            attempt: 1,
+            decision: "accept",
+            rationale: "retry probe",
+            evidence: ["diff"],
+          } as never,
+          createStubToolContext(harness, ROOT_SESSION) as never,
+        );
+      } catch (error) {
+        return error as { code?: string; errorCode?: string };
+      }
+    };
+
+    harness.clientAcquireFails = true;
+    const first = await call();
+    expect((first as { code?: string }).code).toBe("HOST_CONTEXT_UNAVAILABLE");
+
+    // The rejected acquisition must not be cached: a later lookup authenticates.
+    harness.clientAcquireFails = false;
+    const second = await call();
+    expect(JSON.stringify(second)).toContain("WORK_ITEM_NOT_FOUND");
+  });
+});
+// END_BLOCK_LAZY_CLIENT_RETRY_TESTS
+
+// START_BLOCK_FOREGROUND_MALFORMED_SETTLEMENT_TESTS
+/**
+ * The foreground after hook parses a completed tracked report and may run one
+ * bounded continuation. A client-acquisition failure there must be contained
+ * locally so the attempt settles as a truthful report_rejected with the original
+ * excerpt instead of throwing out of the hook and staying in_flight.
+ */
+describe("foreground malformed settlement under client failure", () => {
+  test("a malformed report settles as report_rejected when client acquisition fails", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    await launchTask(harness, ROOT_SESSION, "call-malformed-client", "vv-implementer", workItemId);
+
+    // The lazy client cannot be acquired exactly when the malformed report lands.
+    harness.clientAcquireFails = true;
+    const malformed = wrapTaskResult(
+      "ses_malformed_child",
+      `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE`,
+    );
+    const finalText = await finishTaskWithRawOutput(
+      harness,
+      ROOT_SESSION,
+      "call-malformed-client",
+      "vv-implementer",
+      workItemId,
+      malformed,
+    );
+    // Settled through the original-output protocol path, never a forged DONE.
+    expect(finalText).toContain("RESULT_PROTOCOL_ERROR");
+    const item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.reportRejectionCount).toBe(1);
+    expect(item?.state).not.toBe("awaiting_acceptance");
+
+    // A later acquisition succeeds because the rejected promise was not cached.
+    harness.clientAcquireFails = false;
+    const probe = await harness.plugin
+      .tool!.work_item_decide!.execute(
+        {
+          workItemId,
+          attempt: 1,
+          decision: "accept",
+          rationale: "probe",
+          evidence: ["diff"],
+        } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )
+      .then((value) => value as { code?: string })
+      .catch((error: { code?: string }) => error);
+    expect(probe.code).not.toBe("HOST_CONTEXT_UNAVAILABLE");
+
+    // Later pump events still process on the same live subscription: the
+    // deletion removes this session's store so the item is no longer listed.
+    harness.emit({ type: "session.deleted", data: { sessionID: ROOT_SESSION } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const afterDelete = await listItems(harness);
+    expect(afterDelete.items.find((entry) => entry.workItemId === workItemId)).toBeUndefined();
+  });
+});
+// END_BLOCK_FOREGROUND_MALFORMED_SETTLEMENT_TESTS
