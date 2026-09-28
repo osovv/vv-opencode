@@ -199,9 +199,9 @@
       "id": "plugin.analytics",
       "surface": "Analytics token/cache usage",
       "phase": "T-006",
-      "status": "pending",
-      "acceptance": "Provider-reported usage and cache accounting preserve visible effects; opaque or missing usage is not fabricated.",
-      "command": "bun test src/plugins/analytics"
+      "status": "implemented-full",
+      "acceptance": "Provider-reported usage from a real loopback turn lands as a non-zero analytics usage record in the isolated data home; opaque/missing usage is never a fabricated zero.",
+      "command": "bun scripts/e2e-v2.ts --aggregate"
     },
     {
       "id": "plugin.tool-history-compaction",

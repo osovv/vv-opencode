@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-09-28T20:11:43.618Z",
+  "generatedAt": "2026-09-28T20:32:20.879Z",
   "change": "C-OPENCODE-V2-NATIVE",
   "host": {
     "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
@@ -29,20 +29,20 @@
     "zod": "4.1.8"
   },
   "installedPaths": {
-    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@clack/prompts",
-    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/ai",
-    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/client",
-    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/plugin",
-    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/protocol",
-    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/schema",
-    "ajv": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/ajv",
-    "citty": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/citty",
-    "effect": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/effect",
-    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/htmlparser2",
-    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/jsonc-parser",
-    "turndown": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/turndown",
-    "zod": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/zod",
-    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@osovv/vv-opencode"
+    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@clack/prompts",
+    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@opencode/ai",
+    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@opencode/client",
+    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@opencode/plugin",
+    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@opencode/protocol",
+    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@opencode/schema",
+    "ajv": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/ajv",
+    "citty": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/citty",
+    "effect": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/effect",
+    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/htmlparser2",
+    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/jsonc-parser",
+    "turndown": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/turndown",
+    "zod": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/zod",
+    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-UyyJsO/project/node_modules/@osovv/vv-opencode"
   },
   "installedSurface": [
     {
@@ -90,17 +90,22 @@
     {
       "id": "plugin.system-context-injection",
       "ok": true,
-      "detail": "providerRequests=3 injectedGuidance=true"
+      "detail": "providerRequests=2 injectedGuidance=true"
     },
     {
       "id": "plugin.analytics",
-      "ok": false,
-      "detail": "no non-zero usage record observed"
+      "ok": true,
+      "detail": "usageFile=usage-2026-09.jsonl tokens={\"input\":7,\"output\":4,\"reasoning\":0,\"cacheRead\":0,\"cacheWrite\":0}"
     },
     {
       "id": "plugin.peak-hours",
       "ok": true,
       "detail": "softSecondPromptPrimaryDispatches=2 hardSecondPromptPrimaryDispatches=0"
+    },
+    {
+      "id": "plugin.secrets-redaction.websocket-transport",
+      "ok": false,
+      "detail": "wsOpened=false wsRequestFrames=0"
     }
   ],
   "tiers": {
@@ -115,9 +120,9 @@
   },
   "totals": {
     "rows": 38,
-    "verified": 28,
+    "verified": 29,
     "failed": 0,
-    "unverified": 10
+    "unverified": 9
   },
   "rows": [
     {
@@ -289,10 +294,9 @@
     {
       "id": "plugin.analytics",
       "surface": "Analytics token/cache usage",
-      "status": "pending",
-      "tier": "none",
-      "outcome": "unverified",
-      "detail": "no installed-artifact tier covers this row"
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
     },
     {
       "id": "plugin.tool-history-compaction",

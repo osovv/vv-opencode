@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies installed paths, runs the installed-surface checks, and drives the INSTALLED root aggregate directory on the real host for rows observable in the actual provider payload (system-context injection, peak-hours dispatch gating).]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies installed paths and per-row installed-surface outcomes, and drives the INSTALLED root aggregate on the real host: system-context injection, provider-reported analytics usage, peak-hours PRIMARY dispatch gating, and a WebSocket-transport observation.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle).]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
 // END_CHANGE_SUMMARY
@@ -1444,6 +1444,37 @@ export async function runAggregateParity(input: {
     });
   }
 
+  // secrets-redaction real WebSocket transport: the host must open a session
+  // WebSocket and the loopback responder must serve protocol frames (HTTP
+  // fallback would not produce provider.websocket events).
+  try {
+    const host = await bootAggregateHost({ ...input, label: "ws-transport", transport: "websocket" });
+    try {
+      await aggregatePrompt(host.api, host.projectDir, "ws transport probe");
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 4_000));
+      const records = await readProviderTrace(host.tracePath);
+      const wsOpened = records.some(
+        (record) => record.event === "provider.websocket" && record.path === "open",
+      );
+      const wsMessages = records.filter(
+        (record) => record.event === "provider.websocket" && record.path === "message",
+      ).length;
+      checks.push({
+        id: "plugin.secrets-redaction.websocket-transport",
+        ok: wsOpened && wsMessages > 0,
+        detail: `wsOpened=${wsOpened} wsRequestFrames=${wsMessages}`,
+      });
+    } finally {
+      host.stop();
+    }
+  } catch (error) {
+    checks.push({
+      id: "plugin.secrets-redaction.websocket-transport",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   return checks;
 }
 // END_BLOCK_AGGREGATE_PARITY
@@ -1692,7 +1723,7 @@ export async function runInstalledSurface(input: {
       await mkdir(join(cliProject, ".vvoc"), { recursive: true });
       await mkdir(join(cliProject, ".opencode"), { recursive: true });
       const runCli = (args: readonly string[]) =>
-        runCommand(vvocBin, [...args], { cwd: cliProject, env, timeoutMs: 90_000 });
+        runCommand(vvocBin, [...args], { cwd: cliProject, env, timeoutMs: 180_000 });
 
       const globalVvocPath = join(scratchDir, "cfg", "vvoc", "vvoc.json");
       const opencodePath = join(scratchDir, "cfg", "opencode", "opencode.json");

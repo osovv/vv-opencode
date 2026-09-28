@@ -19,7 +19,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-003 - Created the loopback provider and bounded request trace for the packed host harness.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses now carry an OpenAI usage chunk so the host records real session.step.ended token usage; added a loopback WebSocket transport responder that records provider.websocket open/message events and can echo a split placeholder across protocol frames.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 - Created the loopback provider and bounded request trace for the packed host harness.]
 // END_CHANGE_SUMMARY
 
 import { appendFileSync, mkdirSync } from "node:fs";
@@ -30,7 +31,7 @@ import { assertLoopbackHttpUrl } from "./host.js";
 /** One recorded provider request with model, path, and redacted body. */
 export interface ProviderRequestRecord {
   readonly at: number;
-  readonly event: "provider.request" | "provider.listen";
+  readonly event: "provider.request" | "provider.listen" | "provider.websocket";
   readonly path?: string;
   readonly model?: string;
   readonly body?: unknown;
@@ -55,12 +56,33 @@ function traceAppend(tracePath: string, record: ProviderRequestRecord): void {
 }
 
 function streamChunk(model: string, delta: unknown, finish: string | null): string {
-  return `data: ${JSON.stringify({
+  return `data: ${JSON.stringify(wsChunk(model, delta, finish))}\n\n`;
+}
+
+/** One OpenAI chat-completion chunk object (used as a protocol frame or SSE data). */
+function wsChunk(model: string, delta: unknown, finish: string | null): Record<string, unknown> {
+  return {
     id: "chatcmpl-e2e",
     object: "chat.completion.chunk",
     created: 1,
     model,
     choices: [{ index: 0, delta, finish_reason: finish }],
+  };
+}
+
+/**
+ * Terminal streaming chunk carrying provider-reported usage, mirroring the
+ * OpenAI `stream_options.include_usage` tail so the host records native
+ * `session.step.ended` token usage (analytics) from a real loopback turn.
+ */
+function streamUsageChunk(model: string): string {
+  return `data: ${JSON.stringify({
+    id: "chatcmpl-e2e",
+    object: "chat.completion.chunk",
+    created: 1,
+    model,
+    choices: [],
+    usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11 },
   })}\n\n`;
 }
 
@@ -78,8 +100,14 @@ export async function createLoopbackProvider(input: {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: input.port,
-    async fetch(request) {
+    async fetch(request, serverRef) {
       const url = new URL(request.url);
+      if ((request.headers.get("upgrade") ?? "").toLowerCase() === "websocket") {
+        // Native session WebSocket (`settings.transport: "websocket"`): the host
+        // sends the request JSON as the first text frame and reads protocol frames
+        // back. Recorded so a real WS path can never be replaced by HTTP fallback.
+        if (serverRef.upgrade(request)) return undefined;
+      }
       let body: unknown = null;
       try {
         body = await request.clone().json();
@@ -104,8 +132,8 @@ export async function createLoopbackProvider(input: {
           const stream = `${streamChunk(model, { role: "assistant", content: "" }, null)}${streamChunk(
             model,
             { content: "e2e-ok" },
-            null,
-          )}${streamChunk(model, {}, "stop")}data: [DONE]\n\n`;
+            "stop",
+          )}${streamUsageChunk(model)}data: [DONE]\n\n`;
           return new Response(stream, { headers: { "content-type": "text/event-stream" } });
         }
         return Response.json({
@@ -120,6 +148,39 @@ export async function createLoopbackProvider(input: {
         });
       }
       return new Response("not found", { status: 404 });
+    },
+    websocket: {
+      open() {
+        traceAppend(input.tracePath, { at: Date.now(), event: "provider.websocket", path: "open" });
+      },
+      message(socket, message) {
+        const raw = typeof message === "string" ? message : new TextDecoder().decode(message);
+        traceAppend(input.tracePath, {
+          at: Date.now(),
+          event: "provider.websocket",
+          path: "message",
+          body: raw,
+        });
+        const model = (() => {
+          try {
+            return (JSON.parse(raw) as { model?: string }).model ?? "seam-smart";
+          } catch {
+            return "seam-smart";
+          }
+        })();
+        // Echo any redacted placeholder split across two TEXT frames so the real
+        // secrets `experimental.ws.receive` restoration is exercised; otherwise a
+        // plain completion. The placeholder token grammar matches the plugin's.
+        const placeholder = /__VVOC_SECRET_[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\d+)?__/.exec(raw)?.[0];
+        const text = placeholder ?? "e2e-ok";
+        const head = text.slice(0, Math.ceil(text.length / 2));
+        const tail = text.slice(head.length);
+        socket.send(JSON.stringify(wsChunk(model, { role: "assistant", content: "" }, null)));
+        socket.send(JSON.stringify(wsChunk(model, { content: head }, null)));
+        socket.send(JSON.stringify(wsChunk(model, { content: tail }, null)));
+        socket.send(JSON.stringify(wsChunk(model, {}, "stop")));
+        socket.close(1000);
+      },
     },
   });
   traceAppend(input.tracePath, { at: Date.now(), event: "provider.listen" });

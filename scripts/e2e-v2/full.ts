@@ -162,6 +162,24 @@ export async function runFull(
   }
 
   const installedSummary = coreSummary.installedSurface;
+  const installedCheck = new Map(
+    (installedSummary?.checks ?? []).map((check) => [check.id, check.ok] as const),
+  );
+  const installedOutcomes: Record<string, boolean> = {};
+  const installedRowChecks: Readonly<Record<string, readonly string[]>> = {
+    "package.root-assembly": ["root-aggregate", "standalone-subpaths"],
+    "contracts.tools": ["tool-catalog-census"],
+    "presets.model-variants": ["presets-model-variants"],
+    "managed.agents-skills": ["managed-agents-skills"],
+    "cli.install-sync-init": ["cli.install-sync-init"],
+    "cli.status-doctor-upgrade": ["cli.status-doctor-upgrade"],
+    "cli.config-plugin-completions": ["cli.config-plugin-completions"],
+  };
+  for (const [rowId, checkIds] of Object.entries(installedRowChecks)) {
+    if (checkIds.every((id) => installedCheck.has(id))) {
+      installedOutcomes[rowId] = checkIds.every((id) => installedCheck.get(id) === true);
+    }
+  }
   const aggregateOutcomes: Record<string, boolean> = {};
   for (const check of coreSummary.aggregateChecks ?? []) {
     aggregateOutcomes[check.id] = check.ok;
@@ -171,6 +189,7 @@ export async function runFull(
     coreOk: coreSummary.ok,
     tuiOk: tuiSummary?.ok,
     installedOk: installedSummary?.ok,
+    installedOutcomes,
     aggregateOutcomes,
   });
   const failures = mandatoryRowFailures(results);

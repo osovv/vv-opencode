@@ -84,6 +84,7 @@ export function evaluateParityRows(
     readonly coreOk: boolean;
     readonly tuiOk: boolean | undefined;
     readonly installedOk: boolean | undefined;
+    readonly installedOutcomes?: Readonly<Record<string, boolean>> | undefined;
     readonly aggregateOutcomes?: Readonly<Record<string, boolean>> | undefined;
   },
 ): RowResult[] {
@@ -98,20 +99,17 @@ export function evaluateParityRows(
         outcome: input.coreOk ? "pass" : "fail",
       };
     }
-    if (tier === "aggregate") {
-      const observed = input.aggregateOutcomes?.[row.id];
-      return {
-        id: row.id,
-        surface: row.surface,
-        status: row.status,
-        tier,
-        outcome: observed === true ? "pass" : observed === false ? "fail" : "unverified",
-        ...(observed === undefined
-          ? { detail: "installed aggregate tier did not observe this row" }
-          : {}),
-      };
-    }
     if (tier === "installed") {
+      const observed = input.installedOutcomes?.[row.id];
+      if (observed !== undefined) {
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier,
+          outcome: observed ? "pass" : "fail",
+        };
+      }
       if (input.installedOk === undefined) {
         return {
           id: row.id,
@@ -128,6 +126,19 @@ export function evaluateParityRows(
         status: row.status,
         tier,
         outcome: input.installedOk ? "pass" : "fail",
+      };
+    }
+    if (tier === "aggregate") {
+      const observed = input.aggregateOutcomes?.[row.id];
+      return {
+        id: row.id,
+        surface: row.surface,
+        status: row.status,
+        tier,
+        outcome: observed === true ? "pass" : observed === false ? "fail" : "unverified",
+        ...(observed === undefined
+          ? { detail: "installed aggregate tier did not observe this row" }
+          : {}),
       };
     }
     if (tier === "tui") {
