@@ -15,6 +15,20 @@
 //   makeRegistration - Build native handlers with an injected family policy resolution.
 //   REAL_HOST - Pinned host binary from VVOC_E2E_V2_HOST; the gated smoke is skipped when unset.
 //   realHostDescribe - describe when a real host is configured, describe.skip otherwise.
+//   ContextPart - Context message content part fixture.
+//   ContextMessage - Context message fixture.
+//   PolicyMode - Enabled/disabled/unknown policy mode for the fixture.
+//   SMOKE_SECRET - Real-host smoke sentinel secret.
+//   SMOKE_HMAC - Real-host smoke placeholder HMAC secret.
+//   Scenario - Running real-host scenario handle.
+//   startScenario - Boot an isolated real-host scenario with a scripted provider.
+//   reserveFreePort - Reserve a free loopback port.
+//   smokePlaceholder - Deterministic smoke placeholder for the sentinel.
+//   assistantText - Extract the persisted assistant text from context entries.
+//   distPlugin - Resolve a built plugin subpath.
+//   prompt - Send one smoke prompt to a scenario session.
+//   firstPlaceholder - Produce one redacted placeholder through the handlers.
+//   secretsVvoc - Build a vvoc config with the smoke secrets settings.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

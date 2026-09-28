@@ -16,6 +16,7 @@
 //   createPermission - Build a recording permission guard fixture.
 //   fileFrames - Extract native file content frames from a web tool result.
 //   withFetch - Temporarily install a deterministic global fetch fixture.
+//   RecordingPermission - Recording resource permission guard.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

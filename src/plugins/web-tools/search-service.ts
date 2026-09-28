@@ -18,6 +18,8 @@
 //   executeWebSearch - Execute one validated search against a resolved config and permission guard.
 //   createWebSearchToolForConfig - Create a web_search tool pre-bound to one resolved config (tests/direct).
 //   createWebSearchTool - Create the native web_search tool bound to a per-session policy resolver.
+//   NativeWebToolContent - Native Tool.Result content frame.
+//   WebToolExecutionResult - Native Tool.Result emitted by the web tools.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

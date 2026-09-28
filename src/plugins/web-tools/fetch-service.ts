@@ -15,6 +15,7 @@
 //   executeWebFetch - Execute one validated fetch against a resolved config and permission guard.
 //   createWebFetchToolForConfig - Create a web_fetch tool pre-bound to one resolved config (tests/direct).
 //   createWebFetchTool - Create the native web_fetch tool bound to a per-session policy resolver.
+//   MappedResult - Native Tool.Result shape emitted by web_fetch.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

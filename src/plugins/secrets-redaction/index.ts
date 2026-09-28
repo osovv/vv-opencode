@@ -20,6 +20,12 @@
 //   SecretsRedactionPluginOptions - Optional injectable runtime acquisition for tests.
 //   createSecretsRedactionPlugin - Native plugin factory; the default export acquires the real shared runtime.
 //   SecretsRedactionPlugin - Default production native secrets-redaction plugin object.
+//   SecretsPolicyDecision - Enabled resolution, explicit disable, or unknown policy.
+//   SecretsContextEvent - Native context/generate/compaction/title request surface.
+//   SecretsToolBeforeEvent - Native tool execute.before input surface.
+//   SecretsHttpResponseEvent - Native http.response surface.
+//   SecretsWsReceiveEvent - Native experimental.ws.receive frame surface.
+//   default - Default export alias of SecretsRedactionPlugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

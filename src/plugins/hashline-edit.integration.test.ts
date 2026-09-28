@@ -15,6 +15,12 @@
 //   createHarness - Build native handlers with an injected settings resolver and recording permission.
 //   createToolContext - Build a pinned native tool context fixture (optionally with a throwing progress).
 //   anchorFor - Build a visible hashline anchor for fixture content.
+//   previousConfigHome - Preserved caller config-home environment.
+//   Harness - Native handler harness with recording permission calls.
+//   recordModel - Record a session model into the handler cache.
+//   REAL_HOST - Pinned host binary from VVOC_E2E_V2_HOST.
+//   realHostDescribe - describe when a real host is configured, describe.skip otherwise.
+//   HostHelpers - Structural view of the reused scripts/e2e-v2 host helpers.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -22,9 +28,10 @@
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFileSync, symlinkSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import { Schema } from "effect";
 import { z } from "zod";
@@ -50,7 +57,7 @@ import {
   strReplaceEditorContract,
   strReplaceEditorMetadataSchema,
 } from "./hashline-edit/schemas.js";
-import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
+import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const METADATA_FAILURE_SECRET = "SECRET_TOKEN_must_not_leak";
@@ -74,6 +81,7 @@ interface Harness {
     action: string;
     resources: ReadonlyArray<string>;
     sessionID: string;
+    save?: ReadonlyArray<string>;
   }>;
   readonly permissionFailures: Error[];
 }
@@ -83,7 +91,15 @@ function createHarness(
     enabled: true,
     routing: DEFAULT_ROUTING_CONFIG,
   },
-  options: { denyPermission?: boolean } = {},
+  options: {
+    denyPermission?: boolean;
+    denyExternal?: boolean;
+    baseDir?: string;
+    locations?: Record<string, string>;
+    projectRoot?: string;
+    projectRoots?: Record<string, string>;
+    home?: string;
+  } = {},
 ): Harness {
   const resolvedSettings = settings === null ? undefined : settings;
   const permissionCalls: Harness["permissionCalls"] = [];
@@ -93,7 +109,11 @@ function createHarness(
         action: input.action,
         resources: input.resources,
         sessionID: input.sessionID,
+        ...(input.save === undefined ? {} : { save: input.save }),
       });
+      if (input.action === "external_directory" && options.denyExternal) {
+        throw new Error("EXTERNAL_DENIED");
+      }
       if (options.denyPermission) throw new Error("PERMISSION_DENIED");
       if (guardOptions?.signal?.aborted) throw new Error("PERMISSION_ABORTED");
       return effect();
@@ -101,6 +121,10 @@ function createHarness(
   };
   const registration = createHashlineEditHandlers({
     settingsFor: async () => resolvedSettings,
+    locationFor: async (sessionID) => options.locations?.[sessionID] ?? options.baseDir ?? "/",
+    projectRootFor: async (sessionID) =>
+      options.projectRoots?.[sessionID] ?? options.projectRoot ?? options.baseDir ?? "/",
+    hostHome: () => options.home ?? "/home/test",
     permission,
     log: () => undefined,
   });
@@ -258,7 +282,7 @@ describe("HashlineEditPlugin edit execution", () => {
     try {
       const filePath = join(directory, "sample.ts");
       await writeFile(filePath, 'function greet() {\n  return "hi";\n}\n', "utf8");
-      const { handlers, permissionCalls } = createHarness();
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: directory });
       recordModel(handlers, "session-1", "minimax-m2");
       const anchor = `2#${computeLineHash(2, '  return "hi";')}#${computeAnchorHash(2, "function greet() {", '  return "hi";', "}")}`;
       const { context, metadataCalls } = createToolContext();
@@ -273,7 +297,12 @@ describe("HashlineEditPlugin edit execution", () => {
       expect(result.output).toContain("first change line 2");
       expect(await readFile(filePath, "utf8")).toBe('function greet() {\n  return "hello";\n}\n');
       expect(permissionCalls).toEqual([
-        { action: "edit", resources: [filePath], sessionID: "session-1" },
+        {
+          action: "edit",
+          resources: [relative(directory, filePath)],
+          sessionID: "session-1",
+          save: ["*"],
+        },
       ]);
       expect(metadataCalls).toHaveLength(1);
       expect(metadataCalls[0]?.title).toBe(filePath);
@@ -350,7 +379,7 @@ describe("HashlineEditPlugin edit execution", () => {
       const renamedPath = join(directory, "renamed.ts");
       const originalLines = ["line1", "line2"];
       await writeFile(filePath, originalLines.join("\n"), "utf8");
-      const { handlers, permissionCalls } = createHarness();
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: directory });
       recordModel(handlers, "session-1", "minimax-m2");
       const { context } = createToolContext();
       const result = await handlers.tools.hashline_edit.execute(
@@ -364,7 +393,10 @@ describe("HashlineEditPlugin edit execution", () => {
       expect(result.output).toContain(`Moved ${filePath} to ${renamedPath}`);
       await expect(readFile(filePath, "utf8")).rejects.toThrow();
       expect(await readFile(renamedPath, "utf8")).toBe("line1\nline2-updated");
-      expect(permissionCalls[0]?.resources).toEqual([filePath, renamedPath]);
+      expect(permissionCalls[0]?.resources).toEqual([
+        relative(directory, filePath),
+        relative(directory, renamedPath),
+      ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -552,19 +584,21 @@ describe("HashlineEditPlugin routing and visibility", () => {
     const deepseek = allTools();
     recordModel(handlers, "s1", "deepseek-v4-flash");
     await handlers.sessionContext({ sessionID: "s1", tools: deepseek });
-    expect(Object.keys(deepseek)).toEqual(["str_replace_editor"]);
+    expect(Object.keys(deepseek).sort()).toEqual(["str_replace_editor", "write"]);
 
     const minimax = allTools();
     recordModel(handlers, "s2", "minimax-m2");
     await handlers.sessionContext({ sessionID: "s2", tools: minimax });
-    expect(Object.keys(minimax)).toEqual(["hashline_edit"]);
+    expect(Object.keys(minimax).sort()).toEqual(["hashline_edit", "write"]);
 
     const kimi = allTools();
     recordModel(handlers, "s3", "kimi-k3");
     await handlers.sessionContext({ sessionID: "s3", tools: kimi });
     expect(Object.keys(kimi).sort()).toEqual(["edit", "write"]);
 
+    // The host gpt apply_patch gate already removed native write for this model.
     const gpt = allTools();
+    delete gpt.write;
     recordModel(handlers, "s4", "gpt-5.4");
     await handlers.sessionContext({ sessionID: "s4", tools: gpt });
     expect(Object.keys(gpt)).toEqual(["patch"]);
@@ -576,10 +610,16 @@ describe("HashlineEditPlugin routing and visibility", () => {
       routing: { default: "hashline_edit", rules: [] },
     });
     await seedDefinitions(handlers);
-    const gpt = allTools();
+    // The host gpt gate deleted edit/write; hashline mode restores native write
+    // for new-file creation but hides patch.
+    const gpt: Record<string, unknown> = {
+      hashline_edit: { description: "owned-hashline", input: {} },
+      patch: { description: "native-patch", input: { type: "object" } },
+      edit: { description: "native-edit", input: { type: "object" } },
+    };
     recordModel(handlers, "s1", "gpt-5.4");
     await handlers.sessionContext({ sessionID: "s1", tools: gpt });
-    expect(Object.keys(gpt)).toEqual(["hashline_edit"]);
+    expect(Object.keys(gpt).sort()).toEqual(["hashline_edit", "write"]);
   });
 
   test("GPT override to edit restores the genuine native edit/write definitions", async () => {
@@ -617,7 +657,10 @@ describe("HashlineEditPlugin routing and visibility", () => {
     };
     recordModel(handlers, "s1", "minimax-m2");
     await handlers.sessionContext({ sessionID: "s1", tools });
-    expect(tools).toEqual({ patch: { description: "native-patch", input: { type: "object" } } });
+    expect(tools).toEqual({
+      patch: { description: "native-patch", input: { type: "object" } },
+      write: { description: "native-write", input: { type: "object" } },
+    });
   });
 
   test("refuses silently-exposed native tools when no genuine definition was observed", async () => {
@@ -643,7 +686,7 @@ describe("HashlineEditPlugin routing and visibility", () => {
     recordModel(handlers, "s1", "minimax-m2");
     const first = allTools();
     await handlers.sessionContext({ sessionID: "s1", tools: first });
-    expect(Object.keys(first)).toEqual(["hashline_edit"]);
+    expect(Object.keys(first).sort()).toEqual(["hashline_edit", "write"]);
 
     handlers.recordModelRequest({
       sessionID: "s1",
@@ -693,6 +736,36 @@ describe("HashlineEditPlugin routing and visibility", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("native write stays available for creation and execute.before denies edit/patch in hashline mode", async () => {
+    const { handlers } = createHarness({
+      enabled: true,
+      routing: { default: "hashline_edit", rules: [{ pattern: "gpt", mode: "hashline_edit" }] },
+    });
+    await seedDefinitions(handlers);
+    // GPT gate removed write; hashline mode restores it and hides patch/edit.
+    const tools: Record<string, unknown> = {
+      hashline_edit: { description: "owned-hashline", input: {} },
+      patch: { description: "native-patch", input: { type: "object" } },
+      edit: { description: "native-edit", input: { type: "object" } },
+    };
+    recordModel(handlers, "session-1", "gpt-5.4");
+    await handlers.sessionContext({ sessionID: "session-1", tools });
+    expect(Object.keys(tools).sort()).toEqual(["hashline_edit", "write"]);
+    await expect(
+      handlers.before({
+        tool: "write",
+        sessionID: "session-1",
+        input: { path: "x", content: "y" },
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      handlers.before({ tool: "edit", sessionID: "session-1", input: { path: "x" } }),
+    ).rejects.toThrow(/different edit tool/);
+    await expect(
+      handlers.before({ tool: "patch", sessionID: "session-1", input: { patchText: "x" } }),
+    ).rejects.toThrow(/different edit tool/);
+  });
+
   test("direct execute enforces session model visibility before argument details", async () => {
     const { handlers } = createHarness();
     recordModel(handlers, "session-1", "deepseek-v4-flash");
@@ -732,7 +805,7 @@ describe("HashlineEditPlugin routing and visibility", () => {
     const tools = allTools();
     handlers.recordModel({ sessionID: "s1", model: { providerID: "alibaba", id: "qwen3.8-max" } });
     await handlers.sessionContext({ sessionID: "s1", tools });
-    expect(Object.keys(tools)).toEqual(["hashline_edit"]);
+    expect(Object.keys(tools).sort()).toEqual(["hashline_edit", "write"]);
   });
 });
 
@@ -742,7 +815,7 @@ describe("HashlineEditPlugin dsh str_replace_editor", () => {
     try {
       const filePath = join(directory, "sample.py");
       await writeFile(filePath, "alpha\nbeta\n", "utf8");
-      const { handlers, permissionCalls } = createHarness();
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: directory });
       recordModel(handlers, "session-1", "deepseek-v4-flash");
       const { context, metadataCalls } = createToolContext();
 
@@ -751,7 +824,15 @@ describe("HashlineEditPlugin dsh str_replace_editor", () => {
         context,
       );
       expect(viewed.output).toContain("Here's the content of");
-      expect(permissionCalls).toEqual([]);
+      // Internal reads are still permission-gated (location authority is not permission).
+      expect(permissionCalls).toEqual([
+        {
+          action: "read",
+          resources: [relative(directory, filePath)],
+          sessionID: "session-1",
+          save: ["*"],
+        },
+      ]);
 
       const replaced = await handlers.tools.str_replace_editor.execute(
         { command: "str_replace", path: filePath, old_str: "beta", new_str: "BETA" },
@@ -760,7 +841,18 @@ describe("HashlineEditPlugin dsh str_replace_editor", () => {
       expect(replaced.output).toBe(`The file ${filePath} has been edited successfully.`);
       expect(await readFile(filePath, "utf8")).toBe("alpha\nBETA\n");
       expect(permissionCalls).toEqual([
-        { action: "edit", resources: [filePath], sessionID: "session-1" },
+        {
+          action: "read",
+          resources: [relative(directory, filePath)],
+          sessionID: "session-1",
+          save: ["*"],
+        },
+        {
+          action: "edit",
+          resources: [relative(directory, filePath)],
+          sessionID: "session-1",
+          save: ["*"],
+        },
       ]);
       expect(strReplaceEditorMetadataSchema.safeParse(metadataCalls[0]?.metadata).success).toBe(
         true,
@@ -922,7 +1014,7 @@ describe("HashlineEditPlugin cold-start native definitions", () => {
       edit: { description: "native-edit", input: { type: "object" } },
     };
     await runContext("gpt-5.4", tools);
-    expect(Object.keys(tools)).toEqual(["hashline_edit"]);
+    expect(Object.keys(tools).sort()).toEqual(["hashline_edit", "write"]);
   });
 
   test("a cold non-GPT request routed to apply_patch restores genuine native patch", async () => {
@@ -937,8 +1029,401 @@ describe("HashlineEditPlugin cold-start native definitions", () => {
       write: { description: "native-write", input: { type: "object" } },
     };
     await runContext("minimax-m2", tools);
-    expect(Object.keys(tools)).toEqual(["patch"]);
+    expect(Object.keys(tools).sort()).toEqual(["patch", "write"]);
     expect((tools.patch as { description: string }).description).toBe("Native patch");
+  });
+});
+
+describe("HashlineEditPlugin native read content", () => {
+  test("anchors normalized native text content arrays and preserves file and metadata parts", async () => {
+    const { handlers } = createHarness();
+    recordModel(handlers, "session-1", "minimax-m2");
+    const result: {
+      content: Array<Record<string, unknown>>;
+      metadata: Record<string, unknown>;
+    } = {
+      content: [
+        { type: "text", text: "1: const first = 1;\n2: const second = 2;" },
+        { type: "file", uri: "data:image/png;base64,AA==", mime: "image/png", name: "shot.png" },
+      ],
+      metadata: { truncated: false },
+    };
+    await handlers.after({
+      tool: "read",
+      sessionID: "session-1",
+      input: {},
+      status: "completed",
+      result,
+    });
+
+    const lh1 = computeLineHash(1, "const first = 1;");
+    const lh2 = computeLineHash(2, "const second = 2;");
+    const ah1 = computeAnchorHash(1, undefined, "const first = 1;", "const second = 2;");
+    const ah2 = computeAnchorHash(2, "const first = 1;", "const second = 2;", undefined);
+    expect(result.content[0]!.text).toBe(
+      `1#${lh1}#${ah1}|const first = 1;\n2#${lh2}#${ah2}|const second = 2;`,
+    );
+    expect(result.content[1]).toEqual({
+      type: "file",
+      uri: "data:image/png;base64,AA==",
+      mime: "image/png",
+      name: "shot.png",
+    });
+    expect(result.metadata).toEqual({ truncated: false });
+  });
+
+  test("uses the full-file snapshot for a partial native array read and stale rows hash-mismatch", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-native-partial-"));
+    try {
+      const filePath = join(directory, "race.txt");
+      await writeFile(filePath, "line1\nline2 changed\nline3", "utf8");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "session-1", "minimax-m2");
+      const result: { content: Array<{ type: string; text: string }> } = {
+        content: [{ type: "text", text: "2: line2\n3: line3" }],
+      };
+      await handlers.after({
+        tool: "read",
+        sessionID: "session-1",
+        input: { path: filePath },
+        status: "completed",
+        result,
+      });
+      const fallback = `2#${computeLineHash(2, "line2")}#${computeAnchorHash(2, undefined, "line2", "line3")}`;
+      const laterSnapshot = `2#${computeLineHash(2, "line2 changed")}#${computeAnchorHash(2, "line1", "line2 changed", "line3")}`;
+      expect(result.content[0]!.text).toContain(`${fallback}|line2`);
+      expect(result.content[0]!.text).not.toContain(laterSnapshot);
+
+      const edit = await handlers.tools.hashline_edit.execute(
+        { filePath, edits: [{ op: "replace", pos: fallback, lines: ["line2 updated"] }] },
+        createToolContext().context,
+      );
+      expect(edit.output).toContain("Error: hash mismatch");
+      expect(await readFile(filePath, "utf8")).toBe("line1\nline2 changed\nline3");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("HashlineEditPlugin location boundary", () => {
+  function contextFor(sessionID: string): ToolContext {
+    return createToolContext({ sessionID }).context;
+  }
+
+  test("relative paths resolve against each session location, not the daemon cwd", async () => {
+    const locationA = await mkdtemp(join(tmpdir(), "vvoc-loc-a-"));
+    const locationB = await mkdtemp(join(tmpdir(), "vvoc-loc-b-"));
+    try {
+      await writeFile(join(locationA, "same.txt"), "alpha", "utf8");
+      await writeFile(join(locationB, "same.txt"), "beta", "utf8");
+      const { handlers } = createHarness(undefined, {
+        locations: { sA: locationA, sB: locationB },
+      });
+      recordModel(handlers, "sA", "minimax-m2");
+      recordModel(handlers, "sB", "minimax-m2");
+
+      const editA = await handlers.tools.hashline_edit.execute(
+        { filePath: "same.txt", edits: [{ op: "append", lines: ["A"] }] },
+        contextFor("sA"),
+      );
+      expect(editA.output).toContain(`Updated ${join(locationA, "same.txt")}`);
+      expect(await readFile(join(locationA, "same.txt"), "utf8")).toBe("alpha\nA");
+      expect(await readFile(join(locationB, "same.txt"), "utf8")).toBe("beta");
+
+      await handlers.tools.hashline_edit.execute(
+        { filePath: "same.txt", edits: [{ op: "append", lines: ["B"] }] },
+        contextFor("sB"),
+      );
+      expect(await readFile(join(locationB, "same.txt"), "utf8")).toBe("beta\nB");
+      expect(await readFile(join(locationA, "same.txt"), "utf8")).toBe("alpha\nA");
+    } finally {
+      await rm(locationA, { recursive: true, force: true });
+      await rm(locationB, { recursive: true, force: true });
+    }
+  });
+
+  test("relative and absolute aliases share one freshness identity", async () => {
+    const location = await mkdtemp(join(tmpdir(), "vvoc-loc-alias-"));
+    try {
+      const filePath = join(location, "alias.txt");
+      await writeFile(filePath, "alpha\n", "utf8");
+      const { handlers } = createHarness(undefined, {
+        baseDir: location,
+        locations: { s1: location },
+      });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+
+      const viewed = await handlers.tools.str_replace_editor.execute(
+        { command: "view", path: "alias.txt" },
+        contextFor("s1"),
+      );
+      expect(viewed.output).toContain("Here's the content of");
+
+      // External mutation drifts the snapshot recorded under the relative alias.
+      await writeFile(filePath, "alpha\nextra\n", "utf8");
+      const replaced = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "alpha", new_str: "ALPHA" },
+        contextFor("s1"),
+      );
+      expect(replaced.output).toContain("changed since it was last viewed");
+      expect(await readFile(filePath, "utf8")).toBe("alpha\nextra\n");
+    } finally {
+      await rm(location, { recursive: true, force: true });
+    }
+  });
+
+  test("expands a leading ~ against the trusted host home", async () => {
+    const home = await mkdtemp(join(tmpdir(), "vvoc-loc-home-"));
+    try {
+      const target = join(home, "tilde.txt");
+      await writeFile(target, "home\n", "utf8");
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: home, home });
+      recordModel(handlers, "s1", "minimax-m2");
+      const result = await handlers.tools.hashline_edit.execute(
+        { filePath: "~/tilde.txt", edits: [{ op: "append", lines: ["x"] }] },
+        contextFor("s1"),
+      );
+      expect(result.output).toContain(`Updated ${target}`);
+      expect(await readFile(target, "utf8")).toBe("home\nx\n");
+      expect(permissionCalls.map((call) => call.action)).toEqual(["edit"]);
+      expect(permissionCalls[0]?.resources).toEqual(["tilde.txt"]);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("treats the trusted project/worktree root as internal scope", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vvoc-loc-root-"));
+    try {
+      const location = join(root, "pkg");
+      const other = join(root, "other");
+      await mkdir(location, { recursive: true });
+      await mkdir(other, { recursive: true });
+      const target = join(other, "f.txt");
+      await writeFile(target, "a\n", "utf8");
+      const { handlers, permissionCalls } = createHarness(undefined, {
+        baseDir: location,
+        projectRoot: root,
+      });
+      recordModel(handlers, "s1", "minimax-m2");
+      const result = await handlers.tools.hashline_edit.execute(
+        { filePath: "../other/f.txt", edits: [{ op: "append", lines: ["b"] }] },
+        contextFor("s1"),
+      );
+      expect(result.output).toContain(`Updated ${target}`);
+      expect(await readFile(target, "utf8")).toBe("a\nb\n");
+      // Internal to the project root: no external_directory boundary.
+      expect(permissionCalls.map((call) => call.action)).toEqual(["edit"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("external read requests external_directory then read before content access", async () => {
+    const inside = await mkdtemp(join(tmpdir(), "vvoc-loc-inside-r-"));
+    const outside = await mkdtemp(join(tmpdir(), "vvoc-loc-outside-r-"));
+    try {
+      const target = join(outside, "page.txt");
+      await writeFile(target, "page\n", "utf8");
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: inside });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const viewed = await handlers.tools.str_replace_editor.execute(
+        { command: "view", path: target },
+        contextFor("s1"),
+      );
+      expect(viewed.output).toContain("Here's the content of");
+      expect(permissionCalls.map((call) => call.action)).toEqual(["external_directory", "read"]);
+      expect(permissionCalls[0]?.resources).toEqual([`${outside}/*`]);
+      expect(permissionCalls[1]?.resources).toEqual([target]);
+    } finally {
+      await rm(inside, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("external edit requests external_directory then edit before mutation", async () => {
+    const inside = await mkdtemp(join(tmpdir(), "vvoc-loc-inside-e-"));
+    const outside = await mkdtemp(join(tmpdir(), "vvoc-loc-outside-e-"));
+    try {
+      const target = join(outside, "edit.txt");
+      await writeFile(target, "edit\n", "utf8");
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: inside });
+      recordModel(handlers, "s1", "minimax-m2");
+      await handlers.tools.hashline_edit.execute(
+        { filePath: target, edits: [{ op: "append", lines: ["x"] }] },
+        contextFor("s1"),
+      );
+      expect(await readFile(target, "utf8")).toBe("edit\nx\n");
+      expect(permissionCalls.map((call) => call.action)).toEqual(["external_directory", "edit"]);
+      expect(permissionCalls[1]?.resources).toEqual([target]);
+    } finally {
+      await rm(inside, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed native read cannot bless the freshness cache", async () => {
+    const location = await mkdtemp(join(tmpdir(), "vvoc-loc-failed-read-"));
+    try {
+      const filePath = join(location, "doc.txt");
+      await writeFile(filePath, "one\n", "utf8");
+      const { handlers } = createHarness(undefined, {
+        baseDir: location,
+        locations: { s1: location },
+      });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+
+      // A genuine successful normalized native read records the snapshot.
+      await handlers.after({
+        tool: "read",
+        sessionID: "s1",
+        input: { path: "doc.txt" },
+        status: "completed",
+        result: { content: [{ type: "text", text: "Read file doc.txt, lines 1-1\n1: one" }] },
+      });
+
+      // External mutation drifts the recorded snapshot.
+      await writeFile(filePath, "one\ntwo\n", "utf8");
+
+      // A denied/failed native read must not establish a new freshness snapshot.
+      await handlers.after({
+        tool: "read",
+        sessionID: "s1",
+        input: { path: "doc.txt" },
+        status: "error",
+        error: { message: "denied" },
+      });
+
+      const replaced = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: "doc.txt", old_str: "one", new_str: "ONE" },
+        contextFor("s1"),
+      );
+      expect(replaced.output).toContain("changed since it was last viewed");
+      expect(await readFile(filePath, "utf8")).toBe("one\ntwo\n");
+    } finally {
+      await rm(location, { recursive: true, force: true });
+    }
+  });
+
+  test("external boundary save uses the outside project root, not the caller worktree", async () => {
+    const inside = await mkdtemp(join(tmpdir(), "vvoc-loc-inside-root-"));
+    const outside = await mkdtemp(join(tmpdir(), "vvoc-loc-outside-root-"));
+    try {
+      await mkdir(join(outside, ".git"), { recursive: true });
+      const outsideDir = join(outside, "mod");
+      await mkdir(outsideDir, { recursive: true });
+      const target = join(outsideDir, "file.txt");
+      await writeFile(target, "x\n", "utf8");
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: inside });
+      recordModel(handlers, "s1", "minimax-m2");
+      await handlers.tools.hashline_edit.execute(
+        { filePath: target, edits: [{ op: "append", lines: ["y"] }] },
+        contextFor("s1"),
+      );
+      expect(permissionCalls[0]?.action).toBe("external_directory");
+      expect(permissionCalls[0]?.resources).toEqual([`${outsideDir}/*`]);
+      expect(permissionCalls[0]?.save).toEqual([`${outside}/*`]);
+      expect(permissionCalls[0]?.save).not.toEqual([`${inside}/*`]);
+    } finally {
+      await rm(inside, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("external directory view requests that directory boundary, not its parent", async () => {
+    const inside = await mkdtemp(join(tmpdir(), "vvoc-loc-inside-dir-"));
+    const outside = await mkdtemp(join(tmpdir(), "vvoc-loc-outside-dir-"));
+    try {
+      const listing = join(outside, "listing");
+      await mkdir(listing, { recursive: true });
+      await writeFile(join(listing, "a.txt"), "a\n", "utf8");
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: inside });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const viewed = await handlers.tools.str_replace_editor.execute(
+        { command: "view", path: listing },
+        contextFor("s1"),
+      );
+      expect(viewed.output).toContain(listing);
+      expect(permissionCalls[0]?.action).toBe("external_directory");
+      expect(permissionCalls[0]?.resources).toEqual([`${listing}/*`]);
+      expect(permissionCalls[0]?.resources).not.toEqual([`${outside}/*`]);
+      expect(permissionCalls[1]?.action).toBe("read");
+    } finally {
+      await rm(inside, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("external create for a missing parent uses the file parent boundary and de-duplicates", async () => {
+    const inside = await mkdtemp(join(tmpdir(), "vvoc-loc-inside-create-"));
+    const outside = await mkdtemp(join(tmpdir(), "vvoc-loc-outside-create-"));
+    try {
+      const newDir = join(outside, "new");
+      const target = join(newDir, "missing.txt");
+      const { handlers, permissionCalls } = createHarness(undefined, { baseDir: inside });
+      recordModel(handlers, "s1", "minimax-m2");
+      await handlers.tools.hashline_edit.execute(
+        { filePath: target, edits: [{ op: "append", lines: ["created"] }] },
+        contextFor("s1"),
+      );
+      const boundaries = permissionCalls.filter((call) => call.action === "external_directory");
+      expect(boundaries).toHaveLength(1);
+      expect(boundaries[0]?.resources).toEqual([`${newDir}/*`]);
+    } finally {
+      await rm(inside, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("external_directory denial leaves no read/write/rename effect", async () => {
+    const inside = await mkdtemp(join(tmpdir(), "vvoc-loc-inside-"));
+    const outside = await mkdtemp(join(tmpdir(), "vvoc-loc-outside-"));
+    try {
+      const target = join(outside, "secret.txt");
+      await writeFile(target, "secret\n", "utf8");
+
+      const editor = createHarness(undefined, { baseDir: inside, denyExternal: true });
+      recordModel(editor.handlers, "s1", "minimax-m2");
+      await expect(
+        editor.handlers.tools.hashline_edit.execute(
+          { filePath: target, edits: [{ op: "append", lines: ["x"] }] },
+          contextFor("s1"),
+        ),
+      ).rejects.toThrow("EXTERNAL_DENIED");
+      expect(await readFile(target, "utf8")).toBe("secret\n");
+      expect(editor.permissionCalls[0]?.action).toBe("external_directory");
+      expect(editor.permissionCalls[0]?.resources).toEqual([`${outside}/*`]);
+
+      const renamer = createHarness(undefined, { baseDir: inside, denyExternal: true });
+      recordModel(renamer.handlers, "s1", "minimax-m2");
+      await writeFile(join(inside, "source.txt"), "source\n", "utf8");
+      await expect(
+        renamer.handlers.tools.hashline_edit.execute(
+          {
+            filePath: join(inside, "source.txt"),
+            rename: join(outside, "moved.txt"),
+            edits: [{ op: "append", lines: ["x"] }],
+          },
+          contextFor("s1"),
+        ),
+      ).rejects.toThrow("EXTERNAL_DENIED");
+      expect(await readFile(join(inside, "source.txt"), "utf8")).toBe("source\n");
+      await expect(readFile(join(outside, "moved.txt"), "utf8")).rejects.toThrow();
+
+      const viewer = createHarness(undefined, { baseDir: inside, denyExternal: true });
+      recordModel(viewer.handlers, "s1", "deepseek-v4-flash");
+      await expect(
+        viewer.handlers.tools.str_replace_editor.execute(
+          { command: "view", path: target },
+          contextFor("s1"),
+        ),
+      ).rejects.toThrow("EXTERNAL_DENIED");
+      expect(viewer.permissionCalls.some((call) => call.action === "read")).toBe(false);
+    } finally {
+      await rm(inside, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 });
 
@@ -961,3 +1446,343 @@ describe("pure edit primitives", () => {
     expect(applyInsertBefore(lines, anchorFor(lines, 2), ["y"])).toEqual(["a", "y", "b"]);
   });
 });
+
+// START_BLOCK_REAL_HOST_SMOKE
+/**
+ * Optional isolated real-host smoke. Runs only when `VVOC_E2E_V2_HOST` points at
+ * the pinned OpenCode 2.0.18 binary. It composes the actual built
+ * ModelRolesPlugin.setup(ctx) and HashlineEditPlugin.setup(ctx) on ONE native
+ * Context, drives genuine native write -> read -> hashline_edit through a
+ * scripted loopback model, and asserts the provider observed anchored native
+ * read content, the intended location changed, a same-relative-name second
+ * location did not cross-write, and denied external access left no effects.
+ */
+const REAL_HOST = process.env.VVOC_E2E_V2_HOST;
+const realHostDescribe = REAL_HOST ? describe : describe.skip;
+
+interface HostHelpers {
+  createOwnedScratch(base: string): Promise<{ dir: string; base: string; markerPath: string }>;
+  removeOwnedScratch(scratch: { dir: string; base: string; markerPath: string }): Promise<void>;
+  buildHostEnv(
+    base: Record<string, string>,
+    extra?: Record<string, string | undefined>,
+  ): Record<string, string>;
+  OwnedProcesses: new () => {
+    spawn(
+      command: string,
+      args: readonly string[],
+      options?: { readonly cwd?: string; readonly env?: Record<string, string> },
+    ): { readonly pid?: number };
+    stopAll(): Promise<void>;
+  };
+  waitForRegisteredService(input: { servicePath: string; timeoutMs?: number }): Promise<string>;
+  createNativeApi(input: {
+    baseUrl: string;
+    password: string;
+    directory: string;
+  }): (
+    path: string,
+    init?: RequestInit,
+  ) => Promise<{ status: number; body: unknown; text: string }>;
+  assertLoopbackHttpUrl(raw: string, label?: string): URL;
+}
+
+realHostDescribe("real OpenCode 2.0.18 hashline host smoke (built model-roles + hashline)", () => {
+  test("native write -> read -> hashline_edit across two isolated locations with denied external access", async () => {
+    const helpers = (await import(
+      new URL("../../scripts/e2e-v2/host.ts", import.meta.url).href
+    )) as unknown as HostHelpers;
+    const core = (await import(new URL("../../scripts/e2e-v2/core.ts", import.meta.url).href)) as {
+      getFreePort(): Promise<number>;
+    };
+    const scratch = await helpers.createOwnedScratch(
+      process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode",
+    );
+    const processes = new helpers.OwnedProcesses();
+    const tracePath = join(scratch.dir, "provider.jsonl");
+    const outsideDir = join(scratch.dir, "outside");
+    const daemonCwd = join(scratch.dir, "daemon-cwd");
+    const locationA = join(scratch.dir, "location-a");
+    const locationB = join(scratch.dir, "location-b");
+    const externalTarget = join(outsideDir, "secret.txt");
+    const providerPort = await core.getFreePort();
+    const hostPort = await core.getFreePort();
+    helpers.assertLoopbackHttpUrl(`http://127.0.0.1:${providerPort}`, "provider");
+    const externalAnchor = `2#${computeLineHash(2, "beta")}#${computeAnchorHash(2, "alpha", "beta", "")}`;
+
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: providerPort,
+      async fetch(request) {
+        const url = new URL(request.url);
+        const body = (await request
+          .clone()
+          .json()
+          .catch(() => ({}))) as {
+          model?: string;
+          messages?: Array<{ role?: string; content?: unknown }>;
+        };
+        appendFileSync(tracePath, `${JSON.stringify({ path: url.pathname, body })}\n`, "utf8");
+        if (url.pathname.endsWith("/models")) {
+          return Response.json({
+            object: "list",
+            data: [
+              {
+                id: "seam-smart",
+                object: "model",
+                created: 1,
+                owned_by: "loopback",
+                name: "Seam Smart",
+                context_window: 128000,
+                max_output_tokens: 8192,
+              },
+            ],
+          });
+        }
+        if (!url.pathname.endsWith("/chat/completions")) {
+          return new Response("not found", { status: 404 });
+        }
+        const messages = body.messages ?? [];
+        const model = body.model;
+        const text = (value: unknown) =>
+          typeof value === "string" ? value : JSON.stringify(value ?? "");
+        if (
+          messages.some((message) =>
+            text(message.content).includes("Generate a short, specific title"),
+          )
+        ) {
+          return sseText(model, "Title");
+        }
+        const toolMessages = messages.filter((message) => message.role === "tool");
+        const lastUser = [...messages].reverse().find((message) => message.role === "user");
+        const external = text(lastUser?.content).includes("EXTERNAL");
+        const target = external ? externalTarget : "notes.txt";
+        const step = toolMessages.length;
+        if (step === 0) {
+          return sseTool(model, "write", { path: target, content: "alpha\nbeta\n" });
+        }
+        if (step === 1) {
+          return sseTool(model, "read", { path: target });
+        }
+        if (step === 2) {
+          const readText = text(toolMessages[toolMessages.length - 1]?.content);
+          const anchor = external
+            ? externalAnchor
+            : (readText.match(/\d+#[^#\s|]+#[^#\s|]+/g) ?? []).find((candidate) =>
+                candidate.startsWith("2#"),
+              );
+          if (anchor === undefined) return sseText(model, "no-anchor");
+          return sseTool(model, "hashline_edit", {
+            filePath: target,
+            edits: [{ op: "replace", pos: anchor, lines: ["beta-updated"] }],
+          });
+        }
+        return sseText(model, "done");
+      },
+    });
+
+    const sseChunk = (
+      model: string | undefined,
+      delta: Record<string, unknown>,
+      finish: string | null,
+    ) =>
+      `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+    const sseUsage = (model: string | undefined) =>
+      `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model, choices: [], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\n`;
+    const sseText = (model: string | undefined, content: string) =>
+      new Response(
+        `${sseChunk(model, { role: "assistant" }, null)}${sseChunk(model, { content }, null)}${sseChunk(model, {}, "stop")}${sseUsage(model)}data: [DONE]\n\n`,
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const sseTool = (model: string | undefined, name: string, args: unknown) =>
+      new Response(
+        `${sseChunk(model, { role: "assistant" }, null)}${sseChunk(model, { tool_calls: [{ index: 0, id: `call_${name}`, type: "function", function: { name, arguments: JSON.stringify(args) } }] }, null)}${sseChunk(model, {}, "tool_calls")}${sseUsage(model)}data: [DONE]\n\n`,
+        { headers: { "content-type": "text/event-stream" } },
+      );
+
+    try {
+      await mkdir(outsideDir, { recursive: true });
+      await mkdir(daemonCwd, { recursive: true });
+      for (const dir of ["home", "cfg", "data", "state", "cache"]) {
+        await mkdir(join(scratch.dir, dir), { recursive: true });
+      }
+      await writeFile(externalTarget, "alpha\nbeta\n", "utf8");
+      const distRoot = join(import.meta.dir, "..", "..", "dist", "plugins");
+      const compositeDir = join(scratch.dir, "composite");
+      await mkdir(compositeDir, { recursive: true });
+      // The built plugin imports the pinned native SDK packages directly (T009
+      // will declare them); the scratch package resolves them from the workspace.
+      symlinkSync(
+        join(import.meta.dir, "..", "..", "node_modules"),
+        join(compositeDir, "node_modules"),
+        "dir",
+      );
+      await writeFile(
+        join(compositeDir, "package.json"),
+        JSON.stringify({ name: "vvoc-t005-hashline-composite", private: true, version: "0.0.0" }),
+        "utf8",
+      );
+      await writeFile(
+        join(compositeDir, "index.ts"),
+        `import modelRoles from "${join(distRoot, "model-roles", "index.js")}";\n` +
+          `import hashline from "${join(distRoot, "hashline-edit", "index.js")}";\n` +
+          `export default { id: "vvoc.t005.hashline-composite", async setup(ctx) {\n` +
+          `  const cleanups = [];\n` +
+          `  const roles = await modelRoles.setup(ctx);\n` +
+          `  if (roles) cleanups.push(roles);\n` +
+          `  const edits = await hashline.setup(ctx);\n` +
+          `  if (edits) cleanups.push(edits);\n` +
+          `  return async () => { for (const cleanup of cleanups.reverse()) await cleanup(); };\n` +
+          `} };\n`,
+        "utf8",
+      );
+      for (const location of [locationA, locationB]) {
+        await mkdir(join(location, ".vvoc"), { recursive: true });
+        await writeFile(
+          join(location, "opencode.json"),
+          JSON.stringify({
+            model: "loopback/seam-smart",
+            providers: {
+              loopback: {
+                name: "Smoke Loopback",
+                package: "@opencode/ai/providers/openai-compatible",
+                env: ["LOOPBACK_API_KEY"],
+                settings: {
+                  baseURL: `http://127.0.0.1:${providerPort}/v1`,
+                  provider: "loopback",
+                },
+                models: { "seam-smart": { name: "Seam Smart" } },
+              },
+            },
+            plugins: [{ package: compositeDir }],
+          }),
+          "utf8",
+        );
+        const vvoc = createDefaultVvocConfig();
+        vvoc.roles = {
+          ...vvoc.roles,
+          default: "loopback/seam-smart",
+          smart: "loopback/seam-smart",
+          fast: "loopback/seam-smart",
+          reviewer: "loopback/seam-smart",
+        };
+        await writeFile(join(location, ".vvoc", "vvoc.json"), renderVvocConfig(vvoc), "utf8");
+      }
+
+      const env = helpers.buildHostEnv(
+        {
+          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          HOME: join(scratch.dir, "home"),
+          XDG_CONFIG_HOME: join(scratch.dir, "cfg"),
+          XDG_DATA_HOME: join(scratch.dir, "data"),
+          XDG_STATE_HOME: join(scratch.dir, "state"),
+          XDG_CACHE_HOME: join(scratch.dir, "cache"),
+          LOOPBACK_API_KEY: "smoke-key",
+          OPENCODE_DISABLE_MODELS_FETCH: "1",
+        },
+        { HOME: join(scratch.dir, "home") },
+      );
+      processes.spawn(
+        REAL_HOST as string,
+        [
+          "serve",
+          "--service",
+          "--hostname",
+          "127.0.0.1",
+          "--port",
+          String(hostPort),
+          "--log-level",
+          "error",
+        ],
+        { cwd: daemonCwd, env },
+      );
+      const password = await helpers.waitForRegisteredService({
+        servicePath: join(scratch.dir, "state", "opencode", "service.json"),
+      });
+      const baseUrl = `http://127.0.0.1:${hostPort}`;
+      const apiFor = (directory: string) =>
+        helpers.createNativeApi({ baseUrl, password, directory });
+
+      // Wait for the real native model registry to expose the loopback model.
+      const apiA = apiFor(locationA);
+      let ready = false;
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const models = await apiA("/api/model");
+        if (models.status === 200 && models.text.includes("seam-smart")) {
+          ready = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      expect(ready, "native model registry did not expose the loopback model").toBe(true);
+
+      const runSession = async (
+        directory: string,
+        textPrompt: string,
+        permissions?: ReadonlyArray<{ action: string; resource: string; effect: string }>,
+      ): Promise<{ outcome: string | undefined; entries: Array<Record<string, unknown>> }> => {
+        const api = apiFor(directory);
+        const created = (await api("/api/session", {
+          method: "POST",
+          body: JSON.stringify({
+            location: { directory },
+            ...(permissions === undefined ? {} : { permissions }),
+          }),
+        })) as { status: number; body?: { data?: { id?: string } } };
+        const sessionID = created.body?.data?.id;
+        expect(sessionID).toBeTruthy();
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const prompted = await api(`/api/session/${sessionID}/prompt`, {
+          method: "POST",
+          body: JSON.stringify({ text: textPrompt }),
+        });
+        expect(prompted.status).toBeLessThan(400);
+        const deadline = Date.now() + 30000;
+        for (;;) {
+          const context = (await api(`/api/session/${sessionID}/context`)) as {
+            body?: { data?: Array<Record<string, unknown>> };
+          };
+          const entries = context.body?.data ?? [];
+          if (entries.some((entry) => entry.type === "idle")) {
+            return {
+              outcome: entries.find((entry) => entry.type === "idle")?.outcome as
+                | string
+                | undefined,
+              entries,
+            };
+          }
+          if (Date.now() > deadline) return { outcome: "timeout", entries };
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      };
+
+      const first = await runSession(locationA, "create and update notes");
+      expect(first.outcome).toBe("succeeded");
+      expect(await readFile(join(locationA, "notes.txt"), "utf8")).toBe("alpha\nbeta-updated\n");
+      // Location B was not touched by location A's turn.
+      await expect(readFile(join(locationB, "notes.txt"), "utf8")).rejects.toThrow();
+
+      const second = await runSession(locationB, "create and update notes");
+      expect(second.outcome).toBe("succeeded");
+      expect(await readFile(join(locationB, "notes.txt"), "utf8")).toBe("alpha\nbeta-updated\n");
+      expect(await readFile(join(locationA, "notes.txt"), "utf8")).toBe("alpha\nbeta-updated\n");
+
+      const trace = await readFile(tracePath, "utf8");
+      // The provider saw actual native normalized read content with usable anchors.
+      expect(trace).toContain("notes.txt");
+      expect(/\d+#[^#\s|]+#[^#\s|]+\|/.test(trace)).toBe(true);
+
+      // Denied external_directory: native write/read/hashline_edit effect nothing.
+      const denied = await runSession(locationA, "EXTERNAL deny probe", [
+        { action: "external_directory", resource: "*", effect: "deny" },
+      ]);
+      expect(denied.outcome).toBe("succeeded");
+      expect(await readFile(externalTarget, "utf8")).toBe("alpha\nbeta\n");
+    } finally {
+      await processes.stopAll();
+      server.stop(true);
+      await helpers.removeOwnedScratch(scratch);
+    }
+  }, 240_000);
+});
+// END_BLOCK_REAL_HOST_SMOKE

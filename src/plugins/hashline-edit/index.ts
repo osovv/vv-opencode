@@ -16,14 +16,15 @@
 //   HashlineEditDependencies - Injectable per-family routing settings, permission guard and diagnostics.
 //   HashlineEditHandlers - Native session/tool hook handlers plus the two native tool infos.
 //   HashlineEditRegistration - Handlers plus cleanup-owning dispose.
-//   createHashlineEditRegistration - Build routing state, native hook handlers and tool infos.
+//   createHashlineEditHandlers - Build routing state, native hook handlers and the two tool infos.
 //   HashlineEditPluginOptions - Optional injectable runtime acquisition for tests.
 //   createHashlineEditPlugin - Native plugin factory; the default export acquires the real shared runtime.
 //   HashlineEditPlugin - Default production native hashline-edit plugin object.
+//   default - Default export alias of HashlineEditPlugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 3 - Cold-start visibility restores genuine native edit/patch/write definitions serialized from ctx.tool.list() via public SDK/Effect APIs (no prior-request seeding, no fabricated schema); execute.before enforces the same mode for native edit tools.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 6 - Gates execute.after on status/result before any path/stat/cache/I/O so a failed native read cannot bless freshness, and selects external boundaries by native target kind with the outside project root (metadata-only Project.root) instead of the caller worktree.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -31,7 +32,9 @@ import { Schema } from "effect";
 import { z } from "zod";
 import { $ZodType, toJSONSchema } from "zod/v4/core";
 import type { ToolContext as NativeToolContext } from "@opencode/plugin/promise/tool";
-import { resolve } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import {
   acquireNativeSnapshotRuntime,
@@ -77,17 +80,21 @@ const COLON_READ_LINE_PATTERN = /^\s*(\d+): ?(.*)$/;
 const PIPE_READ_LINE_PATTERN = /^\s*(\d+)\| ?(.*)$/;
 
 // START_BLOCK_ROUTING_CONSTANTS
-// Every tool whose per-session visibility/execution this plugin governs so that
-// exactly one edit mode is exposed: the two owned tools plus the genuine native
-// `edit`/`write` and the native `patch` (canonical vvoc mode `apply_patch`).
-const MANAGED_EDIT_TOOLS = [
+// Native tools whose definitions the plugin may capture/restore.
+const NATIVE_TOOL_NAMES = [
   "hashline_edit",
   "str_replace_editor",
   "edit",
   "write",
   "patch",
 ] as const;
-const MANAGED_NATIVE_TOOLS = new Set(["edit", "write", "patch"]);
+// Existing-file editor tools whose visibility the selected mode governs. Native
+// `write` is deliberately absent: baseline v1.7.0 never hid it, so new-file
+// creation stays available alongside the one selected existing-file editor.
+const HIDDEN_MODE_TOOLS = ["hashline_edit", "str_replace_editor", "edit", "patch"] as const;
+// Native edit tools whose EXECUTION the mode enforces. `write` is always allowed
+// (creation), matching the baseline.
+const MANAGED_NATIVE_TOOLS = new Set(["edit", "patch"]);
 const EDIT_TYPE_TOOLS = ["hashline_edit", "str_replace_editor"] as const;
 type EditTypeTool = (typeof EDIT_TYPE_TOOLS)[number];
 
@@ -95,13 +102,18 @@ function isEditTypeTool(toolName: string): toolName is EditTypeTool {
   return (EDIT_TYPE_TOOLS as readonly string[]).includes(toolName);
 }
 
-/** Tools that must be visible for a mode; canonical `apply_patch` maps to native `patch` once. */
+/**
+ * Tools that must be visible for a mode; canonical `apply_patch` maps to native
+ * `patch` once. Native `write` stays for every mode except `apply_patch` (where
+ * the native patch plugin itself owns file creation), preserving baseline
+ * new-file creation next to the selected existing-file editor.
+ */
 function visibleToolsForMode(mode: EditMode): string[] {
   switch (mode) {
     case "hashline_edit":
-      return ["hashline_edit"];
+      return ["hashline_edit", "write"];
     case "str_replace_editor":
-      return ["str_replace_editor"];
+      return ["str_replace_editor", "write"];
     case "edit":
       return ["edit", "write"];
     case "apply_patch":
@@ -181,6 +193,118 @@ export function captureNativeToolDefinitions(
 }
 // END_BLOCK_ROUTING_CONSTANTS
 
+// START_BLOCK_PATH_BOUNDARY
+/** Reject empty/whitespace-only caller paths before any location resolution. */
+function requireNonEmptyPath(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
+/** Mirror the pinned Windows shell-path normalization (no-op on non-Windows). */
+function windowsPath(value: string): string {
+  if (process.platform !== "win32") return value;
+  return value
+    .replace(/^\/([a-zA-Z]):(?:[\\/]|$)/, (_, drive: string) => `${drive.toUpperCase()}:/`)
+    .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive: string) => `${drive.toUpperCase()}:/`)
+    .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive: string) => `${drive.toUpperCase()}:/`)
+    .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive: string) => `${drive.toUpperCase()}:/`);
+}
+
+/**
+ * Resolve one caller path against the trusted native invocation location exactly
+ * once, mirroring pinned `FileAccess.resolvePath`: normalize Windows shell paths,
+ * expand leading `~` against the trusted host home, then resolve relative to the
+ * location directory. Absolute paths keep their contract.
+ */
+function normalizeTargetPath(baseDir: string, callerPath: string, hostHome: string): string {
+  const normalized = windowsPath(callerPath);
+  if (normalized === "~") return resolve(baseDir, hostHome);
+  if (
+    normalized.startsWith("~/") ||
+    (process.platform === "win32" && normalized.startsWith("~\\"))
+  ) {
+    return resolve(baseDir, join(hostHome, normalized.slice(2)));
+  }
+  return resolve(baseDir, normalized);
+}
+
+/** Pinned `FSUtil.contains` semantics: `child` is `parent` or lexically inside it. */
+function containsPath(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`));
+}
+
+/**
+ * Pinned `Project.root` semantics using metadata only: walk up from a directory
+ * to the nearest ancestor containing a `.git`/`.hg` marker. It runs no git
+ * command and never reads file content, so it cannot modify user git config.
+ */
+function findExternalProjectRoot(directory: string): string | undefined {
+  let current = resolve(directory);
+  const filesystemRoot = parse(current).root;
+  for (;;) {
+    for (const marker of [".git", ".hg"]) {
+      try {
+        if (existsSync(join(current, marker))) return current;
+      } catch {
+        // Unreadable directories are treated as no match.
+      }
+    }
+    if (current === filesystemRoot) return undefined;
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+interface LocatedResource {
+  readonly internal: boolean;
+  readonly resource: string;
+  readonly externalDirectory?: {
+    readonly directory: string;
+    readonly resource: string;
+    readonly save: string;
+  };
+}
+
+/**
+ * Map one resolved absolute target to the pinned permission resources: native
+ * internal scope is the current location plus its trusted project/worktree root
+ * (except the filesystem root special case), producing a location-relative
+ * resource; everything else is external and gets an `external_directory`
+ * `<dir>/*` boundary with the absolute resource.
+ */
+function locateResource(
+  locationDir: string,
+  projectRoot: string | undefined,
+  target: string,
+  kind?: "file" | "directory",
+): LocatedResource {
+  const worktree = projectRoot === undefined ? undefined : resolve(projectRoot);
+  const internal =
+    containsPath(locationDir, target) ||
+    (worktree !== undefined && worktree !== parse(worktree).root && containsPath(worktree, target));
+  if (internal) {
+    return {
+      internal: true,
+      resource: (relative(locationDir, target) || ".").split(sep).join("/"),
+    };
+  }
+  const directory = kind === "directory" ? target : dirname(target);
+  const outsideRoot = findExternalProjectRoot(directory) ?? directory;
+  return {
+    internal: false,
+    resource: target.split(sep).join("/"),
+    externalDirectory: {
+      directory,
+      resource: join(directory, "*").split(sep).join("/"),
+      save: join(outsideRoot, "*").split(sep).join("/"),
+    },
+  };
+}
+// END_BLOCK_PATH_BOUNDARY
+
 type ReadToolArgs = { filePath?: unknown; path?: unknown; file?: unknown };
 
 interface EditTelemetry {
@@ -196,8 +320,12 @@ export interface HashlinePermissionGuard {
       readonly sessionID: string;
       readonly action: string;
       readonly resources: ReadonlyArray<string>;
+      readonly save?: ReadonlyArray<string> | undefined;
       readonly metadata?: Record<string, unknown> | undefined;
       readonly agent?: string | undefined;
+      readonly source?:
+        | { readonly type: "tool"; readonly messageID: string; readonly id: string }
+        | undefined;
     },
     effect: () => Promise<T> | T,
     options?: { readonly signal?: AbortSignal | undefined },
@@ -207,6 +335,12 @@ export interface HashlinePermissionGuard {
 /** Injectable per-family routing settings, permission guard and diagnostics. */
 export interface HashlineEditDependencies {
   settingsFor(sessionID: string): Promise<HashlineEditPluginSettings | undefined>;
+  /** Trusted native invocation location (absolute directory) for a session. */
+  locationFor(sessionID: string): Promise<string | undefined>;
+  /** Trusted native project/worktree root for a session, when known. */
+  projectRootFor(sessionID: string): Promise<string | undefined>;
+  /** Trusted host home used to expand a leading `~`. */
+  readonly hostHome: () => string;
   readonly permission: HashlinePermissionGuard;
   log(event: {
     readonly level: "info" | "warn" | "error";
@@ -229,6 +363,7 @@ interface NativeHookEvents {
     input: unknown;
     status: "completed" | "error";
     result?: { content?: unknown; output?: unknown; metadata?: Record<string, unknown> };
+    error?: unknown;
   };
 }
 
@@ -281,6 +416,15 @@ async function statSnapshot(filePath: string): Promise<FileSnapshot | undefined>
     return { mtimeMs: info.mtimeMs, size: info.size };
   } catch {
     return undefined;
+  }
+}
+
+/** Metadata-only target kind used to select the native external directory boundary. */
+async function inferTargetKind(target: string): Promise<"file" | "directory"> {
+  try {
+    return (await stat(target)).isDirectory() ? "directory" : "file";
+  } catch {
+    return "file";
   }
 }
 
@@ -343,6 +487,10 @@ function isTextFileOutput(output: string): boolean {
   return COLON_READ_LINE_PATTERN.test(firstLine) || PIPE_READ_LINE_PATTERN.test(firstLine);
 }
 
+function hasNumberedReadLines(lines: readonly string[]): boolean {
+  return lines.some((line) => parseReadLineParsed(line) !== null);
+}
+
 function isHashlineEligibleReadOutput(output: string): boolean {
   if (!output) {
     return false;
@@ -370,7 +518,9 @@ function isHashlineEligibleReadOutput(output: string): boolean {
     return isTextFileOutput(firstFileLine);
   }
 
-  return isTextFileOutput(lines[0] ?? "");
+  // Native read text prepends a human summary header ("Read file <path>, lines
+  // N-M"); anchors are still applicable when any numbered line is present.
+  return isTextFileOutput(lines[0] ?? "") || hasNumberedReadLines(lines);
 }
 
 function readArgFilePath(args: unknown): string | undefined {
@@ -386,11 +536,7 @@ function readArgFilePath(args: unknown): string | undefined {
   return undefined;
 }
 
-async function readSourceLines(args: unknown): Promise<string[] | undefined> {
-  const filePath = readArgFilePath(args);
-  if (!filePath) {
-    return undefined;
-  }
+async function readSourceLinesAt(filePath: string): Promise<string[] | undefined> {
   try {
     const file = Bun.file(filePath);
     if (!(await file.exists())) {
@@ -558,22 +704,25 @@ function transformReadOutput(output: string, sourceLines?: string[]): string {
     return [...prefixLines, ...result, ...lines.slice(blockEnd)].join("\n");
   }
 
-  if (!isTextFileOutput(lines[0] ?? "")) {
-    return output;
+  // Native read text prepends a summary header and may append a truncation
+  // marker; transform the numbered block in place and keep every other line.
+  const numberedStart = lines.findIndex((line) => parseReadLineParsed(line) !== null);
+  if (numberedStart < 0) {
+    if (!isTextFileOutput(lines[0] ?? "")) return output;
   }
-
+  const contentLines = lines.slice(Math.max(numberedStart, 0));
   const parsedLines: ParsedReadLine[] = [];
-  for (const line of lines) {
+  for (const line of contentLines) {
     const parsed = parseReadLineParsed(line);
     if (!parsed) break;
     parsedLines.push(parsed);
   }
   const result = formatReadLines(
     parsedLines,
-    lines,
+    contentLines,
     sourceMatchesVisibleRows(sourceLines, parsedLines) ? sourceLines : undefined,
   );
-  return result.join("\n");
+  return [...lines.slice(0, Math.max(numberedStart, 0)), ...result].join("\n");
 }
 // END_BLOCK_FS_HELPERS
 
@@ -584,28 +733,44 @@ async function executeHashlineEdit(
   args: HashlineEditToolArgs,
   telemetry: EditTelemetry,
   publish: PublishMetadata,
+  baseDir: string,
+  hostHome: string,
 ): Promise<string> {
   try {
     const validation = validateHashlineEditToolInput(args);
     if (!validation.ok) {
       return `Error: ${formatContractIssues(validation.issues)}`;
     }
-    const { filePath, rename, delete: deleteMode } = validation.data;
+    const requestedPath = requireNonEmptyPath(validation.data.filePath);
+    if (requestedPath === undefined) {
+      return "Error: filePath must be a non-empty path";
+    }
+    const sourcePath = normalizeTargetPath(baseDir, requestedPath, hostHome);
+    const requestedRename = validation.data.rename;
+    const renamePath =
+      requestedRename === undefined
+        ? undefined
+        : normalizeTargetPath(
+            baseDir,
+            requireNonEmptyPath(requestedRename) ?? requestedRename,
+            hostHome,
+          );
+    const deleteMode = validation.data.delete === true;
 
     const edits = deleteMode ? [] : normalizeHashlineEdits(validation.data.edits);
-    const file = Bun.file(filePath);
+    const file = Bun.file(sourcePath);
     const exists = await file.exists();
 
     if (!exists && !deleteMode && !canCreateFromMissingFile(edits)) {
-      return `Error: File not found: ${filePath}`;
+      return `Error: File not found: ${sourcePath}`;
     }
 
     if (deleteMode) {
       if (!exists) {
-        return `Error: File not found: ${filePath}`;
+        return `Error: File not found: ${sourcePath}`;
       }
       await file.delete();
-      return `Successfully deleted ${filePath}`;
+      return `Successfully deleted ${sourcePath}`;
     }
 
     const rawOldContent = exists ? Buffer.from(await file.arrayBuffer()).toString("utf8") : "";
@@ -613,8 +778,8 @@ async function executeHashlineEdit(
     const applyResult = applyHashlineEditsWithReport(oldEnvelope.content, edits);
     const canonicalNewContent = applyResult.content;
 
-    if (canonicalNewContent === oldEnvelope.content && !rename) {
-      let diagnostic = `No changes made to ${filePath}. The edits produced identical content.`;
+    if (canonicalNewContent === oldEnvelope.content && renamePath === undefined) {
+      let diagnostic = `No changes made to ${sourcePath}. The edits produced identical content.`;
       if (applyResult.noopEdits > 0) {
         diagnostic += ` No-op edits: ${applyResult.noopEdits}. Re-read the file and provide content that differs from the current lines.`;
       }
@@ -622,22 +787,20 @@ async function executeHashlineEdit(
     }
 
     const writeContent = restoreFileText(canonicalNewContent, oldEnvelope);
-    const sourcePath = resolve(filePath);
-    const targetPath = rename ? resolve(rename) : undefined;
-    const isMove = targetPath !== undefined && targetPath !== sourcePath;
+    const isMove = renamePath !== undefined && renamePath !== sourcePath;
 
-    if (isMove && (await Bun.file(targetPath!).exists())) {
-      return `Error: rename target already exists: ${rename}. Refusing to overwrite an existing file.`;
+    if (isMove && (await Bun.file(renamePath!).exists())) {
+      return `Error: rename target already exists: ${renamePath}. Refusing to overwrite an existing file.`;
     }
 
-    await Bun.write(filePath, writeContent);
+    await Bun.write(sourcePath, writeContent);
 
     if (isMove) {
-      await Bun.write(targetPath!, writeContent);
-      await Bun.file(filePath).delete();
+      await Bun.write(renamePath!, writeContent);
+      await Bun.file(sourcePath).delete();
     }
 
-    const effectivePath = isMove ? targetPath! : filePath;
+    const effectivePath = isMove ? renamePath! : sourcePath;
     let metadataReportFailed = false;
     try {
       await publish({
@@ -671,7 +834,7 @@ async function executeHashlineEdit(
       firstChangedLine !== undefined ? `, first change line ${firstChangedLine}` : ""
     }`;
     const headline = isMove
-      ? `Moved ${filePath} to ${rename} (${stats})`
+      ? `Moved ${sourcePath} to ${renamePath} (${stats})`
       : `Updated ${effectivePath} (${stats})`;
     const outputParts = [headline];
     if (metadataReportFailed) {
@@ -704,33 +867,41 @@ async function executeStrReplaceEditor(
   fileCache: SessionFileCache,
   telemetry: EditTelemetry,
   publish: PublishMetadata,
+  baseDir: string,
+  hostHome: string,
 ): Promise<string> {
+  const requestedPath = requireNonEmptyPath(args.path);
+  if (requestedPath === undefined) {
+    return "Error: path must be a non-empty path";
+  }
+  const targetPath = normalizeTargetPath(baseDir, requestedPath, hostHome);
+  const resolvedArgs: StrReplaceEditorArgs = { ...args, path: targetPath };
   const editor = new StrReplaceEditor({
     fs: createNodeStrReplaceFs(),
     onViewed: (path, snapshot) => fileCache.record(sessionID, path, snapshot),
     checkFreshness: (path, current) => fileCache.check(sessionID, path, current),
   });
 
-  const result = await editor.execute(args);
+  const result = await editor.execute(resolvedArgs);
   if (!result.ok) {
     return `Error: ${result.error}`;
   }
 
-  if (args.command !== "view") {
+  if (resolvedArgs.command !== "view") {
     try {
       await publish({
-        title: args.path,
+        title: targetPath,
         metadata: {
-          filePath: args.path,
-          path: args.path,
-          file: args.path,
+          filePath: targetPath,
+          path: targetPath,
+          file: targetPath,
           editMode: telemetry.editMode,
           providerID: telemetry.providerID,
           modelID: telemetry.modelID,
         },
       });
     } catch {
-      return `${result.output}\nWarning: the edit was applied to ${args.path} but reporting metadata failed; inspect the file before retrying.`;
+      return `${result.output}\nWarning: the edit was applied to ${targetPath} but reporting metadata failed; inspect the file before retrying.`;
     }
   }
   return result.output;
@@ -757,6 +928,79 @@ export function createHashlineEditHandlers(
 
   const resolveMode = (sessionID: string, settings: HashlineEditPluginSettings): EditMode =>
     resolveEditMode(settings.routing, modelCache.get(sessionID));
+
+  const requireLocation = async (sessionID: string): Promise<string | undefined> => {
+    const directory = await deps.locationFor(sessionID);
+    if (typeof directory !== "string" || directory.length === 0) return undefined;
+    return resolve(directory);
+  };
+
+  const permissionSource = (context: NativeToolContext) => ({
+    type: "tool" as const,
+    messageID: String(context.messageID),
+    id: String(context.id),
+  });
+
+  /**
+   * Request the pinned file boundary before any effect. External targets first
+   * obtain `external_directory` (`<dir>/*`) approval; reads then always request
+   * `read` (location authority is not permission); edits request `edit` with
+   * location-relative resources for internal targets and absolute resources for
+   * external ones, `save: ["*"]`.
+   */
+  const requestFileEffect = async (
+    context: NativeToolContext,
+    baseDir: string,
+    projectRoot: string | undefined,
+    action: "edit" | "read",
+    targets: ReadonlyArray<string>,
+    tool: string,
+    effect: () => Promise<string>,
+    kind?: "file" | "directory",
+  ): Promise<string> => {
+    const located: LocatedResource[] = [];
+    for (const target of targets) {
+      const targetKind = kind ?? (await inferTargetKind(target));
+      located.push(locateResource(baseDir, projectRoot, target, targetKind));
+    }
+    const seenBoundaries = new Set<string>();
+    const externals = located
+      .flatMap((entry) => (entry.externalDirectory === undefined ? [] : [entry.externalDirectory]))
+      .filter((entry) => {
+        if (seenBoundaries.has(entry.resource)) return false;
+        seenBoundaries.add(entry.resource);
+        return true;
+      });
+    const source = permissionSource(context);
+    if (externals.length > 0) {
+      await deps.permission.guard(
+        {
+          sessionID: context.sessionID,
+          action: "external_directory",
+          resources: externals.map((entry) => entry.resource),
+          save: externals.map((entry) => entry.save),
+          metadata: { tool, boundary: "external_directory" },
+          ...(context.agent === undefined ? {} : { agent: String(context.agent) }),
+          source,
+        },
+        () => undefined,
+        { signal: context.signal },
+      );
+    }
+    return deps.permission.guard(
+      {
+        sessionID: context.sessionID,
+        action,
+        resources: located.map((entry) => entry.resource),
+        save: ["*"],
+        metadata: { tool },
+        ...(context.agent === undefined ? {} : { agent: String(context.agent) }),
+        source,
+      },
+      effect,
+      { signal: context.signal },
+    );
+  };
 
   const assertVisible = async (toolName: EditTypeTool, sessionID: string): Promise<void> => {
     const settings = await deps.settingsFor(sessionID);
@@ -814,20 +1058,42 @@ export function createHashlineEditHandlers(
           // the handler in production.
           return nativeResult(`Error: ${formatContractIssues(validation.issues)}`);
         }
+        const baseDir = await requireLocation(context.sessionID);
+        if (baseDir === undefined) {
+          return nativeResult("Error: no trusted session location is available for this session");
+        }
+        const requestedPath = requireNonEmptyPath(validation.data.filePath);
+        if (requestedPath === undefined) {
+          return nativeResult("Error: filePath must be a non-empty path");
+        }
+        const hostHome = deps.hostHome();
+        const projectRoot = await deps.projectRootFor(context.sessionID);
+        const sourcePath = normalizeTargetPath(baseDir, requestedPath, hostHome);
+        const renamePath =
+          validation.data.rename === undefined
+            ? undefined
+            : normalizeTargetPath(
+                baseDir,
+                requireNonEmptyPath(validation.data.rename) ?? validation.data.rename,
+                hostHome,
+              );
         const telemetry = await telemetryFor(context.sessionID);
-        const resources = [validation.data.filePath];
-        if (validation.data.rename !== undefined) resources.push(validation.data.rename);
-        const output = await deps.permission.guard(
-          {
-            sessionID: context.sessionID,
-            action: "edit",
-            resources,
-            metadata: { editMode: telemetry.editMode, tool: "hashline_edit" },
-            ...(context.agent === undefined ? {} : { agent: String(context.agent) }),
-          },
+        const targets = renamePath === undefined ? [sourcePath] : [sourcePath, renamePath];
+        const output = await requestFileEffect(
+          context,
+          baseDir,
+          projectRoot,
+          "edit",
+          targets,
+          "hashline_edit",
           () =>
-            executeHashlineEdit(validation.data, telemetry, (update) => context.progress(update)),
-          { signal: context.signal },
+            executeHashlineEdit(
+              validation.data,
+              telemetry,
+              (u) => context.progress(u),
+              baseDir,
+              hostHome,
+            ),
         );
         return nativeResult(output);
       },
@@ -844,29 +1110,37 @@ export function createHashlineEditHandlers(
         if (!validation.ok) {
           return nativeResult(`Error: ${formatContractIssues(validation.issues)}`);
         }
+        const baseDir = await requireLocation(context.sessionID);
+        if (baseDir === undefined) {
+          return nativeResult("Error: no trusted session location is available for this session");
+        }
+        const requestedPath = requireNonEmptyPath(validation.data.path);
+        if (requestedPath === undefined) {
+          return nativeResult("Error: path must be a non-empty path");
+        }
+        const hostHome = deps.hostHome();
+        const projectRoot = await deps.projectRootFor(context.sessionID);
+        const targetPath = normalizeTargetPath(baseDir, requestedPath, hostHome);
         const telemetry = await telemetryFor(context.sessionID);
-        const run = async (): Promise<string> =>
+        const run = (): Promise<string> =>
           executeStrReplaceEditor(
             validation.data,
             context.sessionID,
             fileCache,
             telemetry,
-            (update) => context.progress(update),
+            (u) => context.progress(u),
+            baseDir,
+            hostHome,
           );
-        const output =
-          validation.data.command === "view"
-            ? await run()
-            : await deps.permission.guard(
-                {
-                  sessionID: context.sessionID,
-                  action: "edit",
-                  resources: [validation.data.path],
-                  metadata: { editMode: telemetry.editMode, tool: "str_replace_editor" },
-                  ...(context.agent === undefined ? {} : { agent: String(context.agent) }),
-                },
-                run,
-                { signal: context.signal },
-              );
+        const output = await requestFileEffect(
+          context,
+          baseDir,
+          projectRoot,
+          validation.data.command === "view" ? "read" : "edit",
+          [targetPath],
+          "str_replace_editor",
+          run,
+        );
         return nativeResult(output);
       },
     },
@@ -889,28 +1163,29 @@ export function createHashlineEditHandlers(
       if (tools === undefined) return;
       // Capture whichever genuine native definitions this session exposes before
       // any mutation, so a host gate that removed one can still be overridden.
-      for (const name of MANAGED_EDIT_TOOLS) {
+      for (const name of NATIVE_TOOL_NAMES) {
         const value = tools[name];
         if (isNativeToolDefinition(value)) nativeDefinitions.set(name, value);
       }
       const settings = await deps.settingsFor(event.sessionID);
       if (settings === undefined || !settings.enabled) {
         // Disabled/unbound: never force an edit mode; hide only the owned tools
-        // and leave the host gate's native decision in place.
+        // and leave the host gate's native decision in place (including write).
         delete tools.hashline_edit;
         delete tools.str_replace_editor;
         return;
       }
       const mode = resolveMode(event.sessionID, settings);
       const desired = new Set(visibleToolsForMode(mode));
-      for (const toolName of MANAGED_EDIT_TOOLS) {
+      for (const toolName of HIDDEN_MODE_TOOLS) {
         if (!desired.has(toolName)) delete tools[toolName];
       }
+      // Ensure every desired tool is present; native write is restored for
+      // creation when the host gate removed it, never fabricated.
       for (const toolName of desired) {
         if (tools[toolName] !== undefined) continue;
         const captured = nativeDefinitions.get(toolName);
         if (captured === undefined) {
-          // Honest incompatibility: never fabricate a native schema/implementation.
           throw new Error(
             `hashline-edit: cannot expose native tool ${toolName} for edit mode ${mode}: no genuine native definition was observed.`,
           );
@@ -943,19 +1218,46 @@ export function createHashlineEditHandlers(
       }
     },
     async after(event) {
+      // V2 triggers execute.after on errors too: a denied or failed native read
+      // must not stat an unapproved file, establish freshness, or reread content.
       if (!isReadTool(event.tool)) return;
-      const filePath = readArgFilePath(event.input);
-      if (filePath) {
-        const snapshot = await statSnapshot(filePath);
-        if (snapshot) fileCache.record(event.sessionID, filePath, snapshot);
+      if (event.status !== "completed" || event.result === undefined) return;
+      const baseDir = await requireLocation(event.sessionID);
+      const rawPath = readArgFilePath(event.input);
+      const targetPath =
+        baseDir !== undefined && rawPath !== undefined
+          ? normalizeTargetPath(baseDir, rawPath, deps.hostHome())
+          : undefined;
+      // A successful native read always establishes freshness (needed by the
+      // str_replace editor); anchoring additionally requires hashline mode.
+      if (targetPath !== undefined) {
+        const snapshot = await statSnapshot(targetPath);
+        if (snapshot) fileCache.record(event.sessionID, targetPath, snapshot);
       }
       const settings = await deps.settingsFor(event.sessionID);
       if (settings === undefined || !settings.enabled) return;
       if (resolveMode(event.sessionID, settings) !== "hashline_edit") return;
-      if (event.status !== "completed" || event.result === undefined) return;
+      const sourceLines =
+        targetPath === undefined ? undefined : await readSourceLinesAt(targetPath);
       const content = event.result.content;
-      if (typeof content !== "string" || !isHashlineEligibleReadOutput(content)) return;
-      event.result.content = transformReadOutput(content, await readSourceLines(event.input));
+      // Native Tool.Result.content is normalized to an array before execute.after.
+      if (typeof content === "string") {
+        if (isHashlineEligibleReadOutput(content)) {
+          event.result.content = transformReadOutput(content, sourceLines);
+        }
+        return;
+      }
+      if (!Array.isArray(content)) return;
+      let changed = false;
+      const next = content.map((part) => {
+        if (part === null || typeof part !== "object") return part;
+        const record = part as { type?: unknown; text?: unknown };
+        if (record.type !== "text" || typeof record.text !== "string") return part;
+        if (!isHashlineEligibleReadOutput(record.text)) return part;
+        changed = true;
+        return { ...record, text: transformReadOutput(record.text, sourceLines) };
+      });
+      if (changed) event.result.content = next;
     },
   };
 
@@ -1012,6 +1314,13 @@ function createConsoleLog(): HashlineEditDependencies["log"] {
   };
 }
 
+/** Narrow native client surface used only to read the trusted session location. */
+interface HashlineLocationClient {
+  readonly session: {
+    get(input: { readonly sessionID: string }): Promise<unknown>;
+  };
+}
+
 export interface HashlineEditPluginOptions {
   /** Test-only injectable runtime acquisition. Default acquires the real shared runtime. */
   acquireRuntime?: (ctx: NativeSnapshotContext) => Promise<NativeSnapshotRuntime>;
@@ -1035,9 +1344,29 @@ export function createHashlineEditPlugin(options: HashlineEditPluginOptions = {}
         // A registry read failure leaves the map empty; visibility then refuses
         // (honest incompatibility) rather than fabricating a schema.
       }
+      // The trusted invocation location is the host session's location; the
+      // plugin's own location is only a fallback when the session cannot be read.
+      let clientPromise: Promise<unknown> | undefined;
+      const locationFor = async (sessionID: string): Promise<string | undefined> => {
+        try {
+          const client = (await (clientPromise ??=
+            runtime.client())) as unknown as HashlineLocationClient;
+          const info = (await client.session.get({ sessionID })) as {
+            location?: { directory?: unknown };
+          };
+          const directory = info?.location?.directory;
+          if (typeof directory === "string" && directory.length > 0) return directory;
+        } catch {
+          // fall through to the plugin location
+        }
+        return ctx.location?.directory;
+      };
       const registration = createHashlineEditHandlers(
         {
           settingsFor: (sessionID) => resolveSettings(runtime, sessionID),
+          locationFor,
+          projectRootFor: async () => ctx.location?.project?.directory ?? ctx.location?.directory,
+          hostHome: () => process.env.OPENCODE_TEST_HOME ?? homedir(),
           permission: runtime.permissions,
           log: createConsoleLog(),
         },

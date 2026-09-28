@@ -23,6 +23,11 @@
 //   createSpecGuardHandlers - Builds native tool hook handlers with injectable dependencies.
 //   createSpecGuardPlugin - Builds the native spec-guard plugin with injectable runtime acquisition.
 //   SpecGuardPlugin - Default production native spec-guard plugin object.
+//   SpecGuardPolicyMode - Resolved mode including explicit off and unknown policy.
+//   SpecGuardBeforeEvent - Native execute.before event surface.
+//   SpecGuardAfterEvent - Native execute.after event/result surface.
+//   SpecGuardPluginOptions - Optional injectable runtime acquisition for tests.
+//   default - Default export alias of SpecGuardPlugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -30,6 +35,8 @@
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
+import { homedir } from "node:os";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   acquireNativeSnapshotRuntime,
   type NativeSnapshotContext,
@@ -80,10 +87,33 @@ export interface SpecGuardAfterEvent {
 
 export type SpecGuardHookDependencies = {
   modeFor: (sessionID: string) => Promise<SpecGuardPolicyMode>;
+  /** Trusted native invocation location (absolute directory) for a session, if any. */
+  locationFor: (sessionID: string) => Promise<string | undefined>;
+  /** Trusted host home used to expand a leading `~`. */
+  readonly hostHome: () => string;
   cache: Pick<SpecLintCache, "lint">;
   readFile: (path: string) => Promise<string | undefined>;
   log: (level: "info" | "warn", message: string, extra?: Record<string, unknown>) => Promise<void>;
 };
+
+/**
+ * Resolve one caller artifact path against the trusted session location so a
+ * relative `plan.xml` sibling lookup reads the intended location. Without a
+ * location the path is kept verbatim (absolute paths still work).
+ */
+async function resolveGuardPath(
+  deps: SpecGuardHookDependencies,
+  sessionID: string,
+  callerPath: string,
+): Promise<string> {
+  const home = deps.hostHome();
+  if (callerPath === "~") return resolve(home);
+  const expanded = callerPath.startsWith("~/") ? join(home, callerPath.slice(2)) : callerPath;
+  if (isAbsolute(expanded)) return resolve(expanded);
+  const baseDir = await deps.locationFor(sessionID);
+  if (typeof baseDir !== "string" || baseDir.length === 0) return expanded;
+  return resolve(baseDir, expanded);
+}
 
 export interface SpecGuardHandlers {
   before(event: SpecGuardBeforeEvent): Promise<void>;
@@ -256,8 +286,10 @@ export function createSpecGuardHandlers(deps: SpecGuardHookDependencies): SpecGu
       const mode = await deps.modeFor(event.sessionID);
       if (mode === "off") return;
       await guard("before-write inspection", async () => {
-        const path = specGuardPathFromArgs(event.input);
-        if (!path || !isSpecGuardTargetPath(path)) return;
+        const rawPath = specGuardPathFromArgs(event.input);
+        if (!rawPath) return;
+        const path = await resolveGuardPath(deps, event.sessionID, rawPath);
+        if (!isSpecGuardTargetPath(path)) return;
         if (mode === "unknown") {
           throw new Error(
             `${SPEC_GUARD_VERDICT_TAG} unknown-policy: refusing to mutate ${path} because no spec-guard policy capture is bound to this session.`,
@@ -284,8 +316,10 @@ export function createSpecGuardHandlers(deps: SpecGuardHookDependencies): SpecGu
       if (event.status !== "completed" || event.result === undefined) return;
       await guard("output annotation", async () => {
         const result = event.result as SpecGuardNativeResult;
-        const path = specGuardPathFromArgs(event.input);
-        if (!path || !isSpecGuardTargetPath(path)) return;
+        const rawPath = specGuardPathFromArgs(event.input);
+        if (!rawPath) return;
+        const path = await resolveGuardPath(deps, event.sessionID, rawPath);
+        if (!isSpecGuardTargetPath(path)) return;
         if (mode === "unknown") {
           throw new Error(
             `${SPEC_GUARD_VERDICT_TAG} unknown-policy: refusing to hand off ${path} because no spec-guard policy capture is bound to this session.`,
@@ -379,8 +413,26 @@ export function createSpecGuardPlugin(options: SpecGuardPluginOptions = {}): Plu
         options.acquireRuntime ?? ((c: NativeSnapshotContext) => acquireNativeSnapshotRuntime(c));
       const runtime = await acquire(ctx as unknown as NativeSnapshotContext);
       const cache = await createSpecLintCache();
+      let clientPromise: Promise<unknown> | undefined;
+      const locationFor = async (sessionID: string): Promise<string | undefined> => {
+        try {
+          const client = (await (clientPromise ??= runtime.client())) as unknown as {
+            session: { get(input: { sessionID: string }): Promise<unknown> };
+          };
+          const info = (await client.session.get({ sessionID })) as {
+            location?: { directory?: unknown };
+          };
+          const directory = info?.location?.directory;
+          if (typeof directory === "string" && directory.length > 0) return directory;
+        } catch {
+          // fall through to the plugin location
+        }
+        return ctx.location?.directory;
+      };
       const handlers = createSpecGuardHandlers({
         modeFor: (sessionID) => resolveFamilyMode(runtime, sessionID),
+        locationFor,
+        hostHome: () => process.env.OPENCODE_TEST_HOME ?? homedir(),
         cache,
         readFile: readTextFile,
         log: createConsoleLog(),

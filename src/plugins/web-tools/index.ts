@@ -21,6 +21,8 @@
 //   WebToolsPluginOptions - Optional injectable runtime acquisition for tests.
 //   createWebToolsPlugin - Native plugin factory; the default export acquires the real shared runtime.
 //   WebToolsPlugin - Default production native web-tools plugin object.
+//   NativeToolDefinition - Captured genuine native tool description/input schema.
+//   default - Default export alias of WebToolsPlugin.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

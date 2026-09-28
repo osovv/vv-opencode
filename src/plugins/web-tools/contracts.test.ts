@@ -15,11 +15,12 @@
 //   propertiesOf - Narrow a projection to its properties record.
 //   createContext - Build a tool execution context fixture.
 //   withFetch - Temporarily install a deterministic global fetch fixture.
-//   structuredResult - Narrow a ToolResult to its structured form.
 //   searchAccepts - Representative accepted web_search fixtures.
 //   searchRejects - Representative rejected web_search fixtures.
 //   fetchAccepts - Representative accepted web_fetch fixtures.
 //   fetchRejects - Representative rejected web_fetch fixtures.
+//   RecordingPermission - Recording resource permission guard.
+//   createPermission - Build a recording resource permission guard.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

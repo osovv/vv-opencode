@@ -19,6 +19,7 @@
 //   FrameRestoreState - Persistent per-connection frame carries with terminal-boundary reset.
 //   createFrameRestoreState - Build per-connection frame restore state.
 //   restoreProviderFrame - Restore one WebSocket TEXT frame using per-lane carries.
+//   createSseByteTransform - Byte-level SSE transform stream restoring split placeholders.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

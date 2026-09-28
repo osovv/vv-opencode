@@ -16,6 +16,10 @@
 //   createHarness - Build a native plugin harness with per-session policy and recording hooks.
 //   createToolContext - Build a pinned native tool execute context fixture.
 //   disabledConfig - Build a config with web-tools explicitly disabled.
+//   AddedTool - Registered native tool fixture.
+//   NativeSessionEvent - Native session context event fixture.
+//   SessionHandler - Native session hook handler fixture.
+//   createPermission - Build a recording resource permission guard.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

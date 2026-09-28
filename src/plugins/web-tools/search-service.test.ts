@@ -13,6 +13,7 @@
 //   createContext - Build a pinned native tool execute context fixture.
 //   createPermission - Build a recording permission guard fixture.
 //   withFetch - Temporarily install a deterministic global fetch fixture.
+//   RecordingPermission - Recording resource permission guard.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

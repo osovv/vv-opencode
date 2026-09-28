@@ -15,6 +15,8 @@
 //   SpecGuardModeLike - Mode union accepted by the fixture.
 //   makeHandlers - Builds native hook handlers with injected mode, files, cache, and log.
 //   readEvent - Builds a native completed read event carrying a mutable result.
+//   editEvent - Build a native completed edit event.
+//   writeBefore - Build a native write execute.before event.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -52,6 +54,8 @@ async function makeHandlers(
   });
   const handlers = createSpecGuardHandlers({
     modeFor: async () => mode,
+    locationFor: async () => undefined,
+    hostHome: () => "/home/test",
     cache,
     readFile: async (path) => files[path],
     log: async (_level, message) => {
@@ -101,6 +105,49 @@ describe("path gating", () => {
     expect(specGuardPathFromArgs({ path: "a.xml" })).toBe("a.xml");
     expect(specGuardPathFromArgs({})).toBeUndefined();
     expect(specGuardPathFromArgs(undefined)).toBeUndefined();
+  });
+});
+
+describe("location binding", () => {
+  test("resolves relative spec/plan paths against the trusted session location", async () => {
+    const cache = await createSpecLintCache({
+      cacheRoot: join(await mkdtemp(join(tmpdir(), "spec-guard-")), "lint"),
+    });
+    const seen: string[] = [];
+    const handlers = createSpecGuardHandlers({
+      modeFor: async () => "warn",
+      locationFor: async (sessionID) => (sessionID === "s1" ? "/location/one" : "/location/two"),
+      hostHome: () => "/home/test",
+      cache,
+      readFile: async (path) => {
+        seen.push(path);
+        return VALID_SPEC;
+      },
+      log: async () => {},
+    });
+    const result = { content: VALID_SPEC };
+    await handlers.after({
+      tool: "read",
+      sessionID: "s1",
+      input: { path: ".vvoc/specs/2026-08-29-cache/spec.xml" },
+      status: "completed",
+      result,
+    });
+    expect(seen).toContain("/location/one/.vvoc/specs/2026-08-29-cache/spec.xml");
+    expect(result.content).toContain(SPEC_GUARD_VERDICT_TAG);
+
+    // The plan sibling is resolved inside the same location.
+    seen.length = 0;
+    const planResult = { content: "applied" };
+    await handlers.after({
+      tool: "edit",
+      sessionID: "s2",
+      input: { path: ".vvoc/specs/2026-08-29-cache/plan.xml" },
+      status: "completed",
+      result: planResult,
+    });
+    expect(seen).toContain("/location/two/.vvoc/specs/2026-08-29-cache/plan.xml");
+    expect(seen).toContain("/location/two/.vvoc/specs/2026-08-29-cache/spec.xml");
   });
 });
 
@@ -211,6 +258,8 @@ describe("fail-open degradation", () => {
     });
     const handlers = createSpecGuardHandlers({
       modeFor: async () => "enforce",
+      locationFor: async () => undefined,
+      hostHome: () => "/home/test",
       cache,
       readFile: async () => {
         throw new Error("boom");
