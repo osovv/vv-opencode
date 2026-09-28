@@ -1,7 +1,7 @@
 // FILE: scripts/tui-local.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify local pre-release TUI argument parsing, conservative config replacement, and isolated child environment construction.
+//   PURPOSE: Verify local native TUI argument parsing, conservative cli.json plugin merging, and isolated child environment construction.
 //   SCOPE: Pure helper tests; no OpenCode process launch or user config mutation.
 //   DEPENDS: [bun:test, scripts/tui-local.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
@@ -10,18 +10,18 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   [test scenarios] - Local TUI launcher coverage is expressed through module-level tests.
+//   [test scenarios] - Local native TUI launcher coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Added deterministic coverage for the local pre-release TUI launcher.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Rewrote launcher coverage for native cli.json plugin merging.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import {
   createLocalTuiEnvironment,
   parseLocalTuiArguments,
-  renderLocalTuiConfig,
+  renderLocalCliConfig,
 } from "./tui-local.ts";
 
 describe("local TUI arguments", () => {
@@ -50,46 +50,49 @@ describe("local TUI arguments", () => {
   });
 });
 
-describe("local TUI config", () => {
-  test("replaces the managed package with local dist while preserving tuple options and comments", () => {
-    const output = renderLocalTuiConfig(
+describe("local cli.json", () => {
+  test("appends the local plugin directory, drops the managed entry, and preserves unrelated settings", () => {
+    const output = renderLocalCliConfig(
       `{
   // keep the selected theme
-  "theme": "system",
-  "plugin": [
-    ["@osovv/vv-opencode@1.1.3", { "enabled": true }],
-    "other-plugin"
+  "theme": { "name": "system" },
+  "plugins": [
+    "@osovv/vv-opencode@1.7.0",
+    { "package": "other-plugin", "options": { "flag": true } }
   ]
 }\n`,
-      "file:///workspace/vv-opencode/dist/tui.js",
+      "file:///tmp/vvoc-local-tui/plugin",
     );
 
     expect(output).toContain("// keep the selected theme");
-    expect(output).toContain('"theme": "system"');
-    expect(output).toContain('"file:///workspace/vv-opencode/dist/tui.js"');
-    expect(output).toContain('"enabled": true');
+    expect(output).toContain('"name": "system"');
     expect(output).toContain('"other-plugin"');
-    expect(output).not.toContain("@osovv/vv-opencode@1.1.3");
+    expect(output).toContain('"flag": true');
+    expect(output).toContain('"file:///tmp/vvoc-local-tui/plugin"');
+    expect(output).not.toContain("@osovv/vv-opencode@1.7.0");
+  });
+
+  test("creates a valid plugins list when no config exists", () => {
+    const output = renderLocalCliConfig(undefined, "file:///tmp/plugin");
+    expect(JSON.parse(output)).toEqual({ plugins: ["file:///tmp/plugin"] });
   });
 });
 
 describe("local TUI environment", () => {
-  test("isolates native TUI discovery while preserving selected runtime and vvoc paths", () => {
+  test("isolates the native config home while preserving selected runtime and vvoc paths", () => {
     const env = createLocalTuiEnvironment({
       baseEnv: { HOME: "/home/test", XDG_CONFIG_HOME: "/home/test/.config" },
       launchEnv: {
         OPENCODE_CONFIG: "/home/test/.config/opencode/opencode.json",
-        OPENCODE_TUI_CONFIG: "/home/test/.config/opencode/tui.json",
         VVOC_CONFIG: "/home/test/.config/vvoc/vvoc.json",
       },
       isolatedConfigHome: "/tmp/vvoc-local-tui",
-      tuiConfigPath: "/tmp/vvoc-local-tui/opencode/tui.json",
     });
 
     expect(env.HOME).toBe("/home/test");
     expect(env.XDG_CONFIG_HOME).toBe("/tmp/vvoc-local-tui");
     expect(env.OPENCODE_CONFIG).toBe("/home/test/.config/opencode/opencode.json");
     expect(env.VVOC_CONFIG).toBe("/home/test/.config/vvoc/vvoc.json");
-    expect(env.OPENCODE_TUI_CONFIG).toBe("/tmp/vvoc-local-tui/opencode/tui.json");
+    expect(env.OPENCODE_TUI_CONFIG).toBeUndefined();
   });
 });

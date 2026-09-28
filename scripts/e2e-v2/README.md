@@ -44,14 +44,16 @@ Override the binary with `VVOC_E2E_V2_HOST`; override the scratch root with
 ```bash
 bun scripts/e2e-v2.ts --core    # packed core real-host tier (this task)
 bun scripts/e2e-v2.ts --list    # print the parity inventory by phase/status
-bun scripts/e2e-v2.ts --tui     # truthful scaffold for T-008/T-009 (exits 2)
+bun scripts/e2e-v2.ts --tui     # real-PTY TUI tier for the actual built TUI
 bun scripts/e2e-v2.ts           # full parity: refuses explicitly until T-004..T-010
 bun scripts/e2e-v2.ts --core --json --keep   # JSON summary, keep the scratch dir
 ```
 
-`--core` exits non-zero on a missing/invalid host or any failed case. The default
-full mode and the TUI scaffold exit non-zero on purpose: a reduced core matrix is
-never reported as full parity.
+`--core` exits non-zero on a missing/invalid host or any failed case. `--tui`
+runs the actual built TUI inside a real PTY against an isolated standalone host
+and exits non-zero unless every observed scenario passes. The default full mode
+still exits non-zero on purpose: a reduced core matrix is never reported as full
+parity.
 
 > `package.json` (`bun run e2e:v2`) is not modified by this task; wiring the script
 > is part of T-009. Until then use the direct `bun scripts/e2e-v2.ts` command.
@@ -100,8 +102,14 @@ parity (T-005/T-009). Same-model switches emit no native event and are not a
 criterion. The `ordering-first-accepted` case controls same-session input ordering
 through a fixture preparation delay after the real prompt hook (it never implements
 admission); equal-time ordering **across** sessions remains covered by engine and
-integration tests rather than forced on the host. The TUI mode is a truthful
-scaffold, and `--full` still refuses until every parity group lands.
+integration tests rather than forced on the host. The `--tui` tier drives the
+actual built TUI in a real PTY (a narrow fixture composing the actual built
+`dist/tui.js` plus the actual server model-roles plugin as the RPC bridge) and
+reports only observed scenarios: `/context` Overview/Tools/MCP navigation,
+narrow resize, key-driven scrolling, close/reopen, a visible peak-hours banner,
+cache indicator and branding footer, a controlled collection failure without the
+server bridge, and explicit-disabled negative controls. `--full` still refuses
+until every parity group lands.
 
 ## Module map
 
@@ -114,5 +122,5 @@ scaffold, and `--full` still refuses until every parity group lands.
 | `fixtures/model-catalog.json` | Deterministic loopback model catalog |
 | `cases.ts` | Core case descriptors and observable assertions |
 | `core.ts` | Core orchestration, driver, and evidence writer |
-| `tui.ts` | TUI scaffold (non-passing) |
+| `tui.ts` | Real-PTY TUI tier (actual built TUI, screen-buffer assertions) |
 | `parity.json` | Baseline surface inventory with phase and status |

@@ -3,7 +3,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Command-line entry for the v2 real-host acceptance harness with explicit core, full, TUI, and inventory modes.
-//   SCOPE: Argument parsing, parity inventory listing, explicit full-mode refusal until all parity groups exist, truthful TUI scaffold, and delegation to the packed core run with bounded stdout and nonzero exit codes. It has no import-time side effects.
+//   SCOPE: Argument parsing, parity inventory listing, explicit full-mode refusal until all parity groups exist, delegation to the real-PTY TUI tier, and delegation to the packed core run with bounded stdout and nonzero exit codes. It has no import-time side effects.
 //   DEPENDS: [node:fs, node:path, scripts/e2e-v2.ts, scripts/e2e-v2/core.ts, scripts/e2e-v2/tui.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
@@ -19,14 +19,15 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-003 - Added the mode-aware harness entry that refuses full parity until T-004..T-010 land.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Replaced the non-passing TUI scaffold with the real-PTY `--tui` tier and added an injectable runTui dependency.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 - Added the mode-aware harness entry that refuses full parity until T-004..T-010 land.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCore, requireHostBinary, type CoreRunSummary } from "./e2e-v2/core.js";
-import { runTuiAcceptance } from "./e2e-v2/tui.js";
+import { runTuiAcceptance, type TuiAcceptanceResult } from "./e2e-v2/tui.js";
 
 /** Selected harness mode. */
 export type HarnessMode = "list" | "core" | "full" | "tui";
@@ -42,6 +43,12 @@ export interface CliDeps {
     readonly evidencePath: string;
     readonly keepScratch?: boolean;
   }) => Promise<CoreRunSummary>;
+  readonly runTui?: ((options: {
+    readonly workspaceRoot: string;
+    readonly hostBinary?: string | undefined;
+    readonly scratchBase: string;
+    readonly keepScratch?: boolean;
+  }) => Promise<TuiAcceptanceResult>) | undefined;
   readonly hostBinary?: string | undefined;
   readonly requireHost?: (() => string) | undefined;
   readonly scratchBase?: string | undefined;
@@ -102,10 +109,20 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     return 0;
   }
   if (mode === "tui") {
-    const result = runTuiAcceptance();
+    const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
+    const result = await (deps.runTui ?? runTuiAcceptance)({
+      workspaceRoot: deps.workspaceRoot,
+      hostBinary: deps.hostBinary,
+      scratchBase,
+      keepScratch: keep,
+    });
     deps.stdout(JSON.stringify(result, null, 2));
-    deps.stdout("tui acceptance is not implemented; refusing to report success (T-008/T-009)");
-    return 2;
+    if (!result.ok) {
+      deps.stdout(result.error ?? result.note);
+      return 2;
+    }
+    deps.stdout(result.note);
+    return 0;
   }
   if (mode === "full") {
     deps.stdout(

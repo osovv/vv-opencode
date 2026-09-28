@@ -162,7 +162,7 @@ describe("harness argument and mode contract", () => {
     expect(lines.join("\n")).toContain("full parity acceptance is not implemented");
   });
 
-  test("tui mode is a truthful non-passing scaffold", async () => {
+  test("tui mode reports success only for observed passing scenarios", async () => {
     const lines: string[] = [];
     const status = await runCli(["--tui"], {
       workspaceRoot: process.cwd(),
@@ -170,9 +170,36 @@ describe("harness argument and mode contract", () => {
       runCore: async () => {
         throw new Error("runCore must not be called in tui mode");
       },
+      runTui: async () => ({
+        ok: true,
+        implemented: true,
+        sourceCommit: "cd9a14a6b688d4021bee381dfd39d2cef9c0f862",
+        scenarios: [{ id: "startup", status: "pass", detail: "rendered" }],
+        note: "Observed 1 PTY scenario.",
+      }),
+    });
+    expect(status).toBe(0);
+    expect(lines.join("\n")).toContain("Observed 1 PTY scenario");
+  });
+
+  test("tui mode exits 2 when a real scenario fails", async () => {
+    const lines: string[] = [];
+    const status = await runCli(["--tui"], {
+      workspaceRoot: process.cwd(),
+      stdout: (line) => lines.push(line),
+      runCore: async () => {
+        throw new Error("runCore must not be called in tui mode");
+      },
+      runTui: async () => ({
+        ok: false,
+        implemented: true,
+        sourceCommit: "cd9a14a6b688d4021bee381dfd39d2cef9c0f862",
+        scenarios: [{ id: "startup", status: "fail", detail: "no home" }],
+        note: "TUI did not reach its home screen.",
+      }),
     });
     expect(status).toBe(2);
-    expect(lines.join("\n")).toContain("tui acceptance is not implemented");
+    expect(lines.join("\n")).toContain("did not reach its home screen");
   });
 
   test("list mode prints the parity inventory without spawning", async () => {

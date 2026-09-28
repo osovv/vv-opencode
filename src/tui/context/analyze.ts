@@ -1,77 +1,85 @@
 // FILE: src/tui/context/analyze.ts
-// VERSION: 1.1.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Derive measured usage plus reconciled category, per-tool, and per-MCP active context attribution from observable OpenCode session data.
-//   SCOPE: Compaction cutoff, provider usage baseline, context-limit percentages, skill/tool/message categorization, deterministic MCP ownership, explicit schema observability, residual unknown context, and sorted detail aggregates.
-//   DEPENDS: [@opencode-ai/sdk/v2, src/tui/context/estimate.ts, src/tui/context/types.ts]
+//   PURPOSE: Derive honest measured usage plus reconciled observed-context and per-tool attribution from native tagged session data, keeping the registered catalog budget separate.
+//   SCOPE: Native compaction cutoff via message order/timestamps, provider-reported usage with per-field unknown semantics and explicit model/variant + compaction relation, context-limit percentages, skill/tool/message/attachment categorization, deterministic non-guessing tool ownership, residual unknown context, and sorted detail aggregates. Unknown limits and missing usage stay unknown rather than zero.
+//   DEPENDS: [src/tui/context/estimate.ts, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   analyzeContext - Produce the complete overview and detailed context analysis rendered by the TUI plugin.
-//   selectActiveMessages - Keep only the latest compaction summary and subsequent turns.
+//   analyzeContext - Produce the overview and detailed native context analysis rendered by the TUI plugin.
 //   createTokenMetric - Pair estimated tokens with a percentage only when a positive context limit exists.
-//   sanitizeMcpName - Mirror OpenCode's MCP name sanitization contract.
-//   classifyToolSource - Classify known tools and uniquely matched MCP prefixes without guessing.
-//   ContextToolClassification - Source result plus explicit ambiguous MCP candidates.
+//   classifyToolSource - Classify known native built-in/vvoc tools and leave everything else explicitly unattributed.
 //   compareToolUsage - Sort tool detail by combined total descending and ID ascending.
+//   findCompactionCutoff - Latest completed compaction message with its active-context index.
+//   sameModelRef - True when two provider/model/variant references refer to the same real selection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Classified the delegated control tools as vvoc-managed.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 attempt 3 - Measured usage now matches the pinned native contextUsage sum of all five token fields (input+output+reasoning+cacheRead+cacheWrite).]
 // END_CHANGE_SUMMARY
 
-import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2";
 import { estimateTextTokens, estimateValueTokens } from "./estimate.js";
 import type {
   ContextAnalysis,
   ContextAnalysisInput,
   ContextCategory,
   ContextCategoryId,
-  ContextMcpServer,
-  ContextMcpUsage,
+  ContextCompactionRelation,
+  ContextContent,
+  ContextMeasuredUsage,
+  ContextMessage,
+  ContextModel,
+  ContextModelRef,
   ContextTokenMetric,
   ContextToolAttribution,
   ContextToolSource,
   ContextToolUsage,
 } from "./types.js";
 
+/**
+ * Native built-in tool names (core/src/tool/plugin/*). Unknown tools are never
+ * classified as built-in; they stay explicitly unattributed.
+ */
 const BUILTIN_TOOL_IDS = new Set([
-  "bash",
+  "read",
+  "write",
+  "edit",
+  "patch",
   "glob",
   "grep",
-  "list",
-  "read",
+  "shell",
+  "subagent",
+  "webfetch",
+  "websearch",
   "question",
   "skill",
-  "task",
-  "todowrite",
-  "webfetch",
-  "write",
+  "execute",
+  "list_mcp_resources",
+  "read_mcp_resource",
+  "opencode",
+  "models",
+  "session_move",
+  "session_rename",
 ]);
 
 const VVOC_TOOL_IDS = new Set([
-  "edit",
+  "web_search",
+  "web_fetch",
   "work_item_open",
   "work_item_list",
   "work_item_close",
   "work_item_decide",
   "work_checkpoint",
-  "web_search",
-  "web_fetch",
 ]);
-
-const MAX_ATTRIBUTION_WARNINGS = 3;
 
 const CATEGORY_LABELS: Record<ContextCategoryId, string> = {
   system: "Agent/system instructions",
   "skill-catalog": "Skill catalog",
   "loaded-skills": "Loaded skill results",
-  "builtin-tool-schemas": "Built-in tool schemas",
-  "vvoc-tool-schemas": "vvoc tool schemas",
-  "external-tool-schemas": "External/plugin/MCP schemas",
   "user-messages": "User messages",
   "assistant-messages": "Assistant messages",
   "tool-results": "Tool calls and results",
@@ -84,82 +92,67 @@ type CategoryCounter = Record<Exclude<ContextCategoryId, "provider-only">, numbe
 
 type ToolUsageDraft = {
   id: string;
+  source: ContextToolSource;
+  codeMode: boolean;
   schemaListed: boolean;
   schemaTokens: number;
   historyTokens: number;
   calls: number;
 };
 
-export type ContextToolClassification = {
-  source: ContextToolSource;
-  ambiguousServers?: string[];
-};
-
 // START_BLOCK_CONTEXT_ANALYSIS
 export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
-  const activeMessages = selectActiveMessages(input.messages);
-  const activeMessageIDs = new Set(activeMessages.map((message) => message.id));
-  const activeParts = input.parts.filter((part) => activeMessageIDs.has(part.messageID));
-  const latestAssistant = findLatestAssistant(activeMessages);
-  const latestUser = findLatestUser(activeMessages);
+  const compaction = findCompactionCutoff(input.activeMessages);
+  const compacted =
+    compaction !== undefined ||
+    (input.historyMessages.length > 0 &&
+      input.activeMessages.length < input.historyMessages.length);
+  const latestAssistant = findLatestAssistant(input.activeMessages);
+  const latestUser = findLatestUser(input.activeMessages);
   const currentAgent = latestAssistant?.agent ?? latestUser?.agent;
   const counters = createCategoryCounter();
 
-  const agentPrompt = input.agents.find((agent) => agent.name === currentAgent)?.prompt;
+  // Native agents carry both an id and a display name; message.agent is the id.
+  const agentPrompt = input.agents.find((agent) => agent.id === currentAgent)?.system;
   counters.system += estimateTextTokens(agentPrompt);
-  counters.system += estimateTextTokens(latestUser?.system);
 
   for (const skill of input.skills) {
     counters["skill-catalog"] += estimateValueTokens({
       name: skill.name,
       description: skill.description,
-      location: skill.location,
+      path: skill.path,
     });
   }
 
+  // Registered catalog schemas are a budget for the Tools tab, never part of
+  // the observed-context subtotal. They are collected here and kept separate.
   const toolDrafts = new Map<string, ToolUsageDraft>();
+  let catalogSchemaBudget = 0;
   for (const tool of input.tools) {
-    const draft = getToolDraft(toolDrafts, tool.id);
-    draft.schemaListed = true;
-    draft.schemaTokens = estimateValueTokens({
-      id: tool.id,
-      description: tool.description,
-      parameters: tool.parameters,
-    });
-  }
-
-  const messageByID = new Map(activeMessages.map((message) => [message.id, message] as const));
-  const toolPartsByCall = new Map<string, Extract<Part, { type: "tool" }>>();
-  for (const part of activeParts) {
-    if (part.type === "tool") {
-      toolPartsByCall.set(`${part.tool}\u0000${part.callID}`, part);
-      continue;
+    const draft = getToolDraft(toolDrafts, tool.effectiveID, tool);
+    draft.schemaListed = tool.status === "registered";
+    if (tool.status === "registered") {
+      const tokens = estimateValueTokens({
+        id: tool.effectiveID,
+        description: tool.description,
+        namespace: tool.namespace,
+        parameters: tool.inputJSONSchema,
+      });
+      draft.schemaTokens = tokens;
+      catalogSchemaBudget += tokens;
     }
-    countPart(part, messageByID.get(part.messageID), counters);
   }
 
-  for (const part of toolPartsByCall.values()) {
-    const historyTokens = countToolPart(part, counters);
-    const draft = getToolDraft(toolDrafts, part.tool);
-    draft.calls += 1;
-    draft.historyTokens += historyTokens;
+  for (const message of input.activeMessages) {
+    countMessage(message, counters, toolDrafts);
   }
 
-  const contextLimit = normalizeContextLimit(input.model?.contextLimit);
-  const detail = buildToolAttribution(
-    toolDrafts,
-    input.mcpServers,
-    contextLimit,
-    input.mcpSchemaCatalogAvailable ?? false,
-  );
-  counters["builtin-tool-schemas"] =
-    detail.attribution.reconciliation.schema.builtin.estimatedTokens;
-  counters["vvoc-tool-schemas"] = detail.attribution.reconciliation.schema.vvoc.estimatedTokens;
-  counters["external-tool-schemas"] =
-    detail.attribution.reconciliation.schema.external.estimatedTokens;
-  counters["tool-results"] = detail.attribution.reconciliation.history.toolResults.estimatedTokens;
-  counters["loaded-skills"] =
-    detail.attribution.reconciliation.history.loadedSkills.estimatedTokens;
+  // Unknown limits stay unknown; only the selected model's configured limit may
+  // be applied, and only to usage attributed to that exact model/variant.
+  const contextLimit = normalizeContextLimit(input.selectedModel?.contextLimit);
+  const attribution = buildToolAttribution(toolDrafts, contextLimit);
+  counters["tool-results"] = attribution.reconciliation.history.toolResults.estimatedTokens;
+  counters["loaded-skills"] = attribution.reconciliation.history.loadedSkills.estimatedTokens;
 
   const categories = buildKnownCategories(counters, contextLimit);
   const estimatedKnownTokens = categories.reduce(
@@ -167,50 +160,49 @@ export function analyzeContext(input: ContextAnalysisInput): ContextAnalysis {
     0,
   );
   const measured = latestAssistant
-    ? createMeasuredUsage(latestAssistant, input.model?.contextLimit)
+    ? createMeasuredUsage(latestAssistant, input.activeMessages, input.selectedModel, contextLimit)
     : undefined;
-  const providerOnlyTokens = measured ? Math.max(0, measured.usedTokens - estimatedKnownTokens) : 0;
-  const estimationDriftTokens = measured
-    ? Math.max(0, estimatedKnownTokens - measured.usedTokens)
-    : 0;
+  const providerOnlyTokens =
+    measured?.usedTokens === undefined
+      ? 0
+      : Math.max(0, measured.usedTokens - estimatedKnownTokens);
+  const estimationDriftTokens =
+    measured?.usedTokens === undefined
+      ? 0
+      : Math.max(0, estimatedKnownTokens - measured.usedTokens);
 
   if (providerOnlyTokens > 0) {
     categories.push({
       id: "provider-only",
       label: CATEGORY_LABELS["provider-only"],
       ...createTokenMetric(providerOnlyTokens, contextLimit),
-      detail: "Measured provider usage not attributable through public TUI/SDK data",
+      detail: "Measured provider usage not attributable through observable native data",
       source: "provider-residual",
     });
   }
 
   return {
     sessionID: input.sessionID,
+    selectedModel: input.selectedModel,
+    historyModel: latestAssistant === undefined ? undefined : modelFromRef(latestAssistant.model),
     agent: currentAgent,
-    model: input.model,
     measured,
     categories,
     estimatedKnownTokens,
     estimatedTotalTokens: estimatedKnownTokens + providerOnlyTokens,
     estimationDriftTokens,
-    compacted: activeMessages.length < input.messages.length,
-    activeMessageCount: activeMessages.length,
+    ...(input.tools.length === 0
+      ? {}
+      : { catalogSchemaBudget: createTokenMetric(catalogSchemaBudget, contextLimit) }),
+    compacted,
+    ...(compaction === undefined ? {} : { compactionCutoffId: compaction.message.id }),
+    activeMessageCount: input.activeMessages.length,
+    totalMessageCount: input.historyMessages.length,
     mcpServers: [...input.mcpServers],
-    toolAttribution: detail.attribution,
-    warnings: [...(input.warnings ?? []), ...detail.warnings],
+    toolCatalogStatus: input.toolCatalogStatus,
+    toolAttribution: attribution,
+    warnings: [...(input.warnings ?? []), ...buildCatalogWarnings(input)],
   };
-}
-
-export function selectActiveMessages(messages: readonly Message[]): readonly Message[] {
-  let summaryIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.role === "assistant" && message.summary === true) {
-      summaryIndex = index;
-      break;
-    }
-  }
-  return summaryIndex >= 0 ? messages.slice(summaryIndex) : messages;
 }
 // END_BLOCK_CONTEXT_ANALYSIS
 
@@ -225,37 +217,23 @@ export function createTokenMetric(
   return { estimatedTokens: tokens, percent: (tokens / limit) * 100 };
 }
 
-export function sanitizeMcpName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-export function classifyToolSource(
-  toolID: string,
-  mcpServers: readonly ContextMcpServer[],
-): ContextToolClassification {
-  if (VVOC_TOOL_IDS.has(toolID)) return { source: { kind: "vvoc" } };
-  if (BUILTIN_TOOL_IDS.has(toolID)) return { source: { kind: "builtin" } };
-
-  const uniqueServers = new Map(mcpServers.map((server) => [server.name, server] as const));
-  const candidates = [...uniqueServers.values()]
-    .map((server) => ({ name: server.name, prefix: `${sanitizeMcpName(server.name)}_` }))
-    .filter((candidate) => toolID.startsWith(candidate.prefix));
-
-  if (candidates.length === 0) return { source: { kind: "other" } };
-
-  const longestLength = Math.max(...candidates.map((candidate) => candidate.prefix.length));
-  const longest = candidates
-    .filter((candidate) => candidate.prefix.length === longestLength)
-    .sort((left, right) => compareText(left.name, right.name));
-
-  if (longest.length !== 1) {
-    return {
-      source: { kind: "other" },
-      ambiguousServers: longest.map((candidate) => candidate.name),
-    };
-  }
-
-  return { source: { kind: "mcp", server: longest[0]!.name } };
+/**
+ * Classify known native built-in and vvoc tools; every other tool is left
+ * explicitly unattributed. The registered namespace is a hint only and is never
+ * treated as authoritative MCP server provenance.
+ */
+export function classifyToolSource(tool: {
+  effectiveID: string;
+  name: string;
+  namespace?: string;
+}): ContextToolSource {
+  const id = tool.effectiveID.toLowerCase();
+  const name = tool.name.toLowerCase();
+  if (VVOC_TOOL_IDS.has(id) || VVOC_TOOL_IDS.has(name)) return { kind: "vvoc" };
+  if (BUILTIN_TOOL_IDS.has(id) || BUILTIN_TOOL_IDS.has(name)) return { kind: "builtin" };
+  return tool.namespace === undefined
+    ? { kind: "other" }
+    : { kind: "other", namespace: tool.namespace };
 }
 
 export function compareToolUsage(left: ContextToolUsage, right: ContextToolUsage): number {
@@ -263,119 +241,89 @@ export function compareToolUsage(left: ContextToolUsage, right: ContextToolUsage
   return totalDelta || compareText(left.id, right.id);
 }
 
+/** Latest completed compaction message with its active-context index. */
+export function findCompactionCutoff(
+  messages: readonly ContextMessage[],
+):
+  | { readonly message: Extract<ContextMessage, { kind: "compaction" }>; readonly index: number }
+  | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.kind === "compaction" && message.status === "completed") {
+      return { message, index };
+    }
+  }
+  return undefined;
+}
+
 function buildToolAttribution(
   drafts: ReadonlyMap<string, ToolUsageDraft>,
-  mcpServers: readonly ContextMcpServer[],
   contextLimit: number | undefined,
-  mcpSchemaCatalogAvailable: boolean,
-): { attribution: ContextToolAttribution; warnings: string[] } {
-  const serverByName = new Map(mcpServers.map((server) => [server.name, server] as const));
-  const ambiguities = new Map<string, string[]>();
+): ContextToolAttribution {
   const tools = [...drafts.values()]
     .map((draft): ContextToolUsage => {
-      const classification = classifyToolSource(draft.id, mcpServers);
-      if (classification.ambiguousServers) {
-        ambiguities.set(draft.id, classification.ambiguousServers);
-      }
-      const server =
-        classification.source.kind === "mcp"
-          ? serverByName.get(classification.source.server)
-          : undefined;
-      const schema = resolveToolSchema(
-        draft,
-        classification.source,
-        server,
-        mcpSchemaCatalogAvailable,
-      );
+      // Per-row schema availability: a partial catalog does not make a row whose
+      // own schema converted unknown.
+      const schemaKnown = draft.schemaListed;
       return {
         id: draft.id,
-        source: classification.source,
+        source: draft.source,
+        codeMode: draft.codeMode,
         calls: draft.calls,
-        schemaKnown: schema.known,
-        schema: createTokenMetric(schema.tokens, contextLimit),
+        schemaKnown,
+        schema: createTokenMetric(schemaKnown ? draft.schemaTokens : 0, contextLimit),
         history: createTokenMetric(draft.historyTokens, contextLimit),
-        total: createTokenMetric(schema.tokens + draft.historyTokens, contextLimit),
+        total: createTokenMetric(
+          (schemaKnown ? draft.schemaTokens : 0) + draft.historyTokens,
+          contextLimit,
+        ),
       };
     })
     .sort(compareToolUsage);
 
   const schemaBuiltin = sumTools(tools, (tool) => tool.source.kind === "builtin", "schema");
   const schemaVvoc = sumTools(tools, (tool) => tool.source.kind === "vvoc", "schema");
-  const schemaExternal = sumTools(
-    tools,
-    (tool) => tool.source.kind === "mcp" || tool.source.kind === "other",
-    "schema",
-  );
+  const schemaExternal = sumTools(tools, (tool) => tool.source.kind === "other", "schema");
   const historyToolResults = sumTools(tools, (tool) => tool.id !== "skill", "history");
   const historyLoadedSkills = sumTools(tools, (tool) => tool.id === "skill", "history");
 
-  const uniqueServers = [...serverByName.values()];
-  const mcpUsage = uniqueServers
-    .map((server): ContextMcpUsage => {
-      const serverTools = tools.filter(
-        (tool) => tool.source.kind === "mcp" && tool.source.server === server.name,
-      );
-      const schemaKnown = server.status !== "connected" || mcpSchemaCatalogAvailable;
-      const schemaTokens = schemaKnown ? sumTools(serverTools, () => true, "schema") : 0;
-      const historyTokens = sumTools(serverTools, () => true, "history");
-      return {
-        ...server,
-        toolCount: schemaKnown
-          ? serverTools.filter((tool) => tool.schema.estimatedTokens > 0).length
-          : undefined,
-        schemaKnown,
-        schema: createTokenMetric(schemaTokens, contextLimit),
-        history: createTokenMetric(historyTokens, contextLimit),
-        total: createTokenMetric(schemaTokens + historyTokens, contextLimit),
-        tools: serverTools,
-      };
-    })
-    .sort(compareMcpUsage);
-
   return {
-    attribution: {
-      tools,
-      mcpServers: mcpUsage,
-      otherTools: tools.filter((tool) => tool.source.kind === "other"),
-      reconciliation: {
-        schema: {
-          builtin: createTokenMetric(schemaBuiltin, contextLimit),
-          vvoc: createTokenMetric(schemaVvoc, contextLimit),
-          external: createTokenMetric(schemaExternal, contextLimit),
-          total: createTokenMetric(schemaBuiltin + schemaVvoc + schemaExternal, contextLimit),
-        },
-        history: {
-          toolResults: createTokenMetric(historyToolResults, contextLimit),
-          loadedSkills: createTokenMetric(historyLoadedSkills, contextLimit),
-          total: createTokenMetric(historyToolResults + historyLoadedSkills, contextLimit),
-        },
+    tools,
+    otherTools: tools.filter((tool) => tool.source.kind === "other"),
+    reconciliation: {
+      schema: {
+        builtin: createTokenMetric(schemaBuiltin, contextLimit),
+        vvoc: createTokenMetric(schemaVvoc, contextLimit),
+        external: createTokenMetric(schemaExternal, contextLimit),
+        total: createTokenMetric(schemaBuiltin + schemaVvoc + schemaExternal, contextLimit),
+      },
+      history: {
+        toolResults: createTokenMetric(historyToolResults, contextLimit),
+        loadedSkills: createTokenMetric(historyLoadedSkills, contextLimit),
+        total: createTokenMetric(historyToolResults + historyLoadedSkills, contextLimit),
       },
     },
-    warnings: buildAmbiguityWarnings(ambiguities),
   };
 }
 
-function getToolDraft(drafts: Map<string, ToolUsageDraft>, id: string): ToolUsageDraft {
+function getToolDraft(
+  drafts: Map<string, ToolUsageDraft>,
+  id: string,
+  tool: { effectiveID: string; name: string; namespace?: string; codeMode: boolean },
+): ToolUsageDraft {
   const current = drafts.get(id);
   if (current) return current;
-  const created = { id, schemaListed: false, schemaTokens: 0, historyTokens: 0, calls: 0 };
+  const created: ToolUsageDraft = {
+    id,
+    source: classifyToolSource(tool),
+    codeMode: tool.codeMode,
+    schemaListed: false,
+    schemaTokens: 0,
+    historyTokens: 0,
+    calls: 0,
+  };
   drafts.set(id, created);
   return created;
-}
-
-function resolveToolSchema(
-  draft: ToolUsageDraft,
-  source: ContextToolSource,
-  server: ContextMcpServer | undefined,
-  mcpSchemaCatalogAvailable: boolean,
-): { known: boolean; tokens: number } {
-  if (source.kind !== "mcp") {
-    return { known: draft.schemaListed, tokens: draft.schemaTokens };
-  }
-  if (!server) return { known: false, tokens: 0 };
-  if (server.status !== "connected") return { known: true, tokens: 0 };
-  if (!mcpSchemaCatalogAvailable) return { known: false, tokens: 0 };
-  return { known: true, tokens: draft.schemaListed ? draft.schemaTokens : 0 };
 }
 
 function sumTools(
@@ -389,36 +337,22 @@ function sumTools(
   );
 }
 
-function compareMcpUsage(left: ContextMcpUsage, right: ContextMcpUsage): number {
-  const totalDelta = right.total.estimatedTokens - left.total.estimatedTokens;
-  return totalDelta || compareText(left.name, right.name);
-}
-
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function buildAmbiguityWarnings(ambiguities: ReadonlyMap<string, readonly string[]>): string[] {
-  const entries = [...ambiguities.entries()].sort(([left], [right]) => compareText(left, right));
-  const visible =
-    entries.length > MAX_ATTRIBUTION_WARNINGS
-      ? entries.slice(0, MAX_ATTRIBUTION_WARNINGS - 1)
-      : entries;
-  const warnings = visible.map(([toolID, servers]) =>
-    boundWarning(
-      `MCP attribution ambiguous for "${toolID}": matches ${servers.join(", ")}; grouped under Other external/plugin.`,
-    ),
-  );
-  if (entries.length > MAX_ATTRIBUTION_WARNINGS) {
-    warnings.push(
-      `MCP attribution ambiguous for ${entries.length - visible.length} additional tool IDs; grouped under Other external/plugin.`,
-    );
+function buildCatalogWarnings(input: ContextAnalysisInput): string[] {
+  if (input.toolCatalogStatus === "unavailable") {
+    return [
+      "Registered tool catalog is unavailable; tool schemas and code-mode intent are unknown.",
+    ];
   }
-  return warnings;
-}
-
-function boundWarning(value: string): string {
-  return value.length > 180 ? `${value.slice(0, 177)}...` : value;
+  if (input.toolCatalogStatus === "partial") {
+    return [
+      "Registered tool catalog is incomplete; unavailable schemas are shown as unknown, not zero.",
+    ];
+  }
+  return [];
 }
 // END_BLOCK_DETAILED_ATTRIBUTION
 
@@ -428,9 +362,6 @@ function createCategoryCounter(): CategoryCounter {
     system: 0,
     "skill-catalog": 0,
     "loaded-skills": 0,
-    "builtin-tool-schemas": 0,
-    "vvoc-tool-schemas": 0,
-    "external-tool-schemas": 0,
     "user-messages": 0,
     "assistant-messages": 0,
     "tool-results": 0,
@@ -439,70 +370,89 @@ function createCategoryCounter(): CategoryCounter {
   };
 }
 
-function countPart(part: Part, message: Message | undefined, counters: CategoryCounter): void {
-  switch (part.type) {
-    case "text": {
-      if (part.ignored) return;
-      if (message?.role === "user") {
-        counters["user-messages"] += estimateTextTokens(part.text);
-      } else if (message?.role === "assistant" && message.summary) {
-        counters["compacted-summary"] += estimateTextTokens(part.text);
-      } else {
-        counters["assistant-messages"] += estimateTextTokens(part.text);
+function countMessage(
+  message: ContextMessage,
+  counters: CategoryCounter,
+  drafts: Map<string, ToolUsageDraft>,
+): void {
+  switch (message.kind) {
+    case "user":
+      counters["user-messages"] += estimateTextTokens(message.text);
+      for (const attachment of message.files ?? []) {
+        counters.files += estimateValueTokens({
+          name: attachment.name,
+          mime: attachment.mime,
+          sourceType: attachment.sourceType,
+          sourceURI: attachment.sourceURI,
+          byteLength: attachment.byteLength,
+        });
       }
       return;
-    }
-    case "reasoning":
-      counters["assistant-messages"] += estimateTextTokens(part.text);
-      return;
-    case "subtask":
-      counters["assistant-messages"] += estimateValueTokens({
-        prompt: part.prompt,
-        description: part.description,
-        agent: part.agent,
-      });
-      return;
-    case "agent":
+    case "synthetic":
       counters["user-messages"] += estimateValueTokens({
-        name: part.name,
-        source: part.source?.value,
+        text: message.text,
+        description: message.description,
       });
       return;
-    case "file":
-      counters.files += estimateValueTokens({
-        filename: part.filename,
-        mime: part.mime,
-        source: part.source?.text.value,
-        url: part.url.startsWith("data:") ? undefined : part.url,
+    case "system":
+      counters.system += estimateValueTokens({
+        text: message.text,
+        description: message.description,
       });
+      return;
+    case "skill":
+      counters["loaded-skills"] += estimateValueTokens({ name: message.name, text: message.text });
+      return;
+    case "shell":
+      counters["tool-results"] += estimateValueTokens({
+        command: message.command,
+        output: message.output,
+      });
+      return;
+    case "compaction":
+      counters["compacted-summary"] += estimateValueTokens({
+        summary: message.summary,
+        recent: message.recent,
+      });
+      return;
+    case "assistant":
+      countAssistant(message, counters, drafts);
       return;
     default:
       return;
   }
 }
 
-function countToolPart(part: Extract<Part, { type: "tool" }>, counters: CategoryCounter): number {
-  const state = part.state;
-  const payload = {
-    tool: part.tool,
-    input: state.input,
-    output: state.status === "completed" ? state.output : undefined,
-    error: state.status === "error" ? state.error : undefined,
-  };
-  const target = part.tool === "skill" ? "loaded-skills" : "tool-results";
-  const historyTokens = estimateValueTokens(payload);
-  counters[target] += historyTokens;
-
-  if (state.status === "completed") {
-    for (const attachment of state.attachments ?? []) {
-      counters.files += estimateValueTokens({
-        filename: attachment.filename,
-        mime: attachment.mime,
-        source: attachment.source?.text.value,
-      });
+function countAssistant(
+  message: Extract<ContextMessage, { kind: "assistant" }>,
+  counters: CategoryCounter,
+  drafts: Map<string, ToolUsageDraft>,
+): void {
+  for (const content of message.content) {
+    if (content.type === "text" || content.type === "reasoning") {
+      counters["assistant-messages"] += estimateTextTokens(content.text);
+      continue;
     }
+    const historyTokens = estimateValueTokens(toolPayload(content));
+    const draft = getToolDraft(drafts, content.name, {
+      effectiveID: content.name,
+      name: content.name,
+      codeMode: false,
+    });
+    draft.calls += 1;
+    draft.historyTokens += historyTokens;
+    const target = content.name === "skill" ? "loaded-skills" : "tool-results";
+    counters[target] += historyTokens;
   }
-  return historyTokens;
+}
+
+function toolPayload(content: Extract<ContextContent, { type: "tool" }>): unknown {
+  return {
+    tool: content.name,
+    input: content.input,
+    output: content.state === "completed" ? content.output : undefined,
+    error: content.state === "error" ? content.error : undefined,
+  };
 }
 
 function buildKnownCategories(
@@ -521,18 +471,111 @@ function buildKnownCategories(
 // END_BLOCK_CATEGORY_COUNTING
 
 // START_BLOCK_MEASURED_USAGE
-function createMeasuredUsage(message: AssistantMessage, contextLimit: number | undefined) {
-  const usedTokens = message.tokens.input + message.tokens.cache.read + message.tokens.output;
-  const normalizedLimit = normalizeContextLimit(contextLimit);
+function createMeasuredUsage(
+  message: Extract<ContextMessage, { kind: "assistant" }>,
+  activeMessages: readonly ContextMessage[],
+  selectedModel: ContextModel | undefined,
+  contextLimit: number | undefined,
+): ContextMeasuredUsage | undefined {
+  const tokens = message.tokens;
+  // Absent or entirely malformed usage stays unknown; a report with at least one
+  // usable field is surfaced with the unknown fields left undefined.
+  if (tokens === undefined) return undefined;
+  const input = tokens.input;
+  const cacheRead = tokens.cacheRead;
+  const cacheWrite = tokens.cacheWrite;
+  const output = tokens.output;
+  const reasoning = tokens.reasoning;
+  if ([input, cacheRead, cacheWrite, output, reasoning].every((value) => value === undefined)) {
+    return undefined;
+  }
+
+  // Pinned native `contextUsage` sums ALL five token fields and ignores a
+  // non-positive total; missing fields stay unknown.
+  const usedTokens = sumKnown([input, output, reasoning, cacheRead, cacheWrite]);
+  if (usedTokens !== undefined && usedTokens <= 0) return undefined;
+  const matchesSelectedModel =
+    selectedModel !== undefined && sameModelRef(message.model, selectedModel);
+  const normalizedLimit = matchesSelectedModel ? normalizeContextLimit(contextLimit) : undefined;
+  const relation = compactionRelation(message, activeMessages);
+
   return {
-    usedTokens,
-    contextLimit: normalizedLimit,
-    remainingTokens:
-      normalizedLimit === undefined ? undefined : Math.max(0, normalizedLimit - usedTokens),
-    percentUsed: normalizedLimit === undefined ? undefined : (usedTokens / normalizedLimit) * 100,
-    inputTokens: message.tokens.input,
-    cacheReadTokens: message.tokens.cache.read,
-    outputTokens: message.tokens.output,
+    ...(usedTokens === undefined ? {} : { usedTokens }),
+    ...(normalizedLimit === undefined ? {} : { contextLimit: normalizedLimit }),
+    ...(normalizedLimit === undefined || usedTokens === undefined
+      ? {}
+      : { remainingTokens: Math.max(0, normalizedLimit - usedTokens) }),
+    ...(normalizedLimit === undefined || usedTokens === undefined
+      ? {}
+      : { percentUsed: (usedTokens / normalizedLimit) * 100 }),
+    ...(input === undefined ? {} : { inputTokens: input }),
+    ...(cacheRead === undefined ? {} : { cacheReadTokens: cacheRead }),
+    ...(cacheWrite === undefined ? {} : { cacheWriteTokens: cacheWrite }),
+    ...(output === undefined ? {} : { outputTokens: output }),
+    ...(reasoning === undefined ? {} : { reasoningTokens: reasoning }),
+    model: message.model,
+    ...(message.createdAt === undefined ? {} : { reportedAt: message.createdAt }),
+    compactionRelation: relation,
+    matchesSelectedModel,
+    label: measuredLabel(message, matchesSelectedModel, relation),
+  };
+}
+
+/** Temporal relation of a usage report to the latest completed compaction in the active context. */
+function compactionRelation(
+  message: Extract<ContextMessage, { kind: "assistant" }>,
+  activeMessages: readonly ContextMessage[],
+): ContextCompactionRelation {
+  const compaction = findCompactionCutoff(activeMessages);
+  if (compaction === undefined) return "none";
+  const messageIndex = activeMessages.indexOf(message);
+  if (messageIndex >= 0) return messageIndex > compaction.index ? "after" : "before";
+  if (message.createdAt !== undefined && compaction.message.createdAt !== undefined) {
+    return message.createdAt >= compaction.message.createdAt ? "after" : "before";
+  }
+  return "none";
+}
+
+function measuredLabel(
+  message: Extract<ContextMessage, { kind: "assistant" }>,
+  matchesSelectedModel: boolean,
+  relation: ContextCompactionRelation,
+): string {
+  const model = `${message.model.providerID}/${message.model.modelID}${
+    message.model.variant === undefined ? "" : `#${message.model.variant}`
+  }`;
+  if (!matchesSelectedModel) {
+    return `Latest provider-reported step usage for ${model}, which differs from the selected model; not current occupancy.`;
+  }
+  if (relation === "before") {
+    return "Reported before the most recent compaction; not the resulting post-compaction occupancy.";
+  }
+  return "Latest provider-reported step usage for the selected model.";
+}
+
+/** True when two provider/model/variant references refer to the same real selection. */
+export function sameModelRef(left: ContextModelRef, right: ContextModelRef): boolean {
+  return (
+    left.providerID === right.providerID &&
+    left.modelID === right.modelID &&
+    (left.variant ?? undefined) === (right.variant ?? undefined)
+  );
+}
+
+function sumKnown(values: readonly (number | undefined)[]): number | undefined {
+  let total = 0;
+  for (const value of values) {
+    if (value === undefined || !Number.isFinite(value)) return undefined;
+    total += value;
+  }
+  return total;
+}
+
+function modelFromRef(ref: ContextModelRef): ContextModel {
+  return {
+    providerID: ref.providerID,
+    modelID: ref.modelID,
+    ...(ref.variant === undefined ? {} : { variant: ref.variant }),
   };
 }
 
@@ -542,18 +585,22 @@ function normalizeContextLimit(contextLimit: number | undefined): number | undef
     : undefined;
 }
 
-function findLatestAssistant(messages: readonly Message[]): AssistantMessage | undefined {
+function findLatestAssistant(
+  messages: readonly ContextMessage[],
+): Extract<ContextMessage, { kind: "assistant" }> | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message?.role === "assistant") return message;
+    if (message?.kind === "assistant") return message;
   }
   return undefined;
 }
 
-function findLatestUser(messages: readonly Message[]): UserMessage | undefined {
+function findLatestUser(
+  messages: readonly ContextMessage[],
+): Extract<ContextMessage, { kind: "user" }> | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message?.role === "user") return message;
+    if (message?.kind === "user") return message;
   }
   return undefined;
 }

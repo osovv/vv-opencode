@@ -2,8 +2,8 @@
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime, the snapshot service, and the centralized native snapshot runtime (client/permissions/snapshots/config/model/auxiliary) consumed by every later native plugin.
-//   SCOPE: Context-identity reference-counted runtime/snapshot registries, per-acquisition idempotent release leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, core stage/commit/guard/title hook registration, and idempotent teardown without stopping the host. No service discovery until a client is requested, no location-only sharing, no global configuration singleton, no parallel fake runtime, and no V1 compatibility facade.
-//   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/snapshots.ts, src/runtime/types.ts]
+//   SCOPE: Context-identity reference-counted runtime/snapshot registries, per-acquisition idempotent release leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, core stage/commit/guard/title hook registration, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No service discovery until a client is requested, no location-only sharing, no global configuration singleton, no parallel fake runtime, and no V1 compatibility facade.
+//   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/snapshots.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -23,7 +23,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - The event pump contains failures per event (bounded credential-safe diagnostics) instead of ending the only subscription and clears the health flag on a successful config event; stageFor resolves an already-bound family's immutable capture before reading the mutable current config, so an invalid vvoc never fails a bound family while a new unbound candidate still fails closed and recovers.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Registers the read-only context-inspection RPC (registered catalog plus allowlisted family/current-runtime policy) inside the shared runtime and includes it in owned cleanup.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - The event pump contains failures per event (bounded credential-safe diagnostics) instead of ending the only subscription and clears the health flag on a successful config event; stageFor resolves an already-bound family's immutable capture before reading the mutable current config, so an invalid vvoc never fails a bound family while a new unbound candidate still fails closed and recovers.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -59,6 +60,7 @@ import {
   normalizeModelSelection,
   parseRoleSelections,
 } from "./snapshot-config.js";
+import { registerContextInspectionRpc } from "./context-inspection.js";
 import { createFileSnapshotStore } from "./snapshot-store.js";
 import { createSnapshotService, type SnapshotServiceDeps } from "./snapshots.js";
 import {
@@ -361,6 +363,13 @@ export interface NativeSnapshotContext extends RuntimeContext {
   readonly event: {
     subscribe(options?: { readonly signal?: AbortSignal | undefined }): AsyncIterable<RuntimeEvent>;
   };
+  /**
+   * Native registered-tool domain, when the host exposes one. The read-only
+   * context-inspection RPC uses `list()` to snapshot the registered catalog; it
+   * never executes a tool. Optional so a context without a tool domain still
+   * acquires a runtime and reports its catalog as unavailable.
+   */
+  readonly tool?: { list(): Promise<readonly unknown[]> } | undefined;
 }
 
 /** Releasable native registration. */
@@ -1491,6 +1500,25 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       void pump;
 
       await refresh();
+
+      // Read-only native context-inspection RPC: projects the registered tool
+      // catalog and an allowlisted family/current-runtime policy for the TUI.
+      // Owned by this runtime's cleanup; it disposes only its own registration.
+      owned.push(
+        await registerContextInspectionRpc(
+          {
+            location: ctx.location,
+            rpc: ctx.rpc,
+            ...(ctx.tool === undefined ? {} : { tool: ctx.tool }),
+            session: { get: (input) => ctx.session.get(input) },
+          },
+          {
+            policy: (sessionID) => snapshots.policy(sessionID),
+            currentConfig: () => state.config,
+            ...(options?.now === undefined ? {} : { now: options.now }),
+          },
+        ),
+      );
 
       return {
         runtime,

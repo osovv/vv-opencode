@@ -31,7 +31,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - Added event-pump per-event containment coverage (invalid/transient config reads followed by valid lifecycle events) and a bound-family isolation regression: an invalid mutable current config does not fail or re-adopt an already-bound family, a new unbound session fails closed, and both recover after the config is fixed.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Ported the custom-agent intent fixture from the V1 `agent` document key to the native `agents` envelope, preserving the role/literal override assertion.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - Added event-pump per-event containment coverage (invalid/transient config reads followed by valid lifecycle events) and a bound-family isolation regression: an invalid mutable current config does not fail or re-adopt an already-bound family, a new unbound session fails closed, and both recover after the config is fixed.]
 // END_CHANGE_SUMMARY
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
@@ -983,8 +984,10 @@ describe("native snapshot runtime admission", () => {
   test("raw OpenCode agent intent overrides the built-in role for a custom agent", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1", smart: "prov/m2" });
+    // Native OpenCode agent intent lives under `agents`; the V1 `agent` key is
+    // ignored by the native reader, so the fixture uses the native envelope.
     await writeOpenCodeConfig(project, {
-      agent: { build: { model: "vv-role:smart" }, custom: { model: "prov/custom-literal" } },
+      agents: { build: { model: "vv-role:smart" }, custom: { model: "prov/custom-literal" } },
     });
     const context = new FakeNativeContext(project);
     const host = new FakeRuntimeHost(context);
