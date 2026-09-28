@@ -25,7 +25,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added installed-artifact parity mapping and evidence assembly so `--full` fails whenever any mandatory row is unverified rather than reporting a reduced matrix as complete.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Added the installed tier, installed paths, and installed-surface checks to parity row mapping and evidence so `--full` fails whenever any mandatory row is unverified.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added installed-artifact parity mapping and evidence assembly.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -54,17 +55,18 @@ export interface RowResult {
   readonly surface: string;
   readonly status: string;
   readonly outcome: RowOutcome;
-  readonly tier: "core" | "tui" | "none";
+  readonly tier: "core" | "tui" | "installed" | "none";
   readonly detail?: string;
 }
 
 /** The installed-artifact tiers that can verify a row. */
-export const FULL_TIERS = ["core", "tui"] as const;
+export const FULL_TIERS = ["core", "tui", "installed"] as const;
 
 /** Which installed tier a row command belongs to, if any. */
-export function tierForCommand(command: string): "core" | "tui" | undefined {
+export function tierForCommand(command: string): "core" | "tui" | "installed" | undefined {
   if (command.includes("--core")) return "core";
   if (command.includes("--tui")) return "tui";
+  if (command.includes("--installed")) return "installed";
   return undefined;
 }
 
@@ -75,7 +77,11 @@ export function tierForCommand(command: string): "core" | "tui" | undefined {
  */
 export function evaluateParityRows(
   rows: readonly ParityRow[],
-  input: { readonly coreOk: boolean; readonly tuiOk: boolean | undefined },
+  input: {
+    readonly coreOk: boolean;
+    readonly tuiOk: boolean | undefined;
+    readonly installedOk: boolean | undefined;
+  },
 ): RowResult[] {
   return rows.map((row) => {
     const tier = tierForCommand(row.command);
@@ -86,6 +92,25 @@ export function evaluateParityRows(
         status: row.status,
         tier,
         outcome: input.coreOk ? "pass" : "fail",
+      };
+    }
+    if (tier === "installed") {
+      if (input.installedOk === undefined) {
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier,
+          outcome: "unverified",
+          detail: "installed-surface tier was not run",
+        };
+      }
+      return {
+        id: row.id,
+        surface: row.surface,
+        status: row.status,
+        tier,
+        outcome: input.installedOk ? "pass" : "fail",
       };
     }
     if (tier === "tui") {
@@ -141,6 +166,8 @@ export interface ParityEvidenceInput {
   readonly packageName: string;
   readonly packageVersion: string;
   readonly dependencyHashes: Readonly<Record<string, string>>;
+  readonly installedPaths?: Readonly<Record<string, string>> | undefined;
+  readonly installedSurface?: readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[] | undefined;
   readonly coreSummary: { readonly cases: number; readonly failed: number } | undefined;
   readonly tuiSummary: { readonly scenarios: number; readonly failed: number } | undefined;
   readonly limits: readonly string[];
@@ -168,6 +195,8 @@ export function buildParityEvidence(input: ParityEvidenceInput): Record<string, 
       tarballSha256: input.tarballSha256 ?? "unavailable",
     },
     dependencies: input.dependencyHashes,
+    installedPaths: input.installedPaths ?? {},
+    installedSurface: input.installedSurface ?? [],
     tiers: {
       core: input.coreSummary ?? null,
       tui: input.tuiSummary ?? null,

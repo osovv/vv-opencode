@@ -1,0 +1,393 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-09-28T19:39:21.919Z",
+  "change": "C-OPENCODE-V2-NATIVE",
+  "host": {
+    "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
+    "binarySha256": "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f",
+    "sourceCommit": "cd9a14a6b688d4021bee381dfd39d2cef9c0f862",
+    "version": "2.0.18"
+  },
+  "package": {
+    "name": "@osovv/vv-opencode",
+    "version": "1.7.0",
+    "tarballSha256": "1a97177ac6b1707c82cfc12409908db19cc2ea165ff4a93b7e4e83db9dd2525e"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "@opencode/ai": "2.0.18",
+    "@opencode/client": "2.0.18",
+    "@opencode/plugin": "2.0.18",
+    "@opencode/protocol": "2.0.18",
+    "@opencode/schema": "2.0.18",
+    "ajv": "8.20.0",
+    "citty": "0.2.2",
+    "effect": "4.0.0-rc.112",
+    "htmlparser2": "12.0.0",
+    "jsonc-parser": "3.3.1",
+    "turndown": "7.2.4",
+    "zod": "4.1.8"
+  },
+  "installedPaths": {
+    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@clack/prompts",
+    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/ai",
+    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/client",
+    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/plugin",
+    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/protocol",
+    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@opencode/schema",
+    "ajv": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/ajv",
+    "citty": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/citty",
+    "effect": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/effect",
+    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/htmlparser2",
+    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/jsonc-parser",
+    "turndown": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/turndown",
+    "zod": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/zod",
+    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-0AoEYj/project/node_modules/@osovv/vv-opencode"
+  },
+  "installedSurface": [
+    {
+      "id": "root-aggregate",
+      "ok": true,
+      "detail": "default=ok named=all native"
+    },
+    {
+      "id": "standalone-subpaths",
+      "ok": true,
+      "detail": "11 standalone plugin subpaths loaded as native entries"
+    },
+    {
+      "id": "tool-catalog-census",
+      "ok": true,
+      "detail": "the installed catalog holds exactly the nine owned tool ids and no subagent registration"
+    },
+    {
+      "id": "presets-model-variants",
+      "ok": true,
+      "detail": "noKimi=true thinking.type.enabled=true noPdf=true noEffortHigh=true managedThinkingModel=true"
+    },
+    {
+      "id": "managed-agents-skills",
+      "ok": true,
+      "detail": "subagents=true skills=true nativeSubagentSemantics=true"
+    },
+    {
+      "id": "cli.status-doctor-upgrade",
+      "ok": true,
+      "detail": "status=0 doctor=0 versionObserved=true"
+    },
+    {
+      "id": "cli.config-plugin-completions",
+      "ok": true,
+      "detail": "configValidate=0 pluginList=0 toggle=0/0 completion=0"
+    },
+    {
+      "id": "cli.install-sync-init",
+      "ok": true,
+      "detail": "globalInit=0 projectInit=0 sync=0/0 idempotent=true invalidRefusedBeforeWrite=true"
+    }
+  ],
+  "tiers": {
+    "core": {
+      "cases": 12,
+      "failed": 0
+    },
+    "tui": {
+      "scenarios": 19,
+      "failed": 0
+    }
+  },
+  "totals": {
+    "rows": 38,
+    "verified": 26,
+    "failed": 0,
+    "unverified": 12
+  },
+  "rows": [
+    {
+      "id": "pack.packed-artifact",
+      "surface": "Packed package tarball import and activation",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles",
+      "surface": "Model-roles plugin import, activation, toggle, idle quiescence, cleanup",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.admission",
+      "surface": "Awaited first accepted prompt admission",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.rollback",
+      "surface": "Rejected/admission rollback without binding",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.variants",
+      "surface": "Captured source variants on the same real model",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.policy",
+      "surface": "Bound family policy versus changed configuration",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.synthetic",
+      "surface": "Owned generate/synthetic pre-admission and raw-unbound refusal",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.auxiliary",
+      "surface": "Auxiliary title child bound to the family",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.lineage",
+      "surface": "Child/fork/worktree family lineage resolution",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.explicit",
+      "surface": "Explicit-at-create and explicit switch selection provenance",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.fork",
+      "surface": "Native fork with empty parentID and fork.sessionID",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.admission.ordering",
+      "surface": "First-accepted versus first-staged input ordering",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.admission.owned",
+      "surface": "Owned pre-admission gateway and prompt-candidate separation",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.snapshot-persist",
+      "surface": "Durable family capture persistence and restart replay",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.replay-restart",
+      "surface": "Durable replay after service restart",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.permissions",
+      "surface": "Resource permission guard effects and create/get/reply",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.hooks.probe",
+      "surface": "Native hook availability probe",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.guardian",
+      "surface": "Guardian approve/defer and permission review",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.hashline-edit",
+      "surface": "Hashline edit routing and fresh anchor checks",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.secrets-redaction",
+      "surface": "Secrets redaction and SSE/WS restoration",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.web-tools",
+      "surface": "Web search/fetch with permission-before-network",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.spec-guard",
+      "surface": "Spec guard scoped gating",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.system-context-injection",
+      "surface": "System context and agent/model attribution",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.analytics",
+      "surface": "Analytics token/cache usage",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.tool-history-compaction",
+      "surface": "Tool-history compaction cutoff",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "surface": "Peak-hours soft/hard policy and exemptions",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "plugin.workflow",
+      "surface": "Workflow launch/result enforcement, checkpoints, recovery, cancellation",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "tui.context-overview",
+      "surface": "Full /context Overview/Tools/MCP collection and rendering",
+      "status": "implemented-full",
+      "tier": "tui",
+      "outcome": "pass"
+    },
+    {
+      "id": "tui.indicators-footer-banner",
+      "surface": "Cache indicator, branding footer, peak-hours banner",
+      "status": "implemented-full",
+      "tier": "tui",
+      "outcome": "pass"
+    },
+    {
+      "id": "cli.install-sync-init",
+      "surface": "install/init/sync/launch lifecycle",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "cli.status-doctor-upgrade",
+      "surface": "status/doctor/upgrade surfaces",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "cli.config-plugin-completions",
+      "surface": "config/plugin management and completions",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "presets.model-variants",
+      "surface": "Canonical presets, roles, and model variants",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "managed.agents-skills",
+      "surface": "Managed agents and skills content",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "contracts.tools",
+      "surface": "Strict public tool contracts",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "workflow.cancellation-recovery",
+      "surface": "Cancellation recovery and finite authority",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    },
+    {
+      "id": "package.root-assembly",
+      "surface": "Root aggregation and all standalone native exports",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "parity.full",
+      "surface": "Complete baseline parity acceptance",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "unverified",
+      "detail": "no installed-artifact tier covers this row"
+    }
+  ],
+  "limits": [
+    "Remote/paid provider effectiveness is explicitly unverified; only loopback providers are used.",
+    "Same-model switchModel emits no native event and is not a parity criterion.",
+    "A prompt-preparation failure after the prompt hook has no rejection notice; the harness records zero dispatch instead.",
+    "Cross-session equal-time first-accept ordering remains a recorded engine-test limit, not forced on the host.",
+    "Rows without an installed-artifact tier remain unverified until a scenario covers them; --full never promotes them.",
+    "The anthropic-compatible cohort is declared but not exercised by the installed-surface tier."
+  ]
+}

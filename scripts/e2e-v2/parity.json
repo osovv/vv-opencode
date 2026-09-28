@@ -1,9 +1,15 @@
 {
   "version": "1.0.0",
   "change": "C-OPENCODE-V2-NATIVE",
-  "generatedBy": "T-003 versioned parity inventory and isolated real-host core harness",
-  "statusVocabulary": ["implemented-core", "covered-unit", "pending", "unverified-paid"],
-  "note": "Rows marked implemented-core are exercised by `bun scripts/e2e-v2.ts --core` against the packed package on the pinned host. Rows marked pending are owned by later tasks and are not claimed. A reduced core matrix is never full parity.",
+  "generatedBy": "T-003 versioned parity inventory; T-009-FULL installed-artifact tiers",
+  "statusVocabulary": [
+    "implemented-core",
+    "implemented-full",
+    "covered-unit",
+    "pending",
+    "unverified-paid"
+  ],
+  "note": "Rows marked implemented-core/implemented-full are exercised by `bun scripts/e2e-v2.ts --core` / `--tui` / `--installed` against the packed package installed with its declared dependency graph. Rows marked pending have no installed-artifact tier yet and are never claimed.",
   "rows": [
     {
       "id": "pack.packed-artifact",
@@ -225,65 +231,65 @@
       "id": "tui.context-overview",
       "surface": "Full /context Overview/Tools/MCP collection and rendering",
       "phase": "T-008",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Real V2 TUI collection, rendering, tabs, navigation, scrolling, narrow layouts, and cleanup.",
-      "command": "bun test src/tui && bun scripts/e2e-v2.ts --tui"
+      "command": "bun scripts/e2e-v2.ts --tui"
     },
     {
       "id": "tui.indicators-footer-banner",
       "surface": "Cache indicator, branding footer, peak-hours banner",
       "phase": "T-008",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Indicators, footer, and banner derive from native TUI/client contracts in a real PTY.",
-      "command": "bun test src/tui"
+      "command": "bun scripts/e2e-v2.ts --tui"
     },
     {
       "id": "cli.install-sync-init",
       "surface": "install/init/sync/launch lifecycle",
       "phase": "T-007",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Native host version/schema/registration contracts; pinned package specifier retained in OpenCode and TUI plugin arrays.",
-      "command": "bun test src/commands"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "cli.status-doctor-upgrade",
       "surface": "status/doctor/upgrade surfaces",
       "phase": "T-007",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Fresh and repeated setup, invalid config, project isolation, and existing user overrides without touching live configuration.",
-      "command": "bun test src/commands"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "cli.config-plugin-completions",
       "surface": "config/plugin management and completions",
       "phase": "T-007",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Strict canonical vvoc v3 config, conservative idempotent writes, and native plugin toggles.",
-      "command": "bun test src/lib/vvoc-config.test.ts src/lib/opencode.test.ts"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "presets.model-variants",
       "surface": "Canonical presets, roles, and model variants",
       "phase": "T-007",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Remove vv-kimi surfaces; preserve prescribed residual provider patches; publish MiMo thinking correctly without PDF.",
-      "command": "bun test src/lib/model-roles.test.ts"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "managed.agents-skills",
       "surface": "Managed agents and skills content",
       "phase": "T-007",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Managed content and tool references use native subagent semantics.",
-      "command": "bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "contracts.tools",
       "surface": "Strict public tool contracts",
       "phase": "T-009",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Tool-contract census and generated reference updated for native V2 names including subagent.",
-      "command": "bun run contracts:check"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "workflow.cancellation-recovery",
@@ -297,9 +303,9 @@
       "id": "package.root-assembly",
       "surface": "Root aggregation and all standalone native exports",
       "phase": "T-009",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Every server plugin and the TUI load through native V2 exports in the packed package with no V1 SDK dependencies.",
-      "command": "bun run pack:check"
+      "command": "bun scripts/e2e-v2.ts --installed"
     },
     {
       "id": "parity.full",

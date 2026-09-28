@@ -18,7 +18,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Added scroll, visible surfaces, controlled collection failure, and explicit-disabled negative controls, plus a cache-usage loopback provider.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - The PTY tier now packs and installs the declared dependency graph and drives the INSTALLED TUI export plus installed server plugin, verifying installed paths stay outside the workspace.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Added scroll, visible surfaces, controlled collection failure, and explicit-disabled negative controls, plus a cache-usage loopback provider.]
 // END_CHANGE_SUMMARY
 
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
@@ -33,6 +34,9 @@ import {
   createNativeApi,
   createOwnedScratch,
   discoverHostBinary,
+  installPackedPackageWithDependencies,
+  installedArtifactPathIssues,
+  packWorkspace,
   removeOwnedScratch,
   sha256File,
   waitForRegisteredService,
@@ -271,11 +275,17 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     };
   }
 
-  const builtTui = join(options.workspaceRoot, "dist", "tui.js");
-  const builtServerPlugin = join(options.workspaceRoot, "dist", "plugins", "model-roles", "index.js");
+  const workspaceTui = join(options.workspaceRoot, "dist", "tui.js");
+  const workspaceServer = join(
+    options.workspaceRoot,
+    "dist",
+    "plugins",
+    "model-roles",
+    "index.js",
+  );
   try {
-    await readFile(builtTui);
-    await readFile(builtServerPlugin);
+    await readFile(workspaceTui);
+    await readFile(workspaceServer);
   } catch {
     return {
       ok: false,
@@ -284,9 +294,11 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
       sourceCommit: PINNED_SOURCE_COMMIT,
       scenarios,
       error: "built dist/tui.js or model-roles plugin is missing; run bun run build first",
-      note: "TUI acceptance runs the actual built artifact.",
+      note: "TUI acceptance packs and installs the actual built artifact.",
     };
   }
+  let builtTui = workspaceTui;
+  let builtServerPlugin = workspaceServer;
 
   const scratchBase = options.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
   let scratch: OwnedScratch | undefined;
@@ -301,12 +313,27 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     for (const name of ["home", "cfg", "data", "state", "cache", "project"]) {
       await mkdir(join(scratch.dir, name), { recursive: true });
     }
-    // Dependency resolution for the disk-loaded plugin forwarders. Kept outside
-    // the project watcher root so the TUI does not scan the entire tree.
-    await symlink(
-      join(options.workspaceRoot, "node_modules"),
-      join(scratch.dir, "node_modules"),
-      "dir",
+    // Real installed artifact: pack then install the declared dependency graph
+    // into the isolated project (no workspace node_modules symlinks).
+    const packedTarball = await packWorkspace({
+      workspaceRoot: options.workspaceRoot,
+      filename: join(scratch.dir, "pack", "vv-opencode-tui.tgz"),
+    });
+    const installed = await installPackedPackageWithDependencies({
+      workspaceRoot: options.workspaceRoot,
+      tarballPath: packedTarball.tarballPath,
+      projectDir: project,
+    });
+    const installIssues = installedArtifactPathIssues(installed, options.workspaceRoot);
+    if (installIssues.length > 0) {
+      fail("installed-artifact", installIssues.join("; "));
+      return result(hostSha256, scenarios, "The installed artifact resolved outside the isolated project.");
+    }
+    builtTui = join(installed.packageDir, "dist", "tui.js");
+    builtServerPlugin = join(installed.packageDir, "dist", "plugins", "model-roles", "index.js");
+    pass(
+      "installed-artifact",
+      `packed tarball ${packedTarball.sha256.slice(0, 12)} installed with declared deps at ${installed.packageDir}`,
     );
 
     const providerPort = await getFreePort();
@@ -360,7 +387,7 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     // Render a schema-valid canonical vvoc config through the actual built
     // module, so the host accepts it and the real plugins can bind a family.
     const vvocModule = (await import(
-      pathToFileURL(join(options.workspaceRoot, "dist", "lib", "vvoc-config.js")).href
+      pathToFileURL(join(installed.packageDir, "dist", "lib", "vvoc-config.js")).href
     )) as {
       createDefaultVvocConfig(): Record<string, unknown>;
       renderVvocConfig(config: Record<string, unknown>): string;

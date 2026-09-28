@@ -13,17 +13,24 @@
 // START_MODULE_MAP
 //   CoreRunOptions - Inputs controlling one core real-host run.
 //   CoreRunSummary - Machine-readable summary of one core real-host run.
+//   ROOT_PLUGIN_EXPORTS - The eleven native server plugin named exports the root aggregate must publish.
+//   OwnedToolIds - The nine vvoc-owned tool ids (the host subagent tool is never a tenth registration).
+//   InstalledSurfaceCheck - One installed-artifact surface check outcome.
+//   InstalledSurfaceResult - Outcome of the installed-artifact surface checks.
+//   runInstalledSurface - Verify the installed package surface, presets, managed assets, and installed CLI lifecycle.
 //   getFreePort - Reserve and release a loopback TCP port.
 //   runCore - Execute the packed core real-host run and return its summary.
 //   requireHostBinary - Resolve the pinned host binary or throw a bounded diagnostics error.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph and verifies installed paths, then runs the installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle) before cleanup.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
 // END_CHANGE_SUMMARY
 
 import { createServer } from "node:net";
-import { mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -39,7 +46,8 @@ import {
   createNativeApi,
   createOwnedScratch,
   discoverHostBinary,
-  installPackedPackage,
+  installPackedPackageWithDependencies,
+  installedArtifactPathIssues,
   packWorkspace,
   redactEnv,
   removeOwnedScratch,
@@ -71,6 +79,13 @@ export interface CoreRunSummary {
   readonly cases: readonly CaseResult[];
   readonly evidencePath?: string;
   readonly tarballSha256?: string;
+  readonly installed?: {
+    readonly packageDir: string;
+    readonly packageVersion: string;
+    readonly resolvedDependencies: Readonly<Record<string, string>>;
+    readonly loadedPaths: Readonly<Record<string, string>>;
+  };
+  readonly installedSurface?: InstalledSurfaceResult;
   readonly error?: string;
 }
 
@@ -404,7 +419,6 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
     const scratchDir = scratch.dir;
     const projectDir = join(scratchDir, "project");
     const packed = join(scratchDir, "pack");
-    const nodeModulesDir = join(projectDir, "node_modules");
     const pluginDir = join(projectDir, ".e2e-plugin");
     const traceDir = join(scratchDir, "trace");
     const controlFilePath = join(traceDir, "control.json");
@@ -436,11 +450,14 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       workspaceRoot: options.workspaceRoot,
       filename: join(packed, "vv-opencode-e2e.tgz"),
     });
-    const packageDir = await installPackedPackage({
+    const installed = await installPackedPackageWithDependencies({
+      workspaceRoot: options.workspaceRoot,
       tarballPath: packedTarball.tarballPath,
-      nodeModulesDir,
-      workspaceNodeModules: join(options.workspaceRoot, "node_modules"),
+      projectDir,
     });
+    const installIssues = installedArtifactPathIssues(installed, options.workspaceRoot);
+    if (installIssues.length > 0) throw new Error(installIssues.join("; "));
+    const packageDir = installed.packageDir;
     const packedManifest = JSON.parse(
       await readFile(join(packageDir, "package.json"), "utf8"),
     ) as { name?: string; version?: string };
@@ -891,6 +908,11 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       ...new Map(providerPayloads.map((entry) => [JSON.stringify(entry), entry])).values(),
     ];
 
+    const installedSurface = await runInstalledSurface({
+      installedDir: packageDir,
+      projectDir,
+      hostBinary: options.hostBinary,
+    });
     const evidence = {
       change: "C-OPENCODE-V2-NATIVE T-003 core real-host harness",
       mode: "core",
@@ -906,6 +928,10 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
         tarballSha256: packedTarball.sha256,
         version: packedManifest.version ?? "unknown",
         installedDir: packageDir,
+        installStrategy:
+          "declared dependency graph installed into the isolated project via bun install --ignore-scripts (no workspace node_modules symlinks)",
+        resolvedDependencies: installed.resolvedDependencies,
+        loadedPaths: installed.loadedPaths,
         packTool: "bun pm pack --ignore-scripts",
         packEquivalence:
           "verified npm-format tarball entrypoints present and package.json name/version match; successfully installed and loaded on the pinned host",
@@ -930,6 +956,7 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
         ownedPids: owned.pids,
       },
       cases: results,
+      installedSurface: installedSurface.checks,
       coverageLimits: [
         "Same-model switch emits no native event and is not a criterion.",
         "Equal-time cross-session acceptance ordering is covered by engine/integration tests; the host case delays preparation after the real prompt hook without implementing admission.",
@@ -942,10 +969,17 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       await writeFile(options.evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
     }
     return {
-      ok: results.every((entry) => entry.status !== "fail"),
+      ok: results.every((entry) => entry.status !== "fail") && installedSurface.ok,
       cases: results,
       ...(options.evidencePath === undefined ? {} : { evidencePath: options.evidencePath }),
       tarballSha256: packedTarball.sha256,
+      installed: {
+        packageDir,
+        packageVersion: installed.packageVersion,
+        resolvedDependencies: installed.resolvedDependencies,
+        loadedPaths: installed.loadedPaths,
+      },
+      installedSurface,
     };
   } catch (error) {
     return {
@@ -973,3 +1007,322 @@ export function requireHostBinary(env: NodeJS.ProcessEnv = process.env): string 
   }
   return binary;
 }
+// START_BLOCK_INSTALLED_SURFACE
+/** The eleven native server plugin named exports the packed root aggregate must publish. */
+export const ROOT_PLUGIN_EXPORTS = [
+  "GuardianPlugin",
+  "HashlineEditPlugin",
+  "ModelRolesPlugin",
+  "SystemContextInjectionPlugin",
+  "WorkflowPlugin",
+  "SecretsRedactionPlugin",
+  "WebToolsPlugin",
+  "ToolHistoryCompactionPlugin",
+  "AnalyticsPlugin",
+  "PeakHoursPlugin",
+  "SpecGuardPlugin",
+] as const;
+
+/** The nine vvoc-owned tool ids; the host `subagent` tool is never a tenth owned registration. */
+export const OWNED_TOOL_IDS = [
+  "hashline_edit",
+  "str_replace_editor",
+  "web_fetch",
+  "web_search",
+  "work_checkpoint",
+  "work_item_close",
+  "work_item_decide",
+  "work_item_list",
+  "work_item_open",
+] as const;
+
+/** One installed-artifact surface check. */
+export interface InstalledSurfaceCheck {
+  readonly id: string;
+  readonly ok: boolean;
+  readonly detail: string;
+}
+
+/** Outcome of the installed-artifact surface checks. */
+export interface InstalledSurfaceResult {
+  readonly ok: boolean;
+  readonly checks: readonly InstalledSurfaceCheck[];
+}
+
+/** Assert a module value is a native `{ id, setup | effect }` entry. */
+function nativeEntryIssue(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return "not a native entry object";
+  const entry = value as { id?: unknown; setup?: unknown; effect?: unknown };
+  if (typeof entry.id !== "string" || entry.id.length === 0) return "no string id";
+  if (typeof entry.setup !== "function" && typeof entry.effect !== "function") {
+    return "no setup or effect function";
+  }
+  return undefined;
+}
+
+/**
+ * Verify the INSTALLED packed artifact's public native surface in-process: the
+ * root aggregate default plus all eleven named plugins, every standalone plugin
+ * subpath, and the nine-owned-tool catalog census. The installed module graph
+ * resolves its own declared dependencies under the isolated project.
+ */
+export async function runInstalledSurface(input: {
+  readonly installedDir: string;
+  readonly projectDir?: string | undefined;
+  readonly hostBinary?: string | undefined;
+}): Promise<InstalledSurfaceResult> {
+  const checks: InstalledSurfaceCheck[] = [];
+  const record = (id: string, ok: boolean, detail: string): void => {
+    checks.push({ id, ok, detail });
+  };
+  try {
+    const root = (await import(
+      pathToFileURL(join(input.installedDir, "dist", "index.js")).href
+    )) as Record<string, unknown>;
+    const defaultIssue = nativeEntryIssue(root.default);
+    const namedIssues = ROOT_PLUGIN_EXPORTS.map((name) => {
+      const issue = nativeEntryIssue(root[name]);
+      return issue === undefined ? undefined : `${name}: ${issue}`;
+    }).filter((issue): issue is string => issue !== undefined);
+    record(
+      "root-aggregate",
+      defaultIssue === undefined && namedIssues.length === 0,
+      `default=${defaultIssue ?? "ok"} named=${namedIssues.length === 0 ? "all native" : namedIssues.join("; ")}`,
+    );
+  } catch (error) {
+    record("root-aggregate", false, error instanceof Error ? error.message : String(error));
+  }
+
+  const manifest = JSON.parse(readFileSync(join(input.installedDir, "package.json"), "utf8")) as {
+    exports?: Record<string, unknown>;
+  };
+  const subpaths = Object.entries(manifest.exports ?? {}).filter(([subpath]) =>
+    subpath.startsWith("./plugins/"),
+  );
+  const subpathFailures: string[] = [];
+  for (const [subpath, value] of subpaths) {
+    const target =
+      typeof value === "string"
+        ? value
+        : typeof value === "object" && value !== null
+          ? ((value as Record<string, unknown>).import ?? (value as Record<string, unknown>).default)
+          : undefined;
+    if (typeof target !== "string") {
+      subpathFailures.push(`${subpath}: no import target`);
+      continue;
+    }
+    try {
+      const module = (await import(
+        pathToFileURL(join(input.installedDir, target.replace(/^\.\//, ""))).href
+      )) as Record<string, unknown>;
+      const name = `${subpath
+        .replace(/^\.\/plugins\//, "")
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join("")}Plugin`;
+      const issue = nativeEntryIssue(module[name]);
+      if (issue !== undefined) subpathFailures.push(`${subpath}: ${issue}`);
+    } catch (error) {
+      subpathFailures.push(
+        `${subpath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  record(
+    "standalone-subpaths",
+    subpaths.length === 11 && subpathFailures.length === 0,
+    subpaths.length === 11 && subpathFailures.length === 0
+      ? `11 standalone plugin subpaths loaded as native entries`
+      : `count=${subpaths.length} failures=${subpathFailures.join("; ")}`,
+  );
+
+  try {
+    const catalog = (await import(
+      pathToFileURL(join(input.installedDir, "dist", "lib", "agent-tool-catalog.js")).href
+    )) as { AGENT_TOOL_CATALOG_TOOL_IDS?: readonly string[] };
+    const ids = [...(catalog.AGENT_TOOL_CATALOG_TOOL_IDS ?? [])].sort();
+    const expected = [...OWNED_TOOL_IDS].sort();
+    const matches = JSON.stringify(ids) === JSON.stringify(expected);
+    record(
+      "tool-catalog-census",
+      matches && !ids.includes("subagent"),
+      matches
+        ? "the installed catalog holds exactly the nine owned tool ids and no subagent registration"
+        : `catalog ids ${JSON.stringify(ids)} do not match the nine owned tools`,
+    );
+  } catch (error) {
+    record("tool-catalog-census", false, error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    const presets = (await import(
+      pathToFileURL(join(input.installedDir, "dist", "lib", "vvoc-preset-registry.js")).href
+    )) as {
+      BUILTIN_VVOC_PRESET_NAMES?: readonly string[];
+      BUILTIN_VVOC_PRESET_REGISTRY?: Record<string, unknown>;
+    };
+    const registryText = JSON.stringify(presets.BUILTIN_VVOC_PRESET_REGISTRY ?? {});
+    const modelRegistry = (await import(
+      pathToFileURL(join(input.installedDir, "dist", "runtime", "model-registry.js")).href
+    )) as {
+      isManagedThinkingModel?: (selection: unknown) => boolean;
+      managedVariantFor?: (selection: unknown) => unknown;
+    };
+    const selection = {
+      providerID: "xiaomi",
+      modelID: "mimo-v2.6-flash",
+      variant: "thinking",
+    };
+    const variant = modelRegistry.managedVariantFor?.(selection) as
+      | { body?: { thinking?: { type?: unknown } } }
+      | undefined;
+    const variantText = JSON.stringify(variant ?? {});
+    const noKimi =
+      !(presets.BUILTIN_VVOC_PRESET_NAMES ?? []).includes("vv-kimi") && !registryText.includes("vv-kimi");
+    const thinkingOk = variant?.body?.thinking?.type === "enabled";
+    const noPdf = !/pdf/i.test(variantText);
+    const noEffortHigh = !/"reasoningEffort"\s*:\s*"high"/.test(variantText);
+    const thinkingModel = modelRegistry.isManagedThinkingModel?.(selection) === true;
+    record(
+      "presets-model-variants",
+      noKimi && thinkingOk && noPdf && noEffortHigh && thinkingModel,
+      `noKimi=${noKimi} thinking.type.enabled=${thinkingOk} noPdf=${noPdf} noEffortHigh=${noEffortHigh} managedThinkingModel=${thinkingModel}`,
+    );
+  } catch (error) {
+    record("presets-model-variants", false, error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    const agents = (await import(
+      pathToFileURL(join(input.installedDir, "dist", "lib", "managed-agents.js")).href
+    )) as {
+      MANAGED_SUBAGENT_NAMES?: readonly string[];
+      getManagedSubagentDefinition?: (name: string) => { mode?: unknown };
+      loadManagedAgentPromptTemplate?: (name: string) => Promise<string>;
+    };
+    const skills = (await import(
+      pathToFileURL(join(input.installedDir, "dist", "lib", "managed-skills.js")).href
+    )) as {
+      MANAGED_SKILL_NAMES?: readonly string[];
+      loadManagedSkillTemplate?: (name: string) => Promise<string>;
+    };
+    const requiredSubagents = ["vv-implementer", "vv-spec-reviewer", "vv-code-reviewer"];
+    const subagentsPresent = requiredSubagents.every((name) =>
+      (agents.MANAGED_SUBAGENT_NAMES ?? []).includes(name),
+    );
+    const requiredSkills = ["vv-execute", "vv-spec", "vv-plan", "vv-review"];
+    const skillsPresent = requiredSkills.every((name) =>
+      (skills.MANAGED_SKILL_NAMES ?? []).includes(name),
+    );
+    const subagentDefinition = agents.getManagedSubagentDefinition?.("vv-implementer");
+    const skillText = (await skills.loadManagedSkillTemplate?.("vv-execute")) ?? "";
+    const controllerText = (await agents.loadManagedAgentPromptTemplate?.("vv-controller")) ?? "";
+    const nativeSemantics =
+      subagentDefinition?.mode === "subagent" &&
+      /subagent/i.test(skillText) &&
+      controllerText.length > 0;
+    record(
+      "managed-agents-skills",
+      subagentsPresent && skillsPresent && nativeSemantics,
+      `subagents=${subagentsPresent} skills=${skillsPresent} nativeSubagentSemantics=${nativeSemantics}`,
+    );
+  } catch (error) {
+    record("managed-agents-skills", false, error instanceof Error ? error.message : String(error));
+  }
+
+  if (input.projectDir !== undefined && input.hostBinary !== undefined) {
+    try {
+      const scratchDir = dirname(input.projectDir);
+      const binDir = join(scratchDir, "cli-bin");
+      await mkdir(binDir, { recursive: true });
+      await symlink(input.hostBinary, join(binDir, "opencode"));
+      const vvocBin = join(input.projectDir, "node_modules", ".bin", "vvoc");
+      const env = buildHostEnv(process.env, {
+        HOME: join(scratchDir, "home"),
+        XDG_CONFIG_HOME: join(scratchDir, "cfg"),
+        XDG_DATA_HOME: join(scratchDir, "data"),
+        XDG_STATE_HOME: join(scratchDir, "state"),
+        XDG_CACHE_HOME: join(scratchDir, "cache"),
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        OPENCODE_DISABLE_MODELS_FETCH: "1",
+      });
+      // `completion` needs a shell name; buildHostEnv intentionally allow-lists no SHELL.
+      env.SHELL = process.env.SHELL ?? "/bin/zsh";
+      const cliProject = join(scratchDir, "cli-project");
+      await mkdir(join(cliProject, ".vvoc"), { recursive: true });
+      await mkdir(join(cliProject, ".opencode"), { recursive: true });
+      const runCli = (args: readonly string[]) =>
+        runCommand(vvocBin, [...args], { cwd: cliProject, env, timeoutMs: 90_000 });
+
+      const globalVvocPath = join(scratchDir, "cfg", "vvoc", "vvoc.json");
+      const opencodePath = join(scratchDir, "cfg", "opencode", "opencode.json");
+      const globalInit = await runCli(["init", "--non-interactive"]);
+      const projectInit = await runCli(["init", "--non-interactive", "--scope", "project"]);
+      const globalValid = existsSync(globalVvocPath)
+        ? await readFile(globalVvocPath, "utf8")
+        : "";
+      const sync1 = await runCli(["sync"]);
+      const syncHash1 = existsSync(opencodePath) ? await sha256File(opencodePath) : "missing";
+      const sync2 = await runCli(["sync"]);
+      const syncHash2 = existsSync(opencodePath) ? await sha256File(opencodePath) : "missing";
+
+      const status = await runCli(["status"]);
+      const doctor = await runCli(["doctor"]);
+      const statusText = `${status.stdout}${status.stderr}`;
+      record(
+        "cli.status-doctor-upgrade",
+        status.status === 0 && doctor.status === 0 && /2\.0\.18/.test(statusText),
+        `status=${status.status} doctor=${doctor.status} versionObserved=${/2\.0\.18/.test(statusText)}`,
+      );
+
+      const configValidate = await runCli(["config", "validate"]);
+      const pluginList = await runCli(["plugin", "list"]);
+      const pluginDisable = await runCli(["plugin", "disable", "guardian"]);
+      const pluginEnable = await runCli(["plugin", "enable", "guardian"]);
+      const completion = await runCli(["completion"]);
+      record(
+        "cli.config-plugin-completions",
+        configValidate.status === 0 &&
+          pluginList.status === 0 &&
+          pluginDisable.status === 0 &&
+          pluginEnable.status === 0 &&
+          completion.status === 0,
+        `configValidate=${configValidate.status} pluginList=${pluginList.status} toggle=${pluginDisable.status}/${pluginEnable.status} completion=${completion.status}`,
+      );
+
+      // Invalid global config must be refused before any write, then restored.
+      const globalBeforeInvalid = existsSync(globalVvocPath)
+        ? await sha256File(globalVvocPath)
+        : "missing";
+      const opencodeBeforeInvalid = existsSync(opencodePath)
+        ? await sha256File(opencodePath)
+        : "missing";
+      await writeFile(globalVvocPath, "{ invalid json\n", "utf8");
+      const invalidSync = await runCli(["sync"]);
+      const opencodeAfterInvalid = existsSync(opencodePath)
+        ? await sha256File(opencodePath)
+        : "missing";
+      if (globalValid.length > 0) await writeFile(globalVvocPath, globalValid, "utf8");
+      const invalidRefused = invalidSync.status !== 0 && opencodeAfterInvalid === opencodeBeforeInvalid;
+      record(
+        "cli.install-sync-init",
+        globalInit.status === 0 &&
+          projectInit.status === 0 &&
+          sync1.status === 0 &&
+          sync2.status === 0 &&
+          syncHash1 === syncHash2 &&
+          invalidRefused &&
+          globalBeforeInvalid !== "missing",
+        `globalInit=${globalInit.status} projectInit=${projectInit.status} sync=${sync1.status}/${sync2.status} idempotent=${syncHash1 === syncHash2} invalidRefusedBeforeWrite=${invalidRefused}`,
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      record("cli.install-sync-init", false, detail);
+      record("cli.status-doctor-upgrade", false, detail);
+      record("cli.config-plugin-completions", false, detail);
+    }
+  }
+
+  return { ok: checks.every((check) => check.ok), checks };
+}
+// END_BLOCK_INSTALLED_SURFACE

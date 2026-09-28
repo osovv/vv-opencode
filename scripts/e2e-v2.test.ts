@@ -521,21 +521,28 @@ describe("full installed-artifact parity runner", () => {
   const rows: ParityRow[] = [
     { id: "core.a", surface: "core", phase: "T", status: "implemented-core", acceptance: "x", command: "bun scripts/e2e-v2.ts --core" },
     { id: "tui.a", surface: "tui", phase: "T", status: "pending", acceptance: "x", command: "bun scripts/e2e-v2.ts --tui" },
+    { id: "installed.a", surface: "installed", phase: "T", status: "pending", acceptance: "x", command: "bun scripts/e2e-v2.ts --installed" },
     { id: "unit.a", surface: "unit", phase: "T", status: "pending", acceptance: "x", command: "bun test x" },
   ];
 
   test("maps commands to installed tiers and never promotes a unit row", () => {
     expect(tierForCommand("bun scripts/e2e-v2.ts --core")).toBe("core");
     expect(tierForCommand("bun scripts/e2e-v2.ts --tui")).toBe("tui");
+    expect(tierForCommand("bun scripts/e2e-v2.ts --installed")).toBe("installed");
     expect(tierForCommand("bun test src/x.test.ts")).toBeUndefined();
-    const results = evaluateParityRows(rows, { coreOk: true, tuiOk: undefined });
+    const results = evaluateParityRows(rows, { coreOk: true, tuiOk: undefined, installedOk: true });
     expect(results.find((row) => row.id === "core.a")?.outcome).toBe("pass");
+    expect(results.find((row) => row.id === "installed.a")?.outcome).toBe("pass");
     expect(results.find((row) => row.id === "tui.a")?.outcome).toBe("unverified");
     expect(results.find((row) => row.id === "unit.a")?.outcome).toBe("unverified");
     const failures = mandatoryRowFailures(results);
     expect(failures).toContain("tui.a: unverified (TUI tier was not run)");
     expect(failures.some((failure) => failure.startsWith("unit.a"))).toBe(true);
     expect(failures.some((failure) => failure.startsWith("core.a"))).toBe(false);
+    expect(failures.some((failure) => failure.startsWith("installed.a"))).toBe(false);
+    // An installed row is unverified until the installed-surface tier reports.
+    const pendingInstalled = evaluateParityRows(rows, { coreOk: true, tuiOk: true, installedOk: undefined });
+    expect(pendingInstalled.find((row) => row.id === "installed.a")?.outcome).toBe("unverified");
   });
 
   test("the real inventory has 38 rows and full parity stays unverified until every tier lands", async () => {
@@ -608,7 +615,7 @@ describe("full installed-artifact parity runner", () => {
 
   test("buildParityEvidence summarizes verified, failed, and unverified rows", () => {
     const document = buildParityEvidence({
-      rows: evaluateParityRows(rows, { coreOk: false, tuiOk: true }),
+      rows: evaluateParityRows(rows, { coreOk: false, tuiOk: true, installedOk: true }),
       hostBinary: "/bin",
       hostBinarySha256: "h",
       hostSourceCommit: "c",
@@ -622,6 +629,6 @@ describe("full installed-artifact parity runner", () => {
       limits: [],
       generatedAt: "now",
     });
-    expect(document.totals).toMatchObject({ rows: 3, verified: 1, failed: 1, unverified: 1 });
+    expect(document.totals).toMatchObject({ rows: 4, verified: 2, failed: 1, unverified: 1 });
   });
 });

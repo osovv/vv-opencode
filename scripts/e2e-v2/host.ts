@@ -30,6 +30,9 @@
 //   packWorkspace - Create the packed workspace tarball used by the isolated fixture.
 //   linkDependencyTree - Symlink repository dependencies so the packed package resolves offline.
 //   installPackedPackage - Extract the packed tarball into an isolated node_modules tree.
+//   InstalledArtifact - Real installed package/dependency paths and resolved versions.
+//   installPackedPackageWithDependencies - Install the packed tarball with its declared dependency graph (no workspace symlinks).
+//   installedArtifactPathIssues - Prove installed paths resolve inside the isolated project, never the workspace.
 //   OwnedProcesses - Exact live-handle process registry that refuses foreign or exited processes.
 //   waitForRegisteredService - Read the native service registration password from XDG state.
 //   NativeHttpApi - Authenticated bounded fetch helper bound to one owned host.
@@ -39,13 +42,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-003 correction - Added ownership-marked scratch, live-handle PID ownership, bounded commands/HTTP, and precise loopback guards.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Added declared-dependency install of the packed tarball plus installed-path verification, so acceptance runs the real installed artifact instead of workspace dependency symlinks.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Added ownership-marked scratch, live-handle PID ownership, bounded commands/HTTP, and precise loopback guards.]
 // END_CHANGE_SUMMARY
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -402,6 +406,107 @@ export async function installPackedPackage(input: {
   await rm(extractDir, { recursive: true, force: true });
   await linkDependencyTree(input.workspaceNodeModules, nodeModulesDir);
   return packageDir;
+}
+
+/** Result of installing the packed tarball with its declared dependency graph. */
+export interface InstalledArtifact {
+  readonly projectDir: string;
+  readonly packageDir: string;
+  readonly packageVersion: string;
+  readonly resolvedDependencies: Readonly<Record<string, string>>;
+  /** Real (resolved) paths of the installed package and its declared dependencies. */
+  readonly loadedPaths: Readonly<Record<string, string>>;
+}
+
+/**
+ * Install the packed tarball into an isolated project using its DECLARED
+ * dependency graph via the package manager (no workspace `node_modules`
+ * symlinks). Dependency resolution may use the local package-manager cache; it
+ * never substitutes repository files for the installed artifact.
+ */
+export async function installPackedPackageWithDependencies(input: {
+  readonly workspaceRoot: string;
+  readonly tarballPath: string;
+  readonly projectDir: string;
+}): Promise<InstalledArtifact> {
+  await mkdir(input.projectDir, { recursive: true });
+  await writeFile(
+    join(input.projectDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "vvoc-e2e-installed",
+        private: true,
+        version: "0.0.0",
+        dependencies: { "@osovv/vv-opencode": `file:${input.tarballPath}` },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  const install = await runCommand("bun", ["install", "--ignore-scripts"], {
+    cwd: input.projectDir,
+    timeoutMs: 240_000,
+  });
+  if (install.status !== 0) {
+    throw new Error(
+      `declared-dependency install failed (${install.status}): ${install.stderr || install.stdout}`,
+    );
+  }
+  const packageDir = join(input.projectDir, "node_modules", "@osovv", "vv-opencode");
+  if (!existsSync(packageDir)) {
+    throw new Error(`installed package directory is missing: ${packageDir}`);
+  }
+  if ((await lstat(packageDir)).isSymbolicLink()) {
+    throw new Error(`installed package is a symlink, not a real install: ${packageDir}`);
+  }
+  const manifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8")) as {
+    version?: string;
+    dependencies?: Record<string, string>;
+  };
+  const resolvedDependencies: Record<string, string> = {};
+  const loadedPaths: Record<string, string> = {};
+  for (const name of Object.keys(manifest.dependencies ?? {})) {
+    const manifestPath = join(input.projectDir, "node_modules", name, "package.json");
+    if (!existsSync(manifestPath)) {
+      resolvedDependencies[name] = "missing";
+      continue;
+    }
+    const dependencyManifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      version?: string;
+    };
+    resolvedDependencies[name] = dependencyManifest.version ?? "unknown";
+    loadedPaths[name] = await realpath(join(input.projectDir, "node_modules", name));
+  }
+  loadedPaths["@osovv/vv-opencode"] = await realpath(packageDir);
+  return {
+    projectDir: input.projectDir,
+    packageDir,
+    packageVersion: manifest.version ?? "unknown",
+    resolvedDependencies,
+    loadedPaths,
+  };
+}
+
+/**
+ * Verify every installed artifact path resolves outside the workspace and inside
+ * the isolated project, so a workspace symlink can never be reported as an
+ * installed-artifact pass.
+ */
+export function installedArtifactPathIssues(
+  artifact: InstalledArtifact,
+  workspaceRoot: string,
+): string[] {
+  const issues: string[] = [];
+  for (const [name, path] of Object.entries(artifact.loadedPaths)) {
+    if (path.startsWith(resolve(workspaceRoot) + "/")) {
+      issues.push(`installed ${name} resolves into the workspace: ${path}`);
+    }
+    if (!path.startsWith(`${resolve(artifact.projectDir)}/`)) {
+      issues.push(`installed ${name} resolves outside the isolated project: ${path}`);
+    }
+  }
+  return issues;
 }
 // END_BLOCK_PACK
 

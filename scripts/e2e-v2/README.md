@@ -42,21 +42,36 @@ Override the binary with `VVOC_E2E_V2_HOST`; override the scratch root with
 ## Modes
 
 ```bash
-bun run e2e:v2                 # full installed-artifact parity (packed core + real-PTY TUI)
-bun scripts/e2e-v2.ts --core    # packed core real-host tier
-bun scripts/e2e-v2.ts --list    # print the parity inventory by phase/status
-bun scripts/e2e-v2.ts --tui     # real-PTY TUI tier for the actual built TUI
-bun scripts/e2e-v2.ts           # same as --full
+bun run e2e:v2                  # full installed-artifact parity (core + real-PTY TUI + installed surface)
+bun scripts/e2e-v2.ts --core     # packed core real-host tier
+bun scripts/e2e-v2.ts --tui      # real-PTY TUI tier for the installed TUI export
+bun scripts/e2e-v2.ts --installed # installed-surface tier (rows mapped to it by parity.json)
+bun scripts/e2e-v2.ts --list     # print the parity inventory by phase/status
+bun scripts/e2e-v2.ts            # same as --full
 bun scripts/e2e-v2.ts --full --json --keep   # JSON summary, keep the scratch dir
 ```
 
-`--core` exits non-zero on a missing/invalid host or any failed case. `--tui`
-runs the actual built TUI inside a real PTY against an isolated standalone host
-and exits non-zero unless every observed scenario passes. `--full` runs both
-installed tiers, resolves every parity row, writes
+`--core` boots the pinned host against the packed package **installed with its
+declared dependency graph** (no workspace `node_modules` symlinks) and exits
+non-zero on a missing/invalid host or any failed case. `--tui` runs the actual
+installed TUI export inside a real PTY against an isolated standalone host.
+`--installed` verifies the installed package's root aggregate, every standalone
+plugin subpath, the nine-tool catalog census, presets/variants, managed
+agent/skill assets, and the installed `vvoc` CLI lifecycle. `--full` runs all
+tiers, resolves every parity row, writes
 `.grace/changes/active/C-OPENCODE-V2-NATIVE/parity-evidence.json`, and exits
-non-zero while any mandatory parity row is unverified. A reduced core matrix is
-never reported as full parity.
+non-zero while any mandatory parity row is unverified. A reduced matrix is never
+reported as full parity.
+
+## Installed artifact
+
+`installPackedPackageWithDependencies` runs `bun install --ignore-scripts` in an
+isolated project whose only dependency is the freshly packed tarball; dependency
+resolution may use the local package-manager cache. `installedArtifactPathIssues`
+proves every loaded package/dependency path resolves inside that isolated project
+and never inside the workspace. Evidence records the tarball SHA-256, resolved
+dependency versions, and loaded real paths.
+
 
 ## Core case matrix (`--core`)
 

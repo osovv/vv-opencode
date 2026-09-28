@@ -20,7 +20,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added the installed-artifact full runner that reuses the packed core and real-PTY TUI tiers, records exact host/package/dependency hashes, and refuses to pass while any mandatory parity row is unverified.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Resolves rows across the core, real-PTY TUI, and installed-surface tiers from the core summary's installed checks, and records the installed paths and native limits in parity evidence.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added the installed-artifact full runner that reuses the packed core and real-PTY TUI tiers, records exact host/package/dependency hashes, and refuses to pass while any mandatory parity row is unverified.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync } from "node:fs";
@@ -160,9 +161,12 @@ export async function runFull(
     };
   }
 
+  const installedSummary = coreSummary.installedSurface;
+
   const results = evaluateParityRows(rows, {
     coreOk: coreSummary.ok,
     tuiOk: tuiSummary?.ok,
+    installedOk: installedSummary?.ok,
   });
   const failures = mandatoryRowFailures(results);
 
@@ -180,7 +184,9 @@ export async function runFull(
     tarballSha256: coreSummary.tarballSha256,
     packageName: packageManifest.name,
     packageVersion: packageManifest.version,
-    dependencyHashes: await dependencyHashes(options.workspaceRoot, hasher),
+    dependencyHashes: coreSummary.installed?.resolvedDependencies ?? {},
+    installedPaths: coreSummary.installed?.loadedPaths,
+    installedSurface: installedSummary?.checks,
     coreSummary: { cases: coreSummary.cases.length, failed: coreFailed },
     tuiSummary: tuiSummary
       ? {
@@ -189,9 +195,12 @@ export async function runFull(
         }
       : undefined,
     limits: [
-      "Paid/public provider effectiveness is explicitly unverified.",
-      "Equal-time ordering across sessions is not forced on the host and is covered by engine tests only.",
-      "Rows without an installed-artifact tier remain unverified until a scenario covers them.",
+      "Remote/paid provider effectiveness is explicitly unverified; only loopback providers are used.",
+      "Same-model switchModel emits no native event and is not a parity criterion.",
+      "A prompt-preparation failure after the prompt hook has no rejection notice; the harness records zero dispatch instead.",
+      "Cross-session equal-time first-accept ordering remains a recorded engine-test limit, not forced on the host.",
+      "Rows without an installed-artifact tier remain unverified until a scenario covers them; --full never promotes them.",
+      "The anthropic-compatible cohort is declared but not exercised by the installed-surface tier.",
     ],
     generatedAt: new Date().toISOString(),
   });
