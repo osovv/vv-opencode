@@ -31,7 +31,7 @@
 
 import { createServer } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -1192,18 +1192,34 @@ async function aggregatePrompt(
   api: ReturnType<typeof createNativeApi>,
   projectDir: string,
   text: string,
+  timeoutMs = 60_000,
 ): Promise<string> {
-  const opened = await api("/api/session", {
-    method: "POST",
-    body: JSON.stringify({ location: { directory: projectDir } }),
-  });
-  const sessionID = (opened.body as { data?: { id?: string } } | undefined)?.data?.id;
-  if (typeof sessionID !== "string") throw new Error(`session did not open: ${opened.text}`);
-  await api(`/api/session/${sessionID}/prompt`, {
-    method: "POST",
-    body: JSON.stringify({ text }),
-  });
-  return sessionID;
+  // Service registration is not registry readiness; retry until the location
+  // registry accepts a session, then prompt once it accepts.
+  const deadline = Date.now() + timeoutMs;
+  let sessionID = "";
+  for (;;) {
+    const opened = await api("/api/session", {
+      method: "POST",
+      body: JSON.stringify({ location: { directory: projectDir } }),
+    }).catch(() => undefined);
+    const id = (opened?.body as { data?: { id?: string } } | undefined)?.data?.id;
+    if (typeof id === "string") {
+      sessionID = id;
+      break;
+    }
+    if (Date.now() > deadline) throw new Error(`session did not open: ${opened?.text ?? "no response"}`);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+  }
+  for (;;) {
+    const result = await api(`/api/session/${sessionID}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }).catch(() => undefined);
+    if (result?.status !== undefined && result.status < 400) return sessionID;
+    if (Date.now() > deadline) return sessionID;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+  }
 }
 
 /** Wait until the provider trace shows at least one recorded request body. */
@@ -1229,7 +1245,11 @@ function traceHasSystemText(records: readonly ProviderRequestRecord[], marker: s
     const system = body.system;
     if (Array.isArray(system)) {
       for (const part of system) {
-        if (typeof part === "object" && part !== null && typeof (part as { text?: unknown }).text === "string") {
+        if (
+          typeof part === "object" &&
+          part !== null &&
+          typeof (part as { text?: unknown }).text === "string"
+        ) {
           if ((part as { text: string }).text.includes(marker)) return true;
         }
       }
@@ -1240,9 +1260,52 @@ function traceHasSystemText(records: readonly ProviderRequestRecord[], marker: s
 }
 
 /**
- * Drive the INSTALLED root aggregate on the real host for the rows observable in
- * the actual provider payload: system-context injection and peak-hours hard/soft
- * dispatch gating. Every observation comes from a real loopback host turn.
+ * Wait for a real analytics usage record with provider-reported non-zero tokens
+ * under the isolated XDG data home (`vvoc/analytics/usage-YYYY-MM.jsonl`).
+ */
+async function waitForAnalyticsUsage(
+  dataDir: string,
+  timeoutMs: number,
+): Promise<{ ok: boolean; detail: string }> {
+  const dir = join(dataDir, "vvoc", "analytics");
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const files = (await readdir(dir)).filter((name) => name.startsWith("usage-"));
+      for (const file of files) {
+        const text = await readFile(join(dir, file), "utf8");
+        for (const line of text.split("\n")) {
+          if (!line.trim()) continue;
+          let record: unknown;
+          try {
+            record = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const tokens = (record as { tokens?: Record<string, unknown> } | undefined)?.tokens;
+          if (tokens === undefined) continue;
+          const total = ["input", "output", "reasoning", "cacheRead", "cacheWrite"].reduce(
+            (sum, key) => sum + (typeof tokens[key] === "number" ? (tokens[key] as number) : 0),
+            0,
+          );
+          if (total > 0) {
+            return { ok: true, detail: `usageFile=${file} tokens=${JSON.stringify(tokens)}` };
+          }
+        }
+      }
+    } catch {
+      // directory not created yet
+    }
+    if (Date.now() > deadline) return { ok: false, detail: "no non-zero usage record observed" };
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+  }
+}
+
+/**
+ * Drive the INSTALLED root aggregate on the real host for rows observable in
+ * the actual provider payload: system-context injection, provider-reported
+ * analytics usage, and peak-hours hard/soft PRIMARY dispatch gating. Every
+ * observation comes from a real loopback host turn.
  */
 export async function runAggregateParity(input: {
   readonly workspaceRoot: string;
@@ -1269,6 +1332,12 @@ export async function runAggregateParity(input: {
         ok: injected,
         detail: `providerRequests=${records.length} injectedGuidance=${injected}`,
       });
+      const analytics = await waitForAnalyticsUsage(join(input.scratchDir, "sysctx-data"), 20_000);
+      checks.push({
+        id: "plugin.analytics",
+        ok: analytics.ok,
+        detail: analytics.detail,
+      });
     } finally {
       host.stop();
     }
@@ -1294,39 +1363,66 @@ export async function runAggregateParity(input: {
         },
       };
     };
-  const countChatCompletions = (records: readonly ProviderRequestRecord[]): number =>
-    records.filter((record) => record.path?.endsWith("/chat/completions")).length;
+  /**
+   * A PRIMARY dispatch carries injected guidance (`<semantic_continuity>`), which
+   * system-context-injection never adds to title/compaction/internal requests.
+   * Counting only these avoids attributing an exempt auxiliary dispatch to a
+   * primary peak-hours bypass.
+   */
+  const countPrimaryDispatches = (records: readonly ProviderRequestRecord[]): number =>
+    records.filter(
+      (record) =>
+        record.path?.endsWith("/chat/completions") &&
+        JSON.stringify(record.body ?? "").includes("<semantic_continuity>"),
+    ).length;
   const openSession = async (
     api: ReturnType<typeof createNativeApi>,
     projectDir: string,
   ): Promise<string> => {
-    const opened = await api("/api/session", {
-      method: "POST",
-      body: JSON.stringify({ location: { directory: projectDir } }),
-    });
-    const sessionID = (opened.body as { data?: { id?: string } } | undefined)?.data?.id;
-    if (typeof sessionID !== "string") throw new Error(`session did not open: ${opened.text}`);
-    return sessionID;
+    // Service registration is not app/registry readiness: retry until the
+    // location/agent/model registry actually accepts a session.
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const opened = await api("/api/session", {
+        method: "POST",
+        body: JSON.stringify({ location: { directory: projectDir } }),
+      }).catch(() => undefined);
+      const sessionID = (opened?.body as { data?: { id?: string } } | undefined)?.data?.id;
+      if (typeof sessionID === "string") return sessionID;
+      if (Date.now() > deadline) {
+        throw new Error(`session did not open: ${opened?.text ?? "no response"}`);
+      }
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+    }
   };
-  const promptSession = (
+  const promptSession = async (
     api: ReturnType<typeof createNativeApi>,
     sessionID: string,
     text: string,
-  ): Promise<unknown> =>
-    api(`/api/session/${sessionID}/prompt`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    }).catch(() => undefined);
+  ): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const result = await api(`/api/session/${sessionID}/prompt`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      }).catch(() => undefined);
+      const code = (result?.body as { code?: string } | undefined)?.code;
+      if (result?.status !== undefined && result.status < 400) return;
+      if (Date.now() > deadline) return;
+      void code;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+    }
+  };
   const measureSecondPrompt = async (label: string, mode: "soft" | "hard"): Promise<number> => {
     const host = await bootAggregateHost({ ...input, label, vvocOverrides: peakHoursOverrides(mode) });
     try {
       const sessionID = await openSession(host.api, host.projectDir);
       await promptSession(host.api, sessionID, "peak binding warmup");
       await waitForProviderRequests(host.tracePath, 1, timeoutMs);
-      const before = countChatCompletions(await readProviderTrace(host.tracePath));
+      const before = countPrimaryDispatches(await readProviderTrace(host.tracePath));
       await promptSession(host.api, sessionID, `peak ${mode} probe`);
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 6_000));
-      const after = countChatCompletions(await readProviderTrace(host.tracePath));
+      const after = countPrimaryDispatches(await readProviderTrace(host.tracePath));
       return Math.max(0, after - before);
     } finally {
       host.stop();
@@ -1338,7 +1434,7 @@ export async function runAggregateParity(input: {
     checks.push({
       id: "plugin.peak-hours",
       ok: softExtra > 0 && hardExtra === 0,
-      detail: `softSecondPromptDispatches=${softExtra} hardSecondPromptDispatches=${hardExtra}`,
+      detail: `softSecondPromptPrimaryDispatches=${softExtra} hardSecondPromptPrimaryDispatches=${hardExtra}`,
     });
   } catch (error) {
     checks.push({

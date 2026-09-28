@@ -1,7 +1,7 @@
 {
   "change": "C-OPENCODE-V2-NATIVE T-003 core real-host harness",
   "mode": "core",
-  "generatedAt": "2026-09-28T19:54:33.119Z",
+  "generatedAt": "2026-09-28T20:10:40.538Z",
   "host": {
     "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
     "sha256": "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f",
@@ -9,10 +9,10 @@
     "sourceCommit": "cd9a14a6b688d4021bee381dfd39d2cef9c0f862"
   },
   "package": {
-    "tarballPath": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/pack/vv-opencode-e2e.tgz",
+    "tarballPath": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/pack/vv-opencode-e2e.tgz",
     "tarballSha256": "1a97177ac6b1707c82cfc12409908db19cc2ea165ff4a93b7e4e83db9dd2525e",
     "version": "1.7.0",
-    "installedDir": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@osovv/vv-opencode",
+    "installedDir": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@osovv/vv-opencode",
     "installStrategy": "declared dependency graph installed into the isolated project via bun install --ignore-scripts (no workspace node_modules symlinks)",
     "resolvedDependencies": {
       "@clack/prompts": "1.8.1",
@@ -30,20 +30,20 @@
       "zod": "4.1.8"
     },
     "loadedPaths": {
-      "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@clack/prompts",
-      "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/ai",
-      "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/client",
-      "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/plugin",
-      "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/protocol",
-      "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@opencode/schema",
-      "ajv": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/ajv",
-      "citty": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/citty",
-      "effect": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/effect",
-      "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/htmlparser2",
-      "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/jsonc-parser",
-      "turndown": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/turndown",
-      "zod": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/zod",
-      "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/project/node_modules/@osovv/vv-opencode"
+      "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@clack/prompts",
+      "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/ai",
+      "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/client",
+      "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/plugin",
+      "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/protocol",
+      "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@opencode/schema",
+      "ajv": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/ajv",
+      "citty": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/citty",
+      "effect": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/effect",
+      "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/htmlparser2",
+      "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/jsonc-parser",
+      "turndown": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/turndown",
+      "zod": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/zod",
+      "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/project/node_modules/@osovv/vv-opencode"
     },
     "packTool": "bun pm pack --ignore-scripts",
     "packEquivalence": "verified npm-format tarball entrypoints present and package.json name/version match; successfully installed and loaded on the pinned host",
@@ -51,7 +51,7 @@
   },
   "isolation": {
     "scratch": {
-      "dir": "/tmp/opencode/vvoc-e2e-v2-IhkGWx",
+      "dir": "/tmp/opencode/vvoc-e2e-v2-o9bRk7",
       "base": "/tmp/opencode",
       "marker": "owned"
     },
@@ -73,24 +73,24 @@
     ],
     "env": {
       "PATH": "[redacted]",
-      "HOME": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/home",
-      "XDG_CONFIG_HOME": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/cfg",
-      "XDG_DATA_HOME": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/data",
-      "XDG_STATE_HOME": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/state",
-      "XDG_CACHE_HOME": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/cache",
+      "HOME": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/home",
+      "XDG_CONFIG_HOME": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/cfg",
+      "XDG_DATA_HOME": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/data",
+      "XDG_STATE_HOME": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/state",
+      "XDG_CACHE_HOME": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/cache",
       "LOOPBACK_API_KEY": "[redacted]",
       "OPENCODE_DISABLE_MODELS_FETCH": "1",
-      "VVOC_E2E_CONTROL_FILE": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/trace/control.json",
-      "VVOC_E2E_PROVIDER_ORIGIN": "http://127.0.0.1:32955",
+      "VVOC_E2E_CONTROL_FILE": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/trace/control.json",
+      "VVOC_E2E_PROVIDER_ORIGIN": "http://127.0.0.1:37459",
       "VVOC_E2E_ALLOWED_PROVIDERS": "loopback",
-      "VVOC_E2E_TRACE": "/tmp/opencode/vvoc-e2e-v2-IhkGWx/trace/observer.jsonl",
+      "VVOC_E2E_TRACE": "/tmp/opencode/vvoc-e2e-v2-o9bRk7/trace/observer.jsonl",
       "VVOC_E2E_DELAY_MARKER": "__vvoc_e2e_delay__",
       "VVOC_E2E_DELAY_MS": "5000"
     },
     "networking": "owned 127.0.0.1 provider origin only; fixture guards enforce http.request URL, model.request baseURL/provider, and WS handshake destination before dispatch"
   },
   "provider": {
-    "origin": "http://127.0.0.1:32955",
+    "origin": "http://127.0.0.1:37459",
     "catalog": {
       "object": "list",
       "data": [
@@ -131,10 +131,10 @@
   "teardown": {
     "strategy": "exact live ChildProcess handles, SIGTERM then joined SIGKILL; ownership-marked scratch removed only through guarded cleanup",
     "ownedPids": [
-      393779,
-      393840,
-      393862,
-      393904
+      398850,
+      398909,
+      398970,
+      399007
     ]
   },
   "cases": [
@@ -161,9 +161,9 @@
         "model.updated reload count stays bounded (4)"
       ],
       "failures": [],
-      "durationMs": 995,
+      "durationMs": 990,
       "observed": {
-        "instanceId": "7d8871e6fdf996b1dcf0ddc08c254699",
+        "instanceId": "4fb949c68c73094ebc8c5ff6fed076ef",
         "guardState": {
           "http.request": true,
           "model.request": true,
@@ -206,14 +206,14 @@
         "the accepted prompt dispatched exactly once for its marker (expected 1, got 1)",
         "the accepted prompt dispatched the source variant merged settings (override/high)",
         "the valid prompt bound a durable family policy",
-        "session model carries the qualified override variant (750c9ec924c792a9.seam-smart.override)"
+        "session model carries the qualified override variant (633cc38a69cf2617.seam-smart.override)"
       ],
       "failures": [],
-      "durationMs": 2973,
+      "durationMs": 2981,
       "observed": {
-        "sessionID": "ses_f166b9b34ffeBrm6mqGZE7Q4LT",
+        "sessionID": "ses_f165d2493ffeS7x9kMnqAHK81e",
         "rejectedStatus": 400,
-        "variant": "750c9ec924c792a9.seam-smart.override"
+        "variant": "633cc38a69cf2617.seam-smart.override"
       }
     },
     {
@@ -227,7 +227,7 @@
       "status": "pass",
       "detail": "two distinct qualified payloads for one model; final registry readback present",
       "assertions": [
-        "root role uses the override variant (c977cbd95ec160f1.seam-smart.override)",
+        "root role uses the override variant (9fff3d0607aedf57.seam-smart.override)",
         "native model.list contains the family-qualified override variant",
         "native model.list does not contain a fabricated variant (negative control)",
         "capture service still exposes the source variant descriptors",
@@ -235,9 +235,9 @@
         "the same model dispatched a distinct plain/minimal payload"
       ],
       "failures": [],
-      "durationMs": 1643,
+      "durationMs": 1623,
       "observed": {
-        "variant": "c977cbd95ec160f1.seam-smart.override",
+        "variant": "9fff3d0607aedf57.seam-smart.override",
         "registryContains": true
       }
     },
@@ -253,17 +253,17 @@
       "detail": "auxiliary title is parented, family-qualified, and replaces the native title dispatch",
       "assertions": [
         "auxiliary work created a real parented native child",
-        "child records the family root parentID (expected \"ses_f166b892cffe3oNjHeO7boXAv6\", got \"ses_f166b892cffe3oNjHeO7boXAv6\")",
+        "child records the family root parentID (expected \"ses_f165d1299ffeLZTEq1AzMTJkwm\", got \"ses_f165d1299ffeLZTEq1AzMTJkwm\")",
         "child carries host-owned auxiliary kind/role metadata (expected \"{\\\"vvocAuxiliary\\\":{\\\"kind\\\":\\\"title\\\",\\\"role\\\":\\\"fast\\\"}}\", got \"{\\\"vvocAuxiliary\\\":{\\\"kind\\\":\\\"title\\\",\\\"role\\\":\\\"fast\\\"}}\")",
-        "child shares the family capture prefix (e596cb62f23245b1)",
+        "child shares the family capture prefix (8c01d4d63623cbc9)",
         "exactly one provider dispatch is attributed to the parent (no native title dispatch) (expected 1, got 1)",
         "the auxiliary child performed the title generation instead"
       ],
       "failures": [],
-      "durationMs": 3136,
+      "durationMs": 3143,
       "observed": {
-        "sessionID": "ses_f166b892cffe3oNjHeO7boXAv6",
-        "childID": "ses_3a93fe6aa80932b56b436027c7504dc8",
+        "sessionID": "ses_f165d1299ffeLZTEq1AzMTJkwm",
+        "childID": "ses_8e35e4550d649ccd680179144b5735df",
         "parentDispatches": 1,
         "childDispatches": 1
       }
@@ -292,7 +292,7 @@
         "raw unbound synthetic did not bind a family (status 200)"
       ],
       "failures": [],
-      "durationMs": 7411,
+      "durationMs": 7441,
       "observed": {
         "genStatus": 200,
         "synStatus": 200,
@@ -310,17 +310,17 @@
       "status": "pass",
       "detail": "explicit-at-create and explicit switch are preserved over the config default",
       "assertions": [
-        "explicit-at-create kept the override selection (94629dce654b96ea.seam-smart.override)",
+        "explicit-at-create kept the override selection (8d1621733c2f5ddb.seam-smart.override)",
         "explicit-at-create dispatched the override payload",
         "explicit switch accepted (204)",
-        "explicit switch kept the chosen plain selection (801407b76101d818.seam-smart.plain)",
+        "explicit switch kept the chosen plain selection (fdb09e539c065f05.seam-smart.plain)",
         "explicit switch dispatched the chosen plain payload"
       ],
       "failures": [],
-      "durationMs": 3865,
+      "durationMs": 3839,
       "observed": {
-        "createVariant": "94629dce654b96ea.seam-smart.override",
-        "switchVariant": "801407b76101d818.seam-smart.plain"
+        "createVariant": "8d1621733c2f5ddb.seam-smart.override",
+        "switchVariant": "fdb09e539c065f05.seam-smart.plain"
       }
     },
     {
@@ -334,16 +334,16 @@
       "status": "pass",
       "detail": "config change binds new work without mutating an already bound family",
       "assertions": [
-        "initial family bound override (1b46501771715a61.seam-smart.override)",
-        "new work after mutation binds the new plain policy (1111fda88a090b06.seam-smart.plain)",
+        "initial family bound override (638af5ed1a95237c.seam-smart.override)",
+        "new work after mutation binds the new plain policy (d669dab094e7e4b0.seam-smart.plain)",
         "the new family capture differs from the earlier one",
-        "the already-bound family keeps its original captured variant (expected \"1b46501771715a61.seam-smart.override\", got \"1b46501771715a61.seam-smart.override\")"
+        "the already-bound family keeps its original captured variant (expected \"638af5ed1a95237c.seam-smart.override\", got \"638af5ed1a95237c.seam-smart.override\")"
       ],
       "failures": [],
-      "durationMs": 4764,
+      "durationMs": 4729,
       "observed": {
-        "firstVariant": "1b46501771715a61.seam-smart.override",
-        "secondVariant": "1111fda88a090b06.seam-smart.plain"
+        "firstVariant": "638af5ed1a95237c.seam-smart.override",
+        "secondVariant": "d669dab094e7e4b0.seam-smart.plain"
       }
     },
     {
@@ -359,32 +359,32 @@
       "assertions": [
         "native fork created (200)",
         "forked session has an empty parentID",
-        "forked session records fork.sessionID to the source (expected \"ses_f166b3e44ffenexSz1s0bHl8Ch\", got \"ses_f166b3e44ffenexSz1s0bHl8Ch\")",
-        "host-verified family lookup resolves the fork to the root family (expected \"ses_f166b3e44ffenexSz1s0bHl8Ch\", got \"ses_f166b3e44ffenexSz1s0bHl8Ch\")",
+        "forked session records fork.sessionID to the source (expected \"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\", got \"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\")",
+        "host-verified family lookup resolves the fork to the root family (expected \"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\", got \"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\")",
         "root session exposes its projectID",
         "native worktree created (200: )",
         "fork moved into the worktree (204)",
-        "moved fork still resolves the root family (expected \"ses_f166b3e44ffenexSz1s0bHl8Ch\", got \"ses_f166b3e44ffenexSz1s0bHl8Ch\")",
-        "moved fork keeps the root family capture (expected \"27ce5e16493ec531\", got \"27ce5e16493ec531\")",
+        "moved fork still resolves the root family (expected \"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\", got \"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\")",
+        "moved fork keeps the root family capture (expected \"5b2415329ca11f13\", got \"5b2415329ca11f13\")",
         "moved fork prompt accepted (200)",
-        "moved fork dispatched the root family captured plain payload with root lineage (fresh=[{\"variant\":\"plain\",\"marker\":true,\"session\":\"ses_f166b3e44ffenexSz1s0bHl8Ch\"}])"
+        "moved fork dispatched the root family captured plain payload with root lineage (fresh=[{\"variant\":\"plain\",\"marker\":true,\"session\":\"ses_f165cc7c6ffeRC5oyTQ1Ex5mcP\"}])"
       ],
       "failures": [],
-      "durationMs": 2836,
+      "durationMs": 2781,
       "observed": {
-        "rootFamily": "ses_f166b3e44ffenexSz1s0bHl8Ch",
-        "forkID": "ses_f166b37f0ffe5R0j0XfYD72fiz",
-        "projectID": "35c756e2128d18757ecf86369dd7d3f0b22eaf6b",
+        "rootFamily": "ses_f165cc7c6ffeRC5oyTQ1Ex5mcP",
+        "forkID": "ses_f165cc188ffep4tjapc3WNku80",
+        "projectID": "fe5ecd972eb52703be795fdbd6b6184265e1bf47",
         "movedModel": {
           "id": "seam-smart",
           "providerID": "loopback",
-          "variant": "27ce5e16493ec531.seam-smart.plain"
+          "variant": "5b2415329ca11f13.seam-smart.plain"
         },
         "freshSummary": [
           {
             "variant": "plain",
             "marker": true,
-            "session": "ses_f166b3e44ffenexSz1s0bHl8Ch"
+            "session": "ses_f165cc7c6ffeRC5oyTQ1Ex5mcP"
           }
         ]
       }
@@ -410,7 +410,7 @@
         "fast reply ran the effect exactly once with no lost event (expected 1, got 1)"
       ],
       "failures": [],
-      "durationMs": 1268,
+      "durationMs": 1287,
       "observed": {
         "denied": {
           "allowed": false,
@@ -440,14 +440,14 @@
         "policy switch during A preparation accepted (204)",
         "second prompt accepted (200)",
         "first prompt request completed (200)",
-        "the first-accepted input's plain policy bound, not the first-staged override (496d1ac2090182c4.seam-smart.plain)",
+        "the first-accepted input's plain policy bound, not the first-staged override (58b14e8e08493724.seam-smart.plain)",
         "the bound family capture reflects the accepted plain policy"
       ],
       "failures": [],
-      "durationMs": 7820,
+      "durationMs": 7807,
       "observed": {
-        "session": "ses_f166b285fffePK3TjHu2wV4LuT",
-        "variant": "496d1ac2090182c4.seam-smart.plain",
+        "session": "ses_f165cb207ffelqfroQL9wV1D5I",
+        "variant": "58b14e8e08493724.seam-smart.plain",
         "aStatus": 200,
         "bStatus": 200
       }
@@ -488,25 +488,25 @@
       "status": "pass",
       "detail": "persisted root and auxiliary family captures survived a real host restart",
       "assertions": [
-        "pre-restart root family bound a snapshot variant (62a7e78c43e37645.seam-smart.override)",
+        "pre-restart root family bound a snapshot variant (f9b2dd42a9377d94.seam-smart.override)",
         "pre-restart auxiliary family exists",
-        "pre-restart auxiliary shares the root family snapshot (expected \"62a7e78c43e37645\", got \"62a7e78c43e37645\")",
+        "pre-restart auxiliary shares the root family snapshot (expected \"f9b2dd42a9377d94\", got \"f9b2dd42a9377d94\")",
         "first host instance exited before restart",
         "packed fixture control plane re-registered on the new host instance",
-        "persisted root family capture replayed after a real service restart (expected \"62a7e78c43e37645.seam-smart.override\", got \"62a7e78c43e37645.seam-smart.override\")",
+        "persisted root family capture replayed after a real service restart (expected \"f9b2dd42a9377d94.seam-smart.override\", got \"f9b2dd42a9377d94.seam-smart.override\")",
         "the replayed root family dispatched its persisted variant payload after restart",
-        "persisted auxiliary family capture replayed after restart (expected \"62a7e78c43e37645\", got \"62a7e78c43e37645\")",
-        "auxiliary child kept its qualified variant after restart (expected \"62a7e78c43e37645.seam-smart.plain\", got \"62a7e78c43e37645.seam-smart.plain\")",
+        "persisted auxiliary family capture replayed after restart (expected \"f9b2dd42a9377d94\", got \"f9b2dd42a9377d94\")",
+        "auxiliary child kept its qualified variant after restart (expected \"f9b2dd42a9377d94.seam-smart.plain\", got \"f9b2dd42a9377d94.seam-smart.plain\")",
         "the auxiliary family dispatched its persisted variant payload after restart"
       ],
       "failures": [],
-      "durationMs": 4567,
+      "durationMs": 4461,
       "observed": {
-        "rootID": "ses_f166b09d1ffeK1MF7ZCP3YKa9R",
-        "rootVariant": "62a7e78c43e37645.seam-smart.override",
-        "rootAfterVariant": "62a7e78c43e37645.seam-smart.override",
-        "auxID": "ses_d0efa6d3882c24ad95808ba79a226d16",
-        "auxVariant": "62a7e78c43e37645.seam-smart.plain",
+        "rootID": "ses_f165c9386ffeoVSh7RzGv8Ic5E",
+        "rootVariant": "f9b2dd42a9377d94.seam-smart.override",
+        "rootAfterVariant": "f9b2dd42a9377d94.seam-smart.override",
+        "auxID": "ses_cadf228b3dc36a5cc140c061372e0b24",
+        "auxVariant": "f9b2dd42a9377d94.seam-smart.plain",
         "restarted": true
       }
     }
@@ -560,9 +560,14 @@
       "detail": "providerRequests=3 injectedGuidance=true"
     },
     {
-      "id": "plugin.peak-hours",
+      "id": "plugin.analytics",
       "ok": false,
-      "detail": "softSecondPromptDispatches=3 hardSecondPromptDispatches=1"
+      "detail": "no non-zero usage record observed"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "ok": true,
+      "detail": "softSecondPromptPrimaryDispatches=2 hardSecondPromptPrimaryDispatches=0"
     }
   ],
   "coverageLimits": [

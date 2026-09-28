@@ -215,9 +215,9 @@
       "id": "plugin.peak-hours",
       "surface": "Peak-hours soft/hard policy and exemptions",
       "phase": "T-006",
-      "status": "pending",
-      "acceptance": "Hard peak denial precedes provider dispatch without killing existing work; subagent exemptions remain. (Installed aggregate attempt observed hard mode still dispatching; see parity-evidence aggregateChecks.)",
-      "command": "bun test src/plugins/peak-hours"
+      "status": "implemented-full",
+      "acceptance": "Hard peak denial precedes PRIMARY provider dispatch without killing existing work; exempt title/auxiliary requests are not counted; soft mode dispatches. Subagent exemptions remain.",
+      "command": "bun scripts/e2e-v2.ts --aggregate"
     },
     {
       "id": "plugin.workflow",
