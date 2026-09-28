@@ -1,7 +1,7 @@
 {
   "version": 1,
   "kind": "vvoc-tool-contract-host-compatibility",
-  "generatedAt": "2026-09-28T18:28:09.957Z",
+  "generatedAt": "2026-09-28T19:14:40.442Z",
   "command": "bun run contracts:host",
   "host": {
     "opencodeVersion": "2.0.18",
@@ -130,12 +130,11 @@
     "allOwnedToolsObserved": true,
     "coverageFailures": [],
     "nativeLimits": [
-      "work_item_open accept: the built workflow tool throws 'Attempted to assign to readonly property' on the pinned native host; the workflow accept path is exercised through work_item_list instead and the defect remains unexercised here.",
       "hashline_edit/str_replace_editor/web_search/web_fetch are validated at native registration and model-visible projection level; full execution coverage belongs to the installed-parity tier (wi-17).",
       "The anthropic-compatible transport cohort is declared with a native provider package but is not exercised by this bounded native matrix."
     ],
-    "caseCount": 2,
-    "caseDigest": "cfb38cd2137d9bd4c3dbf9fcc0cd70aa648389526fe5db8461017b4cbf3554da"
+    "caseCount": 3,
+    "caseDigest": "e9050a9ea43c2096c0b8da98b6e68bd7daaf0e3a60dc5dc314a30bf29787af95"
   },
   "artifacts": [
     {
@@ -370,8 +369,8 @@
     },
     {
       "path": "dist/plugins/secrets-redaction/deep.js",
-      "sha256": "8ac395439fa6a8205957d085ffbbf2edc1308a2c13c1c78d0ff511fd21f16469",
-      "bytes": 2691
+      "sha256": "7a83669f9f45160cbfc263484510633807e73389249c3dea72c043600d531b42",
+      "bytes": 2913
     },
     {
       "path": "dist/plugins/secrets-redaction/engine.js",
@@ -927,8 +926,8 @@
     },
     {
       "path": "src/plugins/secrets-redaction/deep.ts",
-      "sha256": "10d04c4a5a496021a56557aae859d133fdb6517133b5515eabd5cbd8e5ce6fe6",
-      "bytes": 2976
+      "sha256": "764338c0894f80054c8f3d8d40366660d463706ee19a795eb67fd55d916fbe19",
+      "bytes": 3150
     },
     {
       "path": "src/plugins/secrets-redaction/engine.ts",
@@ -1289,13 +1288,13 @@
     },
     {
       "path": "scripts/check-tool-contracts-host.test.ts",
-      "sha256": "0a38c8ebe47c3438dcbfabd28d9feb69967726cb7123ae2d1ab2d850a680a524",
-      "bytes": 70366
+      "sha256": "78edb008b69443e2a8faaca99f09ee6b2c7e2585715a00459f495ee98cbe450d",
+      "bytes": 71031
     },
     {
       "path": "scripts/check-tool-contracts-host.ts",
-      "sha256": "3afba8fe41a23c6fba8e7177cfa71f6cda79a0bf4c84e77c7aa376963757f2c2",
-      "bytes": 172675
+      "sha256": "6e1de5d7d6a2aa943a1f704d4a890b9decbc459d1f8bfb5ce9319fcef77d4b95",
+      "bytes": 173880
     },
     {
       "path": "templates/skills/vv-execute/references/tool-contracts.md",
@@ -1546,8 +1545,8 @@
       },
       {
         "path": "dist/plugins/secrets-redaction/deep.js",
-        "sha256": "8ac395439fa6a8205957d085ffbbf2edc1308a2c13c1c78d0ff511fd21f16469",
-        "bytes": 2691
+        "sha256": "7a83669f9f45160cbfc263484510633807e73389249c3dea72c043600d531b42",
+        "bytes": 2913
       },
       {
         "path": "dist/plugins/secrets-redaction/engine.js",
@@ -1906,13 +1905,13 @@
       },
       {
         "path": "scripts/check-tool-contracts-host.test.ts",
-        "sha256": "0a38c8ebe47c3438dcbfabd28d9feb69967726cb7123ae2d1ab2d850a680a524",
-        "bytes": 70366
+        "sha256": "78edb008b69443e2a8faaca99f09ee6b2c7e2585715a00459f495ee98cbe450d",
+        "bytes": 71031
       },
       {
         "path": "scripts/check-tool-contracts-host.ts",
-        "sha256": "3afba8fe41a23c6fba8e7177cfa71f6cda79a0bf4c84e77c7aa376963757f2c2",
-        "bytes": 172675
+        "sha256": "6e1de5d7d6a2aa943a1f704d4a890b9decbc459d1f8bfb5ce9319fcef77d4b95",
+        "bytes": 173880
       },
       {
         "path": "src/index.ts",
@@ -2151,8 +2150,8 @@
       },
       {
         "path": "src/plugins/secrets-redaction/deep.ts",
-        "sha256": "10d04c4a5a496021a56557aae859d133fdb6517133b5515eabd5cbd8e5ce6fe6",
-        "bytes": 2976
+        "sha256": "764338c0894f80054c8f3d8d40366660d463706ee19a795eb67fd55d916fbe19",
+        "bytes": 3150
       },
       {
         "path": "src/plugins/secrets-redaction/engine.ts",
@@ -2708,8 +2707,8 @@
       },
       {
         "path": "dist/plugins/secrets-redaction/deep.js",
-        "sha256": "8ac395439fa6a8205957d085ffbbf2edc1308a2c13c1c78d0ff511fd21f16469",
-        "bytes": 2691
+        "sha256": "7a83669f9f45160cbfc263484510633807e73389249c3dea72c043600d531b42",
+        "bytes": 2913
       },
       {
         "path": "dist/plugins/secrets-redaction/engine.js",
@@ -3068,13 +3067,13 @@
       },
       {
         "path": "scripts/check-tool-contracts-host.test.ts",
-        "sha256": "0a38c8ebe47c3438dcbfabd28d9feb69967726cb7123ae2d1ab2d850a680a524",
-        "bytes": 70366
+        "sha256": "78edb008b69443e2a8faaca99f09ee6b2c7e2585715a00459f495ee98cbe450d",
+        "bytes": 71031
       },
       {
         "path": "scripts/check-tool-contracts-host.ts",
-        "sha256": "3afba8fe41a23c6fba8e7177cfa71f6cda79a0bf4c84e77c7aa376963757f2c2",
-        "bytes": 172675
+        "sha256": "6e1de5d7d6a2aa943a1f704d4a890b9decbc459d1f8bfb5ce9319fcef77d4b95",
+        "bytes": 173880
       },
       {
         "path": "src/index.ts",
@@ -3313,8 +3312,8 @@
       },
       {
         "path": "src/plugins/secrets-redaction/deep.ts",
-        "sha256": "10d04c4a5a496021a56557aae859d133fdb6517133b5515eabd5cbd8e5ce6fe6",
-        "bytes": 2976
+        "sha256": "764338c0894f80054c8f3d8d40366660d463706ee19a795eb67fd55d916fbe19",
+        "bytes": 3150
       },
       {
         "path": "src/plugins/secrets-redaction/engine.ts",
@@ -3679,6 +3678,13 @@
       "failures": [],
       "cases": [
         {
+          "id": "work-open",
+          "tool": "work_item_open",
+          "expect": "completed",
+          "observedStatus": "completed",
+          "ok": true
+        },
+        {
           "id": "work-list",
           "tool": "work_item_list",
           "expect": "completed",
@@ -3827,13 +3833,13 @@
         }
       ],
       "providerRequests": {
-        "modelRequests": 3,
-        "modelRequestsWithTools": 3,
+        "modelRequests": 4,
+        "modelRequestsWithTools": 4,
         "webSearchRequests": 0,
         "webFetchRequests": 0
       },
       "sideEffects": {
-        "execJournalEntries": 1,
+        "execJournalEntries": 2,
         "rejectJournalEntries": 0,
         "pluginErrors": [],
         "workflowState": {

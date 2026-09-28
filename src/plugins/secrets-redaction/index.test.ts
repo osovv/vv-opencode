@@ -1,7 +1,7 @@
 // FILE: src/plugins/secrets-redaction/index.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native-boundary behavioral tests for the SecretsRedactionPlugin handlers: context redaction including configured and placeholder-resolved web apiKey values, tool-part payload redaction, http.response stream restoration, tool-input restoration, strict per-family disabled/unknown policy behavior, and per-native-session WebSocket framing lifecycle (handshake discard, abandoned-stream isolation, same-family session independence, production hook registration).
+//   PURPOSE: Native-boundary behavioral tests for the SecretsRedactionPlugin handlers: context redaction including configured and placeholder-resolved web apiKey values, tool-part payload redaction, http.response stream restoration, tool-input restoration including deep-frozen host inputs, strict per-family disabled/unknown policy behavior, and per-native-session WebSocket framing lifecycle (handshake discard, abandoned-stream isolation, same-family session independence, production hook registration).
 //   SCOPE: Invoke the native hook handlers with pinned message/system/stream shapes through createSecretsRedactionRegistration with an injected strict family policy resolver; pure web apiKey rule tests are retained.
 //   DEPENDS: bun:test, src/lib/vvoc-config.ts, src/plugins/secrets-redaction/config.ts, src/plugins/secrets-redaction/index.ts
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
@@ -29,11 +29,12 @@
 //   distPlugin - Resolve a built plugin subpath.
 //   prompt - Send one smoke prompt to a scenario session.
 //   firstPlaceholder - Produce one redacted placeholder through the handlers.
+//   deepFreeze - Recursively freeze a JSON-like fixture like the native host freezes tool input.
 //   secretsVvoc - Build a vvoc config with the smoke secrets settings.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE MID-REPAIR-2 - Added per-native-session WebSocket framing regressions: a handshake discards a terminal-less SSE stream and abandoned partial carries so later JSON frames restore, a >512-session same-family fan-out never evicts an active carry, two same-family sessions keep independent framing while sharing mappings, and production setup's registered handshake/receive callbacks are invoked through an abort/retry with every hook disposer observed.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Added deep-frozen tool-input regressions: array and nested-object restore through toolBefore, no-placeholder equivalent copy, cyclic input cycle preservation, and frozen tool-call redaction all assert the host-provided original is never mutated and the handler rebinds to an owned copy. Prior MID-REPAIR-2: per-native-session WebSocket framing regressions (handshake discard, abandoned-stream isolation, >512-session same-family fan-out, independent framing, production hook registration).]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -111,6 +112,19 @@ async function firstPlaceholder(registration: SecretsRedactionRegistration): Pro
   ];
   await registration.handlers.context({ sessionID: "s1", messages });
   return messages[0]!.content[0]!.text!.match(PLACEHOLDER_PATTERN)![0];
+}
+
+/** Recursively freeze a JSON-like fixture the way the native host freezes tool input. */
+function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+  if (value !== null && typeof value === "object") {
+    if (seen.has(value)) return value;
+    seen.add(value);
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key], seen);
+    }
+    Object.freeze(value);
+  }
+  return value;
 }
 
 describe("SecretsRedactionPlugin", () => {
@@ -305,6 +319,91 @@ describe("SecretsRedactionPlugin", () => {
     const input = { command: `echo ${EMAIL}` };
     await registration.handlers.toolBefore({ sessionID: "s1", tool: "bash", input });
     expect(input.command).toBe(`echo ${EMAIL}`);
+  });
+});
+
+describe("SecretsRedactionPlugin frozen tool-input restoration", () => {
+  test("restores a deep-frozen nested tool input without mutating the original", async () => {
+    const registration = makeRegistration();
+    const placeholder = await firstPlaceholder(registration);
+    const frozen = deepFreeze({
+      items: [{ command: `echo ${placeholder}`, nested: { value: placeholder } }],
+      plain: `x ${placeholder}`,
+    });
+    const before = JSON.stringify(frozen);
+    const event = { sessionID: "s1", tool: "bash", input: frozen as unknown };
+
+    await registration.handlers.toolBefore(event);
+
+    // The handler rebinds to an owned copy; the host-frozen original is untouched.
+    expect(event.input).not.toBe(frozen);
+    expect(Object.isFrozen(frozen.items)).toBe(true);
+    expect(JSON.stringify(frozen)).toBe(before);
+    const restored = event.input as {
+      items: Array<{ command: string; nested: { value: string } }>;
+      plain: string;
+    };
+    expect(restored.items[0]!.command).toContain(EMAIL);
+    expect(restored.items[0]!.command).not.toContain(placeholder);
+    expect(restored.items[0]!.nested.value).toBe(EMAIL);
+    expect(restored.plain).toBe(`x ${EMAIL}`);
+    expect(Object.isFrozen(restored.items)).toBe(false);
+  });
+
+  test("an input without placeholders still yields an equivalent owned copy", async () => {
+    const registration = makeRegistration();
+    const frozen = deepFreeze({ items: [{ command: "echo safe", nested: { value: "safe" } }] });
+    const before = JSON.stringify(frozen);
+    const event = { sessionID: "s1", tool: "bash", input: frozen as unknown };
+
+    await registration.handlers.toolBefore(event);
+
+    expect(event.input).not.toBe(frozen);
+    expect(JSON.stringify(event.input)).toBe(before);
+    expect(JSON.stringify(frozen)).toBe(before);
+  });
+
+  test("a cyclic tool input restores into an owned copy that preserves the cycle", async () => {
+    const registration = makeRegistration();
+    const placeholder = await firstPlaceholder(registration);
+    const cyclic: Record<string, unknown> = { value: placeholder };
+    cyclic.self = cyclic;
+    deepFreeze(cyclic);
+    const event = { sessionID: "s1", tool: "bash", input: cyclic };
+
+    await registration.handlers.toolBefore(event);
+    const restored = event.input as Record<string, unknown>;
+
+    expect(restored).not.toBe(cyclic);
+    expect(restored.value).toBe(EMAIL);
+    expect(restored.self).toBe(restored);
+    // The original frozen cycle is unchanged: still the placeholder, still self-referential.
+    expect(cyclic.value).toBe(placeholder);
+    expect(cyclic.self).toBe(cyclic);
+  });
+
+  test("redacts a deep-frozen tool-call payload into an owned copy", async () => {
+    const registration = makeRegistration();
+    const frozenInput = deepFreeze({
+      command: `echo ${EMAIL}`,
+      nested: { value: EMAIL },
+    });
+    const before = JSON.stringify(frozenInput);
+    const messages: ContextMessage[] = [
+      { role: "assistant", content: [{ type: "tool-call", input: frozenInput }] },
+    ];
+
+    await registration.handlers.context({ sessionID: "s1", messages });
+
+    const redacted = messages[0]!.content[0]!.input as {
+      command: string;
+      nested: { value: string };
+    };
+    expect(redacted).not.toBe(frozenInput);
+    expect(redacted.command).toMatch(PLACEHOLDER_PATTERN);
+    expect(redacted.command).not.toContain(EMAIL);
+    expect(redacted.nested.value).toMatch(PLACEHOLDER_PATTERN);
+    expect(JSON.stringify(frozenInput)).toBe(before);
   });
 });
 

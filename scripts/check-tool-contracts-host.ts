@@ -135,6 +135,8 @@
 //   resolvePinnedHostBinary - Resolve and SHA-verify the pinned native host binary.
 //   verifyPinnedHost - Isolated version+SHA gate for the pinned native host.
 //   runNativeMatrix - Run the bounded native contract matrix and return observed host evidence.
+//   NATIVE_MATRIX_STEPS - Deterministic native matrix calls including the generic work_item_open accept path.
+//   NATIVE_MATRIX_LIMITS - Declared native-matrix coverage limits recorded in compatibility evidence.
 //   resolveEvidenceTarget - Require the approved active bundle directory to already exist.
 //   invalidateEvidence - Remove prior owned passing evidence so a stale pass cannot mislead.
 //   writeEvidenceIfAllowed - Write evidence only on a valid target, no failures, and within cap.
@@ -145,8 +147,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-HOST - Ported the live harness to native 2.0.18: pinned-binary SHA/version gating, native probe and composing-aggregate plugins (native tool domain + hooks), native cohorts/config/pins/provenance, current-bundle evidence, and a bounded native matrix that verifies the nine owned registrations, native projections, accept/reject diagnostics and side-effect isolation.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-HOST - Began the native 2.0.18 port (pinned-binary gating, native probe plugin/config, native event normalization).]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Restored generic work_item_open accept coverage in the native matrix (the frozen-input defect was fixed in secrets-redaction deep.ts, not the workflow path) and removed the stale work_item_open nativeLimit workaround; limits are now the exported NATIVE_MATRIX_LIMITS constant.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-HOST - Ported the live harness to native 2.0.18: pinned-binary SHA/version gating, native probe and composing-aggregate plugins (native tool domain + hooks), native cohorts/config/pins/provenance, current-bundle evidence, and a bounded native matrix that verifies the nine owned registrations, native projections, accept/reject diagnostics and side-effect isolation.]
 // END_CHANGE_SUMMARY
 
 import { mkdir, mkdtemp, readdir, rm, writeFile, readFile } from "node:fs/promises";
@@ -3414,7 +3416,33 @@ async function runHostSession(
  * execute (unknown keys stripped, defaults applied), so rejection is proven on
  * type/enum violations, never on unknown-key removal.
  */
-const NATIVE_MATRIX_STEPS: readonly HostToolStep[] = [
+export const NATIVE_MATRIX_STEPS: readonly HostToolStep[] = [
+  {
+    id: "work-open",
+    tool: "work_item_open",
+    expect: "completed",
+    buildArgs: () => ({
+      items: [
+        {
+          key: "matrix-task",
+          title: "Matrix task",
+          mode: "delegated",
+          requiredReviewers: [],
+          writeScope: ["src/impl.ts"],
+          taskId: "T-100",
+          acceptanceCriteria: ["The matrix implementation file exists."],
+        },
+      ],
+      execution: {
+        executionKey: "matrix-run",
+        source: { kind: "conversation-scoped" },
+        goal: "Exercise the generic work_item_open accept path.",
+        boundary: { files: ["src/impl.ts"], directories: [] },
+      },
+    }),
+    outputIncludes: ['"tool": "work_item_open"', '"ok": true', '"action": "register"'],
+    expectJson: { tool: "work_item_open", ok: true, action: "register" },
+  },
   {
     id: "work-list",
     tool: "work_item_list",
@@ -3431,6 +3459,15 @@ const NATIVE_MATRIX_STEPS: readonly HostToolStep[] = [
     expectDiagnostic: { path: "items" },
     rejectionLevel: "execute",
   },
+];
+
+/**
+ * Declared limits this bounded native matrix intentionally does not cover. Kept
+ * as an exported constant so the runner and tests agree on what is unexercised.
+ */
+export const NATIVE_MATRIX_LIMITS: readonly string[] = [
+  "hashline_edit/str_replace_editor/web_search/web_fetch are validated at native registration and model-visible projection level; full execution coverage belongs to the installed-parity tier (wi-17).",
+  "The anthropic-compatible transport cohort is declared with a native provider package but is not exercised by this bounded native matrix.",
 ];
 
 /** Deep-clone a JSON value with `description` keys removed (native projection tolerance). */
@@ -4448,11 +4485,7 @@ export async function runContractsHost(options?: {
       fingerprintsBefore: beforeFingerprints.entries,
       fingerprintsAfter: afterFingerprints.entries,
       coverageFailures,
-      nativeLimits: [
-        "work_item_open accept: the built workflow tool throws 'Attempted to assign to readonly property' on the pinned native host; the workflow accept path is exercised through work_item_list instead and the defect remains unexercised here.",
-        "hashline_edit/str_replace_editor/web_search/web_fetch are validated at native registration and model-visible projection level; full execution coverage belongs to the installed-parity tier (wi-17).",
-        "The anthropic-compatible transport cohort is declared with a native provider package but is not exercised by this bounded native matrix.",
-      ],
+      nativeLimits: NATIVE_MATRIX_LIMITS,
     });
     const failures = sessions.flatMap((session) => session.failed);
     const gateFailures =

@@ -1,7 +1,7 @@
 // FILE: scripts/check-tool-contracts-host.test.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify pure host-runner helpers for both routes: environment allowlist, host version gating, owned-root cleanup, fail-closed journal/stdout/harness parsing, probe and full-matrix observation evaluation, exact built-descriptor projection comparison, cohort/wire-definition normalization, composing-wrapper generation, isolated config builders, evidence lifecycle helpers, fingerprint drift, and compatibility-evidence assembly.
+//   PURPOSE: Verify pure host-runner helpers for both routes: environment allowlist, host version gating, owned-root cleanup, fail-closed journal/stdout/harness parsing, probe and full-matrix observation evaluation, exact built-descriptor projection comparison, cohort/wire-definition normalization, composing-wrapper generation, isolated config builders, evidence lifecycle helpers, fingerprint drift, native-matrix coverage declarations, and compatibility-evidence assembly.
 //   SCOPE: Pure helper tests with an injected synthetic built-contract context only; the live routes run via `bun scripts/check-tool-contracts-host.ts --probe` and `bun run contracts:host`.
 //   DEPENDS: [bun:test, scripts/check-tool-contracts-host, src/lib/vvoc-config.ts]
 //   LINKS: [M-AGENT-TOOL-CONTRACT]
@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-009 recovery attempt3 - Added dependency-closure and pinned-manifest tests: cycle/re-export discovery termination on owned tmp fixtures, `.js`→`.ts` and raw-query resolution, real-repo closure now including the previously omitted behavior-critical workflow/hashline/web files without an exact-N count, specifier extraction, tmp fingerprint drift for changed helper/schema/package, and matching/absent/mismatched @opencode-ai manifest gating. Prior correction: synthetic built-context evaluation, exact projection drift, hidden-editor, loaded-identity, owned semantics, malformed-body, evidence lifecycle, and fingerprint drift.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Added native-matrix coverage assertions: the matrix exercises the generic work_item_open accept path and no longer records the work_item_open readonly nativeLimit workaround. Prior C-AGENT-TOOL-CONTRACTS recovery: dependency-closure and pinned-manifest tests.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -48,6 +48,8 @@ import {
   EXTRA_FINGERPRINT_PATHS,
   HOST_COHORTS,
   MINIMUM_SUPPORTED_HOST_VERSION,
+  NATIVE_MATRIX_LIMITS,
+  NATIVE_MATRIX_STEPS,
   NATIVE_PINNED_DEPENDENCIES,
   NATIVE_PINNED_DEV_DEPENDENCIES,
   OWNED_TOOL_IDS,
@@ -1691,6 +1693,27 @@ describe("local dependency closure discovery", () => {
     expect(EXTRA_FINGERPRINT_PATHS).toContain("package.json");
     expect(EXTRA_FINGERPRINT_PATHS).toContain("scripts/check-tool-contracts-host.ts");
     expect(uniqueSorted(["b", "a", "a"])).toEqual(["a", "b"]);
+  });
+});
+
+describe("native matrix coverage", () => {
+  test("exercises the generic work_item_open accept path", () => {
+    const accept = NATIVE_MATRIX_STEPS.find((step) => step.id === "work-open");
+    expect(accept).toBeDefined();
+    expect(accept!.tool).toBe("work_item_open");
+    expect(accept!.expect).toBe("completed");
+    const args = accept!.buildArgs("", { workspace: "/tmp/native-matrix", port: 0 }) as {
+      items?: unknown;
+      execution?: unknown;
+    };
+    expect(Array.isArray(args.items)).toBe(true);
+    expect((args.items as Array<{ mode?: string }>)[0]!.mode).toBe("delegated");
+    expect(args.execution).toBeDefined();
+  });
+
+  test("no longer records the work_item_open readonly nativeLimit workaround", () => {
+    expect(NATIVE_MATRIX_LIMITS.some((limit) => limit.includes("work_item_open"))).toBe(false);
+    expect(NATIVE_MATRIX_LIMITS.some((limit) => limit.includes("readonly property"))).toBe(false);
   });
 });
 
