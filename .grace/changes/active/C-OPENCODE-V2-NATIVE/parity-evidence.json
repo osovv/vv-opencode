@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-09-29T19:26:45.516Z",
+  "generatedAt": "2026-09-29T19:41:58.626Z",
   "change": "C-OPENCODE-V2-NATIVE",
   "host": {
     "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
@@ -29,20 +29,20 @@
     "zod": "4.1.8"
   },
   "installedPaths": {
-    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@clack/prompts",
-    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@opencode/ai",
-    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@opencode/client",
-    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@opencode/plugin",
-    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@opencode/protocol",
-    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@opencode/schema",
-    "ajv": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/ajv",
-    "citty": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/citty",
-    "effect": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/effect",
-    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/htmlparser2",
-    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/jsonc-parser",
-    "turndown": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/turndown",
-    "zod": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/zod",
-    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-a9jlGW/project/node_modules/@osovv/vv-opencode"
+    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@clack/prompts",
+    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@opencode/ai",
+    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@opencode/client",
+    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@opencode/plugin",
+    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@opencode/protocol",
+    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@opencode/schema",
+    "ajv": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/ajv",
+    "citty": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/citty",
+    "effect": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/effect",
+    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/htmlparser2",
+    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/jsonc-parser",
+    "turndown": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/turndown",
+    "zod": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/zod",
+    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-uMMmp7/project/node_modules/@osovv/vv-opencode"
   },
   "installedSurface": [
     {
@@ -121,6 +121,16 @@
       "id": "plugin.hashline-edit",
       "ok": true,
       "detail": "readAnchor=1#JN#NJ routedHashlineEdit=true staleAnchorRejected=true"
+    },
+    {
+      "id": "plugin.spec-guard",
+      "ok": true,
+      "detail": "gatedWriteBlocked=true plainWriteAllowed=true specGuardDiagnostic=true"
+    },
+    {
+      "id": "plugin.tool-history-compaction",
+      "ok": true,
+      "detail": "olderOutputCompacted=true recentWindowPreserved=true"
     }
   ],
   "tiers": {
@@ -135,9 +145,9 @@
   },
   "totals": {
     "rows": 38,
-    "verified": 32,
+    "verified": 34,
     "failed": 0,
-    "unverified": 6
+    "unverified": 4
   },
   "rows": [
     {
@@ -291,10 +301,9 @@
     {
       "id": "plugin.spec-guard",
       "surface": "Spec guard scoped gating",
-      "status": "pending",
-      "tier": "none",
-      "outcome": "unverified",
-      "detail": "no installed-artifact tier covers this row"
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
     },
     {
       "id": "plugin.system-context-injection",
@@ -313,10 +322,9 @@
     {
       "id": "plugin.tool-history-compaction",
       "surface": "Tool-history compaction cutoff",
-      "status": "pending",
-      "tier": "none",
-      "outcome": "unverified",
-      "detail": "no installed-artifact tier covers this row"
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
     },
     {
       "id": "plugin.peak-hours",

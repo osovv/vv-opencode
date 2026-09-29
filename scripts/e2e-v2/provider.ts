@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses carry an OpenAI usage chunk (real analytics), a scripted tool-call plan (with per-step args derived from the request and a pre-call side-effect hook) makes the host execute named tools, and a loopback WebSocket transport responder records provider.websocket events and echoes a split placeholder across frames.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses carry an OpenAI usage chunk (real analytics), a scripted tool-call plan (per-step args derived from the request, a pre-call side-effect hook, and optional activation-marker gating) makes the host execute named tools, and a loopback WebSocket transport responder records provider.websocket events and echoes a split placeholder across frames.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 - Created the loopback provider and bounded request trace for the packed host harness.]
 // END_CHANGE_SUMMARY
 
@@ -125,6 +125,8 @@ export async function createLoopbackProvider(input: {
   readonly tracePath: string;
   readonly catalog: unknown;
   readonly toolPlan?: readonly ProviderToolStep[];
+  /** Only serve the tool plan when the request messages contain this text (skips warmup turns). */
+  readonly toolPlanActivationText?: string;
 }): Promise<LoopbackProvider> {
   assertLoopbackHttpUrl(`http://127.0.0.1:${input.port}`, "loopback provider");
   const server = Bun.serve({
@@ -161,7 +163,11 @@ export async function createLoopbackProvider(input: {
         const messages = (body as { messages?: Array<{ role?: string }> } | undefined)?.messages ?? [];
         const toolResults = messages.filter((message) => message.role === "tool").length;
         const plan = input.toolPlan;
-        if (plan !== undefined && toolResults < plan.length) {
+        const planActive =
+          plan !== undefined &&
+          (input.toolPlanActivationText === undefined ||
+            JSON.stringify(messages).includes(input.toolPlanActivationText));
+        if (planActive && plan !== undefined && toolResults < plan.length) {
           const step = plan[toolResults];
           if (step !== undefined) {
             const args = step.argsFromRequest ? step.argsFromRequest(body) : step.args;

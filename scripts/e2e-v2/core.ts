@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies per-row outcomes, and drives the INSTALLED root aggregate on the real host: system-context injection, analytics usage, peak-hours PRIMARY gating, a tool control plane proving web-tools permission-before-network, guardian deny/allow file-write gating, and hashline-edit routed-tool + stale-anchor rejection; retries session readiness and deterministically replays the auxiliary family after restart.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies per-row outcomes, and drives the INSTALLED root aggregate on the real host control plane: system-context injection, analytics usage, peak-hours PRIMARY gating, web-tools permission-before-network, guardian deny/allow file-write gating, hashline-edit routed-tool + stale-anchor rejection, spec-guard scoped enforcement, and tool-history-compaction of the real dispatched request; retries readiness and deterministically replays the auxiliary family after restart.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle).]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
 // END_CHANGE_SUMMARY
@@ -1112,6 +1112,7 @@ async function bootAggregateHost(input: {
   readonly label?: string;
   readonly permissions?: readonly unknown[];
   readonly toolPlan?: readonly ProviderToolStep[];
+  readonly toolPlanActivationText?: string;
   readonly vvocOverrides?: (config: {
     roles: Record<string, string>;
     plugins: Record<string, unknown>;
@@ -1150,6 +1151,9 @@ async function bootAggregateHost(input: {
       ),
     ),
     ...(input.toolPlan === undefined ? {} : { toolPlan: input.toolPlan }),
+    ...(input.toolPlanActivationText === undefined
+      ? {}
+      : { toolPlanActivationText: input.toolPlanActivationText }),
   });
 
   await writeFile(
@@ -1771,6 +1775,118 @@ export async function runToolControlPlaneParity(input: {
   } catch (error) {
     checks.push({
       id: "plugin.hashline-edit",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // spec-guard: enforce mode blocks a full-content write of an active
+  // `.vvoc/specs` artifact that has ERROR findings, while the same tool writing a
+  // non-gated path is allowed (the gate is path-scoped).
+  try {
+    const label = "spec-guard";
+    const projectDir = join(input.scratchDir, `${label}-project`);
+    const gatedPath = join(projectDir, ".vvoc", "specs", "gated", "spec.xml");
+    const plainPath = join(projectDir, "plain-spec-target.txt");
+    await mkdir(dirname(gatedPath), { recursive: true });
+    const invalidSpec = `<GraceChangeSpec graceVersion="4.0" status="approved"></GraceChangeSpec>`;
+    const host = await bootAggregateHost({
+      ...input,
+      label,
+      permissions: [
+        { action: "write", resource: gatedPath, effect: "allow" },
+        { action: "write", resource: plainPath, effect: "allow" },
+        { action: "edit", resource: gatedPath, effect: "allow" },
+        { action: "edit", resource: plainPath, effect: "allow" },
+      ],
+      vvocOverrides: (config) => {
+        config.plugins["spec-guard"] = { enabled: true, mode: "enforce" };
+      },
+      toolPlanActivationText: "spec guard probe",
+      toolPlan: [
+        { tool: "write", args: { path: gatedPath, content: invalidSpec } },
+        { tool: "write", args: { path: plainPath, content: "plain\n" } },
+      ],
+    });
+    try {
+      await controlPrompt(host.api, host.projectDir, "spec guard probe", timeoutMs);
+      await controlDelay(6_000);
+      const records = await readProviderTrace(host.tracePath);
+      const gatedBlocked = !existsSync(gatedPath);
+      const plainWritten = existsSync(plainPath);
+      const specGuardDiagnostic = records.some((record) =>
+        JSON.stringify(record.body ?? "").includes("[spec-guard]"),
+      );
+      checks.push({
+        id: "plugin.spec-guard",
+        ok: gatedBlocked && plainWritten && specGuardDiagnostic,
+        detail: `gatedWriteBlocked=${gatedBlocked} plainWriteAllowed=${plainWritten} specGuardDiagnostic=${specGuardDiagnostic}`,
+      });
+    } finally {
+      host.stop();
+    }
+  } catch (error) {
+    checks.push({
+      id: "plugin.spec-guard",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // tool-history-compaction: a long tool history is compacted on the real
+  // dispatched request while the protected recent window stays intact.
+  try {
+    const label = "compaction";
+    const bigDir = join(input.scratchDir, `${label}-project`, "big");
+    await mkdir(bigDir, { recursive: true });
+    await writeFile(
+      join(bigDir, "big.txt"),
+      Array.from(
+        { length: 400 },
+        (_, index) => `line ${index} MATCHTOKEN filler filler filler filler filler`,
+      ).join("\n"),
+      "utf8",
+    );
+    const grepArgs = { pattern: "MATCHTOKEN", path: bigDir };
+    const host = await bootAggregateHost({
+      ...input,
+      label,
+      vvocOverrides: (config) => {
+        config.plugins["tool-history-compaction"] = {
+          enabled: true,
+          protectLastCalls: 1,
+          protectRecentMessages: 0,
+        };
+      },
+      toolPlanActivationText: "compaction probe",
+      toolPlan: [
+        { tool: "grep", args: grepArgs },
+        { tool: "grep", args: grepArgs },
+        { tool: "grep", args: grepArgs },
+      ],
+    });
+    try {
+      await controlPrompt(host.api, host.projectDir, "compaction probe", timeoutMs);
+      await controlDelay(8_000);
+      const records = await readProviderTrace(host.tracePath);
+      const bodies = records
+        .filter((record) => record.event === "provider.request")
+        .map((record) => JSON.stringify(record.body ?? ""));
+      const compacted = bodies.some((body) => body.includes("[... tool output pruned ...]"));
+      const protectedRecent = bodies.some(
+        (body) => (body.match(/MATCHTOKEN/g)?.length ?? 0) >= 50,
+      );
+      checks.push({
+        id: "plugin.tool-history-compaction",
+        ok: compacted && protectedRecent,
+        detail: `olderOutputCompacted=${compacted} recentWindowPreserved=${protectedRecent}`,
+      });
+    } finally {
+      host.stop();
+    }
+  } catch (error) {
+    checks.push({
+      id: "plugin.tool-history-compaction",
       ok: false,
       detail: error instanceof Error ? error.message : String(error),
     });
