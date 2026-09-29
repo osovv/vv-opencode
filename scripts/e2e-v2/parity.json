@@ -151,17 +151,17 @@
       "id": "plugin.guardian",
       "surface": "Guardian approve/defer and permission review",
       "phase": "T-005",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Guardian approves only low-risk work, defers uncertainty, and uses family-bound auxiliary inference with native permission events.",
-      "command": "bun test src/plugins/guardian.integration.test.ts"
+      "command": "bun scripts/e2e-v2.ts --aggregate"
     },
     {
       "id": "plugin.hashline-edit",
       "surface": "Hashline edit routing and fresh anchor checks",
       "phase": "T-005",
-      "status": "pending",
+      "status": "implemented-full",
       "acceptance": "Per-model edit routing, fresh hashline checks, and edit-tool visibility/execution enforcement under native schemas.",
-      "command": "bun test src/plugins/hashline-edit.integration.test.ts"
+      "command": "bun scripts/e2e-v2.ts --aggregate"
     },
     {
       "id": "plugin.secrets-redaction",

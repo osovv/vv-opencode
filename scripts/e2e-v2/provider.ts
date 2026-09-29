@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses carry an OpenAI usage chunk (real analytics), an optional scripted tool-call plan makes the host execute named tools, and a loopback WebSocket transport responder records provider.websocket open/message events and echoes a split placeholder across protocol frames.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses carry an OpenAI usage chunk (real analytics), a scripted tool-call plan (with per-step args derived from the request and a pre-call side-effect hook) makes the host execute named tools, and a loopback WebSocket transport responder records provider.websocket events and echoes a split placeholder across frames.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 - Created the loopback provider and bounded request trace for the packed host harness.]
 // END_CHANGE_SUMMARY
 
@@ -108,7 +108,11 @@ function streamToolCallResponse(model: string, callID: string, tool: string, arg
 /** One scripted tool call the loopback provider streams to make the host execute a tool. */
 export interface ProviderToolStep {
   readonly tool: string;
-  readonly args: unknown;
+  readonly args?: unknown;
+  /** Derive this step's args from the inbound request body (e.g. a read result anchor). */
+  readonly argsFromRequest?: (body: unknown) => unknown;
+  /** Side effect run after args are derived and before the tool call is streamed. */
+  readonly before?: () => Promise<void> | void;
 }
 
 /**
@@ -160,7 +164,9 @@ export async function createLoopbackProvider(input: {
         if (plan !== undefined && toolResults < plan.length) {
           const step = plan[toolResults];
           if (step !== undefined) {
-            return new Response(streamToolCallResponse(model, `call_${toolResults + 1}`, step.tool, step.args), {
+            const args = step.argsFromRequest ? step.argsFromRequest(body) : step.args;
+            if (step.before) await step.before();
+            return new Response(streamToolCallResponse(model, `call_${toolResults + 1}`, step.tool, args), {
               headers: { "content-type": "text/event-stream" },
             });
           }

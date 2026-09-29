@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies per-row installed and core outcomes, and drives the INSTALLED root aggregate on the real host: system-context injection, provider-reported analytics usage, peak-hours PRIMARY dispatch gating, a WebSocket-transport observation, and a native tool control plane (scripted tool calls + native permission deny/allow) proving web-tools permission-before-network; also retries session readiness and deterministically replays the auxiliary family after restart.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies per-row outcomes, and drives the INSTALLED root aggregate on the real host: system-context injection, analytics usage, peak-hours PRIMARY gating, a tool control plane proving web-tools permission-before-network, guardian deny/allow file-write gating, and hashline-edit routed-tool + stale-anchor rejection; retries session readiness and deterministically replays the auxiliary family after restart.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle).]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
 // END_CHANGE_SUMMARY
@@ -1658,6 +1658,122 @@ export async function runToolControlPlaneParity(input: {
     });
   } finally {
     oracle.stop();
+  }
+
+  // guardian/permission-before-side-effect: a guarded native write must not
+  // happen when the native permission is rejected, and must happen when allowed.
+  const runGuardedWrite = async (
+    decision: "once" | "reject",
+  ): Promise<{ seen: boolean; written: boolean }> => {
+    const target = join(input.scratchDir, `guardian-${decision}.txt`);
+    await rm(target, { force: true });
+    const host = await bootAggregateHost({
+      ...input,
+      label: `guardian-${decision}`,
+      permissions: [
+        { action: "write", resource: target, effect: "ask" },
+        { action: "edit", resource: target, effect: "ask" },
+      ],
+      toolPlan: [{ tool: "write", args: { path: target, content: "guarded\n" } }],
+    });
+    let seen = false;
+    try {
+      const sessionID = await controlPrompt(host.api, host.projectDir, "guardian guarded write probe", timeoutMs);
+      if (sessionID !== undefined) {
+        const requestID = await waitForPendingPermission(host.api, sessionID, 12_000);
+        if (requestID !== undefined) {
+          seen = true;
+          await replyPermission(host.api, sessionID, requestID, decision);
+        }
+        await controlDelay(5_000);
+      }
+      return { seen, written: existsSync(target) };
+    } finally {
+      host.stop();
+    }
+  };
+  try {
+    const denied = await runGuardedWrite("reject");
+    const allowed = await runGuardedWrite("once");
+    checks.push({
+      id: "plugin.guardian",
+      ok: denied.seen && !denied.written && allowed.written,
+      detail: `deniedPermissionSeen=${denied.seen} deniedWritten=${denied.written} allowedPermissionSeen=${allowed.seen} allowedWritten=${allowed.written}`,
+    });
+  } catch (error) {
+    checks.push({
+      id: "plugin.guardian",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // hashline-edit: the routed edit tool is `hashline_edit` (native edit/patch
+  // hidden), and an anchor that is stale after an external change is rejected.
+  try {
+    const target = join(input.scratchDir, "hashline-target.txt");
+    await writeFile(target, "alpha\nbeta\n", "utf8");
+    let anchor: string | undefined;
+    const host = await bootAggregateHost({
+      ...input,
+      label: "hashline",
+      permissions: [{ action: "edit", resource: target, effect: "allow" }],
+      toolPlan: [
+        { tool: "read", args: { path: target } },
+        {
+          tool: "hashline_edit",
+          argsFromRequest: (body) => {
+            const match = JSON.stringify(body ?? "").match(
+              /(\d+#[ZPMQVRWSNKTXJBYH]{2}#[ZPMQVRWSNKTXJBYH]{2})\|/,
+            );
+            anchor = match?.[1];
+            return anchor === undefined
+              ? undefined
+              : { filePath: target, edits: [{ op: "replace", pos: anchor, lines: ["ALPHA"] }] };
+          },
+          before: async () => {
+            // Change the file after the read established the anchor, so the
+            // emitted edit anchor is stale.
+            await writeFile(target, "alpha changed\nbeta\n", "utf8");
+          },
+        },
+      ],
+    });
+    try {
+      await controlPrompt(host.api, host.projectDir, "hashline stale anchor probe", timeoutMs);
+      await controlDelay(6_000);
+      const records = await readProviderTrace(host.tracePath);
+      const firstWithTools = records.find(
+        (record) =>
+          record.event === "provider.request" &&
+          Array.isArray((record.body as { tools?: unknown[] } | undefined)?.tools) &&
+          ((record.body as { tools?: unknown[] }).tools?.length ?? 0) > 0,
+      );
+      const toolNames = (
+        (firstWithTools?.body as { tools?: Array<{ function?: { name?: string }; name?: string }> })
+          ?.tools ?? []
+      ).map((entry) => entry.function?.name ?? entry.name);
+      const routed =
+        toolNames.includes("hashline_edit") &&
+        !toolNames.includes("edit") &&
+        !toolNames.includes("patch");
+      const staleRejected = records.some((record) =>
+        JSON.stringify(record.body ?? "").includes("changed since last read"),
+      );
+      checks.push({
+        id: "plugin.hashline-edit",
+        ok: anchor !== undefined && routed && staleRejected,
+        detail: `readAnchor=${anchor ?? "missing"} routedHashlineEdit=${routed} staleAnchorRejected=${staleRejected}`,
+      });
+    } finally {
+      host.stop();
+    }
+  } catch (error) {
+    checks.push({
+      id: "plugin.hashline-edit",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return checks;
