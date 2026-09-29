@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Resolves rows across the core, real-PTY TUI, installed-surface, and installed-aggregate tiers, records installed paths plus per-check observations and native limits in parity evidence, and never promotes an unobserved aggregate row.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Resolves rows per case/check across the core, real-PTY TUI, installed-surface, and installed-aggregate tiers so one flaky scenario no longer cascades; records installed paths, per-check observations, and native limits, and never promotes an unobserved row.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added the installed-artifact full runner that reuses the packed core and real-PTY TUI tiers, records exact host/package/dependency hashes, and refuses to pass while any mandatory parity row is unverified.]
 // END_CHANGE_SUMMARY
 
@@ -184,9 +184,14 @@ export async function runFull(
   for (const check of coreSummary.aggregateChecks ?? []) {
     aggregateOutcomes[check.id] = check.ok;
   }
+  const coreOutcomes: Record<string, boolean> = {};
+  for (const entry of coreSummary.cases) {
+    for (const rowId of entry.parity) coreOutcomes[rowId] = entry.status !== "fail";
+  }
 
   const results = evaluateParityRows(rows, {
     coreOk: coreSummary.ok,
+    coreOutcomes,
     tuiOk: tuiSummary?.ok,
     installedOk: installedSummary?.ok,
     installedOutcomes,

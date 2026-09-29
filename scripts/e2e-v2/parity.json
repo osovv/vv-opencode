@@ -175,9 +175,9 @@
       "id": "plugin.web-tools",
       "surface": "Web search/fetch with permission-before-network",
       "phase": "T-005",
-      "status": "pending",
-      "acceptance": "Strict web defaults and errors, permission-before-network semantics, and scoped spec gating.",
-      "command": "bun test src/plugins/web-tools.integration.test.ts"
+      "status": "implemented-full",
+      "acceptance": "Native web_search/web_fetch names; a denied resource permission blocks the network fetch (zero outbound), an allowed permission fetches.",
+      "command": "bun scripts/e2e-v2.ts --aggregate"
     },
     {
       "id": "plugin.spec-guard",

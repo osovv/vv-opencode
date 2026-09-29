@@ -755,12 +755,20 @@ async function seedSession(input: {
       password,
       directory: input.project,
     });
-    const created = await api("/api/session", {
-      method: "POST",
-      body: JSON.stringify({ location: { directory: input.project } }),
-    });
-    const id = (created.body as { data?: { id?: string } } | undefined)?.data?.id;
-    return typeof id === "string" && id.length > 0 ? id : undefined;
+    // Service registration is not registry readiness: retry until the location
+    // registry accepts a session (a `service_starting` race previously failed
+    // the whole PTY tier).
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      const created = await api("/api/session", {
+        method: "POST",
+        body: JSON.stringify({ location: { directory: input.project } }),
+      }).catch(() => undefined);
+      const id = (created?.body as { data?: { id?: string } } | undefined)?.data?.id;
+      if (typeof id === "string" && id.length > 0) return id;
+      if (Date.now() > deadline) return undefined;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+    }
   } catch {
     return undefined;
   } finally {

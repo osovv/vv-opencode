@@ -82,6 +82,7 @@ export function evaluateParityRows(
   rows: readonly ParityRow[],
   input: {
     readonly coreOk: boolean;
+    readonly coreOutcomes?: Readonly<Record<string, boolean>> | undefined;
     readonly tuiOk: boolean | undefined;
     readonly installedOk: boolean | undefined;
     readonly installedOutcomes?: Readonly<Record<string, boolean>> | undefined;
@@ -91,12 +92,13 @@ export function evaluateParityRows(
   return rows.map((row) => {
     const tier = tierForCommand(row.command);
     if (tier === "core") {
+      const observed = input.coreOutcomes?.[row.id];
       return {
         id: row.id,
         surface: row.surface,
         status: row.status,
         tier,
-        outcome: input.coreOk ? "pass" : "fail",
+        outcome: observed === true ? "pass" : observed === false ? "fail" : input.coreOk ? "pass" : "fail",
       };
     }
     if (tier === "installed") {

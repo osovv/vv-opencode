@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies installed paths and per-row installed-surface outcomes, and drives the INSTALLED root aggregate on the real host: system-context injection, provider-reported analytics usage, peak-hours PRIMARY dispatch gating, and a WebSocket-transport observation.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies per-row installed and core outcomes, and drives the INSTALLED root aggregate on the real host: system-context injection, provider-reported analytics usage, peak-hours PRIMARY dispatch gating, a WebSocket-transport observation, and a native tool control plane (scripted tool calls + native permission deny/allow) proving web-tools permission-before-network; also retries session readiness and deterministically replays the auxiliary family after restart.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle).]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Owned scratch lifecycle, bounded host output/control, guard-aware evidence, and restart coverage of auxiliary families.]
 // END_CHANGE_SUMMARY
@@ -588,18 +588,29 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
     // Plugins activate during the first model request, so a warmup prompt both
     // opens the project location and publishes the fixture control plane. The
     // warmup family is a separate session and never substitutes for a case.
-    const opened = await api("/api/session", {
-      method: "POST",
-      body: JSON.stringify({ location: { directory: projectDir } }),
-    });
-    const warmupID = (opened.body as { data?: { id?: string } } | undefined)?.data?.id;
-    if (typeof warmupID !== "string") {
-      throw new Error(`project location did not open: ${opened.text}`);
+    // Service registration is not registry readiness: retry until the location
+    // registry accepts a session.
+    const warmupDeadline = Date.now() + 60_000;
+    let warmupID = "";
+    for (;;) {
+      const opened = await api("/api/session", {
+        method: "POST",
+        body: JSON.stringify({ location: { directory: projectDir } }),
+      }).catch(() => undefined);
+      const id = (opened?.body as { data?: { id?: string } } | undefined)?.data?.id;
+      if (typeof id === "string") {
+        warmupID = id;
+        break;
+      }
+      if (Date.now() > warmupDeadline) {
+        throw new Error(`project location did not open: ${opened?.text ?? "no response"}`);
+      }
+      await delay(500);
     }
     await api(`/api/session/${warmupID}/prompt`, {
       method: "POST",
       body: JSON.stringify({ text: "harness activation warmup" }),
-    });
+    }).catch(() => undefined);
 
     const waitForControl = async (): Promise<{ port: number; nonce: string }> => {
       const controlDeadline = Date.now() + 45_000;
@@ -857,13 +868,28 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
           );
           const auxVariantName =
             typeof auxVariant === "string" ? auxVariant.replace(/.*\.seam-smart\./, "") : undefined;
-          check.truthy(
-            restartFresh.some(
+          // Drive the auxiliary family directly after restart so its persisted
+          // capture/variant must dispatch deterministically (a title request is
+          // not guaranteed for an already-titled session).
+          const auxProviderBase = await driverAfterRestart.providerCount();
+          await api(`/api/session/${auxID}/prompt`, {
+            method: "POST",
+            body: JSON.stringify({ text: "aux post-restart replay marker" }),
+          }).catch(() => undefined);
+          let auxDispatched = false;
+          const auxDeadline = Date.now() + 20_000;
+          while (!auxDispatched && Date.now() < auxDeadline) {
+            const fresh = await driverAfterRestart.providerRequestsSince(auxProviderBase);
+            auxDispatched = fresh.some(
               (record) =>
-                JSON.stringify(record.body ?? "").includes("Generate a short, specific title") &&
+                JSON.stringify(record.body ?? "").includes("aux post-restart replay marker") &&
                 (record.body as { smoke_variant?: unknown } | undefined)?.smoke_variant ===
                   auxVariantName,
-            ),
+            );
+            if (!auxDispatched) await delay(500);
+          }
+          check.truthy(
+            auxDispatched,
             "the auxiliary family dispatched its persisted variant payload after restart",
           );
         }
@@ -910,14 +936,24 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       ...new Map(providerPayloads.map((entry) => [JSON.stringify(entry), entry])).values(),
     ];
 
-    const aggregateChecks = await runAggregateParity({
-      workspaceRoot: options.workspaceRoot,
-      hostBinary: options.hostBinary,
-      scratchDir,
-      packageDir,
-      owned,
-      timeoutMs: options.caseTimeoutMs,
-    });
+    const aggregateChecks = [
+      ...(await runAggregateParity({
+        workspaceRoot: options.workspaceRoot,
+        hostBinary: options.hostBinary,
+        scratchDir,
+        packageDir,
+        owned,
+        timeoutMs: options.caseTimeoutMs,
+      })),
+      ...(await runToolControlPlaneParity({
+        workspaceRoot: options.workspaceRoot,
+        hostBinary: options.hostBinary,
+        scratchDir,
+        packageDir,
+        owned,
+        timeoutMs: options.caseTimeoutMs,
+      })),
+    ];
     const installedSurface = await runInstalledSurface({
       installedDir: packageDir,
       projectDir,
@@ -1032,11 +1068,12 @@ function aggregateOpencodeConfig(input: {
   readonly providerPort: number;
   readonly packageDir: string;
   readonly transport?: "http" | "websocket";
+  readonly permissions?: readonly unknown[];
 }): unknown {
   return {
     model: "loopback/seam-smart",
     default_agent: "vv-controller",
-    permissions: [{ action: "*", resource: "*", effect: "allow" }],
+    permissions: input.permissions ?? [{ action: "*", resource: "*", effect: "allow" }],
     providers: {
       loopback: {
         name: "Aggregate Loopback",
@@ -1073,6 +1110,8 @@ async function bootAggregateHost(input: {
   readonly owned: OwnedProcesses;
   readonly transport?: "http" | "websocket";
   readonly label?: string;
+  readonly permissions?: readonly unknown[];
+  readonly toolPlan?: readonly ProviderToolStep[];
   readonly vvocOverrides?: (config: {
     roles: Record<string, string>;
     plugins: Record<string, unknown>;
@@ -1110,6 +1149,7 @@ async function bootAggregateHost(input: {
         "utf8",
       ),
     ),
+    ...(input.toolPlan === undefined ? {} : { toolPlan: input.toolPlan }),
   });
 
   await writeFile(
@@ -1119,6 +1159,7 @@ async function bootAggregateHost(input: {
         providerPort,
         packageDir: input.packageDir,
         ...(input.transport === undefined ? {} : { transport: input.transport }),
+        ...(input.permissions === undefined ? {} : { permissions: input.permissions }),
       }),
       null,
       2,
@@ -1478,6 +1519,150 @@ export async function runAggregateParity(input: {
   return checks;
 }
 // END_BLOCK_AGGREGATE_PARITY
+
+// START_BLOCK_TOOL_CONTROL_PLANE
+/** Loopback HTTP target that counts inbound fetches (web_fetch side-effect oracle). */
+function createFetchOracle(): { readonly port: number; count: () => number; stop: () => void } {
+  let requests = 0;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch() {
+      requests += 1;
+      return new Response("oracle-body", { headers: { "content-type": "text/plain" } });
+    },
+  });
+  return { port: server.port ?? 0, count: () => requests, stop: () => server.stop(true) };
+}
+
+const controlDelay = (ms: number) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+
+/** Poll the native session permission list for the first pending request id. */
+async function waitForPendingPermission(
+  api: ReturnType<typeof createNativeApi>,
+  sessionID: string,
+  timeoutMs = 12_000,
+): Promise<string | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const listed = await api(`/api/session/${sessionID}/permission`).catch(() => undefined);
+    const entries = (listed?.body as { data?: Array<{ id?: string }> } | undefined)?.data;
+    if (Array.isArray(entries) && entries.length > 0 && typeof entries[0]?.id === "string") {
+      return entries[0].id;
+    }
+    await controlDelay(150);
+  }
+  return undefined;
+}
+
+/** Reply to one native permission request. */
+async function replyPermission(
+  api: ReturnType<typeof createNativeApi>,
+  sessionID: string,
+  requestID: string,
+  decision: "once" | "reject",
+): Promise<void> {
+  await api(`/api/session/${sessionID}/permission/${requestID}/reply`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  }).catch(() => undefined);
+}
+
+/** Open a session with readiness retries, then prompt once. */
+async function controlPrompt(
+  api: ReturnType<typeof createNativeApi>,
+  projectDir: string,
+  text: string,
+  timeoutMs: number,
+): Promise<string | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const opened = await api("/api/session", {
+      method: "POST",
+      body: JSON.stringify({ location: { directory: projectDir } }),
+    }).catch(() => undefined);
+    const sessionID = (opened?.body as { data?: { id?: string } } | undefined)?.data?.id;
+    if (typeof sessionID === "string") {
+      // Bind the family first, then send the tool-call prompt.
+      await api(`/api/session/${sessionID}/prompt`, {
+        method: "POST",
+        body: JSON.stringify({ text: "control plane binding warmup" }),
+      }).catch(() => undefined);
+      await controlDelay(2_000);
+      await api(`/api/session/${sessionID}/prompt`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      }).catch(() => undefined);
+      return sessionID;
+    }
+    if (Date.now() > deadline) return undefined;
+    await controlDelay(500);
+  }
+}
+
+/**
+ * Installed-aggregate tool control plane: script real native tool calls through
+ * the loopback provider, decide the native permission via the host API, and
+ * assert the guarded side effect happened (allow) or did not (deny).
+ */
+export async function runToolControlPlaneParity(input: {
+  readonly workspaceRoot: string;
+  readonly hostBinary: string;
+  readonly scratchDir: string;
+  readonly packageDir: string;
+  readonly owned: OwnedProcesses;
+  readonly timeoutMs?: number;
+}): Promise<AggregateCheck[]> {
+  const checks: AggregateCheck[] = [];
+  const timeoutMs = input.timeoutMs ?? 60_000;
+  const oracle = createFetchOracle();
+  const targetUrl = `http://127.0.0.1:${oracle.port}/resource`;
+  const permissions = [{ action: "web_fetch", resource: targetUrl, effect: "ask" }];
+  const runOne = async (decision: "once" | "reject", label: string): Promise<{ fetches: number; permissionSeen: boolean }> => {
+    const before = oracle.count();
+    const host = await bootAggregateHost({
+      ...input,
+      label,
+      permissions,
+      toolPlan: [{ tool: "web_fetch", args: { url: targetUrl, format: "text" } }],
+    });
+    let permissionSeen = false;
+    try {
+      const sessionID = await controlPrompt(host.api, host.projectDir, "control plane fetch probe", timeoutMs);
+      if (sessionID !== undefined) {
+        const requestID = await waitForPendingPermission(host.api, sessionID, 12_000);
+        if (requestID !== undefined) {
+          permissionSeen = true;
+          await replyPermission(host.api, sessionID, requestID, decision);
+        }
+        await controlDelay(5_000);
+      }
+      return { fetches: oracle.count() - before, permissionSeen };
+    } finally {
+      host.stop();
+    }
+  };
+  try {
+    const denied = await runOne("reject", "web-deny");
+    const allowed = await runOne("once", "web-allow");
+    checks.push({
+      id: "plugin.web-tools",
+      ok: denied.permissionSeen && denied.fetches === 0 && allowed.fetches > 0,
+      detail: `deniedPermissionSeen=${denied.permissionSeen} deniedFetches=${denied.fetches} allowedPermissionSeen=${allowed.permissionSeen} allowedFetches=${allowed.fetches}`,
+    });
+  } catch (error) {
+    checks.push({
+      id: "plugin.web-tools",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    oracle.stop();
+  }
+
+  return checks;
+}
+// END_BLOCK_TOOL_CONTROL_PLANE
 // START_BLOCK_INSTALLED_SURFACE
 /** The eleven native server plugin named exports the packed root aggregate must publish. */
 export const ROOT_PLUGIN_EXPORTS = [

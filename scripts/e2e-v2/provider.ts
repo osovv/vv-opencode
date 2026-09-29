@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses now carry an OpenAI usage chunk so the host records real session.step.ended token usage; added a loopback WebSocket transport responder that records provider.websocket open/message events and can echo a split placeholder across protocol frames.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-FULL - Streaming responses carry an OpenAI usage chunk (real analytics), an optional scripted tool-call plan makes the host execute named tools, and a loopback WebSocket transport responder records provider.websocket open/message events and echoes a split placeholder across protocol frames.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 - Created the loopback provider and bounded request trace for the packed host harness.]
 // END_CHANGE_SUMMARY
 
@@ -86,6 +86,31 @@ function streamUsageChunk(model: string): string {
   })}\n\n`;
 }
 
+/** SSE response streaming one scripted function call so the host executes a tool. */
+function streamToolCallResponse(model: string, callID: string, tool: string, args: unknown): string {
+  return `${streamChunk(
+    model,
+    {
+      role: "assistant",
+      tool_calls: [
+        {
+          index: 0,
+          id: callID,
+          type: "function",
+          function: { name: tool, arguments: JSON.stringify(args) },
+        },
+      ],
+    },
+    null,
+  )}${streamChunk(model, {}, "tool_calls")}${streamUsageChunk(model)}data: [DONE]\n\n`;
+}
+
+/** One scripted tool call the loopback provider streams to make the host execute a tool. */
+export interface ProviderToolStep {
+  readonly tool: string;
+  readonly args: unknown;
+}
+
 /**
  * Start the loopback provider and its JSONL trace. The server binds 127.0.0.1
  * only; the configured base URL is re-validated as loopback so a misconfigured
@@ -95,6 +120,7 @@ export async function createLoopbackProvider(input: {
   readonly port: number;
   readonly tracePath: string;
   readonly catalog: unknown;
+  readonly toolPlan?: readonly ProviderToolStep[];
 }): Promise<LoopbackProvider> {
   assertLoopbackHttpUrl(`http://127.0.0.1:${input.port}`, "loopback provider");
   const server = Bun.serve({
@@ -128,6 +154,17 @@ export async function createLoopbackProvider(input: {
         return Response.json(input.catalog);
       }
       if (url.pathname.endsWith("/chat/completions")) {
+        const messages = (body as { messages?: Array<{ role?: string }> } | undefined)?.messages ?? [];
+        const toolResults = messages.filter((message) => message.role === "tool").length;
+        const plan = input.toolPlan;
+        if (plan !== undefined && toolResults < plan.length) {
+          const step = plan[toolResults];
+          if (step !== undefined) {
+            return new Response(streamToolCallResponse(model, `call_${toolResults + 1}`, step.tool, step.args), {
+              headers: { "content-type": "text/event-stream" },
+            });
+          }
+        }
         if ((body as { stream?: boolean } | undefined)?.stream === true) {
           const stream = `${streamChunk(model, { role: "assistant", content: "" }, null)}${streamChunk(
             model,

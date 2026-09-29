@@ -57,8 +57,13 @@ non-zero on a missing/invalid host or any failed case. `--tui` runs the actual
 installed TUI export inside a real PTY against an isolated standalone host.
 `--installed` verifies the installed package's root aggregate, every standalone
 plugin subpath, the nine-tool catalog census, presets/variants, managed
-agent/skill assets, and the installed `vvoc` CLI lifecycle. `--full` runs all
-tiers, resolves every parity row, writes
+agent/skill assets, and the installed `vvoc` CLI lifecycle. The installed
+**aggregate** tier (`--aggregate`) additionally drives the installed root
+aggregate on the real host: system-context injection, provider-reported
+analytics usage, peak-hours primary-dispatch gating, real WebSocket transport
+observation, and a native tool control plane (scripted loopback tool calls plus
+native permission deny/allow) for permission-before-network rows. `--full` runs
+all tiers, resolves every parity row, writes
 `.grace/changes/active/C-OPENCODE-V2-NATIVE/parity-evidence.json`, and exits
 non-zero while any mandatory parity row is unverified. A reduced matrix is never
 reported as full parity.
