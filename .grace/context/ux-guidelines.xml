@@ -33,6 +33,7 @@
     <Guideline>Docs should clearly distinguish global, project, and effective scope when scope affects behavior.</Guideline>
     <Guideline>Changelog and release summaries should explain user impact, compatibility impact, and required action, not only internal implementation details.</Guideline>
     <Guideline>Release language must be grounded in actual changes and must not invent capabilities, compatibility, migration, or safety claims.</Guideline>
+    <Guideline>Document the exact supported host window and the limits of the evidence behind compatibility claims (for example isolated loopback real-host parity versus unverified paid-provider effectiveness) instead of implying broader or untested support.</Guideline>
   </DocumentationAndReleaseLanguage>
   <SecurityAndPermissions>
     <Guideline>Secrets, credentials, raw tokens, and sensitive payloads should not appear in normal output or logs.</Guideline>

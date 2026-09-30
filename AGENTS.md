@@ -84,9 +84,18 @@ the conflict rather than guessing.
 - Package: `@osovv/vv-opencode`.
 - Tests: Bun test files colocated under `src/` and `scripts/`.
 - Quality tools: TypeScript, `oxlint`, `oxfmt`, and `lefthook`.
-- Public plugins: Guardian, Hashline Edit, Model Roles, System Context Injection,
-  Workflow, Secrets Redaction, and the `/context` TUI plugin. Modern TUI integration targets
-  OpenCode `>=1.18.2`.
+- Supported host window: OpenCode `>=2.0.18 <2.0.19` (declared in `package.json`
+  `engines.opencode`; install/init/sync/launch fail closed outside it).
+- Native dependency pins: `@opencode/{plugin,client,schema,ai,protocol}` `2.0.18`,
+  `effect` `4.0.0-rc.112` (schema-owned peer used by `@opencode/schema` codecs),
+  `zod` `4.1.8`, `@opentui/{core,keymap,solid}` `0.5.12`, `solid-js` `1.9.15`.
+  There is no `@opencode-ai/*` dependency.
+- Public plugins: eleven native server plugins (Guardian, Hashline Edit, Model
+  Roles, System Context Injection, Workflow, Secrets Redaction, Web Tools, Tool
+  History Compaction, Analytics, Peak Hours, Spec Guard) plus the native TUI
+  plugin (`/context` inspector, analytics indicator, branding footer, peak-hours
+  banner). One pinned base-package entry in the native `plugins` array serves
+  both the `./server` and `./tui` exports.
 
 ## Repository Map
 
@@ -94,14 +103,16 @@ the conflict rather than guessing.
 |---|---|---|
 | CLI registration | `src/cli.ts` | Top-level command tree and CLI metadata. |
 | CLI commands | `src/commands/*.ts` | Command implementation and colocated `*.test.ts`. |
-| Config resolution | `src/lib/config-layers.ts`, `src/lib/vvoc-paths.ts` | vvoc, OpenCode runtime, and TUI env/project/global/default precedence and write targets. |
+| Config resolution | `src/lib/config-layers.ts`, `src/lib/vvoc-paths.ts` | vvoc and OpenCode runtime env/project/global/default precedence, the `VVOC_CONFIG`/`OPENCODE_CONFIG`/`OPENCODE_CONFIG_DIR` overrides, and write targets; no dedicated TUI config layer. |
 | Config document | `src/lib/vvoc-config.ts`, `schemas/vvoc/v3.json` | Strict canonical v3 parsing, rendering, and schema. |
-| OpenCode mutation | `src/lib/opencode.ts` | Conservative runtime/TUI registration, inspection, and managed config writes. |
+| OpenCode mutation | `src/lib/opencode.ts`, `src/lib/opencode/*` | Conservative native `plugins`/`agents`/`skills`/`providers` writes, V1-shape refusal, host-window inspection, modelIntent envelope IO, and managed config writes. |
+| Native runtime | `src/runtime/*` | Shared native context/snapshot/client/permissions/model/auxiliary/coordination services and the read-only context-inspection RPC (`M-NATIVE-RUNTIME`). |
 | Managed agents/skills | `src/lib/managed-agents.ts`, `src/lib/managed-skills.ts`, `templates/` | Installed by `vvoc install`/`sync`. |
 | Model roles/presets | `src/lib/model-roles.ts`, `src/lib/agent-models.ts`, `src/lib/vvoc-preset-registry.ts` | Semantic role resolution and built-in presets. |
-| Plugins | `src/plugins/` | Public plugin entry points and plugin-local tests. |
-| TUI plugin | `src/tui.tsx`, `src/tui/context/` | Default TUI module, `/context` collection/analysis/dialog, and focused tests. |
-| Workflow engine | `src/plugins/workflow/` | Protocol, state, transitions, tooling, repair, and persistence. |
+| Plugins | `src/plugins/` | Eleven native server plugin entry points and plugin-local tests. |
+| TUI plugin | `src/tui.tsx`, `src/tui/context/` | Default native TUI module, `/context` collection/analysis/dialog, and focused tests. |
+| Workflow engine | `src/plugins/workflow/` | Protocol, state, transitions, host/cancellation mapping, tooling, repair, and persistence. |
+| Real-host harness | `scripts/e2e-v2.ts`, `scripts/e2e-v2/*` | Installed-package native parity harness (`M-E2E-V2-HARNESS`); run with `bun run e2e:v2`. |
 | Release automation | `scripts/release-*.ts`, `.github/workflows/publish.yml` | Follow deployment policy; do not duplicate it here. |
 | Public exports | `src/index.ts`, `package.json#exports` | Validate with `bun run pack:check`. |
 
@@ -223,18 +234,23 @@ File-local reference:
 - Never silently clobber user-owned config.
 - Writes must be conservative and idempotent.
 - OpenCode config stays in OpenCode-managed paths.
-- Dedicated OpenCode TUI config stays in `tui.json(c)` under the selected OpenCode config
-  directory; project scope keeps it inside `./.opencode/`.
+- Native config uses the `plugins` array (string or `{package, options}` entries),
+  `agents`, `skills: string[]`, `providers`, and `permissions`; there is no
+  dedicated TUI config layer and V1 `plugin`/`agent`/`provider`/`command`/
+  `small_model`/`tools` shapes are refused before mutation.
 - Global vvoc config lives under `$XDG_CONFIG_HOME/vvoc/`; project vvoc config lives
   under `./.vvoc/`; persisted data lives under `$XDG_DATA_HOME/vvoc/`.
 - Effective reads resolve explicit env override, nearest project layer, global layer,
   then defaults where allowed.
 - Canonical `vvoc.json` is strict schema v3. Invalid or old existing config must fail
   loudly instead of being silently migrated or repaired.
-- `vvoc install` must keep a pinned package specifier in the OpenCode plugin array.
-- `vvoc install`, `init`, and `sync` must keep the current pinned base package specifier in
-  the TUI plugin array so OpenCode selects its `./tui` export, migrating legacy `/tui` specs
-  without removing comments, unrelated settings, plugin entries, or tuple options.
+- `vvoc install` must keep a pinned package specifier in the native OpenCode `plugins`
+  array; the single entry serves both the `./server` and `./tui` exports.
+- `vvoc install`, `init`, and `sync` must keep the current pinned base package specifier
+  in that native `plugins` array, migrating legacy `/tui` specs without removing
+  comments, unrelated settings, plugin entries, or entry `options`.
+- Role intent (`vv-role:*`, `smallModel`, per-agent/command models) lives in the pinned
+  package entry's `options.modelIntent` envelope, never as a native model literal.
 - Runtime plugins share the startup config snapshot; config changes require an OpenCode
   restart rather than live reload behavior.
 
@@ -255,9 +271,11 @@ File-local reference:
 | Config paths, precedence, schema, or data meaning | Config libs, `schemas/vvoc/v3.json`, README layout, graph and verification | Relevant config tests, `bun run check`, `bun run release:check` when schema/version consistency is involved |
 | A module, dependency, data flow, or public export | `.grace/graph/*`, `src/index.ts`, `package.json#exports` as applicable | `bun run check`, `bun run build`; add `bun run pack:check` for exports/package surface |
 | A test strategy, critical scenario, command gate, or log marker | `.grace/verification/*` | Targeted tests plus the recorded gate command |
+| Real-host parity rows, harness guards, or installed-artifact evidence | `scripts/e2e-v2.ts`, `scripts/e2e-v2/*`, `M-E2E-V2-HARNESS`/`V-M-E2E-V2-HARNESS`, parity evidence | `bun test scripts/e2e-v2.test.ts` plus `bun run e2e:v2` when the host and pinned binary are available |
 | Managed agent or skill content | `templates/`, loader tests, README when user-facing behavior changes | `bun test src/lib/managed-agents.test.ts` or the owning loader test, then `bun run check` |
 | Workflow protocol/state/transitions/persistence | All affected files under `src/plugins/workflow/`, graph, verification | `bun test src/plugins/workflow.integration.test.ts`, `bun run typecheck`, `bun run build` |
 | Release behavior or package/schema versioning | `.grace/context/deployment.xml`, release scripts/tests, changelog/schema/package metadata | `bun run release:check`, `bun run check`, `bun run pack:check` |
+| Native host window, native dependency pins, or the live host contract gate | `package.json` (`engines.opencode`, pins), `src/lib/opencode/plugin-registration.ts`, `.grace/context/technology.xml`, README | Targeted config tests, `bun run check`, and `bun run contracts:host` against the pinned 2.0.18 host |
 | Documentation only | Referenced commands, paths, and current code/schema | Review the diff and validate every changed command/path; code tests are optional unless the docs expose uncertain behavior |
 
 ## Verification Commands
@@ -276,10 +294,12 @@ bun test path/to/file.test.ts       # narrow test
 bun run typecheck                   # TypeScript only
 bun run lint                        # oxlint on src/
 bun run fmt:check                   # oxfmt check on src/
-bun run check                       # typecheck + lint + fmt check + all tests
+bun run check                       # typecheck + lint + fmt check + GRACE markup + tool-contract gate + all tests
 bun run build                       # regenerate dist/ from source
 bun run pack:check                  # build, import public exports, dry-run npm pack
 bun run release:check               # package/schema/release consistency
+bun run contracts:host              # isolated live-host contract gate vs the pinned 2.0.18 host (needs local opencode + built dist)
+bun run e2e:v2                      # installed-package real-host parity harness (bun scripts/e2e-v2.ts --full)
 grace lint --path .
 grace status --path .
 ```
