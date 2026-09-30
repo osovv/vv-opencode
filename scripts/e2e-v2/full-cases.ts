@@ -102,17 +102,39 @@ export function evaluateParityRows(
   const mapped = rows
     .filter((row) => row.id !== "parity.full")
     .map((row): RowResult => {
-      // AC-11 honest residual: only honored when parity.json records a precise
-      // reason AND cross-references to accepted proofs of the same behavior.
-      if (row.status === "residual-accepted" && row.residual !== undefined) {
+      // AC-11 honest residual: only honored when parity.json records a non-empty
+      // precise reason AND at least one non-empty cross-reference to an accepted
+      // proof of the same behavior. A residual-accepted row without both is
+      // rejected as unverified — it can never silently satisfy the meta row.
+      if (row.status === "residual-accepted") {
+        const residual = row.residual;
+        const reasonOk =
+          residual !== undefined && typeof residual.reason === "string" && residual.reason.trim().length > 0;
+        const refsOk =
+          residual !== undefined &&
+          Array.isArray(residual.crossReferences) &&
+          residual.crossReferences.length > 0 &&
+          residual.crossReferences.every(
+            (ref) => typeof ref === "string" && ref.trim().length > 0,
+          );
+        if (reasonOk && refsOk) {
+          return {
+            id: row.id,
+            surface: row.surface,
+            status: row.status,
+            tier: "none",
+            outcome: "residual",
+            residual: residual!,
+            detail: residual!.reason,
+          };
+        }
         return {
           id: row.id,
           surface: row.surface,
           status: row.status,
           tier: "none",
-          outcome: "residual",
-          residual: row.residual,
-          detail: row.residual.reason,
+          outcome: "unverified",
+          detail: "residual-accepted row is missing a precise reason and/or cross-references",
         };
       }
       const tier = tierForCommand(row.command);

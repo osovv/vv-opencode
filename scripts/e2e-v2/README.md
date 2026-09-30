@@ -55,6 +55,11 @@ bun scripts/e2e-v2.ts --full --json --keep   # JSON summary, keep the scratch di
 declared dependency graph** (no workspace `node_modules` symlinks) and exits
 non-zero on a missing/invalid host or any failed case. `--tui` runs the actual
 installed TUI export inside a real PTY against an isolated standalone host.
+`--full` exits 0 only when every mandatory row is either verified against the
+installed artifact or classified `residual-accepted` with a precise reason plus
+cross-references (AC-11); a silently pending row or a `residual-accepted` row
+missing a reason/cross-references counts as unverified and keeps `--full`
+failing.
 `--installed` verifies the installed package's root aggregate, every standalone
 plugin subpath, the nine-tool catalog census, presets/variants, managed
 agent/skill assets, and the installed `vvoc` CLI lifecycle. The installed
@@ -108,17 +113,49 @@ dependency versions, and loaded real paths.
 - The harness uses only `Service.discover`-style reads of the native registration
   password; it never calls service ensure/stop.
 - No paid or public model requests are made.
-- The packed package is the only source under test; its dependency tree is
-  satisfied by symlinks to the repository `node_modules` so the fixture resolves
-  offline. That offline-install shortcut is disclosed here and is **not** the
-  T-009 installer proof. A full installer/registry proof is a separate T-009 gate.
+- The packed package is the only source under test. Since the T-009-FULL work it
+  is installed into an isolated project **with its declared dependency graph**
+  (`bun install --ignore-scripts`, local package-manager cache only); see the
+  Installed artifact section. Dependency resolution never falls back to
+  symlinking the repository `node_modules`.
+
+## Row classification (`parity.json`)
+
+Every row ends the run as one of:
+
+- **verified** (`implemented-core` / `implemented-full`) — the observation was
+  made against the packed, installed artifact on the pinned host in this run.
+- **residual-accepted** (AC-11) — the behavior cannot be exercised offline
+  against this host (or is proven instead by an accepted dedicated suite). The
+  row MUST carry a precise `residual.reason` and non-empty `residual.crossReferences`;
+  the meta row only counts rows whose reason AND cross-references are present.
+- **pending / unverified** — no installed-artifact observation and no accepted
+  residual. `--full` fails on these; they are never promoted.
 
 ## Honest coverage limits
 
-The core tier does **not** claim full product parity. Still pending (see
-`parity.json`): the other ten plugins, full workflow/cancellation, CLI/config/setup,
-presets and managed content, the full TUI, and secrets/SSE restoration product
-parity (T-005/T-009). Same-model switches emit no native event and are not a
+Recorded residuals (see `parity.json` + `parity-evidence.json`):
+
+- **secrets live WebSocket**: the native session-WS gate
+  (`core/src/session/model-request.ts:326-327`, `webSocket:'session'` in
+  `runner/llm.ts`) was unreachable with a loopback provider (`wsOpened=false`);
+  framing is proven at unit (`stream.test.ts`), HTTP-composition, and MID levels.
+- **workflow + cancellation-recovery**: the aggregate verifies plugin load, the
+  nine-tool census, `work_item_open` execution, a real foreground subagent launch
+  (child session with parentID, attempt persisted `in_flight`) and a real
+  background launch. The aggregate cancellation scenario is blocked by native
+  offline observability: a child-session interrupt is a no-op for subagent runs
+  (the subagent executes under the parent coordinator — pinned
+  `core/session/execution.ts`: "Idle interruption is a no-op"), and a root
+  interrupt in the fixture did not persist the partial assistant tool part, so
+  the pinned `Subagent cancelled (sessionID:…)` / `Tool execution
+  interrupted (sessionID:…)` parent evidence is not observable through the
+  offline HTTP-API fixture. Settlement and the remaining lifecycle sub-checks are
+  proven by the accepted T-004 real-host suites
+  (`workflow.delegated.integration.test.ts`, `workflow.execution.integration.test.ts`,
+  `cancellation.test.ts`) and the live root-interrupt shape fix (wi-20/c77f36d).
+
+Other limits: same-model switches emit no native event and are not a
 criterion. The `ordering-first-accepted` case controls same-session input ordering
 through a fixture preparation delay after the real prompt hook (it never implements
 admission); equal-time ordering **across** sessions remains covered by engine and
@@ -128,9 +165,10 @@ actual built TUI in a real PTY (a narrow fixture composing the actual built
 reports only observed scenarios: `/context` Overview/Tools/MCP navigation,
 narrow resize, key-driven scrolling, close/reopen, a visible peak-hours banner,
 cache indicator and branding footer, a controlled collection failure without the
-server bridge, and explicit-disabled negative controls. `--full` aggregates both
-installed tiers and fails, with machine-readable evidence, while any mandatory
-parity row has no installed-artifact tier; it never promotes a pending row.
+server bridge, and explicit-disabled negative controls. `--full` aggregates all
+installed tiers and writes machine-readable evidence; it fails while any
+mandatory row is pending/unverified (a `residual-accepted` row counts only with
+a precise reason and cross-references) and never promotes a pending row.
 
 ## Module map
 

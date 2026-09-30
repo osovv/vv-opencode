@@ -658,6 +658,33 @@ describe("full installed-artifact parity runner", () => {
     expect(mandatoryRowFailures(resolved)).toEqual([]);
   });
 
+  test("a residual-accepted row without a reason and cross-references is rejected as unverified", () => {
+    const rows: ParityRow[] = [
+      {
+        id: "ok-row",
+        surface: "x",
+        phase: "T",
+        status: "implemented-full",
+        acceptance: "x",
+        command: "bun scripts/e2e-v2.ts --core",
+      },
+      { id: "bad-residual", surface: "x", phase: "T", status: "residual-accepted", acceptance: "x", command: "bun test x" },
+      { id: "thin-residual", surface: "x", phase: "T", status: "residual-accepted", acceptance: "x", command: "bun test x", residual: { reason: "  ", crossReferences: ["unit suite"] } },
+      { id: "empty-refs", surface: "x", phase: "T", status: "residual-accepted", acceptance: "x", command: "bun test x", residual: { reason: "precise", crossReferences: [] } },
+      { id: "parity.full", surface: "meta", phase: "T", status: "pending", acceptance: "meta", command: "bun run e2e:v2" },
+    ];
+    const results = evaluateParityRows(rows, { coreOk: true, tuiOk: true, installedOk: true });
+    expect(results.find((row) => row.id === "bad-residual")?.outcome).toBe("unverified");
+    expect(results.find((row) => row.id === "thin-residual")?.outcome).toBe("unverified");
+    expect(results.find((row) => row.id === "empty-refs")?.outcome).toBe("unverified");
+    expect(
+      results.find((row) => row.id === "bad-residual")?.detail,
+    ).toContain("missing a precise reason");
+    const meta = results.find((row) => row.id === "parity.full");
+    expect(meta?.outcome).toBe("unverified");
+    expect(mandatoryRowFailures(results).length).toBeGreaterThanOrEqual(3);
+  });
+
   test("buildParityEvidence summarizes verified, failed, and unverified rows", () => {
     const document = buildParityEvidence({
       rows: evaluateParityRows(rows, {
