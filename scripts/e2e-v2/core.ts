@@ -953,6 +953,14 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
         owned,
         timeoutMs: options.caseTimeoutMs,
       })),
+      ...(await runWorkflowParity({
+        workspaceRoot: options.workspaceRoot,
+        hostBinary: options.hostBinary,
+        scratchDir,
+        packageDir,
+        owned,
+        timeoutMs: options.caseTimeoutMs,
+      })),
     ];
     const installedSurface = await runInstalledSurface({
       installedDir: packageDir,
@@ -1092,6 +1100,11 @@ function aggregateOpencodeConfig(input: {
     },
     agents: {
       "vv-controller": { description: "Aggregate controller", mode: "primary", model: "loopback/seam-smart" },
+      "vv-implementer": {
+        description: "Aggregate delegated implementer",
+        mode: "subagent",
+        model: "loopback/seam-smart",
+      },
     },
     plugins: [{ package: input.packageDir }],
   };
@@ -1113,6 +1126,8 @@ async function bootAggregateHost(input: {
   readonly permissions?: readonly unknown[];
   readonly toolPlan?: readonly ProviderToolStep[];
   readonly toolPlanActivationText?: string;
+  readonly childReportText?: string;
+  readonly childHoldMs?: number;
   readonly vvocOverrides?: (config: {
     roles: Record<string, string>;
     plugins: Record<string, unknown>;
@@ -1154,6 +1169,8 @@ async function bootAggregateHost(input: {
     ...(input.toolPlanActivationText === undefined
       ? {}
       : { toolPlanActivationText: input.toolPlanActivationText }),
+    ...(input.childReportText === undefined ? {} : { childReportText: input.childReportText }),
+    ...(input.childHoldMs === undefined ? {} : { childHoldMs: input.childHoldMs }),
   });
 
   await writeFile(
@@ -1895,6 +1912,157 @@ export async function runToolControlPlaneParity(input: {
   return checks;
 }
 // END_BLOCK_TOOL_CONTROL_PLANE
+
+// START_BLOCK_WORKFLOW_PARITY
+/** Read all workflow-state JSON files under an isolated vvoc data home. */
+async function readWorkflowStates(dataDir: string): Promise<unknown[]> {
+  const root = join(dataDir, "vvoc", "workflow");
+  const states: unknown[] = [];
+  let sessions: string[] = [];
+  try {
+    sessions = await readdir(root);
+  } catch {
+    return states;
+  }
+  for (const session of sessions) {
+    try {
+      const text = await readFile(join(root, session, "workflow-state.json"), "utf8");
+      states.push(JSON.parse(text));
+    } catch {
+      // no state for this session
+    }
+  }
+  return states;
+}
+
+/**
+ * Drive the installed aggregate's workflow boundary on the real host: a native
+ * subagent foreground launch (child session with parentID, persisted attempt),
+ * then cancel it through the native API and read the host's actual records.
+ */
+export async function runWorkflowParity(input: {
+  readonly workspaceRoot: string;
+  readonly hostBinary: string;
+  readonly scratchDir: string;
+  readonly packageDir: string;
+  readonly owned: OwnedProcesses;
+  readonly timeoutMs?: number;
+}): Promise<AggregateCheck[]> {
+  const checks: AggregateCheck[] = [];
+  const timeoutMs = input.timeoutMs ?? 60_000;
+  const label = "workflow";
+  const dataDir = join(input.scratchDir, `${label}-data`);
+  const childReport =
+    "VVOC_WORK_ITEM_ID: {workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDelegated implementation complete.";
+  let host: Awaited<ReturnType<typeof bootAggregateHost>> | undefined;
+  try {
+    host = await bootAggregateHost({
+      ...input,
+      label,
+      childReportText: childReport,
+      // Keep the child in-flight so a real interrupt can cancel it.
+      childHoldMs: 45_000,
+      toolPlanActivationText: "workflow probe",
+      toolPlan: [
+        {
+          tool: "work_item_open",
+          args: {
+            items: [
+              {
+                key: "k1",
+                title: "Delegated implementation",
+                mode: "delegated",
+                requiredReviewers: [],
+                writeScope: ["src/impl.ts"],
+              },
+            ],
+          },
+        },
+        {
+          tool: "subagent",
+          argsFromRequest: (body) => {
+            const match = /wi-[A-Za-z0-9]+/.exec(JSON.stringify(body ?? ""));
+            const workItemId = match?.[0] ?? "wi-1";
+            return {
+              agent: "vv-implementer",
+              description: "Delegated implementation",
+              prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Apply the scoped change.</assignment>`,
+              background: false,
+            };
+          },
+        },
+      ],
+    });
+    try {
+      const rootSession = await controlPrompt(host.api, host.projectDir, "workflow probe", timeoutMs);
+      // The child turn is held in-flight, so the launch is observable now.
+      await controlDelay(10_000);
+      const listed = await host.api(
+        `/api/session?location[directory]=${encodeURIComponent(host.projectDir)}`,
+      ).catch(() => undefined);
+      const sessions =
+        (listed?.body as { data?: Array<{ id?: string; parentID?: string }> } | undefined)?.data ?? [];
+      const child = sessions.find(
+        (session) => typeof session.parentID === "string" && session.parentID.length > 0,
+      );
+      const states = await readWorkflowStates(dataDir);
+      const hasAttempt =
+        JSON.stringify(states).includes("delegated") || JSON.stringify(states).includes("attempt");
+      checks.push({
+        id: "plugin.workflow.launch",
+        ok: child !== undefined && hasAttempt,
+        detail: `childSession=${child?.id ?? "none"} parentID=${child?.parentID ?? "none"} workflowStates=${states.length} persistedAttempt=${hasAttempt}`,
+      });
+      if (child?.id !== undefined && rootSession !== undefined) {
+        const interrupts: string[] = [];
+        for (const target of [rootSession, child.id]) {
+          for (const suffix of ["interrupt", "abort", "cancel"]) {
+            const path = `/api/session/${target}/${suffix}`;
+            const response = await host.api(path, { method: "POST" }).catch(() => undefined);
+            if (response !== undefined && response.status < 400) {
+              interrupts.push(path);
+              break;
+            }
+          }
+        }
+        await controlDelay(12_000);
+        const statesAfter = await readWorkflowStates(dataDir);
+        const stateText = JSON.stringify(statesAfter);
+        const rootInfo = await host.api(`/api/session/${rootSession}`).catch(() => undefined);
+        const childInfo = await host.api(`/api/session/${child.id}`).catch(() => undefined);
+        const recordText = `${JSON.stringify(rootInfo?.body ?? "")}${JSON.stringify(childInfo?.body ?? "")}`;
+        // A genuine recovery must show the interrupted attempt settled to a
+        // terminal state (never merely in_flight) AND the child terminal aborted.
+        const attemptTerminal =
+          /"(aborted|blocked|failed|report_rejected|cancelled|interrupted)"/i.test(stateText);
+        const stillInFlight = /"in_flight"/.test(stateText);
+        const recordAborted =
+          /Subagent cancelled|Tool execution interrupted|"type":\s*"aborted"|aborted|cancelled/i.test(
+            recordText,
+          );
+        checks.push({
+          id: "workflow.cancellation-recovery",
+          ok: interrupts.length > 0 && attemptTerminal && !stillInFlight && recordAborted,
+          detail: `interrupts=${interrupts.join(",") || "none"} attemptTerminal=${attemptTerminal} stillInFlight=${stillInFlight} sessionRecordAborted=${recordAborted}`,
+        });
+      } else {
+        checks.push({
+          id: "workflow.cancellation-recovery",
+          ok: false,
+          detail: `no child/root session to cancel (root=${rootSession ?? "none"} child=${child?.id ?? "none"})`,
+        });
+      }
+    } finally {
+      host.stop();
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    checks.push({ id: "plugin.workflow.launch", ok: false, detail });
+    checks.push({ id: "workflow.cancellation-recovery", ok: false, detail });
+  }
+  return checks;
+}
+// END_BLOCK_WORKFLOW_PARITY
 // START_BLOCK_INSTALLED_SURFACE
 /** The eleven native server plugin named exports the packed root aggregate must publish. */
 export const ROOT_PLUGIN_EXPORTS = [

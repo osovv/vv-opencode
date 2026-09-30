@@ -127,6 +127,10 @@ export async function createLoopbackProvider(input: {
   readonly toolPlan?: readonly ProviderToolStep[];
   /** Only serve the tool plan when the request messages contain this text (skips warmup turns). */
   readonly toolPlanActivationText?: string;
+  /** Reply text served to a child (subagent) turn carrying a `VVOC_WORK_ITEM_ID` assignment. */
+  readonly childReportText?: string;
+  /** Hold a child turn for this many ms (keeps the child in-flight for cancellation tests). */
+  readonly childHoldMs?: number;
 }): Promise<LoopbackProvider> {
   assertLoopbackHttpUrl(`http://127.0.0.1:${input.port}`, "loopback provider");
   const server = Bun.serve({
@@ -178,9 +182,20 @@ export async function createLoopbackProvider(input: {
           }
         }
         if ((body as { stream?: boolean } | undefined)?.stream === true) {
+          const childReport =
+            input.childReportText !== undefined &&
+            JSON.stringify(messages).includes("VVOC_WORK_ITEM_ID:");
+          let text = "e2e-ok";
+          if (childReport) {
+            const match = /VVOC_WORK_ITEM_ID:\s*(\S+)/.exec(JSON.stringify(messages));
+            text = (input.childReportText ?? "").replace("{workItemId}", match?.[1] ?? "wi-1");
+            if (input.childHoldMs !== undefined && input.childHoldMs > 0) {
+              await new Promise((resolvePromise) => setTimeout(resolvePromise, input.childHoldMs));
+            }
+          }
           const stream = `${streamChunk(model, { role: "assistant", content: "" }, null)}${streamChunk(
             model,
-            { content: "e2e-ok" },
+            { content: text },
             "stop",
           )}${streamUsageChunk(model)}data: [DONE]\n\n`;
           return new Response(stream, { headers: { "content-type": "text/event-stream" } });
