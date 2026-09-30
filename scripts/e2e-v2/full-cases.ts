@@ -44,10 +44,15 @@ export interface ParityRow {
   readonly status: string;
   readonly acceptance: string;
   readonly command: string;
+  /** AC-11 honest residual: precise technical reason plus accepted proof cross-references. */
+  readonly residual?: {
+    readonly reason: string;
+    readonly crossReferences: readonly string[];
+  };
 }
 
-/** Installed-artifact outcome for one row. */
-export type RowOutcome = "pass" | "fail" | "unverified";
+/** Installed-artifact outcome for one row. `residual` is an accepted AC-11 honest residual. */
+export type RowOutcome = "pass" | "fail" | "unverified" | "residual";
 
 /** Row outcome with the tier that produced it. */
 export interface RowResult {
@@ -57,6 +62,10 @@ export interface RowResult {
   readonly outcome: RowOutcome;
   readonly tier: "core" | "tui" | "installed" | "aggregate" | "none";
   readonly detail?: string;
+  readonly residual?: {
+    readonly reason: string;
+    readonly crossReferences: readonly string[];
+  };
 }
 
 /** The installed-artifact tiers that can verify a row. */
@@ -87,96 +96,164 @@ export function evaluateParityRows(
     readonly installedOk: boolean | undefined;
     readonly installedOutcomes?: Readonly<Record<string, boolean>> | undefined;
     readonly aggregateOutcomes?: Readonly<Record<string, boolean>> | undefined;
+    readonly aggregateDetails?: Readonly<Record<string, string>> | undefined;
   },
 ): RowResult[] {
-  return rows.map((row) => {
-    const tier = tierForCommand(row.command);
-    if (tier === "core") {
-      const observed = input.coreOutcomes?.[row.id];
+  const mapped = rows
+    .filter((row) => row.id !== "parity.full")
+    .map((row): RowResult => {
+      // AC-11 honest residual: only honored when parity.json records a precise
+      // reason AND cross-references to accepted proofs of the same behavior.
+      if (row.status === "residual-accepted" && row.residual !== undefined) {
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier: "none",
+          outcome: "residual",
+          residual: row.residual,
+          detail: row.residual.reason,
+        };
+      }
+      const tier = tierForCommand(row.command);
+      if (tier === "core") {
+        const observed = input.coreOutcomes?.[row.id];
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier,
+          outcome:
+            observed === true
+              ? "pass"
+              : observed === false
+                ? "fail"
+                : input.coreOk
+                  ? "pass"
+                  : "fail",
+        };
+      }
+      if (tier === "installed") {
+        const observed = input.installedOutcomes?.[row.id];
+        if (observed !== undefined) {
+          return {
+            id: row.id,
+            surface: row.surface,
+            status: row.status,
+            tier,
+            outcome: observed ? "pass" : "fail",
+          };
+        }
+        if (input.installedOk === undefined) {
+          return {
+            id: row.id,
+            surface: row.surface,
+            status: row.status,
+            tier,
+            outcome: "unverified",
+            detail: "installed-surface tier was not run",
+          };
+        }
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier,
+          outcome: input.installedOk ? "pass" : "fail",
+        };
+      }
+      if (tier === "aggregate") {
+        const observed = input.aggregateOutcomes?.[row.id];
+        const failDetail = observed === false ? input.aggregateDetails?.[row.id] : undefined;
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier,
+          outcome: observed === true ? "pass" : observed === false ? "fail" : "unverified",
+          ...(observed === undefined
+            ? { detail: "installed aggregate tier did not observe this row" }
+            : failDetail
+              ? { detail: failDetail }
+              : {}),
+        };
+      }
+      if (tier === "tui") {
+        if (input.tuiOk === undefined) {
+          return {
+            id: row.id,
+            surface: row.surface,
+            status: row.status,
+            tier,
+            outcome: "unverified",
+            detail: "TUI tier was not run",
+          };
+        }
+        return {
+          id: row.id,
+          surface: row.surface,
+          status: row.status,
+          tier,
+          outcome: input.tuiOk ? "pass" : "fail",
+        };
+      }
       return {
         id: row.id,
         surface: row.surface,
         status: row.status,
-        tier,
-        outcome: observed === true ? "pass" : observed === false ? "fail" : input.coreOk ? "pass" : "fail",
+        tier: "none",
+        outcome: "unverified",
+        detail: "no installed-artifact tier covers this row",
       };
-    }
-    if (tier === "installed") {
-      const observed = input.installedOutcomes?.[row.id];
-      if (observed !== undefined) {
-        return {
-          id: row.id,
-          surface: row.surface,
-          status: row.status,
-          tier,
-          outcome: observed ? "pass" : "fail",
-        };
-      }
-      if (input.installedOk === undefined) {
-        return {
-          id: row.id,
-          surface: row.surface,
-          status: row.status,
-          tier,
+    });
+
+  // Meta row: parity.full passes ONLY when every other mandatory row is
+  // verified or an accepted honest residual — never while one is pending/failed.
+  const metaRow = rows.find((row) => row.id === "parity.full");
+  if (metaRow === undefined) return mapped;
+  const satisfied = mapped.every(
+    (result) =>
+      result.outcome === "pass" ||
+      result.outcome === "residual" ||
+      result.status === "unverified-paid",
+  );
+  const unresolved = mapped
+    .filter(
+      (result) =>
+        result.outcome !== "pass" && result.outcome !== "residual" && result.status !== "unverified-paid",
+    )
+    .map((result) => `${result.id}:${result.outcome}`);
+  return [
+    ...mapped,
+    satisfied
+      ? {
+          id: metaRow.id,
+          surface: metaRow.surface,
+          status: metaRow.status,
+          tier: "none",
+          outcome: "pass",
+          detail: "every mandatory row verified or accepted residual",
+        }
+      : {
+          id: metaRow.id,
+          surface: metaRow.surface,
+          status: metaRow.status,
+          tier: "none",
           outcome: "unverified",
-          detail: "installed-surface tier was not run",
-        };
-      }
-      return {
-        id: row.id,
-        surface: row.surface,
-        status: row.status,
-        tier,
-        outcome: input.installedOk ? "pass" : "fail",
-      };
-    }
-    if (tier === "aggregate") {
-      const observed = input.aggregateOutcomes?.[row.id];
-      return {
-        id: row.id,
-        surface: row.surface,
-        status: row.status,
-        tier,
-        outcome: observed === true ? "pass" : observed === false ? "fail" : "unverified",
-        ...(observed === undefined
-          ? { detail: "installed aggregate tier did not observe this row" }
-          : {}),
-      };
-    }
-    if (tier === "tui") {
-      if (input.tuiOk === undefined) {
-        return {
-          id: row.id,
-          surface: row.surface,
-          status: row.status,
-          tier,
-          outcome: "unverified",
-          detail: "TUI tier was not run",
-        };
-      }
-      return {
-        id: row.id,
-        surface: row.surface,
-        status: row.status,
-        tier,
-        outcome: input.tuiOk ? "pass" : "fail",
-      };
-    }
-    return {
-      id: row.id,
-      surface: row.surface,
-      status: row.status,
-      tier: "none",
-      outcome: "unverified",
-      detail: "no installed-artifact tier covers this row",
-    };
-  });
+          detail: `waiting on ${unresolved.slice(0, 8).join(", ")}${unresolved.length > 8 ? ", ..." : ""}`,
+        },
+  ];
 }
 
-/** Mandatory rows that are not verified. `unverified-paid` rows are recorded limits. */
+/** Mandatory rows that are not verified. Residuals and `unverified-paid` are recorded limits. */
 export function mandatoryRowFailures(results: readonly RowResult[]): string[] {
   return results
-    .filter((result) => result.outcome !== "pass" && result.status !== "unverified-paid")
+    .filter(
+      (result) =>
+        result.outcome !== "pass" &&
+        result.outcome !== "residual" &&
+        result.status !== "unverified-paid",
+    )
     .map((result) => `${result.id}: ${result.outcome}${result.detail ? ` (${result.detail})` : ""}`);
 }
 
@@ -208,6 +285,7 @@ export interface ParityEvidenceInput {
 /** Assemble the bounded parity-evidence document. */
 export function buildParityEvidence(input: ParityEvidenceInput): Record<string, unknown> {
   const verified = input.rows.filter((row) => row.outcome === "pass").length;
+  const residual = input.rows.filter((row) => row.outcome === "residual").length;
   const failed = input.rows.filter((row) => row.outcome === "fail").length;
   const unverified = input.rows.filter((row) => row.outcome === "unverified").length;
   return {
@@ -233,7 +311,7 @@ export function buildParityEvidence(input: ParityEvidenceInput): Record<string, 
       core: input.coreSummary ?? null,
       tui: input.tuiSummary ?? null,
     },
-    totals: { rows: input.rows.length, verified, failed, unverified },
+    totals: { rows: input.rows.length, verified, residual, failed, unverified },
     rows: input.rows,
     limits: input.limits,
   };

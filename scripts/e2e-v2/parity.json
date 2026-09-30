@@ -7,7 +7,8 @@
     "implemented-full",
     "covered-unit",
     "pending",
-    "unverified-paid"
+    "unverified-paid",
+    "residual-accepted"
   ],
   "note": "Rows marked implemented-core/implemented-full are exercised by `bun scripts/e2e-v2.ts --core` / `--tui` / `--installed` against the packed package installed with its declared dependency graph. Rows marked pending have no installed-artifact tier yet and are never claimed.",
   "rows": [
@@ -167,9 +168,17 @@
       "id": "plugin.secrets-redaction",
       "surface": "Secrets redaction and SSE/WS restoration",
       "phase": "T-005",
-      "status": "pending",
+      "status": "residual-accepted",
       "acceptance": "Primary/auxiliary redaction, split placeholder restore. AC-11 offline residual: the native session WebSocket gate (packages/core/src/session/model-request.ts:326-327, runner/llm.ts webSocket:'session') was not reachable offline with a loopback provider (wsOpened=false); WS framing is verified at unit (stream.test.ts real frame shapes) + HTTP-composition + MID generation3 level.",
-      "command": "bun test src/plugins/secrets-redaction"
+      "command": "bun test src/plugins/secrets-redaction",
+      "residual": {
+        "reason": "Live session-WebSocket cannot be driven offline against this pinned host: the native session WS gate (packages/core/src/session/model-request.ts:326-327 `input.webSocket==='session' && model.transport==='websocket'`, runner llm.ts primary webSocket:'session') was not reached with a loopback provider (observed wsOpened=false, wsRequestFrames=0), and packages/ai/src/route/transport/websocket.ts+websocket-channel.ts define an internal channel protocol without an offline WS-capable provider route. The loopback WS responder itself splits a placeholder across protocol frames and is validated in isolation.",
+        "crossReferences": [
+          "src/plugins/secrets-redaction/stream.test.ts (unit: real SSE/WS frame shapes, split TEXT placeholder, opaque-frame, terminal-less carry, disabled control)",
+          "HTTP-composition tier evidence (partial-frame SSE composition over captured frames)",
+          "T-009 MID generation3 evidence (per-session framing fix, mid-level composition)"
+        ]
+      }
     },
     {
       "id": "plugin.web-tools",

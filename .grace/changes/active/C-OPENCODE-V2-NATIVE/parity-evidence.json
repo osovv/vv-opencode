@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generatedAt": "2026-09-30T07:15:52.425Z",
+  "generatedAt": "2026-09-30T09:32:38.906Z",
   "change": "C-OPENCODE-V2-NATIVE",
   "host": {
     "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
@@ -11,7 +11,7 @@
   "package": {
     "name": "@osovv/vv-opencode",
     "version": "1.7.0",
-    "tarballSha256": "1a97177ac6b1707c82cfc12409908db19cc2ea165ff4a93b7e4e83db9dd2525e"
+    "tarballSha256": "2bc95ff142ced02ee43f9a3ab7507ebc6f9bbb7c28bb82c6ba684c3a0af4bcc3"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",
@@ -29,20 +29,20 @@
     "zod": "4.1.8"
   },
   "installedPaths": {
-    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@clack/prompts",
-    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@opencode/ai",
-    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@opencode/client",
-    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@opencode/plugin",
-    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@opencode/protocol",
-    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@opencode/schema",
-    "ajv": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/ajv",
-    "citty": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/citty",
-    "effect": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/effect",
-    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/htmlparser2",
-    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/jsonc-parser",
-    "turndown": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/turndown",
-    "zod": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/zod",
-    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-Mz26BI/project/node_modules/@osovv/vv-opencode"
+    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@clack/prompts",
+    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@opencode/ai",
+    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@opencode/client",
+    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@opencode/plugin",
+    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@opencode/protocol",
+    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@opencode/schema",
+    "ajv": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/ajv",
+    "citty": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/citty",
+    "effect": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/effect",
+    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/htmlparser2",
+    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/jsonc-parser",
+    "turndown": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/turndown",
+    "zod": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/zod",
+    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-LkqK6K/project/node_modules/@osovv/vv-opencode"
   },
   "installedSurface": [
     {
@@ -135,12 +135,27 @@
     {
       "id": "plugin.workflow.launch",
       "ok": true,
-      "detail": "childSession=ses_f0ed5f072ffeCH06HGESsay0Mk parentID=ses_f0ed5fd45ffexDSg711jyk3ijx workflowStates=1 persistedAttempt=true"
+      "detail": "childSession=ses_bdf4a031a03fafa74c5a49aba0cf8167 rootSession=ses_f0e5afb78ffewSP62PP6gZcHPD attemptStatus=in_flight attemptCallId=call_2 launchedAt=2026-09-30T09:28:42.026Z stateFiles=1"
     },
     {
       "id": "workflow.cancellation-recovery",
       "ok": false,
-      "detail": "interrupts=/api/session/ses_f0ed5fd45ffexDSg711jyk3ijx/interrupt,/api/session/ses_f0ed5f072ffeCH06HGESsay0Mk/interrupt attemptTerminal=false stillInFlight=true sessionRecordAborted=false"
+      "detail": "childTurnInFlight=true interrupted=false interruptStatus=200 interruptBody={\"interrupted\":false} parentMessage=none parentCompletedMs=none childAbortedCompletedMs=none childAbsentFromActive=true inboxEmpty=true preRecoverStatus=completed expectedCompletedAt=none rootErrors=subagent:completed: | work_item_open:completed: | work_item_decide:completed: | subagent:completed: | work_item_open:completed:"
+    },
+    {
+      "id": "workflow.cancellation-recovery.settlement",
+      "ok": false,
+      "detail": "settleStatus=completed completedAt=2026-09-30T09:29:42.137Z expectedCompletedAt=none match=false"
+    },
+    {
+      "id": "plugin.workflow.background",
+      "ok": true,
+      "detail": "backgroundChild=ses_f0e5a031bfferEMJ3bn7SuCbDj attemptCount=2 attemptStatuses=completed,in_flight"
+    },
+    {
+      "id": "workflow.cancellation-recovery.root",
+      "ok": false,
+      "detail": "rootInterrupted=true interruptStatus=200 liveParentMessage=none rootTurnContinued=false rootToolParts= rawRootMessages=[{\"id\":\"msg_0f1a6d573001FwIv3OdJ4dAuCn\",\"time\":{\"created\":1790760637811},\"type\":\"idle\",\"outcome\":\"interrupted\"},{\"id\":\"msg_0f1a6d52c001pD3Y4NT3jDxF7j\",\"time\":{\"created\":1790760637786},\"text\":\"workflow probe\",\"type\":\"user\"},{\"id\":\"msg_0f1a6ce55001ODMYzZg6BkE0lU\",\"time\":{\"created\":1790760635989},\"type\":\"idle\",\"outcome\":\"succeeded\"},{\"id\":\"msg_0f1a6cd98001NXYFKsf79wBESE\",\"time\":{\"created\":1790760635915,\"streamed\":1790760635981,\"completed\":1790760635984},\"type\":\"assistant\",\"agent\":\"vv-controller\",\"model\":{\"id\":\"seam-smart\",\"providerID\":\"loopback\",\"variant\":\"32467019de28816d.seam-smart\"},\"content\":[{\"type\":\"text\",\"text\":\"e2e-ok\"}],\"finish\":\"stop\",\"rawFinish\":\"stop\",\"cost\":0,\"tokens\":{\"input\":7,\"output\":4,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}},{\"id\":\"msg_0f1a6c8c0001C6HtdtB5o2cFox\",\"time\":{\"created\":1790760635763},\"text\":\"control plane binding warmup\",\"type\":\"user\"},{\"id\":\"msg_0f1a6cd40001bKJGt46pIOA6p6\",\"time\":{\"created\":1790760635712},\"type\":\"model-switched\",\"model\":{\"id\":\"seam-smart\",\"providerID\":\"loopback\",\"variant\":\"32467019de28816d.seam-smart\"}}] rawChildMessages=[]"
     }
   ],
   "tiers": {
@@ -156,8 +171,9 @@
   "totals": {
     "rows": 38,
     "verified": 34,
+    "residual": 1,
     "failed": 0,
-    "unverified": 4
+    "unverified": 3
   },
   "rows": [
     {
@@ -296,10 +312,18 @@
     {
       "id": "plugin.secrets-redaction",
       "surface": "Secrets redaction and SSE/WS restoration",
-      "status": "pending",
+      "status": "residual-accepted",
       "tier": "none",
-      "outcome": "unverified",
-      "detail": "no installed-artifact tier covers this row"
+      "outcome": "residual",
+      "residual": {
+        "reason": "Live session-WebSocket cannot be driven offline against this pinned host: the native session WS gate (packages/core/src/session/model-request.ts:326-327 `input.webSocket==='session' && model.transport==='websocket'`, runner llm.ts primary webSocket:'session') was not reached with a loopback provider (observed wsOpened=false, wsRequestFrames=0), and packages/ai/src/route/transport/websocket.ts+websocket-channel.ts define an internal channel protocol without an offline WS-capable provider route. The loopback WS responder itself splits a placeholder across protocol frames and is validated in isolation.",
+        "crossReferences": [
+          "src/plugins/secrets-redaction/stream.test.ts (unit: real SSE/WS frame shapes, split TEXT placeholder, opaque-frame, terminal-less carry, disabled control)",
+          "HTTP-composition tier evidence (partial-frame SSE composition over captured frames)",
+          "T-009 MID generation3 evidence (per-session framing fix, mid-level composition)"
+        ]
+      },
+      "detail": "Live session-WebSocket cannot be driven offline against this pinned host: the native session WS gate (packages/core/src/session/model-request.ts:326-327 `input.webSocket==='session' && model.transport==='websocket'`, runner llm.ts primary webSocket:'session') was not reached with a loopback provider (observed wsOpened=false, wsRequestFrames=0), and packages/ai/src/route/transport/websocket.ts+websocket-channel.ts define an internal channel protocol without an offline WS-capable provider route. The loopback WS responder itself splits a placeholder across protocol frames and is validated in isolation."
     },
     {
       "id": "plugin.web-tools",
@@ -428,7 +452,7 @@
       "status": "pending",
       "tier": "none",
       "outcome": "unverified",
-      "detail": "no installed-artifact tier covers this row"
+      "detail": "waiting on plugin.workflow:unverified, workflow.cancellation-recovery:unverified"
     }
   ],
   "limits": [
@@ -437,6 +461,8 @@
     "A prompt-preparation failure after the prompt hook has no rejection notice; the harness records zero dispatch instead.",
     "Cross-session equal-time first-accept ordering remains a recorded engine-test limit, not forced on the host.",
     "Rows without an installed-artifact tier remain unverified until a scenario covers them; --full never promotes them.",
-    "The anthropic-compatible cohort is declared but not exercised by the installed-surface tier."
+    "The anthropic-compatible cohort is declared but not exercised by the installed-surface tier.",
+    "plugin.workflow remaining sub-checks (malformed same-child continuation, BLOCKED/NEEDS_CONTEXT hard stop, checkpoint lifecycle, finite-authority exhaustion, interrupted hydration) are honest residuals driven by the accepted T-004 dedicated suites src/plugins/workflow.delegated.integration.test.ts, src/plugins/workflow.execution.integration.test.ts and src/plugins/workflow/cancellation.test.ts; the installed aggregate independently confirms the plugin loads, its tool census is the nine owned tools, work_item_open executes, and a real foreground subagent launch (child session with parentID and a persisted in_flight attempt) plus a background launch (second child, second attempt) occurred on native records.",
+    "BLOCKED workflow.cancellation-recovery: POST /api/session/{child}/interrupt returns {interrupted:false} (idle no-op) while the child's provider turn is verifiably in flight (childTurnInFlight=true, retried for 20s); pinned core/session/execution.ts documents 'Idle interruption is a no-op' and the internal subagent run is not active under the child session's coordinator. Root interrupt is accepted (interrupted:true) but the interrupted parent run's partial assistant message carrying the subagent tool part is not persisted: /api/session/{root}/message shows only {type:idle,outcome:interrupted} with zero tool parts, so the pinned 'Subagent cancelled (sessionID: ...)' / 'Tool execution interrupted (sessionID: ...)' parent shapes cannot be observed there. Authoritative cancellation/recovery remains verified only by the accepted T-004 suites (workflow.delegated.integration.test.ts, workflow.execution.integration.test.ts, cancellation.test.ts)."
   ]
 }

@@ -1914,7 +1914,91 @@ export async function runToolControlPlaneParity(input: {
 // END_BLOCK_TOOL_CONTROL_PLANE
 
 // START_BLOCK_WORKFLOW_PARITY
-/** Read all workflow-state JSON files under an isolated vvoc data home. */
+type AnyRecord = Record<string, unknown>;
+
+function isAnyRecord(value: unknown): value is AnyRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Collect every nested object that carries a `type` string (native part shapes). */
+function collectTypedParts(value: unknown, out: AnyRecord[] = [], depth = 0): AnyRecord[] {
+  if (depth > 10 || out.length > 600) return out;
+  if (Array.isArray(value)) {
+    for (const item of value) collectTypedParts(item, out, depth + 1);
+    return out;
+  }
+  if (isAnyRecord(value)) {
+    if (typeof value.type === "string") out.push(value);
+    for (const nested of Object.values(value)) collectTypedParts(nested, out, depth + 1);
+  }
+  return out;
+}
+
+/** Epoch-ms of a native timestamp (number or ISO string); undefined otherwise. */
+function toMs(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? undefined : ms;
+  }
+  return undefined;
+}
+
+/** Maximum `time.completed` (ms) anywhere inside a native message subtree. */
+function maxCompletedMs(value: unknown, depth = 0): number | undefined {
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    let best: number | undefined;
+    for (const item of value) {
+      const ms = maxCompletedMs(item, depth + 1);
+      if (ms !== undefined && (best === undefined || ms > best)) best = ms;
+    }
+    return best;
+  }
+  if (!isAnyRecord(value)) return undefined;
+  let best: number | undefined;
+  const own = isAnyRecord(value.time) ? toMs(value.time.completed) : undefined;
+  if (own !== undefined) best = own;
+  for (const nested of Object.values(value)) {
+    const ms = maxCompletedMs(nested, depth + 1);
+    if (ms !== undefined && (best === undefined || ms > best)) best = ms;
+  }
+  return best;
+}
+
+/** Flatten a persisted workflow state into its attempt records. */
+function collectAttempts(state: unknown): AnyRecord[] {
+  const out: AnyRecord[] = [];
+  const walk = (value: unknown, depth: number): void => {
+    if (depth > 8 || out.length > 32) return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, depth + 1);
+      return;
+    }
+    if (!isAnyRecord(value)) return;
+    if (value.attempt !== undefined && value.status !== undefined) out.push(value);
+    for (const nested of Object.values(value)) walk(nested, depth + 1);
+  };
+  walk(state, 0);
+  return out;
+}
+
+async function pollFor<T>(
+  fn: () => Promise<T | undefined>,
+  predicate: (value: T) => boolean,
+  timeoutMs: number,
+  pollMs = 400,
+): Promise<T | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await fn().catch(() => undefined);
+    if (value !== undefined && predicate(value)) return value;
+    if (Date.now() >= deadline) return undefined;
+    await controlDelay(pollMs);
+  }
+}
+
+/** Read all persisted workflow-state JSON files under an isolated vvoc data home. */
 async function readWorkflowStates(dataDir: string): Promise<unknown[]> {
   const root = join(dataDir, "vvoc", "workflow");
   const states: unknown[] = [];
@@ -1935,10 +2019,21 @@ async function readWorkflowStates(dataDir: string): Promise<unknown[]> {
   return states;
 }
 
+/** Pinned 2.0.18 parent subagent failure shapes on the native assistant tool part. */
+const PARENT_CANCEL_RE = /^(Subagent cancelled|Tool execution interrupted) \(sessionID: .+\)$/;
+
+/** Last work-item id visible in a request body (latest open wins across history). */
+function lastWorkItemId(body: unknown): string {
+  const matches = [...JSON.stringify(body ?? "").matchAll(/wi-[A-Za-z0-9]+/g)];
+  return matches[matches.length - 1]?.[0] ?? "wi-1";
+}
+
 /**
- * Drive the installed aggregate's workflow boundary on the real host: a native
- * subagent foreground launch (child session with parentID, persisted attempt),
- * then cancel it through the native API and read the host's actual records.
+ * Drive the installed aggregate's workflow boundary on real native records:
+ * a delegated foreground subagent launch, a child-only interrupt with native
+ * cancellation evidence, pre-recover in-flight survival, driven explicit recovery
+ * (settled with completedAt = max(parent, child)), a background launch, and the
+ * live parent shape after a root interrupt.
  */
 export async function runWorkflowParity(input: {
   readonly workspaceRoot: string;
@@ -1952,113 +2047,382 @@ export async function runWorkflowParity(input: {
   const timeoutMs = input.timeoutMs ?? 60_000;
   const label = "workflow";
   const dataDir = join(input.scratchDir, `${label}-data`);
+  const rootDataDir = join(input.scratchDir, "workflow-root-data");
   const childReport =
     "VVOC_WORK_ITEM_ID: {workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nDelegated implementation complete.";
+
+  const openItem = (key: string, title: string, scope: string) => ({
+    tool: "work_item_open",
+    args: {
+      items: [
+        { key, title, mode: "delegated", requiredReviewers: [], writeScope: [scope] },
+      ],
+    },
+  });
+  const subagentStep = (background: boolean) => ({
+    tool: "subagent",
+    argsFromRequest: (body: unknown) => ({
+      agent: "vv-implementer",
+      description: background ? "Background task" : "Delegated implementation",
+      prompt: `VVOC_WORK_ITEM_ID: ${lastWorkItemId(body)}\n<assignment>Apply the scoped change.</assignment>`,
+      background,
+    }),
+  });
+  const recoverStep = {
+    tool: "work_item_decide",
+    argsFromRequest: (body: unknown) => ({
+      workItemId: lastWorkItemId(body),
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "child terminal abort observed on native records",
+      changedCondition: "cancellation evidence gathered after native child interrupt",
+      verification: [
+        "native parent tool part Subagent cancelled",
+        "native child terminal aborted error",
+        "active and inbox quiescent",
+      ],
+      recoveryId: "recover-native-cancellation",
+    }),
+  };
+
   let host: Awaited<ReturnType<typeof bootAggregateHost>> | undefined;
   try {
     host = await bootAggregateHost({
       ...input,
       label,
       childReportText: childReport,
-      // Keep the child in-flight so a real interrupt can cancel it.
-      childHoldMs: 45_000,
+      childHoldMs: 60_000,
       toolPlanActivationText: "workflow probe",
       toolPlan: [
-        {
-          tool: "work_item_open",
-          args: {
-            items: [
-              {
-                key: "k1",
-                title: "Delegated implementation",
-                mode: "delegated",
-                requiredReviewers: [],
-                writeScope: ["src/impl.ts"],
-              },
-            ],
-          },
-        },
-        {
-          tool: "subagent",
-          argsFromRequest: (body) => {
-            const match = /wi-[A-Za-z0-9]+/.exec(JSON.stringify(body ?? ""));
-            const workItemId = match?.[0] ?? "wi-1";
-            return {
-              agent: "vv-implementer",
-              description: "Delegated implementation",
-              prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Apply the scoped change.</assignment>`,
-              background: false,
-            };
-          },
-        },
+        openItem("k1", "Delegated implementation", "src/impl.ts"),
+        subagentStep(false),
+        recoverStep,
+        openItem("k2", "Background delegated task", "src/gen.ts"),
+        subagentStep(true),
       ],
     });
-    try {
-      const rootSession = await controlPrompt(host.api, host.projectDir, "workflow probe", timeoutMs);
-      // The child turn is held in-flight, so the launch is observable now.
-      await controlDelay(10_000);
-      const listed = await host.api(
-        `/api/session?location[directory]=${encodeURIComponent(host.projectDir)}`,
-      ).catch(() => undefined);
-      const sessions =
-        (listed?.body as { data?: Array<{ id?: string; parentID?: string }> } | undefined)?.data ?? [];
-      const child = sessions.find(
-        (session) => typeof session.parentID === "string" && session.parentID.length > 0,
+    const current = () => {
+      if (host === undefined) throw new Error("workflow host not started");
+      return host;
+    };
+    const http = (path: string, init?: RequestInit) => current().api(path, init).catch(() => undefined);
+    const messageList = async (sessionID: string): Promise<AnyRecord[] | undefined> => {
+      const res = await http(`/api/session/${sessionID}/message`);
+      if (res === undefined || res.status >= 400) return undefined;
+      const body = res.body;
+      const data = isAnyRecord(body) && Array.isArray(body.data) ? body.data : undefined;
+      return Array.isArray(data) ? (data as AnyRecord[]) : undefined;
+    };
+    const listSessions = async (): Promise<AnyRecord[] | undefined> => {
+      const res = await http(`/api/session?location[directory]=${encodeURIComponent(current().projectDir)}`);
+      if (res === undefined || res.status >= 400) return undefined;
+      const body = res.body;
+      const data = isAnyRecord(body) && Array.isArray(body.data) ? body.data : undefined;
+      return Array.isArray(data) ? (data as AnyRecord[]) : undefined;
+    };
+    const childrenOf = (list: AnyRecord[] | undefined, rootId: string): AnyRecord[] =>
+      (list ?? []).filter(
+        (entry) =>
+          isAnyRecord(entry) &&
+          typeof entry.id === "string" &&
+          typeof entry.parentID === "string" &&
+          entry.parentID === rootId,
       );
-      const states = await readWorkflowStates(dataDir);
-      const hasAttempt =
-        JSON.stringify(states).includes("delegated") || JSON.stringify(states).includes("attempt");
+    const interruptTrue = async (
+      sessionID: string,
+    ): Promise<{ ok: boolean; status: number | "no-response"; body: string }> => {
+      const res = await http(`/api/session/${sessionID}/interrupt`, { method: "POST" });
+      if (res === undefined) return { ok: false, status: "no-response", body: "" };
+      return {
+        ok:
+          res.status < 400 &&
+          (isAnyRecord(res.body)
+            ? res.body.interrupted === true
+            : typeof res.body === "object" && res.body !== null
+              ? JSON.stringify(res.body).includes('"interrupted":true')
+              : false),
+        status: res.status,
+        body: JSON.stringify(res.body).slice(0, 240),
+      };
+    };
+    const findParentCancel = async (
+      sessionID: string,
+      childID: string,
+    ): Promise<AnyRecord | undefined> => {
+      const marker = new RegExp(
+        `^(Subagent cancelled|Tool execution interrupted) \\(sessionID: ${childID}\\)$`,
+      );
+      return pollFor(
+        async () => {
+          const list = await messageList(sessionID);
+          if (list === undefined) return undefined;
+          for (const part of collectTypedParts(list)) {
+            if (part.type !== "tool") continue;
+            const state = isAnyRecord(part.state) ? part.state : undefined;
+            if (state === undefined || state.status !== "error") continue;
+            const message = isAnyRecord(state.error) ? state.error.message : undefined;
+            if (typeof message === "string" && marker.test(message)) return part;
+          }
+          return undefined;
+        },
+        () => true,
+        45_000,
+      );
+    };
+
+    try {
+      const rootSession = await controlPrompt(
+        current().api,
+        current().projectDir,
+        "workflow probe",
+        timeoutMs,
+      );
+      if (rootSession === undefined) throw new Error("workflow probe session did not open");
+
+      // 1. Foreground native subagent launch: real child session + persisted in-flight attempt.
+      const child = await pollFor(
+        async () => {
+          const list = await listSessions();
+          return list === undefined ? undefined : childrenOf(list, rootSession)[0];
+        },
+        () => true,
+        30_000,
+      );
+      const childId = isAnyRecord(child) ? (child.id as string) : undefined;
+      const launchAttempt = await pollFor(
+        async () => {
+          const states = await readWorkflowStates(dataDir);
+          const attempt = states.flatMap(collectAttempts)[0];
+          return attempt !== undefined && typeof attempt.launchedAt === "string" ? attempt : undefined;
+        },
+        () => true,
+        30_000,
+      );
+      const launchStateCount = (await readWorkflowStates(dataDir)).length;
       checks.push({
         id: "plugin.workflow.launch",
-        ok: child !== undefined && hasAttempt,
-        detail: `childSession=${child?.id ?? "none"} parentID=${child?.parentID ?? "none"} workflowStates=${states.length} persistedAttempt=${hasAttempt}`,
+        ok: childId !== undefined && launchAttempt !== undefined,
+        detail: `childSession=${childId ?? "none"} rootSession=${rootSession} attemptStatus=${String(launchAttempt?.status ?? "none")} attemptCallId=${String(launchAttempt?.callId ?? "none")} launchedAt=${String(launchAttempt?.launchedAt ?? "none")} stateFiles=${launchStateCount}`,
       });
-      if (child?.id !== undefined && rootSession !== undefined) {
-        const interrupts: string[] = [];
-        for (const target of [rootSession, child.id]) {
-          for (const suffix of ["interrupt", "abort", "cancel"]) {
-            const path = `/api/session/${target}/${suffix}`;
-            const response = await host.api(path, { method: "POST" }).catch(() => undefined);
-            if (response !== undefined && response.status < 400) {
-              interrupts.push(path);
-              break;
-            }
-          }
-        }
-        await controlDelay(12_000);
-        const statesAfter = await readWorkflowStates(dataDir);
-        const stateText = JSON.stringify(statesAfter);
-        const rootInfo = await host.api(`/api/session/${rootSession}`).catch(() => undefined);
-        const childInfo = await host.api(`/api/session/${child.id}`).catch(() => undefined);
-        const recordText = `${JSON.stringify(rootInfo?.body ?? "")}${JSON.stringify(childInfo?.body ?? "")}`;
-        // A genuine recovery must show the interrupted attempt settled to a
-        // terminal state (never merely in_flight) AND the child terminal aborted.
-        const attemptTerminal =
-          /"(aborted|blocked|failed|report_rejected|cancelled|interrupted)"/i.test(stateText);
-        const stillInFlight = /"in_flight"/.test(stateText);
-        const recordAborted =
-          /Subagent cancelled|Tool execution interrupted|"type":\s*"aborted"|aborted|cancelled/i.test(
-            recordText,
-          );
+      if (childId === undefined) throw new Error("foreground subagent launch was not observed");
+
+      // 2. Child-only interrupt with native cancellation evidence on real records.
+      // First wait until the child's provider turn is actually in flight (its
+      // request holds the child mid-execution); interrupting earlier is an idle
+      // no-op (`interrupted:false`) and proves nothing.
+      const childTurnInFlight = await pollFor(
+        async () => {
+          const records = await readProviderTrace(current().tracePath);
+          const childTurn = records.some((record) => {
+            if (record.event !== "provider.request") return false;
+            const body = record.body as { messages?: unknown[]; tools?: unknown[] } | undefined;
+            const text = JSON.stringify(body ?? "");
+            return (
+              text.includes("VVOC_WORK_ITEM_ID:") &&
+              Array.isArray(body?.messages) &&
+              body.messages.length === 2 &&
+              Array.isArray(body?.tools) &&
+              body.tools.length > 0
+            );
+          });
+          return childTurn ? true : undefined;
+        },
+        () => true,
+        30_000,
+      );
+      // The child's fetch can reach the provider a beat before its run is
+      // registered interruptible; retry inside the hold window until it is not
+      // an idle no-op (`interrupted:false`).
+      let interruptResult = { ok: false, status: 0 as number | "no-response", body: "" };
+      const interruptDeadline = Date.now() + 20_000;
+      while (!interruptResult.ok && Date.now() < interruptDeadline) {
+        await controlDelay(1_500);
+        interruptResult = await interruptTrue(childId);
+      }
+      const interrupted = interruptResult.ok;
+      const rootPart = await findParentCancel(rootSession, childId);
+      const parentMessage =
+        rootPart !== undefined &&
+        isAnyRecord(rootPart.state) &&
+        isAnyRecord(rootPart.state.error)
+          ? String(rootPart.state.error.message)
+          : undefined;
+      const parentCompleted = rootPart === undefined ? undefined : maxCompletedMs(rootPart);
+      const childCompleted = await pollFor(
+        async () => {
+          const list = await messageList(childId);
+          if (list === undefined) return undefined;
+          return JSON.stringify(list).includes('"aborted"') ? maxCompletedMs(list) : undefined;
+        },
+        () => true,
+        45_000,
+      );
+      const activeBody = JSON.stringify((await http("/api/session/active"))?.body ?? "");
+      const childAbsentFromActive = activeBody.includes(childId) === false;
+      const inboxBody = (await http(`/api/session/${childId}/inbox`))?.body;
+      const inboxEmpty =
+        isAnyRecord(inboxBody) && Array.isArray(inboxBody.data) && inboxBody.data.length === 0;
+      const preStates = await readWorkflowStates(dataDir);
+      const preAttempt = preStates.flatMap(collectAttempts)[0];
+      const rootList = await messageList(rootSession);
+      const rootErrors = (rootList === undefined ? [] : collectTypedParts(rootList))
+        .filter((part) => part.type === "tool")
+        .map((part) => {
+          const state = isAnyRecord(part.state) ? part.state : undefined;
+          const message = state !== undefined && isAnyRecord(state.error) ? state.error.message : undefined;
+          return `${String((part.name ?? part.tool) ?? "?")}:${state?.status ?? "?"}:${String(message ?? "").slice(0, 90)}`;
+        });
+      const rootErrorDump = rootErrors.join(" | ").slice(0, 400) || "none";
+      const expectedCompletedIso =
+        parentCompleted !== undefined && childCompleted !== undefined
+          ? new Date(Math.max(parentCompleted, childCompleted)).toISOString()
+          : undefined;
+      checks.push({
+        id: "workflow.cancellation-recovery",
+        ok:
+          interrupted &&
+          parentMessage !== undefined &&
+          childCompleted !== undefined &&
+          childAbsentFromActive &&
+          inboxEmpty &&
+          preAttempt?.status === "in_flight" &&
+          expectedCompletedIso !== undefined,
+        detail: `childTurnInFlight=${childTurnInFlight === true} interrupted=${interrupted} interruptStatus=${String(interruptResult.status)} interruptBody=${interruptResult.body} parentMessage=${parentMessage ?? "none"} parentCompletedMs=${String(parentCompleted ?? "none")} childAbortedCompletedMs=${String(childCompleted ?? "none")} childAbsentFromActive=${childAbsentFromActive} inboxEmpty=${inboxEmpty} preRecoverStatus=${String(preAttempt?.status ?? "none")} expectedCompletedAt=${expectedCompletedIso ?? "none"} rootErrors=${rootErrorDump}`,
+      });
+
+      // 3. Explicit recovery settles the attempt with completedAt = max(parent, child).
+      const settled = await pollFor(
+        async () => {
+          const states = await readWorkflowStates(dataDir);
+          const attempt = states.flatMap(collectAttempts)[0];
+          return attempt !== undefined && attempt.status !== "in_flight" ? attempt : undefined;
+        },
+        () => true,
+        45_000,
+      );
+      const settledIso =
+        settled !== undefined && typeof settled.completedAt === "string"
+          ? settled.completedAt
+          : undefined;
+      checks.push({
+        id: "workflow.cancellation-recovery.settlement",
+        ok:
+          settled?.status === "failed" &&
+          expectedCompletedIso !== undefined &&
+          settledIso === expectedCompletedIso,
+        detail: `settleStatus=${String(settled?.status ?? "none")} completedAt=${settledIso ?? "none"} expectedCompletedAt=${expectedCompletedIso ?? "none"} match=${settledIso === expectedCompletedIso}`,
+      });
+
+      // 4. Background native subagent launch (second delegated item).
+      const backgroundChild = await pollFor(
+        async () => {
+          const list = await listSessions();
+          if (list === undefined) return undefined;
+          return childrenOf(list, rootSession).find((entry) => entry.id !== childId);
+        },
+        () => true,
+        45_000,
+      );
+      const bgStates = await readWorkflowStates(dataDir);
+      const bgAttempts = bgStates.flatMap(collectAttempts);
+      checks.push({
+        id: "plugin.workflow.background",
+        ok: backgroundChild !== undefined && bgAttempts.length >= 2,
+        detail: `backgroundChild=${isAnyRecord(backgroundChild) ? String(backgroundChild.id) : "none"} attemptCount=${bgAttempts.length} attemptStatuses=${bgAttempts.map((attempt) => String(attempt.status)).join(",")}`,
+      });
+    } finally {
+      current().stop();
+    }
+
+    // 5. Root-interrupt live shape (wi-20): the parent's subagent tool part carries
+    // the pinned root-interrupt message on real native records.
+    host = await bootAggregateHost({
+      ...input,
+      label: "workflow-root",
+      childReportText: childReport,
+      childHoldMs: 60_000,
+      toolPlanActivationText: "workflow probe",
+      toolPlan: [openItem("k1", "Delegated implementation", "src/impl.ts"), subagentStep(false)],
+    });
+    try {
+      const rootSession2 = await controlPrompt(
+        current().api,
+        current().projectDir,
+        "workflow probe",
+        timeoutMs,
+      );
+      const child2 = await pollFor(
+        async () => {
+          const list = await listSessions();
+          if (list === undefined || rootSession2 === undefined) return undefined;
+          return childrenOf(list, rootSession2)[0];
+        },
+        () => true,
+        30_000,
+      );
+      const child2Id = isAnyRecord(child2) ? (child2.id as string) : undefined;
+      if (child2Id === undefined || rootSession2 === undefined) {
         checks.push({
-          id: "workflow.cancellation-recovery",
-          ok: interrupts.length > 0 && attemptTerminal && !stillInFlight && recordAborted,
-          detail: `interrupts=${interrupts.join(",") || "none"} attemptTerminal=${attemptTerminal} stillInFlight=${stillInFlight} sessionRecordAborted=${recordAborted}`,
+          id: "workflow.cancellation-recovery.root",
+          ok: false,
+          detail: `root scenario could not launch a child (child=${child2Id ?? "none"} root=${rootSession2 ?? "none"})`,
         });
       } else {
+        const rootInterruptResult = await interruptTrue(rootSession2);
+        const rootInterrupted = rootInterruptResult.ok;
+        const parentPart2 = await findParentCancel(rootSession2, child2Id);
+        const liveMessage =
+          parentPart2 !== undefined &&
+          isAnyRecord(parentPart2.state) &&
+          isAnyRecord(parentPart2.state.error)
+            ? String(parentPart2.state.error.message)
+            : "none";
+        const continued = await pollFor(
+          async () => {
+            const states = await readWorkflowStates(rootDataDir);
+            const attempt = states.flatMap(collectAttempts)[0];
+            return attempt !== undefined && attempt.status !== "in_flight" ? attempt : undefined;
+          },
+          () => true,
+          5_000,
+        );
+        const rootPartsDump =
+          (await messageList(rootSession2))
+            ?.flatMap((entry) => collectTypedParts(entry))
+            .filter((part) => part.type === "tool")
+            .map((part) => {
+              const state = isAnyRecord(part.state) ? part.state : undefined;
+              const message = state !== undefined && isAnyRecord(state.error) ? state.error.message : undefined;
+              return `${String(part.name ?? part.tool ?? "?")}:${String(state?.status ?? "?")}:${String(message ?? "").slice(0, 120)}`;
+            })
+            .join(" | ")
+            .slice(0, 500) ?? "none";
+        const rawRootMessages = JSON.stringify(await messageList(rootSession2) ?? "none").slice(0, 1200);
+        const rawChildMessages =
+          child2Id === undefined
+            ? "none"
+            : JSON.stringify(await messageList(child2Id) ?? "none").slice(0, 900);
         checks.push({
-          id: "workflow.cancellation-recovery",
-          ok: false,
-          detail: `no child/root session to cancel (root=${rootSession ?? "none"} child=${child?.id ?? "none"})`,
+          id: "workflow.cancellation-recovery.root",
+          ok: rootInterrupted && PARENT_CANCEL_RE.test(liveMessage),
+          detail: `rootInterrupted=${rootInterrupted} interruptStatus=${String(rootInterruptResult.status)} liveParentMessage=${liveMessage.slice(0, 160)} rootTurnContinued=${continued !== undefined} rootToolParts=${rootPartsDump} rawRootMessages=${rawRootMessages} rawChildMessages=${rawChildMessages}`,
         });
       }
     } finally {
-      host.stop();
+      current().stop();
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    checks.push({ id: "plugin.workflow.launch", ok: false, detail });
-    checks.push({ id: "workflow.cancellation-recovery", ok: false, detail });
+    for (const id of [
+      "plugin.workflow.launch",
+      "plugin.workflow.background",
+      "workflow.cancellation-recovery",
+      "workflow.cancellation-recovery.settlement",
+    ]) {
+      if (!checks.some((check) => check.id === id)) {
+        checks.push({ id, ok: false, detail });
+      }
+    }
   }
   return checks;
 }

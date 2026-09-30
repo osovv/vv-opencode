@@ -187,9 +187,17 @@ export async function createLoopbackProvider(input: {
             JSON.stringify(messages).includes("VVOC_WORK_ITEM_ID:");
           let text = "e2e-ok";
           if (childReport) {
-            const match = /VVOC_WORK_ITEM_ID:\s*(\S+)/.exec(JSON.stringify(messages));
+            const allMessages = JSON.stringify(messages);
+            // Match only the token id: JSON.stringify escapes inner newlines to
+            // literal "\n", so a greedy \S+ would swallow `<assignment>` text.
+            const match = /VVOC_WORK_ITEM_ID:\s*(wi-[A-Za-z0-9]+)/.exec(allMessages);
             text = (input.childReportText ?? "").replace("{workItemId}", match?.[1] ?? "wi-1");
-            if (input.childHoldMs !== undefined && input.childHoldMs > 0) {
+            // Hold only genuine child turns (no probe activation marker); the
+            // parent's own late turns must not stall on the hold timer.
+            const isChildTurn =
+              input.toolPlanActivationText === undefined ||
+              !allMessages.includes(input.toolPlanActivationText);
+            if (isChildTurn && input.childHoldMs !== undefined && input.childHoldMs > 0) {
               await new Promise((resolvePromise) => setTimeout(resolvePromise, input.childHoldMs));
             }
           }

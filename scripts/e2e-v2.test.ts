@@ -623,6 +623,41 @@ describe("full installed-artifact parity runner", () => {
     expect(lines.join("\n")).toContain("unit.a: unverified");
   });
 
+  test("parity.full only passes when every mandatory row is verified or an accepted residual", () => {
+    const base = {
+      phase: "T",
+      surface: "x",
+    };
+    const rows: ParityRow[] = [
+      { ...base, id: "ok-row", status: "implemented-full", acceptance: "x", command: "bun scripts/e2e-v2.ts --core" },
+      {
+        ...base,
+        id: "residual-row",
+        status: "residual-accepted",
+        acceptance: "x",
+        command: "bun test x",
+        residual: { reason: "offline-infeasible", crossReferences: ["unit suite"] },
+      },
+      { ...base, id: "pending-row", status: "pending", acceptance: "x", command: "bun test y" },
+      { ...base, id: "parity.full", status: "pending", acceptance: "meta", command: "bun run e2e:v2" },
+    ];
+    const input = { coreOk: true, tuiOk: true, installedOk: true };
+    const results = evaluateParityRows(rows, input);
+    const meta = results.find((row) => row.id === "parity.full");
+    expect(meta?.outcome).toBe("unverified");
+    expect(meta?.detail).toContain("pending-row");
+    expect(results.find((row) => row.id === "residual-row")?.outcome).toBe("residual");
+    const failures = mandatoryRowFailures(results);
+    expect(failures.some((failure) => failure.startsWith("pending-row"))).toBe(true);
+    expect(failures.some((failure) => failure.startsWith("residual-row"))).toBe(false);
+
+    const resolvedRows = rows.filter((row) => row.id !== "pending-row");
+    const resolved = evaluateParityRows(resolvedRows, input);
+    const resolvedMeta = resolved.find((row) => row.id === "parity.full");
+    expect(resolvedMeta?.outcome).toBe("pass");
+    expect(mandatoryRowFailures(resolved)).toEqual([]);
+  });
+
   test("buildParityEvidence summarizes verified, failed, and unverified rows", () => {
     const document = buildParityEvidence({
       rows: evaluateParityRows(rows, {

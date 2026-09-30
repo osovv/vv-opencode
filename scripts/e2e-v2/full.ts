@@ -181,8 +181,29 @@ export async function runFull(
     }
   }
   const aggregateOutcomes: Record<string, boolean> = {};
+  const aggregateDetails: Record<string, string> = {};
+  // Rows whose command is the aggregate tier are keyed by their row id; map the
+  // multi-check workflow observations onto their parity rows explicitly so a
+  // blocked sub-check shows its precise blocker instead of "no tier covers".
+  const aggregateRowChecks: Readonly<Record<string, readonly string[]>> = {
+    "plugin.workflow": ["plugin.workflow.launch", "plugin.workflow.background"],
+    "workflow.cancellation-recovery": [
+      "workflow.cancellation-recovery",
+      "workflow.cancellation-recovery.settlement",
+    ],
+    "workflow.cancellation-recovery.root": ["workflow.cancellation-recovery.root"],
+  };
   for (const check of coreSummary.aggregateChecks ?? []) {
     aggregateOutcomes[check.id] = check.ok;
+    aggregateDetails[check.id] = check.detail;
+  }
+  for (const [rowId, checkIds] of Object.entries(aggregateRowChecks)) {
+    const observed = checkIds.map((id) => coreSummary.aggregateChecks?.find((check) => check.id === id));
+    if (observed.some((check) => check !== undefined)) {
+      aggregateOutcomes[rowId] = observed.every((check) => check?.ok === true);
+      const firstFailed = observed.find((check) => check !== undefined && check.ok === false);
+      if (firstFailed !== undefined) aggregateDetails[rowId] = firstFailed.detail;
+    }
   }
   const coreOutcomes: Record<string, boolean> = {};
   for (const entry of coreSummary.cases) {
@@ -196,6 +217,7 @@ export async function runFull(
     installedOk: installedSummary?.ok,
     installedOutcomes,
     aggregateOutcomes,
+    aggregateDetails,
   });
   const failures = mandatoryRowFailures(results);
 
@@ -231,6 +253,8 @@ export async function runFull(
       "Cross-session equal-time first-accept ordering remains a recorded engine-test limit, not forced on the host.",
       "Rows without an installed-artifact tier remain unverified until a scenario covers them; --full never promotes them.",
       "The anthropic-compatible cohort is declared but not exercised by the installed-surface tier.",
+      "plugin.workflow remaining sub-checks (malformed same-child continuation, BLOCKED/NEEDS_CONTEXT hard stop, checkpoint lifecycle, finite-authority exhaustion, interrupted hydration) are honest residuals driven by the accepted T-004 dedicated suites src/plugins/workflow.delegated.integration.test.ts, src/plugins/workflow.execution.integration.test.ts and src/plugins/workflow/cancellation.test.ts; the installed aggregate independently confirms the plugin loads, its tool census is the nine owned tools, work_item_open executes, and a real foreground subagent launch (child session with parentID and a persisted in_flight attempt) plus a background launch (second child, second attempt) occurred on native records.",
+      "BLOCKED workflow.cancellation-recovery: POST /api/session/{child}/interrupt returns {interrupted:false} (idle no-op) while the child's provider turn is verifiably in flight (childTurnInFlight=true, retried for 20s); pinned core/session/execution.ts documents 'Idle interruption is a no-op' and the internal subagent run is not active under the child session's coordinator. Root interrupt is accepted (interrupted:true) but the interrupted parent run's partial assistant message carrying the subagent tool part is not persisted: /api/session/{root}/message shows only {type:idle,outcome:interrupted} with zero tool parts, so the pinned 'Subagent cancelled (sessionID: ...)' / 'Tool execution interrupted (sessionID: ...)' parent shapes cannot be observed there. Authoritative cancellation/recovery remains verified only by the accepted T-004 suites (workflow.delegated.integration.test.ts, workflow.execution.integration.test.ts, cancellation.test.ts).",
     ],
     generatedAt: new Date().toISOString(),
   });
