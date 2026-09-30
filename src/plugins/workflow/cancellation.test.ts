@@ -13,7 +13,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Initial native cancellation fixtures and evidence-rule regressions.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-20 - Pinned BOTH native 2.0.18 interrupt shapes (live root interrupt + stale post-death settle) to kind 'interrupted' with the child session id, plus negative cases for a bare interrupt, generic provider errors, and unrelated text.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -65,6 +65,16 @@ describe("parseSubagentToolFailure", () => {
       childSessionId: "ses_child",
       detail: "boom",
     });
+  });
+
+  test("parses both pinned native interrupt shapes as interrupted", () => {
+    // Live in-process root interrupt (step.ts TOOLS_INTERRUPTED composed by
+    // publish-llm-event.ts failTool subagent special case).
+    expect(parseSubagentToolFailure("Tool execution interrupted (sessionID: ses_child)")).toEqual({
+      kind: "interrupted",
+      childSessionId: "ses_child",
+    });
+    // Stale post-process-death settle (llm.ts settleStaleToolCalls).
     expect(
       parseSubagentToolFailure("Tool execution interrupted: subagent (sessionID: ses_child)"),
     ).toEqual({ kind: "interrupted", childSessionId: "ses_child" });
@@ -77,6 +87,22 @@ describe("parseSubagentToolFailure", () => {
     expect(
       parseSubagentToolFailure("Subagent cancelled (sessionID: ses_child) trailing"),
     ).toBeUndefined();
+  });
+
+  test("rejects interrupts that do not name a subagent child session", () => {
+    // Bare live interrupt (non-subagent tool, or a subagent without progress
+    // metadata) never carries a child session id and is never evidence.
+    expect(parseSubagentToolFailure("Tool execution interrupted")).toBeUndefined();
+    expect(parseSubagentToolFailure("Tool execution interrupted (sessionID: )")).toBeUndefined();
+    expect(
+      parseSubagentToolFailure(
+        "Tool execution interrupted: subagent (sessionID: ses_child) trailing",
+      ),
+    ).toBeUndefined();
+    expect(
+      parseSubagentToolFailure("Tool execution interrupted (sessionID: ses_child) trailing"),
+    ).toBeUndefined();
+    expect(parseSubagentToolFailure("Tool execution interrupted: echo")).toBeUndefined();
   });
 });
 

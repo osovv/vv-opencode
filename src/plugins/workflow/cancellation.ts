@@ -16,7 +16,7 @@
 //   NativeExecutionTerminalEvent - Decoded session.execution.failed/interrupted terminal event.
 //   SubagentToolFailureKind - Native mapping of a foreground subagent tool-call termination.
 //   SubagentToolFailure - Parsed subagent tool-call termination with the child session it names.
-//   parseSubagentToolFailure - Parse the exact pinned subagent failure/cancel/interrupt messages.
+//   parseSubagentToolFailure - Parse the exact pinned subagent failure/cancel/interrupt messages (both native interrupt shapes).
 //   isAbortedStructuredError - True only for a terminal native `{type:"aborted"}` error.
 //   decodeToolTerminalEvent - Decode a native session.tool.success/session.tool.failed envelope.
 //   decodeSyntheticEvent - Decode a native session.synthetic envelope.
@@ -26,7 +26,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Added the authoritative native cancellation mapping and strict recovery evidence rule; replaces the V1 Task cancelled / MessageAbortedError assumption with verified 2.0.18 shapes.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-20 - parseSubagentToolFailure now recognizes BOTH pinned 2.0.18 interrupt shapes: the live in-process root-interrupt `Tool execution interrupted (sessionID: <id>)` (step.ts TOOLS_INTERRUPTED composed by publish-llm-event.ts failTool) in addition to the stale post-process-death `Tool execution interrupted: subagent (sessionID: <id>)` (llm.ts settleStaleToolCalls). A root interrupt now yields kind 'interrupted' with the child session id, so explicit recovery can settle the attempt; a bare interrupt without a child session id, a generic provider/transport error, or unrelated text still returns undefined. T-004 originally added the authoritative native cancellation mapping and strict recovery evidence rule, replacing the V1 Task cancelled / MessageAbortedError assumption with verified 2.0.18 shapes.]
 // END_CHANGE_SUMMARY
 
 /** Native `SessionError.Error` shape (packages/schema/src/session-error.ts). */
@@ -75,14 +75,28 @@ export interface SubagentToolFailure {
 // Exact pinned messages from the 2.0.18 source:
 // - packages/core/src/tool/plugin/subagent.ts: `Subagent cancelled (sessionID: <id>)`
 //   and `Subagent failed (sessionID: <id>): <detail>`.
-// - packages/core/src/session/runner/llm.ts: `Tool execution interrupted: subagent (sessionID: <id>)`.
+// - LIVE in-process root interrupt (parent session interrupted while the subagent
+//   tool part is unsettled — the common TUI Esc / API interrupt case):
+//   packages/core/src/session/runner/step.ts:61 `TOOLS_INTERRUPTED`
+//   (`{ type: "aborted", message: "Tool execution interrupted" }`) composed by
+//   packages/core/src/session/runner/publish-llm-event.ts:342-358 (`failTool`
+//   subagent special case) into `Tool execution interrupted (sessionID: <id>)`.
+// - STALE post-process-death settle: packages/core/src/session/runner/llm.ts:348
+//   (`settleStaleToolCalls`) `Tool execution interrupted: subagent (sessionID: <id>)`.
+// Both interrupt shapes carry a subagent child session id; a bare
+// `Tool execution interrupted` (no child session id) is not evidence here.
 const SUBAGENT_CANCELLED_RE = /^Subagent cancelled \(sessionID: ([^)\s]+)\)$/;
 const SUBAGENT_FAILED_RE = /^Subagent failed \(sessionID: ([^)\s]+)\)(?:: ([\s\S]*))?$/;
-const SUBAGENT_INTERRUPTED_RE = /^Tool execution interrupted: subagent \(sessionID: ([^)\s]+)\)$/;
+const SUBAGENT_INTERRUPTED_LIVE_RE = /^Tool execution interrupted \(sessionID: ([^)\s]+)\)$/;
+const SUBAGENT_INTERRUPTED_STALE_RE =
+  /^Tool execution interrupted: subagent \(sessionID: ([^)\s]+)\)$/;
 
 /**
- * Parse only the exact pinned subagent termination messages. A generic provider
- * or transport error is not a cancellation and returns undefined.
+ * Parse only the exact pinned subagent termination messages, covering both
+ * native interrupt shapes (live root interrupt and stale post-death settle). A
+ * generic provider or transport error, an unrelated tool interrupt, or an
+ * interrupt without a subagent child session id is not a cancellation and
+ * returns undefined.
  */
 export function parseSubagentToolFailure(message: string): SubagentToolFailure | undefined {
   const cancelled = SUBAGENT_CANCELLED_RE.exec(message);
@@ -98,9 +112,13 @@ export function parseSubagentToolFailure(message: string): SubagentToolFailure |
       ...(detail === undefined || detail === "" ? {} : { detail }),
     };
   }
-  const interrupted = SUBAGENT_INTERRUPTED_RE.exec(message);
-  if (interrupted) {
-    return { kind: "interrupted", childSessionId: interrupted[1] as string };
+  const liveInterrupted = SUBAGENT_INTERRUPTED_LIVE_RE.exec(message);
+  if (liveInterrupted) {
+    return { kind: "interrupted", childSessionId: liveInterrupted[1] as string };
+  }
+  const staleInterrupted = SUBAGENT_INTERRUPTED_STALE_RE.exec(message);
+  if (staleInterrupted) {
+    return { kind: "interrupted", childSessionId: staleInterrupted[1] as string };
   }
   return undefined;
 }

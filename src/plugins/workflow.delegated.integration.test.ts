@@ -52,7 +52,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 attempt 2 - Added staged-launch persistence coverage, a lazy-client-acquisition retry regression, and a foreground malformed-report regression: a client-acquisition failure during bounded continuation still settles report_rejected with the original excerpt (never in_flight/DONE), a later acquisition succeeds, and later session.deleted events still process.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-20 - Added cancellation-recovery regressions for the LIVE native root-interrupt parent shape: explicit recover settles the in-flight attempt with completedAt = max(parent tool-part end, child terminal completion), and a bare `Tool execution interrupted` without a subagent child session id still refuses with CANCELLATION_EVIDENCE_REQUIRED. seedCancellationEvidence now takes an optional pinned parent failure. Prior wi-7 attempt 2: staged-launch persistence coverage, a lazy-client-acquisition retry regression, and a foreground malformed-report regression (a client-acquisition failure during bounded continuation still settles report_rejected with the original excerpt, never in_flight/DONE).]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -3408,9 +3408,18 @@ describe("native background settlement and explicit cancellation recovery", () =
       childCompleted: number;
       childIdle?: number;
       childError?: boolean;
+      /**
+       * Pinned parent subagent tool-part failure. Defaults to the child-cancelled
+       * shape; interruption tests seed one of the pinned native interrupt shapes.
+       */
+      parentFailure?: { type?: string; message: string };
     },
   ): void {
     const childId = "ses_cancel_child";
+    const parentFailure = options.parentFailure ?? {
+      type: "tool.execution",
+      message: `Subagent cancelled (sessionID: ${childId})`,
+    };
     harness.sessionMessages.set(ROOT_SESSION, [
       {
         id: "msg_parent",
@@ -3424,8 +3433,8 @@ describe("native background settlement and explicit cancellation recovery", () =
               status: "error",
               input: {},
               error: {
-                type: "tool.execution",
-                message: `Subagent cancelled (sessionID: ${childId})`,
+                type: parentFailure.type ?? "tool.execution",
+                message: parentFailure.message,
               },
               metadata: { sessionID: childId, status: "running" },
             },
@@ -3495,6 +3504,73 @@ describe("native background settlement and explicit cancellation recovery", () =
     const attempt = persistedAttempt(workItemId);
     expect(attempt?.status).toBe("failed");
     expect(attempt?.completedAt).toBe(new Date(70).toISOString());
+  });
+
+  test("explicit recovery settles a live root-interrupt attempt with the max historical completion timestamp", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-root-int", "vv-implementer", workItemId);
+    seedCancellationEvidence(harness, "call-root-int", {
+      // LIVE in-process root interrupt (step.ts TOOLS_INTERRUPTED composed by
+      // publish-llm-event.ts failTool): the parent tool part carries
+      // `Tool execution interrupted (sessionID: <child>)`, and the child's
+      // terminal abort lands later, so max must select the child completion.
+      parentCompleted: 40,
+      childCompleted: 55,
+      parentFailure: {
+        type: "aborted",
+        message: "Tool execution interrupted (sessionID: ses_cancel_child)",
+      },
+    });
+
+    const recovered = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "The root session was interrupted while the worker was running.",
+      changedCondition: "Resume after the explicit native root-interrupt evidence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-root-int-1",
+    });
+    expect(recovered.ok).toBe(true);
+    const item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(1);
+    const record = persistedRecord(workItemId);
+    expect(record?.delegated?.recoveryHistory).toHaveLength(1);
+    expect(record?.delegated?.recoveryHistory[0]?.kind).toBe("resume");
+    const attempt = persistedAttempt(workItemId);
+    expect(attempt?.status).toBe("failed");
+    expect(attempt?.completedAt).toBe(new Date(55).toISOString());
+  });
+
+  test("a bare tool interrupt without a subagent child session id never settles recovery", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-bare-int", "vv-implementer", workItemId);
+    seedCancellationEvidence(harness, "call-bare-int", {
+      parentCompleted: 70,
+      childCompleted: 55,
+      // No child session id in the message: never parent-cancelled evidence,
+      // even though the child itself aborted and is quiescent.
+      parentFailure: { type: "aborted", message: "Tool execution interrupted" },
+    });
+
+    const refused = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "Attempted recovery on a bare interrupt without child evidence.",
+      changedCondition: "Wait for authoritative cancellation evidence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-bare-int",
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.errorCode).toBe("CANCELLATION_EVIDENCE_REQUIRED");
+
+    const item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+    expect(item?.delegated?.attempts).toBe(1);
+    expect(item?.delegated?.recoveryCount ?? 0).toBe(0);
+    expect(persistedAttempt(workItemId)?.completedAt).toBeUndefined();
   });
 
   test("an active or incomplete cancellation child refuses recovery without changing budget", async () => {
