@@ -28,6 +28,7 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_RELEASE_SUMMARY_MODEL,
   DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS,
+  MAX_COMMIT_DIFF_CHARS,
   RELEASE_SUMMARY_MAX_ATTEMPTS,
   buildReleaseSummaryAgentConfig,
   buildReleaseSummaryPrompt,
@@ -212,6 +213,19 @@ describe("buildReleaseSummaryPrompt", () => {
     expect(prompt).toContain("diff --git a/src/feature.ts b/src/feature.ts");
     expect(prompt).toContain("+export const enabled = true;");
     expect(prompt).toContain("diff --git a/src/bug.ts b/src/bug.ts");
+  });
+
+  test("truncates oversized commit diffs with an explicit marker", () => {
+    const bigDiff = "x".repeat(MAX_COMMIT_DIFF_CHARS + 5_000);
+    const prompt = buildReleaseSummaryPrompt(
+      samplePromptInput({
+        commits: [{ hash: "abc1234", subject: "feat: add new feature", body: "", diff: bigDiff }],
+      }),
+    );
+    expect(prompt).toContain("(diff truncated: 5000 characters omitted");
+    expect(prompt).not.toContain("x".repeat(MAX_COMMIT_DIFF_CHARS + 1));
+    // The kept head plus the marker stays within a bounded budget of the cap.
+    expect(prompt.length).toBeLessThan(MAX_COMMIT_DIFF_CHARS + 5_000);
   });
 
   test("instructs model not to invent facts outside provided diffs", () => {

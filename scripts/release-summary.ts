@@ -21,7 +21,8 @@
 //   RELEASE_SUMMARY_MAX_ATTEMPTS - Total attempts before release:bump aborts.
 //   resolveReleaseSummaryOptions - Parses env overrides and returns validated model/timeout settings.
 //   collectReleaseCommitMetadata - Reads git metadata and full per-commit diffs from latest reachable tag to HEAD through an injected runner.
-//   buildReleaseSummaryPrompt - Builds the stdin prompt payload for the restricted release-summary agent.
+//   buildReleaseSummaryPrompt - Builds the stdin prompt payload for the restricted release-summary agent, bounding each commit diff to the summary model context window.
+//   MAX_COMMIT_DIFF_CHARS - Per-commit diff budget; truncated diffs keep the head and announce the cut.
 //   buildReleaseSummaryAgentConfig - Builds OPENCODE_CONFIG_CONTENT for the restricted primary release-summary agent.
 //   parseOpencodeRunJsonOutput - Parses OpenCode JSONL stdout into accumulated model text or a failure.
 //   extractSummaryEnvelope - Extracts a single XML-like summary envelope.
@@ -41,7 +42,7 @@
 //   SummaryValidationResult - Parsed latest changelog block validation result.
 // END_MODULE_MAP
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Default the release summary model to deepseek/deepseek-flash after deepseek-v4-flash started returning server errors.]
+//   LAST_CHANGE: [DIRECT-FIX - Bounded each commit diff in the release summary prompt (MAX_COMMIT_DIFF_CHARS with an explicit truncation marker) so large releases no longer exceed the summary model's context window and fail release preparation.]
 // END_CHANGE_SUMMARY
 
 export const DEFAULT_RELEASE_SUMMARY_MODEL = "deepseek/deepseek-flash";
@@ -235,20 +236,37 @@ export function buildReleaseSummaryAgentConfig(model: string): string {
 
 /**
  * Builds a deterministic prompt payload for stdin.
- * The prompt includes full commit diff context and instructs the model to return only a single <summary> envelope in English.
+ * The prompt includes commit diff context, bounded per commit so a large
+ * release never exceeds the summary model's context window, and instructs
+ * the model to return only a single <summary> envelope in English.
  */
+
+/** Per-commit diff budget; truncated diffs keep the head and announce the cut. */
+export const MAX_COMMIT_DIFF_CHARS = 24_000;
+
+function renderCommitDiff(diff: string): string {
+  if (!diff) return "\n      (no textual diff captured)";
+  if (diff.length <= MAX_COMMIT_DIFF_CHARS) {
+    return `\n${diff
+      .split("\n")
+      .map((diffLine) => `      ${diffLine}`)
+      .join("\n")}`;
+  }
+  const kept = diff.slice(0, MAX_COMMIT_DIFF_CHARS);
+  const omitted = diff.length - kept.length;
+  return `\n${kept
+    .split("\n")
+    .map((diffLine) => `      ${diffLine}`)
+    .join("\n")}\n      (diff truncated: ${omitted} characters omitted to fit the summary model context)`;
+}
+
 export function buildReleaseSummaryPrompt(input: ReleaseSummaryPromptInput): string {
   const commitList = input.commits
     .map((c) => {
       let line = `  ${c.hash}: ${c.subject}`;
       if (c.body) line += `\n    ${c.body.split("\n").join("\n    ")}`;
       line += `\n    Full diff:`;
-      line += c.diff
-        ? `\n${c.diff
-            .split("\n")
-            .map((diffLine) => `      ${diffLine}`)
-            .join("\n")}`
-        : "\n      (no textual diff captured)";
+      line += renderCommitDiff(c.diff);
       return line;
     })
     .join("\n\n");
