@@ -10,36 +10,44 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   ListedPluginItems - Parsed work_item_list payload used by plugin integration tests.
+//   PermissionRule - Native permission rule shape (action/resource/effect).
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
 //   SESSION_ID - Stable session identifier shared by workflow fixtures.
+//   workflowLogs - Captured workflow diagnostic console lines.
+//   originalConsoleError - Bound original console.error used to restore the sink.
+//   openItem - Opens one work item against an in-memory store.
+//   result - Builds a strict tracked result block.
 //   WorkflowPluginHarness - Captured workflow plugin hooks, logs, and recorded prompt calls for one fixture.
-//   createToolContext - Builds a workflow tool execution context.
+//   PromptScriptEntry - Scripted harness continuation outcome: text response, error, or thrown failure.
+//   NativeWorkflowHarnessPlugin - Native fixture plugin surface that runs the real WorkflowPlugin.setup.
+//   NativeEventQueue - Queue delivering native plugin events to the async event stream.
+//   deriveSubagentChildId - Derive the child session id from tracked subagent output.
+//   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
+//   NativeToolInfo - Registered native tool shape inspected by the fake editor.
+//   NativeFakeToolEditor - Minimal native tool editor double used by the harness.
 //   createWorkflowPluginHarness - Creates an isolated workflow plugin harness with optional scripted continuation responses.
+//   ListedPluginItems - Parsed work_item_list payload used by plugin integration tests.
+//   openPluginWorkItem - Opens one work item through the plugin tool.
+//   launchPluginTask - Launches one tracked task through plugin hooks.
+//   openAndLaunchImplementer - Opens an implementation item and launches one vv-implementer task.
 //   finishPluginTask - Completes a tracked plugin task with a strict result block.
 //   finishPluginTaskWithRawOutput - Completes a tracked plugin task with raw output.
-//   launchPluginTask - Launches one tracked task through plugin hooks.
 //   listPluginItems - Lists and parses plugin work items.
-//   openItem - Opens one work item against an in-memory store.
-//   openPluginWorkItem - Opens one work item through the plugin tool.
-//   openAndLaunchImplementer - Opens an implementation item and launches one vv-implementer task.
+//   createToolContext - Builds a workflow tool execution context.
 //   parseToolJson - Parses structured workflow tool output.
-//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
-//   result - Builds a strict tracked result block.
-//   wrapTaskElement - Wraps tracked output in an OpenCode task-element envelope.
 //   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
-//   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
-//   SessionPromptCall - SDK-derived session.prompt request accepted by the host-contract double.
-//   SessionPromptResponse - SDK-derived session.prompt response with a valid assistant message and text part.
-//   SessionPromptError - SDK-derived session.prompt error consumed by continuation.
-//   SessionPromptConsumedResult - Narrowed SDK session.prompt data/error boundary consumed by continuation.
-//   SessionPromptMutation - Session mutation API names tracked by the host-contract double.
-//   HostPermissionDouble - Captured host-contract double client, recorded calls, mutation counts, and persisted rules.
-//   PromptScriptEntry - Scripted harness continuation outcome: text response, error, or thrown failure.
-//   assistantMessage - Builds a valid SDK AssistantMessage fixture for one session.
-//   textPart - Builds a valid SDK TextPart response fixture.
-//   sessionPromptResponse - Builds a valid SDK session.prompt response fixture.
-//   firstPromptText - Extracts the first text-part input from a recorded prompt call.
-//   createHostPermissionDouble - Models the confirmed host rule-replacement semantics for prompt `tools` and counts session mutations.
+//   wrapTaskElement - Wraps tracked output in an OpenCode task-element envelope.
+//   NativeRepairCall - Recorded native session.prompt call used by the repair double.
+//   NativeRepairDouble - Native same-child continuation double exposing only prompt/wait and message list.
+//   hostMutationSurface - Sorted native session surface keys exposed to the repair boundary.
+//   createNativeRepairDouble - Builds the native same-child continuation double.
+//   REAL_WORKFLOW_HOST - Pinned host binary path enabling the real workflow smoke suite.
+//   workflowSmokeDescribe - describe or describe.skip bound to whether the real host is configured.
+//   E2eHostModule - Structural view of the read-only real-host harness helper module.
+//   e2eHostPromise - Memoized dynamic import of the read-only real-host helper module.
+//   loadE2eHost - Runtime dynamic import of the read-only real-host harness helpers.
+//   getFreePort - Reserve and release a loopback TCP port.
+//   sleep - Promise-based millisecond delay for smoke polling.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

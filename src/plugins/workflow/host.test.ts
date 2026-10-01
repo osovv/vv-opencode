@@ -6,10 +6,11 @@
 //   DEPENDS: [bun:test, src/plugins/workflow/host.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   (tests) - Native subagent input/result/envelope decoding assertions.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

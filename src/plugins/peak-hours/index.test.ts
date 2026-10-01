@@ -13,11 +13,22 @@
 //   NOW - Fixed Friday 07:00 UTC evaluation instant used by default fixtures.
 //   deepseekSchedules - Schedule fixture with the deepseek peak windows active at NOW.
 //   baseEntry - Fully seeded entry fixture.
+//   configFor - Build a vvoc config with the peak-hours plugin entry.
+//   NativeModelRequest - Native model request shape used by smoke assertions.
 //   makePlugin - Builds the native plugin with an injected captured policy and deps.
+//   REAL_T006_HOST - Pinned host binary path enabling the real T-006 smoke suite.
+//   t006SmokeDescribe - describe or describe.skip bound to whether the real host is configured.
+//   E2eHostModule - Structural view of the read-only real-host harness helper module.
+//   e2eHostPromise - Memoized dynamic import of the read-only real-host helper module.
 //   loadE2eHost - Runtime dynamic import of the read-only real-host harness helpers.
-//   startSmokeHost - Start the pinned host with the actual built T-006 plugins and a loopback provider.
-//   providerTraceLines - Parse the recorded provider request trace.
+//   getFreePort - Reserve and release a loopback TCP port.
+//   smokeSleep - Promise-based millisecond delay for smoke polling.
+//   PeakSmokeMode - Soft or hard peak-hours smoke mode.
 //   withPeakPolicy - Build a vvoc config with a soft/hard/off peak policy active at now.
+//   smokePluginSource - Generate the plugin module composing the built T-006 plugins.
+//   smokeProviderScript - Generate the loopback provider script for the smoke host.
+//   providerTraceLines - Parse the recorded provider request trace.
+//   readUsageRecords - Read persisted analytics usage records from the data home.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

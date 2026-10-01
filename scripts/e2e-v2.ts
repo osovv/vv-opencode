@@ -7,13 +7,15 @@
 //   DEPENDS: [node:fs, node:path, scripts/e2e-v2/core.ts, scripts/e2e-v2/full.ts, scripts/e2e-v2/tui.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   HarnessMode - Selected harness mode.
 //   CliDeps - Injectable runner dependencies used by tests and the real entry.
 //   parseArgs - Parse harness arguments into a mode and output flag.
+//   ParityRow - One parity inventory row read and printed by the list mode.
+//   readParity - Read the packed parity inventory rows from the workspace.
 //   runCli - Execute one harness invocation and return its process-style status.
 //   main - Real entry that wires process arguments and exits.
 // END_MODULE_MAP

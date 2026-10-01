@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   NativeSystemPart - Native system part fixture.
+//   NativeContextEvent - Native chat context event fixture.
 //   makeHarness - Builds a native plugin harness with an injected capture policy.
 //   systemText - Joins injected native system part text.
 // END_MODULE_MAP

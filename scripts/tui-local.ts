@@ -20,6 +20,8 @@
 //   parseScope - Validates the local launch scope option.
 //   runBuild - Builds the local package before launch.
 //   main - Runs the isolated local TUI launch workflow.
+//   isManagedVvocEntry - True when a cli.json plugin entry targets the vvoc package.
+//   isRecord - Narrow a value to a plain record.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

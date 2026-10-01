@@ -7,13 +7,14 @@
 //   DEPENDS: [node:child_process, node:crypto, node:fs, node:fs/promises, node:path, node:url]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   PINNED_HOST_VERSION - Pinned OpenCode host version accepted by the harness.
 //   PINNED_HOST_SHA256 - SHA-256 of the pinned host binary.
 //   PINNED_SOURCE_COMMIT - Pinned native host source commit recorded in evidence.
+//   DEFAULT_HOST_BINARY - Default pinned host binary location for local acceptance.
 //   LOOPBACK_HOSTNAMES - Hostnames accepted as loopback for provider dispatch.
 //   HOST_ENV_KEYS - Allow-listed environment keys passed to the owned host process.
 //   OWNERSHIP_MARKER - Marker file proving the harness created a scratch directory.
@@ -26,7 +27,14 @@
 //   createOwnedScratch - Create a fresh mkdtemp child with an ownership marker.
 //   removeOwnedScratch - Remove only a marked, guarded scratch child.
 //   buildHostEnv - Build an allow-listed child environment from scratch.
+//   redactEnv - Redact private environment values before they reach evidence or logs.
+//   CommandResult - Result of one bounded short-lived command.
+//   DEFAULT_COMMAND_TIMEOUT_MS - Default timeout for one bounded short-lived command.
+//   DEFAULT_HTTP_TIMEOUT_MS - Default timeout for one bounded native HTTP request.
+//   DEFAULT_MAX_BYTES - Default output cap for one bounded command or HTTP response.
 //   runCommand - Run one bounded short-lived command and capture status and output.
+//   packedArtifactIssues - Expected top-level entries that make a packed workspace a valid installable artifact.
+//   verifyPackedArtifact - Prove the tarball is readable and carries the expected manifest identity.
 //   packWorkspace - Create the packed workspace tarball used by the isolated fixture.
 //   linkDependencyTree - Symlink repository dependencies so the packed package resolves offline.
 //   installPackedPackage - Extract the packed tarball into an isolated node_modules tree.
@@ -35,10 +43,13 @@
 //   installedArtifactPathIssues - Prove installed paths resolve inside the isolated project, never the workspace.
 //   OwnedProcesses - Exact live-handle process registry that refuses foreign or exited processes.
 //   waitForRegisteredService - Read the native service registration password from XDG state.
+//   NativeHttpResponse - One decoded native HTTP response.
 //   NativeHttpApi - Authenticated bounded fetch helper bound to one owned host.
+//   readBoundedText - Read a response body up to a byte cap.
 //   createNativeApi - Build the authenticated native HTTP helper for an owned host.
 //   discoverHostBinary - Resolve the pinned host binary from environment or the pinned location.
 //   writeFileEnsured - Write one file, creating parent directories.
+//   fileUrl - Expose the workspace file URL helper for fixture source generation.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

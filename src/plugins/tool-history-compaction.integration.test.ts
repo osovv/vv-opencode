@@ -10,10 +10,18 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   captureFor - Builds a fake family capture from a vvoc config.
+//   previousDataHome - Preserves the caller's data-home environment for cleanup.
+//   scratchDataHome - Tracks the isolated data home created by the test.
+//   NativeContextEvent - Native context hook event shape used by the harness.
+//   SessionHandler - Handler signature for recorded context hooks.
+//   configFor - Build a vvoc config with the tool-history-compaction plugin entry.
 //   createHarness - Builds a native plugin harness with an injected runtime seam.
+//   seq - Monotonic counter making generated fixture ids unique.
 //   createToolMessage - Builds a native message carrying one textual tool result.
 //   outputOf - Reads a native tool result text value back out.
+//   inputOf - Reads a native tool-call input back out.
+//   BIG - Large synthetic tool output used by compaction cases.
+//   LONG_READ - Long synthetic read output used by compaction cases.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

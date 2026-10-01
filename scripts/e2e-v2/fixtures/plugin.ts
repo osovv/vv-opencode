@@ -7,7 +7,7 @@
 //   DEPENDS: [node:crypto, node:fs, node:http, scripts/e2e-v2/host.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS, M-PLUGIN-MODEL-ROLES]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
@@ -17,6 +17,12 @@
 //   HarnessPluginDeps - Packaged plugin, runtime acquisition, guard origins, and control-plane configuration.
 //   HarnessControlInfo - Nonce-protected discovery record written for the driver.
 //   createHarnessPlugin - Build the plugin object after the owner calls setup.
+//   MAX_EVENT_QUEUE - Cap on retained fixture control-plane events.
+//   assertOwnedOrigin - Assert an outgoing request URL stays on the owned loopback fixture origin.
+//   sendJson - Write a JSON response with its status and content length.
+//   readBody - Read and JSON-parse a bounded request body.
+//   createControlHandler - Build the nonce-protected handler that only forwards to real runtime methods.
+//   closeServer - Close an owned fixture HTTP server and resolve once it has stopped.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

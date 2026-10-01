@@ -13,7 +13,9 @@
 //   CONTEXT_INSPECTION_RPC_ID - Stable versioned RPC id.
 //   CONTEXT_INSPECTION_VERSION - DTO schema version required in every reply.
 //   CONTEXT_INSPECTION_METHOD - Registered method name.
+//   CONTEXT_INSPECTION_MAX_TOOLS - Maximum tool rows included in one catalog projection.
 //   ContextInspectionStatus - Explicit complete/partial/unavailable observation status.
+//   ContextInspectionErrorCode - Stable value-free error codes surfaced through the policy/RPC contract.
 //   ContextInspectionLocation - Serving location/project identity exposed to the client.
 //   ContextInspectionTool - One registered tool row with effective id, safe namespace, code-mode flag, optional input JSON Schema, and availability status.
 //   ContextInspectionCatalog - Tool catalog plus its own verdict and warnings.
@@ -27,7 +29,9 @@
 //   ContextInspectionPolicySource - Structural vvoc toggle source accepted by the pure policy projection.
 //   ContextInspectionSchemaConverter - Server-injectable vendor schema-to-JSON-Schema converter.
 //   contextInspectionRpc - Portable RPC definition registered server-side and called client-side.
+//   ProjectedContextInspectionPolicy - Allowlisted, bounded policy projection returned to the client.
 //   projectContextInspectionPolicy - Allowlisted policy projection from plugin toggles.
+//   ProjectedContextInspectionTool - Safe projected tool row plus projection warnings.
 //   projectContextInspectionTool - Safe projection of one native tool row with bounded strings/schema size.
 //   isContextInspectionResult - Strict versioned output decoder used by the client.
 //   boundedWarnings - Bound and sanitize a warning list.

@@ -7,7 +7,7 @@
 //   DEPENDS: [node:fs, node:path, scripts/e2e-v2/full-cases.ts, scripts/e2e-v2/host.ts, scripts/e2e-v2/core.ts, scripts/e2e-v2/tui.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
@@ -15,6 +15,7 @@
 //   FullRunSummary - Machine-readable outcome of one full run.
 //   FullRunDeps - Injectable tier runners and evidence writer.
 //   readParityInventory - Read the versioned parity inventory from the workspace.
+//   RUNTIME_DEPENDENCIES - Runtime dependencies whose exact installed hashes the full run records.
 //   dependencyHashes - Exact content hashes of the installed runtime dependencies under test.
 //   runFull - Run every installed tier, resolve rows, write evidence, and fail on unverified mandatory rows.
 // END_MODULE_MAP

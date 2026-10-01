@@ -7,7 +7,7 @@
 //   DEPENDS: [scripts/e2e-v2/host.ts, scripts/e2e-v2/provider.ts, scripts/e2e-v2/fixtures/plugin.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
@@ -17,6 +17,18 @@
 //   CoreDriver - Host/profile operations the cases use; implemented by the runner.
 //   CoreCase - One executable core acceptance case descriptor.
 //   coreCases - Ordered core acceptance cases.
+//   ORDERING_DELAY_MARKER - Marker that makes the fixture delay native preparation after the real prompt hook.
+//   delay - Promise-based millisecond delay used by permission polling.
+//   markerSeq - Monotonic counter making case markers unique within a run.
+//   nextMarker - Build a unique case marker string from a prefix.
+//   bodyText - Serialize a provider request body for bounded marker/session matching.
+//   attributedSessionID - Hosted session id embedded in a provider request environment block.
+//   containsMarker - True when a provider request carries an exact case marker.
+//   payloadFields - Extract the smoke variant and reasoning effort fields from a provider body.
+//   qualifiedSuffix - True when a variant string ends with the expected capture suffix.
+//   containsValue - Recursively search a parsed value for an exact string property value.
+//   waitForPendingPermission - Poll the native session permission list for the first pending request id.
+//   replyPermission - Submit a permission decision for a pending native request.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

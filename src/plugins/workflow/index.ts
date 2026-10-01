@@ -1450,6 +1450,7 @@ async function setupWorkflow(
       },
     });
   });
+  // END_BLOCK_TOOL_CONTRACT_PUBLICATION
   // END_BLOCK_PLUGIN_TOOLS
 
   // START_BLOCK_TOOL_EXECUTE_BEFORE

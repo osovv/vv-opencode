@@ -10,7 +10,9 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: policy, deferred
+//   PolicyInput - Overrides accepted by the policy fixture.
+//   policy - Build a ContextInspectionPolicy fixture.
+//   deferred - Build a manually resolved promise.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

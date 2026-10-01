@@ -10,8 +10,14 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   SESSION_ID - Stable session id fixture.
+//   SECRET - Permission secret sentinel value.
+//   Subscriber - Event subscriber callback fixture shape.
 //   FakeNativeEventStream - Asynchronous SSE-like event double with delayed handshake, emit, and disconnect.
 //   FakePermissionHost - Native session permission lifecycle double used by the permission assertions.
+//   requestInput - Builds a native permission create input.
+//   waitForPending - Waits until the host records a pending request.
+//   flushMacrotasks - Flushes pending macrotasks.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

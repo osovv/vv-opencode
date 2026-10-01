@@ -10,7 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   previousDataHome - Preserves the caller's data-home environment for cleanup.
+//   scratchDataHome - Tracks the isolated data home created by the test.
 //   config - Module-local test fixture/helper.
+//   seq - Monotonic counter making generated fixture ids unique.
+//   nextId - Build a unique fixture id from a prefix.
+//   ResultType - Native tool-result result-type union used by the result-part fixture.
 //   resultPart - Builds a native tool-result part.
 //   callPart - Builds a native tool-call part.
 //   assistantRow - Builds an id-bearing native assistant row.

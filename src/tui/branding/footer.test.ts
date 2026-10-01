@@ -10,7 +10,8 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: OPENCODE_VERSION, fakeContext
+//   OPENCODE_VERSION - Pinned host version used by the branding-footer assertion.
+//   fakeContext - Minimal native context double that records footer claims.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

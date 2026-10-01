@@ -10,7 +10,9 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: PEAK, peakPolicy, fakeContext
+//   PEAK - Active peak window fixture.
+//   peakPolicy - Build a context policy with peak-hours enabled.
+//   fakeContext - Minimal native context double that records banner claims.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

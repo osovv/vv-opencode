@@ -10,7 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: nativeAssistant, nativeUser, nativeCompaction, deps, inspection
+//   LOCATION - Context location fixture used by the collector.
+//   nativeUser - Build a native user message fixture.
+//   nativeAssistant - Build a native assistant message fixture.
+//   nativeCompaction - Build a native compaction message fixture.
+//   inspection - Build a ContextInspectionResult fixture.
+//   deps - Build collector dependencies from a fixture inspection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

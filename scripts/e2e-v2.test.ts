@@ -10,9 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   scratchDirs - Temporary scratch directories removed after each test.
+//   scratch - Create a temporary guarded test base.
+//   hookHandlers - Hook handlers recorded through the minimal fake context.
+//   disposeCalls - Disposal targets recorded through the minimal fake context.
 //   fakeCtx - Minimal native plugin context that records registrations for the fixture test.
 //   fakeRuntime - Minimal real-runtime stand-in that records forwarded calls.
-//   scratch - Create a temporary guarded test base.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

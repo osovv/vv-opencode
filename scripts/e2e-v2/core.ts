@@ -7,20 +7,53 @@
 //   DEPENDS: [node:fs/promises, node:net, node:path, node:url, scripts/e2e-v2/cases.ts, scripts/e2e-v2/host.ts, scripts/e2e-v2/provider.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   CoreRunOptions - Inputs controlling one core real-host run.
 //   CoreRunSummary - Machine-readable summary of one core real-host run.
-//   ROOT_PLUGIN_EXPORTS - The eleven native server plugin named exports the root aggregate must publish.
-//   OwnedToolIds - The nine vvoc-owned tool ids (the host subagent tool is never a tenth registration).
-//   InstalledSurfaceCheck - One installed-artifact surface check outcome.
-//   InstalledSurfaceResult - Outcome of the installed-artifact surface checks.
-//   runInstalledSurface - Verify the installed package surface, presets, managed assets, and installed CLI lifecycle.
 //   getFreePort - Reserve and release a loopback TCP port.
+//   delay - Promise-based millisecond delay used by host lifecycle polling.
+//   waitForPidExit - True once an owned PID no longer exists; polls without signalling anything else.
+//   writeVvocRolesFile - Render and write the isolated project's canonical vvoc role configuration.
+//   fixturePluginSource - Generate the isolated fixture plugin entry that wraps the packed actual plugin.
+//   opencodeConfig - Render the isolated project's native OpenCode configuration.
+//   controlFetch - Bounded JSON fetch against the fixture control plane.
+//   createDriver - Build the driver that talks to the owned host and its control plane.
 //   runCore - Execute the packed core real-host run and return its summary.
 //   requireHostBinary - Resolve the pinned host binary or throw a bounded diagnostics error.
+//   AggregateCheck - One aggregate real-host parity observation.
+//   aggregateOpencodeConfig - Broad-allow native config that loads the installed package directory as the root aggregate.
+//   bootAggregateHost - Start and own an aggregate host from the installed package, returning its authenticated API, provider trace, and stop handle.
+//   aggregatePrompt - Send one prompt through the native API and return the created session id.
+//   waitForProviderRequests - Wait until the provider trace shows at least one recorded request body.
+//   traceHasSystemText - True when any request body carries the given injected system context marker.
+//   waitForAnalyticsUsage - Wait for a real analytics usage record with provider-reported non-zero tokens.
+//   runAggregateParity - Drive installed-aggregate real-host parity: analytics usage and peak-hours PRIMARY dispatch gating.
+//   createFetchOracle - Loopback HTTP target that counts inbound fetches (web_fetch side-effect oracle).
+//   controlDelay - Promise-based millisecond delay used by control-plane permission polling.
+//   waitForPendingPermission - Poll the native session permission list for the first pending request id.
+//   replyPermission - Reply to one native permission request.
+//   controlPrompt - Open a session with readiness retries, then prompt once.
+//   runToolControlPlaneParity - Drive permission-gated tool cases through the loopback provider and native permission decisions.
+//   AnyRecord - Loose record shape for validating native payloads.
+//   isAnyRecord - True when a value is a non-array object.
+//   collectTypedParts - Collect every nested object that carries a type string (native part shapes).
+//   toMs - Epoch-ms of a native timestamp (number or ISO string); undefined otherwise.
+//   maxCompletedMs - Maximum time.completed (ms) anywhere inside a native message subtree.
+//   collectAttempts - Flatten a persisted workflow state into its attempt records.
+//   pollFor - Poll an async producer until it satisfies a predicate or the deadline passes.
+//   readWorkflowStates - Read all persisted workflow-state JSON files under an isolated vvoc data home.
+//   PARENT_CANCEL_RE - Pinned 2.0.18 parent subagent failure shapes on the native assistant tool part.
+//   lastWorkItemId - Last work-item id visible in a request body (latest open wins across history).
+//   runWorkflowParity - Drive real-host workflow parity for resumed cancellation settlement, background launch, and root interrupt.
+//   ROOT_PLUGIN_EXPORTS - The eleven native server plugin named exports the packed root aggregate must publish.
+//   OWNED_TOOL_IDS - The nine vvoc-owned tool ids; the host subagent tool is never a tenth owned registration.
+//   InstalledSurfaceCheck - One installed-artifact surface check.
+//   InstalledSurfaceResult - Outcome of the installed-artifact surface checks.
+//   nativeEntryIssue - Assert a module value is a native { id, setup | effect } entry.
+//   runInstalledSurface - Verify the installed package surface, presets, managed assets, and installed CLI lifecycle.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

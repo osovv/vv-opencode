@@ -13,7 +13,10 @@
 //   ROOT_AGENT - Canonical controller agent for registered-tool calls.
 //   previousConfigHome - Preserves the caller's config-home environment for cleanup.
 //   previousDataHome - Preserves the caller's data-home environment for cleanup.
+//   ContractsHarnessPlugin - Minimal native plugin shape used by the isolated harness.
 //   ContractsHarness - One isolated plugin instance plus its recorded logs.
+//   ContractsNativeTool - Registered native tool shape used by the isolated harness.
+//   ContractsFakeEditor - Minimal native tool editor double used by the isolated harness.
 //   createContractsHarness - Builds one isolated plugin plus its recorded logs.
 //   parseToolJson - Parse a registered tool's JSON string or SDK result object.
 //   createToolContext - Pinned SDK ToolContext shape for registered calls.

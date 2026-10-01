@@ -11,7 +11,6 @@
 //
 // START_MODULE_MAP
 //   PROVENANCE - Source URLs the derived fixtures are based on.
-//   schema - The pinned host tool.schema helper shared by the derived fixtures.
 //   makeHostProbeContract - Closed probe contract fixture with enum, description, and nested shape.
 //   hostFromPluginJsonSchema - Derived host input-mode JSON Schema projection for plugin arg maps.
 //   hostParametersAccepts - Derived host Effect parameters bridge predicate (safeParse success only).

@@ -7,7 +7,7 @@
 //   DEPENDS: [node:crypto]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
@@ -20,6 +20,7 @@
 //   evaluateParityRows - Resolve every inventory row to an installed-artifact outcome.
 //   mandatoryRowFailures - Mandatory rows that are not verified.
 //   sha256Hex - Hex SHA-256 of a string.
+//   ParityEvidenceInput - Inputs for the bounded parity-evidence document.
 //   buildParityEvidence - Assemble the bounded parity-evidence document.
 //   writeParityEvidence - Serialize and write the evidence document.
 // END_MODULE_MAP

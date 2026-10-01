@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: CommandShape, createHarness, createDependencies, emptyAnalysis
+//   CommandShape - Minimal captured command shape.
+//   createHarness - Build the TUI plugin harness with a scripted initial route.
+//   createDependencies - Build plugin dependencies for the harness.
+//   emptyAnalysis - Build an empty ContextAnalysis for a session.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

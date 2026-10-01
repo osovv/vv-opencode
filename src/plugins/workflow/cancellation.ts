@@ -22,6 +22,7 @@
 //   decodeSyntheticEvent - Decode a native session.synthetic envelope.
 //   decodeExecutionTerminalEvent - Decode a native session.execution.failed/interrupted envelope.
 //   CancellationEvidence - Strict evidence bundle for one candidate cancellation recovery.
+//   CancellationEvidenceDecision - Approved or refused cancellation settlement outcome.
 //   evaluateCancellationEvidence - Approve cancellation settlement only with complete, matching, quiescent evidence.
 // END_MODULE_MAP
 //

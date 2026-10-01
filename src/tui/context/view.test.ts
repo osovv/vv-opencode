@@ -10,7 +10,14 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: THEME, detailedAnalysis, emptyAnalysis, toolUsage, createKeymapHarness, renderDialog
+//   THEME - Terminal theme fixture for the dialog renderer.
+//   CapturedCommand - Captured command entry rendered in the keymap.
+//   CapturedLayer - Captured keymap layer with optional commands.
+//   createKeymapHarness - Build the keymap and command capture harness.
+//   toolUsage - Build a ContextToolUsage fixture.
+//   detailedAnalysis - Build a detailed ContextAnalysis fixture.
+//   emptyAnalysis - Build an empty ContextAnalysis fixture.
+//   renderDialog - Render the context dialog and capture its visible output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: state, usageEvent, fakeContext, renderClaim
+//   state - Build an IndicatorTokens fixture.
+//   usageEvent - Build a native session.usage.updated event.
+//   fakeContext - Minimal native context double that records slot claims.
+//   allEnabledPolicy - Context policy snapshot with every feature enabled.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

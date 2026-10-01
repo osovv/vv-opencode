@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   tempDirs - Tracks temporary harness roots for cleanup.
 //   makeEvent - Build a native permission.evaluate event fixture.
+//   policy - Builds a Guardian review policy fixture.
+//   Harness - Guardian handler test harness surface.
 //   createHarness - Build handler dependencies with recording history/inference/log.
 //   verdict - Serialize a risk assessment verdict.
 // END_MODULE_MAP

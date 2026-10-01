@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   SUPPORTED_RUNTIME - Supported runtime inspection fixture stub.
 //   captureConsoleLog - Captures sync command diagnostics.
 //   runSyncCommand - Runs the sync command against isolated fixtures.
 // END_MODULE_MAP

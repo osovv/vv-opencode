@@ -10,7 +10,6 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   schema - The direct zod instance shared by the contract fixtures.
 //   makeProbeContract - Builds a representative closed probe contract used across cases.
 //   typedDefaultsContract - Contract with required defaults and literal enums for inference tests.
 //   toNativeToolResult - Map the host-neutral owned envelope to a native Tool.Result file content.

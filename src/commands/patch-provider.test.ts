@@ -10,7 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   [test scenarios] - Patch-provider behavior coverage is expressed through module-level tests.
+//   PresetValue - Preset value record shape used by the patch-provider fixtures.
+//   NativeModel - Native provider model config shape under test.
+//   NativeConfig - Native OpenCode config shape carrying providers and models.
+//   valueOf - Deep-clones a preset value into a plain record.
+//   presetModels - Reads a preset's model map.
+//   variantIds - Lists the variant ids of one native model.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

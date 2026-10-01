@@ -61,6 +61,7 @@
 //   HOST_EVIDENCE_MAX_BYTES - Hard cap on the serialized evidence document so payloads stay bounded.
 //   SYNTHETIC_EXA_API_KEY - Synthetic Exa credential injected through the isolated project vvoc config.
 //   SYNTHETIC_PROVIDER_KEY - Synthetic provider key written into the isolated OpenCode config.
+//   SYNTHETIC_LOOPBACK_KEY - Synthetic loopback provider credential accepted only by the isolated responder.
 //   OWNED_TOOL_IDS - The nine vvoc-owned tools the cohort union must expose.
 //   PROVENANCE_SOURCES - Provenance URLs the derived provider-lowering fixtures and matrix are based on.
 //   CohortDefinition - One transport/cohort definition exercised by the live matrix.
@@ -118,6 +119,10 @@
 //   TOOL_CONTRACT_REFERENCE_SUFFIX - Reference asset suffix the loaded identity must resolve within the package.
 //   evaluateHostSession - Evaluate one session against built descriptors/identity; failures stop the gate.
 //   runHostSession - Run one isolated session against a loopback responder; returns its observed result.
+//   stripDescriptions - Deep-clone a JSON value with description keys removed.
+//   NATIVE_PINNED_DEPENDENCIES - Exact native runtime pins the package manifest must declare.
+//   NATIVE_PINNED_DEV_DEPENDENCIES - Exact native TUI pins the package manifest must declare.
+//   readManifestVersion - Read an installed package manifest version; null when missing or invalid.
 //   CLOSURE_ROOTS - Built plugin/catalog/identity roots the local closure is derived from.
 //   EXTRA_FINGERPRINT_PATHS - Package/manifest, instruction/reference, and T009 fixture paths.
 //   FingerprintEntry - Path/sha256/bytes fingerprint row.

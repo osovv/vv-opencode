@@ -7,12 +7,18 @@
 //   DEPENDS: [node:fs, node:path, scripts/e2e-v2/host.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   ProviderRequestRecord - One recorded provider request with model, path, and redacted body.
 //   LoopbackProvider - Running loopback provider handle with base URL, trace path, and stop.
+//   traceAppend - Append one recorded provider request to the JSONL trace.
+//   streamChunk - Wrap one chat-completion chunk as an SSE data frame.
+//   wsChunk - Build one OpenAI chat-completion chunk object.
+//   streamUsageChunk - Terminal SSE chunk carrying provider-reported token usage.
+//   streamToolCallResponse - SSE response streaming one scripted function call so the host executes a tool.
+//   ProviderToolStep - One scripted tool call the loopback provider streams to make the host execute a tool.
 //   createLoopbackProvider - Start the loopback provider and JSONL trace on 127.0.0.1.
 //   readProviderTrace - Read the recorded provider requests in order.
 //   providerCatalog - Load the pinned model catalog fixture.

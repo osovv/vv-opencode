@@ -10,11 +10,14 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   NativeEvent - Native event envelope with id, type, and data.
 //   createEventQueue - Pushable native event stream fixture.
 //   makeHarness - Builds the plugin with capturing deps and a fake runtime.
+//   sessionCreated - Builds a native session.created event.
 //   stepStarted - Builds a native session.step.started event.
 //   stepEnded - Builds a native session.step.ended event.
-//   sessionCreated - Builds a native session.created event.
+//   compactionEvent - Builds a native session compaction event fixture.
+//   stepFailed - Builds a native session.step.failed event fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

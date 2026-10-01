@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   SUPPORTED_RUNTIME - Runtime inspector fixture reporting the supported OpenCode host window.
 //   writeProjectLayer - Writes project-scoped launch fixtures.
 // END_MODULE_MAP
 //

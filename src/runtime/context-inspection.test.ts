@@ -10,7 +10,14 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: makeContext, makeRuntime, toolRow, baseCapture, canary
+//   CANARY - Sentinel secret that must never leak into the projection.
+//   LOCATION - Runtime location fixture.
+//   ToolRow - Record shape of one native tool row fixture.
+//   toolRow - Builds one native tool row fixture.
+//   makeContext - Builds a runtime client context fixture.
+//   makeRuntime - Builds a runtime client double.
+//   SAFE_PLUGINS - Plugin toggle fixture containing only allowlisted fields.
+//   baseCapture - Builds a family capture fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

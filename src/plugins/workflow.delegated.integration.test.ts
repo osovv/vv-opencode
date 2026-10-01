@@ -15,15 +15,13 @@
 //   previousDataHome - Preserves the caller's data-home environment for cleanup.
 //   dataHome - Isolated per-process XDG data home for persistence fixtures.
 //   cleanupPaths - Tracks temporary workspaces for cleanup after each test.
+//   TaskToolPartState - Native parent task part state projection used by the delegated event fixtures.
+//   TaskToolPart - Native parent task tool part projection emitted to the event hook.
 //   StubSession - Minimal session stub shape with an optional parentID.
+//   DelegatedPromptCall - Recorded session.prompt call with session id and text.
+//   DelegatedHarnessPlugin - Native tool and hook handles captured from a real WorkflowPlugin.setup.
+//   DelegatedEventQueue - Minimal event queue delivering queued events in order.
 //   DelegatedPluginHarness - Captured plugin hooks, tools, logs, prompt calls, and workspace paths for one delegated fixture.
-//   DelegatedSessionPromptCall - SDK-derived session.prompt request recorded for continuation assertions.
-//   DelegatedSessionPromptResponse - SDK-derived session.prompt response with a valid assistant message and text part.
-//   DelegatedSessionPromptError - SDK-derived session.prompt error consumed by continuation.
-//   DelegatedSessionPromptResult - Narrowed SDK session.prompt data/error boundary consumed by continuation.
-//   delegatedAssistantMessage - Builds a valid SDK AssistantMessage fixture for one session.
-//   delegatedTextPart - Builds a valid SDK TextPart response fixture.
-//   delegatedPromptResponse - Builds a valid SDK session.prompt response fixture.
 //   writeProfile - Writes an isolated orchestration profile fixture.
 //   specXml - Renders the approved spec fixture for the task pipeline.
 //   PlanTaskInput - Task index and wave pairing used by the plan builder.
@@ -40,7 +38,9 @@
 //   finishTaskWithRawOutput - Drives the after hook with raw tracked task output for continuation tests.
 //   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
 //   taskToolPart - Builds a native-shaped parent task tool part for one parent task call.
-//   taskPartUpdated - Wraps a task tool part in a message.part.updated event.
+//   DelegatedNativeTool - Registered native tool shape used by the delegated harness.
+//   DelegatedFakeToolEditor - Minimal native tool editor double used by the delegated harness.
+//   deriveDelegatedChildId - Derive the child session id from a tracked launch header.
 //   runningState - Builds a native-shaped running tool state with host metadata.
 //   errorState - Builds a native-shaped error tool state with a host error.
 //   emitPart - Delivers one message.part.updated event through the plugin event hook.

@@ -13,11 +13,13 @@
 //   MIN_SUPPORTED_OPENCODE_VERSION - Lowest supported native OpenCode host version.
 //   MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE - First unsupported native OpenCode host version (exclusive upper bound).
 //   SUPPORTED_OPENCODE_VERSION_RANGE - Human-readable exact supported native OpenCode host window.
+//   TUI_PACKAGE_SPECIFIER - Pinned combined base package specifier used for TUI registration.
 //   isSupportedOpenCodeVersion - True only for the exact supported native OpenCode host window (no prereleases).
 //   ensurePackageConfigText - Ensures OpenCode config registers the pinned combined base package in the native `plugins` array.
 //   ensurePackageInstalled - Writes the pinned vvoc package into OpenCode config.
 //   isManagedPackageTarget - True when a plugin target is the vvoc base package or a legacy `/tui` subpath.
 //   normalizePluginEntries - Rewrites the managed vvoc entry to the requested specifier preserving options and order.
+//   JsonObject - Re-exported JSON object shape for native config documents.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

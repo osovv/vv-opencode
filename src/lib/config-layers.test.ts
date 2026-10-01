@@ -14,6 +14,7 @@
 //   tempDirs - Tracks temporary roots for cleanup.
 //   touch - Creates a fixture file and parent directories.
 //   writeValidVvocConfig - Writes a canonical valid vvoc fixture.
+//   restoreEnv - Restores an environment variable after a test, deleting it when previously unset.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

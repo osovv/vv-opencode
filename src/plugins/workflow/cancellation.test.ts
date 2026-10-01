@@ -6,10 +6,12 @@
 //   DEPENDS: [bun:test, src/plugins/workflow/cancellation.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
-//   MAP_MODE: NONE
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   abortedError - Build a structured aborted/interrupted error fixture.
+//   toolFailedEvent - Build a native session.tool.failed event fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

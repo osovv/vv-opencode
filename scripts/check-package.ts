@@ -11,15 +11,19 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   execFileAsync - Promisified child_process.execFile used for the pack and list commands.
 //   PackageManifest - Minimal package.json view needed by the pack gate.
 //   PackDependencies - Injectable import/pack/list dependencies used by tests and the real entry.
 //   nativeEntryIssue - Assert one module value is a native {id, setup|effect} entry.
 //   pluginExportName - Derive the named plugin export from a plugin subpath.
-//   packageExportIssues - Required export subpaths and their expected native entry kinds.
+//   ExportRequirement - Required export subpath with its expected native entry kind.
+//   packageExportRequirements - Required export subpaths and their expected native entry kinds.
+//   exportTarget - Human-readable target string of one exported value.
 //   verifyPackageExports - Import every declared export and report shape failures.
 //   manifestIssues - Package manifest identity/dependency failures.
 //   expectedTarballEntries - Required packed entries derived from the manifest exports.
 //   verifyTarballEntries - Report missing required packed entries.
+//   readManifest - Read and parse the repository package.json manifest.
 //   runPackageCheck - Full read-only package check over injectable dependencies.
 // END_MODULE_MAP
 //

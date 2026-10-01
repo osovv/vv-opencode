@@ -10,7 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   AUTH_PASSWORD - Fixture runtime password the client must encode.
+//   AUTH_HEADER - Expected Basic authorization header for the fixture password.
+//   makeLocation - Builds a runtime location fixture.
+//   NativeHandler - Native RPC handler signature.
 //   FakeNativeClientHost - Configurable discovery/registration/client double used by the authentication assertions.
+//   createFakeClient - Builds a runtime client over the fake host.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

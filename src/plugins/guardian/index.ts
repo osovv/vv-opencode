@@ -19,6 +19,7 @@
 //   GuardianPluginOptions - Optional injectable runtime acquisition for tests.
 //   createGuardianPlugin - Native plugin factory; the default export acquires the real shared runtime.
 //   GuardianPlugin - Default production native guardian plugin object.
+//   default - Default export alias of GuardianPlugin for native plugin registration.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -10,7 +10,10 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   LOCALS: assistantMessage, userMessage, toolRow, baseInput
+//   userMessage - Build a native user message fixture.
+//   assistantMessage - Build a native assistant message fixture.
+//   toolRow - Build a ContextInspectionTool fixture.
+//   baseInput - Build a ContextAnalysisInput fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

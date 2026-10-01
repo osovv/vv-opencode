@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   SUPPORTED_RUNTIME - Runtime inspector fixture reporting the supported OpenCode host window.
 //   [test scenarios] - Init behavior coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //

@@ -7,14 +7,26 @@
 //   DEPENDS: [node:fs/promises, node:path, node:url, scripts/e2e-v2/host.ts, scripts/e2e-v2/provider.ts, scripts/e2e-v2/core.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS, M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: SCRIPT
-//   MAP_MODE: EXPORTS
+//   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
 //   TuiScenarioResult - Machine-readable outcome of one PTY scenario.
 //   TuiAcceptanceResult - Machine-readable outcome of the whole TUI tier.
 //   ScreenBuffer - Minimal ANSI terminal screen buffer used for visible-content assertions.
+//   blank - Allocate a blank character matrix for one terminal screen.
+//   TuiOptions - Inputs controlling one real-PTY TUI acceptance run.
 //   runTuiAcceptance - Run the real-PTY acceptance and return only observed results.
+//   result - Assemble a TuiAcceptanceResult from scenario outcomes.
+//   UsageProvider - Running loopback provider that reports cache token usage.
+//   createUsageProvider - Start the loopback usage provider on 127.0.0.1.
+//   seedSession - Seed one real native session through the host HTTP API, then stop the headless server.
+//   readPackageVersion - Read the workspace package version for the branding-footer assertion.
+//   runDisabledNegative - Explicit-disabled negative control for suppressed context/analytics/peak-hours.
+//   runControlledFailure - Controlled collection failure against a host without the vvoc server bridge.
+//   screenExcerpt - Bounded one-line screen excerpt for failure diagnostics.
+//   openContextOverview - Type /context and submit it, tolerating a consuming completion list.
+//   waitFor - Poll the visible screen until a predicate holds or the deadline passes.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY

@@ -152,6 +152,8 @@ export async function inspectOpenCodeRuntime(
   }
 }
 
+// END_BLOCK_INSPECT_OPENCODE_RUNTIME
+
 // START_CONTRACT: assertSupportedOpenCodeRuntime
 //   PURPOSE: Fail closed on an unverifiable or out-of-window OpenCode host before any runtime/TUI/vvoc/agent/skill write.
 //   INPUTS: { inspect: () => Promise<OpenCodeRuntimeInspection> - Injectable runtime inspector for tests. }
@@ -201,8 +203,6 @@ export function extractOpenCodeVersion(output: string): string | undefined {
   );
   return match?.[1];
 }
-
-// END_BLOCK_INSPECT_OPENCODE_RUNTIME
 
 // START_BLOCK_INSPECT_INSTALLATION_STATE
 export async function inspectInstallation(

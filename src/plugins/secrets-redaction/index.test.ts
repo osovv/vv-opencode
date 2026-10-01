@@ -13,7 +13,6 @@
 //   EMAIL - Stable email secret fixture.
 //   PLACEHOLDER_PATTERN - Expected redacted email placeholder shape.
 //   makeRegistration - Build native handlers with an injected family policy resolution.
-//   createSecretsRedactionPlugin - Plugin factory under test for production hook registration.
 //   REAL_HOST - Pinned host binary from VVOC_E2E_V2_HOST; the gated smoke is skipped when unset.
 //   realHostDescribe - describe when a real host is configured, describe.skip otherwise.
 //   ContextPart - Context message content part fixture.
