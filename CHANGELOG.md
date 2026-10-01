@@ -1,3 +1,45 @@
+## 2.1.0 (2026-10-01)
+
+### Summary
+
+Version 2.1.0 completes the migration to a native OpenCode 2.0.18 integration, replacing the earlier dual-runtime approach so that install, init, sync, and launch now target the supported host window (>=2.0.18 <2.0.19) and fail closed outside it, and it drops legacy V1 dependencies and the Kimi preset while preserving user-owned configuration. Workflow tracking and recovery are ported to the native host, including correct cancellation settlement on the live native root-interrupt shape and safe handling of failed report repair, while the context TUI gains real-PTY acceptance coverage. Reliability and safety fixes matter to users throughout: secrets restoration and redaction now rebuild owned copies so frozen native tool inputs can no longer throw, WebSocket framing state is isolated per session and reset at each request boundary so abandoned streams no longer poison later responses, native file boundaries, read anchoring, and permission checks are enforced, snapshot admission and auxiliary lineage are correlated and persisted, and setup validates the native document before any write while keeping role intent in the modelIntent envelope instead of native model literals. The release also bounds commit diffs in the release-summary prompt so large releases no longer exceed the summary model's context window and fail release preparation, aggregating installed-parity evidence that verifies the packed artifact and its surfaces against the pinned host. For users this means a cleaner, more predictable native experience with stronger guarantees around secrets, edits, cancellation recovery, and configuration safety.
+
+* fix(release): bound commit diffs in summary prompt to model context ([1c6f722](https://github.com/osovv/vv-opencode/commit/1c6f722))
+* fix(v2): contain midpoint stream and workflow failures ([5ff4290](https://github.com/osovv/vv-opencode/commit/5ff4290))
+* fix(v2): copy-on-write secret restore for frozen native tool input ([3a4f72f](https://github.com/osovv/vv-opencode/commit/3a4f72f))
+* fix(v2): correlate snapshot admission and persist auxiliary lineage ([029eb62](https://github.com/osovv/vv-opencode/commit/029eb62))
+* fix(v2): enforce native file boundaries and read anchoring ([4b1e953](https://github.com/osovv/vv-opencode/commit/4b1e953))
+* fix(v2): isolate websocket framing by request lifetime ([7fb9ac1](https://github.com/osovv/vv-opencode/commit/7fb9ac1))
+* fix(v2): validate native setup and preserve model intent ([67424d7](https://github.com/osovv/vv-opencode/commit/67424d7))
+* fix(workflow): settle cancellation on live native root-interrupt shape ([c77f36d](https://github.com/osovv/vv-opencode/commit/c77f36d))
+* chore(grace): apply and archive C-OPENCODE-V2-NATIVE ([01f13b8](https://github.com/osovv/vv-opencode/commit/01f13b8))
+* chore(grace): record native V2 rewrite plan and findings ([c003724](https://github.com/osovv/vv-opencode/commit/c003724))
+* chore(v2): checkpoint host gating and Kimi removal ([0dfa6ad](https://github.com/osovv/vv-opencode/commit/0dfa6ad))
+* chore(v2): checkpoint native setup awaiting acceptance ([9afd855](https://github.com/osovv/vv-opencode/commit/9afd855))
+* chore(v2): checkpoint safety ports pending native boundary fixes ([2dc7ac6](https://github.com/osovv/vv-opencode/commit/2dc7ac6))
+* chore(v2): checkpoint unfinished native runtime and snapshots ([25c4db1](https://github.com/osovv/vv-opencode/commit/25c4db1))
+* docs(grace): record final spec review pass ([4bdf00a](https://github.com/osovv/vv-opencode/commit/4bdf00a))
+* docs(grace): retain native file boundary and creation findings ([537a5d2](https://github.com/osovv/vv-opencode/commit/537a5d2))
+* docs(v2): reconcile README/AGENTS/GRACE to native V2-only ([0cf66b9](https://github.com/osovv/vv-opencode/commit/0cf66b9))
+* docs(v2): record final delivery evidence snapshot ([6671291](https://github.com/osovv/vv-opencode/commit/6671291))
+* docs(v2): restore grace-lint-clean semantic markup ([d5c573e](https://github.com/osovv/vv-opencode/commit/d5c573e))
+* test(v2): add isolated packed core acceptance harness ([3403e2e](https://github.com/osovv/vv-opencode/commit/3403e2e))
+* test(v2): aggregate guardian + hashline parity (32/38) ([62906e5](https://github.com/osovv/vv-opencode/commit/62906e5))
+* test(v2): aggregate spec-guard + compaction parity (34/38) ([f54fdcf](https://github.com/osovv/vv-opencode/commit/f54fdcf))
+* test(v2): aggregate tool control plane, web-tools parity (30/38) ([cfe96d7](https://github.com/osovv/vv-opencode/commit/cfe96d7))
+* test(v2): aggregate-root parity tier (27/38 rows) ([d028207](https://github.com/osovv/vv-opencode/commit/d028207))
+* test(v2): correct workflow cancellation parity harness; native interrupt-observability wall ([c8aab64](https://github.com/osovv/vv-opencode/commit/c8aab64))
+* test(v2): drive workflow foreground launch in aggregate parity ([f3e90ba](https://github.com/osovv/vv-opencode/commit/f3e90ba))
+* test(v2): finalize installed-parity evidence with honest AC-11 residuals ([f507ced](https://github.com/osovv/vv-opencode/commit/f507ced))
+* test(v2): installed-artifact parity harness foundation (26/38 rows) ([50c4f91](https://github.com/osovv/vv-opencode/commit/50c4f91))
+* test(v2): rewrite tool-contract host harness for native 2.0.18 ([e6a5161](https://github.com/osovv/vv-opencode/commit/e6a5161))
+* test(v2): verify analytics usage in aggregate parity (29/38) ([868810f](https://github.com/osovv/vv-opencode/commit/868810f))
+* test(v2): verify peak-hours primary gating in aggregate parity (28/38) ([d931df9](https://github.com/osovv/vv-opencode/commit/d931df9))
+* feat(v2): assemble native package and coordinate snapshot admission ([1755af5](https://github.com/osovv/vv-opencode/commit/1755af5))
+* feat(v2): deliver native context TUI and PTY acceptance ([caa1244](https://github.com/osovv/vv-opencode/commit/caa1244))
+* feat(v2): port context telemetry compaction and peak policies ([98b5680](https://github.com/osovv/vv-opencode/commit/98b5680))
+* feat(workflow): port tracking and recovery to native V2 ([7aa723d](https://github.com/osovv/vv-opencode/commit/7aa723d))
+
 ## <small>2.0.1 (2026-09-26)</small>
 
 ### Summary
