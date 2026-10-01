@@ -13,7 +13,6 @@
     <Goal>Make implementation review-driven by separating focused implementation, spec review, code review, verification, and bounded retry loops.</Goal>
     <Goal>Keep shared agents and skills portable by using semantic model roles such as vv-role:smart and resolving them per machine or project.</Goal>
     <Goal>Make multi-agent work explicit through work items, tracked subagent headers, reviewer result collection, hard stops, and bounded review rounds.</Goal>
-    <Goal>Keep the plugin package dual-runtime across OpenCode v1 and v2 so the one-server memory model, per-session configuration, and restart-free preset switching are available without abandoning v1 users during the transition.</Goal>
     <Goal>Improve long-run safety with Guardian permission review, secrets redaction, hashline-backed edits, strict config validation, and clear recovery diagnostics.</Goal>
     <Goal>Provide one CLI, vvoc, for setup, sync, launch, status, diagnostics, roles, presets, plugin toggles, completions, and upgrades.</Goal>
     <Goal>Expose an honest OpenCode-native /context view that combines provider-reported usage with clearly labeled approximate category accounting.</Goal>
@@ -25,36 +24,36 @@
     <UC-001>
       <Name>SetupAndInstall</Name>
       <Action>User runs vvoc init or vvoc install for global or project scope.</Action>
-      <Goal>Bootstrap vv-opencode into OpenCode with managed runtime/TUI package registration, config, agents, skills, default controller selection, and role-reference model fields.</Goal>
-      <Acceptance>The selected scope contains the pinned runtime package registration, dedicated TUI subpath registration, canonical vvoc config, seeded built-in roles and presets, managed agents and skills, vv-controller default agent registration, and vv-role:* model references.</Acceptance>
+      <Goal>Bootstrap vv-opencode into OpenCode with one pinned native plugins registration, canonical config, managed agents and skills, and default controller selection.</Goal>
+      <Acceptance>The selected scope contains the pinned combined base package entry in the native plugins array (whose options can carry the modelIntent role-intent envelope), canonical vvoc config, seeded built-in roles and presets, managed agents and skills with the native skills registration, vv-controller default_agent registration, and a host inside the supported window.</Acceptance>
       <RelatedFlow>DF-PLUGIN-INSTALL</RelatedFlow>
     </UC-001>
     <UC-002>
       <Name>ManagedWorkflowSync</Name>
       <Action>User runs vvoc sync after package updates, config drift, or moving to another machine.</Action>
-      <Goal>Refresh vvoc-owned config, prompts, skills, presets, runtime/TUI plugin registration, and managed OpenCode agent registrations without clobbering user-owned state.</Goal>
-      <Acceptance>Valid current vvoc config is rewritten canonically while role assignments, user presets, plugin toggles, unrelated OpenCode/TUI entries, and TUI tuple options are preserved; invalid existing config fails before mutation with recovery guidance.</Acceptance>
+      <Goal>Refresh vvoc-owned config, prompts, skills, presets, and native OpenCode plugins/agents/skills registrations without clobbering user-owned state.</Goal>
+      <Acceptance>Valid current vvoc config is rewritten canonically while role assignments, user presets, plugin toggles, unrelated native OpenCode entries, and their options are preserved; invalid existing config fails before mutation with recovery guidance.</Acceptance>
       <RelatedFlow>DF-CONFIG-SYNC</RelatedFlow>
     </UC-002>
     <UC-003>
       <Name>DeterministicLaunch</Name>
       <Action>User runs vvoc launch with effective, project, or global scope.</Action>
-      <Goal>Start OpenCode with deterministic OPENCODE_CONFIG, VVOC_CONFIG, and existing managed OPENCODE_TUI_CONFIG selection for the requested scope.</Goal>
-      <Acceptance>Launch selects the expected runtime and vvoc paths, conditionally pins an existing selected TUI path, forwards passthrough arguments, preserves child exit code, and reports missing project scope setup with a clear install hint.</Acceptance>
+      <Goal>Start OpenCode with deterministic OPENCODE_CONFIG, VVOC_CONFIG, and a conditional native OPENCODE_CONFIG_DIR discovery root for the requested scope after a fail-closed host-window preflight.</Goal>
+      <Acceptance>Launch selects the expected runtime and vvoc paths, conditionally pins the native discovery root, forwards passthrough arguments, preserves child exit code, and reports missing project scope setup with a clear install hint.</Acceptance>
       <RelatedFlow>DF-VVOC-LAUNCH</RelatedFlow>
     </UC-003>
     <UC-004>
       <Name>StatusAndDiagnostics</Name>
       <Action>User runs vvoc status, vvoc doctor, or related diagnostics.</Action>
-      <Goal>Explain current installation, selected runtime/TUI/vvoc config sources, role assignments, plugin registration, and recoverable setup problems without mutating config.</Goal>
-      <Acceptance>Diagnostics report selected source kind and path, runtime/TUI parse state, validation failures, unresolved role problems, plugin state, and next-action guidance while leaving files unchanged.</Acceptance>
+      <Goal>Explain current installation, the supported host window, selected runtime/vvoc config sources, role assignments, plugin registration, and recoverable setup problems without mutating config.</Goal>
+      <Acceptance>Diagnostics report selected source kind and path, the exact supported host-window range and installed-version result, config parse state, validation failures, unresolved role problems, plugin state, and next-action guidance while leaving files unchanged.</Acceptance>
       <RelatedFlow>DF-LAYERED-CONFIG</RelatedFlow>
     </UC-004>
     <UC-005>
       <Name>SemanticModelRoles</Name>
-      <Action>Shared OpenCode agents, subagents, commands, or root model fields use vv-role:&lt;role-id&gt; references.</Action>
-      <Goal>Let shared workflow definitions express model intent semantically while each machine or project resolves roles to concrete provider/model selections.</Goal>
-      <Acceptance>Supported model-bearing fields resolve at startup from the selected vvoc config, valid variants are represented safely, literal non-role values are left alone, and unknown or invalid roles fail loudly.</Acceptance>
+      <Action>Shared workflow definitions express role intent as vv-role:&lt;role-id&gt; references in vvoc role assignments or the vvoc plugins modelIntent envelope.</Action>
+      <Goal>Let shared workflow definitions express model intent semantically while each machine or project resolves roles to concrete provider/model#variant selections.</Goal>
+      <Acceptance>Role intent resolves per session-family snapshot from the selected vvoc config, valid variants are represented safely, literal non-role values are left alone, role intent is never written as a native model literal, and unknown or invalid roles fail loudly.</Acceptance>
       <RelatedFlow>DF-ROLE-RESOLUTION</RelatedFlow>
     </UC-005>
     <UC-006>
@@ -68,7 +67,7 @@
       <Name>PresetSwitching</Name>
       <Action>User lists, shows, or applies a named vvoc preset.</Action>
       <Goal>Switch model-role assignments through declarative presets without rewriting OpenCode model fields directly.</Goal>
-      <Acceptance>Preset application updates only roles declared by the selected preset, leaves unlisted roles unchanged, preserves user-owned presets, and keeps OpenCode config role-reference based.</Acceptance>
+      <Acceptance>Preset application updates only roles declared by the selected preset, leaves unlisted roles unchanged, preserves user-owned presets (including retired ones already saved by a user), and keeps role intent in the vvoc modelIntent envelope rather than native model fields.</Acceptance>
       <RelatedFlow>DF-PRESET-SWITCH</RelatedFlow>
     </UC-007>
     <UC-008>
@@ -230,8 +229,8 @@
     <Constraint>OpenCode config remains in OpenCode-managed paths; vvoc must not invent unrelated config locations.</Constraint>
     <Constraint>vvoc-managed config may be global under $XDG_CONFIG_HOME/vvoc/ or project-local under .vvoc/, depending on selected scope and command semantics.</Constraint>
     <Constraint>Project-scope writes must stay inside project-local .opencode/ and .vvoc/ paths.</Constraint>
-    <Constraint>Dedicated OpenCode TUI config uses tui.json(c); project scope stores it inside .opencode and conservative mutation preserves unrelated settings and plugin tuple options.</Constraint>
-    <Constraint>The public TUI entry targets OpenCode 1.18.2 or newer; tui.json(c) registers the pinned base package specifier and OpenCode selects its ./tui export.</Constraint>
+    <Constraint>Native OpenCode config uses the plugins array of package strings or {package, options} objects plus agents, skills, and providers; V1 plugin/agent/provider/command/small_model/tools shapes are refused before mutation, and no dedicated tui.json(c) surface is written.</Constraint>
+    <Constraint>The supported host window is &gt;=2.0.18 &lt;2.0.19; install, init, sync, and launch fail closed outside it, the pinned combined base package registered once in the native plugins array carries both the ./server and ./tui exports, and role intent lives in the vvoc plugins options.modelIntent envelope.</Constraint>
     <Constraint>Persisted vvoc data must live under $XDG_DATA_HOME/vvoc/.</Constraint>
     <Constraint>Config writes must be conservative, idempotent, and strict about current schema validity before mutation.</Constraint>
     <Constraint>Role resolution must fail loudly for unknown or invalid semantic role references.</Constraint>
@@ -253,7 +252,7 @@
     <Risk>Unsafe rewrites of user-maintained config could damage trust in the CLI.</Risk>
     <Risk>OpenCode plugin and SDK surface area may evolve.</Risk>
     <Risk>Provider-reported usage can include hidden or transformed context that cannot be attributed to observable categories, requiring explicit unknown/drift reporting.</Risk>
-    <Risk>Provider alias models may be required for some role assignments.</Risk>
+    <Risk>Provider model variants may be required for some role assignments.</Risk>
     <Risk>LLMs may produce malformed tracked subagent protocol output.</Risk>
     <Risk>Workflow state can confuse users after process restarts, session switches, or corrupt persistence if diagnostics are weak.</Risk>
     <Risk>A snapshot-version bump or migration could silently clear recovery histories, accepted work, or consumed authority if compatibility is not exercised explicitly.</Risk>

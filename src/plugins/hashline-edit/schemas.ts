@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Single source of the two vvoc-owned edit tool contracts: registered raw argument maps, closed nested edit/command structures, strict runtime schemas with args-only branch validation, model-facing descriptions, operation examples, and concrete metadata/result producer schemas.
 //   SCOPE: Pure contract declarations and args-only validation for hashline_edit and str_replace_editor: structural parsing (unknown keys, enums, types), operation/command allowed/required field matrices, delete/rename/edits branch rules, anchor-conflict detection, and view_range exact-shape rules. No filesystem, session cache, editor execution, plugin registration, or anchor-versus-current-file validation; the normalizer and editor keep literal-content, three-part-anchor, and current-file authority.
-//   DEPENDS: [@opencode-ai/plugin, zod (types), src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/tool-description.ts]
+//   DEPENDS: [zod (types), src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/tool-description.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -42,8 +42,7 @@
 //   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Initial single-source edit-tool contracts plus a correction cycle: non-empty path checks for filePath/rename/path, representable insert_line min(0) and view_range length(2) bounds, and a shared closed single-edit shape validation for the direct normalizer.]
 // END_CHANGE_SUMMARY
 
-import { tool } from "@opencode-ai/plugin";
-import type { z, ZodRawShape } from "zod";
+import { z, type ZodRawShape } from "zod";
 import {
   MAX_CONTRACT_ISSUES,
   MAX_ISSUE_MESSAGE_CHARS,
@@ -60,7 +59,7 @@ import {
 import { EDIT_MODES } from "./routing.js";
 import { HASHLINE_EDIT_DESCRIPTION, STR_REPLACE_EDITOR_DESCRIPTION } from "./tool-description.js";
 
-const schema = tool.schema;
+const schema = z;
 
 // START_BLOCK_TOOL_IDS
 /** Registered tool id for the hash-anchored editor. */

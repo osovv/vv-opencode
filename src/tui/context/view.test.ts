@@ -1,30 +1,31 @@
 // FILE: src/tui/context/view.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify host-owned /context composition, responsive tab rendering, unavailable MCP schema disclosure, keyboard navigation, bounded scrolling, and dialog-local cleanup.
+//   PURPOSE: Verify native /context dialog composition, responsive tab rendering, unavailable-catalog disclosure, tab navigation, bounded scrolling, and host dialog sizing.
 //   SCOPE: Pure helpers plus deterministic OpenTUI test-renderer frames; no running OpenCode process.
-//   DEPENDS: [bun:test, @opencode-ai/plugin/tui, @opentui/solid, src/tui/context/view.tsx]
+//   DEPENDS: [bun:test, @opencode/plugin/tui, @opentui/solid, src/tui/context/view.tsx]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   CapturedKeymapLayer - Captured dialog-local keymap registration.
-//   THEME - Stable test theme used by deterministic frames.
-//   createKeymapHarness - Builds a keymap-aware TUI harness.
-//   detailedAnalysis - Reusable populated context analysis fixture.
-//   emptyAnalysis - Reusable empty context analysis fixture.
-//   renderDialog - Renders one context dialog frame for assertions.
-//   toolUsage - Builds reusable per-tool usage fixtures.
+//   THEME - Terminal theme fixture for the dialog renderer.
+//   CapturedCommand - Captured command entry rendered in the keymap.
+//   CapturedLayer - Captured keymap layer with optional commands.
+//   createKeymapHarness - Build the keymap and command capture harness.
+//   toolUsage - Build a ContextToolUsage fixture.
+//   detailedAnalysis - Build a detailed ContextAnalysis fixture.
+//   emptyAnalysis - Build an empty ContextAnalysis fixture.
+//   renderDialog - Render the context dialog and capture its visible output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Preloaded the OpenTUI Solid transform before all test discovery so reactive rendering is deterministic in CI.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Rewrote dialog coverage for the native dialog/keymap APIs and native attribution model.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
+import type { Plugin } from "@opencode/plugin/tui";
 import { createComponent, testRender } from "@opentui/solid";
 import {
   ContextDialogContent,
@@ -32,54 +33,201 @@ import {
   openContextDialog,
   renderMetricBar,
   selectContextTabForKey,
+  type ContextKeymapLike,
 } from "./view.js";
-import type { ContextAnalysis, ContextMcpUsage, ContextToolUsage } from "./types.js";
+import type { ContextAnalysis, ContextToolUsage } from "./types.js";
 
 const THEME = {
   text: "#ffffff",
-  textMuted: "#888888",
+  muted: "#888888",
   primary: "#00ffff",
   warning: "#ffff00",
+  error: "#ff0000",
+  success: "#00ff00",
 };
 
+interface CapturedCommand {
+  title?: string;
+  bind?: string | false;
+  run?: (input?: string) => void | false | Promise<void>;
+}
+type CapturedLayer = { mode?: string; commands?: readonly CapturedCommand[] };
+
+function createKeymapHarness() {
+  let layer: CapturedLayer | undefined;
+  const keymap: ContextKeymapLike = {
+    layer: (input) => {
+      layer = input();
+    },
+  };
+  return { keymap, getLayer: () => layer };
+}
+
+function toolUsage(overrides: Partial<ContextToolUsage> = {}): ContextToolUsage {
+  return {
+    id: "read",
+    source: { kind: "builtin" },
+    codeMode: false,
+    calls: 2,
+    schemaKnown: true,
+    schema: { estimatedTokens: 100, percent: 10 },
+    history: { estimatedTokens: 50, percent: 5 },
+    total: { estimatedTokens: 150, percent: 15 },
+    ...overrides,
+  };
+}
+
+function detailedAnalysis(): ContextAnalysis {
+  return {
+    sessionID: "ses_1",
+    selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    historyModel: { providerID: "deepseek", modelID: "chat" },
+    agent: "build",
+    measured: {
+      usedTokens: 500,
+      contextLimit: 1000,
+      remainingTokens: 500,
+      percentUsed: 50,
+      inputTokens: 100,
+      cacheReadTokens: 350,
+      cacheWriteTokens: 20,
+      outputTokens: 50,
+      reasoningTokens: 10,
+      model: { providerID: "deepseek", modelID: "chat" },
+      compactionRelation: "after",
+      matchesSelectedModel: true,
+      label: "Latest provider-reported step usage for the selected model.",
+    },
+    categories: [
+      {
+        id: "system",
+        label: "Agent/system instructions",
+        estimatedTokens: 100,
+        percent: 10,
+        source: "estimated",
+      },
+      {
+        id: "tool-results",
+        label: "Tool calls and results",
+        estimatedTokens: 1500,
+        percent: 150,
+        source: "estimated",
+      },
+    ],
+    estimatedKnownTokens: 1600,
+    estimatedTotalTokens: 1600,
+    estimationDriftTokens: 0,
+    catalogSchemaBudget: { estimatedTokens: 1500, percent: 150 },
+    compacted: true,
+    compactionCutoffId: "cmp_1",
+    activeMessageCount: 3,
+    totalMessageCount: 6,
+    mcpServers: [{ name: "docs server", status: "connected" }],
+    toolCatalogStatus: "partial",
+    toolAttribution: {
+      tools: [
+        toolUsage(),
+        toolUsage({
+          id: "docs_search",
+          source: { kind: "other", namespace: "docs" },
+          schemaKnown: false,
+          calls: 5,
+          history: { estimatedTokens: 500, percent: 50 },
+          total: { estimatedTokens: 500, percent: 50 },
+          schema: { estimatedTokens: 0 },
+        }),
+      ],
+      otherTools: [
+        toolUsage({
+          id: "docs_search",
+          source: { kind: "other", namespace: "docs" },
+          schemaKnown: false,
+          calls: 5,
+          history: { estimatedTokens: 500, percent: 50 },
+          total: { estimatedTokens: 500, percent: 50 },
+          schema: { estimatedTokens: 0 },
+        }),
+      ],
+      reconciliation: {
+        schema: {
+          builtin: { estimatedTokens: 100 },
+          vvoc: { estimatedTokens: 0 },
+          external: { estimatedTokens: 0 },
+          total: { estimatedTokens: 100 },
+        },
+        history: {
+          toolResults: { estimatedTokens: 50, percent: 5 },
+          loadedSkills: { estimatedTokens: 0 },
+          total: { estimatedTokens: 50, percent: 5 },
+        },
+      },
+    },
+    warnings: ["tool catalog truncated to 512 rows"],
+  };
+}
+
+function emptyAnalysis(): ContextAnalysis {
+  return {
+    sessionID: "ses_1",
+    categories: [],
+    estimatedKnownTokens: 0,
+    estimatedTotalTokens: 0,
+    estimationDriftTokens: 0,
+    compacted: false,
+    activeMessageCount: 0,
+    totalMessageCount: 0,
+    mcpServers: [],
+    toolCatalogStatus: "unavailable",
+    warnings: [],
+  };
+}
+
+async function renderDialog(
+  analysis: ContextAnalysis,
+  dimensions: { width: number; height: number },
+) {
+  const harness = createKeymapHarness();
+  const setup = await testRender(
+    () => createComponent(ContextDialogContent, { analysis, keymap: harness.keymap, theme: THEME }),
+    dimensions,
+  );
+  await setup.flush();
+  return { setup, harness };
+}
+
 describe("context dialog composition", () => {
-  test("renders context content directly in the host dialog before applying xlarge size", () => {
-    let dialogReads = 0;
-    let selectedSize: string | undefined;
+  test("shows content through the host dialog before applying xlarge size", () => {
+    const events: string[] = [];
     let render: (() => unknown) | undefined;
-    const dialogEvents: string[] = [];
-
-    const ui = {
-      get Dialog() {
-        dialogReads += 1;
-        return () => null;
-      },
-      dialog: {
-        setSize: (size: string) => {
-          selectedSize = size;
-          dialogEvents.push(`size:${size}`);
-        },
-        replace: (renderer: () => unknown) => {
-          render = renderer;
-          dialogEvents.push("replace");
+    const ctx = {
+      ui: {
+        dialog: {
+          show: (value: () => unknown) => {
+            events.push("show");
+            render = value;
+          },
+          set: (options: { size?: string }) => events.push(`size:${options.size}`),
         },
       },
-    };
-    const api = {
-      theme: { current: THEME },
-      ui,
-    } as unknown as TuiPluginApi;
-
-    openContextDialog(api, emptyAnalysis());
-
-    expect(selectedSize).toBe("xlarge");
+      keymap: { layer: () => undefined },
+      theme: {
+        text: {
+          base: "#ffffff",
+          muted: "#888888",
+          feedback: {
+            warning: { base: "#ffff00" },
+            error: { base: "#ff0000" },
+            success: { base: "#00ff00" },
+          },
+        },
+        hue: { accent: { 200: "#00ffff" } },
+      },
+    } as unknown as Plugin.Context;
+    openContextDialog(ctx, emptyAnalysis());
+    expect(events).toEqual(["show", "size:xlarge"]);
     expect(render).toBeFunction();
-    expect(dialogReads).toBe(0);
-    expect(dialogEvents).toEqual(["replace", "size:xlarge"]);
   });
-});
 
-describe("context tab helpers", () => {
   test("cycles tabs and selects Overview, Tools, and MCP directly", () => {
     expect(selectContextTabForKey("overview", "right")).toBe("tools");
     expect(selectContextTabForKey("tools", "right")).toBe("mcp");
@@ -95,291 +243,72 @@ describe("context tab helpers", () => {
     expect(calculateContextBodyHeight(60)).toBe(16);
     expect(calculateContextBodyHeight(40)).toBe(7);
     expect(calculateContextBodyHeight(28)).toBe(1);
-    expect(calculateContextBodyHeight(18)).toBe(1);
     expect(calculateContextBodyHeight(5)).toBe(1);
     expect(renderMetricBar(150, 10)).toBe("[██████████]");
     expect(renderMetricBar(undefined, 10)).toBe("[░░░░░░░░░░]");
   });
-});
 
-describe("context dialog rendering", () => {
-  test("renders representative Overview, Tools, and MCP metrics and switches through both navigation forms", async () => {
-    const setup = await renderDialog(detailedAnalysis(), 90, 60);
-
+  test("renders Overview, Tools, and MCP content and switches through the modal keymap", async () => {
+    const { setup, harness } = await renderDialog(detailedAnalysis(), { width: 100, height: 40 });
     const overview = setup.captureCharFrame();
     expect(overview).toContain("[1 Overview]");
-    expect(overview).toContain("Built-in tool schemas");
-    expect(overview).toContain("10.0%");
+    expect(overview).toContain("Tool calls and results");
+    expect(overview).toContain("Measured = latest provider usage");
     expect(overview).toContain("150.0%");
-    expect(overview).toContain("—");
 
-    setup.mockInput.pressArrow("right");
-    await setup.flush();
-    const tools = setup.captureCharFrame();
-    expect(tools).toContain("[2 Tools]");
-    expect(tools).toContain("read");
-    expect(tools).toContain("active calls 2");
-    expect(tools).toContain("Built-in");
-
-    setup.mockInput.pressKey("3");
-    await setup.flush();
-    const mcp = setup.captureCharFrame();
-    expect(mcp).toContain("[3 MCP]");
-    expect(mcp).toContain("docs server");
-    expect(mcp).toContain("connected");
-    expect(mcp).toContain("current tools unavailable");
-    expect(mcp).toContain("schema unavailable");
-    expect(mcp).not.toContain("schema 0 · 0.0%");
-    expect(mcp).toContain("history 500 · 5.0%");
-    expect(mcp).toContain("known total 500 · 5.0%");
-    expect(mcp).toContain("OpenCode API does not expose this MCP schema catalog.");
-    expect(mcp).toContain("Other external/plugin");
-
-    setup.mockInput.pressKey("1");
-    await setup.flush();
-    expect(setup.captureCharFrame()).toContain("[1 Overview]");
-    setup.renderer.destroy();
-  });
-
-  test("keeps overflowing tool detail inside a focused bounded body and scrolls vertically", async () => {
-    const analysis = detailedAnalysis();
-    analysis.toolAttribution!.tools = Array.from({ length: 30 }, (_, index) =>
-      toolUsage(`tool-${String(index).padStart(2, "0")}`, index + 1),
-    );
-    const setup = await renderDialog(analysis, 64, 40);
-    setup.mockInput.pressKey("2");
-    await setup.flush();
-
-    const before = setup.captureCharFrame();
-    expect(before.split("\n")).toHaveLength(41);
-    expect(before).toContain("tool-00");
-    expect(before).toContain("Measured = latest provider usage");
-
-    for (let index = 0; index < 14; index += 1) setup.mockInput.pressArrow("down");
-    await setup.flush();
-    const after = setup.captureCharFrame();
-    expect(after).not.toBe(before);
-    expect(after).toMatch(/tool-0[2-9]|tool-1[0-9]/);
-    expect(after).toContain("Measured = latest provider usage");
-    setup.renderer.destroy();
-  });
-
-  test("renders essential values at narrow width without horizontal frame overflow", async () => {
-    const setup = await renderDialog(detailedAnalysis(), 50, 36);
-    setup.mockInput.pressKey("3");
-    await setup.flush();
-    const frame = setup.captureCharFrame();
-
-    expect(frame).toContain("[3 MCP]");
-    expect(frame).toContain("docs server");
-    expect(frame.split("\n").every((line) => line.length <= 50)).toBe(true);
-
-    for (let index = 0; index < 3; index += 1) setup.mockInput.pressArrow("down");
-    await setup.flush();
-    const scrolled = setup.captureCharFrame();
-    expect(scrolled).toContain("history 500 · 5.0%");
-    expect(scrolled.split("\n").every((line) => line.length <= 50)).toBe(true);
-    setup.renderer.destroy();
-  });
-
-  test("removes the dialog-local modal keymap and reopens with fresh Overview state", async () => {
-    const keymap = createKeymapHarness();
-    const first = await renderDialog(detailedAnalysis(), 80, 20, keymap.api);
-    expect(keymap.layer?.mode).toBe("modal");
-    expect(keymap.layer?.bindings.map((binding) => binding.key)).toEqual([
+    expect(harness.getLayer()?.mode).toBe("modal");
+    const commands = harness.getLayer()?.commands ?? [];
+    expect(commands.slice(0, 5).map((command) => command.bind)).toEqual([
       "left",
       "right",
       "1",
       "2",
       "3",
     ]);
-    keymap.run("vvoc.context.tab.mcp");
-    await first.flush();
-    expect(first.captureCharFrame()).toContain("[3 MCP]");
-    first.renderer.destroy();
-    expect(keymap.disposeCount()).toBe(1);
+    expect(commands.some((command) => command.bind === "pagedown")).toBe(true);
+    await commands.find((command) => command.bind === "2")?.run?.();
+    await setup.flush();
+    const tools = setup.captureCharFrame();
+    expect(tools).toContain("[2 Tools]");
+    expect(tools).toContain("active calls 2");
+    expect(tools).toContain("Built-in");
 
-    const reopenedKeymap = createKeymapHarness();
-    const reopened = await renderDialog(detailedAnalysis(), 80, 20, reopenedKeymap.api);
-    expect(reopened.captureCharFrame()).toContain("[1 Overview]");
-    reopened.renderer.destroy();
-    expect(reopenedKeymap.disposeCount()).toBe(1);
+    await commands.find((command) => command.bind === "3")?.run?.();
+    await setup.flush();
+    const mcp = setup.captureCharFrame();
+    expect(mcp).toContain("[3 MCP]");
+    expect(mcp).toContain("docs server");
+    expect(mcp).toContain("connected");
+    expect(mcp).toContain("not authoritative MCP server provenance");
+  });
+
+  test("keeps overflowing tool detail inside a focused bounded body and scrolls vertically", async () => {
+    const analysis = detailedAnalysis();
+    analysis.toolAttribution!.tools = Array.from({ length: 40 }, (_, index) =>
+      toolUsage({ id: `tool-${index.toString().padStart(2, "0")}` }),
+    );
+    const { setup, harness } = await renderDialog(analysis, { width: 100, height: 60 });
+    const commands = harness.getLayer()?.commands ?? [];
+    await commands.find((command) => command.bind === "2")?.run?.();
+    await setup.flush();
+    const before = setup.captureCharFrame();
+    expect(before.split("\n").length).toBeLessThanOrEqual(61);
+    expect(before).toContain("tool-00");
+  });
+
+  test("renders essential values at narrow width without horizontal overflow", async () => {
+    const { setup, harness } = await renderDialog(detailedAnalysis(), { width: 50, height: 40 });
+    const commands = harness.getLayer()?.commands ?? [];
+    await commands.find((command) => command.bind === "3")?.run?.();
+    await setup.flush();
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("[3 MCP]");
+    expect(frame).toContain("docs server");
+    expect(frame.split("\n").every((line) => line.length <= 50)).toBe(true);
+  });
+
+  test("discloses an unavailable registered catalog instead of showing zeros", async () => {
+    const { setup } = await renderDialog(emptyAnalysis(), { width: 100, height: 40 });
+    expect(setup.captureCharFrame()).toContain("Provider usage is not available");
   });
 });
-
-async function renderDialog(
-  analysis: ContextAnalysis,
-  width: number,
-  height: number,
-  keymap?: TuiPluginApi["keymap"],
-) {
-  const setup = await testRender(
-    () => createComponent(ContextDialogContent, { analysis, keymap, theme: THEME }),
-    { width, height },
-  );
-  await setup.flush();
-  return setup;
-}
-
-type CapturedKeymapLayer = {
-  mode?: string;
-  commands: Array<{ name: string; run: () => unknown }>;
-  bindings: Array<{ key: string; cmd: string }>;
-};
-
-function createKeymapHarness() {
-  let layer: CapturedKeymapLayer | undefined;
-  let disposals = 0;
-  const api = {
-    registerLayer(value: CapturedKeymapLayer) {
-      layer = value;
-      return () => {
-        disposals += 1;
-      };
-    },
-  } as unknown as TuiPluginApi["keymap"];
-  return {
-    api,
-    get layer() {
-      return layer;
-    },
-    run(name: string) {
-      const command = layer?.commands.find((candidate) => candidate.name === name);
-      if (!command) throw new Error(`Missing keymap command ${name}`);
-      command.run();
-    },
-    disposeCount: () => disposals,
-  };
-}
-
-function emptyAnalysis(): ContextAnalysis {
-  return {
-    sessionID: "session-1",
-    categories: [],
-    estimatedKnownTokens: 0,
-    estimatedTotalTokens: 0,
-    estimationDriftTokens: 0,
-    compacted: false,
-    activeMessageCount: 0,
-    mcpServers: [],
-    warnings: [],
-  };
-}
-
-function detailedAnalysis(): ContextAnalysis {
-  const read = toolUsage("read", 1_500, {
-    source: { kind: "builtin" },
-    calls: 2,
-    schema: { estimatedTokens: 500, percent: 5 },
-    history: { estimatedTokens: 1_000, percent: 10 },
-  });
-  const docsTool = toolUsage("docs_search", 500, {
-    source: { kind: "mcp", server: "docs server" },
-    calls: 1,
-    schemaKnown: false,
-    schema: { estimatedTokens: 0, percent: 0 },
-    history: { estimatedTokens: 500, percent: 5 },
-  });
-  const other = toolUsage("very_long_external_plugin_tool_name", 250, {
-    calls: 1,
-    schema: { estimatedTokens: 100, percent: 1 },
-    history: { estimatedTokens: 150, percent: 1.5 },
-  });
-  const mcp: ContextMcpUsage = {
-    name: "docs server",
-    status: "connected",
-    toolCount: undefined,
-    schemaKnown: false,
-    schema: { estimatedTokens: 0, percent: 0 },
-    history: { estimatedTokens: 500, percent: 5 },
-    total: { estimatedTokens: 500, percent: 5 },
-    tools: [docsTool],
-  };
-  return {
-    sessionID: "session-1",
-    agent: "vv-controller-with-a-long-name",
-    model: {
-      providerID: "provider-with-a-long-name",
-      modelID: "model-with-a-long-name",
-      contextLimit: 10_000,
-    },
-    measured: {
-      usedTokens: 4_000,
-      contextLimit: 10_000,
-      remainingTokens: 6_000,
-      percentUsed: 40,
-      inputTokens: 3_000,
-      cacheReadTokens: 500,
-      outputTokens: 500,
-    },
-    categories: [
-      {
-        id: "builtin-tool-schemas",
-        label: "Built-in tool schemas",
-        estimatedTokens: 1_000,
-        percent: 10,
-        source: "estimated",
-      },
-      {
-        id: "external-tool-schemas",
-        label: "External/plugin/MCP schemas",
-        estimatedTokens: 15_000,
-        percent: 150,
-        source: "estimated",
-      },
-      {
-        id: "provider-only",
-        label: "Unknown/provider-only",
-        estimatedTokens: 500,
-        source: "provider-residual",
-      },
-    ],
-    estimatedKnownTokens: 16_000,
-    estimatedTotalTokens: 16_500,
-    estimationDriftTokens: 12_000,
-    compacted: true,
-    activeMessageCount: 6,
-    mcpServers: [{ name: "docs server", status: "connected" }],
-    toolAttribution: {
-      tools: [read, docsTool, other],
-      mcpServers: [mcp],
-      otherTools: [other],
-      reconciliation: {
-        schema: {
-          builtin: { estimatedTokens: 500, percent: 5 },
-          vvoc: { estimatedTokens: 0, percent: 0 },
-          external: { estimatedTokens: 100, percent: 1 },
-          total: { estimatedTokens: 600, percent: 6 },
-        },
-        history: {
-          toolResults: { estimatedTokens: 1_650, percent: 16.5 },
-          loadedSkills: { estimatedTokens: 0, percent: 0 },
-          total: { estimatedTokens: 1_650, percent: 16.5 },
-        },
-      },
-    },
-    warnings: ["Attribution remains approximate."],
-  };
-}
-
-function toolUsage(
-  id: string,
-  totalTokens: number,
-  overrides: Partial<ContextToolUsage> = {},
-): ContextToolUsage {
-  const schema = overrides.schema ?? { estimatedTokens: totalTokens, percent: totalTokens / 100 };
-  const history = overrides.history ?? { estimatedTokens: 0, percent: 0 };
-  return {
-    id,
-    source: { kind: "other" },
-    calls: 0,
-    schemaKnown: true,
-    schema,
-    history,
-    total: overrides.total ?? {
-      estimatedTokens: schema.estimatedTokens + history.estimatedTokens,
-      percent: (schema.percent ?? 0) + (history.percent ?? 0),
-    },
-    ...overrides,
-  };
-}

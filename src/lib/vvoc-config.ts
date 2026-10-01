@@ -515,10 +515,10 @@ export function createDefaultVvocPresets(): VvocPresets {
 
 function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Record<string, string> {
   const defaults: Record<BuiltInRoleName, string> = {
-    default: "openai/gpt-5.6-terra",
-    smart: "openai/gpt-5.6-sol",
-    fast: "openai/gpt-5.6-luna",
-    reviewer: "openai/gpt-5.6-sol",
+    default: "openai/gpt-5.6-terra#high",
+    smart: "openai/gpt-5.6-sol#xhigh",
+    fast: "openai/gpt-6-luna#low",
+    reviewer: "openai/gpt-5.6-sol#xhigh",
   } as const;
   const roles: Record<string, string> = { ...defaults };
 

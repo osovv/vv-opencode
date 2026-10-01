@@ -25,7 +25,14 @@
 //   collectReturnedObjects - Object literals returned by a factory, excluding nested functions.
 //   isPluginFactoryDeclaration - Whether a declaration names the host Plugin factory contract.
 //   findLocalFactory - Resolve a local factory declaration referenced by a default export alias.
-//   extractToolRegistrations - Independent census of `tool` registration maps in source.
+//   isStringLiteralExpression - Whether an expression is a string-literal initializer.
+//   buildStringConstMap - Static string values of local `const NAME = "..."` declarations.
+//   buildFunctionMap - Local function and const-arrow declarations across the sources.
+//   boundedTargetText - Bounded, whitespace-normalized expression text for diagnostics.
+//   toolIdFromDefinitionObject - Resolve a tool id from a definition object's `name`/`id`.
+//   definitionObjectIds - Owned tool ids declared by helper-returned definition objects.
+//   resolveRegistrationTarget - Resolve one `editor.add` argument to tool ids or a diagnostic.
+//   extractToolRegistrations - Independent census of native and legacy tool registration in source.
 //   compareRegistrationCensus - Census/dynamic/catalog agreement failures.
 //   compareDescriptorCoverage - Catalog/descriptor contract agreement failures.
 //   vocabularyValues - Declared vocabulary values for one `toolId.field` vocabulary key.
@@ -67,7 +74,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-008 correction r2 - Added checkBranchNegatives: every validated positive operation family (vocabulary values plus structural delete/rename/open/includeClosed paths) must carry a reject fixture that retains its real discriminator and fails another condition; branch association is derived from parsed positives and raw rejected inputs, not catalog labels. Also descends array-element result unions with boolean/number literal discriminators. Prior: independent registration census, vocabulary/dispatch/default/result gate, generated-reference currency, --generate/--packed.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Replaced the over-broad `tool:{...}` census with native `editor.add` registration resolution (helper-returned definitions and local string constants), so DTO projections are no longer flagged and the nine real native registrations are found; legacy plugin factory `tool` maps remain recognized and unresolved additions still fail closed.]
+//   PREVIOUS: [C-AGENT-TOOL-CONTRACTS T-008 correction r2 - Added checkBranchNegatives: every validated positive operation family (vocabulary values plus structural delete/rename/open/includeClosed paths) must carry a reject fixture that retains its real discriminator and fails another condition; branch association is derived from parsed positives and raw rejected inputs, not catalog labels. Also descends array-element result unions with boolean/number literal discriminators. Prior: independent registration census, vocabulary/dispatch/default/result gate, generated-reference currency, --generate/--packed.]
 // END_CHANGE_SUMMARY
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -286,31 +294,198 @@ function findLocalFactory(source: ts.SourceFile, name: string): ts.Node | undefi
   return found;
 }
 
+/** A string-literal initializer (regular or no-substitution template). */
+function isStringLiteralExpression(node: ts.Expression): node is ts.StringLiteral {
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
+}
+
+/** Static string values of local `const NAME = "..."` declarations across the sources. */
+function buildStringConstMap(files: readonly SourceFile[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const conflicted = new Set<string>();
+  for (const file of files) {
+    const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        isStringLiteralExpression(node.initializer)
+      ) {
+        const name = node.name.text;
+        const previous = map.get(name);
+        if (previous !== undefined && previous !== node.initializer.text) conflicted.add(name);
+        map.set(name, node.initializer.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  for (const name of conflicted) map.delete(name);
+  return map;
+}
+
+/** Local function and const-arrow declarations across the sources, keyed by name. */
+function buildFunctionMap(files: readonly SourceFile[]): Map<string, ts.Node> {
+  const map = new Map<string, ts.Node>();
+  const conflicted = new Set<string>();
+  const register = (name: string, node: ts.Node): void => {
+    const previous = map.get(name);
+    if (previous !== undefined && previous !== node) conflicted.add(name);
+    map.set(name, node);
+  };
+  for (const file of files) {
+    const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node): void => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        register(node.name.text, node);
+      } else if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        isFactoryCandidate(node.initializer)
+      ) {
+        register(node.name.text, node.initializer);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  for (const name of conflicted) map.delete(name);
+  return map;
+}
+
+/** Bounded, whitespace-normalized source text of one expression for diagnostics. */
+function boundedTargetText(expression: ts.Expression, source: ts.SourceFile): string {
+  return expression.getText(source).replace(/\s+/g, " ").slice(0, 80);
+}
+
+/** Resolve the owned tool id declared by a `name`/`id` member of a tool definition object. */
+function toolIdFromDefinitionObject(
+  object: ts.ObjectLiteralExpression,
+  stringConsts: ReadonlyMap<string, string>,
+): string | undefined {
+  for (const property of object.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const key = staticPropertyName(property.name);
+    if (key !== "name" && key !== "id") continue;
+    const value = skipParentheses(property.initializer);
+    if (isStringLiteralExpression(value)) return value.text;
+    if (ts.isIdentifier(value)) return stringConsts.get(value.text);
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Owned tool ids declared by the object literals a helper function returns. */
+function definitionObjectIds(
+  returned: readonly ts.ObjectLiteralExpression[],
+  stringConsts: ReadonlyMap<string, string>,
+): string[] {
+  const ids = new Set<string>();
+  for (const object of returned) {
+    const id = toolIdFromDefinitionObject(object, stringConsts);
+    if (id !== undefined) ids.add(id);
+  }
+  return [...ids];
+}
+
 /**
- * Independent census of `tool` registration maps in source.
- * A `tool` object literal anywhere is a registration map (its keys are the owned
- * tool ids), including static computed keys (`{["tool"]: ...}`). Every function
- * that returns an object carrying a `tool` member is treated as a plugin factory
- * regardless of name, default-export status, or declared type; a `tool` member
- * whose value is not an object literal is an unclassified dynamic registration and
- * fails closed. Unrelated object fields named `tool` (e.g. `tool: event.tool`) are
- * not maps.
+ * Resolve one `editor.add(...)` argument to its owned tool ids, or an unresolved
+ * diagnostic. Static property access uses its key; object definitions use their
+ * `name`/`id`; a call or identifier is followed to the helper's returned
+ * definition objects. Anything else is unresolved and fails closed.
+ */
+function resolveRegistrationTarget(
+  target: ts.Expression,
+  source: ts.SourceFile,
+  stringConsts: ReadonlyMap<string, string>,
+  functions: ReadonlyMap<string, ts.Node>,
+  depth = 0,
+): { readonly ids: readonly string[]; readonly unresolved?: string } {
+  const expression = skipParentheses(target);
+  if (ts.isObjectLiteralExpression(expression)) {
+    const id = toolIdFromDefinitionObject(expression, stringConsts);
+    return id === undefined
+      ? { ids: [], unresolved: boundedTargetText(expression, source) }
+      : { ids: [id] };
+  }
+  if (ts.isPropertyAccessExpression(expression)) {
+    const name = staticPropertyName(expression.name);
+    return name === undefined
+      ? { ids: [], unresolved: boundedTargetText(expression, source) }
+      : { ids: [name] };
+  }
+  if (depth >= 4) return { ids: [], unresolved: boundedTargetText(expression, source) };
+  if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
+    const factory = functions.get(expression.expression.text);
+    if (factory !== undefined) {
+      const ids = definitionObjectIds(collectReturnedObjects(factory), stringConsts);
+      if (ids.length > 0) return { ids };
+    }
+    return { ids: [], unresolved: boundedTargetText(expression, source) };
+  }
+  if (ts.isIdentifier(expression)) {
+    const factory = functions.get(expression.text);
+    if (factory !== undefined) {
+      const ids = definitionObjectIds(collectReturnedObjects(factory), stringConsts);
+      if (ids.length > 0) return { ids };
+    }
+    const literal = stringConsts.get(expression.text);
+    if (literal !== undefined) return { ids: [literal] };
+    return { ids: [], unresolved: boundedTargetText(expression, source) };
+  }
+  return { ids: [], unresolved: boundedTargetText(expression, source) };
+}
+
+/**
+ * Independent census of native tool registration in source.
+ * Native registration is `editor.add(<definition>)` inside a tool transform: the
+ * argument is resolved to its owned tool id from a static `name`/`id` member
+ * (following helper-returned definitions and local string constants) or from the
+ * added property key. An argument that cannot be resolved statically is an
+ * unclassified dynamic registration and fails closed. The legacy `tool: {...}`
+ * registration map returned by a plugin factory is also recognized (its keys are
+ * the owned tool ids), but a bare `tool: {...}` object literal that is not a
+ * plugin factory return (for example an inspection DTO projection) is not a
+ * registration.
  */
 export function extractToolRegistrations(files: readonly SourceFile[]): RegistrationCensus {
   const byFile: Record<string, string[]> = {};
   const dynamic: string[] = [];
   const all = new Set<string>();
+  const stringConsts = buildStringConstMap(files);
+  const functions = buildFunctionMap(files);
 
   for (const file of files) {
     const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true);
     const ids: string[] = [];
-    const visit = (node: ts.Node): void => {
-      if (isToolProperty(node) && ts.isObjectLiteralExpression(node.initializer)) {
-        collectToolMapKeys(node.initializer, file, ids, dynamic);
+
+    const nativeVisit = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        staticPropertyName(node.expression.name) === "add" &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "editor"
+      ) {
+        const target = node.arguments[0];
+        if (target === undefined) {
+          dynamic.push(`${file.path}: native editor.add without a definition argument`);
+        } else {
+          const resolution = resolveRegistrationTarget(target, source, stringConsts, functions);
+          if (resolution.unresolved !== undefined) {
+            dynamic.push(
+              `${file.path}: unresolved native editor.add registration target: ${resolution.unresolved}`,
+            );
+          } else {
+            for (const id of resolution.ids) ids.push(id);
+          }
+        }
       }
-      ts.forEachChild(node, visit);
+      ts.forEachChild(node, nativeVisit);
     };
-    visit(source);
+    nativeVisit(source);
 
     const factories: ts.Node[] = [];
     const factoryVisit = (node: ts.Node): void => {

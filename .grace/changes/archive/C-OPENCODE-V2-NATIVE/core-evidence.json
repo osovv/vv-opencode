@@ -1,0 +1,644 @@
+{
+  "change": "C-OPENCODE-V2-NATIVE T-003 core real-host harness",
+  "mode": "core",
+  "generatedAt": "2026-10-01T09:07:39.551Z",
+  "host": {
+    "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
+    "sha256": "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f",
+    "version": "2.0.18",
+    "sourceCommit": "cd9a14a6b688d4021bee381dfd39d2cef9c0f862"
+  },
+  "package": {
+    "tarballPath": "/tmp/opencode/vvoc-e2e-v2-a984ke/pack/vv-opencode-e2e.tgz",
+    "tarballSha256": "4ff4928403b3e1f06febd46dc13b3140b4beaa8aac26e3e867f8c88fa5eda612",
+    "version": "1.7.0",
+    "installedDir": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@osovv/vv-opencode",
+    "installStrategy": "declared dependency graph installed into the isolated project via bun install --ignore-scripts (no workspace node_modules symlinks)",
+    "resolvedDependencies": {
+      "@clack/prompts": "1.8.1",
+      "@opencode/ai": "2.0.18",
+      "@opencode/client": "2.0.18",
+      "@opencode/plugin": "2.0.18",
+      "@opencode/protocol": "2.0.18",
+      "@opencode/schema": "2.0.18",
+      "ajv": "8.20.0",
+      "citty": "0.2.2",
+      "effect": "4.0.0-rc.112",
+      "htmlparser2": "12.0.0",
+      "jsonc-parser": "3.3.1",
+      "turndown": "7.2.4",
+      "zod": "4.1.8"
+    },
+    "loadedPaths": {
+      "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@clack/prompts",
+      "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/ai",
+      "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/client",
+      "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/plugin",
+      "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/protocol",
+      "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/schema",
+      "ajv": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/ajv",
+      "citty": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/citty",
+      "effect": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/effect",
+      "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/htmlparser2",
+      "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/jsonc-parser",
+      "turndown": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/turndown",
+      "zod": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/zod",
+      "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@osovv/vv-opencode"
+    },
+    "packTool": "bun pm pack --ignore-scripts",
+    "packEquivalence": "verified npm-format tarball entrypoints present and package.json name/version match; successfully installed and loaded on the pinned host",
+    "packedEntryCount": 489
+  },
+  "isolation": {
+    "scratch": {
+      "dir": "/tmp/opencode/vvoc-e2e-v2-a984ke",
+      "base": "/tmp/opencode",
+      "marker": "owned"
+    },
+    "envKeys": [
+      "HOME",
+      "LOOPBACK_API_KEY",
+      "OPENCODE_DISABLE_MODELS_FETCH",
+      "PATH",
+      "VVOC_E2E_ALLOWED_PROVIDERS",
+      "VVOC_E2E_CONTROL_FILE",
+      "VVOC_E2E_DELAY_MARKER",
+      "VVOC_E2E_DELAY_MS",
+      "VVOC_E2E_PROVIDER_ORIGIN",
+      "VVOC_E2E_TRACE",
+      "XDG_CACHE_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME"
+    ],
+    "env": {
+      "PATH": "[redacted]",
+      "HOME": "/tmp/opencode/vvoc-e2e-v2-a984ke/home",
+      "XDG_CONFIG_HOME": "/tmp/opencode/vvoc-e2e-v2-a984ke/cfg",
+      "XDG_DATA_HOME": "/tmp/opencode/vvoc-e2e-v2-a984ke/data",
+      "XDG_STATE_HOME": "/tmp/opencode/vvoc-e2e-v2-a984ke/state",
+      "XDG_CACHE_HOME": "/tmp/opencode/vvoc-e2e-v2-a984ke/cache",
+      "LOOPBACK_API_KEY": "[redacted]",
+      "OPENCODE_DISABLE_MODELS_FETCH": "1",
+      "VVOC_E2E_CONTROL_FILE": "/tmp/opencode/vvoc-e2e-v2-a984ke/trace/control.json",
+      "VVOC_E2E_PROVIDER_ORIGIN": "http://127.0.0.1:38637",
+      "VVOC_E2E_ALLOWED_PROVIDERS": "loopback",
+      "VVOC_E2E_TRACE": "/tmp/opencode/vvoc-e2e-v2-a984ke/trace/observer.jsonl",
+      "VVOC_E2E_DELAY_MARKER": "__vvoc_e2e_delay__",
+      "VVOC_E2E_DELAY_MS": "5000"
+    },
+    "networking": "owned 127.0.0.1 provider origin only; fixture guards enforce http.request URL, model.request baseURL/provider, and WS handshake destination before dispatch"
+  },
+  "provider": {
+    "origin": "http://127.0.0.1:38637",
+    "catalog": {
+      "object": "list",
+      "data": [
+        {
+          "id": "seam-smart",
+          "object": "model",
+          "created": 1,
+          "owned_by": "loopback",
+          "name": "Seam Smart",
+          "context_window": 128000,
+          "max_output_tokens": 8192
+        },
+        {
+          "id": "seam-fast",
+          "object": "model",
+          "created": 1,
+          "owned_by": "loopback",
+          "name": "Seam Fast",
+          "context_window": 128000,
+          "max_output_tokens": 8192
+        }
+      ]
+    },
+    "requestCount": 29,
+    "distinctPayloads": [
+      {
+        "model": "seam-smart",
+        "smoke_variant": "plain",
+        "reasoning_effort": "minimal"
+      },
+      {
+        "model": "seam-smart",
+        "smoke_variant": "override",
+        "reasoning_effort": "high"
+      }
+    ]
+  },
+  "teardown": {
+    "strategy": "exact live ChildProcess handles, SIGTERM then joined SIGKILL; ownership-marked scratch removed only through guarded cleanup",
+    "ownedPids": [
+      144964,
+      145031,
+      145055,
+      145082,
+      145111,
+      145150,
+      145184,
+      145215,
+      145252,
+      145297,
+      145331,
+      145375,
+      145474,
+      145851
+    ]
+  },
+  "cases": [
+    {
+      "id": "activation",
+      "title": "Packed artifact import, mandatory guards, and idle registry quiescence",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles",
+        "pack.packed-artifact"
+      ],
+      "status": "pass",
+      "detail": "packed package imported, mandatory guards registered, fresh sessions unbound",
+      "assertions": [
+        "control plane reports the packed fixture setup completed",
+        "fixture plugin id is stable (expected \"vvoc.e2e.fixture\", got \"vvoc.e2e.fixture\")",
+        "packed package preserves version 1.7.0 (expected \"1.7.0\", got \"1.7.0\")",
+        "mandatory http.request destination guard registered (expected true, got true)",
+        "mandatory model.request destination guard registered (expected true, got true)",
+        "authenticated same-instance native client challenge succeeded",
+        "durable capture registry is readable",
+        "a fresh session has no bound policy",
+        "a fresh session has no staged candidate",
+        "model.updated reload count stays bounded (4)"
+      ],
+      "failures": [],
+      "durationMs": 1129,
+      "observed": {
+        "instanceId": "06619a8468147c95b8e08a179faa6e78",
+        "guardState": {
+          "http.request": true,
+          "model.request": true,
+          "experimental.ws.handshake": true
+        },
+        "eventCounts": {
+          "integration.updated": 1,
+          "model.updated": 4,
+          "provider.updated": 1,
+          "vcs.branch.updated": 1,
+          "agent.updated": 3,
+          "command.updated": 1,
+          "skill.updated": 1,
+          "websearch.updated": 1,
+          "reference.updated": 1,
+          "plugin.updated": 1,
+          "session.model.selected": 1,
+          "session.inbox.enqueued": 1,
+          "session.execution.started": 1,
+          "session.instructions.updated": 1,
+          "session.inbox.delivered": 1
+        }
+      }
+    },
+    {
+      "id": "admission",
+      "title": "Awaited admission, rejected preparation, and zero-dispatch rejection",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.admission",
+        "plugin.model-roles.rollback"
+      ],
+      "status": "pass",
+      "detail": "rejected preparation dispatched nothing; the valid prompt dispatched once and bound",
+      "assertions": [
+        "native preparation rejection is observable (status 400)",
+        "rejected preparation produced zero provider dispatch for that input",
+        "a preparation rejection after the prompt hook does not bind a family policy",
+        "valid prompt accepted (status 200)",
+        "the accepted prompt dispatched exactly once for its marker (expected 1, got 1)",
+        "the accepted prompt dispatched the source variant merged settings (override/high)",
+        "the valid prompt bound a durable family policy",
+        "session model carries the qualified override variant (7d025bf7de02891d.seam-smart.override)"
+      ],
+      "failures": [],
+      "durationMs": 3072,
+      "observed": {
+        "sessionID": "ses_f094ca49bffeqQVf92E0XKWk4F",
+        "rejectedStatus": 400,
+        "variant": "7d025bf7de02891d.seam-smart.override"
+      }
+    },
+    {
+      "id": "payload-variants",
+      "title": "Same model, two captured source variants, native registry readback",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.variants",
+        "runtime.model-registry"
+      ],
+      "status": "pass",
+      "detail": "two distinct qualified payloads for one model; final registry readback present",
+      "assertions": [
+        "root role uses the override variant (cd85773fa30f0482.seam-smart.override)",
+        "native model.list contains the family-qualified override variant",
+        "native model.list does not contain a fabricated variant (negative control)",
+        "capture service still exposes the source variant descriptors",
+        "the override payload was actually dispatched",
+        "the same model dispatched a distinct plain/minimal payload"
+      ],
+      "failures": [],
+      "durationMs": 1719,
+      "observed": {
+        "variant": "cd85773fa30f0482.seam-smart.override",
+        "registryContains": true
+      }
+    },
+    {
+      "id": "lineage-title",
+      "title": "Auxiliary title lineage and zero native title provider dispatch",
+      "phase": "T-003",
+      "parity": [
+        "runtime.lineage",
+        "plugin.model-roles.auxiliary"
+      ],
+      "status": "pass",
+      "detail": "auxiliary title is parented, family-qualified, and replaces the native title dispatch",
+      "assertions": [
+        "auxiliary work created a real parented native child",
+        "child records the family root parentID (expected \"ses_f094c91e4ffeDyY723063Jsncg\", got \"ses_f094c91e4ffeDyY723063Jsncg\")",
+        "child carries host-owned auxiliary kind/role metadata (expected \"{\\\"vvocAuxiliary\\\":{\\\"kind\\\":\\\"title\\\",\\\"role\\\":\\\"fast\\\"}}\", got \"{\\\"vvocAuxiliary\\\":{\\\"kind\\\":\\\"title\\\",\\\"role\\\":\\\"fast\\\"}}\")",
+        "child shares the family capture prefix (51628f6e9fc06b7d)",
+        "exactly one provider dispatch is attributed to the parent (no native title dispatch) (expected 1, got 1)",
+        "the auxiliary child performed the title generation instead"
+      ],
+      "failures": [],
+      "durationMs": 3197,
+      "observed": {
+        "sessionID": "ses_f094c91e4ffeDyY723063Jsncg",
+        "childID": "ses_7997889147bbb49666b9b3e47b39236b",
+        "parentDispatches": 1,
+        "childDispatches": 1
+      }
+    },
+    {
+      "id": "owned-generate-synthetic",
+      "title": "Owned pre-admission for generate/synthetic before a user prompt, raw-unbound refusal",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.synthetic",
+        "runtime.admission.owned"
+      ],
+      "status": "pass",
+      "detail": "owned generate/synthetic bound before a user prompt; raw unbound work dispatched nothing",
+      "assertions": [
+        "owned generate pre-admission published (bound)",
+        "native session.generate succeeded (200)",
+        "session.generate dispatched exactly once for its marker (expected 1, got 1)",
+        "owned generate dispatched the family captured variant payload",
+        "owned generate bound the family before any ordinary user prompt",
+        "native session.synthetic accepted (200)",
+        "owned synthetic dispatched the family captured variant payload",
+        "raw unbound session.generate is refused (500)",
+        "raw unbound generate produced zero provider dispatch",
+        "raw unbound synthetic produced zero provider dispatch",
+        "raw unbound synthetic did not bind a family (status 200)"
+      ],
+      "failures": [],
+      "durationMs": 7712,
+      "observed": {
+        "genStatus": 200,
+        "synStatus": 200,
+        "rawGenStatus": 500,
+        "rawSynStatus": 200
+      }
+    },
+    {
+      "id": "explicit-selection",
+      "title": "Explicit-at-create and explicit switch preserve the chosen selection",
+      "phase": "T-003",
+      "parity": [
+        "plugin.model-roles.explicit"
+      ],
+      "status": "pass",
+      "detail": "explicit-at-create and explicit switch are preserved over the config default",
+      "assertions": [
+        "explicit-at-create kept the override selection (be70ad6d2d1593e2.seam-smart.override)",
+        "explicit-at-create dispatched the override payload",
+        "explicit switch accepted (204)",
+        "explicit switch kept the chosen plain selection (2bd6578de908a7d3.seam-smart.plain)",
+        "explicit switch dispatched the chosen plain payload"
+      ],
+      "failures": [],
+      "durationMs": 4004,
+      "observed": {
+        "createVariant": "be70ad6d2d1593e2.seam-smart.override",
+        "switchVariant": "2bd6578de908a7d3.seam-smart.plain"
+      }
+    },
+    {
+      "id": "config-mutation",
+      "title": "Bound family retains policy while changed configuration binds new work",
+      "phase": "T-003",
+      "parity": [
+        "runtime.snapshot-persist",
+        "plugin.model-roles.policy"
+      ],
+      "status": "pass",
+      "detail": "config change binds new work without mutating an already bound family",
+      "assertions": [
+        "initial family bound override (6dd820f08a746405.seam-smart.override)",
+        "new work after mutation binds the new plain policy (439e938b60c31d0d.seam-smart.plain)",
+        "the new family capture differs from the earlier one",
+        "the already-bound family keeps its original captured variant (expected \"6dd820f08a746405.seam-smart.override\", got \"6dd820f08a746405.seam-smart.override\")"
+      ],
+      "failures": [],
+      "durationMs": 4848,
+      "observed": {
+        "firstVariant": "6dd820f08a746405.seam-smart.override",
+        "secondVariant": "439e938b60c31d0d.seam-smart.plain"
+      }
+    },
+    {
+      "id": "fork-worktree",
+      "title": "Fork (empty parentID) and worktree move keep root family policy",
+      "phase": "T-003",
+      "parity": [
+        "runtime.lineage",
+        "plugin.model-roles.fork"
+      ],
+      "status": "pass",
+      "detail": "fork lineage and worktree move preserve the root family capture and payload",
+      "assertions": [
+        "native fork created (200)",
+        "forked session has an empty parentID",
+        "forked session records fork.sessionID to the source (expected \"ses_f094c44b4ffe6IdH6PreIBMjim\", got \"ses_f094c44b4ffe6IdH6PreIBMjim\")",
+        "host-verified family lookup resolves the fork to the root family (expected \"ses_f094c44b4ffe6IdH6PreIBMjim\", got \"ses_f094c44b4ffe6IdH6PreIBMjim\")",
+        "root session exposes its projectID",
+        "native worktree created (200: )",
+        "fork moved into the worktree (204)",
+        "moved fork still resolves the root family (expected \"ses_f094c44b4ffe6IdH6PreIBMjim\", got \"ses_f094c44b4ffe6IdH6PreIBMjim\")",
+        "moved fork keeps the root family capture (expected \"1b9fe9a15d5442cf\", got \"1b9fe9a15d5442cf\")",
+        "moved fork prompt accepted (200)",
+        "moved fork dispatched the root family captured plain payload with root lineage (fresh=[{\"variant\":\"plain\",\"marker\":true,\"session\":\"ses_f094c44b4ffe6IdH6PreIBMjim\"}])"
+      ],
+      "failures": [],
+      "durationMs": 3246,
+      "observed": {
+        "rootFamily": "ses_f094c44b4ffe6IdH6PreIBMjim",
+        "forkID": "ses_f094c3e3affeEKS9ZiArMgCFug",
+        "projectID": "c9610e5ae66223aadedb59b473dcdfc8aefd9891",
+        "movedModel": {
+          "id": "seam-smart",
+          "providerID": "loopback",
+          "variant": "1b9fe9a15d5442cf.seam-smart.plain"
+        },
+        "freshSummary": [
+          {
+            "variant": "plain",
+            "marker": true,
+            "session": "ses_f094c44b4ffe6IdH6PreIBMjim"
+          }
+        ]
+      }
+    },
+    {
+      "id": "permission-guard",
+      "title": "Resource permission guard effects: deny zero, allow one, fast reply",
+      "phase": "T-003",
+      "parity": [
+        "runtime.permissions"
+      ],
+      "status": "pass",
+      "detail": "guard produced zero effects on deny and exactly one on allow, including a fast reply",
+      "assertions": [
+        "guard created a pending native permission request",
+        "guard denied the effect (expected false, got false)",
+        "denied guard ran zero effects (expected 0, got 0)",
+        "second guard created a pending request",
+        "guard allowed the effect after the reply (expected true, got true)",
+        "allowed guard ran the effect exactly once (expected 1, got 1)",
+        "fast-reply guard created a pending request",
+        "fast reply allowed the effect (expected true, got true)",
+        "fast reply ran the effect exactly once with no lost event (expected 1, got 1)"
+      ],
+      "failures": [],
+      "durationMs": 1351,
+      "observed": {
+        "denied": {
+          "allowed": false,
+          "effects": 0,
+          "error": "Permission denied for action e2e.guard.deny."
+        },
+        "allowed": {
+          "allowed": true,
+          "effects": 1
+        },
+        "fast": {
+          "allowed": true,
+          "effects": 1
+        }
+      }
+    },
+    {
+      "id": "ordering-first-accepted",
+      "title": "First-accepted input binds over the first-staged input with a differing policy",
+      "phase": "T-003",
+      "parity": [
+        "runtime.admission.ordering"
+      ],
+      "status": "pass",
+      "detail": "first-accepted input's policy bound while the first-staged input's policy did not",
+      "assertions": [
+        "policy switch during A preparation accepted (204)",
+        "second prompt accepted (200)",
+        "first prompt request completed (200)",
+        "the first-accepted input's plain policy bound, not the first-staged override (519d60f3ee2dda8c.seam-smart.plain)",
+        "the bound family capture reflects the accepted plain policy"
+      ],
+      "failures": [],
+      "durationMs": 7925,
+      "observed": {
+        "session": "ses_f094c2ce0ffeKf2neDTnoBsdPO",
+        "variant": "519d60f3ee2dda8c.seam-smart.plain",
+        "aStatus": 200,
+        "bStatus": 200
+      }
+    },
+    {
+      "id": "hook-probe",
+      "title": "Native hook availability probe (no product parity claim)",
+      "phase": "T-003",
+      "parity": [
+        "runtime.hooks.probe"
+      ],
+      "status": "pass",
+      "detail": "recorded which native hooks register; availability only, not secrets/SSE restoration parity (T-005/T-009)",
+      "assertions": [
+        "hook probe endpoint answered",
+        "model.request hook is available"
+      ],
+      "failures": [],
+      "durationMs": 3,
+      "observed": {
+        "model.request": true,
+        "context": true,
+        "generate": true,
+        "compaction": true,
+        "title": true,
+        "http.request": true,
+        "http.response": true
+      }
+    },
+    {
+      "id": "replay-restart",
+      "title": "Durable root and auxiliary family replay after a real service restart",
+      "phase": "T-003",
+      "parity": [
+        "runtime.snapshot-persist",
+        "runtime.lineage"
+      ],
+      "status": "pass",
+      "detail": "persisted root and auxiliary family captures survived a real host restart",
+      "assertions": [
+        "pre-restart root family bound a snapshot variant (8406e4f400437841.seam-smart.override)",
+        "pre-restart auxiliary family exists",
+        "pre-restart auxiliary shares the root family snapshot (expected \"8406e4f400437841\", got \"8406e4f400437841\")",
+        "first host instance exited before restart",
+        "packed fixture control plane re-registered on the new host instance",
+        "persisted root family capture replayed after a real service restart (expected \"8406e4f400437841.seam-smart.override\", got \"8406e4f400437841.seam-smart.override\")",
+        "the replayed root family dispatched its persisted variant payload after restart",
+        "persisted auxiliary family capture replayed after restart (expected \"8406e4f400437841\", got \"8406e4f400437841\")",
+        "auxiliary child kept its qualified variant after restart (expected \"8406e4f400437841.seam-smart.plain\", got \"8406e4f400437841.seam-smart.plain\")",
+        "the auxiliary family dispatched its persisted variant payload after restart"
+      ],
+      "failures": [],
+      "durationMs": 6200,
+      "observed": {
+        "rootID": "ses_f094c0de9ffew1LUoDQL7aBaKf",
+        "rootVariant": "8406e4f400437841.seam-smart.override",
+        "rootAfterVariant": "8406e4f400437841.seam-smart.override",
+        "auxID": "ses_b865777015603eea92848861446bd07e",
+        "auxVariant": "8406e4f400437841.seam-smart.plain",
+        "restarted": true
+      }
+    }
+  ],
+  "installedSurface": [
+    {
+      "id": "root-aggregate",
+      "ok": true,
+      "detail": "default=ok named=all native"
+    },
+    {
+      "id": "standalone-subpaths",
+      "ok": true,
+      "detail": "11 standalone plugin subpaths loaded as native entries"
+    },
+    {
+      "id": "tool-catalog-census",
+      "ok": true,
+      "detail": "the installed catalog holds exactly the nine owned tool ids and no subagent registration"
+    },
+    {
+      "id": "presets-model-variants",
+      "ok": true,
+      "detail": "noKimi=true thinking.type.enabled=true noPdf=true noEffortHigh=true managedThinkingModel=true"
+    },
+    {
+      "id": "managed-agents-skills",
+      "ok": true,
+      "detail": "subagents=true skills=true nativeSubagentSemantics=true"
+    },
+    {
+      "id": "cli.status-doctor-upgrade",
+      "ok": true,
+      "detail": "status=0 doctor=0 versionObserved=true"
+    },
+    {
+      "id": "cli.config-plugin-completions",
+      "ok": true,
+      "detail": "configValidate=0 pluginList=0 toggle=0/0 completion=0"
+    },
+    {
+      "id": "cli.install-sync-init",
+      "ok": true,
+      "detail": "globalInit=0 projectInit=0 sync=0/0 idempotent=true invalidRefusedBeforeWrite=true"
+    }
+  ],
+  "aggregateChecks": [
+    {
+      "id": "plugin.system-context-injection",
+      "ok": true,
+      "detail": "providerRequests=3 injectedGuidance=true"
+    },
+    {
+      "id": "plugin.analytics",
+      "ok": true,
+      "detail": "usageFile=usage-2026-10.jsonl tokens={\"input\":7,\"output\":4,\"reasoning\":0,\"cacheRead\":0,\"cacheWrite\":0}"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "ok": true,
+      "detail": "softSecondPromptPrimaryDispatches=2 hardSecondPromptPrimaryDispatches=0"
+    },
+    {
+      "id": "plugin.secrets-redaction.websocket-transport",
+      "ok": false,
+      "detail": "wsOpened=false wsRequestFrames=0"
+    },
+    {
+      "id": "plugin.web-tools",
+      "ok": true,
+      "detail": "deniedPermissionSeen=true deniedFetches=0 allowedPermissionSeen=true allowedFetches=1"
+    },
+    {
+      "id": "plugin.guardian",
+      "ok": true,
+      "detail": "deniedPermissionSeen=true deniedWritten=false allowedPermissionSeen=true allowedWritten=true"
+    },
+    {
+      "id": "plugin.hashline-edit",
+      "ok": true,
+      "detail": "readAnchor=1#JN#NJ routedHashlineEdit=true staleAnchorRejected=true"
+    },
+    {
+      "id": "plugin.spec-guard",
+      "ok": true,
+      "detail": "gatedWriteBlocked=true plainWriteAllowed=true specGuardDiagnostic=true"
+    },
+    {
+      "id": "plugin.tool-history-compaction",
+      "ok": true,
+      "detail": "olderOutputCompacted=true recentWindowPreserved=true"
+    },
+    {
+      "id": "plugin.workflow.launch",
+      "ok": true,
+      "detail": "childSession=ses_dd9acd4c8af4bc6bdeab2e992fd1eed8 rootSession=ses_f094a8d1effexlRND01qH7pSu1 attemptStatus=in_flight attemptCallId=call_2 launchedAt=2026-10-01T09:04:45.565Z stateFiles=1"
+    },
+    {
+      "id": "workflow.cancellation-recovery",
+      "ok": false,
+      "detail": "childTurnInFlight=true interrupted=false interruptStatus=200 interruptBody={\"interrupted\":false} parentMessage=none parentCompletedMs=none childAbortedCompletedMs=none childAbsentFromActive=true inboxEmpty=true preRecoverStatus=completed expectedCompletedAt=none rootErrors=subagent:completed: | work_item_open:completed: | work_item_decide:completed: | subagent:completed: | work_item_open:completed:"
+    },
+    {
+      "id": "workflow.cancellation-recovery.settlement",
+      "ok": false,
+      "detail": "settleStatus=completed completedAt=2026-10-01T09:05:45.769Z expectedCompletedAt=none match=false"
+    },
+    {
+      "id": "plugin.workflow.background",
+      "ok": true,
+      "detail": "backgroundChild=ses_f09499114ffeQT46dLdlwR47qO attemptCount=2 attemptStatuses=completed,in_flight"
+    },
+    {
+      "id": "workflow.cancellation-recovery.root",
+      "ok": false,
+      "detail": "rootInterrupted=true interruptStatus=200 liveParentMessage=none rootTurnContinued=false rootToolParts= rawRootMessages=[{\"id\":\"msg_0f6b747ad001jVpvB6mxaIa57a\",\"time\":{\"created\":1790845601709},\"type\":\"idle\",\"outcome\":\"interrupted\"},{\"id\":\"msg_0f6b7474b0012EhxfU3IblLQCb\",\"time\":{\"created\":1790845601665},\"text\":\"workflow probe\",\"type\":\"user\"},{\"id\":\"msg_0f6b74116001bTv6hwWquih3pq\",\"time\":{\"created\":1790845600022},\"type\":\"idle\",\"outcome\":\"succeeded\"},{\"id\":\"msg_0f6b73ff0001nao30Us2qgSbwy\",\"time\":{\"created\":1790845599933,\"streamed\":1790845600014,\"completed\":1790845600017},\"type\":\"assistant\",\"agent\":\"vv-controller\",\"model\":{\"id\":\"seam-smart\",\"providerID\":\"loopback\",\"variant\":\"02ffc3aa3e21d3b8.seam-smart\"},\"content\":[{\"type\":\"text\",\"text\":\"e2e-ok\"}],\"finish\":\"stop\",\"rawFinish\":\"stop\",\"cost\":0,\"tokens\":{\"input\":7,\"output\":4,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}},{\"id\":\"msg_0f6b73a5b001rcscFbZwrtVccW\",\"time\":{\"created\":1790845599673},\"text\":\"control plane binding warmup\",\"type\":\"user\"},{\"id\":\"msg_0f6b73f69001n2abpexSAGZckL\",\"time\":{\"created\":1790845599593},\"type\":\"model-switched\",\"model\":{\"id\":\"seam-smart\",\"providerID\":\"loopback\",\"variant\":\"02ffc3aa3e21d3b8.seam-smart\"}}] rawChildMessages=[]"
+    }
+  ],
+  "coverageLimits": [
+    "Same-model switch emits no native event and is not a criterion.",
+    "Equal-time cross-session acceptance ordering is covered by engine/integration tests; the host case delays preparation after the real prompt hook without implementing admission.",
+    "Secrets/SSE placeholder restoration product parity belongs to T-005/T-009; this run only probes hook availability.",
+    "Full-product parity (all eleven plugins, CLI/config/setup, presets, workflow, full TUI) is not claimed; see parity.json."
+  ]
+}

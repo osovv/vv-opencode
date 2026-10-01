@@ -2,8 +2,8 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify WorkflowPlugin delegated integration: control-tool registration and authorization, callID-bound attempts, checkpoint linkage through real hooks, bounded recovery, terminal report-rejection settlement, and legacy-profile isolation.
-//   SCOPE: Delegated-only tool registration, root-session and workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify/recover through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, event-hook host-terminal launch failures with sticky exclusions and persistence recovery, same-child malformed-result continuation with SDK-derived prompt fixtures that preserves the original attempt identity, pre-checkpoint bounded recovery after exhaustion with autonomous denial and root-user message extension plus replay rejection, terminal malformed hard-stop settlement as a rejected report with a reachable recovery path, staged recovery persistence failure that keeps launches blocked, final completion refusing skipped reviewers after checkpoint recovery, and old-profile regressions.
-//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, @opencode-ai/sdk, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
+//   SCOPE: Native Plugin.setup fixtures over a fake native context: delegated-only tool registration, root/fork/workspace authorization denial, unauthorized self-acceptance, unknown root-session data, stale call callbacks, premature close bypass, checkpoint register/start/verify/recover through the tool wrapper with hook-driven reviewer results, barrier-blocked launches, invalid persisted state denial, native event-delivered host-terminal launch failures with sticky exclusions and persistence recovery, same-child malformed-result continuation through native session.prompt/wait/context, pre-checkpoint bounded recovery after exhaustion with autonomous denial and root-user message extension plus replay rejection, terminal malformed hard-stop settlement as a rejected report with a reachable recovery path, staged recovery persistence failure that keeps launches blocked, native background synthetic settlement, evidence-gated explicit cancellation recovery with historical timestamps, final completion refusing skipped reviewers after checkpoint recovery, and old-profile regressions.
+//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-DELEGATED, M-WORKFLOW-CHECKPOINTS, M-WORKFLOW-PERSISTENCE, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -15,15 +15,13 @@
 //   previousDataHome - Preserves the caller's data-home environment for cleanup.
 //   dataHome - Isolated per-process XDG data home for persistence fixtures.
 //   cleanupPaths - Tracks temporary workspaces for cleanup after each test.
+//   TaskToolPartState - Native parent task part state projection used by the delegated event fixtures.
+//   TaskToolPart - Native parent task tool part projection emitted to the event hook.
 //   StubSession - Minimal session stub shape with an optional parentID.
+//   DelegatedPromptCall - Recorded session.prompt call with session id and text.
+//   DelegatedHarnessPlugin - Native tool and hook handles captured from a real WorkflowPlugin.setup.
+//   DelegatedEventQueue - Minimal event queue delivering queued events in order.
 //   DelegatedPluginHarness - Captured plugin hooks, tools, logs, prompt calls, and workspace paths for one delegated fixture.
-//   DelegatedSessionPromptCall - SDK-derived session.prompt request recorded for continuation assertions.
-//   DelegatedSessionPromptResponse - SDK-derived session.prompt response with a valid assistant message and text part.
-//   DelegatedSessionPromptError - SDK-derived session.prompt error consumed by continuation.
-//   DelegatedSessionPromptResult - Narrowed SDK session.prompt data/error boundary consumed by continuation.
-//   delegatedAssistantMessage - Builds a valid SDK AssistantMessage fixture for one session.
-//   delegatedTextPart - Builds a valid SDK TextPart response fixture.
-//   delegatedPromptResponse - Builds a valid SDK session.prompt response fixture.
 //   writeProfile - Writes an isolated orchestration profile fixture.
 //   specXml - Renders the approved spec fixture for the task pipeline.
 //   PlanTaskInput - Task index and wave pairing used by the plan builder.
@@ -39,10 +37,12 @@
 //   finishTask - Drives the tool.execute.after hook for one tracked result.
 //   finishTaskWithRawOutput - Drives the after hook with raw tracked task output for continuation tests.
 //   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
-//   taskToolPart - Builds a real SDK-shaped ToolPart for one parent task call.
-//   taskPartUpdated - Wraps a ToolPart in a real message.part.updated event.
-//   runningState - Builds a real SDK-shaped running ToolState with host metadata.
-//   errorState - Builds a real SDK-shaped error ToolState with a host error.
+//   taskToolPart - Builds a native-shaped parent task tool part for one parent task call.
+//   DelegatedNativeTool - Registered native tool shape used by the delegated harness.
+//   DelegatedFakeToolEditor - Minimal native tool editor double used by the delegated harness.
+//   deriveDelegatedChildId - Derive the child session id from a tracked launch header.
+//   runningState - Builds a native-shaped running tool state with host metadata.
+//   errorState - Builds a native-shaped error tool state with a host error.
 //   emitPart - Delivers one message.part.updated event through the plugin event hook.
 //   listItems - Reads the current work-item list through the real tool.
 //   decide - Calls work_item_decide with a stub controller context.
@@ -52,7 +52,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Native register/start/verify/rework/accept/request_changes/recover outputs produced through the registered helpers are now asserted against the closed result schemas; a failing session lookup and invalid persisted state assert their host_context/persistence categories. Earlier T-002 correction added registered-wrapper diagnostics for native/generic run routing, planPath/runId conflicts, unknown-run lookup failures, source-only field rejection, cross-session no-source-detail refusal, and normalized-runId staged fail-closed routing.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-20 - Added cancellation-recovery regressions for the LIVE native root-interrupt parent shape: explicit recover settles the in-flight attempt with completedAt = max(parent tool-part end, child terminal completion), and a bare `Tool execution interrupted` without a subagent child session id still refuses with CANCELLATION_EVIDENCE_REQUIRED. seedCancellationEvidence now takes an optional pinned parent failure. Prior wi-7 attempt 2: staged-launch persistence coverage, a lazy-client-acquisition retry regression, and a foreground malformed-report regression (a client-acquisition failure during bounded continuation still settles report_rejected with the original excerpt, never in_flight/DONE).]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -60,22 +60,31 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  AssistantMessage,
-  EventMessagePartUpdated,
-  OpencodeClient,
-  SessionPromptErrors,
-  SessionPromptResponses,
-  TextPart,
-  ToolPart,
-  ToolStateError,
-  ToolStateRunning,
-} from "@opencode-ai/sdk";
-import { resetVvocConfigForTests } from "../lib/config-layers.js";
+/** Native parent task part projection used by the delegated event fixtures. */
+interface TaskToolPartState {
+  readonly status: "running" | "error";
+  readonly error?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+/** Native parent task tool part projection (id/session/state) used before the event is emitted. */
+interface TaskToolPart {
+  readonly id: string;
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly type: "tool";
+  readonly callID: string;
+  readonly tool: string;
+  readonly state: TaskToolPartState;
+}
+import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { WorkflowPlugin } from "./workflow/index.js";
-import { deleteWorkflowSessionDir, getWorkflowSessionDir } from "./workflow/persistence.js";
+import { createWorkflowPlugin } from "./workflow/index.js";
+import {
+  deleteWorkflowSessionDir,
+  getWorkflowSessionDir,
+  hydrateWorkflowStateChecked,
+} from "./workflow/persistence.js";
 import { validateWorkflowToolResult } from "./workflow/results.js";
 import type { ParsedResultBlock } from "./workflow/protocol.js";
 
@@ -86,65 +95,96 @@ let dataHome: string;
 
 const cleanupPaths: string[] = [];
 
-type StubSession = { parentID?: string };
+type StubSession = {
+  parentID?: string;
+  forkSessionID?: string;
+  locationDirectory?: string;
+  idle?: number;
+  outcome?: string;
+};
 
-type DelegatedSessionPromptCall = Parameters<OpencodeClient["session"]["prompt"]>[0];
-type DelegatedSessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses];
-type DelegatedSessionPromptError = SessionPromptErrors[keyof SessionPromptErrors];
-type DelegatedSessionPromptResult =
-  | { data: DelegatedSessionPromptResponse; error?: undefined }
-  | { data?: undefined; error: DelegatedSessionPromptError };
+type DelegatedPromptCall = { sessionID: string; text: string };
 
-function delegatedAssistantMessage(sessionID: string): AssistantMessage {
-  return {
-    id: `msg_${sessionID}`,
-    sessionID,
-    role: "assistant",
-    time: { created: 1 },
-    parentID: `msg_parent_${sessionID}`,
-    modelID: "deepseek-flash",
-    providerID: "deepseek",
-    mode: "build",
-    path: { cwd: "/tmp/project", root: "/tmp/project" },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
+// START_BLOCK_NATIVE_DELEGATED_FIXTURE
+/** Native tool/hook handles captured from a real WorkflowPlugin.setup. */
+type DelegatedHarnessPlugin = {
+  tool: Record<
+    string,
+    { name: string; execute: (input: unknown, context: unknown) => Promise<unknown> } | undefined
+  >;
+  "tool.execute.before": (
+    input: { tool: string; sessionID: string; callID: string },
+    output: { args: unknown },
+  ) => Promise<void>;
+  "tool.execute.after": (
+    input: { tool: string; sessionID: string; callID: string; args: unknown },
+    output: { title?: string; output: unknown; metadata?: unknown },
+  ) => Promise<void>;
+  /** Deliver a native backgrounded subagent result (status running). */
+  afterRunning: (input: {
+    sessionID: string;
+    callID: string;
+    subagentType: string;
+    workItemId: string;
+    childSessionId: string;
+  }) => Promise<void>;
+};
+
+class DelegatedEventQueue {
+  private readonly events: unknown[] = [];
+  private waiter: (() => void) | undefined;
+
+  push(event: unknown): void {
+    this.events.push(event);
+    this.waiter?.();
+    this.waiter = undefined;
+  }
+
+  drain(): AsyncIterable<unknown> {
+    return {
+      [Symbol.asyncIterator]: (): AsyncIterator<unknown> => ({
+        next: () => {
+          const next = this.events.shift();
+          if (next !== undefined) return Promise.resolve({ done: false as const, value: next });
+          return new Promise((resolve) => {
+            this.waiter = () => {
+              const value = this.events.shift();
+              resolve(
+                value === undefined
+                  ? { done: true as const, value: undefined }
+                  : { done: false as const, value },
+              );
+            };
+          });
+        },
+        return: () => Promise.resolve({ done: true as const, value: undefined }),
+      }),
+    };
+  }
 }
-
-function delegatedTextPart(sessionID: string, text: string): TextPart {
-  return {
-    id: `part_${sessionID}`,
-    sessionID,
-    messageID: `msg_${sessionID}`,
-    type: "text",
-    text,
-  };
-}
-
-function delegatedPromptResponse(sessionID: string, text: string): DelegatedSessionPromptResponse {
-  return {
-    info: delegatedAssistantMessage(sessionID),
-    parts: [delegatedTextPart(sessionID, text)],
-  };
-}
+// END_BLOCK_NATIVE_DELEGATED_FIXTURE
 
 interface DelegatedPluginHarness {
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
+  plugin: DelegatedHarnessPlugin;
   logs: string[];
   workspaceRoot: string;
   planPath: string;
   sessions: Map<string, StubSession>;
   sessionGetFails: boolean;
-  promptCalls: DelegatedSessionPromptCall[];
+  /** Simulates a transient failure acquiring the lazy authenticated full client. */
+  clientAcquireFails: boolean;
+  promptCalls: DelegatedPromptCall[];
   promptResponses: string[];
-  /** Identity/timing snapshots served by the SDK session.message stub. */
+  /** Identity/timing snapshots served by the native session.context lookup. */
   userMessages: Map<string, DelegatedUserMessageStub>;
   messageLookups: string[];
+  emit: (event: unknown) => void;
+  /** Native session message lists, seedable by native cancellation/continuation tests. */
+  sessionMessages: Map<string, unknown[]>;
+  /** Sessions the fake full client reports as active (running). */
+  activeSessions: Set<string>;
+  /** Pending inbox items per session for quiescence checks. */
+  inboxItems: Map<string, unknown[]>;
 }
 
 /** Minimal SDK-shaped message snapshot served for authorization lookups. */
@@ -153,6 +193,7 @@ interface DelegatedUserMessageStub {
   sessionID?: string;
   id?: string;
   timeCreatedMs?: number;
+  ignored?: boolean;
   /** Simulates an unreachable lookup instead of a missing message. */
   transportError?: boolean;
 }
@@ -365,6 +406,20 @@ function createStubToolContext(
   };
 }
 
+type DelegatedNativeTool = {
+  name: string;
+  execute: (input: unknown, context: unknown) => Promise<unknown>;
+};
+
+type DelegatedFakeToolEditor = {
+  list: () => DelegatedNativeTool[];
+  get: (id: string) => DelegatedNativeTool | undefined;
+  namespace: () => void;
+  add: (tool: DelegatedNativeTool) => void;
+  update: () => void;
+  remove: (id: string) => void;
+};
+
 async function createDelegatedPluginHarness(
   workspaceRoot: string,
   profile: OrchestrationProfile = "delegated",
@@ -374,85 +429,313 @@ async function createDelegatedPluginHarness(
   writeProfile(profile);
   const logs: string[] = [];
   const sessions = new Map<string, StubSession>();
-  const promptCalls: DelegatedSessionPromptCall[] = [];
+  const promptCalls: DelegatedPromptCall[] = [];
   const promptResponses = [...(options?.promptResponses ?? [])];
+  let messageCounter = 0;
   const userMessages = new Map<string, DelegatedUserMessageStub>();
   const messageLookups: string[] = [];
+  const sessionMessages = new Map<string, unknown[]>();
+  const activeSessions = new Set<string>();
+  const inboxItems = new Map<string, unknown[]>();
+  const queue = new DelegatedEventQueue();
+  const tools = new Map<
+    string,
+    { name: string; execute: (input: unknown, context: unknown) => Promise<unknown> }
+  >();
+  const beforeHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+  const afterHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+  const contextHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+
   const harness: DelegatedPluginHarness = {
     logs,
     workspaceRoot,
     planPath: "",
     sessions,
     sessionGetFails: false,
+    clientAcquireFails: false,
     promptCalls,
     promptResponses,
     userMessages,
     messageLookups,
     plugin: undefined as never,
+    emit: (event) => queue.push(event),
+    sessionMessages,
+    activeSessions,
+    inboxItems,
   };
-  const plugin = await WorkflowPlugin({
-    client: {
-      app: {
-        log: async (payload: { body?: { message?: string } }) => {
-          const message = payload.body?.message;
-          if (typeof message === "string") logs.push(message);
-        },
-      },
-      session: {
-        get: async (options: { path: { id: string } }) => {
-          if (harness.sessionGetFails) {
-            throw new Error("session service unavailable");
-          }
-          const stub = sessions.get(options.path.id) ?? {};
-          return { data: { id: options.path.id, parentID: stub.parentID, title: "stub" } };
-        },
-        prompt: async (call: DelegatedSessionPromptCall): Promise<DelegatedSessionPromptResult> => {
-          promptCalls.push(call);
-          const text = promptResponses.shift();
-          if (text === undefined) {
-            return {
-              data: undefined,
-              error: { name: "BadRequest", data: { message: "prompt unavailable" } },
-            };
-          }
-          return { data: delegatedPromptResponse(call.path.id, text) };
-        },
-        message: async (options: { path: { id: string; messageID: string } }) => {
-          const key = `${options.path.id}::${options.path.messageID}`;
+
+  const editor = {
+    list: () => [...tools.values()],
+    get: (id: string) => tools.get(id),
+    namespace: () => undefined,
+    add: (tool: {
+      name: string;
+      execute: (input: unknown, context: unknown) => Promise<unknown>;
+    }) => {
+      tools.set(tool.name, tool);
+    },
+    update: () => undefined,
+    remove: (id: string) => {
+      tools.delete(id);
+    },
+  };
+
+  const sessionInfo = (sessionID: string): Record<string, unknown> => {
+    if (harness.sessionGetFails) {
+      throw new Error("session service unavailable");
+    }
+    const stub = sessions.get(sessionID) ?? {};
+    return {
+      id: sessionID,
+      parentID: stub.parentID,
+      ...(stub.forkSessionID === undefined ? {} : { fork: { sessionID: stub.forkSessionID } }),
+      location: { directory: stub.locationDirectory ?? workspaceRoot },
+      time: { created: 1, ...(stub.idle === undefined ? {} : { idle: stub.idle }) },
+      ...(stub.outcome === undefined ? {} : { outcome: stub.outcome }),
+    };
+  };
+
+  const collectMessages = (sessionID: string): unknown[] => {
+    const collected: unknown[] = [...(sessionMessages.get(sessionID) ?? [])];
+    for (const [key, stub] of userMessages) {
+      const [stubSession, messageId] = key.split("::");
+      if (stubSession !== sessionID) continue;
+      collected.push({
+        id: stub.id ?? messageId,
+        type: stub.role === "user" ? "user" : "assistant",
+        text: "",
+        ignored: stub.ignored === true,
+        time: { created: stub.timeCreatedMs ?? 0 },
+      });
+    }
+    return collected;
+  };
+  const messageTime = (message: unknown): number => {
+    if (typeof message !== "object" || message === null) return 0;
+    const time = (message as { time?: { created?: unknown } }).time;
+    return typeof time?.created === "number" ? time.created : 0;
+  };
+
+  const fakeClient = {
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => sessionInfo(sessionID),
+      context: async ({ sessionID }: { sessionID: string }) => collectMessages(sessionID),
+      message: {
+        get: async ({ sessionID, messageID }: { sessionID: string; messageID: string }) => {
+          const key = `${sessionID}::${messageID}`;
           messageLookups.push(key);
           const stub = userMessages.get(key);
-          if (!stub) {
+          if (stub) {
+            if (stub.transportError) throw new Error("session service unavailable");
             return {
-              data: undefined,
-              error: { name: "NotFound", data: { message: "message not found" } },
+              id: stub.id ?? messageID,
+              type: stub.role === "user" ? "user" : "assistant",
+              text: "",
+              ignored: stub.ignored === true,
+              time: { created: stub.timeCreatedMs ?? 0 },
             };
           }
-          if (stub.transportError) {
-            throw new Error("session service unavailable");
-          }
-          return {
-            data: {
-              info: {
-                role: stub.role ?? "user",
-                sessionID: stub.sessionID ?? options.path.id,
-                id: stub.id ?? options.path.messageID,
-                time: { created: stub.timeCreatedMs ?? Date.now() },
-              },
-              parts: [],
-            },
-          };
+          return (sessionMessages.get(sessionID) ?? []).find(
+            (message) =>
+              typeof message === "object" &&
+              message !== null &&
+              (message as { id?: unknown }).id === messageID,
+          );
         },
       },
-    } as never,
-    project: {} as never,
-    directory: workspaceRoot,
-    worktree: workspaceRoot,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
+      active: async () =>
+        Object.fromEntries([...activeSessions].map((id) => [id, { type: "running" }])),
+      inbox: {
+        list: async ({ sessionID }: { sessionID: string }) => inboxItems.get(sessionID) ?? [],
+      },
+      prompt: async (input: { sessionID: string; text: string }) => {
+        promptCalls.push({ sessionID: input.sessionID, text: input.text });
+        const text = promptResponses.shift();
+        if (text === undefined) {
+          return { error: { name: "BadRequest", message: "prompt unavailable" } };
+        }
+        const created = Date.now();
+        messageCounter += 1;
+        sessionMessages.set(input.sessionID, [
+          ...(sessionMessages.get(input.sessionID) ?? []),
+          {
+            id: `msg_cont_${messageCounter}`,
+            type: "assistant",
+            content: [{ type: "text", text }],
+            time: { created: created + 1, completed: created + 2 },
+          },
+        ]);
+        return {
+          id: `msg_prompt_${input.sessionID}`,
+          sessionID: input.sessionID,
+          time: { created },
+        };
+      },
+      wait: async () => undefined,
+      interrupt: async () => undefined,
+    },
+    message: {
+      list: async (input: {
+        sessionID: string;
+        order?: "asc" | "desc";
+        limit?: number;
+        type?: string;
+      }) => {
+        let data = collectMessages(input.sessionID);
+        if (input.type !== undefined) {
+          data = data.filter((message) => (message as { type?: unknown }).type === input.type);
+        }
+        data.sort((left, right) =>
+          input.order === "desc"
+            ? messageTime(right) - messageTime(left)
+            : messageTime(left) - messageTime(right),
+        );
+        if (input.limit !== undefined) data = data.slice(0, input.limit);
+        return { data, cursor: {} };
+      },
+    },
+  };
+
+  const loaded = await loadVvocConfig({ cwd: workspaceRoot });
+  const defaultCapture = { vvoc: loaded.config };
+  const fakeRuntime = {
+    snapshots: {
+      configFor: async () => defaultCapture,
+      accept: async () => ({ status: "unbound" }),
+    },
+    client: async () => {
+      if (harness.clientAcquireFails) {
+        throw new Error("transient client acquisition failure");
+      }
+      return fakeClient;
+    },
+    effectiveConfig: () => ({ vvoc: loaded.config }),
+    release: async () => undefined,
+  };
+
+  const ctx = {
+    location: {
+      directory: workspaceRoot,
+      project: { id: "proj", directory: workspaceRoot, canonical: workspaceRoot },
+    },
+    tool: {
+      transform: async (callback: (editor: DelegatedFakeToolEditor) => void) => {
+        callback(editor);
+        return { dispose: async () => undefined };
+      },
+      hook: async (name: string, callback: (event: Record<string, unknown>) => unknown) => {
+        if (name === "execute.before") beforeHooks.push(callback);
+        else if (name === "execute.after") afterHooks.push(callback);
+        return { dispose: async () => undefined };
+      },
+      list: async () => [],
+      reload: async () => undefined,
+    },
+    session: {
+      hook: async (_name: string, callback: (event: Record<string, unknown>) => unknown) => {
+        contextHooks.push(callback);
+        return { dispose: async () => undefined };
+      },
+    },
+    event: { subscribe: () => queue.drain() },
+    rpc: { register: async () => ({ dispose: async () => undefined }) },
+  };
+
+  await createWorkflowPlugin({ acquireRuntime: async () => fakeRuntime as never }).setup(
+    ctx as never,
+  );
+
+  const plugin: DelegatedHarnessPlugin = {
+    tool: new Proxy(
+      {},
+      { get: (_target, property: string) => tools.get(property) },
+    ) as DelegatedHarnessPlugin["tool"],
+    "tool.execute.before": async (input, output) => {
+      const args = (output.args ?? {}) as Record<string, unknown>;
+      const event: Record<string, unknown> = {
+        tool: "subagent",
+        sessionID: input.sessionID,
+        agent: "vv-controller",
+        messageID: "message-1",
+        id: input.callID,
+        input: {
+          agent: args.subagent_type,
+          description: args.description,
+          prompt: args.prompt,
+          ...(args.task_id === undefined ? {} : { sessionID: args.task_id }),
+          ...(args.sessionID === undefined ? {} : { sessionID: args.sessionID }),
+          ...(args.background === undefined ? {} : { background: args.background }),
+          ...(args.model === undefined ? {} : { model: args.model }),
+        },
+      };
+      for (const hook of beforeHooks) await hook(event);
+      output.args = event.input;
+    },
+    "tool.execute.after": async (input, output) => {
+      const rawArgs = (input.args ?? {}) as Record<string, unknown>;
+      const outputText = typeof output.output === "string" ? output.output : "";
+      const childSessionId = deriveDelegatedChildId(outputText) ?? `ses_${input.callID}_child`;
+      const event: Record<string, unknown> = {
+        tool: "subagent",
+        sessionID: input.sessionID,
+        agent: "vv-controller",
+        messageID: "message-1",
+        id: input.callID,
+        input: {
+          agent: rawArgs.subagent_type,
+          description: rawArgs.description,
+          prompt: rawArgs.prompt,
+          ...(rawArgs.task_id === undefined ? {} : { sessionID: rawArgs.task_id }),
+        },
+        status: "completed",
+        result: {
+          output: { sessionID: childSessionId, status: "completed", output: outputText },
+          content: `<subagent sessionID="${childSessionId}" state="completed">\n${outputText}\n</subagent>`,
+          metadata: output.metadata ?? {},
+        },
+      };
+      for (const hook of afterHooks) await hook(event);
+      const result = event.result as { output?: unknown; metadata?: unknown };
+      // Native execute.after cannot fail; diagnostics rewrite the result.
+      output.output = result.output;
+      output.metadata = result.metadata;
+    },
+    afterRunning: async (input) => {
+      const event: Record<string, unknown> = {
+        tool: "subagent",
+        sessionID: input.sessionID,
+        agent: "vv-controller",
+        messageID: "message-1",
+        id: input.callID,
+        input: {
+          agent: input.subagentType,
+          prompt: `VVOC_WORK_ITEM_ID: ${input.workItemId}\n<assignment>Run tracked task</assignment>`,
+        },
+        status: "completed",
+        result: {
+          output: {
+            sessionID: input.childSessionId,
+            status: "running",
+            output: "running in background",
+          },
+          content: "running in background",
+          metadata: { sessionID: input.childSessionId, status: "running" },
+        },
+      };
+      for (const hook of afterHooks) await hook(event);
+    },
+  };
+
   harness.plugin = plugin;
   return harness;
+}
+
+function deriveDelegatedChildId(output: string): string | undefined {
+  const element = /^<task\s+id="([^"]+)"/m.exec(output);
+  if (element) return element[1];
+  const header = /^task_id:\s+(\S+)/m.exec(output);
+  if (header) return header[1];
+  return undefined;
 }
 
 function parseToolJson<T>(value: unknown): T {
@@ -536,19 +819,19 @@ async function launchTaskWithArgs(
   );
 }
 
-function runningState(metadata: Record<string, unknown>, start = 1): ToolStateRunning {
-  return { status: "running", input: {}, metadata, time: { start } };
+function runningState(metadata: Record<string, unknown>): TaskToolPartState {
+  return { status: "running", metadata };
 }
 
-function errorState(error: string, metadata: Record<string, unknown>): ToolStateError {
-  return { status: "error", input: {}, error, metadata, time: { start: 1, end: 2 } };
+function errorState(error: string, metadata: Record<string, unknown>): TaskToolPartState {
+  return { status: "error", error, metadata };
 }
 
 function taskToolPart(
   parentSessionId: string,
   callId: string,
-  state: ToolStateRunning | ToolStateError,
-): ToolPart {
+  state: TaskToolPartState,
+): TaskToolPart {
   return {
     id: `part-${callId}`,
     sessionID: parentSessionId,
@@ -560,12 +843,27 @@ function taskToolPart(
   };
 }
 
-function taskPartUpdated(part: ToolPart): EventMessagePartUpdated {
-  return { type: "message.part.updated", properties: { part } };
-}
-
-async function emitPart(harness: DelegatedPluginHarness, part: ToolPart): Promise<void> {
-  await harness.plugin.event?.({ event: taskPartUpdated(part) } as never);
+async function emitPart(harness: DelegatedPluginHarness, part: TaskToolPart): Promise<void> {
+  if (part.tool !== "task") return;
+  const state = part.state as { status?: string; error?: string; metadata?: unknown };
+  if (state.status === "error") {
+    harness.emit({
+      type: "session.tool.failed",
+      data: {
+        sessionID: part.sessionID,
+        id: part.callID,
+        error: { type: "tool.execution", message: state.error },
+        metadata: state.metadata,
+      },
+    });
+  } else if (state.status === "running") {
+    harness.emit({
+      type: "session.tool.progress",
+      data: { sessionID: part.sessionID, id: part.callID, metadata: state.metadata },
+    });
+  }
+  // Let the native event pump process the queued event before assertions run.
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 async function listItems(harness: DelegatedPluginHarness) {
@@ -627,23 +925,15 @@ async function finishTask(
   workItemId: string,
   status: ParsedResultBlock["status"],
   body = "Done.",
-): Promise<void> {
+): Promise<string> {
   const route = subagentType === "vv-implementer" ? "\nVVOC_ROUTE: change_with_review" : "";
-  await harness.plugin["tool.execute.after"]?.(
-    {
-      tool: "task",
-      sessionID,
-      callID: callId,
-      args: {
-        subagent_type: subagentType,
-        prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
-      },
-    } as never,
-    {
-      title: "task",
-      output: `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: ${status}${route}\n\n${body}`,
-      metadata: {},
-    } as never,
+  return finishTaskWithRawOutput(
+    harness,
+    sessionID,
+    callId,
+    subagentType,
+    workItemId,
+    `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: ${status}${route}\n\n${body}`,
   );
 }
 
@@ -654,7 +944,8 @@ async function finishTaskWithRawOutput(
   subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
   workItemId: string,
   output: string,
-): Promise<void> {
+): Promise<string> {
+  const sink = { title: "task", output: output as unknown, metadata: {} as unknown };
   await harness.plugin["tool.execute.after"]?.(
     {
       tool: "task",
@@ -665,8 +956,15 @@ async function finishTaskWithRawOutput(
         prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
       },
     } as never,
-    { title: "task", output, metadata: {} } as never,
+    sink as never,
   );
+  const final = sink.output;
+  if (typeof final === "string") return final;
+  if (final && typeof final === "object" && "output" in final) {
+    const inner = (final as { output?: unknown }).output;
+    if (typeof inner === "string") return inner;
+  }
+  return "";
 }
 
 function wrapTaskResult(taskId: string, innerResult: string): string {
@@ -896,6 +1194,7 @@ describe("delegated control-tool authorization", () => {
       ...createStubToolContext(harness, ROOT_SESSION),
       worktree: "/tmp/untrusted-workspace",
     };
+    harness.sessions.set(ROOT_SESSION, { locationDirectory: "/tmp/untrusted-workspace" });
     const deniedWorkspace = await harness.plugin.tool?.work_checkpoint
       ?.execute(
         { action: "start", runId, checkpointId: "CHECKPOINT-R-001" } as never,
@@ -906,6 +1205,7 @@ describe("delegated control-tool authorization", () => {
     expect(String(deniedWorkspace)).toContain("does not match the trusted plugin workspace");
     expect((deniedWorkspace as { code?: string }).code).toBe("CONTROL_DENIED");
     expect((deniedWorkspace as { category?: string }).category).toBe("authorization");
+    harness.sessions.delete(ROOT_SESSION);
   });
 
   test("invalid persisted state denies new control mutations instead of resetting", async () => {
@@ -1342,10 +1642,9 @@ describe("delegated attempt flow through plugin hooks", () => {
 
     expect(harness.promptCalls).toHaveLength(1);
     const call = harness.promptCalls[0];
-    expect(call?.path.id).toBe("ses_delegated_continuation");
-    expect(call?.body?.agent).toBe("vv-implementer");
-    expect(call?.body?.tools).toBeUndefined();
-    expect(call?.body !== undefined && "tools" in call.body).toBe(false);
+    expect(call?.sessionID).toBe("ses_delegated_continuation");
+    expect(Object.keys(call ?? {}).sort()).toEqual(["sessionID", "text"]);
+    expect(call?.text).toContain("Plain progress without a protocol header.");
 
     const listed = await listItems(harness);
     const item = listed.items.find((entry) => entry.workItemId === workItemId);
@@ -1678,45 +1977,23 @@ describe("delegated attempt flow through plugin hooks", () => {
     expect(started.errorCode).toBe("ALREADY_IN_REVIEW");
   });
 
-  test("an attempt orphaned by a restart is reclaimed at hydration without consuming budget", async () => {
+  test("an attempt orphaned by a restart stays in-flight and preserves consumed budget", async () => {
     const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
     const firstHarness = await createDelegatedPluginHarness(workspaceRoot);
     const runId = await registerPlan(firstHarness, planPath);
     const workItemId = await taskWorkItemId(firstHarness, runId, "T-001");
     await launchTask(firstHarness, ROOT_SESSION, "call-orphan", "vv-implementer", workItemId);
 
-    // A fresh plugin instance simulates the restart: the persisted in-flight
-    // attempt's host call can never arrive, so hydration reclaims it.
+    // A fresh plugin instance simulates the restart: hydration must NOT refund
+    // the in-flight attempt or its consumed budget. It remains in-flight until
+    // explicit, evidence-backed recovery settles it.
     const secondHarness = await createDelegatedPluginHarness(workspaceRoot);
-    await launchTask(secondHarness, ROOT_SESSION, "call-reclaimed", "vv-implementer", workItemId);
-    await finishTask(
-      secondHarness,
-      ROOT_SESSION,
-      "call-reclaimed",
-      "vv-implementer",
-      workItemId,
-      "DONE",
-    );
-    const accepted = await decide(secondHarness, {
-      workItemId,
-      attempt: 1,
-      decision: "accept",
-      rationale: "Reclaimed attempt verified.",
-      evidence: ["src/tasks/task-001.ts"],
-    });
-    expect(accepted.ok).toBe(true);
-
-    const listed = parseToolJson<{
-      items: Array<{ workItemId: string; delegated?: { attempts: number; accepted: boolean } }>;
-    }>(
-      (await secondHarness.plugin.tool?.work_item_list?.execute(
-        { includeClosed: false },
-        createStubToolContext(secondHarness, ROOT_SESSION) as never,
-      )) ?? "{}",
-    );
+    const listed = await listItems(secondHarness);
     const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("awaiting_implementer");
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
     expect(item?.delegated?.attempts).toBe(1);
-    expect(item?.delegated?.accepted).toBe(true);
+    expect(item?.delegated?.remainingAttempts).toBe(1);
   });
 });
 // END_BLOCK_DELEGATED_FLOW_TESTS
@@ -1737,7 +2014,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
   }
 
   function foregroundMetadata(child = CHILD): Record<string, unknown> {
-    return { parentSessionId: ROOT_SESSION, sessionId: child, model: {} };
+    return { sessionID: child, status: "running" };
   }
 
   test("records a failed attempt without an after hook and allows an explicit retry", async () => {
@@ -1752,7 +2029,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
         ROOT_SESSION,
         "call-ev-1",
         errorState(
-          `Subagent failed (task_id: ${CHILD}): unknown provider for model deepseek-flash`,
+          `Subagent failed (sessionID: ${CHILD}): unknown provider for model deepseek-flash`,
           metadata,
         ),
       ),
@@ -1781,7 +2058,10 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       taskToolPart(
         ROOT_SESSION,
         "call-direct",
-        errorState(`Subagent failed (task_id: ${CHILD}): transport failure`, foregroundMetadata()),
+        errorState(
+          `Subagent failed (sessionID: ${CHILD}): transport failure`,
+          foregroundMetadata(),
+        ),
       ),
     );
 
@@ -1802,7 +2082,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
           ROOT_SESSION,
           callId,
           errorState(
-            `Subagent failed (task_id: ${child}): provider error`,
+            `Subagent failed (sessionID: ${child}): provider error`,
             foregroundMetadata(child),
           ),
         ),
@@ -1835,11 +2115,10 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
     await emitPart(
       harness,
       taskToolPart(
-        ROOT_SESSION,
+        "ses_other_parent",
         "call-mismatch",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, {
-          parentSessionId: "ses_other_parent",
-          sessionId: CHILD,
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, {
+          sessionID: CHILD,
         }),
       ),
     );
@@ -1859,7 +2138,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
         ROOT_SESSION,
         "call-mismatch",
         errorState(
-          "Subagent failed (task_id: ses_delegated_child_other): provider error",
+          "Subagent failed (sessionID: ses_delegated_child_other): provider error",
           foregroundMetadata("ses_delegated_child_other"),
         ),
       ),
@@ -1875,7 +2154,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       taskToolPart(
         ROOT_SESSION,
         "call-unknown",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     listed = await listItems(harness);
@@ -1911,7 +2190,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       taskToolPart(
         ROOT_SESSION,
         "call-after",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     expect(
@@ -1934,7 +2213,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       taskToolPart(
         ROOT_SESSION,
         "call-bg",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     expect(
@@ -1943,7 +2222,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       )?.delegated?.inFlightAttempt,
     ).toBe(true);
 
-    // A host subtask launch always carries a command key (undefined here).
+    // A later native launch that resumes an existing child is ineligible.
     const subtask = await harnessWithTask();
     await launchTaskWithArgs(
       subtask.harness,
@@ -1951,14 +2230,14 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       "call-subtask",
       "vv-implementer",
       `VVOC_WORK_ITEM_ID: ${subtask.workItemId}`,
-      { command: undefined },
+      { sessionID: "ses_existing_child" },
     );
     await emitPart(
       subtask.harness,
       taskToolPart(
         ROOT_SESSION,
         "call-subtask",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     expect(
@@ -1975,25 +2254,19 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       "vv-implementer",
       promotion.workItemId,
     );
+    await promotion.harness.plugin.afterRunning({
+      sessionID: ROOT_SESSION,
+      callID: "call-promote",
+      subagentType: "vv-implementer",
+      workItemId: promotion.workItemId,
+      childSessionId: CHILD,
+    });
     await emitPart(
       promotion.harness,
       taskToolPart(
         ROOT_SESSION,
         "call-promote",
-        runningState({
-          parentSessionId: ROOT_SESSION,
-          sessionId: CHILD,
-          background: true,
-          jobId: CHILD,
-        }),
-      ),
-    );
-    await emitPart(
-      promotion.harness,
-      taskToolPart(
-        ROOT_SESSION,
-        "call-promote",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     expect(
@@ -2012,22 +2285,17 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
     );
     await emitPart(
       interrupted.harness,
-      taskToolPart(
-        ROOT_SESSION,
-        "call-int",
-        runningState({
-          parentSessionId: ROOT_SESSION,
-          sessionId: CHILD,
-          interrupted: true,
-        }),
-      ),
+      taskToolPart(ROOT_SESSION, "call-int", runningState({ sessionID: CHILD, status: "running" })),
     );
     await emitPart(
       interrupted.harness,
       taskToolPart(
         ROOT_SESSION,
         "call-int",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(
+          `Tool execution interrupted: subagent (sessionID: ${CHILD})`,
+          foregroundMetadata(),
+        ),
       ),
     );
     expect(
@@ -2063,7 +2331,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       taskToolPart(
         ROOT_SESSION,
         "call-resume",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     expect(
@@ -2080,21 +2348,18 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
       taskToolPart(ROOT_SESSION, "call-reprompt", runningState(foregroundMetadata())),
     );
     const userMessage = (id: string) => ({
-      event: {
-        type: "message.updated",
-        properties: {
-          info: { id, sessionID: CHILD, role: "user" },
-        },
-      },
+      type: "session.inbox.enqueued",
+      data: { sessionID: CHILD, inboxID: id, item: { type: "user" } },
     });
-    await harness.plugin.event?.(userMessage("msg-child-1") as never);
-    await harness.plugin.event?.(userMessage("msg-child-2") as never);
+    harness.emit(userMessage("msg-child-1"));
+    harness.emit(userMessage("msg-child-2"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await emitPart(
       harness,
       taskToolPart(
         ROOT_SESSION,
         "call-reprompt",
-        errorState(`Subagent failed (task_id: ${CHILD}): provider error`, foregroundMetadata()),
+        errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, foregroundMetadata()),
       ),
     );
     expect(
@@ -2112,7 +2377,7 @@ describe("confirmed host-terminal launch failures through the event hook", () =>
     const errorEvent = taskToolPart(
       ROOT_SESSION,
       "call-persist",
-      errorState(`Subagent failed (task_id: ${CHILD}): provider error`, metadata),
+      errorState(`Subagent failed (sessionID: ${CHILD}): provider error`, metadata),
     );
 
     // Force the checked snapshot write to fail by occupying the state path.
@@ -2937,3 +3202,614 @@ describe("terminal report rejection and checkpoint recovery integration", () => 
   });
 });
 // END_BLOCK_RECOVERY_INTEGRATION_TESTS
+
+// START_BLOCK_LAUNCH_PERSISTENCE_TESTS
+/**
+ * A launch mutates live attempt/budget/reviewer state, so it must not proceed
+ * unless that transition is durably persisted. Each launch family is staged,
+ * persisted, then published; a failed write refuses before any child runs and
+ * leaves the original state intact.
+ */
+describe("staged launch persistence", () => {
+  function occupyStatePath(): string {
+    const statePath = join(getWorkflowSessionDir(ROOT_SESSION), "workflow-state.json");
+    rmSync(statePath, { recursive: true, force: true });
+    mkdirSync(statePath, { recursive: true });
+    return statePath;
+  }
+
+  test("a delegated launch refuses without a durable attempt and persists on success", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+
+    const statePath = occupyStatePath();
+    const refused = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-persist-fail",
+      "vv-implementer",
+      workItemId,
+    )
+      .then(() => undefined)
+      .catch((error: Error) => error.message);
+    expect(String(refused)).toContain("LAUNCH_PERSISTENCE_FAILED");
+
+    // No attempt is exposed and the live item did not advance.
+    let item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(0);
+    expect(item?.state).toBe("open");
+
+    // After I/O recovery the same launch persists the consumed attempt.
+    rmSync(statePath, { recursive: true, force: true });
+    await launchTask(harness, ROOT_SESSION, "call-persist-ok", "vv-implementer", workItemId);
+    item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+    expect(item?.delegated?.attempts).toBe(1);
+
+    // A fresh plugin instance hydrates the persisted in-flight attempt.
+    const rehydrated = await createDelegatedPluginHarness(workspaceRoot);
+    const hydrated = (await listItems(rehydrated)).items.find(
+      (entry) => entry.workItemId === workItemId,
+    );
+    expect(hydrated?.delegated?.inFlightAttempt).toBe(true);
+    expect(hydrated?.delegated?.attempts).toBe(1);
+  });
+
+  test("a reviewer launch refuses without a durable in-flight reviewer", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const openedRaw = await harness.plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "review-persist",
+            title: "Review persistence",
+            mode: "review_only",
+            requiredReviewers: ["spec"],
+          },
+        ],
+      } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const opened = parseToolJson<{
+      items?: Array<{ ok: boolean; workItemId?: string }>;
+    }>(openedRaw ?? "{}");
+    const openedItem = opened.items?.[0];
+    expect(openedItem?.ok).toBe(true);
+    const workItemId = openedItem?.workItemId ?? "";
+    expect(workItemId).toBeTruthy();
+    expect((await listItems(harness)).items.find((e) => e.workItemId === workItemId)?.state).toBe(
+      "awaiting_reviews",
+    );
+
+    const statePath = occupyStatePath();
+    const refused = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-reviewer-fail",
+      "vv-spec-reviewer",
+      workItemId,
+    )
+      .then(() => undefined)
+      .catch((error: Error) => error.message);
+    expect(String(refused)).toContain("LAUNCH_PERSISTENCE_FAILED");
+
+    // The refused launch was not published: the same reviewer can still be
+    // launched after I/O recovery (an in-memory in-flight mark would reject it).
+    rmSync(statePath, { recursive: true, force: true });
+    await launchTask(harness, ROOT_SESSION, "call-reviewer-ok", "vv-spec-reviewer", workItemId);
+    const listed = await listItems(harness);
+    const item = listed.items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("awaiting_reviews");
+  });
+
+  test("an ordinary tracked launch refuses without a durable transition", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const openedRaw = await harness.plugin.tool?.work_item_open?.execute(
+      {
+        items: [
+          {
+            key: "impl-persist",
+            title: "Implementation persistence",
+            mode: "implementation",
+            requiredReviewers: ["code"],
+          },
+        ],
+      } as never,
+      createStubToolContext(harness, ROOT_SESSION) as never,
+    );
+    const opened = parseToolJson<{ items?: Array<{ ok: boolean; workItemId?: string }> }>(
+      openedRaw ?? "{}",
+    );
+    const workItemId = opened.items?.[0]?.workItemId ?? "";
+    expect(opened.items?.[0]?.ok).toBe(true);
+    expect(workItemId).toBeTruthy();
+
+    const statePath = occupyStatePath();
+    const refused = await launchTask(
+      harness,
+      ROOT_SESSION,
+      "call-impl-fail",
+      "vv-implementer",
+      workItemId,
+    )
+      .then(() => undefined)
+      .catch((error: Error) => error.message);
+    expect(String(refused)).toContain("LAUNCH_PERSISTENCE_FAILED");
+
+    // After I/O recovery the ordinary launch proceeds.
+    rmSync(statePath, { recursive: true, force: true });
+    await launchTask(harness, ROOT_SESSION, "call-impl-ok", "vv-implementer", workItemId);
+    const item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.state).toBe("open");
+  });
+});
+// END_BLOCK_LAUNCH_PERSISTENCE_TESTS
+
+// START_BLOCK_NATIVE_CANCELLATION_RECOVERY_TESTS
+describe("native background settlement and explicit cancellation recovery", () => {
+  async function harnessWithTask(): Promise<{
+    harness: DelegatedPluginHarness;
+    workItemId: string;
+  }> {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    return { harness, workItemId };
+  }
+
+  test("a background subagent settles only on its native synthetic terminal delivery", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTaskWithArgs(
+      harness,
+      ROOT_SESSION,
+      "call-bg-term",
+      "vv-implementer",
+      `VVOC_WORK_ITEM_ID: ${workItemId}`,
+      { background: true },
+    );
+    await harness.plugin.afterRunning({
+      sessionID: ROOT_SESSION,
+      callID: "call-bg-term",
+      subagentType: "vv-implementer",
+      workItemId,
+      childSessionId: "ses_bg_child",
+    });
+    harness.sessions.set("ses_bg_child", { parentID: ROOT_SESSION });
+
+    let item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+
+    harness.emit({
+      type: "session.synthetic",
+      data: {
+        sessionID: ROOT_SESSION,
+        text: `<subagent sessionID="ses_bg_child" state="completed" description="task">\nVVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nBackground finished.\n</subagent>`,
+        metadata: { source: "subagent", childID: "ses_bg_child", state: "completed" },
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.state).toBe("awaiting_acceptance");
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+  });
+
+  function seedCancellationEvidence(
+    harness: DelegatedPluginHarness,
+    callId: string,
+    options: {
+      parentCompleted: number;
+      childCompleted: number;
+      childIdle?: number;
+      childError?: boolean;
+      /**
+       * Pinned parent subagent tool-part failure. Defaults to the child-cancelled
+       * shape; interruption tests seed one of the pinned native interrupt shapes.
+       */
+      parentFailure?: { type?: string; message: string };
+    },
+  ): void {
+    const childId = "ses_cancel_child";
+    const parentFailure = options.parentFailure ?? {
+      type: "tool.execution",
+      message: `Subagent cancelled (sessionID: ${childId})`,
+    };
+    harness.sessionMessages.set(ROOT_SESSION, [
+      {
+        id: "msg_parent",
+        type: "assistant",
+        content: [
+          {
+            type: "tool",
+            id: callId,
+            name: "subagent",
+            state: {
+              status: "error",
+              input: {},
+              error: {
+                type: parentFailure.type ?? "tool.execution",
+                message: parentFailure.message,
+              },
+              metadata: { sessionID: childId, status: "running" },
+            },
+            // Native timing is beside `state`, on the assistant tool part.
+            time: { created: 10, completed: options.parentCompleted },
+          },
+        ],
+        time: { created: 10 },
+      },
+    ]);
+    harness.sessions.set(childId, {
+      parentID: ROOT_SESSION,
+      ...(options.childIdle === undefined ? {} : { idle: options.childIdle }),
+      outcome: options.childError === false ? "succeeded" : "interrupted",
+    });
+    harness.sessionMessages.set(childId, [
+      {
+        id: "msg_child",
+        type: "assistant",
+        content: [{ type: "text", text: "cancelled work" }],
+        ...(options.childError === false
+          ? {}
+          : { error: { type: "aborted", message: "Interrupted by user" } }),
+        time: { created: 11, completed: options.childCompleted },
+      },
+    ]);
+  }
+
+  function persistedRecord(workItemId: string) {
+    const hydrated = hydrateWorkflowStateChecked(ROOT_SESSION);
+    if (hydrated.status !== "valid") return undefined;
+    for (const record of hydrated.data.records.values()) {
+      if (record.workItemId === workItemId) return record;
+    }
+    return undefined;
+  }
+
+  function persistedAttempt(workItemId: string) {
+    return persistedRecord(workItemId)?.delegated?.attempts[0];
+  }
+
+  test("explicit recovery settles a cancelled attempt with historical completion timestamps", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-cancel", "vv-implementer", workItemId);
+    seedCancellationEvidence(harness, "call-cancel", {
+      // Parent end is AFTER the child completion: max must select the parent.
+      parentCompleted: 70,
+      childCompleted: 55,
+    });
+
+    const recovered = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "The worker was cancelled by the host.",
+      changedCondition: "Resume after explicit native cancellation evidence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-cancel-1",
+    });
+    expect(recovered.ok).toBe(true);
+    const item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(1);
+    const record = persistedRecord(workItemId);
+    expect(record?.delegated?.recoveryHistory).toHaveLength(1);
+    expect(record?.delegated?.recoveryHistory[0]?.kind).toBe("resume");
+    const attempt = persistedAttempt(workItemId);
+    expect(attempt?.status).toBe("failed");
+    expect(attempt?.completedAt).toBe(new Date(70).toISOString());
+  });
+
+  test("explicit recovery settles a live root-interrupt attempt with the max historical completion timestamp", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-root-int", "vv-implementer", workItemId);
+    seedCancellationEvidence(harness, "call-root-int", {
+      // LIVE in-process root interrupt (step.ts TOOLS_INTERRUPTED composed by
+      // publish-llm-event.ts failTool): the parent tool part carries
+      // `Tool execution interrupted (sessionID: <child>)`, and the child's
+      // terminal abort lands later, so max must select the child completion.
+      parentCompleted: 40,
+      childCompleted: 55,
+      parentFailure: {
+        type: "aborted",
+        message: "Tool execution interrupted (sessionID: ses_cancel_child)",
+      },
+    });
+
+    const recovered = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "The root session was interrupted while the worker was running.",
+      changedCondition: "Resume after the explicit native root-interrupt evidence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-root-int-1",
+    });
+    expect(recovered.ok).toBe(true);
+    const item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.attempts).toBe(1);
+    const record = persistedRecord(workItemId);
+    expect(record?.delegated?.recoveryHistory).toHaveLength(1);
+    expect(record?.delegated?.recoveryHistory[0]?.kind).toBe("resume");
+    const attempt = persistedAttempt(workItemId);
+    expect(attempt?.status).toBe("failed");
+    expect(attempt?.completedAt).toBe(new Date(55).toISOString());
+  });
+
+  test("a bare tool interrupt without a subagent child session id never settles recovery", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-bare-int", "vv-implementer", workItemId);
+    seedCancellationEvidence(harness, "call-bare-int", {
+      parentCompleted: 70,
+      childCompleted: 55,
+      // No child session id in the message: never parent-cancelled evidence,
+      // even though the child itself aborted and is quiescent.
+      parentFailure: { type: "aborted", message: "Tool execution interrupted" },
+    });
+
+    const refused = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "Attempted recovery on a bare interrupt without child evidence.",
+      changedCondition: "Wait for authoritative cancellation evidence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-bare-int",
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.errorCode).toBe("CANCELLATION_EVIDENCE_REQUIRED");
+
+    const item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+    expect(item?.delegated?.attempts).toBe(1);
+    expect(item?.delegated?.recoveryCount ?? 0).toBe(0);
+    expect(persistedAttempt(workItemId)?.completedAt).toBeUndefined();
+  });
+
+  test("an active or incomplete cancellation child refuses recovery without changing budget", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-cancel-active", "vv-implementer", workItemId);
+    seedCancellationEvidence(harness, "call-cancel-active", {
+      parentCompleted: 70,
+      childCompleted: 55,
+    });
+    // The child is still reported active, so evidence is not quiescent.
+    harness.activeSessions.add("ses_cancel_child");
+
+    const refused = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "Attempted recovery while the child may still be active.",
+      changedCondition: "Wait for quiescence.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-cancel-active",
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.errorCode).toBe("CANCELLATION_EVIDENCE_REQUIRED");
+
+    const item = (await listItems(harness)).items.find((i) => i.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(true);
+    expect(item?.delegated?.attempts).toBe(1);
+    expect(item?.delegated?.recoveryCount ?? 0).toBe(0);
+
+    // A non-cancellation parent failure is never evidence either.
+    const generic = await harnessWithTask();
+    await launchTask(
+      generic.harness,
+      ROOT_SESSION,
+      "call-generic",
+      "vv-implementer",
+      generic.workItemId,
+    );
+    generic.harness.sessionMessages.set(ROOT_SESSION, [
+      {
+        id: "msg_parent_generic",
+        type: "assistant",
+        content: [
+          {
+            type: "tool",
+            id: "call-generic",
+            name: "subagent",
+            state: {
+              status: "error",
+              input: {},
+              error: { type: "provider.transport", message: "provider transport failure" },
+              metadata: { sessionID: "ses_cancel_child" },
+            },
+            time: { created: 10, completed: 70 },
+          },
+        ],
+        time: { created: 10 },
+      },
+    ]);
+    const refusedGeneric = await decide(generic.harness, {
+      workItemId: generic.workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "Generic transport failure is not cancellation evidence.",
+      changedCondition: "None.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-cancel-generic",
+    });
+    expect(refusedGeneric.ok).toBe(false);
+    expect(refusedGeneric.errorCode).toBe("CANCELLATION_EVIDENCE_REQUIRED");
+
+    // A missing parent tool-part historical timestamp is not evidence.
+    const missingTime = await harnessWithTask();
+    await launchTask(
+      missingTime.harness,
+      ROOT_SESSION,
+      "call-missing-time",
+      "vv-implementer",
+      missingTime.workItemId,
+    );
+    missingTime.harness.sessionMessages.set(ROOT_SESSION, [
+      {
+        id: "msg_parent_missing_time",
+        type: "assistant",
+        content: [
+          {
+            type: "tool",
+            id: "call-missing-time",
+            name: "subagent",
+            state: {
+              status: "error",
+              input: {},
+              error: {
+                type: "tool.execution",
+                message: "Subagent cancelled (sessionID: ses_cancel_child)",
+              },
+              metadata: { sessionID: "ses_cancel_child" },
+            },
+            // No `time.completed` beside the state.
+            time: { created: 10 },
+          },
+        ],
+        time: { created: 10 },
+      },
+    ]);
+    missingTime.harness.sessions.set("ses_cancel_child", { parentID: ROOT_SESSION, idle: 60 });
+    missingTime.harness.sessionMessages.set("ses_cancel_child", [
+      {
+        id: "msg_child_missing_time",
+        type: "assistant",
+        content: [{ type: "text", text: "cancelled" }],
+        error: { type: "aborted", message: "Interrupted by user" },
+        time: { created: 11, completed: 55 },
+      },
+    ]);
+    const refusedMissingTime = await decide(missingTime.harness, {
+      workItemId: missingTime.workItemId,
+      attempt: 1,
+      decision: "recover",
+      diagnosis: "Missing parent terminal timestamp.",
+      changedCondition: "None.",
+      verification: ["src/tasks/task-001.test.ts"],
+      recoveryId: "rec-cancel-missing-time",
+    });
+    expect(refusedMissingTime.ok).toBe(false);
+    expect(refusedMissingTime.errorCode).toBe("CANCELLATION_EVIDENCE_REQUIRED");
+  });
+
+  test("a fork session cannot run control mutations", async () => {
+    const { harness, workItemId } = await harnessWithTask();
+    await launchTask(harness, ROOT_SESSION, "call-fork", "vv-implementer", workItemId);
+    harness.sessions.set(ROOT_SESSION, { forkSessionID: "ses_root_origin" });
+    const denied = await decide(harness, {
+      workItemId,
+      attempt: 1,
+      decision: "accept",
+      rationale: "Fork controller attempt.",
+      evidence: ["diff"],
+    }).catch((error: Error) => error);
+    expect(String(denied)).toContain("fork");
+  });
+});
+// END_BLOCK_NATIVE_CANCELLATION_RECOVERY_TESTS
+
+// START_BLOCK_LAZY_CLIENT_RETRY_TESTS
+describe("lazy client acquisition recovery", () => {
+  test("a rejected acquisition is retried instead of cached forever", async () => {
+    const { workspaceRoot } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const decide = harness.plugin.tool?.work_item_decide;
+    expect(decide).toBeDefined();
+    const call = async () => {
+      try {
+        return await decide!.execute(
+          {
+            workItemId: "wi-missing",
+            attempt: 1,
+            decision: "accept",
+            rationale: "retry probe",
+            evidence: ["diff"],
+          } as never,
+          createStubToolContext(harness, ROOT_SESSION) as never,
+        );
+      } catch (error) {
+        return error as { code?: string; errorCode?: string };
+      }
+    };
+
+    harness.clientAcquireFails = true;
+    const first = await call();
+    expect((first as { code?: string }).code).toBe("HOST_CONTEXT_UNAVAILABLE");
+
+    // The rejected acquisition must not be cached: a later lookup authenticates.
+    harness.clientAcquireFails = false;
+    const second = await call();
+    expect(JSON.stringify(second)).toContain("WORK_ITEM_NOT_FOUND");
+  });
+});
+// END_BLOCK_LAZY_CLIENT_RETRY_TESTS
+
+// START_BLOCK_FOREGROUND_MALFORMED_SETTLEMENT_TESTS
+/**
+ * The foreground after hook parses a completed tracked report and may run one
+ * bounded continuation. A client-acquisition failure there must be contained
+ * locally so the attempt settles as a truthful report_rejected with the original
+ * excerpt instead of throwing out of the hook and staying in_flight.
+ */
+describe("foreground malformed settlement under client failure", () => {
+  test("a malformed report settles as report_rejected when client acquisition fails", async () => {
+    const { workspaceRoot, planPath } = await buildDelegatedWorkspace(1, [1], () => 1);
+    const harness = await createDelegatedPluginHarness(workspaceRoot);
+    const runId = await registerPlan(harness, planPath);
+    const workItemId = await taskWorkItemId(harness, runId, "T-001");
+    await launchTask(harness, ROOT_SESSION, "call-malformed-client", "vv-implementer", workItemId);
+
+    // The lazy client cannot be acquired exactly when the malformed report lands.
+    harness.clientAcquireFails = true;
+    const malformed = wrapTaskResult(
+      "ses_malformed_child",
+      `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: DONE`,
+    );
+    const finalText = await finishTaskWithRawOutput(
+      harness,
+      ROOT_SESSION,
+      "call-malformed-client",
+      "vv-implementer",
+      workItemId,
+      malformed,
+    );
+    // Settled through the original-output protocol path, never a forged DONE.
+    expect(finalText).toContain("RESULT_PROTOCOL_ERROR");
+    const item = (await listItems(harness)).items.find((entry) => entry.workItemId === workItemId);
+    expect(item?.delegated?.inFlightAttempt).toBe(false);
+    expect(item?.delegated?.reportRejectionCount).toBe(1);
+    expect(item?.state).not.toBe("awaiting_acceptance");
+
+    // A later acquisition succeeds because the rejected promise was not cached.
+    harness.clientAcquireFails = false;
+    const probe = await harness.plugin
+      .tool!.work_item_decide!.execute(
+        {
+          workItemId,
+          attempt: 1,
+          decision: "accept",
+          rationale: "probe",
+          evidence: ["diff"],
+        } as never,
+        createStubToolContext(harness, ROOT_SESSION) as never,
+      )
+      .then((value) => value as { code?: string })
+      .catch((error: { code?: string }) => error);
+    expect(probe.code).not.toBe("HOST_CONTEXT_UNAVAILABLE");
+
+    // Later pump events still process on the same live subscription: the
+    // deletion removes this session's store so the item is no longer listed.
+    harness.emit({ type: "session.deleted", data: { sessionID: ROOT_SESSION } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const afterDelete = await listItems(harness);
+    expect(afterDelete.items.find((entry) => entry.workItemId === workItemId)).toBeUndefined();
+  });
+});
+// END_BLOCK_FOREGROUND_MALFORMED_SETTLEMENT_TESTS

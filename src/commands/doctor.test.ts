@@ -24,7 +24,6 @@ import { join } from "node:path";
 import doctorCommand from "./doctor.js";
 import {
   ensurePackageInstalled,
-  ensureTuiPackageInstalled,
   installVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
@@ -45,14 +44,19 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     });
 
     await ensurePackageInstalled(paths);
-    await ensureTuiPackageInstalled(paths);
     await syncManagedAgentRegistrations(paths);
     await installVvocConfig(paths);
 
     const opencodeConfig = JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
-      model?: string;
+      plugins?: Array<string | { package: string; options?: Record<string, unknown> }>;
     };
-    opencodeConfig.model = "vv-role:missing";
+    const managedEntry = opencodeConfig.plugins?.find(
+      (entry) => typeof entry === "object" && entry.package.includes("vv-opencode"),
+    );
+    if (!managedEntry || typeof managedEntry === "string") {
+      throw new Error("managed plugin entry missing");
+    }
+    managedEntry.options = { modelIntent: { model: "vv-role:missing" } };
     await writeFile(
       paths.opencodeConfigPath,
       JSON.stringify(opencodeConfig, null, 2) + "\n",
@@ -74,14 +78,12 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
     });
 
     expect(stdout).toContain("Roles:");
-    expect(stdout).toContain(`OpenCode TUI source: project ${paths.opencodeTuiConfigPath}`);
-    expect(stdout).toContain("OpenCode TUI config parse: ok");
     expect(stdout).toContain("OpenCode version:");
-    expect(stdout).toContain("OpenCode TUI minimum: 1.18.2");
-    expect(stdout).toContain("TUI package configured: yes");
+    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <2.0.19");
+    expect(stdout).toContain("TUI package registered: yes");
     expect(stderr).toContain("Problems:");
     expect(stderr).toContain(
-      "unresolved role reference at model: vv-role:missing (missing role: missing)",
+      "unresolved role reference at modelIntent.model: vv-role:missing (missing role: missing)",
     );
     expect(process.exitCode ?? 0).toBe(1);
   } finally {
@@ -106,7 +108,6 @@ test("doctor reports invalid vvoc config and exits non-zero without mutating it"
     });
 
     await ensurePackageInstalled(paths);
-    await ensureTuiPackageInstalled(paths);
     await installVvocConfig(paths);
     const invalidText =
       JSON.stringify({ ...createDefaultVvocConfig(), version: 2 }, null, 2) + "\n";
@@ -141,9 +142,9 @@ test("doctor reports invalid vvoc config and exits non-zero without mutating it"
   }
 });
 
-test("doctor reports malformed TUI config and exits non-zero without mutating it", async () => {
-  const configHome = await mkdtemp(join(tmpdir(), "vvoc-doctor-invalid-tui-config-"));
-  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-doctor-invalid-tui-project-"));
+test("doctor reports malformed native plugins and exits non-zero without mutating it", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-doctor-invalid-opencode-config-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-doctor-invalid-opencode-project-"));
   const initialCwd = process.cwd();
   const initialExitCode = process.exitCode;
 
@@ -155,8 +156,8 @@ test("doctor reports malformed TUI config and exits non-zero without mutating it
     });
     await ensurePackageInstalled(paths);
     await installVvocConfig(paths);
-    const invalidText = '{ "plugin": [["broken"]] }\n';
-    await writeFile(paths.opencodeTuiConfigPath, invalidText, "utf8");
+    const invalidText = '{ "plugins": [["broken"]] }\n';
+    await writeFile(paths.opencodeConfigPath, invalidText, "utf8");
 
     process.chdir(projectDir);
     process.exitCode = 0;
@@ -166,12 +167,11 @@ test("doctor reports malformed TUI config and exits non-zero without mutating it
       ).run({ args: { scope: "project", "config-dir": configHome } });
     });
 
-    expect(stdout).toContain(`OpenCode TUI config: ${paths.opencodeTuiConfigPath}`);
-    expect(stdout).toContain("OpenCode TUI config parse:");
-    expect(stdout).toContain('expected "plugin[0]"');
-    expect(stderr).toContain(paths.opencodeTuiConfigPath);
+    expect(stdout).toContain("OpenCode config parse:");
+    expect(stdout).toContain('expected "plugins[0]"');
+    expect(stderr).toContain(paths.opencodeConfigPath);
     expect(process.exitCode ?? 0).toBe(1);
-    expect(await readFile(paths.opencodeTuiConfigPath, "utf8")).toBe(invalidText);
+    expect(await readFile(paths.opencodeConfigPath, "utf8")).toBe(invalidText);
   } finally {
     process.chdir(initialCwd);
     process.exitCode = initialExitCode ?? 0;

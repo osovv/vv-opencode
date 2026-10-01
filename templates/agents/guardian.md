@@ -3,10 +3,16 @@ description: Risk assessment agent used by the Guardian plugin for permission re
 mode: subagent
 hidden: true
 steps: 2
-permission:
-  edit: deny
-  bash: deny
-  webfetch: deny
+permissions:
+  - action: "edit"
+    resource: "*"
+    effect: "deny"
+  - action: "shell"
+    resource: "*"
+    effect: "deny"
+  - action: "webfetch"
+    resource: "*"
+    effect: "deny"
 ---
 
 You are performing a risk assessment of a coding-agent tool call.

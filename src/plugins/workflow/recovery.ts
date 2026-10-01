@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Durable committed-recovery and staged-transaction machinery over the per-session persistence seam.
 //   SCOPE: Serialized generic tool transactions (staged persist before publish with per-session queueing), durably committed recovery mutations with synchronous persist and rollback so launch permissions appear only after a durable write, and record/checkpoint capture-restore helpers for rollback. No tool definitions, authorization checks, or domain reducers here.
-//   DEPENDS: [@opencode-ai/plugin (Plugin type), src/plugins/workflow/state.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/transactions.ts]
+//   DEPENDS: [src/plugins/workflow/host.ts (WorkflowDiagnosticSink), src/plugins/workflow/state.ts, src/plugins/workflow/persistence.ts, src/plugins/workflow/transactions.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-PERSISTENCE, M-WORKFLOW-STATE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -16,14 +16,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - commitGenericToolResult takes the trusted expected tool identity and validates every owned staged success against it (missing/wrong tag, malformed nested result, and a thrown validator are fail-closed); a thrown validator is summarized safely by name without echoing its message; invalid hydration is a persistence failure and post-apply rollback throws carry persistence category plus an explicit rolled_back outcome.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Replaced the V1 PluginClient failure logging with the host-neutral credential-safe WorkflowDiagnosticSink; transaction and rollback semantics are unchanged.]
 // END_CHANGE_SUMMARY
 
-import type { Plugin } from "@opencode-ai/plugin";
 import { createRecordLookupKey, createWorkItemStoreView, type WorkItemStore } from "./state.js";
 import { snapshotWorkflowStateChecked } from "./persistence.js";
 import { runWorkflowTransaction, WorkflowTransactionQueue } from "./transactions.js";
 import { formatContractIssues } from "../../lib/agent-tool-contract.js";
+import type { WorkflowDiagnosticSink } from "./host.js";
 import {
   normalizeWorkflowFailure,
   validateWorkflowToolResult,
@@ -32,11 +32,9 @@ import {
   type WorkflowToolResultToolId,
 } from "./results.js";
 
-/** Plugin client shape used for failure logging. */
-type PluginClient = Parameters<Plugin>[0]["client"];
-
+/** Plugin diagnostic shape used for failure logging. */
 export type RecoverySupportContext = {
-  client: PluginClient;
+  diagnostics: WorkflowDiagnosticSink;
   stores: Map<string, WorkItemStore>;
   invalidHydrationSessions: Set<string>;
 };
@@ -58,7 +56,7 @@ export type RecoverySupport = {
 };
 
 export function createRecoverySupport(context: RecoverySupportContext): RecoverySupport {
-  const { client, stores, invalidHydrationSessions } = context;
+  const { diagnostics, stores, invalidHydrationSessions } = context;
 
   // Per-session serialization for generic mutating tool calls. The staged
   // snapshot persists before the committed state is published, so a failed
@@ -141,17 +139,11 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
     });
     if (!outcome.ok) {
       if (outcome.invalidResult === true) {
-        void client.app
-          .log({
-            body: {
-              service: "workflow",
-              level: "error",
-              message:
-                "[workflow][generic][BLOCK_RESULT_CONTRACT] staged result failed its contract",
-              extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
-            },
-          })
-          .catch(() => undefined);
+        diagnostics.log({
+          level: "error",
+          message: "[workflow][generic][BLOCK_RESULT_CONTRACT] staged result failed its contract",
+          extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
+        });
         // Nothing was persisted or published, so the observed outcome is
         // not_applied; report a bounded internal contract failure rather than
         // an INVALID_INPUT request or an unqualified retry.
@@ -162,16 +154,11 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
           outcome: "not_applied",
         });
       }
-      void client.app
-        .log({
-          body: {
-            service: "workflow",
-            level: "error",
-            message: "[workflow][generic][BLOCK_GENERIC_COMMIT] persistence failed",
-            extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
-          },
-        })
-        .catch(() => undefined);
+      diagnostics.log({
+        level: "error",
+        message: "[workflow][generic][BLOCK_GENERIC_COMMIT] persistence failed",
+        extra: { sessionID: sessionId, error: outcome.error.slice(0, 300) },
+      });
       return normalizeWorkflowFailure({
         tool: toolId,
         sessionId,
@@ -217,16 +204,11 @@ export function createRecoverySupport(context: RecoverySupportContext): Recovery
     const persisted = snapshotWorkflowStateChecked(sessionId, liveStore.getStoreData());
     if (!persisted.ok) {
       restore();
-      void client.app
-        .log({
-          body: {
-            service: "workflow",
-            level: "error",
-            message: "[workflow][recovery][BLOCK_RECOVERY_COMMIT] recovery persistence failed",
-            extra: { sessionID: sessionId, error: persisted.error.slice(0, 300) },
-          },
-        })
-        .catch(() => undefined);
+      diagnostics.log({
+        level: "error",
+        message: "[workflow][recovery][BLOCK_RECOVERY_COMMIT] recovery persistence failed",
+        extra: { sessionID: sessionId, error: persisted.error.slice(0, 300) },
+      });
       // The mutation was applied in memory and then rolled back; report the
       // observed outcome truthfully without promising a safe replay.
       throw new WorkflowDiagnosticError(

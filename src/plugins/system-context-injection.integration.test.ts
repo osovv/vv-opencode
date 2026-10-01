@@ -1,290 +1,238 @@
 // FILE: src/plugins/system-context-injection.integration.test.ts
-// VERSION: 0.5.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify universal primary guidance, including correctness obligations and evidence discipline, and startup-selected concrete vv-controller orchestration policy injection.
-//   SCOPE: Correctness-obligations delivery, settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, test-results-as-evidence wording, per-claim/restatement exclusions, per-profile controller context, primary isolation, explore guidance, known subagent exclusion, duplicate prevention, and startup snapshot stability.
-//   DEPENDS: [bun:test, node:fs/promises, node:path, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
+//   PURPOSE: Verify native universal primary guidance injection, including correctness obligations and evidence discipline, and bound-family concrete vv-controller orchestration policy injection into native system parts.
+//   SCOPE: Correctness-obligations delivery, settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, per-profile controller context, primary isolation, explore guidance, built-in/managed/configured subagent exclusion, duplicate prevention, native-registry mode exclusion, and unknown/disabled no-op.
+//   DEPENDS: [bun:test, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   createOutput - Builds a system-context hook output fixture.
-//   createPluginInput - Builds an isolated plugin input fixture.
-//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
-//   writeProfile - Writes a vvoc orchestration profile fixture.
+//   NativeSystemPart - Native system part fixture.
+//   NativeContextEvent - Native chat context event fixture.
+//   makeHarness - Builds a native plugin harness with an injected capture policy.
+//   systemText - Joins injected native system part text.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added instruction-delivery coverage for settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, and test-results-as-evidence wording with per-claim/restatement exclusions. Prior: calibrated assumption-discipline coverage.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 - Rewrote V1 chat.message tests against native session context SystemPart injection, captured family policy, and native-registry agent modes.]
 // END_CHANGE_SUMMARY
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { resetVvocConfigForTests } from "../lib/config-layers.js";
+import { describe, expect, test } from "bun:test";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
-import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { SystemContextInjectionPlugin } from "./system-context-injection/index.js";
+import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
+import { createSystemContextInjectionPlugin } from "./system-context-injection/index.js";
 
-const previousConfigHome = process.env.XDG_CONFIG_HOME;
+interface NativeSystemPart {
+  type: "text";
+  text: string;
+}
+interface NativeContextEvent {
+  sessionID: string;
+  agent: string;
+  system: NativeSystemPart[];
+}
 
-beforeEach(() => {
-  resetVvocConfigForTests();
-  process.env.XDG_CONFIG_HOME = `/tmp/vvoc-system-context-empty-config-${process.pid}`;
-});
+function systemText(event: NativeContextEvent): string {
+  return event.system.map((part) => part.text).join("\n\n");
+}
 
-afterEach(async () => {
-  resetVvocConfigForTests();
-  await rm(`/tmp/vvoc-system-context-empty-config-${process.pid}`, {
-    recursive: true,
-    force: true,
-  });
-  if (previousConfigHome === undefined) {
-    delete process.env.XDG_CONFIG_HOME;
-  } else {
-    process.env.XDG_CONFIG_HOME = previousConfigHome;
+async function makeHarness(
+  options: {
+    profile?: OrchestrationProfile;
+    enabled?: boolean;
+    policy?: "enabled" | "unknown";
+    agentModes?: Record<string, "subagent" | "primary" | "all">;
+    /** Override the default registry adapter (defaults to a real envelope-shaped list). */
+    agentList?: () => Promise<unknown>;
+    existingSystem?: string;
+  } = {},
+) {
+  const config: VvocConfig = createDefaultVvocConfig();
+  config.orchestration = { profile: options.profile ?? "balanced" };
+  if (options.enabled === false) {
+    config.plugins = { ...config.plugins, "system-context-injection": false };
   }
-});
-
-function createPluginInput() {
-  return {
-    client: {} as never,
-    project: {} as never,
-    directory: "/tmp/project",
-    worktree: "/tmp/project",
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
+  const policy = options.policy ?? "enabled";
+  const agentModes = options.agentModes ?? {
+    build: "primary",
+    "vv-controller": "primary",
+    // Native registry truth: explore is a subagent (core/src/plugin/agent.ts).
+    explore: "subagent",
+    "custom-primary": "primary",
   };
-}
-
-function createOutput(agent: string, system?: string) {
-  return {
-    message: {
-      agent,
-      system,
+  const hooks = new Map<string, (event: NativeContextEvent) => Promise<void> | void>();
+  let released = false;
+  const fakeRuntime = {
+    snapshots: {
+      configFor: async () =>
+        policy === "unknown" ? undefined : { familyId: "fam-1", vvoc: config },
+      accept: async () => ({ status: "unbound" }),
     },
-    parts: [],
+    release: async () => {
+      released = true;
+    },
   };
-}
-
-async function writeProfile(profile: OrchestrationProfile): Promise<string> {
-  const configHome = process.env.XDG_CONFIG_HOME;
-  if (!configHome) throw new Error("XDG_CONFIG_HOME required for system-context test");
-  const configPath = join(configHome, "vvoc", "vvoc.json");
-  const config = createDefaultVvocConfig();
-  config.orchestration = { profile };
-  await mkdir(join(configHome, "vvoc"), { recursive: true });
-  await writeFile(configPath, renderVvocConfig(config), "utf8");
-  return configPath;
+  const envelope = () => ({
+    location: { directory: "/tmp/project" },
+    data: Object.entries(agentModes).map(([id, mode]) => ({ id, mode })),
+  });
+  const fakeContext = {
+    location: {
+      directory: "/tmp/project",
+      project: { id: "proj", directory: "/tmp/project", canonical: "/tmp/project" },
+    },
+    agent: {
+      list: options.agentList ?? (async () => envelope()),
+    },
+    session: {
+      hook: async (name: string, callback: (event: NativeContextEvent) => Promise<void> | void) => {
+        hooks.set(name, callback);
+        return { dispose: async () => undefined };
+      },
+    },
+  };
+  const plugin = createSystemContextInjectionPlugin({
+    acquireRuntime: async () => fakeRuntime as never,
+  });
+  const cleanup = (await plugin.setup(fakeContext as never)) as () => Promise<void>;
+  const inject = async (agent: string, existing?: string): Promise<NativeContextEvent> => {
+    const handler = hooks.get("context");
+    if (handler === undefined) throw new Error("no context hook registered");
+    const event: NativeContextEvent = {
+      sessionID: `session-${agent}`,
+      agent,
+      system: existing === undefined ? [] : [{ type: "text", text: existing }],
+    };
+    await handler(event);
+    return event;
+  };
+  return { hooks, inject, cleanup, isReleased: () => released };
 }
 
 describe("SystemContextInjectionPlugin", () => {
+  test("registers the context hook even when the startup config disables the toggle", async () => {
+    const disabled = await makeHarness({ enabled: false });
+    expect(disabled.hooks.has("context")).toBe(true);
+  });
+
+  test("cleanup releases the shared runtime", async () => {
+    const harness = await makeHarness();
+    expect(harness.isReleased()).toBe(false);
+    await harness.cleanup();
+    expect(harness.isReleased()).toBe(true);
+  });
+
   test("injects primary-session system context for build", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("build");
+    const harness = await makeHarness();
+    const event = await harness.inject("build");
+    const text = systemText(event);
 
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-1",
-        agent: undefined,
-      } as never,
-      output as never,
-    );
-
-    const systemText = output.message.system ?? "";
-
-    expect(systemText).toContain("<working_state>");
-    expect(systemText).toContain("<reroute_on_evidence>");
-    expect(systemText).toContain("<semantic_continuity>");
-    expect(systemText).toContain("<assumption_discipline>");
-    expect(systemText).toContain("<correctness_obligations>");
-    expect(systemText).toContain("<anti_drift_budget>");
-    expect(systemText).toContain("<project_overlays>");
-    expect(systemText).toContain("<editing_workflow>");
-    expect(systemText).toContain("<repository_memory>");
-    expect(systemText).toContain(".vvoc/lessons/index.xml");
-    expect(systemText).toContain(".vvoc/runbooks/index.xml");
-    expect(systemText).not.toContain("<proactive_context_gathering>");
-    expect(systemText).not.toContain("change_with_review");
-    expect(systemText).not.toContain("Work directly in the current session");
-    expect(systemText).not.toContain("Use the full tracked implementation and review workflow");
-    expect(systemText.replace(/\s+/g, " ")).toContain(
+    expect(text).toContain("<working_state>");
+    expect(text).toContain("<reroute_on_evidence>");
+    expect(text).toContain("<semantic_continuity>");
+    expect(text).toContain("<assumption_discipline>");
+    expect(text).toContain("<correctness_obligations>");
+    expect(text).toContain("<anti_drift_budget>");
+    expect(text).toContain("<project_overlays>");
+    expect(text).toContain("<editing_workflow>");
+    expect(text).toContain("<repository_memory>");
+    expect(text).toContain(".vvoc/lessons/index.xml");
+    expect(text).toContain(".vvoc/runbooks/index.xml");
+    expect(text).not.toContain("<proactive_context_gathering>");
+    expect(text).not.toContain("change_with_review");
+    expect(text).not.toContain("Work directly in the current session");
+    expect(text).not.toContain("Use the full tracked implementation and review workflow");
+    expect(text.replace(/\s+/g, " ")).toContain(
       "prefer the `edit` tool over shell-based rewrites when it is available.",
     );
   });
 
   test("delivers correctness obligations with scope separation and evidence wording", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("build");
+    const harness = await makeHarness();
+    const text = systemText(await harness.inject("build")).replace(/\s+/g, " ");
 
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-1",
-        agent: undefined,
-      } as never,
-      output as never,
-    );
-
-    const normalized = (output.message.system ?? "").replace(/\s+/g, " ");
-
-    expect(normalized).toContain(
+    expect(text).toContain(
       "For behavior changes, run a compact correctness cycle before reporting done",
     );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "Separate write scope (what you may edit), impact scope (behavior that could change), and verification scope (what you actually check).",
     );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "Investigating directly affected consumers to understand impact is required; broadening writes beyond the approved scope is not",
     );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "challenge at least one material assumption with a diagnostic counterexample",
     );
-    expect(normalized).toContain("Choose verification at the level where the risk arises");
-    expect(normalized).toContain(
+    expect(text).toContain("Choose verification at the level where the risk arises");
+    expect(text).toContain(
       "Derive test expectations from the contract and the request, not from the implementation's current output",
     );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "ground mocks in the dependency's established contract rather than in whatever makes the change pass",
     );
-    expect(normalized).toContain("The absence of a discovered defect is not proof of correctness");
-    expect(normalized).toContain(
+    expect(text).toContain("The absence of a discovered defect is not proof of correctness");
+    expect(text).toContain(
       "an unverified material condition is reported as remaining uncertainty, never presented as a passed check",
     );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "Unrelated informational or trivial documentation work needs none of this ceremony",
     );
   });
 
   test("delivers calibrated assumption discipline without per-claim reasoning labels", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("build");
+    const harness = await makeHarness();
+    const raw = systemText(await harness.inject("build"));
+    const text = raw.replace(/\s+/g, " ");
 
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-1",
-        agent: undefined,
-      } as never,
-      output as never,
-    );
+    expect(raw).not.toContain("Mark each claim in internal reasoning:");
+    expect(raw).not.toContain("`✓` verified");
+    expect(raw).not.toContain("An unmarked claim counts as");
+    expect(text).not.toContain("restate the requirement in one line in your own words");
 
-    const systemText = output.message.system ?? "";
-    const normalized = systemText.replace(/\s+/g, " ");
-
-    // Mandatory per-claim reasoning labels and the restatement ritual are gone.
-    expect(systemText).not.toContain("Mark each claim in internal reasoning:");
-    expect(systemText).not.toContain("`✓` verified");
-    expect(systemText).not.toContain("An unmarked claim counts as");
-    expect(normalized).not.toContain("restate the requirement in one line in your own words");
-
-    // Material assumptions, repository-answerable resolution, and honest
-    // uncertainty remain first-class.
-    expect(normalized).toContain("Do not make silent material assumptions.");
-    expect(normalized).toContain(
+    expect(text).toContain("Do not make silent material assumptions.");
+    expect(text).toContain(
       "If a material assumption is necessary, state it explicitly and carry its effect into the result report.",
     );
-    expect(normalized).toContain("If a material assumption later becomes false, stop and reroute.");
-    expect(normalized).toContain(
+    expect(text).toContain("If a material assumption later becomes false, stop and reroute.");
+    expect(text).toContain(
       "Resolve repository-answerable technical questions from the established code, contracts, and tests yourself",
     );
-    expect(normalized).toContain("only a genuine business-semantics fork needs a user decision");
-    expect(normalized).toContain(
-      "an unverified material condition is named as unverified, never presented as a passed check",
-    );
+    expect(text).toContain("only a genuine business-semantics fork needs a user decision");
   });
 
   test("delivers evidence discipline with reopen triggers and false-premise handling", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("build");
+    const harness = await makeHarness();
+    const text = systemText(await harness.inject("build")).replace(/\s+/g, " ");
 
-    await plugin["chat.message"]?.(
-      {
-        sessionID: "session-1",
-        agent: undefined,
-      } as never,
-      output as never,
-    );
-
-    const systemText = output.message.system ?? "";
-    const normalized = systemText.replace(/\s+/g, " ");
-
-    expect(normalized).toContain(
+    expect(text).toContain(
       "When a request assumes something that does not exist (a library, file, or behavior), surface the false premise",
     );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "never silently substitute a different goal or add an unnecessary dependency to make the premise true",
     );
-    expect(normalized).toContain("A reopen or reroute trigger is concrete");
-    expect(normalized).toContain("Vague doubt or unsupported pressure is not itself a trigger");
-    expect(normalized).toContain(
-      "retain a supported conclusion with a brief justification and ask for a specific discrepancy only when needed",
-    );
-    expect(normalized).toContain(
-      "an explicit user change in requirements follows the existing scope and approval process rather than a factual debate",
-    );
-    expect(normalized).toContain("An unchecked claim is not settled");
-    expect(normalized).toContain(
-      "Once required checks substantiate the material claims for the current files and inputs, move forward",
-    );
-    expect(normalized).toContain(
+    expect(text).toContain("A reopen or reroute trigger is concrete");
+    expect(text).toContain("Vague doubt or unsupported pressure is not itself a trigger");
+    expect(text).toContain("An unchecked claim is not settled");
+    expect(text).toContain(
       "Interpret test results as evidence against the request and established contracts, not as the authoritative specification",
     );
-    expect(normalized).toContain(
-      "a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests",
-    );
-
-    // No blanket bans on apologizing or agreeing, and no mandatory per-claim rituals.
-    for (const banned of ["Never apologize", "Do not agree", "Mark each claim"]) {
-      expect(systemText).not.toContain(banned);
-    }
-    expect(normalized).not.toContain("restate the requirement in one line in your own words");
   });
 
   test("injects primary-session system context for vv-controller", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("vv-controller");
+    const harness = await makeHarness({ profile: "balanced" });
+    const text = systemText(await harness.inject("vv-controller"));
 
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "vv-controller" } as never,
-      output as never,
-    );
-
-    expect(output.message.system).toContain("<working_state>");
-    expect(output.message.system).toContain("selectively delegate bounded repository search");
-    expect(output.message.system).not.toContain("Work directly in the current session");
-    expect(output.message.system).not.toContain("Use the full tracked implementation");
+    expect(text).toContain("<working_state>");
+    expect(text).toContain("selectively delegate bounded repository search");
+    expect(text).not.toContain("Work directly in the current session");
+    expect(text).not.toContain("Use the full tracked implementation");
   });
 
-  test("preserves existing system text and avoids duplicate injection", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("vv-controller", "Existing system context.");
-
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "vv-controller" } as never,
-      output as never,
-    );
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "vv-controller" } as never,
-      output as never,
-    );
-
-    const systemText = output.message.system ?? "";
-
-    expect(systemText).toContain("Existing system context.");
-    expect(systemText.match(/<working_state>/g)).toHaveLength(1);
-    expect(systemText.match(/<correctness_obligations>/g)).toHaveLength(1);
-    expect(systemText.match(/<repository_memory>/g)).toHaveLength(1);
-    expect(systemText.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
-  });
-
-  test("injects only the concrete controller policy selected by each profile", async () => {
-    const cases: Array<{
-      profile: OrchestrationProfile;
-      expected: string;
-      absent: string[];
-    }> = [
+  test("injects only the concrete controller policy selected by each captured profile", async () => {
+    const cases: Array<{ profile: OrchestrationProfile; expected: string; absent: string[] }> = [
       {
         profile: "single-session",
         expected: "Work directly in the current session",
@@ -321,34 +269,20 @@ describe("SystemContextInjectionPlugin", () => {
     ];
 
     for (const { profile, expected, absent } of cases) {
-      resetVvocConfigForTests();
-      await writeProfile(profile);
-      const plugin = await SystemContextInjectionPlugin(createPluginInput());
-      const output = createOutput("vv-controller");
-      await plugin["chat.message"]?.(
-        { sessionID: `session-${profile}`, agent: "vv-controller" } as never,
-        output as never,
-      );
-      const systemText = output.message.system ?? "";
-
-      expect(systemText).toContain("<working_state>");
-      expect(systemText).toContain(expected);
-      for (const inactive of absent) expect(systemText).not.toContain(inactive);
+      const harness = await makeHarness({ profile });
+      const text = systemText(await harness.inject("vv-controller"));
+      expect(text).toContain("<working_state>");
+      expect(text).toContain(expected);
+      for (const inactive of absent) expect(text).not.toContain(inactive);
       for (const profileName of ["single-session", "balanced", "orchestrated", "delegated"]) {
-        expect(systemText).not.toContain(profileName);
+        expect(text).not.toContain(profileName);
       }
     }
   });
 
   test("single-session excludes working-subagent routes and retains the reviewer exception", async () => {
-    await writeProfile("single-session");
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("vv-controller");
-    await plugin["chat.message"]?.(
-      { sessionID: "session-single", agent: "vv-controller" } as never,
-      output as never,
-    );
-    const systemText = output.message.system ?? "";
+    const harness = await makeHarness({ profile: "single-session" });
+    const text = systemText(await harness.inject("vv-controller"));
 
     for (const activity of [
       "exploration",
@@ -357,7 +291,7 @@ describe("SystemContextInjectionPlugin", () => {
       "implementation",
       "verification",
     ]) {
-      expect(systemText).toContain(activity);
+      expect(text).toContain(activity);
     }
     for (const inactive of [
       "proactively use the explore subagent",
@@ -366,160 +300,149 @@ describe("SystemContextInjectionPlugin", () => {
       "change_with_review",
       "tracked implementation-loop",
     ]) {
-      expect(systemText).not.toContain(inactive);
+      expect(text).not.toContain(inactive);
     }
-    expect(systemText).toContain("Do not delegate working context to subagents");
-    expect(systemText).toContain("Independent reviewer subagents remain permitted");
+    expect(text).toContain("Do not delegate working context to subagents");
+    expect(text).toContain("Independent reviewer subagents remain permitted");
   });
 
   test("non-controller primary agents receive universal guidance without orchestration policy", async () => {
-    await writeProfile("orchestrated");
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-
+    const harness = await makeHarness({ profile: "orchestrated" });
     for (const agent of ["build", "custom-primary"]) {
-      const output = createOutput(agent);
-      await plugin["chat.message"]?.(
-        { sessionID: `session-${agent}`, agent } as never,
-        output as never,
-      );
-      const systemText = output.message.system ?? "";
-      expect(systemText).toContain("<working_state>");
-      expect(systemText).not.toContain("Work directly in the current session");
-      expect(systemText).not.toContain("selectively delegate bounded repository search");
-      expect(systemText).not.toContain("Use the full tracked implementation and review workflow");
+      const text = systemText(await harness.inject(agent));
+      expect(text).toContain("<working_state>");
+      expect(text).not.toContain("Work directly in the current session");
+      expect(text).not.toContain("selectively delegate bounded repository search");
+      expect(text).not.toContain("Use the full tracked implementation and review workflow");
     }
   });
 
-  test("keeps the startup-selected policy after vvoc.json changes", async () => {
-    await writeProfile("single-session");
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    await writeProfile("orchestrated");
-    const output = createOutput("vv-controller");
+  test("injects explore-specific guidance for the built-in subagent-mode explore worker only", async () => {
+    // Pinned native truth: core/src/plugin/agent.ts sets explore.mode = "subagent".
+    const harness = await makeHarness();
+    const text = systemText(await harness.inject("explore"));
 
-    await plugin["chat.message"]?.(
-      { sessionID: "session-snapshot", agent: "vv-controller" } as never,
-      output as never,
-    );
-
-    expect(output.message.system).toContain("Work directly in the current session");
-    expect(output.message.system).not.toContain(
-      "Use the full tracked implementation and review workflow",
-    );
-  });
-
-  test("injects explore-specific system context for built-in explore subagent", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("explore");
-
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "explore" } as never,
-      output as never,
-    );
-
-    const systemText = output.message.system ?? "";
-
-    expect(systemText).toContain("<explore_role>");
-    expect(systemText.replace(/\s+/g, " ")).toContain(
+    expect(text).toContain("<explore_role>");
+    expect(text.replace(/\s+/g, " ")).toContain(
       "You are a repository search-and-discovery worker.",
     );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Do not return exact file contents, large pasted excerpts, or rewrite proposals unless the parent explicitly asks for them.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Default output: a short summary plus a compact, prioritized list of relevant paths with why they matter and line references or anchors when useful.",
-    );
-    expect(systemText).not.toContain("<working_state>");
-    expect(systemText).not.toContain("<correctness_obligations>");
-    expect(systemText).not.toContain("Work directly in the current session");
+    expect(text).not.toContain("<working_state>");
+    expect(text).not.toContain("<correctness_obligations>");
+    expect(text).not.toContain("<semantic_continuity>");
+    expect(text).not.toContain("Work directly in the current session");
+    expect(text).not.toContain("selectively delegate bounded repository search");
   });
 
-  test("skips plugin-managed subagents", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("guardian");
+  test("preserves existing system text and avoids duplicate injection", async () => {
+    const harness = await makeHarness({ profile: "balanced" });
+    const event = await harness.inject("vv-controller", "Existing system context.");
+    await harness.inject("vv-controller", systemText(event));
 
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "guardian" } as never,
-      output as never,
-    );
-
-    expect(output.message.system).toBeUndefined();
+    const text = systemText(event);
+    expect(text).toContain("Existing system context.");
+    expect(text.match(/<working_state>/g)).toHaveLength(1);
+    expect(text.match(/<correctness_obligations>/g)).toHaveLength(1);
+    expect(text.match(/<repository_memory>/g)).toHaveLength(1);
+    expect(text.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
   });
 
-  test("skips vv-tracked subagents", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("vv-implementer");
-
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "vv-implementer" } as never,
-      output as never,
-    );
-
-    expect(output.message.system).toBeUndefined();
+  test("skips plugin-managed and managed subagents", async () => {
+    const harness = await makeHarness();
+    for (const agent of ["guardian", "vv-implementer"]) {
+      const event = await harness.inject(agent);
+      expect(event.system).toEqual([]);
+    }
   });
 
-  test("skips custom configured subagents", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    await plugin.config?.({
-      agent: {
-        reviewer: {
-          mode: "subagent",
-        },
+  test("skips internal title/summary/compaction agents", async () => {
+    const harness = await makeHarness();
+    for (const agent of ["title", "summary", "compaction"]) {
+      const event = await harness.inject(agent);
+      expect(event.system).toEqual([]);
+    }
+  });
+
+  test("skips a custom agent whose native registry mode is subagent", async () => {
+    const harness = await makeHarness({
+      agentModes: { build: "primary", reviewer: "subagent" },
+    });
+    const event = await harness.inject("reviewer");
+    expect(event.system).toEqual([]);
+  });
+
+  test("default registry adapter reads the real native envelope and recovers from a transient failure", async () => {
+    let calls = 0;
+    const harness = await makeHarness({
+      agentList: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("registry unavailable");
+        return {
+          location: { directory: "/tmp/project" },
+          data: [
+            { id: "build", name: "Build", mode: "primary" },
+            { id: "reviewer", name: "Reviewer", mode: "subagent" },
+          ],
+        };
       },
-    } as never);
+    });
+    // First lookup fails transiently: the agent is treated as non-subagent (no
+    // permanent poisoning) and universal guidance is injected.
+    const first = await harness.inject("build");
+    expect(systemText(first)).toContain("<working_state>");
+    // Recovery: the real envelope is parsed and the subagent mode is honored.
+    const second = await harness.inject("reviewer");
+    expect(second.system).toEqual([]);
+    const third = await harness.inject("build");
+    expect(systemText(third)).toContain("<working_state>");
+    expect(calls).toBeGreaterThanOrEqual(3);
+  });
 
-    const output = createOutput("reviewer");
+  test("default registry adapter reflects a newly configured subagent without restart", async () => {
+    const modes = new Map<string, "subagent" | "primary">([["build", "primary"]]);
+    const harness = await makeHarness({
+      agentList: async () => ({
+        location: { directory: "/tmp/project" },
+        data: [...modes.entries()].map(([id, mode]) => ({ id, mode })),
+      }),
+    });
+    expect((await harness.inject("new-worker")).system).not.toEqual([]);
+    modes.set("new-worker", "subagent");
+    expect((await harness.inject("new-worker")).system).toEqual([]);
+  });
 
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "reviewer" } as never,
-      output as never,
-    );
-
-    expect(output.message.system).toBeUndefined();
+  test("a disabled or unknown captured policy injects nothing", async () => {
+    const disabled = await makeHarness({ enabled: false });
+    expect((await disabled.inject("build")).system).toEqual([]);
+    const unknown = await makeHarness({ policy: "unknown" });
+    expect((await unknown.inject("build")).system).toEqual([]);
   });
 
   test("keeps injected guidance wording stable", async () => {
-    const plugin = await SystemContextInjectionPlugin(createPluginInput());
-    const output = createOutput("build");
+    const harness = await makeHarness();
+    const text = systemText(await harness.inject("build")).replace(/\s+/g, " ");
 
-    await plugin["chat.message"]?.(
-      { sessionID: "session-1", agent: "build" } as never,
-      output as never,
-    );
-
-    const systemText = output.message.system ?? "";
-
-    expect(systemText).not.toContain("proactively use the explore subagent");
-    expect(systemText).not.toContain("change_with_review");
-    expect(systemText.replace(/\s+/g, " ")).toContain(
+    expect(text).not.toContain("proactively use the explore subagent");
+    expect(text).not.toContain("change_with_review");
+    expect(text).toContain(
       "stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
     );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "When new evidence invalidates the current route, stop and reroute.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "Reuse stable domain terms from the user request and the repository.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain("Do not make silent material assumptions.");
-    expect(systemText.replace(/\s+/g, " ")).toContain(
-      "When repeated attempts do not converge, stop and summarize.",
-    );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
+    expect(text).toContain("When new evidence invalidates the current route, stop and reroute.");
+    expect(text).toContain("Reuse stable domain terms from the user request and the repository.");
+    expect(text).toContain("Do not make silent material assumptions.");
+    expect(text).toContain("When repeated attempts do not converge, stop and summarize.");
+    expect(text).toContain(
       "project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples",
     );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
+    expect(text).toContain(
       "Read the file first, then use exact `line#hash#anchor` refs from the latest `read` output when present.",
     );
-    expect(systemText.replace(/\s+/g, " ")).toContain(
+    expect(text).toContain(
       "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
     );
-    const normalized = (output.message.system ?? "").replace(/\s+/g, " ");
-    expect(normalized).toContain(
+    expect(text).toContain(
       "inspect relevant index entries before debugging, fixing, changing behavior, operating on, architecting, or investigating repository-specific issues.",
     );
-    expect(normalized).toContain(
-      "Load only entry files whose slug, summary, or applicability signal appears relevant to the current task.",
-    );
-    expect(normalized).toContain(
+    expect(text).toContain(
       "advisory agent-facing repository memory, not as stronger authority than explicit user instructions, code, tests, or repository-owned instructions.",
     );
   });

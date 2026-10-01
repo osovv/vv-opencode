@@ -1,8 +1,8 @@
 // FILE: src/commands/launch.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Launch OpenCode with deterministic vvoc, OpenCode runtime, and managed TUI config layer environment variables.
-//   SCOPE: Scope parsing, runtime/TUI config source selection, subprocess env construction, arg forwarding, stdio forwarding, and exit-code preservation.
+//   PURPOSE: Launch OpenCode with deterministic vvoc and native OpenCode config layer environment variables.
+//   SCOPE: Scope parsing, OpenCode/vvoc config source selection, subprocess env construction, arg forwarding, stdio forwarding, and exit-code preservation.
 //   DEPENDS: [citty, src/lib/config-layers.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: RUNTIME
@@ -18,19 +18,21 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added conditional OPENCODE_TUI_CONFIG selection for existing managed TUI files.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight before spawning OpenCode.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
+import { dirname } from "node:path";
+import { getGlobalOpencodeDir } from "../lib/vvoc-paths.js";
 import {
+  OPENCODE_CONFIG_DIR_ENV,
   OPENCODE_CONFIG_ENV,
-  OPENCODE_TUI_CONFIG_ENV,
   VVOC_CONFIG_ENV,
   resolveOpenCodeConfigSource,
-  resolveOpenCodeTuiConfigSource,
   resolveVvocConfigSource,
   type ConfigSource,
 } from "../lib/config-layers.js";
+import { assertSupportedOpenCodeRuntime, type OpenCodeRuntimeInspection } from "../lib/opencode.js";
 
 export type LaunchScope = "effective" | "project" | "global";
 
@@ -38,7 +40,6 @@ export type LaunchPlan = {
   command: string[];
   env: Record<string, string>;
   opencodeSource: ConfigSource;
-  opencodeTuiSource: ConfigSource;
   vvocSource: ConfigSource;
 };
 
@@ -56,14 +57,8 @@ export async function buildLaunchPlan(options: {
   passthroughArgs: string[];
   env?: NodeJS.ProcessEnv;
 }): Promise<LaunchPlan> {
-  const [opencodeSource, opencodeTuiSource, vvocSource] = await Promise.all([
+  const [opencodeSource, vvocSource] = await Promise.all([
     resolveOpenCodeConfigSource({
-      scope: options.scope,
-      cwd: options.cwd,
-      configDir: options.configDir,
-      env: options.env,
-    }),
-    resolveOpenCodeTuiConfigSource({
       scope: options.scope,
       cwd: options.cwd,
       configDir: options.configDir,
@@ -100,15 +95,19 @@ export async function buildLaunchPlan(options: {
     [OPENCODE_CONFIG_ENV]: opencodeSource.path,
     [VVOC_CONFIG_ENV]: vvocSource.path,
   };
-  if (opencodeTuiSource.kind !== "missing" && opencodeTuiSource.path) {
-    env[OPENCODE_TUI_CONFIG_ENV] = opencodeTuiSource.path;
+  // OPENCODE_CONFIG only adds a document; arrange the native discovery root so
+  // generated sibling agents/skills under a custom or alt-XDG global config are
+  // still discovered. Project scope keeps the native default global root.
+  if (options.scope === "global") {
+    env[OPENCODE_CONFIG_DIR_ENV] = getGlobalOpencodeDir(options.configDir);
+  } else if (opencodeSource.kind === "global" && opencodeSource.path !== undefined) {
+    env[OPENCODE_CONFIG_DIR_ENV] = dirname(opencodeSource.path);
   }
 
   return {
     command: ["opencode", ...options.passthroughArgs],
     env,
     opencodeSource,
-    opencodeTuiSource,
     vvocSource,
   };
 }
@@ -119,7 +118,10 @@ export async function runLaunch(options: {
   configDir?: string;
   passthroughArgs: string[];
   spawn?: (plan: LaunchPlan) => Promise<number>;
+  inspectRuntime?: () => Promise<OpenCodeRuntimeInspection>;
 }): Promise<number> {
+  // Preflight: refuse to launch against an unverifiable or out-of-window host.
+  await assertSupportedOpenCodeRuntime(options.inspectRuntime);
   const plan = await buildLaunchPlan(options);
   if (options.spawn) {
     return options.spawn(plan);

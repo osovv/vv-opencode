@@ -15,10 +15,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Category-grammar coverage: every canonical category emits a matchable token, whole-text restoration, and counter uniqueness under a forced hash collision.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { restoreText } from "./restore.js";
 import { PlaceholderSession, generateFallbackSecret } from "./session.js";
 
 const SECRET = "test-secret-for-hmac";
@@ -206,4 +207,64 @@ test("generateFallbackSecret returns different values each call", () => {
   const s1 = generateFallbackSecret();
   const s2 = generateFallbackSecret();
   expect(s1).not.toBe(s2);
+});
+
+describe("placeholder category grammar", () => {
+  const categories = [
+    "EMAIL",
+    "IPV4",
+    "lowercase",
+    "mixedCase9",
+    "custom-key",
+    "dotted.key",
+    "подпись",
+    "a".repeat(200),
+    "!!!",
+  ];
+
+  test("every canonical category emits a matchable token and preserves its metadata", () => {
+    const session = new PlaceholderSession({
+      prefix: PREFIX,
+      ttlMs: 60_000,
+      maxMappings: 1000,
+      secret: SECRET,
+    });
+    for (const category of categories) {
+      const placeholder = session.getOrCreatePlaceholder(`secret-for-${category}`, category);
+      expect(placeholder).toMatch(/^__VVOC_SECRET_[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\d+)?__$/);
+      // No original category characters leak into the emitted token beyond the slug.
+      expect(placeholder.includes(category) && category.length > 32).toBe(false);
+    }
+  });
+
+  test("whole-text restoration works for every canonical category", () => {
+    const session = new PlaceholderSession({
+      prefix: PREFIX,
+      ttlMs: 60_000,
+      maxMappings: 1000,
+      secret: SECRET,
+    });
+    for (const category of categories) {
+      const original = `value-${category}`;
+      const placeholder = session.getOrCreatePlaceholder(original, category);
+      expect(restoreText(`before ${placeholder} after`, session)).toBe(`before ${original} after`);
+    }
+  });
+
+  test("collisions in slugged categories stay unique via the counter", () => {
+    const session = new PlaceholderSession({
+      prefix: PREFIX,
+      ttlMs: 60_000,
+      maxMappings: 1000,
+      secret: SECRET,
+    });
+    // Force a deterministic HMAC collision so the counter path is exercised.
+    (session as unknown as { computeHash(value: string): string }).computeHash = () =>
+      "0".repeat(64);
+    const a = session.getOrCreatePlaceholder("secret-a", "custom-key");
+    const b = session.getOrCreatePlaceholder("secret-b", "custom-key");
+    expect(a).toMatch(/^__VVOC_SECRET_custom_key_0{12}__$/);
+    expect(b).toMatch(/^__VVOC_SECRET_custom_key_0{12}_1__$/);
+    expect(restoreText(`${a}|${b}`, session)).toBe("secret-a|secret-b");
+  });
 });

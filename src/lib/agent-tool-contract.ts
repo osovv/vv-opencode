@@ -1,9 +1,9 @@
 // FILE: src/lib/agent-tool-contract.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Provide reusable cross-plugin agent-tool contract primitives: registered raw argument maps, strict full-object runtime schemas with output inference, bounded diagnostics, fail-closed definition/pre-execute/direct-execute guards, SDK-compatible result-envelope helpers, and loaded contract identity.
-//   SCOPE: Generic owned-tool contract descriptors and host-boundary adapters only. No catalog aggregation, no workflow/plugin runtime imports, no permission or state-eligibility decisions. Uses the pinned SDK tool.schema Zod instance; zod imports are type-only. Result-envelope validation is producer/test-only and never wraps post-side-effect execution.
-//   DEPENDS: [@opencode-ai/plugin, zod (types), src/lib/package.ts]
+//   PURPOSE: Provide reusable cross-plugin agent-tool contract primitives: registered raw argument maps, strict full-object runtime schemas with output inference, bounded diagnostics, fail-closed definition/pre-execute/direct-execute guards, host-neutral result-envelope helpers, and loaded contract identity.
+//   SCOPE: Generic owned-tool contract descriptors and host-boundary adapters only. No catalog aggregation, no workflow/plugin runtime imports, no permission or state-eligibility decisions. Uses the direct zod instance for schemas and structural result/attachment DTOs; no V1 SDK types. Result-envelope validation is producer/test-only and never wraps post-side-effect execution.
+//   DEPENDS: [zod (direct runtime schemas; pinned direct dependency is T-009 package assembly), src/lib/package.ts]
 //   LINKS: [M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -28,13 +28,13 @@
 //   ContractInputError - Pre-execution structural rejection with code, category, and issues.
 //   ContractHostCompatibilityError - Fail-closed host-context rejection for unsupported definition publication.
 //   OperationExample - Named accept/reject operation example metadata for a contract.
-//   OwnedToolResult - Object branch of the pinned SDK ToolResult (assignable through tool execute).
-//   OwnedToolAttachment - Pinned SDK ToolAttachment shape.
-//   ownedToolResult - Build an SDK-compatible structured tool result envelope.
+//   OwnedToolResult - Host-neutral structured result envelope DTO.
+//   OwnedToolAttachment - Host-neutral file attachment DTO.
+//   ownedToolResult - Build a structured host-neutral tool result envelope.
 //   ownedToolAttachmentSchema - Strict attachment envelope schema for producer/test validation.
 //   ownedToolResultSchema - Strict result envelope schema; metadata/document content remain opaque.
 //   validateOwnedToolResult - Producer/test-only result envelope validation (no post-side-effect wrapper).
-//   strictObject - Build a closed object schema on the SDK tool.schema instance.
+//   strictObject - Build a closed object schema on the direct zod instance.
 //   contractInputJsonSchema - Input-mode JSON Schema projection for a contract schema.
 //   OwnedToolArgs - Schema-inferred argument type for an owned-tool registered map.
 //   OwnedToolContract - Registered raw map plus strict runtime schema and typed parse helpers.
@@ -46,12 +46,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS - Correction cycle: fail-closed definition publication, Zod output inference end-to-end, SDK-compatible result envelope + producer validation schema, escaped diagnostic paths, and preserved nested union issue paths.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Replaced V1 SDK tool.schema/ToolResult/ToolAttachment with the direct zod instance and host-neutral result/attachment DTOs; adapters keep structural signatures for unported plugin consumers.]
 // END_CHANGE_SUMMARY
 
-import { tool } from "@opencode-ai/plugin";
-import type { ToolAttachment, ToolResult } from "@opencode-ai/plugin";
-import type { ZodError, ZodObject, ZodRawShape, ZodType, z } from "zod";
+import { z } from "zod";
+import type { ZodError, ZodObject, ZodRawShape, ZodType } from "zod";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
@@ -335,14 +334,25 @@ export interface OperationExample {
   readonly notes?: string;
 }
 
-/** Attachment envelope matching the pinned SDK ToolAttachment (assignable to ToolResult). */
-export type OwnedToolAttachment = ToolAttachment;
+/** Host-neutral attachment envelope DTO for structured owned-tool results. */
+export interface OwnedToolAttachment {
+  readonly type: "file";
+  readonly mime: string;
+  readonly url: string;
+  readonly filename?: string;
+}
 
 /**
- * Object branch of the pinned SDK ToolResult.
- * Assignable directly through tool({ execute }) return positions.
+ * Host-neutral structured tool result envelope.
+ * Assignable through both the retired V1 tool execute return position still
+ * consumed by unported plugins and the native Tool.Result boundary.
  */
-export type OwnedToolResult = Extract<ToolResult, { output: string }>;
+export interface OwnedToolResult {
+  readonly title?: string;
+  readonly output: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly attachments?: OwnedToolAttachment[];
+}
 
 /**
  * Build a structured tool result envelope compatible with the pinned SDK ToolResult.
@@ -364,17 +374,17 @@ export function ownedToolResult(
   };
 }
 
-/** Closed object schema on the SDK tool.schema instance (rejects unknown keys). */
+/** Closed object schema on the zod instance (rejects unknown keys). */
 export function strictObject<TShape extends ZodRawShape>(shape: TShape): ZodObject<TShape> {
-  return tool.schema.strictObject(shape);
+  return z.strictObject(shape);
 }
 
 /** Attachment envelope schema for producer/test validation of owned tool results. */
 export const ownedToolAttachmentSchema = strictObject({
-  type: tool.schema.literal("file"),
-  mime: tool.schema.string(),
-  url: tool.schema.string(),
-  filename: tool.schema.string().optional(),
+  type: z.literal("file"),
+  mime: z.string(),
+  url: z.string(),
+  filename: z.string().optional(),
 });
 
 /**
@@ -384,10 +394,10 @@ export const ownedToolAttachmentSchema = strictObject({
  * This is never applied as a throw-after-side-effect execute wrapper.
  */
 export const ownedToolResultSchema = strictObject({
-  title: tool.schema.string().optional(),
-  output: tool.schema.string(),
-  metadata: tool.schema.record(tool.schema.string(), tool.schema.unknown()).optional(),
-  attachments: tool.schema.array(ownedToolAttachmentSchema).optional(),
+  title: z.string().optional(),
+  output: z.string(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  attachments: z.array(ownedToolAttachmentSchema).optional(),
 });
 
 /**
@@ -410,7 +420,7 @@ export function validateOwnedToolResult(
  * Consistent with the host registry projection (io: "input", $defs → definitions).
  */
 export function contractInputJsonSchema(schema: ZodType): Record<string, unknown> {
-  const projected = tool.schema.toJSONSchema(schema, { io: "input" }) as unknown;
+  const projected = z.toJSONSchema(schema, { io: "input" }) as unknown;
   if (typeof projected !== "object" || projected === null || Array.isArray(projected)) {
     throw new Error("contract schema produced a non-object JSON Schema");
   }

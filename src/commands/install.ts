@@ -11,24 +11,26 @@
 //
 // START_MODULE_MAP
 //   default - Install command definition for plugin registration and vvoc config bootstrap.
+//   runInstall - Testable install flow with injectable native host verification.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Added a preflight readVvocConfig validation so an invalid existing vvoc.json fails loudly before any install mutation instead of after a partial write.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight and extracted an injectable runInstall flow.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import {
+  assertSupportedOpenCodeRuntime,
   describeWriteResult,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
-  ensureTuiPackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
   readVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
+  type OpenCodeRuntimeInspection,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -54,47 +56,53 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    // START_BLOCK_APPLY_INSTALL_COMMAND
-    const scope = args.scope === "project" ? "project" : "global";
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const paths = await resolvePaths({
-      scope: scope as Scope,
-      cwd: process.cwd(),
-      configDir,
-    });
-    // Preflight: strictly validate any existing vvoc.json before mutating
-    // anything, so an invalid config fails loudly up front instead of after a
-    // partial install.
-    await readVvocConfig(paths);
-    const opencode = await ensurePackageInstalled(paths);
-    const tui = await ensureTuiPackageInstalled(paths);
-    const managedAgents = await syncManagedAgentRegistrations(paths);
-
-    console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
-    console.log(describeWriteResult(tui));
-    console.log(
-      `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
-    );
-
-    for (const result of await installManagedAgentPrompts(paths, {
-      force: Boolean(args.force),
-    })) {
-      console.log(describeWriteResult(result));
-    }
-
-    for (const result of await installManagedSkillFiles(paths, {
-      force: Boolean(args.force),
-    })) {
-      console.log(describeWriteResult(result));
-    }
-
-    const vvocConfig = await installVvocConfig(paths);
-    console.log(describeWriteResult(vvocConfig));
-
-    if (paths.scope === "global") {
-      const symlinkResult = await ensureManagedSkillSymlink(configDir);
-      console.log(describeWriteResult(symlinkResult));
-    }
-    // END_BLOCK_APPLY_INSTALL_COMMAND
+    await runInstall(args as Record<string, unknown>);
   },
 });
+
+export async function runInstall(
+  args: Record<string, unknown>,
+  options: { inspectRuntime?: () => Promise<OpenCodeRuntimeInspection> } = {},
+): Promise<void> {
+  // START_BLOCK_APPLY_INSTALL_COMMAND
+  const scope = args.scope === "project" ? "project" : "global";
+  const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+  const paths = await resolvePaths({
+    scope: scope as Scope,
+    cwd: process.cwd(),
+    configDir,
+  });
+  // Preflight: fail closed on an unverifiable or out-of-window host, and
+  // strictly validate any existing vvoc.json, before mutating anything so the
+  // command fails loudly up front instead of after a partial install.
+  await assertSupportedOpenCodeRuntime(options.inspectRuntime);
+  await readVvocConfig(paths);
+  const opencode = await ensurePackageInstalled(paths);
+  const managedAgents = await syncManagedAgentRegistrations(paths);
+
+  console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
+  console.log(
+    `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
+  );
+
+  for (const result of await installManagedAgentPrompts(paths, {
+    force: Boolean(args.force),
+  })) {
+    console.log(describeWriteResult(result));
+  }
+
+  for (const result of await installManagedSkillFiles(paths, {
+    force: Boolean(args.force),
+  })) {
+    console.log(describeWriteResult(result));
+  }
+
+  const vvocConfig = await installVvocConfig(paths);
+  console.log(describeWriteResult(vvocConfig));
+
+  if (paths.scope === "global") {
+    const symlinkResult = await ensureManagedSkillSymlink(configDir);
+    console.log(describeWriteResult(symlinkResult));
+  }
+  // END_BLOCK_APPLY_INSTALL_COMMAND
+}

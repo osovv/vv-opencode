@@ -24,7 +24,6 @@ import { dirname, join } from "node:path";
 import statusCommand from "./status.js";
 import {
   ensurePackageInstalled,
-  ensureTuiPackageInstalled,
   installVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
@@ -44,7 +43,6 @@ test("status prints built-in role inventory after init-style seeding", async () 
     });
 
     await ensurePackageInstalled(paths);
-    await ensureTuiPackageInstalled(paths);
     await syncManagedAgentRegistrations(paths);
     await installVvocConfig(paths);
 
@@ -62,11 +60,9 @@ test("status prints built-in role inventory after init-style seeding", async () 
 
     expect(stdout).toContain("Roles:");
     expect(stdout).toContain("OpenCode source: project");
-    expect(stdout).toContain(`OpenCode TUI source: project ${paths.opencodeTuiConfigPath}`);
-    expect(stdout).toContain("OpenCode TUI config parse: ok");
     expect(stdout).toContain("OpenCode version:");
-    expect(stdout).toContain("OpenCode TUI minimum: 1.18.2");
-    expect(stdout).toContain("TUI package configured: yes");
+    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <2.0.19");
+    expect(stdout).toContain("TUI package registered: yes");
     expect(stdout).toContain("vvoc source: project");
     expect(stdout).toContain("Orchestration profile: balanced");
     const defaultIndex = stdout.indexOf("  default:");
@@ -98,7 +94,6 @@ test("status reports invalid explicit profile without mutating the selected file
     });
 
     await ensurePackageInstalled(paths);
-    await ensureTuiPackageInstalled(paths);
     await installVvocConfig(paths);
     const invalidText =
       JSON.stringify(

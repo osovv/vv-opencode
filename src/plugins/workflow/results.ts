@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Own the concrete public workflow result contracts: failure category taxonomy and classification, bounded failure DTOs with preserved tokenized issues and state/prerequisite guidance, closed result schemas and types for every owned workflow response family (standalone batch, generic mutation, list views, close, decide, checkpoint/authority actions, and failures), producer/test result validation, and production serialization with a truthful post-side-effect failure fallback.
 //   SCOPE: Pure result/response shape ownership only. No store lookup, no state eligibility, no permission decisions, no mutation, no persistence. Serialization never throws after a side effect and never parses free-form messages to recover paths or state.
-//   DEPENDS: [@opencode-ai/plugin (tool.schema), zod (types), src/lib/agent-tool-contract.ts]
+//   DEPENDS: [zod (direct runtime result schemas; pinned direct dependency is T-009 package assembly), src/lib/agent-tool-contract.ts]
 //   LINKS: [M-WORKFLOW-TOOLING, M-AGENT-TOOL-CONTRACT, M-PLUGIN-WORKFLOW]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -43,11 +43,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - Added the additive work_item_list inspection contract: loaded package/contract identity, generic/native execution views with derived task status, checkpoint generation/outcome/current-obligation detail, delegated latest-attempt and gate-derived guidance, and the launch_blocked next action. Prior T-003: concrete public workflow result contracts with failure categories, preserved tokenized issues, typed state/attempt/budget context, closed per-tool schemas/views, producer-side finalization, and truthful post-side-effect serialization.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Replaced the V1 SDK tool.schema re-export with the direct zod instance for native Tool.ValueSchema compatibility; result shapes and validation are unchanged.]
 // END_CHANGE_SUMMARY
 
-import { tool } from "@opencode-ai/plugin";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   MAX_CONTRACT_ISSUES,
   MAX_ISSUE_MESSAGE_CHARS,
@@ -609,7 +608,7 @@ export class WorkflowDiagnosticError extends Error {
 // END_BLOCK_FAILURE_DTO
 
 // START_BLOCK_SCHEMAS
-const schema = tool.schema;
+const schema = z;
 
 const WORK_ITEM_STATES = [
   "open",

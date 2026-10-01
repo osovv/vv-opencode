@@ -1,7 +1,7 @@
 // FILE: scripts/check-tool-contracts-host.test.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify pure host-runner helpers for both routes: environment allowlist, host version gating, owned-root cleanup, fail-closed journal/stdout/harness parsing, probe and full-matrix observation evaluation, exact built-descriptor projection comparison, cohort/wire-definition normalization, composing-wrapper generation, isolated config builders, evidence lifecycle helpers, fingerprint drift, and compatibility-evidence assembly.
+//   PURPOSE: Verify pure host-runner helpers for both routes: environment allowlist, host version gating, owned-root cleanup, fail-closed journal/stdout/harness parsing, probe and full-matrix observation evaluation, exact built-descriptor projection comparison, cohort/wire-definition normalization, composing-wrapper generation, isolated config builders, evidence lifecycle helpers, fingerprint drift, native-matrix coverage declarations, and compatibility-evidence assembly.
 //   SCOPE: Pure helper tests with an injected synthetic built-contract context only; the live routes run via `bun scripts/check-tool-contracts-host.ts --probe` and `bun run contracts:host`.
 //   DEPENDS: [bun:test, scripts/check-tool-contracts-host, src/lib/vvoc-config.ts]
 //   LINKS: [M-AGENT-TOOL-CONTRACT]
@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-009 recovery attempt3 - Added dependency-closure and pinned-manifest tests: cycle/re-export discovery termination on owned tmp fixtures, `.js`→`.ts` and raw-query resolution, real-repo closure now including the previously omitted behavior-critical workflow/hashline/web files without an exact-N count, specifier extraction, tmp fingerprint drift for changed helper/schema/package, and matching/absent/mismatched @opencode-ai manifest gating. Prior correction: synthetic built-context evaluation, exact projection drift, hidden-editor, loaded-identity, owned semantics, malformed-body, evidence lifecycle, and fingerprint drift.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Added native-matrix coverage assertions: the matrix exercises the generic work_item_open accept path and no longer records the work_item_open readonly nativeLimit workaround. Prior C-AGENT-TOOL-CONTRACTS recovery: dependency-closure and pinned-manifest tests.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -48,6 +48,10 @@ import {
   EXTRA_FINGERPRINT_PATHS,
   HOST_COHORTS,
   MINIMUM_SUPPORTED_HOST_VERSION,
+  NATIVE_MATRIX_LIMITS,
+  NATIVE_MATRIX_STEPS,
+  NATIVE_PINNED_DEPENDENCIES,
+  NATIVE_PINNED_DEV_DEPENDENCIES,
   OWNED_TOOL_IDS,
   PROBE_CALL_SCRIPT,
   PROBE_SCRATCH_PARENT,
@@ -242,11 +246,16 @@ describe("environment isolation helpers", () => {
     ).toBe(true);
   });
 
-  test("allowlist never contains provider credential keys", () => {
-    expect(ALLOWED_ENV_KEYS.some((key) => key.includes("API_KEY"))).toBe(false);
+  test("allowlist never contains real provider credential keys", () => {
+    const realCredentialKeys = ALLOWED_ENV_KEYS.filter(
+      (key) => key.includes("API_KEY") && key !== "LOOPBACK_API_KEY",
+    );
+    expect(realCredentialKeys).toEqual([]);
     expect(ALLOWED_ENV_KEYS).not.toContain("OPENCODE_AUTH_CONTENT");
     expect(ALLOWED_ENV_KEYS).not.toContain("OPENAI_API_KEY");
+    expect(ALLOWED_ENV_KEYS).not.toContain("ANTHROPIC_API_KEY");
     expect(ALLOWED_ENV_KEYS).toContain("OPENCODE_DISABLE_DEFAULT_PLUGINS");
+    expect(ALLOWED_ENV_KEYS).toContain("LOOPBACK_API_KEY");
   });
 
   test("default scratch parent is under session /tmp/opencode policy", () => {
@@ -554,21 +563,22 @@ describe("report formatting", () => {
 });
 
 describe("probe plugin generation", () => {
-  test("emits a plugin that imports the real contract helper and registers the probe tool", () => {
+  test("emits a native plugin that imports the built contract helper and registers the probe tool", () => {
     const source = generateProbePluginSource({
-      contractModuleUrl: "file:///repo/src/lib/agent-tool-contract.ts",
+      contractModuleUrl: "file:///repo/dist/lib/agent-tool-contract.js",
       journalPath: "/tmp/journal.jsonl",
     });
-    expect(source).toContain("file:///repo/src/lib/agent-tool-contract.ts");
-    expect(source).toContain("createToolDefinitionAdapter");
-    expect(source).toContain("createPreExecuteGuard");
+    expect(source).toContain("file:///repo/dist/lib/agent-tool-contract.js");
+    expect(source).toContain("ctx.tool.transform");
+    expect(source).toContain("editor.add");
+    expect(source).toContain('ctx.tool.hook("execute.before"');
     expect(source).toContain("parseOwnedToolArgs");
-    expect(source).toContain("ownedToolResult");
-    expect(source).toContain("callID: context.callID");
-    expect(source).toContain("callID: input.callID");
+    expect(source).toContain("createPreExecuteGuard");
+    expect(source).toContain("callID: context.id");
+    expect(source).toContain("callID: event.id");
     expect(source).toContain(PROBE_TOOL_ID);
-    expect(source).toContain('"tool.definition"');
-    expect(source).toContain('"tool.execute.before"');
+    expect(source).not.toContain("@opencode-ai");
+    expect(source).not.toContain("tool.definition");
     expect(source).not.toContain("workflow-contract");
     expect(source).not.toContain("agent-tool-catalog");
   });
@@ -775,9 +785,9 @@ describe("full host matrix cohort definitions", () => {
     ]);
     expect(HOST_COHORTS[0]!.editorTool).toBe("str_replace_editor");
     expect(HOST_COHORTS[1]!.editorTool).toBe("hashline_edit");
-    expect(HOST_COHORTS[0]!.providerNpm).toBe("@ai-sdk/openai-compatible");
-    expect(HOST_COHORTS[1]!.providerNpm).toBe("@ai-sdk/anthropic");
-    expect(HOST_COHORTS[0]!.loweringRoute).toContain("no branch");
+    expect(HOST_COHORTS[0]!.providerNpm).toBe("@opencode/ai/providers/openai-compatible");
+    expect(HOST_COHORTS[1]!.providerNpm).toBe("@opencode/ai/providers/anthropic-compatible");
+    expect(HOST_COHORTS[0]!.loweringRoute).toContain("verbatim");
   });
 
   test("four sessions cover the whole nine-tool union without forcing hidden tools", () => {
@@ -1350,30 +1360,30 @@ describe("host session evaluation", () => {
 });
 
 describe("host harness generation and isolation", () => {
-  test("wrapper imports built dist plugins and dist schema validators, hashes payloads, and denies egress", () => {
+  test("native wrapper imports the built dist aggregate and validators, hashes payloads, and denies egress", () => {
     const source = generateHostHarnessPluginSource({
-      workflowPluginUrl: "file:///repo/dist/plugins/workflow/index.js",
-      hashlinePluginUrl: "file:///repo/dist/plugins/hashline-edit/index.js",
-      webPluginUrl: "file:///repo/dist/plugins/web-tools/index.js",
+      rootAggregateUrl: "file:///repo/dist/index.js",
       workflowResultsUrl: "file:///repo/dist/plugins/workflow/results.js",
       hashlineSchemasUrl: "file:///repo/dist/plugins/hashline-edit/schemas.js",
       webSchemasUrl: "file:///repo/dist/plugins/web-tools/schemas.js",
       journalPath: "/tmp/journal.jsonl",
       loopbackOrigin: "http://127.0.0.1:4321",
     });
-    expect(source).toContain("file:///repo/dist/plugins/workflow/index.js");
+    expect(source).toContain("file:///repo/dist/index.js");
     expect(source).toContain("file:///repo/dist/plugins/workflow/results.js");
     expect(source).toContain("file:///repo/dist/plugins/hashline-edit/schemas.js");
     expect(source).toContain("file:///repo/dist/plugins/web-tools/schemas.js");
+    expect(source).toContain("root.default.setup");
+    expect(source).toContain('ctx.tool.hook("execute.after"');
     expect(source).toContain("api.exa.ai");
     expect(source).toContain("VVOC_EGRESS_DENIED");
     expect(source).toContain('redirect: "manual"');
-    expect(source).toContain("...original");
     expect(source).toContain("validateOwnedResult");
     expect(source).toContain("metadataReport");
     expect(source).toContain("outputSha256");
-    expect(source).toContain("urlSha256");
-    expect(source).not.toContain("urlPrefix: typeof");
+    expect(source).toContain("plugin_error");
+    expect(source).not.toContain("@opencode-ai");
+    expect(source).not.toContain("tool.definition");
     expect(source).not.toContain("src/plugins/workflow/index.ts");
   });
 
@@ -1385,21 +1395,25 @@ describe("host harness generation and isolation", () => {
     expect(text).not.toContain("ANTHROPIC_API_KEY");
   });
 
-  test("builds a cohort config with synthetic primary and child agents only", () => {
+  test("builds a native cohort config with synthetic primary and child agents only", () => {
     const config = JSON.parse(
-      buildCohortHostConfig(HOST_COHORTS[1]!, { port: 5555, pluginUrl: "file:///plugin.ts" }),
+      buildCohortHostConfig(HOST_COHORTS[1]!, { port: 5555, pluginDir: "/tmp/plugin" }),
     ) as {
-      provider: Record<string, { npm: string; options: { baseURL: string } }>;
-      agent: Record<string, { mode: string }>;
-      plugin: string[];
+      providers: Record<string, { package: string; settings: { baseURL: string } }>;
+      agents: Record<string, { mode: string }>;
+      plugins: { package: string }[];
+      default_agent: string;
     };
-    expect(config.provider["vvoc-probe-anthropic"]?.npm).toBe("@ai-sdk/anthropic");
-    expect(config.provider["vvoc-probe-anthropic"]?.options.baseURL).toBe(
+    expect(config.providers["vvoc-probe-anthropic"]?.package).toBe(
+      "@opencode/ai/providers/anthropic-compatible",
+    );
+    expect(config.providers["vvoc-probe-anthropic"]?.settings.baseURL).toBe(
       "http://127.0.0.1:5555/v1",
     );
-    expect(Object.keys(config.agent).sort()).toEqual(["vv-controller", "vv-implementer"]);
-    expect(config.agent["vv-implementer"]?.mode).toBe("subagent");
-    expect(config.plugin).toEqual(["file:///plugin.ts"]);
+    expect(Object.keys(config.agents).sort()).toEqual(["vv-controller", "vv-implementer"]);
+    expect(config.agents["vv-implementer"]?.mode).toBe("subagent");
+    expect(config.plugins).toEqual([{ package: "/tmp/plugin" }]);
+    expect(config.default_agent).toBe("vv-controller");
   });
 });
 
@@ -1408,7 +1422,7 @@ describe("evidence lifecycle", () => {
     const base = await mkdtemp(join(await realpathSafe(tmpdir()), "vvoc-evidence-"));
     try {
       expect(resolveEvidenceTarget(base).ok).toBe(false);
-      await mkdir(join(base, ".grace/changes/active/C-AGENT-TOOL-CONTRACTS"), { recursive: true });
+      await mkdir(join(base, ".grace/changes/active/C-OPENCODE-V2-NATIVE"), { recursive: true });
       const target = resolveEvidenceTarget(base);
       expect(target.ok).toBe(true);
     } finally {
@@ -1506,42 +1520,60 @@ describe("fingerprint drift and manifest gates", () => {
     }
   });
 
-  test("readPinnedExpectations and checkPinnedManifests require real matching versions", async () => {
+  test("readPinnedExpectations and checkPinnedManifests require real matching native versions", async () => {
     const base = await mkdtemp(join(await realpathSafe(tmpdir()), "vvoc-pinned-"));
     try {
-      await mkdir(join(base, "node_modules/@opencode-ai/plugin"), { recursive: true });
-      await mkdir(join(base, "node_modules/@opencode-ai/sdk"), { recursive: true });
+      const deps = { ...NATIVE_PINNED_DEPENDENCIES };
+      const devDeps = { ...NATIVE_PINNED_DEV_DEPENDENCIES };
       await writeFile(
         join(base, "package.json"),
-        JSON.stringify({
-          dependencies: { "@opencode-ai/plugin": "1.18.2", "@opencode-ai/sdk": "1.18.2" },
-        }),
+        JSON.stringify({ dependencies: deps, devDependencies: devDeps }),
       );
+      for (const [name, version] of [...Object.entries(deps), ...Object.entries(devDeps)]) {
+        await mkdir(join(base, "node_modules", name), { recursive: true });
+        await writeFile(
+          join(base, "node_modules", name, "package.json"),
+          JSON.stringify({ version }),
+        );
+      }
+      const expectations = readPinnedExpectations(base);
+      expect(expectations.ok).toBe(true);
+      if (!expectations.ok) return;
+      expect(expectations.pins["@opencode/plugin"]).toBe("2.0.18");
+      expect(expectations.pins["effect"]).toBe("4.0.0-rc.112");
+      expect(checkPinnedManifests(base, expectations).ok).toBe(true);
+
+      // A stale installed legacy manifest is a hard failure.
+      await mkdir(join(base, "node_modules/@opencode-ai/plugin"), { recursive: true });
       await writeFile(
         join(base, "node_modules/@opencode-ai/plugin/package.json"),
         '{"version":"1.18.2"}',
       );
-      await writeFile(
-        join(base, "node_modules/@opencode-ai/sdk/package.json"),
-        '{"version":"1.18.2"}',
-      );
-      const expectations = readPinnedExpectations(base);
-      expect(expectations.ok).toBe(true);
-      if (!expectations.ok) return;
-      expect(expectations.pluginSdk).toBe("1.18.2");
-      expect(checkPinnedManifests(base, expectations).ok).toBe(true);
+      const stale = checkPinnedManifests(base, expectations);
+      expect(stale.ok).toBe(false);
+      if (!stale.ok) expect(stale.reason).toContain("@opencode-ai");
+      await rm(join(base, "node_modules/@opencode-ai"), { recursive: true, force: true });
 
-      await writeFile(join(base, "node_modules/@opencode-ai/sdk/package.json"), "{}");
-      expect(readManifestVersion(base, "node_modules/@opencode-ai/sdk/package.json")).toBeNull();
-      expect(checkPinnedManifests(base, expectations).ok).toBe(false);
-
-      await writeFile(
-        join(base, "node_modules/@opencode-ai/sdk/package.json"),
-        '{"version":"1.17.0"}',
-      );
+      // A version mismatch is a hard failure.
+      await writeFile(join(base, "node_modules/zod/package.json"), '{"version":"4.0.0"}');
       const mismatch = checkPinnedManifests(base, expectations);
       expect(mismatch.ok).toBe(false);
       if (!mismatch.ok) expect(mismatch.reason).toContain("does not match pinned");
+
+      // A manifest with no valid version is a hard failure.
+      await writeFile(join(base, "node_modules/zod/package.json"), "{}");
+      expect(readManifestVersion(base, "node_modules/zod/package.json")).toBeNull();
+      expect(checkPinnedManifests(base, expectations).ok).toBe(false);
+
+      // package.json still declaring a removed V1 dependency fails closed.
+      await writeFile(
+        join(base, "package.json"),
+        JSON.stringify({
+          dependencies: { ...deps, "@opencode-ai/plugin": "1.18.2" },
+          devDependencies: devDeps,
+        }),
+      );
+      expect(readPinnedExpectations(base).ok).toBe(false);
     } finally {
       await rm(base, { recursive: true, force: true });
     }
@@ -1553,12 +1585,14 @@ describe("fingerprint drift and manifest gates", () => {
       await writeFile(
         join(base, "package.json"),
         JSON.stringify({
-          dependencies: { "@opencode-ai/plugin": "1.18.2", "@opencode-ai/sdk": "1.18.2" },
+          dependencies: { ...NATIVE_PINNED_DEPENDENCIES },
+          devDependencies: { ...NATIVE_PINNED_DEV_DEPENDENCIES },
         }),
       );
       const expectations = readPinnedExpectations(base);
       expect(expectations.ok).toBe(true);
       if (!expectations.ok) return;
+      // No node_modules at all: every installed manifest is missing.
       expect(checkPinnedManifests(base, expectations).ok).toBe(false);
     } finally {
       await rm(base, { recursive: true, force: true });
@@ -1662,6 +1696,27 @@ describe("local dependency closure discovery", () => {
   });
 });
 
+describe("native matrix coverage", () => {
+  test("exercises the generic work_item_open accept path", () => {
+    const accept = NATIVE_MATRIX_STEPS.find((step) => step.id === "work-open");
+    expect(accept).toBeDefined();
+    expect(accept!.tool).toBe("work_item_open");
+    expect(accept!.expect).toBe("completed");
+    const args = accept!.buildArgs("", { workspace: "/tmp/native-matrix", port: 0 }) as {
+      items?: unknown;
+      execution?: unknown;
+    };
+    expect(Array.isArray(args.items)).toBe(true);
+    expect((args.items as Array<{ mode?: string }>)[0]!.mode).toBe("delegated");
+    expect(args.execution).toBeDefined();
+  });
+
+  test("no longer records the work_item_open readonly nativeLimit workaround", () => {
+    expect(NATIVE_MATRIX_LIMITS.some((limit) => limit.includes("work_item_open"))).toBe(false);
+    expect(NATIVE_MATRIX_LIMITS.some((limit) => limit.includes("readonly property"))).toBe(false);
+  });
+});
+
 describe("compatibility evidence document", () => {
   function evidenceSession(overrides: Partial<HostSessionResult> = {}): HostSessionResult {
     const spec = unitSpec();
@@ -1694,10 +1749,9 @@ describe("compatibility evidence document", () => {
       scratchParent: PROBE_SCRATCH_PARENT,
       identity: BUILT.identity,
       pinned: {
-        pluginSdk: "1.18.2",
-        sdk: "1.18.2",
-        pinnedPluginSdk: "1.18.2",
-        pinnedSdk: "1.18.2",
+        pins: { "@opencode/plugin": "2.0.18" },
+        manifests: { "@opencode/plugin": "2.0.18" },
+        provenance: [],
       },
       fingerprintMeta: {
         closureRoots: CLOSURE_ROOTS,
@@ -1732,10 +1786,9 @@ describe("compatibility evidence document", () => {
     expect(fingerprints.removedDeps).toEqual([]);
     expect(fingerprints.unresolved).toEqual([]);
     expect(document.pinned).toEqual({
-      pluginSdk: "1.18.2",
-      sdk: "1.18.2",
-      pinnedPluginSdk: "1.18.2",
-      pinnedSdk: "1.18.2",
+      pins: { "@opencode/plugin": "2.0.18" },
+      manifests: { "@opencode/plugin": "2.0.18" },
+      provenance: [],
     });
     expect(document.failures).toEqual([]);
   });
@@ -1749,10 +1802,9 @@ describe("compatibility evidence document", () => {
       scratchParent: PROBE_SCRATCH_PARENT,
       identity: BUILT.identity,
       pinned: {
-        pluginSdk: "1.18.2",
-        sdk: "1.18.2",
-        pinnedPluginSdk: "1.18.2",
-        pinnedSdk: "1.18.2",
+        pins: { "@opencode/plugin": "2.0.18" },
+        manifests: { "@opencode/plugin": "2.0.18" },
+        provenance: [],
       },
       fingerprintMeta: {
         closureRoots: CLOSURE_ROOTS,

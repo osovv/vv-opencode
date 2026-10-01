@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Own the pure nine-tool agent-tool catalog: one entry per vvoc-owned registered tool aggregating its descriptor contract, model-facing vocabularies, checked positive/negative operation fixtures, execute-time defaults, state/host prerequisites, conditional requirements, path kinds, result variants, representative errors, a deterministic generated reference renderer, a fixture runner over the actual exported validators/result schemas, and the recorded contract-size baseline.
 //   SCOPE: Catalog aggregation and reference generation only. Imports descriptor modules (workflow input-validation/results, edit schemas, web schemas) and shared contract primitives; never imports plugin factories, config, stores, filesystem, network, or workflow state, so no catalog-to-runtime cycle exists. Fixtures are pure synthetic data validated through the owning runtime validators; the catalog grants no permission, state eligibility, or acceptance.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/workflow/input-validation.ts, src/plugins/workflow/results.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/web-tools/schemas.ts, zod (types)]
+//   DEPENDS: [src/lib/agent-tool-contract.ts, src/plugins/workflow/input-validation.ts, src/plugins/workflow/results.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/web-tools/schemas.ts, zod (types)]
 //   LINKS: [M-AGENT-TOOL-CONTRACT, M-WORKFLOW-TOOLING, M-PLUGIN-HASHLINE-EDIT, M-PLUGIN-WEB-TOOLS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -38,8 +38,7 @@
 //   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-008 correction r2 - Array-element traversal with finite-primitive (boolean/number) literal discriminators so batch item and nested provider families are coverage-checked; added the batch-failure fixture and the per-operation/branch negative fixtures for review_only, generic open paths, request_changes/rework, verify/review/bind/amend/record_approval/revoke_authority, delete/rename/replace/prepend, and every freshness/format branch. Prior: honest hashline text+metadata aggregate, nested provider coverage, closed-schema scanning, outcome-validated reference examples.]
 // END_CHANGE_SUMMARY
 
-import { tool } from "@opencode-ai/plugin";
-import type { ZodRawShape, ZodType } from "zod";
+import { z, type ZodRawShape, type ZodType } from "zod";
 import {
   AGENT_TOOL_CONTRACT_REVISION,
   PACKAGE_NAME,
@@ -1418,10 +1417,7 @@ const workflowEntries: AgentToolCatalogEntry[] = [
  * The metadata object is never presented as the registered return value. Composed
  * here from the existing descriptor schemas so no runtime producer changes.
  */
-const hashlineEditResultSchema = tool.schema.union([
-  tool.schema.string(),
-  hashlineEditMetadataSchema,
-]);
+const hashlineEditResultSchema = z.union([z.string(), hashlineEditMetadataSchema]);
 
 const editEntries: AgentToolCatalogEntry[] = [
   {

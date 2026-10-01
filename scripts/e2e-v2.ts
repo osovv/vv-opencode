@@ -2,326 +2,236 @@
 // FILE: scripts/e2e-v2.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: End-to-end verification of the vv-opencode dual-runtime package against a real, sandboxed OpenCode v2 server.
-//   SCOPE: Download an isolated v2 binary on demand, build the package, prepare sandboxed XDG homes and a scratch project with role-referenced agents, start the server with an exact recorded PID, assert plugin activation, prompt-applied role models, preset hot-switching, and session anchoring through the server API, and always clean up by that PID.
-//   DEPENDS: [node:fs, node:child_process, package.json]
-//   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS, M-PLUGIN-V2-RUNTIME]
+//   PURPOSE: Command-line entry for the v2 real-host acceptance harness with explicit core, full, TUI, and inventory modes.
+//   SCOPE: Argument parsing, parity inventory listing, delegation to the full installed-artifact runner, delegation to the real-PTY TUI tier, and delegation to the packed core run with bounded stdout and nonzero exit codes. It has no import-time side effects.
+//   DEPENDS: [node:fs, node:path, scripts/e2e-v2/core.ts, scripts/e2e-v2/full.ts, scripts/e2e-v2/tui.ts]
+//   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   V2_VERSION - Pinned OpenCode v2 version under test.
-//   WORKSPACE_ROOT - Repository root resolved from this script location.
-//   checkResults - Collected check outcomes for the machine-readable summary.
-//   main - Orchestrates build, sandbox preparation, server lifecycle, assertions, and cleanup.
-//   downloadV2Binary - Fetch and cache the isolated v2 binary, never touching any installed OpenCode.
-//   prepareSandbox - Create XDG homes and the scratch project with vvoc roles and a role-referenced agent.
-//   startServer - Start the v2 server on a free port with the exact PID recorded for cleanup.
-//   api - Authenticated fetch helper for the v2 HTTP API.
-//   waitFor - Retry helper with timeout for readiness polling.
-//   ServerHandle - Running server handle with exact PID, port, password, and stop.
-//   record - Append and print one check outcome.
-//   switchedModel - Routing proof via the model-switched session event.
-//   buildSandboxConfigs - Pure vvoc roles and opencode plugin/agent shapes for the scratch project.
+//   HarnessMode - Selected harness mode.
+//   CliDeps - Injectable runner dependencies used by tests and the real entry.
+//   parseArgs - Parse harness arguments into a mode and output flag.
+//   ParityRow - One parity inventory row read and printed by the list mode.
+//   readParity - Read the packed parity inventory rows from the workspace.
+//   runCli - Execute one harness invocation and return its process-style status.
+//   main - Real entry that wires process arguments and exits.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-009 - Created the repeatable sandboxed v2 end-to-end harness.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Wired the default `--full` mode to the installed-artifact full runner that writes parity evidence and fails while any mandatory parity row is unverified.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 - Replaced the non-passing TUI scaffold with the real-PTY `--tui` tier and added an injectable runTui dependency. T-003 - Added the mode-aware harness entry that refuses full parity until T-004..T-010 land.]
 // END_CHANGE_SUMMARY
 
-import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile, readFile, cp } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runCore, requireHostBinary, type CoreRunSummary } from "./e2e-v2/core.js";
+import { runFull, type FullRunSummary } from "./e2e-v2/full.js";
+import { runTuiAcceptance, type TuiAcceptanceResult } from "./e2e-v2/tui.js";
 
-const V2_VERSION = "2.0.18";
-const WORKSPACE_ROOT = join(fileURLToPath(new URL("..", import.meta.url)), "");
-const checkResults: Array<{ name: string; status: "pass" | "fail" | "skip"; detail?: string }> = [];
+/** Selected harness mode. */
+export type HarnessMode = "list" | "core" | "full" | "tui";
 
-function record(name: string, status: "pass" | "fail" | "skip", detail?: string) {
-  checkResults.push({ name, status, detail });
-  const label = String(status).toUpperCase();
-  console.log(`[${label}] ${name}${detail ? ` — ${detail}` : ""}`);
+/** Injectable runner dependencies used by tests and the real entry. */
+export interface CliDeps {
+  readonly workspaceRoot: string;
+  readonly stdout: (line: string) => void;
+  readonly runCore: (options: {
+    readonly workspaceRoot: string;
+    readonly hostBinary: string;
+    readonly scratchBase: string;
+    readonly evidencePath: string;
+    readonly keepScratch?: boolean;
+  }) => Promise<CoreRunSummary>;
+  readonly runTui?: ((options: {
+    readonly workspaceRoot: string;
+    readonly hostBinary?: string | undefined;
+    readonly scratchBase: string;
+    readonly keepScratch?: boolean;
+  }) => Promise<TuiAcceptanceResult>) | undefined;
+  readonly runFull?: ((options: {
+    readonly workspaceRoot: string;
+    readonly hostBinary: string;
+    readonly scratchBase: string;
+    readonly evidencePath: string;
+    readonly keepScratch?: boolean;
+  }) => Promise<FullRunSummary>) | undefined;
+  readonly hostBinary?: string | undefined;
+  readonly requireHost?: (() => string) | undefined;
+  readonly scratchBase?: string | undefined;
+  readonly evidencePath?: string | undefined;
 }
 
-async function waitFor(
-  label: string,
-  attempt: () => Promise<boolean>,
-  attempts: number,
-  delayMs: number,
-) {
-  for (let i = 0; i < attempts; i++) {
-    if (await attempt()) return true;
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+/** Parse harness arguments into a mode and output flag. */
+export function parseArgs(argv: readonly string[]): {
+  readonly mode: HarnessMode;
+  readonly json: boolean;
+  readonly keep: boolean;
+} {
+  let mode: HarnessMode = "full";
+  let json = false;
+  let keep = false;
+  for (const arg of argv) {
+    if (arg === "--core") mode = "core";
+    else if (arg === "--tui") mode = "tui";
+    else if (arg === "--list") mode = "list";
+    else if (arg === "--full") mode = "full";
+    else if (arg === "--json") json = true;
+    else if (arg === "--keep") keep = true;
   }
-  throw new Error(`timeout waiting for ${label}`);
+  return { mode, json, keep };
 }
 
-async function downloadV2Binary(cacheDir: string): Promise<string> {
-  const binaryPath = join(cacheDir, "opencode");
-  if (existsSync(binaryPath)) return binaryPath;
-  await mkdir(cacheDir, { recursive: true });
-  const url = `https://opencode.ai/files/bin/${V2_VERSION}/opencode-linux-x64.tar.gz`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`download failed: ${response.status} ${url}`);
-  const archive = join(cacheDir, "v2.tar.gz");
-  await writeFile(archive, new Uint8Array(await response.arrayBuffer()));
-  const extract = spawn("tar", ["xzf", "v2.tar.gz"], { cwd: cacheDir });
-  await new Promise<void>((resolve, reject) => {
-    extract.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`tar exit ${code}`))));
-  });
-  return binaryPath;
+interface ParityRow {
+  readonly id: string;
+  readonly surface: string;
+  readonly phase: string;
+  readonly status: string;
 }
 
-/** Pure sandbox config shapes so unit tests can validate them without IO. */
-export function buildSandboxConfigs(rolesSmart: string, pluginSpecifier: string) {
-  return {
-    vvocRoles: {
-      default: "opencode/gpt-6-luna",
-      smart: rolesSmart,
-      fast: "opencode/gpt-6-luna",
-      reviewer: rolesSmart,
-    },
-    opencode: {
-      plugins: [pluginSpecifier],
-      agent: {
-        "vv-role-probe": {
-          prompt: "Probe agent whose model is a vv-role reference.",
-          model: "vv-role:smart",
-        },
-      },
-    },
-  };
+function readParity(workspaceRoot: string): ParityRow[] {
+  const path = join(workspaceRoot, "scripts", "e2e-v2", "parity.json");
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { rows?: ParityRow[] };
+  return parsed.rows ?? [];
 }
 
-async function prepareSandbox(root: string, rolesSmart: string) {
-  const project = join(root, "project");
-  await mkdir(join(project, ".vvoc"), { recursive: true });
-  const { createDefaultVvocConfig } = (await import(
-    join(WORKSPACE_ROOT, "dist/lib/vvoc-config.js")
-  )) as { createDefaultVvocConfig: () => Record<string, unknown> };
-  const vvoc = createDefaultVvocConfig();
-  const shapes = buildSandboxConfigs(rolesSmart, `file://${WORKSPACE_ROOT.replace(/\/$/, "")}`);
-  (vvoc as { roles: Record<string, string> }).roles = shapes.vvocRoles;
-  await writeFile(join(project, ".vvoc", "vvoc.json"), JSON.stringify(vvoc, null, 2));
-  await writeFile(join(project, "opencode.json"), JSON.stringify(shapes.opencode, null, 2));
-  return project;
-}
-
-interface ServerHandle {
-  pid: number;
-  port: number;
-  password: string;
-  baseUrl: string;
-  stop: () => Promise<void>;
-}
-
-async function startServer(
-  binary: string,
-  project: string,
-  xdgConfig: string,
-  xdgData: string,
-): Promise<ServerHandle> {
-  await mkdir(join(xdgConfig, "opencode"), { recursive: true });
-  await writeFile(
-    join(xdgConfig, "opencode", "opencode.json"),
-    JSON.stringify({ plugins: [`file://${WORKSPACE_ROOT.replace(/\/$/, "")}`] }),
-  );
-  const port = 47000 + Math.floor(Math.random() * 2000);
-  const logPath = join(project, "..", "server.log");
-  let logText = "";
-  const child = spawn(binary, ["serve", "--port", String(port)], {
-    cwd: project,
-    env: {
-      ...process.env,
-      XDG_CONFIG_HOME: xdgConfig,
-      XDG_DATA_HOME: xdgData,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
-  child.stdout?.on("data", (chunk: Buffer) => {
-    logText += chunk.toString();
-  });
-  child.stderr?.on("data", (chunk: Buffer) => {
-    logText += chunk.toString();
-  });
-  const pass = await waitFor(
-    "server password",
-    async () => /password (\S+)/.test(logText),
-    60,
-    500,
-  ).then(() => /password (\S+)/.exec(logText)?.[1] ?? "");
-  return {
-    pid: child.pid ?? -1,
-    port,
-    password: pass,
-    baseUrl: `http://127.0.0.1:${port}`,
-    stop: async () => {
-      // PID-exact cleanup: never match processes by name.
+// START_BLOCK_RUN
+/** Execute one harness invocation and return its process-style status. */
+export async function runCli(argv: readonly string[], deps: CliDeps): Promise<number> {
+  const { mode, json, keep } = parseArgs(argv);
+  if (mode === "list") {
+    const rows = readParity(deps.workspaceRoot);
+    if (json) {
+      deps.stdout(JSON.stringify({ rows }, null, 2));
+    } else {
+      for (const row of rows) {
+        deps.stdout(`${row.phase}\t${row.status}\t${row.id}\t${row.surface}`);
+      }
+      const counts = rows.reduce<Record<string, number>>((acc, row) => {
+        acc[row.status] = (acc[row.status] ?? 0) + 1;
+        return acc;
+      }, {});
+      deps.stdout(`parity rows: ${rows.length} ${JSON.stringify(counts)}`);
+    }
+    return 0;
+  }
+  if (mode === "tui") {
+    const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
+    const result = await (deps.runTui ?? runTuiAcceptance)({
+      workspaceRoot: deps.workspaceRoot,
+      hostBinary: deps.hostBinary,
+      scratchBase,
+      keepScratch: keep,
+    });
+    deps.stdout(JSON.stringify(result, null, 2));
+    if (!result.ok) {
+      deps.stdout(result.error ?? result.note);
+      return 2;
+    }
+    deps.stdout(result.note);
+    return 0;
+  }
+  if (mode === "full") {
+    let hostBinary = deps.hostBinary;
+    if (hostBinary === undefined) {
       try {
-        process.kill(child.pid ?? 0, "SIGTERM");
-      } catch {}
-    },
-  };
-}
-
-async function api(server: ServerHandle, path: string, init?: RequestInit): Promise<unknown> {
-  const auth = Buffer.from(`opencode:${server.password}`).toString("base64");
-  const response = await fetch(`${server.baseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-  });
-  return response.json();
-}
-
-/**
- * The routing proof: the model-switched session event records the exact
- * model our prompt hook pinned, independent of whether the provider then
- * answers without credentials (sandbox models may require auth and produce
- * empty responses, which still proves the routing).
- */
-async function switchedModel(server: ServerHandle, sessionID: string): Promise<string | undefined> {
-  const messages = (await api(server, `/api/session/${sessionID}/message`)) as {
-    data?: Array<{ type?: string; model?: { id?: string; providerID?: string } }>;
-  };
-  const switched = messages.data?.find((message) => message.type === "model-switched");
-  return switched?.model ? `${switched.model.providerID}/${switched.model.id}` : undefined;
-}
-
-async function main() {
-  const root = await mkdtemp(join(tmpdir(), "vvoc-e2e-v2-"));
-  let server: ServerHandle | undefined;
-  try {
-    record("build package", "pass");
-    const build = spawn("bun", ["run", "build"], { cwd: WORKSPACE_ROOT });
-    await new Promise<void>((resolve, reject) =>
-      build.on("exit", (code) => (code === 0 ? resolve() : reject(new Error("build failed")))),
-    );
-
-    const binary = await downloadV2Binary(join(tmpdir(), `vvoc-e2e-v2-bin-${V2_VERSION}`));
-    const project = await prepareSandbox(root, "opencode/gpt-6-sol");
-
-    server = await startServer(binary, project, join(root, "xdg-config"), join(root, "xdg-data"));
-
-    // Kick the project location open and wait for plugin activation.
-    await waitFor(
-      "plugin activation",
-      async () => {
-        try {
-          await api(server!, "/api/session", {
-            method: "POST",
-            body: JSON.stringify({ title: "boot" }),
-          });
-          const plugins = (await api(server!, "/api/plugin")) as {
-            data?: Array<{ id?: string; state?: { status?: string } }>;
-          };
-          const vvoc = plugins.data?.find((plugin) => plugin.id === "vvoc");
-          return vvoc?.state?.status === "active";
-        } catch {
-          return false;
-        }
-      },
-      12,
-      3000,
-    );
-    const plugins = (await api(server, "/api/plugin")) as {
-      data?: Array<{ id?: string; source?: { type?: string }; features?: Record<string, boolean> }>;
-    };
-    const vvoc = plugins.data?.find((plugin) => plugin.id === "vvoc");
-    record(
-      "plugin active with server and tui features",
-      Boolean(vvoc?.features?.server && vvoc?.features?.tui) ? "pass" : "fail",
-      JSON.stringify(vvoc?.features),
-    );
-
-    // Session A: role model applied on first prompt.
-    const sessionA = (await api(server, "/api/session", {
-      method: "POST",
-      body: JSON.stringify({ title: "anchored", agent: "vv-role-probe" }),
-    })) as { data?: { id?: string } };
-    const sessionAID = sessionA.data?.id ?? "";
-    await api(server, `/api/session/${sessionAID}/prompt`, {
-      method: "POST",
-      body: JSON.stringify({ text: "e2e" }),
+        hostBinary = (deps.requireHost ?? requireHostBinary)();
+      } catch (error) {
+        deps.stdout(error instanceof Error ? error.message : String(error));
+        return 2;
+      }
+    }
+    const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
+    const evidencePath =
+      deps.evidencePath ??
+      join(
+        deps.workspaceRoot,
+        ".grace",
+        "changes",
+        "active",
+        "C-OPENCODE-V2-NATIVE",
+        "parity-evidence.json",
+      );
+    const runner =
+      deps.runFull ??
+      ((options: Parameters<NonNullable<CliDeps["runFull"]>>[0]) => runFull(options));
+    const summary = await runner({
+      workspaceRoot: deps.workspaceRoot,
+      hostBinary,
+      scratchBase,
+      evidencePath,
+      keepScratch: keep,
     });
-    await waitFor(
-      "session A model",
-      async () => (await switchedModel(server!, sessionAID)) !== undefined,
-      30,
-      1000,
-    );
-    const modelA1 = await switchedModel(server, sessionAID);
-    record(
-      "role model applied on first prompt",
-      modelA1 === "opencode/gpt-6-sol" ? "pass" : "fail",
-      String(modelA1),
-    );
-
-    // Hot-switch the preset and verify anchoring.
-    const { createDefaultVvocConfig: rebuild } = (await import(
-      join(WORKSPACE_ROOT, "dist/lib/vvoc-config.js")
-    )) as { createDefaultVvocConfig: () => Record<string, unknown> };
-    const switched = rebuild();
-    (switched as { roles: Record<string, string> }).roles = buildSandboxConfigs(
-      "opencode/gpt-6-luna",
-      "",
-    ).vvocRoles;
-    await writeFile(join(project, ".vvoc", "vvoc.json"), JSON.stringify(switched, null, 2));
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    const sessionB = (await api(server, "/api/session", {
-      method: "POST",
-      body: JSON.stringify({ title: "new-preset", agent: "vv-role-probe" }),
-    })) as { data?: { id?: string } };
-    const sessionBID = sessionB.data?.id ?? "";
-    await api(server, `/api/session/${sessionBID}/prompt`, {
-      method: "POST",
-      body: JSON.stringify({ text: "e2e" }),
-    });
-    await waitFor(
-      "session B model",
-      async () => (await switchedModel(server!, sessionBID)) !== undefined,
-      30,
-      1000,
-    );
-    const modelB = await switchedModel(server, sessionBID);
-    record(
-      "preset hot-switch without restart",
-      modelB === "opencode/gpt-6-luna" ? "pass" : "fail",
-      String(modelB),
-    );
-
-    await api(server, `/api/session/${sessionAID}/prompt`, {
-      method: "POST",
-      body: JSON.stringify({ text: "again" }),
-    });
-    await new Promise((resolve) => setTimeout(resolve, 4000));
-    const modelA2 = await switchedModel(server, sessionAID);
-    record(
-      "long session anchored to its starting preset",
-      modelA2 === "opencode/gpt-6-sol" ? "pass" : "fail",
-      String(modelA2),
-    );
-  } catch (error) {
-    record("harness", "fail", String(error));
-  } finally {
-    await server?.stop();
-    await rm(root, { recursive: true, force: true }).catch(() => {});
+    if (json) {
+      deps.stdout(JSON.stringify(summary, null, 2));
+    } else {
+      for (const row of summary.rows) {
+        deps.stdout(`[${row.outcome.toUpperCase()}] ${row.id} — ${row.surface}`);
+      }
+      for (const failure of summary.failures) deps.stdout(`not verified: ${failure}`);
+      if (summary.error !== undefined) deps.stdout(`harness error: ${summary.error}`);
+      const verified = summary.rows.filter((row) => row.outcome === "pass").length;
+      deps.stdout(`parity totals: ${verified} verified, ${summary.failures.length} not verified`);
+      if (summary.evidencePath !== undefined) deps.stdout(`evidence: ${summary.evidencePath}`);
+    }
+    return summary.ok ? 0 : 1;
   }
 
-  const failed = checkResults.filter((entry) => entry.status === "fail").length;
-  console.log(`\ne2e:v2 summary: ${checkResults.length - failed} pass, ${failed} fail`);
-  process.exit(failed > 0 ? 1 : 0);
+  // core mode
+  let hostBinary = deps.hostBinary;
+  if (hostBinary === undefined) {
+    try {
+      hostBinary = (deps.requireHost ?? requireHostBinary)();
+    } catch (error) {
+      deps.stdout(error instanceof Error ? error.message : String(error));
+      return 2;
+    }
+  }
+  const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
+  const evidencePath =
+    deps.evidencePath ??
+    join(deps.workspaceRoot, ".grace", "changes", "active", "C-OPENCODE-V2-NATIVE", "core-evidence.json");
+  const summary = await deps.runCore({
+    workspaceRoot: deps.workspaceRoot,
+    hostBinary,
+    scratchBase,
+    evidencePath,
+    keepScratch: keep,
+  });
+  if (json) {
+    deps.stdout(JSON.stringify(summary, null, 2));
+  } else {
+    for (const entry of summary.cases) {
+      deps.stdout(`[${entry.status.toUpperCase()}] ${entry.id} — ${entry.title}`);
+      for (const failure of entry.failures) deps.stdout(`    failure: ${failure}`);
+    }
+    if (summary.error !== undefined) deps.stdout(`harness error: ${summary.error}`);
+    const failed = summary.cases.filter((entry) => entry.status === "fail").length;
+    deps.stdout(`core summary: ${summary.cases.length - failed} pass, ${failed} fail`);
+    if (summary.evidencePath !== undefined) deps.stdout(`evidence: ${summary.evidencePath}`);
+    deps.stdout(`packed tarball sha256: ${summary.tarballSha256 ?? "unavailable"}`);
+  }
+  if (summary.error !== undefined) return 2;
+  return summary.ok ? 0 : 1;
+}
+// END_BLOCK_RUN
+
+// START_BLOCK_MAIN
+/** Real entry that wires process arguments and exits. */
+async function main(): Promise<void> {
+  const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
+  const status = await runCli(process.argv.slice(2), {
+    workspaceRoot,
+    stdout: (line) => console.log(line),
+    runCore,
+  });
+  process.exit(status);
 }
 
 if (import.meta.main) {
   void main();
 }
+// END_BLOCK_MAIN

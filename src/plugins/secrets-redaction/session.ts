@@ -13,13 +13,14 @@
 // START_MODULE_MAP
 //   PlaceholderSession - manages secret → placeholder mappings with HMAC hashing
 //   getPlaceholderRegex - returns RegExp to find all placeholders in text
+//   placeholderCategoryToken - deterministic bounded token-safe category representation
 //   PlaceholderSessionOptions - Session configuration options.
 //   PlaceholderEntry - Individual placeholder mapping entry.
 //   generateFallbackSecret - Generate fallback secret string.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Emit a deterministic bounded token-safe category token so every canonical config category (lowercase/digits/punctuation/Unicode/long) restores, while the original category stays mapping metadata.]
 // END_CHANGE_SUMMARY
 
 import { createHmac, randomBytes } from "node:crypto";
@@ -67,12 +68,13 @@ export class PlaceholderSession {
 
     const hash = this.computeHash(original);
     const hash12 = hash.substring(0, 12);
-    let placeholder = `${this.prefix}${category}_${hash12}__`;
+    const token = placeholderCategoryToken(category);
+    let placeholder = `${this.prefix}${token}_${hash12}__`;
 
     if (this.forward.has(placeholder)) {
       let counter = 1;
       while (this.forward.has(placeholder)) {
-        placeholder = `${this.prefix}${category}_${hash12}_${counter}__`;
+        placeholder = `${this.prefix}${token}_${hash12}_${counter}__`;
         counter++;
       }
     }
@@ -80,6 +82,8 @@ export class PlaceholderSession {
     const entry: PlaceholderEntry = {
       original,
       placeholder,
+      // The original category is preserved as mapping metadata; only the emitted
+      // token is slugged so the restorer can match every canonical config category.
       category,
       createdAt: Date.now(),
     };
@@ -146,8 +150,25 @@ export class PlaceholderSession {
   }
 }
 
+/**
+ * Deterministic, bounded, token-safe representation of a configured category.
+ * Every canonical config category (built-in uppercase, lowercase, digits,
+ * punctuation, Unicode, or an over-long label) maps to a non-empty
+ * `[A-Za-z0-9_]+` token that never starts or ends with `_`, so the emitted
+ * placeholder stays matchable; the original category is kept as mapping
+ * metadata, never leaked into the placeholder itself.
+ */
+export function placeholderCategoryToken(category: string): string {
+  const slug = category.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const bounded = slug.slice(0, 32);
+  return bounded.length > 0 ? bounded : "KEY";
+}
+
 export function getPlaceholderRegex(prefix: string): RegExp {
-  return new RegExp(`${prefix}[A-Z_]+_[0-9a-f]{12}(?:_\\d+)?__`, "g");
+  return new RegExp(
+    `${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\\d+)?__`,
+    "g",
+  );
 }
 
 export function generateFallbackSecret(): string {

@@ -1,702 +1,413 @@
 // FILE: src/tui/context/analyze.test.ts
-// VERSION: 1.1.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify measured context usage, compaction cutoff, percentages, detailed tool/MCP attribution, schema observability, reconciliation, and drift reporting.
-//   SCOPE: Pure deterministic analyzer and attribution-helper scenarios, including unavailable connected MCP catalogs, without a running OpenCode TUI.
-//   DEPENDS: [bun:test, @opencode-ai/sdk/v2, src/tui/context/analyze.ts]
-//   LINKS: [M-PLUGIN-CONTEXT-TUI, V-M-PLUGIN-CONTEXT-TUI]
+//   PURPOSE: Verify native context analysis: context-occupancy usage with unknown-when-absent fields, variant-aware model matching, temporal compaction relation, separate catalog budget, non-guessing native tool ownership, and attachment/agent normalization effects.
+//   SCOPE: Pure analyzer tests with native tagged message fixtures; no host or TUI renderer.
+//   DEPENDS: [bun:test, src/tui/context/analyze.ts, src/tui/context/types.ts]
+//   LINKS: [V-M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   toolUsage - Build a minimal tool usage fixture.
-//   categoryTokens - Read one category's estimated token count.
-//   userMessage - Build a user message fixture.
-//   assistantMessage - Build an assistant message fixture with provider usage.
-//   textPart - Build a text part fixture.
-//   filePart - Build a file part fixture.
-//   skillToolPart - Build a completed skill tool part fixture.
-//   pendingToolPart - Build a pending tool part fixture.
-//   runningToolPart - Build a running tool part fixture.
-//   completedToolPart - Build a completed tool part fixture.
-//   errorToolPart - Build an errored tool part fixture.
+//   userMessage - Build a native user message fixture.
+//   assistantMessage - Build a native assistant message fixture.
+//   toolRow - Build a ContextInspectionTool fixture.
+//   baseInput - Build a ContextAnalysisInput fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Covered vvoc attribution for web_search and web_fetch.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Added occupancy/total usage, absent-usage-unknown, variant mismatch, compaction relation, catalog-budget separation, and native built-in classification coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2";
 import {
   analyzeContext,
   classifyToolSource,
   compareToolUsage,
   createTokenMetric,
-  sanitizeMcpName,
-  selectActiveMessages,
+  findCompactionCutoff,
+  sameModelRef,
 } from "./analyze.js";
-import type { ContextToolUsage } from "./types.js";
+import { estimateTextTokens, estimateValueTokens } from "./estimate.js";
+import type {
+  ContextAnalysisInput,
+  ContextContent,
+  ContextMessage,
+  ContextToolUsage,
+} from "./types.js";
+import type { ContextInspectionTool } from "../../runtime/context-inspection-contract.js";
 
-describe("context analysis", () => {
-  test("derives metric percentages only from a positive finite context limit", () => {
-    expect(createTokenMetric(250, 1_000)).toEqual({ estimatedTokens: 250, percent: 25 });
-    for (const contextLimit of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(createTokenMetric(250, contextLimit)).toEqual({ estimatedTokens: 250 });
-    }
-  });
-
-  test("sanitizes MCP names and classifies unique longest prefixes without guessing collisions", () => {
-    expect(sanitizeMcpName("docs.api/v1-beta")).toBe("docs_api_v1-beta");
-    expect(classifyToolSource("read", [])).toEqual({ source: { kind: "builtin" } });
-    expect(classifyToolSource("edit", [])).toEqual({ source: { kind: "vvoc" } });
-    expect(classifyToolSource("web_search", [])).toEqual({ source: { kind: "vvoc" } });
-    expect(classifyToolSource("web_fetch", [])).toEqual({ source: { kind: "vvoc" } });
-    expect(
-      classifyToolSource("docs_api_lookup", [
-        { name: "docs", status: "connected" },
-        { name: "docs api", status: "connected" },
-      ]),
-    ).toEqual({ source: { kind: "mcp", server: "docs api" } });
-    expect(
-      classifyToolSource("docs_api_lookup", [
-        { name: "docs api", status: "connected" },
-        { name: "docs.api", status: "disabled" },
-      ]),
-    ).toEqual({
-      source: { kind: "other" },
-      ambiguousServers: ["docs api", "docs.api"],
-    });
-    expect(classifyToolSource("remote_search", [])).toEqual({ source: { kind: "other" } });
-  });
-
-  test("sorts tool detail by combined total descending with a stable ID tie-breaker", () => {
-    const tools = [toolUsage("zeta", 20), toolUsage("small", 5), toolUsage("alpha", 20)];
-    expect(tools.sort(compareToolUsage).map((tool) => tool.id)).toEqual(["alpha", "zeta", "small"]);
-  });
-
-  test("uses latest provider input, cache read, and output as the measured baseline", () => {
-    const messages = [
-      userMessage("u1"),
-      assistantMessage("a1", "u1", { input: 1_000, cacheRead: 200, output: 100 }),
-    ];
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages,
-      parts: [textPart("u1", "hello"), textPart("a1", "world")],
-      agents: [],
-      skills: [],
-      tools: [],
-      mcpServers: [],
-      model: { providerID: "openai", modelID: "gpt", contextLimit: 2_000 },
-    });
-
-    expect(analysis.measured?.usedTokens).toBe(1_300);
-    expect(analysis.measured?.remainingTokens).toBe(700);
-    expect(analysis.measured?.percentUsed).toBe(65);
-    expect(
-      analysis.categories.find((category) => category.id === "provider-only")?.estimatedTokens,
-    ).toBeGreaterThan(0);
-  });
-
-  test("starts active context at the latest compaction summary", () => {
-    const oldUser = userMessage("u-old");
-    const oldAssistant = assistantMessage("a-old", "u-old");
-    const summary = assistantMessage("a-summary", "u-old", {}, true);
-    const newUser = userMessage("u-new");
-    const latest = assistantMessage("a-new", "u-new");
-    const messages = [oldUser, oldAssistant, summary, newUser, latest];
-
-    expect(selectActiveMessages(messages).map((message) => message.id)).toEqual([
-      "a-summary",
-      "u-new",
-      "a-new",
-    ]);
-
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages,
-      parts: [
-        textPart("u-old", "old content ".repeat(100)),
-        textPart("a-summary", "compact summary"),
-        textPart("u-new", "new question"),
-        textPart("a-new", "new answer"),
-      ],
-      agents: [],
-      skills: [],
-      tools: [],
-      mcpServers: [],
-    });
-
-    expect(analysis.compacted).toBe(true);
-    expect(analysis.activeMessageCount).toBe(3);
-    expect(
-      analysis.categories.find((category) => category.id === "compacted-summary")?.estimatedTokens,
-    ).toBeGreaterThan(0);
-  });
-
-  test("estimates system instructions and both sides of the visible conversation", () => {
-    const user = { ...userMessage("u1"), system: "Follow the repository contract" };
-    const assistant = assistantMessage("a1", "u1");
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages: [user, assistant],
-      parts: [textPart("u1", "user question"), textPart("a1", "assistant answer")],
-      agents: [
-        {
-          name: "vv-controller",
-          mode: "primary",
-          permission: [],
-          prompt: "You are the controller",
-          options: {},
-        },
-      ],
-      skills: [],
-      tools: [],
-      mcpServers: [],
-    });
-
-    for (const id of ["system", "user-messages", "assistant-messages"] as const) {
-      expect(
-        analysis.categories.find((category) => category.id === id)?.estimatedTokens,
-      ).toBeGreaterThan(0);
-    }
-  });
-
-  test("groups skills, vvoc tools, built-ins, external schemas, tool output, files, and MCP status", () => {
-    const messages = [userMessage("u1"), assistantMessage("a1", "u1")];
-    const parts: Part[] = [
-      textPart("u1", "inspect"),
-      filePart("u1", "src/app.ts", "export const app = true"),
-      skillToolPart("a1"),
-    ];
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages,
-      parts,
-      agents: [],
-      skills: [
-        {
-          name: "frontend-design",
-          description: "Build polished interfaces",
-          location: "/skills/frontend-design/SKILL.md",
-          content: "full content is loaded only on demand",
-        },
-      ],
-      tools: [
-        { id: "read", description: "Read files", parameters: { type: "object" } },
-        { id: "edit", description: "Edit with anchors", parameters: { type: "object" } },
-        { id: "remote_search", description: "External search", parameters: { type: "object" } },
-      ],
-      mcpServers: [{ name: "docs", status: "connected" }],
-    });
-
-    for (const id of [
-      "skill-catalog",
-      "loaded-skills",
-      "builtin-tool-schemas",
-      "vvoc-tool-schemas",
-      "external-tool-schemas",
-      "files",
-    ]) {
-      expect(
-        analysis.categories.find((category) => category.id === id)?.estimatedTokens,
-      ).toBeGreaterThan(0);
-    }
-    expect(analysis.mcpServers).toEqual([{ name: "docs", status: "connected" }]);
-  });
-
-  test("aggregates observable schemas and active tool history into reconciled tool and MCP detail", () => {
-    const messages = [userMessage("u1"), assistantMessage("a1", "u1")];
-    const attachment = filePart("a1", "result.txt", "attachment payload");
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages,
-      parts: [
-        pendingToolPart("a1", "read", "read-1", { filePath: "draft.ts" }),
-        completedToolPart("a1", "read", "read-1", { filePath: "final.ts" }, "final content", [
-          attachment,
-        ]),
-        errorToolPart("a1", "read", "read-2", { filePath: "missing.ts" }, "not found"),
-        pendingToolPart("a1", "read", "read-3", { filePath: "pending.ts" }),
-        runningToolPart("a1", "read", "read-4", { filePath: "running.ts" }),
-        completedToolPart("a1", "skill", "skill-1", { name: "frontend-design" }, "loaded"),
-        completedToolPart("a1", "docs_search", "docs-1", { query: "api" }, "docs result"),
-        completedToolPart("a1", "offline_fetch", "offline-1", { url: "/old" }, "cached result"),
-      ],
-      agents: [],
-      skills: [],
-      tools: [
-        { id: "read", description: "Read files", parameters: { type: "object" } },
-        { id: "skill", description: "Load skills", parameters: { type: "object" } },
-        { id: "unused", description: "Unused plugin", parameters: { type: "object" } },
-        { id: "offline_fetch", description: "Fetch offline", parameters: { type: "object" } },
-      ],
-      mcpServers: [
-        { name: "docs", status: "connected" },
-        { name: "offline", status: "disabled" },
-      ],
-      model: { providerID: "openai", modelID: "gpt", contextLimit: 10_000 },
-    });
-
-    const attribution = analysis.toolAttribution!;
-    const read = attribution.tools.find((tool) => tool.id === "read")!;
-    const skill = attribution.tools.find((tool) => tool.id === "skill")!;
-    const unused = attribution.tools.find((tool) => tool.id === "unused")!;
-    const docs = attribution.mcpServers.find((server) => server.name === "docs")!;
-    const offline = attribution.mcpServers.find((server) => server.name === "offline")!;
-
-    expect(read.calls).toBe(4);
-    expect(read.history.estimatedTokens).toBeGreaterThan(0);
-    expect(read.total.estimatedTokens).toBe(
-      read.schema.estimatedTokens + read.history.estimatedTokens,
-    );
-    expect(read.total.percent).toBeCloseTo((read.total.estimatedTokens / 10_000) * 100);
-    expect(unused).toMatchObject({ calls: 0, history: { estimatedTokens: 0 } });
-    expect(unused.schema.estimatedTokens).toBeGreaterThan(0);
-    expect(skill.history.estimatedTokens).toBeGreaterThan(0);
-    expect(docs.toolCount).toBeUndefined();
-    expect(docs.schemaKnown).toBe(false);
-    expect(docs.schema.estimatedTokens).toBe(0);
-    expect(docs.history.estimatedTokens).toBeGreaterThan(0);
-    expect(docs.tools[0]?.schemaKnown).toBe(false);
-    expect(offline.toolCount).toBe(0);
-    expect(offline.schemaKnown).toBe(true);
-    expect(offline.schema.estimatedTokens).toBe(0);
-    expect(offline.history.estimatedTokens).toBeGreaterThan(0);
-    expect(offline.tools[0]?.schema.estimatedTokens).toBe(0);
-    expect(attribution.otherTools.map((tool) => tool.id)).toContain("unused");
-
-    expect(categoryTokens(analysis, "builtin-tool-schemas")).toBe(
-      attribution.reconciliation.schema.builtin.estimatedTokens,
-    );
-    expect(categoryTokens(analysis, "external-tool-schemas")).toBe(
-      attribution.reconciliation.schema.external.estimatedTokens,
-    );
-    expect(categoryTokens(analysis, "tool-results")).toBe(
-      attribution.reconciliation.history.toolResults.estimatedTokens,
-    );
-    expect(categoryTokens(analysis, "loaded-skills")).toBe(
-      attribution.reconciliation.history.loadedSkills.estimatedTokens,
-    );
-    expect(attribution.reconciliation.history.total.estimatedTokens).toBe(
-      attribution.reconciliation.history.toolResults.estimatedTokens +
-        attribution.reconciliation.history.loadedSkills.estimatedTokens,
-    );
-    expect(attribution.tools.reduce((total, tool) => total + tool.history.estimatedTokens, 0)).toBe(
-      attribution.reconciliation.history.total.estimatedTokens,
-    );
-    expect(
-      categoryTokens(analysis, "tool-results") + categoryTokens(analysis, "loaded-skills"),
-    ).toBe(attribution.reconciliation.history.total.estimatedTokens);
-    expect(
-      analysis.categories.find((category) => category.id === "builtin-tool-schemas")?.percent,
-    ).toBeCloseTo((categoryTokens(analysis, "builtin-tool-schemas") / 10_000) * 100);
-    expect(categoryTokens(analysis, "files")).toBeGreaterThan(0);
-  });
-
-  test("leaves overview and detailed percentages undefined without a positive model limit", () => {
-    const input = {
-      sessionID: "session-1",
-      messages: [userMessage("u1"), assistantMessage("a1", "u1")],
-      parts: [completedToolPart("a1", "read", "read-1", { filePath: "a.ts" }, "content")],
-      agents: [],
-      skills: [],
-      tools: [{ id: "read", description: "Read files", parameters: { type: "object" } }],
-      mcpServers: [],
-    } as const;
-
-    for (const contextLimit of [undefined, 0, -1]) {
-      const analysis = analyzeContext({
-        ...input,
-        model: { providerID: "openai", modelID: "gpt", contextLimit },
-      });
-      expect(analysis.categories.every((category) => category.percent === undefined)).toBe(true);
-      expect(analysis.toolAttribution?.tools[0]?.schema.percent).toBeUndefined();
-      expect(analysis.toolAttribution?.tools[0]?.history.percent).toBeUndefined();
-      expect(analysis.toolAttribution?.tools[0]?.total.percent).toBeUndefined();
-    }
-  });
-
-  test("excludes pre-compaction calls while retaining post-compaction calls and current schemas", () => {
-    const oldUser = userMessage("u-old");
-    const oldAssistant = assistantMessage("a-old", "u-old");
-    const summary = assistantMessage("a-summary", "u-old", {}, true);
-    const newUser = userMessage("u-new");
-    const latest = assistantMessage("a-new", "u-new");
-    const currentCall = completedToolPart(
-      "a-new",
-      "read",
-      "new-call",
-      { filePath: "new.ts" },
-      "new",
-    );
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages: [oldUser, oldAssistant, summary, newUser, latest],
-      parts: [
-        completedToolPart("a-old", "read", "old-call", { filePath: "old.ts" }, "old ".repeat(100)),
-        textPart("a-summary", "summary"),
-        currentCall,
-      ],
-      agents: [],
-      skills: [],
-      tools: [{ id: "read", description: "Read files", parameters: { type: "object" } }],
-      mcpServers: [],
-    });
-    const currentOnly = analyzeContext({
-      sessionID: "session-1",
-      messages: [summary, newUser, latest],
-      parts: [textPart("a-summary", "summary"), currentCall],
-      agents: [],
-      skills: [],
-      tools: [{ id: "read", description: "Read files", parameters: { type: "object" } }],
-      mcpServers: [],
-    });
-
-    const read = analysis.toolAttribution?.tools.find((tool) => tool.id === "read");
-    expect(read?.calls).toBe(1);
-    expect(read?.schema.estimatedTokens).toBeGreaterThan(0);
-    expect(read?.history.estimatedTokens).toBe(
-      currentOnly.toolAttribution?.tools.find((tool) => tool.id === "read")?.history
-        .estimatedTokens,
-    );
-  });
-
-  test("retains active history but zeroes current schema for every disconnected MCP status", () => {
-    const statuses = [
-      { name: "disabled", status: "disabled" as const },
-      { name: "failed", status: "failed" as const, error: "offline" },
-      { name: "auth", status: "needs_auth" as const },
-      {
-        name: "register",
-        status: "needs_client_registration" as const,
-        error: "client id required",
-      },
-    ];
-    const parts = statuses.map((server) =>
-      completedToolPart(
-        "a1",
-        `${server.name}_run`,
-        `${server.name}-call`,
-        { value: 1 },
-        "retained",
-      ),
-    );
-    parts.push(completedToolPart("a1", "connected_run", "connected-call", { value: 1 }, "active"));
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages: [userMessage("u1"), assistantMessage("a1", "u1")],
-      parts,
-      agents: [],
-      skills: [],
-      tools: [
-        ...statuses.map((server) => ({
-          id: `${server.name}_run`,
-          description: "stale schema",
-          parameters: { type: "object" },
-        })),
-        { id: "connected_run", description: "current schema", parameters: { type: "object" } },
-      ],
-      mcpSchemaCatalogAvailable: true,
-      mcpServers: [
-        { name: "connected", status: "connected" },
-        ...statuses,
-        { name: "alpha", status: "connected" },
-        { name: "zeta", status: "connected" },
-      ],
-    });
-
-    const servers = analysis.toolAttribution!.mcpServers;
-    for (const status of statuses) {
-      const server = servers.find((candidate) => candidate.name === status.name)!;
-      expect(server.toolCount).toBe(0);
-      expect(server.schemaKnown).toBe(true);
-      expect(server.schema.estimatedTokens).toBe(0);
-      expect(server.history.estimatedTokens).toBeGreaterThan(0);
-      expect(server.tools[0]?.history.estimatedTokens).toBeGreaterThan(0);
-    }
-    const connected = servers.find((server) => server.name === "connected")!;
-    expect(connected.toolCount).toBe(1);
-    expect(connected.schemaKnown).toBe(true);
-    expect(connected.schema.estimatedTokens).toBeGreaterThan(0);
-    expect(
-      servers.filter((server) => server.total.estimatedTokens === 0).map((server) => server.name),
-    ).toEqual(["alpha", "zeta"]);
-  });
-
-  test("marks connected MCP schema catalogs unavailable when the public API omits them", () => {
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages: [userMessage("u1"), assistantMessage("a1", "u1")],
-      parts: [
-        completedToolPart(
-          "a1",
-          "brave-search_brave_web_search",
-          "search-call",
-          { query: "OpenCode MCP schemas" },
-          "result",
-        ),
-      ],
-      agents: [],
-      skills: [],
-      tools: [],
-      mcpServers: [{ name: "brave-search", status: "connected" }],
-    });
-
-    const server = analysis.toolAttribution!.mcpServers[0]!;
-    const tool = server.tools[0]!;
-    expect(server.toolCount).toBeUndefined();
-    expect(server.schemaKnown).toBe(false);
-    expect(server.schema.estimatedTokens).toBe(0);
-    expect(server.history.estimatedTokens).toBeGreaterThan(0);
-    expect(server.total.estimatedTokens).toBe(server.history.estimatedTokens);
-    expect(tool.schemaKnown).toBe(false);
-    expect(tool.schema.estimatedTokens).toBe(0);
-    expect(tool.history.estimatedTokens).toBeGreaterThan(0);
-  });
-
-  test("uses longest MCP prefixes and bounds collision warnings while falling back to Other", () => {
-    const ambiguousIDs = ["docs_api_alpha", "docs_api_bravo", "docs_api_charlie", "docs_api_delta"];
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages: [userMessage("u1"), assistantMessage("a1", "u1")],
-      parts: [completedToolPart("a1", "docs_api_lookup", "unique", {}, "result")],
-      agents: [],
-      skills: [],
-      tools: [
-        { id: "docs_api_lookup", description: "longest", parameters: { type: "object" } },
-        ...ambiguousIDs.map((id) => ({
-          id,
-          description: "ambiguous",
-          parameters: { type: "object" },
-        })),
-        { id: "plain_plugin", description: "other", parameters: { type: "object" } },
-      ],
-      mcpServers: [
-        { name: "docs", status: "connected" },
-        { name: "docs api", status: "connected" },
-        { name: "docs.api", status: "connected" },
-      ],
-    });
-
-    const tools = analysis.toolAttribution!.tools;
-    expect(tools.find((tool) => tool.id === "docs_api_lookup")?.source).toEqual({ kind: "other" });
-    expect(analysis.toolAttribution!.otherTools.map((tool) => tool.id)).toEqual(
-      expect.arrayContaining([...ambiguousIDs, "docs_api_lookup", "plain_plugin"]),
-    );
-    expect(analysis.warnings).toHaveLength(3);
-    expect(analysis.warnings.at(-1)).toContain("additional tool IDs");
-
-    const unique = analyzeContext({
-      sessionID: "session-1",
-      messages: [userMessage("u1"), assistantMessage("a1", "u1")],
-      parts: [],
-      agents: [],
-      skills: [],
-      tools: [{ id: "docs_api_lookup", description: "longest", parameters: { type: "object" } }],
-      mcpServers: [
-        { name: "docs", status: "connected" },
-        { name: "docs api", status: "connected" },
-      ],
-    });
-    expect(unique.toolAttribution?.tools[0]?.source).toEqual({ kind: "mcp", server: "docs api" });
-  });
-
-  test("reports positive estimation drift instead of inventing a negative unknown category", () => {
-    const messages = [userMessage("u1"), assistantMessage("a1", "u1", { input: 1, output: 1 })];
-    const analysis = analyzeContext({
-      sessionID: "session-1",
-      messages,
-      parts: [textPart("u1", "large visible prompt ".repeat(100))],
-      agents: [],
-      skills: [],
-      tools: [],
-      mcpServers: [],
-    });
-
-    expect(analysis.estimationDriftTokens).toBeGreaterThan(0);
-    expect(analysis.categories.some((category) => category.id === "provider-only")).toBe(false);
-  });
-});
-
-function toolUsage(id: string, total: number): ContextToolUsage {
-  return {
-    id,
-    source: { kind: "other" },
-    calls: 0,
-    schemaKnown: true,
-    schema: { estimatedTokens: total },
-    history: { estimatedTokens: 0 },
-    total: { estimatedTokens: total },
-  };
-}
-
-function categoryTokens(analysis: ReturnType<typeof analyzeContext>, id: string): number {
-  return analysis.categories.find((category) => category.id === id)?.estimatedTokens ?? 0;
-}
-
-function userMessage(id: string): UserMessage {
-  return {
-    id,
-    sessionID: "session-1",
-    role: "user",
-    time: { created: 1 },
-    agent: "vv-controller",
-    model: { providerID: "openai", modelID: "gpt" },
-  };
+function userMessage(id: string, text: string): ContextMessage {
+  return { kind: "user", id, text, agent: "build" };
 }
 
 function assistantMessage(
   id: string,
-  parentID: string,
-  tokens: { input?: number; cacheRead?: number; output?: number } = {},
-  summary = false,
-): AssistantMessage {
+  content: ContextContent[],
+  overrides: Partial<Extract<ContextMessage, { kind: "assistant" }>> = {},
+): ContextMessage {
   return {
+    kind: "assistant",
     id,
-    sessionID: "session-1",
-    role: "assistant",
-    time: { created: 2, completed: 3 },
-    parentID,
-    modelID: "gpt",
-    providerID: "openai",
-    mode: "build",
-    agent: "vv-controller",
-    path: { cwd: "/tmp/project", root: "/tmp/project" },
-    summary: summary || undefined,
-    cost: 0,
-    tokens: {
-      input: tokens.input ?? 0,
-      output: tokens.output ?? 0,
-      reasoning: 0,
-      cache: { read: tokens.cacheRead ?? 0, write: 0 },
-    },
+    agent: "build",
+    model: { providerID: "deepseek", modelID: "chat" },
+    content,
+    ...overrides,
   };
 }
 
-function textPart(messageID: string, text: string): Extract<Part, { type: "text" }> {
-  return { id: `${messageID}-text`, sessionID: "session-1", messageID, type: "text", text };
-}
-
-function filePart(
-  messageID: string,
-  filename: string,
-  value: string,
-): Extract<Part, { type: "file" }> {
+function toolRow(overrides: Partial<ContextInspectionTool> = {}): ContextInspectionTool {
   return {
-    id: `${messageID}-file`,
-    sessionID: "session-1",
-    messageID,
-    type: "file",
-    mime: "text/plain",
-    filename,
-    url: `file://${filename}`,
-    source: { type: "file", path: filename, text: { value, start: 0, end: value.length } },
+    effectiveID: "read",
+    name: "read",
+    description: "Read a file",
+    codeMode: false,
+    status: "registered",
+    inputJSONSchema: { type: "object", properties: { path: { type: "string" } } },
+    ...overrides,
   };
 }
 
-function skillToolPart(messageID: string): Extract<Part, { type: "tool" }> {
+function baseInput(overrides: Partial<ContextAnalysisInput> = {}): ContextAnalysisInput {
   return {
-    id: `${messageID}-skill`,
-    sessionID: "session-1",
-    messageID,
-    type: "tool",
-    callID: "call-1",
-    tool: "skill",
-    state: {
+    sessionID: "ses_1",
+    activeMessages: [],
+    historyMessages: [],
+    agents: [],
+    skills: [],
+    tools: [],
+    toolCatalogStatus: "complete",
+    mcpServers: [],
+    ...overrides,
+  };
+}
+
+describe("context analysis helpers", () => {
+  test("derives metric percentages only from a positive finite context limit", () => {
+    expect(createTokenMetric(100, 1000)).toEqual({ estimatedTokens: 100, percent: 10 });
+    expect(createTokenMetric(100, undefined)).toEqual({ estimatedTokens: 100 });
+    expect(createTokenMetric(100, 0)).toEqual({ estimatedTokens: 100 });
+    expect(createTokenMetric(Number.NaN, 100)).toEqual({ estimatedTokens: 0, percent: 0 });
+  });
+
+  test("classifies native built-ins and vvoc tools and leaves unknown tools unattributed", () => {
+    expect(classifyToolSource({ effectiveID: "shell", name: "shell" })).toEqual({
+      kind: "builtin",
+    });
+    expect(classifyToolSource({ effectiveID: "subagent", name: "subagent" })).toEqual({
+      kind: "builtin",
+    });
+    expect(classifyToolSource({ effectiveID: "websearch", name: "websearch" })).toEqual({
+      kind: "builtin",
+    });
+    expect(classifyToolSource({ effectiveID: "web_fetch", name: "web_fetch" })).toEqual({
+      kind: "vvoc",
+    });
+    expect(
+      classifyToolSource({ effectiveID: "docs_search", name: "docs_search", namespace: "docs" }),
+    ).toEqual({
+      kind: "other",
+      namespace: "docs",
+    });
+  });
+
+  test("sorts tool detail by combined total descending with a stable ID tie-breaker", () => {
+    const usage = (id: string, tokens: number): ContextToolUsage => ({
+      id,
+      source: { kind: "other" },
+      codeMode: false,
+      calls: 0,
+      schemaKnown: true,
+      schema: createTokenMetric(tokens, undefined),
+      history: createTokenMetric(0, undefined),
+      total: createTokenMetric(tokens, undefined),
+    });
+    const sorted = [usage("b", 10), usage("a", 10), usage("c", 5)].sort(compareToolUsage);
+    expect(sorted.map((tool) => tool.id)).toEqual(["a", "b", "c"]);
+  });
+
+  test("compares models including variant", () => {
+    expect(sameModelRef({ providerID: "p", modelID: "m" }, { providerID: "p", modelID: "m" })).toBe(
+      true,
+    );
+    expect(
+      sameModelRef(
+        { providerID: "p", modelID: "m", variant: "fast" },
+        { providerID: "p", modelID: "m" },
+      ),
+    ).toBe(false);
+  });
+
+  test("finds the latest completed compaction cutoff only", () => {
+    const messages: ContextMessage[] = [
+      { kind: "compaction", id: "c1", status: "completed", summary: "s", recent: "r" },
+      userMessage("u1", "hi"),
+      { kind: "compaction", id: "c2", status: "failed", summary: "s", recent: "r" },
+    ];
+    expect(findCompactionCutoff(messages)?.message.id).toBe("c1");
+  });
+});
+
+describe("native context analysis", () => {
+  test("measures the pinned native contextUsage sum of all five token fields", () => {
+    // Exact controller counterexample: 100 input + 20 output + 30 reasoning +
+    // 40 cache read + 50 cache write = 240 native total, remaining 760.
+    const message = assistantMessage("a1", [{ type: "text", text: "hello" }], {
+      tokens: { input: 100, output: 20, reasoning: 30, cacheRead: 40, cacheWrite: 50 },
+    });
+    const input = baseInput({
+      activeMessages: [userMessage("u1", "prompt"), message],
+      historyMessages: [userMessage("u1", "prompt"), message],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    const analysis = analyzeContext(input);
+    expect(analysis.measured?.usedTokens).toBe(240);
+    expect(analysis.measured?.remainingTokens).toBe(760);
+    expect(analysis.measured?.percentUsed).toBeCloseTo(24);
+    expect(analysis.measured?.cacheWriteTokens).toBe(50);
+    expect(analysis.measured?.outputTokens).toBe(20);
+    expect(analysis.measured?.reasoningTokens).toBe(30);
+    expect(analysis.measured?.matchesSelectedModel).toBe(true);
+  });
+
+  test("ignores a reported non-positive native total", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "hello" }], {
+      tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    });
+    const analysis = analyzeContext(
+      baseInput({
+        activeMessages: [message],
+        historyMessages: [message],
+        selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+      }),
+    );
+    expect(analysis.measured).toBeUndefined();
+  });
+
+  test("keeps absent usage unknown instead of reporting zero", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "hello" }]);
+    const input = baseInput({
+      activeMessages: [message],
+      historyMessages: [message],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    const analysis = analyzeContext(input);
+    expect(analysis.measured).toBeUndefined();
+  });
+
+  test("keeps malformed/partial usage unknown field-by-field", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "hello" }], {
+      tokens: { output: 5 },
+    });
+    const input = baseInput({
+      activeMessages: [message],
+      historyMessages: [message],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    const analysis = analyzeContext(input);
+    expect(analysis.measured?.usedTokens).toBeUndefined();
+    expect(analysis.measured?.outputTokens).toBe(5);
+    expect(analysis.measured?.percentUsed).toBeUndefined();
+  });
+
+  test("rejects a different variant for the current-limit and occupancy claim", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "hello" }], {
+      model: { providerID: "deepseek", modelID: "chat", variant: "thinking" },
+      tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+    });
+    const input = baseInput({
+      activeMessages: [message],
+      historyMessages: [message],
+      selectedModel: {
+        providerID: "deepseek",
+        modelID: "chat",
+        variant: "plain",
+        contextLimit: 100,
+      },
+    });
+    const analysis = analyzeContext(input);
+    expect(analysis.measured?.matchesSelectedModel).toBe(false);
+    expect(analysis.measured?.contextLimit).toBeUndefined();
+    expect(analysis.measured?.percentUsed).toBeUndefined();
+    expect(analysis.measured?.label).toContain("differs from the selected model");
+  });
+
+  test("distinguishes usage before and after the latest completed compaction", () => {
+    const before = assistantMessage("a_before", [{ type: "text", text: "old" }], {
+      tokens: { input: 999, output: 1, cacheRead: 0, cacheWrite: 0 },
+    });
+    const compaction: ContextMessage = {
+      kind: "compaction",
+      id: "c1",
       status: "completed",
-      input: { name: "frontend-design" },
-      output: "Loaded skill instructions",
-      title: "frontend-design",
-      metadata: {},
-      time: { start: 1, end: 2 },
-    },
-  };
-}
+      summary: "sum",
+      recent: "rec",
+      createdAt: 10,
+    };
+    const after = assistantMessage("a_after", [{ type: "text", text: "new" }], {
+      tokens: { input: 5, output: 2, cacheRead: 1, cacheWrite: 1 },
+      createdAt: 20,
+    });
+    const beforeInput = baseInput({
+      activeMessages: [before, { ...compaction, createdAt: 30 }],
+      historyMessages: [before, compaction],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    expect(analyzeContext(beforeInput).measured?.compactionRelation).toBe("before");
+    expect(analyzeContext(beforeInput).measured?.label).toContain(
+      "before the most recent compaction",
+    );
 
-function pendingToolPart(
-  messageID: string,
-  tool: string,
-  callID: string,
-  input: Record<string, unknown>,
-): Extract<Part, { type: "tool" }> {
-  return {
-    id: `${messageID}-${callID}-pending`,
-    sessionID: "session-1",
-    messageID,
-    type: "tool",
-    callID,
-    tool,
-    state: { status: "pending", input, raw: JSON.stringify(input) },
-  };
-}
+    const afterInput = baseInput({
+      activeMessages: [compaction, after],
+      historyMessages: [before, compaction, after],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    expect(analyzeContext(afterInput).measured?.compactionRelation).toBe("after");
+  });
 
-function runningToolPart(
-  messageID: string,
-  tool: string,
-  callID: string,
-  input: Record<string, unknown>,
-): Extract<Part, { type: "tool" }> {
-  return {
-    id: `${messageID}-${callID}-running`,
-    sessionID: "session-1",
-    messageID,
-    type: "tool",
-    callID,
-    tool,
-    state: { status: "running", input, title: tool, metadata: {}, time: { start: 1 } },
-  };
-}
+  test("matches agent prompts by id, not display name", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "hi" }]);
+    const input = baseInput({
+      activeMessages: [message],
+      historyMessages: [message],
+      agents: [{ id: "build", name: "Build", system: "system prompt" }],
+    });
+    const analysis = analyzeContext(input);
+    const system = analysis.categories.find((category) => category.id === "system");
+    expect(system?.estimatedTokens).toBe(estimateTextTokens("system prompt"));
+  });
 
-function completedToolPart(
-  messageID: string,
-  tool: string,
-  callID: string,
-  input: Record<string, unknown>,
-  output: string,
-  attachments?: Array<Extract<Part, { type: "file" }>>,
-): Extract<Part, { type: "tool" }> {
-  return {
-    id: `${messageID}-${callID}-completed`,
-    sessionID: "session-1",
-    messageID,
-    type: "tool",
-    callID,
-    tool,
-    state: {
-      status: "completed",
-      input,
-      output,
-      title: tool,
-      metadata: {},
-      time: { start: 1, end: 2 },
-      attachments,
-    },
-  };
-}
+  test("counts native user attachments under files", () => {
+    const input = baseInput({
+      activeMessages: [
+        {
+          kind: "user",
+          id: "u1",
+          text: "see file",
+          files: [
+            {
+              name: "a.png",
+              mime: "image/png",
+              sourceType: "uri",
+              sourceURI: "https://x/a.png",
+              byteLength: 100,
+            },
+          ],
+        },
+      ],
+      historyMessages: [],
+    });
+    const analysis = analyzeContext(input);
+    const files = analysis.categories.find((category) => category.id === "files");
+    expect(files?.estimatedTokens).toBeGreaterThan(0);
+  });
 
-function errorToolPart(
-  messageID: string,
-  tool: string,
-  callID: string,
-  input: Record<string, unknown>,
-  error: string,
-): Extract<Part, { type: "tool" }> {
-  return {
-    id: `${messageID}-${callID}-error`,
-    sessionID: "session-1",
-    messageID,
-    type: "tool",
-    callID,
-    tool,
-    state: {
-      status: "error",
-      input,
-      error,
-      metadata: {},
-      time: { start: 1, end: 2 },
-    },
-  };
-}
+  test("keeps the registered catalog budget separate from observed context and provider residual", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "short" }], {
+      tokens: { input: 10, output: 1, cacheRead: 0, cacheWrite: 0 },
+    });
+    const withoutCatalog = analyzeContext(
+      baseInput({
+        activeMessages: [message],
+        historyMessages: [message],
+        selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+      }),
+    );
+    const withCatalog = analyzeContext(
+      baseInput({
+        activeMessages: [message],
+        historyMessages: [message],
+        selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+        tools: [
+          toolRow({
+            effectiveID: "huge",
+            name: "huge",
+            inputJSONSchema: {
+              type: "object",
+              properties: { blob: { type: "string", description: "y".repeat(4000) } },
+            },
+          }),
+        ],
+      }),
+    );
+    expect(withCatalog.estimatedKnownTokens).toBe(withoutCatalog.estimatedKnownTokens);
+    expect(withCatalog.catalogSchemaBudget?.estimatedTokens).toBeGreaterThan(0);
+    const residual = (analysis: typeof withoutCatalog) =>
+      analysis.categories.find((category) => category.id === "provider-only")?.estimatedTokens ?? 0;
+    expect(residual(withCatalog)).toBe(residual(withoutCatalog));
+  });
+
+  test("keeps known external rows known when another row fails conversion", () => {
+    const input = baseInput({
+      tools: [
+        toolRow({ effectiveID: "docs_search", name: "docs_search", namespace: "docs" }),
+        toolRow({
+          effectiveID: "broken",
+          name: "broken",
+          namespace: "docs",
+          status: "unavailable",
+          inputJSONSchema: undefined,
+        }),
+      ],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    const analysis = analyzeContext(input);
+    const known = analysis.toolAttribution?.tools.find((tool) => tool.id === "docs_search");
+    const broken = analysis.toolAttribution?.tools.find((tool) => tool.id === "broken");
+    expect(known?.schemaKnown).toBe(true);
+    expect(broken?.schemaKnown).toBe(false);
+    expect(analysis.estimatedKnownTokens).toBe(0);
+  });
+
+  test("retains active tool history but marks an unavailable schema as unknown", () => {
+    const message = assistantMessage("a1", [
+      {
+        type: "tool",
+        id: "t1",
+        name: "docs_search",
+        state: "completed",
+        input: { q: "x" },
+        output: "result",
+      },
+    ]);
+    const input = baseInput({
+      activeMessages: [message],
+      historyMessages: [message],
+      tools: [
+        toolRow({
+          effectiveID: "docs_search",
+          name: "docs_search",
+          status: "unavailable",
+          inputJSONSchema: undefined,
+        }),
+      ],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 1000 },
+    });
+    const analysis = analyzeContext(input);
+    const tool = analysis.toolAttribution?.tools.find((entry) => entry.id === "docs_search");
+    expect(tool?.calls).toBe(1);
+    expect(tool?.schemaKnown).toBe(false);
+    expect(tool?.history.estimatedTokens).toBeGreaterThan(0);
+  });
+
+  test("reports positive estimation drift instead of inventing a negative unknown category", () => {
+    const message = assistantMessage("a1", [{ type: "text", text: "a".repeat(4000) }], {
+      tokens: { input: 10, output: 1, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    });
+    const input = baseInput({
+      activeMessages: [message],
+      historyMessages: [message],
+      selectedModel: { providerID: "deepseek", modelID: "chat", contextLimit: 10000 },
+    });
+    const analysis = analyzeContext(input);
+    expect(analysis.estimatedKnownTokens).toBeGreaterThan(analysis.measured?.usedTokens ?? 0);
+    expect(analysis.estimationDriftTokens).toBeGreaterThan(0);
+    expect(analysis.categories.some((category) => category.id === "provider-only")).toBe(false);
+  });
+
+  test("estimates value tokens deterministically", () => {
+    expect(estimateValueTokens({ a: "b" })).toBeGreaterThan(0);
+  });
+});

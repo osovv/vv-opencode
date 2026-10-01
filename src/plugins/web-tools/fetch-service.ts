@@ -1,10 +1,10 @@
 // FILE: src/plugins/web-tools/fetch-service.ts
-// VERSION: 1.0.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Build the provider-neutral web_fetch tool: strict contract validation with explicit execute-time defaults, URL scheme/shape rejection, permission request, provider dispatch, and structured text or attachment results.
-//   SCOPE: web_fetch ToolDefinition factory plus provider result mapping. Validates raw host-forwarded arguments through the shared web_fetch contract before any permission request, credential lookup, or provider dispatch; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters.
-//   DEPENDS: [@opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
-//   LINKS: M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-WEB-EXA, M-PLUGIN-WEB-TOOLS, M-AGENT-TOOL-CONTRACT, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
+//   PURPOSE: Build the provider-neutral native web_fetch tool: strict contract validation with explicit execute-time defaults, URL scheme/shape rejection, per-family captured policy/config resolution, awaited resource permission before any network effect, provider dispatch, and structured text or native file-content results.
+//   SCOPE: Native Tool.Info factory plus provider result mapping. Validates raw host-forwarded arguments through the shared web_fetch contract before any permission request, credential lookup, or provider dispatch; awaits a resource-specific permission; delegates retrieval and conversion to the native, Spider, and direct Z.AI adapters. Media attachments map to native Tool file content covering data-URI binary payloads. No V1 ToolDefinition/context.ask, no startup-global toggle.
+//   DEPENDS: [@opencode/plugin/promise/tool, zod, src/lib/agent-tool-contract.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/schemas.ts, src/plugins/web-tools/search-service.ts (WebPermissionGuard/WebToolsRuntime), src/plugins/web-tools/providers/native-fetch.ts, src/plugins/web-tools/providers/spider.ts, src/plugins/web-tools/providers/zai.ts, src/plugins/web-tools/providers/exa.ts]
+//   LINKS: [M-WEB-FETCH-SERVICE, M-WEB-NATIVE-FETCH, M-WEB-SPIDER, M-WEB-ZAI, M-WEB-MEDIA-LOADER, M-WEB-EXA, M-PLUGIN-WEB-TOOLS, M-AGENT-TOOL-CONTRACT, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -12,57 +12,79 @@
 // START_MODULE_MAP
 //   WEB_FETCH_DEFAULT_TIMEOUT_SECONDS - Default per-call timeout in seconds (re-exported from schemas).
 //   WEB_FETCH_MAX_TIMEOUT_SECONDS - Maximum model-configurable timeout in seconds (re-exported from schemas).
-//   createWebFetchTool - Create the web_fetch ToolDefinition bound to a resolved fetch config.
+//   executeWebFetch - Execute one validated fetch against a resolved config and permission guard.
+//   createWebFetchToolForConfig - Create a web_fetch tool pre-bound to one resolved config (tests/direct).
+//   createWebFetchTool - Create the native web_fetch tool bound to a per-session policy resolver.
+//   MappedResult - Native Tool.Result shape emitted by web_fetch.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Registered web_fetch from the shared schemas.ts contract and validated URL shape/scheme plus re-applied the documented format/timeout defaults at the execute boundary before any permission request or dispatch.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 attempt 2 - Split per-provider execution from a per-session policy resolver so a startup-global toggle can no longer hijack a disabled captured family or block a later enabled one.]
 // END_CHANGE_SUMMARY
 
-import {
-  tool,
-  type ToolAttachment,
-  type ToolDefinition,
-  type ToolResult,
-} from "@opencode-ai/plugin";
-import { ContractInputError } from "../../lib/agent-tool-contract.js";
+import { z } from "zod";
+import type { ToolContext as NativeToolContext } from "@opencode/plugin/promise/tool";
+import { ContractInputError, type OwnedToolAttachment } from "../../lib/agent-tool-contract.js";
 import type { ResolvedWebFetchConfig } from "./config.js";
 import { WebProviderError } from "./providers/exa.js";
 import { fetchNative, type NativeFetchOutcome } from "./providers/native-fetch.js";
 import { scrapeSpider, type SpiderOutcome } from "./providers/spider.js";
 import { fetchZai, type ZaiReaderOutcome } from "./providers/zai.js";
 import {
+  WebToolsPolicyError,
+  type WebPermissionGuard,
+  type WebToolsRuntime,
+} from "./search-service.js";
+import {
   WEB_FETCH_TOOL_ID,
   validateWebFetchToolInput,
-  webFetchArgs,
   webFetchContract,
   type WebFetchFormat,
 } from "./schemas.js";
 
 export { WEB_FETCH_DEFAULT_TIMEOUT_SECONDS, WEB_FETCH_MAX_TIMEOUT_SECONDS } from "./schemas.js";
 
+type NativeToolContent =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string };
+
 // START_BLOCK_RESULT_MAPPING
-function mediaSummary(attachment: ToolAttachment): string {
+function mediaSummary(attachment: OwnedToolAttachment): string {
   const name = attachment.filename ? `\`${attachment.filename}\`` : "the requested resource";
   return `Fetched ${name} as a ${attachment.mime} attachment.`;
+}
+
+/** Map a host-neutral attachment to a native Tool file-content frame (data-URI payload preserved). */
+function fileContent(attachment: OwnedToolAttachment): NativeToolContent {
+  return {
+    type: "file",
+    uri: attachment.url,
+    mime: attachment.mime,
+    ...(attachment.filename === undefined ? {} : { name: attachment.filename }),
+  };
+}
+
+export interface MappedResult {
+  readonly output: string;
+  readonly content: string | ReadonlyArray<NativeToolContent>;
+  readonly metadata: Record<string, unknown>;
 }
 
 function nativeResult(
   url: string,
   format: WebFetchFormat,
   outcome: NativeFetchOutcome,
-): Exclude<ToolResult, string> {
+): MappedResult {
   if (outcome.kind === "media") {
     return {
-      title: `web_fetch: ${url}`,
       output: mediaSummary(outcome.attachment),
-      attachments: [outcome.attachment],
+      content: [fileContent(outcome.attachment)],
       metadata: { provider: "native", format, status: outcome.status },
     };
   }
   return {
-    title: `web_fetch: ${url}`,
     output: outcome.content,
+    content: outcome.content,
     metadata: { provider: "native", format, status: outcome.status },
   };
 }
@@ -72,7 +94,7 @@ function spiderResult(
   format: WebFetchFormat,
   credentialSource: "env" | "config",
   outcome: SpiderOutcome,
-): Exclude<ToolResult, string> {
+): MappedResult {
   const metadata = {
     provider: "spider",
     format,
@@ -81,13 +103,12 @@ function spiderResult(
   };
   if (outcome.kind === "media") {
     return {
-      title: `web_fetch: ${url}`,
       output: mediaSummary(outcome.attachment),
-      attachments: [outcome.attachment],
+      content: [fileContent(outcome.attachment)],
       metadata,
     };
   }
-  return { title: `web_fetch: ${url}`, output: outcome.content, metadata };
+  return { output: outcome.content, content: outcome.content, metadata };
 }
 
 function zaiResult(
@@ -96,7 +117,7 @@ function zaiResult(
   region: "international" | "china",
   credentialSource: "env" | "config",
   outcome: ZaiReaderOutcome,
-): Exclude<ToolResult, string> {
+): MappedResult {
   const metadata = {
     provider: "zai",
     region,
@@ -106,58 +127,50 @@ function zaiResult(
   };
   if (outcome.kind === "media") {
     return {
-      title: `web_fetch: ${url}`,
       output: mediaSummary(outcome.attachment),
-      attachments: [outcome.attachment],
+      content: [fileContent(outcome.attachment)],
       metadata,
     };
   }
-  return { title: `web_fetch: ${url}`, output: outcome.content, metadata };
+  return { output: outcome.content, content: outcome.content, metadata };
 }
 // END_BLOCK_RESULT_MAPPING
 
 /**
- * Create the web_fetch tool bound to the resolved fetch configuration.
- * execute validates raw host-forwarded arguments through the shared strict contract first, so
- * unknown keys, invalid provided values, and unsupported or malformed URLs reject with a
- * bounded field diagnostic before any permission request, credential lookup, or provider
- * dispatch; the documented format/timeout defaults are re-applied here because the host
- * forwards unparsed raw arguments. Permission uses key web_fetch with patterns [url]. Textual
- * extraction routes to native, Spider, or direct Z.AI reader; media returns as an attachment
- * with a short Markdown summary in the same ToolResult and reports metadata
- * { provider, format, credentialSource?, status?, durationMs? }.
- * Native fetch requires no credential; Spider and Z.AI validate credentials at execution time
- * with actionable messages naming the environment variable and web.fetch.apiKey.
+ * Execute one web_fetch against an already-resolved config. Validates raw
+ * host-forwarded arguments through the shared strict contract first, so unknown
+ * keys, invalid provided values, and unsupported or malformed URLs reject with a
+ * bounded field diagnostic before any permission request, credential lookup, or
+ * provider dispatch; the documented format/timeout defaults are re-applied here
+ * because the host forwards unparsed raw arguments. The awaited permission is
+ * resource-specific (url pattern) and runs before any network effect.
  */
-export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefinition {
-  return tool({
-    description: webFetchContract.description,
-    args: webFetchArgs,
-    async execute(args, context) {
-      const validation = validateWebFetchToolInput(args);
-      if (!validation.ok) {
-        throw new ContractInputError(WEB_FETCH_TOOL_ID, validation.issues);
-      }
-      const { url, format, timeout: timeoutSeconds } = validation.data;
+export async function executeWebFetch(
+  resolved: ResolvedWebFetchConfig,
+  permission: WebPermissionGuard,
+  args: unknown,
+  context: NativeToolContext,
+): Promise<MappedResult> {
+  const validation = validateWebFetchToolInput(args);
+  if (!validation.ok) {
+    throw new ContractInputError(WEB_FETCH_TOOL_ID, validation.issues);
+  }
+  const { url, format, timeout: timeoutSeconds } = validation.data;
 
-      await context.ask({
-        permission: "web_fetch",
-        patterns: [url],
-        always: [],
-        metadata: { provider: resolved.provider, format },
-      });
-
+  return permission.guard(
+    {
+      sessionID: context.sessionID,
+      action: "web_fetch",
+      resources: [url],
+      metadata: { provider: resolved.provider, format },
+      ...(context.agent === undefined ? {} : { agent: context.agent }),
+    },
+    async () => {
       const timeoutMs = timeoutSeconds * 1000;
       if (resolved.provider === "native") {
-        const outcome = await fetchNative({
-          url,
-          format,
-          abort: context.abort,
-          timeoutMs,
-        });
+        const outcome = await fetchNative({ url, format, abort: context.signal, timeoutMs });
         return nativeResult(url, format, outcome);
       }
-
       if (!resolved.credential) {
         throw new WebProviderError(
           resolved.provider,
@@ -174,7 +187,7 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
           format,
           region: resolved.region,
           credential: resolved.credential,
-          abort: context.abort,
+          abort: context.signal,
           timeoutMs,
         });
         return zaiResult(url, format, resolved.region, resolved.credential.source, outcome);
@@ -183,10 +196,68 @@ export function createWebFetchTool(resolved: ResolvedWebFetchConfig): ToolDefini
         url,
         format,
         credential: resolved.credential,
-        abort: context.abort,
+        abort: context.signal,
         timeoutMs,
       });
       return spiderResult(url, format, resolved.credential.source, outcome);
     },
-  });
+    { signal: context.signal },
+  );
+}
+
+/** Create a web_fetch tool pre-bound to one resolved config (direct/deterministic tests and callers). */
+export function createWebFetchToolForConfig(
+  resolved: ResolvedWebFetchConfig,
+  permission: WebPermissionGuard,
+): {
+  name: string;
+  description: string;
+  input: typeof webFetchContract.runtimeSchema;
+  output: z.ZodString;
+  options: { codemode: false };
+  execute: (args: unknown, context: NativeToolContext) => Promise<MappedResult>;
+} {
+  return {
+    name: WEB_FETCH_TOOL_ID,
+    description: webFetchContract.description,
+    input: webFetchContract.runtimeSchema,
+    output: z.string(),
+    options: { codemode: false },
+    execute: (args, context) => executeWebFetch(resolved, permission, args, context),
+  };
+}
+
+/**
+ * Create the native web_fetch tool bound to a per-session policy resolver.
+ * A disabled or unknown family policy refuses the owned provider-bound path.
+ */
+export function createWebFetchTool(runtime: WebToolsRuntime): {
+  name: string;
+  description: string;
+  input: typeof webFetchContract.runtimeSchema;
+  output: z.ZodString;
+  options: { codemode: false };
+  execute: (args: unknown, context: NativeToolContext) => Promise<MappedResult>;
+} {
+  return {
+    name: WEB_FETCH_TOOL_ID,
+    description: webFetchContract.description,
+    input: webFetchContract.runtimeSchema,
+    output: z.string(),
+    options: { codemode: false },
+    async execute(args, context) {
+      const decision = await runtime.resolve(context.sessionID);
+      if (decision === "disabled") {
+        throw new WebToolsPolicyError(
+          "web tools are disabled by the captured policy bound to this session.",
+        );
+      }
+      if (decision === undefined) {
+        throw new WebToolsPolicyError(
+          "no trustworthy web-tools policy is bound to this session; refusing the provider-bound web path.",
+        );
+      }
+      return executeWebFetch(decision.resolved.fetch, decision.permission, args, context);
+    },
+  };
 }

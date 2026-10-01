@@ -77,7 +77,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - Extracted the shared pure item-level ordinary-launch gate (delegatedOrdinaryLaunchGate) now consumed by beginDelegatedLaunchInStore and the read-only inspection guidance so a suggested launch can never disagree with the real mutation gate. Prior T-002: validateDelegatedWriteScope rejects non-string entries with their index instead of stringifying them into the declared scope.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-004 - Attempt settlement accepts an authoritative historical completedAt (cancellation recovery never repairs wall time) and recovery accepts a cancellationSettled marker so a settled cancelled attempt resumes in the same transaction. Prior T-004: extracted the shared pure item-level ordinary-launch gate.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -926,6 +926,13 @@ export interface ApplyDelegatedLaunchFailureInput {
   workItemId: string;
   callId: string;
   failureExcerpt: WorkflowResultExcerpt;
+  /**
+   * Authoritative historical completion time for a cancellation settlement
+   * (max of the parent tool-call end and the child's completed time). When
+   * omitted the settlement uses the current time, which is only correct for a
+   * live host-terminal failure, never for a later explicit recovery.
+   */
+  completedAt?: string;
 }
 
 // START_CONTRACT: applyDelegatedLaunchFailure
@@ -1010,7 +1017,7 @@ export function applyDelegatedLaunchFailureInStore(
     };
   }
 
-  const now = toIsoNow();
+  const now = input.completedAt ?? toIsoNow();
   const updated: WorkItemRecord = {
     ...existing,
     // Failed attempts never advance the lifecycle: the item stays waiting at
@@ -1592,6 +1599,13 @@ export interface RecoverDelegatedWorkItemInput {
    * one-unit grant; it is never acceptance and never satisfies a reviewer.
    */
   advanceGrantApproved?: boolean;
+  /**
+   * Set by the cancellation-recovery transaction after it settled the cancelled
+   * in-flight attempt in the same staged store. It permits the bounded resume
+   * recovery of that settled target even though the item still has remaining
+   * budget; all authorization and budget rules still apply.
+   */
+  cancellationSettled?: boolean;
 }
 
 type DelegatedRecoveryErrorCode =
@@ -1671,7 +1685,8 @@ function precheckDelegatedRecovery(
   const isExhausted =
     existing.state === "awaiting_implementer" &&
     existing.delegated.attempts.length >= delegatedAttemptBudget(existing.delegated);
-  if (!isStop && !isExhausted) {
+  const isSettledCancellation = input.cancellationSettled === true;
+  if (!isStop && !isExhausted && !isSettledCancellation) {
     return {
       ok: false,
       errorCode: "INVALID_TARGET_STATE",
@@ -1872,10 +1887,10 @@ export async function recoverDelegatedWorkItemInStore(
 }
 
 // START_CONTRACT: revertInFlightDelegatedLaunches
-//   PURPOSE: Reclaim delegated attempts that a process-restart boundary orphaned, restoring their items to a launchable state without consuming budget.
+//   PURPOSE: Legacy pure helper that removes never-completed in-flight delegated attempts without consuming budget. Hydration no longer calls it: a restart preserves in-flight attempts and consumed budget, and only explicit, evidence-backed cancellation recovery settles them.
 //   INPUTS: { store: WorkItemStoreData - hydrated store data, sessionId: string - owning session }
 //   OUTPUTS: { { reverted: number; workItemIds: string[] } - reclaimed attempts and affected items }
-//   SIDE_EFFECTS: [Removes never-completed in-flight attempts from the ledger and returns items to awaiting_implementer]
+//   SIDE_EFFECTS: [Removes never-completed in-flight attempts from the ledger and returns items to awaiting_implementer; not used by production hydration]
 //   LINKS: [M-WORKFLOW-DELEGATED, M-WORKFLOW-PERSISTENCE, M-PLUGIN-WORKFLOW]
 // END_CONTRACT: revertInFlightDelegatedLaunches
 export function revertInFlightDelegatedLaunches(

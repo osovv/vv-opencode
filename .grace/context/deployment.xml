@@ -11,6 +11,7 @@
   </PackageFiles>
   <Exports>
     <Export>@osovv/vv-opencode</Export>
+    <Export>@osovv/vv-opencode/server</Export>
     <Export>@osovv/vv-opencode/plugins/guardian</Export>
     <Export>@osovv/vv-opencode/plugins/hashline-edit</Export>
     <Export>@osovv/vv-opencode/plugins/model-roles</Export>
@@ -21,9 +22,10 @@
     <Export>@osovv/vv-opencode/tui</Export>
   </Exports>
   <InstallAndSync>
-    <Global>vvoc install and vvoc sync may write OpenCode runtime and TUI config under $XDG_CONFIG_HOME/opencode and vvoc config under $XDG_CONFIG_HOME/vvoc.</Global>
-    <Project>Project scope writes OpenCode runtime/TUI files only inside .opencode and vvoc files only inside .vvoc under the selected project root.</Project>
-    <Launch>vvoc launch pins OPENCODE_CONFIG and VVOC_CONFIG and conditionally pins an existing selected tui.json(c) through OPENCODE_TUI_CONFIG for deterministic sandboxed OpenCode startup.</Launch>
+    <Global>vvoc install and vvoc sync may write native OpenCode config (plugins, agents, skills) under $XDG_CONFIG_HOME/opencode and vvoc config under $XDG_CONFIG_HOME/vvoc after verifying the exact supported host window.</Global>
+    <Project>Project scope writes native OpenCode files only inside .opencode and vvoc files only inside .vvoc under the selected project root.</Project>
+    <Launch>vvoc launch preflights the supported native host window, pins OPENCODE_CONFIG and VVOC_CONFIG, conditionally pins the native OPENCODE_CONFIG_DIR discovery root, and forwards passthrough args for deterministic sandboxed OpenCode startup.</Launch>
+    <HostWindow>The supported native host window is &gt;=2.0.18 &lt;2.0.19; install, init, sync, and launch fail closed outside it, and vvoc status/doctor report the installed version against that window without mutating files.</HostWindow>
   </InstallAndSync>
   <ReleaseGates>
     <Command>bun run typecheck</Command>

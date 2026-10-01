@@ -1,9 +1,9 @@
 // FILE: src/plugins/web-tools/fetch-service.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the provider-neutral web_fetch tool schema, strict contract validation with explicit execute-time defaults, URL validation, permission flow, provider dispatch, attachments, metadata, and credential errors.
-//   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
-//   DEPENDS: [bun:test, @opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/fetch-service.ts]
+//   PURPOSE: Verify the provider-neutral native web_fetch tool: strict contract validation with explicit execute-time defaults, URL validation, awaited permission before network work, provider dispatch, native file-content attachments, metadata, and credential errors.
+//   SCOPE: Deterministic native tool-level tests with a temporary global fetch stub and an injected permission guard; no live provider calls.
+//   DEPENDS: [bun:test, @opencode/plugin/promise/tool, src/lib/agent-tool-contract.ts, src/plugins/web-tools/fetch-service.ts]
 //   LINKS: M-WEB-FETCH-SERVICE, V-M-WEB-FETCH-SERVICE, DF-WEB-FETCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -12,39 +12,63 @@
 // START_MODULE_MAP
 //   PNG_BYTES - Minimal PNG fixture.
 //   PDF_BYTES - Minimal PDF fixture.
-//   createContext - Build a tool execution context fixture.
+//   createContext - Build a pinned native tool execute context fixture.
+//   createPermission - Build a recording permission guard fixture.
+//   fileFrames - Extract native file content frames from a web tool result.
 //   withFetch - Temporarily install a deterministic global fetch fixture.
-//   structuredResult - Narrow a ToolResult to its structured form.
+//   RecordingPermission - Recording resource permission guard.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Covered strict execute-boundary rejection (structural, URL scheme, and malformed values) before permission/dispatch plus fractional timeout and PDF media delivery.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 - Rewrote V1 SDK tool.schema/context.ask tests as native Tool.Info input, injected resource permission guard, and native file-content attachment tests.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool, type ToolContext, type ToolResult } from "@opencode-ai/plugin";
+import type { ToolContext } from "@opencode/plugin/promise/tool";
 import { ContractInputError } from "../../lib/agent-tool-contract.js";
 import {
-  createWebFetchTool,
+  createWebFetchToolForConfig,
   WEB_FETCH_DEFAULT_TIMEOUT_SECONDS,
   WEB_FETCH_MAX_TIMEOUT_SECONDS,
 } from "./fetch-service.js";
 import type { FetchLike } from "./http.js";
+import type { WebPermissionGuard } from "./search-service.js";
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
 const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 1]);
 
-function createContext(ask: ToolContext["ask"] = async () => undefined): ToolContext {
+function createContext(signal: AbortSignal = new AbortController().signal): ToolContext {
   return {
     sessionID: "session-1",
-    messageID: "message-1",
     agent: "test-agent",
-    directory: "/tmp/project",
-    worktree: "/tmp/project",
-    abort: new AbortController().signal,
-    metadata: () => undefined,
-    ask,
+    messageID: "message-1",
+    id: "call-1",
+    signal,
+    progress: async () => undefined,
+  } as unknown as ToolContext;
+}
+
+interface RecordingPermission extends WebPermissionGuard {
+  readonly calls: Array<{ action: string; resources: ReadonlyArray<string> }>;
+}
+
+function createPermission(): RecordingPermission {
+  const calls: Array<{ action: string; resources: ReadonlyArray<string> }> = [];
+  return {
+    calls,
+    async guard(input, effect) {
+      calls.push({ action: input.action, resources: input.resources });
+      return effect();
+    },
   };
+}
+
+function fileFrames(result: {
+  content: string | ReadonlyArray<Record<string, unknown>>;
+}): Array<Record<string, unknown>> {
+  return Array.isArray(result.content)
+    ? result.content.filter((frame) => frame.type === "file")
+    : [];
 }
 
 async function withFetch<T>(fetchImpl: FetchLike, run: () => Promise<T>): Promise<T> {
@@ -57,17 +81,10 @@ async function withFetch<T>(fetchImpl: FetchLike, run: () => Promise<T>): Promis
   }
 }
 
-function structuredResult(result: ToolResult): Exclude<ToolResult, string> {
-  if (typeof result === "string") {
-    throw new Error("expected a structured tool result");
-  }
-  return result;
-}
-
 describe("createWebFetchTool", () => {
   test("defaults format and timeout and rejects timeouts above the cap", () => {
-    const definition = createWebFetchTool({ provider: "native" });
-    const schema = tool.schema.object(definition.args);
+    const definition = createWebFetchToolForConfig({ provider: "native" }, createPermission());
+    const schema = definition.input;
 
     expect(schema.parse({ url: "https://example.test" })).toEqual({
       url: "https://example.test",
@@ -80,16 +97,16 @@ describe("createWebFetchTool", () => {
     ).toBe(false);
   });
 
-  test("applies format and timeout defaults when OpenCode omits them at execution", async () => {
+  test("applies format and timeout defaults when the host omits them at execution", async () => {
     let readerBody: Record<string, unknown> | undefined;
-    const definition = createWebFetchTool({
-      provider: "zai",
-      region: "international",
-      credential: { value: "zai-secret", source: "env" },
-    });
-    const runtimeArgs = {
-      url: "https://example.test/page",
-    } as Parameters<typeof definition.execute>[0];
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      createPermission(),
+    );
 
     const result = await withFetch(
       async (url, init) => {
@@ -103,7 +120,7 @@ describe("createWebFetchTool", () => {
           headers: { "content-type": "text/html" },
         });
       },
-      () => definition.execute(runtimeArgs, createContext()),
+      () => definition.execute({ url: "https://example.test/page" }, createContext()),
     );
 
     expect(readerBody).toEqual({
@@ -111,16 +128,16 @@ describe("createWebFetchTool", () => {
       timeout: WEB_FETCH_DEFAULT_TIMEOUT_SECONDS,
       return_format: "markdown",
     });
-    expect(structuredResult(result).metadata).toMatchObject({
+    expect(result.metadata).toMatchObject({
       provider: "zai",
       format: "markdown",
     });
   });
 
   test("rejects non-http URLs before permission or network work", async () => {
-    let asked = false;
+    const permission = createPermission();
     let fetched = false;
-    const definition = createWebFetchTool({ provider: "native" });
+    const definition = createWebFetchToolForConfig({ provider: "native" }, permission);
     const error = await withFetch(
       async () => {
         fetched = true;
@@ -129,26 +146,21 @@ describe("createWebFetchTool", () => {
       () =>
         definition.execute(
           { url: "file:///tmp/secret", format: "text", timeout: 30 },
-          createContext(async () => {
-            asked = true;
-          }),
+          createContext(),
         ),
     ).catch((caught) => caught);
 
     expect(error).toBeInstanceOf(ContractInputError);
     expect(String(error.message)).toContain("http and https");
     expect(String(error.message)).not.toContain("/tmp/secret");
-    expect(asked).toBe(false);
+    expect(permission.calls).toEqual([]);
     expect(fetched).toBe(false);
   });
 
   test("rejects relative, malformed, and other-scheme URLs before permission or network work", async () => {
-    const definition = createWebFetchTool({ provider: "native" });
-    let asked = false;
+    const permission = createPermission();
+    const definition = createWebFetchToolForConfig({ provider: "native" }, permission);
     let fetched = false;
-    const context = createContext(async () => {
-      asked = true;
-    });
 
     for (const url of [
       "/page",
@@ -162,7 +174,7 @@ describe("createWebFetchTool", () => {
           fetched = true;
           return new Response("unexpected");
         },
-        () => definition.execute({ url, format: "markdown", timeout: 30 }, context),
+        () => definition.execute({ url, format: "markdown", timeout: 30 }, createContext()),
       ).catch((caught) => caught);
       expect(error).toBeInstanceOf(ContractInputError);
       if (error instanceof ContractInputError) {
@@ -170,17 +182,14 @@ describe("createWebFetchTool", () => {
       }
     }
 
-    expect(asked).toBe(false);
+    expect(permission.calls).toEqual([]);
     expect(fetched).toBe(false);
   });
 
   test("rejects invalid format, timeout, and unknown credential fields before permission or network work", async () => {
-    const definition = createWebFetchTool({ provider: "native" });
-    let asked = false;
+    const permission = createPermission();
+    const definition = createWebFetchToolForConfig({ provider: "native" }, permission);
     let fetched = false;
-    const context = createContext(async () => {
-      asked = true;
-    });
 
     const invalidArgs: Array<Record<string, unknown>> = [
       { url: "https://example.test/page", format: "pdf" },
@@ -199,23 +208,26 @@ describe("createWebFetchTool", () => {
           fetched = true;
           return new Response("unexpected");
         },
-        () => definition.execute(args as never, context),
+        () => definition.execute(args, createContext()),
       ).catch((caught) => caught);
       expect(error).toBeInstanceOf(ContractInputError);
       expect(String(error.message)).not.toContain("never-print-this");
     }
 
-    expect(asked).toBe(false);
+    expect(permission.calls).toEqual([]);
     expect(fetched).toBe(false);
   });
 
   test("applies a fractional positive timeout at the execute boundary", async () => {
     let readerBody: Record<string, unknown> | undefined;
-    const definition = createWebFetchTool({
-      provider: "zai",
-      region: "international",
-      credential: { value: "zai-secret", source: "env" },
-    });
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      createPermission(),
+    );
 
     await withFetch(
       async (url, init) => {
@@ -233,22 +245,23 @@ describe("createWebFetchTool", () => {
     expect(readerBody?.timeout).toBe(0.5);
   });
 
-  test("returns native PDF media as an attachment", async () => {
-    const definition = createWebFetchTool({ provider: "native" });
+  test("returns native PDF media as a native file content frame", async () => {
+    const definition = createWebFetchToolForConfig({ provider: "native" }, createPermission());
     const result = await withFetch(
       async () =>
         new Response(PDF_BYTES, { status: 200, headers: { "content-type": "application/pdf" } }),
       () => definition.execute({ url: "https://example.test/doc.pdf" }, createContext()),
     );
 
-    const structured = structuredResult(result);
-    expect(structured.attachments?.[0]).toMatchObject({ type: "file", mime: "application/pdf" });
-    expect(structured.metadata).toMatchObject({ provider: "native", format: "markdown" });
+    expect(fileFrames(result)[0]).toMatchObject({ type: "file", mime: "application/pdf" });
+    expect(String(fileFrames(result)[0]?.uri)).toStartWith("data:application/pdf;base64,");
+    expect(result.metadata).toMatchObject({ provider: "native", format: "markdown" });
   });
 
-  test("asks permission before native dispatch and returns requested text", async () => {
+  test("awaits permission before native dispatch and returns requested text", async () => {
     const events: string[] = [];
-    const definition = createWebFetchTool({ provider: "native" });
+    const permission = createPermission();
+    const definition = createWebFetchToolForConfig({ provider: "native" }, permission);
     const result = await withFetch(
       async () => {
         events.push("fetch");
@@ -257,29 +270,29 @@ describe("createWebFetchTool", () => {
           headers: { "content-type": "text/plain" },
         });
       },
-      () =>
-        definition.execute(
+      async () => {
+        const value = await definition.execute(
           { url: "https://example.test/page", format: "text", timeout: 12 },
-          createContext(async (input) => {
-            events.push("ask");
-            expect(input).toMatchObject({
-              permission: "web_fetch",
-              patterns: ["https://example.test/page"],
-            });
-          }),
-        ),
+          createContext(),
+        );
+        events.push("result");
+        return value;
+      },
     );
 
-    expect(events).toEqual(["ask", "fetch"]);
-    expect(structuredResult(result)).toEqual({
-      title: "web_fetch: https://example.test/page",
+    expect(permission.calls).toEqual([
+      { action: "web_fetch", resources: ["https://example.test/page"] },
+    ]);
+    expect(events).toEqual(["fetch", "result"]);
+    expect(result).toEqual({
       output: "plain body",
+      content: "plain body",
       metadata: { provider: "native", format: "text", status: 200 },
     });
   });
 
-  test("returns native media with a textual summary and attachment", async () => {
-    const definition = createWebFetchTool({ provider: "native" });
+  test("returns native media with a textual summary and file content frame", async () => {
+    const definition = createWebFetchToolForConfig({ provider: "native" }, createPermission());
     const result = await withFetch(
       async () =>
         new Response(PNG_BYTES, { status: 200, headers: { "content-type": "image/png" } }),
@@ -289,20 +302,22 @@ describe("createWebFetchTool", () => {
           createContext(),
         ),
     );
-    const structured = structuredResult(result);
 
-    expect(structured.output).toContain("attachment");
-    expect(structured.attachments).toHaveLength(1);
-    expect(structured.attachments?.[0]).toMatchObject({ type: "file", mime: "image/png" });
+    expect(result.output).toContain("attachment");
+    expect(fileFrames(result)).toHaveLength(1);
+    expect(fileFrames(result)[0]).toMatchObject({ type: "file", mime: "image/png" });
   });
 
   test("surfaces Spider content, status, duration, and credential source metadata", async () => {
-    const definition = createWebFetchTool({
-      provider: "spider",
-      envVar: "SPIDER_API_KEY",
-      configField: "web.fetch.apiKey",
-      credential: { value: "spider-secret", source: "config" },
-    });
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "spider",
+        envVar: "SPIDER_API_KEY",
+        configField: "web.fetch.apiKey",
+        credential: { value: "spider-secret", source: "config" },
+      },
+      createPermission(),
+    );
     const result = await withFetch(
       async (url) =>
         String(url).includes("api.spider.cloud")
@@ -317,9 +332,9 @@ describe("createWebFetchTool", () => {
         ),
     );
 
-    expect(structuredResult(result)).toEqual({
-      title: "web_fetch: https://example.test/page",
+    expect(result).toEqual({
       output: "scraped",
+      content: "scraped",
       metadata: {
         provider: "spider",
         format: "html",
@@ -331,13 +346,16 @@ describe("createWebFetchTool", () => {
   });
 
   test("surfaces direct Z.AI reader content and regional request metadata", async () => {
-    const definition = createWebFetchTool({
-      provider: "zai",
-      region: "china",
-      envVar: "ZAI_API_KEY",
-      configField: "web.fetch.apiKey",
-      credential: { value: "zai-secret", source: "config" },
-    });
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "zai",
+        region: "china",
+        envVar: "ZAI_API_KEY",
+        configField: "web.fetch.apiKey",
+        credential: { value: "zai-secret", source: "config" },
+      },
+      createPermission(),
+    );
     const result = await withFetch(
       async (url) =>
         String(url).endsWith("/api/paas/v4/reader")
@@ -358,9 +376,9 @@ describe("createWebFetchTool", () => {
         ),
     );
 
-    expect(structuredResult(result)).toEqual({
-      title: "web_fetch: https://example.test/page",
+    expect(result).toEqual({
       output: "读取内容",
+      content: "读取内容",
       metadata: {
         provider: "zai",
         region: "china",
@@ -373,14 +391,17 @@ describe("createWebFetchTool", () => {
     });
   });
 
-  test("returns direct Z.AI media through the canonical attachment result", async () => {
-    const definition = createWebFetchTool({
-      provider: "zai",
-      region: "international",
-      envVar: "ZAI_API_KEY",
-      configField: "web.fetch.apiKey",
-      credential: { value: "zai-secret", source: "env" },
-    });
+  test("returns direct Z.AI media through the canonical file-content result", async () => {
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        envVar: "ZAI_API_KEY",
+        configField: "web.fetch.apiKey",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      createPermission(),
+    );
     const result = await withFetch(
       async () =>
         new Response(PNG_BYTES, { status: 200, headers: { "content-type": "image/png" } }),
@@ -390,9 +411,9 @@ describe("createWebFetchTool", () => {
           createContext(),
         ),
     );
-    const structured = structuredResult(result);
-    expect(structured.attachments?.[0]).toMatchObject({ type: "file", mime: "image/png" });
-    expect(structured.metadata).toEqual({
+
+    expect(fileFrames(result)[0]).toMatchObject({ type: "file", mime: "image/png" });
+    expect(result.metadata).toEqual({
       provider: "zai",
       region: "international",
       format: "markdown",
@@ -401,11 +422,14 @@ describe("createWebFetchTool", () => {
   });
 
   test("missing Spider credentials name both supported locations without values", async () => {
-    const definition = createWebFetchTool({
-      provider: "spider",
-      envVar: "SPIDER_API_KEY",
-      configField: "web.fetch.apiKey",
-    });
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "spider",
+        envVar: "SPIDER_API_KEY",
+        configField: "web.fetch.apiKey",
+      },
+      createPermission(),
+    );
     const error = await definition
       .execute(
         { url: "https://example.test/page", format: "markdown", timeout: 30 },
@@ -419,12 +443,15 @@ describe("createWebFetchTool", () => {
   });
 
   test("missing Z.AI credentials name both supported locations without values", async () => {
-    const definition = createWebFetchTool({
-      provider: "zai",
-      region: "international",
-      envVar: "ZAI_API_KEY",
-      configField: "web.fetch.apiKey",
-    });
+    const definition = createWebFetchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        envVar: "ZAI_API_KEY",
+        configField: "web.fetch.apiKey",
+      },
+      createPermission(),
+    );
     const error = await definition
       .execute(
         { url: "https://example.test/page", format: "markdown", timeout: 30 },

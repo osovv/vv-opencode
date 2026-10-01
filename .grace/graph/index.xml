@@ -3,6 +3,8 @@
     <GD-MAIN>
       <Path>graph/main.xml</Path>
       <Owns>
+        <M-NATIVE-RUNTIME />
+        <M-E2E-V2-HARNESS />
         <M-MODEL-ROLES />
         <M-CONFIG-LAYERS />
         <M-CLI-CONFIG />
@@ -25,11 +27,9 @@
         <M-PLUGIN-CONTEXT-TUI />
         <M-PLUGIN-WEB-TOOLS />
         <M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <M-PLUGIN-ANALYTICS />
         <M-PEAK-HOURS-SCHEDULES />
         <M-PLUGIN-PEAK-HOURS />
-        <M-PLUGIN-ANALYTICS />
-        <M-PLUGIN-V2-RUNTIME />
-        <M-E2E-V2-HARNESS />
         <M-TUI-PEAK-HOURS-BANNER />
         <M-SPEC-LINT />
         <M-PLUGIN-SPEC-GUARD />

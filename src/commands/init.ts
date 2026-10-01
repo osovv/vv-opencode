@@ -15,21 +15,22 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Registered and inspected the dedicated TUI plugin config during init.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight before any init write.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import {
+  assertSupportedOpenCodeRuntime,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
-  ensureTuiPackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
   installManagedSkillFiles,
   inspectInstallation,
   resolvePaths,
   syncManagedAgentRegistrations,
+  type OpenCodeRuntimeInspection,
   type Scope,
 } from "../lib/opencode.js";
 
@@ -90,8 +91,13 @@ export async function runInit(options: {
   cwd: string;
   configDir?: string;
   nonInteractive: boolean;
+  inspectRuntime?: () => Promise<OpenCodeRuntimeInspection>;
 }): Promise<void> {
   const { scope, cwd, configDir, nonInteractive } = options;
+
+  // Preflight: fail closed on an unverifiable or out-of-window host before any
+  // runtime/TUI/vvoc/agent/skill write.
+  await assertSupportedOpenCodeRuntime(options.inspectRuntime);
 
   if (nonInteractive) {
     await runInitNonInteractive({ scope, cwd, configDir });
@@ -116,11 +122,7 @@ export async function runInit(options: {
   const reloadedPaths = await resolvePaths({ scope: selectedScope, cwd, configDir });
   const inspection = await inspectInstallation(reloadedPaths);
 
-  if (
-    inspection.opencode.pluginConfigured &&
-    inspection.tui.pluginConfigured &&
-    inspection.vvoc.exists
-  ) {
+  if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
     const overwrite = await p.confirm({
       message: `@osovv/vv-opencode is already configured. Overwrite?`,
       initialValue: false,
@@ -140,10 +142,6 @@ export async function runInit(options: {
   p.log.step("Registering plugin in OpenCode config...");
   const pkgResult = await ensurePackageInstalled(finalPaths);
   p.log.info(pkgResult.path + " - " + (pkgResult.changed ? "updated" : "already up to date"));
-
-  p.log.step("Registering TUI plugin...");
-  const tuiResult = await ensureTuiPackageInstalled(finalPaths);
-  p.log.info(tuiResult.path + " - " + tuiResult.action);
 
   p.log.step("Registering managed agents...");
   const agentRegistration = await syncManagedAgentRegistrations(finalPaths);
@@ -183,17 +181,12 @@ async function runInitNonInteractive(options: {
   const paths = await resolvePaths({ scope, cwd, configDir });
 
   const inspection = await inspectInstallation(paths);
-  if (
-    inspection.opencode.pluginConfigured &&
-    inspection.tui.pluginConfigured &&
-    inspection.vvoc.exists
-  ) {
+  if (inspection.opencode.pluginConfigured && inspection.vvoc.exists) {
     console.log("Already configured. Run `vvoc sync` to update configs.");
     return;
   }
 
   await ensurePackageInstalled(paths);
-  await ensureTuiPackageInstalled(paths);
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
   await installManagedSkillFiles(paths, { force: true });

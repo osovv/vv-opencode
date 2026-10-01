@@ -1,7 +1,5 @@
 // FILE: tui.js
-// VERSION: 1.0.0
-// OpenCode v2 resolves the CLI/TUI plugin entrypoint of directory-scoped
-// plugin targets through a literal `tui` module next to the package manifest.
-// This shim re-exports the dual-runtime default TUI entrypoint so the
-// file-path and npm-specifier loading styles stay equivalent.
+// Root native TUI-plugin forwarder for local-directory loading. OpenCode's plugin
+// host resolves a plugin directory's `tui` subpath (or package export `./tui`) to
+// this file.
 export { default } from "./dist/tui.js";

@@ -3,64 +3,72 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify workflow core modules and WorkflowPlugin integration behavior.
 //   SCOPE: Protocol parsing, result excerpts, bounded continuation guidance and host-permission preservation, canonical result-status/identity agreement across orchestration profiles, explicit work-item contracts, mode-aware launch validation, review aggregation, profile-compatible guidance, persistence, and primary-only tooling.
-//   DEPENDS: [bun:test, node:fs, node:path, @opencode-ai/sdk, @opencode-ai/sdk/v2/types, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
+//   DEPENDS: [bun:test, node:fs, node:path, zod, src/lib/config-layers.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/workflow/protocol.ts, src/plugins/workflow/repair.ts, src/plugins/workflow/state.ts, src/plugins/workflow/transitions.ts, src/plugins/workflow/tooling.ts, src/plugins/workflow/index.ts, src/plugins/workflow/persistence.ts]
 //   LINKS: [M-WORKFLOW-PROTOCOL, M-WORKFLOW-REPAIR, M-WORKFLOW-STATE, M-WORKFLOW-TRANSITIONS, M-WORKFLOW-TOOLING, M-PLUGIN-WORKFLOW, M-ORCHESTRATION-PROFILES, M-WORKFLOW-PERSISTENCE, V-M-WORKFLOW-PROTOCOL, V-M-WORKFLOW-REPAIR, V-M-WORKFLOW-STATE, V-M-WORKFLOW-TRANSITIONS, V-M-WORKFLOW-TOOLING, V-M-PLUGIN-WORKFLOW, V-M-WORKFLOW-PERSISTENCE]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   ListedPluginItems - Parsed work_item_list payload used by plugin integration tests.
+//   PermissionRule - Native permission rule shape (action/resource/effect).
+//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
 //   SESSION_ID - Stable session identifier shared by workflow fixtures.
+//   workflowLogs - Captured workflow diagnostic console lines.
+//   originalConsoleError - Bound original console.error used to restore the sink.
+//   openItem - Opens one work item against an in-memory store.
+//   result - Builds a strict tracked result block.
 //   WorkflowPluginHarness - Captured workflow plugin hooks, logs, and recorded prompt calls for one fixture.
-//   createToolContext - Builds a workflow tool execution context.
+//   PromptScriptEntry - Scripted harness continuation outcome: text response, error, or thrown failure.
+//   NativeWorkflowHarnessPlugin - Native fixture plugin surface that runs the real WorkflowPlugin.setup.
+//   NativeEventQueue - Queue delivering native plugin events to the async event stream.
+//   deriveSubagentChildId - Derive the child session id from tracked subagent output.
+//   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
+//   NativeToolInfo - Registered native tool shape inspected by the fake editor.
+//   NativeFakeToolEditor - Minimal native tool editor double used by the harness.
 //   createWorkflowPluginHarness - Creates an isolated workflow plugin harness with optional scripted continuation responses.
+//   ListedPluginItems - Parsed work_item_list payload used by plugin integration tests.
+//   openPluginWorkItem - Opens one work item through the plugin tool.
+//   launchPluginTask - Launches one tracked task through plugin hooks.
+//   openAndLaunchImplementer - Opens an implementation item and launches one vv-implementer task.
 //   finishPluginTask - Completes a tracked plugin task with a strict result block.
 //   finishPluginTaskWithRawOutput - Completes a tracked plugin task with raw output.
-//   launchPluginTask - Launches one tracked task through plugin hooks.
 //   listPluginItems - Lists and parses plugin work items.
-//   openItem - Opens one work item against an in-memory store.
-//   openPluginWorkItem - Opens one work item through the plugin tool.
-//   openAndLaunchImplementer - Opens an implementation item and launches one vv-implementer task.
+//   createToolContext - Builds a workflow tool execution context.
 //   parseToolJson - Parses structured workflow tool output.
-//   previousConfigHome - Preserves the caller's config-home environment for cleanup.
-//   result - Builds a strict tracked result block.
-//   wrapTaskElement - Wraps tracked output in an OpenCode task-element envelope.
 //   wrapTaskResult - Wraps tracked output in an OpenCode task-result envelope.
-//   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
-//   SessionPromptCall - SDK-derived session.prompt request accepted by the host-contract double.
-//   SessionPromptResponse - SDK-derived session.prompt response with a valid assistant message and text part.
-//   SessionPromptError - SDK-derived session.prompt error consumed by continuation.
-//   SessionPromptConsumedResult - Narrowed SDK session.prompt data/error boundary consumed by continuation.
-//   SessionPromptMutation - Session mutation API names tracked by the host-contract double.
-//   HostPermissionDouble - Captured host-contract double client, recorded calls, mutation counts, and persisted rules.
-//   PromptScriptEntry - Scripted harness continuation outcome: text response, error, or thrown failure.
-//   assistantMessage - Builds a valid SDK AssistantMessage fixture for one session.
-//   textPart - Builds a valid SDK TextPart response fixture.
-//   sessionPromptResponse - Builds a valid SDK session.prompt response fixture.
-//   firstPromptText - Extracts the first text-part input from a recorded prompt call.
-//   createHostPermissionDouble - Models the confirmed host rule-replacement semantics for prompt `tools` and counts session mutations.
+//   wrapTaskElement - Wraps tracked output in an OpenCode task-element envelope.
+//   NativeRepairCall - Recorded native session.prompt call used by the repair double.
+//   NativeRepairDouble - Native same-child continuation double exposing only prompt/wait and message list.
+//   hostMutationSurface - Sorted native session surface keys exposed to the repair boundary.
+//   createNativeRepairDouble - Builds the native same-child continuation double.
+//   REAL_WORKFLOW_HOST - Pinned host binary path enabling the real workflow smoke suite.
+//   workflowSmokeDescribe - describe or describe.skip bound to whether the real host is configured.
+//   E2eHostModule - Structural view of the read-only real-host harness helper module.
+//   e2eHostPromise - Memoized dynamic import of the read-only real-host helper module.
+//   loadE2eHost - Runtime dynamic import of the read-only real-host harness helpers.
+//   getFreePort - Reserve and release a loopback TCP port.
+//   sleep - Promise-based millisecond delay for smoke polling.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Added parser-backed coverage for the tracked result protocol: canonical terminal statuses against a real non-first assigned id, wrong-identity mismatch without relabeling, fail-closed duplicate/separator fixtures, unchanged bounded repair eligibility, the first-line continuation rule, and shared profile guidance agreement. Prior T-002: registered-schema/hook/wrapper diagnostic regressions.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added event-pump per-event containment coverage: a throwing event is logged as a bounded contained failure and a later session.deleted is still processed by the live subscription.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
-import type {
-  AssistantMessage,
-  OpencodeClient,
-  SessionPromptErrors,
-  SessionPromptResponses,
-  TextPart,
-} from "@opencode-ai/sdk";
-import type { PermissionRule } from "@opencode-ai/sdk/v2/types";
-import { resetVvocConfigForTests } from "../lib/config-layers.js";
+/** Native permission rule shape (`@opencode/schema/permission` Rule): action/resource/effect. */
+interface PermissionRule {
+  readonly action: string;
+  readonly resource: string;
+  readonly effect: "allow" | "deny" | "ask";
+}
+import { z } from "zod";
+import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { WorkflowPlugin } from "./workflow/index.js";
+import { createWorkflowPlugin } from "./workflow/index.js";
 import { ContractInputError } from "../lib/agent-tool-contract.js";
 import {
   deleteWorkflowSessionDir,
@@ -107,6 +115,17 @@ import {
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
 const SESSION_ID = "session-workflow-explicit";
+
+// Capture the workflow diagnostic sink's structured console lines (the native
+// App is metadata-only) so tests can assert on them like the former host logs.
+const workflowLogs: string[] = [];
+const originalConsoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  const line = args.filter((arg): arg is string => typeof arg === "string").join(" ");
+  const match = /^\[workflow\]\[\w+\]\s+(.*?)(?:\s+\{[\s\S]*\})?$/.exec(line);
+  if (match) workflowLogs.push(match[1]);
+  originalConsoleError(...args);
+};
 
 function openItem(options: {
   mode: WorkItemMode;
@@ -411,110 +430,73 @@ describe("workflow repair", () => {
     );
   });
 
-  test("host permission double replaces persistent rules when prompt tools is nonempty", async () => {
-    const host = createHostPermissionDouble({
+  test("native continuation prompt carries no tool, agent, or system override", async () => {
+    const host = createNativeRepairDouble({
       rules: [
-        { permission: "edit", action: "ask", pattern: "src/**" },
-        { permission: "bash", action: "deny", pattern: "*" },
+        { action: "edit", effect: "ask", resource: "src/**" },
+        { action: "bash", effect: "deny", resource: "*" },
       ],
     });
 
-    await host.client.session.prompt({
-      path: { id: "ses_old_defect" },
-      body: {
-        tools: { edit: false, write: false },
-        parts: [{ type: "text", text: "Old defect probe." }],
-      },
+    await attemptTrackedResultRepair({
+      client: host.client,
+      sessionId: "ses_old_defect",
+      agent: "vv-implementer",
+      workItemId: "wi-1",
+      malformedOutput: "Old defect probe.",
+      parseErrorCode: "UNEXPECTED_TOP_BLOCK_LINE",
+      parseErrorMessage: "UNEXPECTED_TOP_BLOCK_LINE",
     });
 
-    expect(host.getRules()).toEqual([
-      { permission: "edit", action: "deny", pattern: "*" },
-      { permission: "write", action: "deny", pattern: "*" },
-    ]);
+    expect(host.calls).toHaveLength(1);
+    expect(Object.keys(host.calls[0] ?? {}).sort()).toEqual(["sessionID", "text"]);
+    expect(Object.keys(host.client.session).sort()).toEqual(["prompt", "wait"]);
   });
 
-  test("continuation and a later ordinary child prompt preserve persistent permissions", async () => {
+  test("continuation returns the corrected native assistant text", async () => {
     const persistentRules: PermissionRule[] = [
-      { permission: "edit", action: "ask", pattern: "src/plugins/**" },
-      { permission: "bash", action: "deny", pattern: "rm *" },
-      { permission: "read", action: "allow", pattern: "*" },
-      { permission: "webfetch", action: "allow", pattern: "*" },
-      { permission: "work_item_decide", action: "deny", pattern: "*" },
+      { action: "edit", effect: "ask", resource: "src/plugins/**" },
+      { action: "bash", effect: "deny", resource: "rm *" },
+      { action: "read", effect: "allow", resource: "*" },
+      { action: "webfetch", effect: "allow", resource: "*" },
+      { action: "work_item_decide", effect: "deny", resource: "*" },
     ];
-    const host = createHostPermissionDouble({
+    const host = createNativeRepairDouble({
       rules: persistentRules,
       promptResult: () => ({
-        data: sessionPromptResponse(
-          "ses_same_child",
-          `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nFinished the original task.`,
-        ),
+        text: `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nFinished the original task.`,
       }),
     });
 
-    const repairOptions = {
-      client: host.client as never,
-      directory: "/tmp/project",
-      taskId: "ses_same_child",
-      agent: "vv-implementer" as const,
+    expect(host.getRules()).toEqual(persistentRules);
+
+    const continued = await attemptTrackedResultRepair({
+      client: host.client,
+      sessionId: "ses_same_child",
+      agent: "vv-implementer",
       workItemId: "wi-1",
       malformedOutput: "I have started implementing; tests are next.",
-      parseErrorCode: "UNEXPECTED_TOP_BLOCK_LINE" as const,
+      parseErrorCode: "UNEXPECTED_TOP_BLOCK_LINE",
       parseErrorMessage: "UNEXPECTED_TOP_BLOCK_LINE: strict top block contains a non-protocol line",
-    };
-
-    expect(host.getRules()).toEqual(persistentRules);
-
-    const continued = await attemptTrackedResultRepair(repairOptions);
+    });
     expect(continued).toContain("VVOC_STATUS: DONE");
     const continuationCall = host.calls[0];
-    expect(continuationCall?.path.id).toBe("ses_same_child");
-    expect(continuationCall?.body?.agent).toBe("vv-implementer");
-    expect(continuationCall?.body?.tools).toBeUndefined();
-    expect(continuationCall?.body !== undefined && "tools" in continuationCall.body).toBe(false);
+    expect(continuationCall?.sessionID).toBe("ses_same_child");
+    // Native prompt carries only the child id and the continuation text; no
+    // tool, agent, system, or model override is ever sent.
+    expect(Object.keys(continuationCall ?? {}).sort()).toEqual(["sessionID", "text"]);
+    expect(continuationCall?.text).toContain("VVOC_WORK_ITEM_ID: wi-1");
     expect(host.getRules()).toEqual(persistentRules);
-
-    // A later ORDINARY prompt to the same child carries a normal work prompt
-    // with no repair system instruction and no tools override.
-    await host.client.session.prompt({
-      path: { id: "ses_same_child" },
-      body: {
-        agent: "vv-implementer",
-        parts: [{ type: "text", text: "Continue the original assignment." }],
-      },
-    });
-    const ordinaryCall = host.calls[1];
-    expect(ordinaryCall?.path.id).toBe("ses_same_child");
-    expect(ordinaryCall?.body?.agent).toBe("vv-implementer");
-    expect(ordinaryCall?.body?.system).toBeUndefined();
-    expect(ordinaryCall?.body?.tools).toBeUndefined();
-    expect(ordinaryCall?.body !== undefined && "tools" in ordinaryCall.body).toBe(false);
-
-    expect(host.calls).toHaveLength(2);
-    expect(host.getRules()).toEqual(persistentRules);
-    // Normal repository permissions remain available and inherited deny rules stay effective.
-    expect(host.getRules()).toContainEqual({ permission: "read", action: "allow", pattern: "*" });
-    expect(host.getRules()).toContainEqual({
-      permission: "edit",
-      action: "ask",
-      pattern: "src/plugins/**",
-    });
-    expect(host.getRules()).toContainEqual({
-      permission: "work_item_decide",
-      action: "deny",
-      pattern: "*",
-    });
-    expect(host.mutationCalls).toEqual({ create: 0, fork: 0, update: 0, restore: 0 });
   });
 
-  test("continuation failures do not mutate persistent permissions", async () => {
+  test("continuation failures return undefined without mutating persistent permissions", async () => {
     const persistentRules: PermissionRule[] = [
-      { permission: "edit", action: "allow", pattern: "src/**" },
-      { permission: "bash", action: "ask", pattern: "*" },
+      { action: "edit", effect: "allow", resource: "src/**" },
+      { action: "bash", effect: "ask", resource: "*" },
     ];
-    const repairOptions = (client: unknown) => ({
-      client: client as never,
-      directory: "/tmp/project",
-      taskId: "ses_same_child",
+    const repairOptions = (client: NativeRepairDouble["client"]) => ({
+      client,
+      sessionId: "ses_same_child",
       agent: "vv-implementer" as const,
       workItemId: "wi-1",
       malformedOutput: "plain progress",
@@ -522,27 +504,77 @@ describe("workflow repair", () => {
       parseErrorMessage: "MISSING_ROUTE: vv-implementer output must include VVOC_ROUTE",
     });
 
-    const errorHost = createHostPermissionDouble({
+    const errorHost = createNativeRepairDouble({
       rules: persistentRules,
-      promptResult: () => ({
-        data: undefined,
-        error: { name: "BadRequest", data: { message: "rejected" } },
-      }),
+      promptResult: () => ({ throws: "rejected" }),
     });
     expect(await attemptTrackedResultRepair(repairOptions(errorHost.client))).toBeUndefined();
 
-    const throwHost = createHostPermissionDouble({
+    const throwHost = createNativeRepairDouble({
       rules: persistentRules,
-      promptResult: () => {
-        throw new Error("aborted");
-      },
+      promptResult: () => ({ throws: "aborted" }),
     });
     expect(await attemptTrackedResultRepair(repairOptions(throwHost.client))).toBeUndefined();
 
     expect(errorHost.getRules()).toEqual(persistentRules);
     expect(throwHost.getRules()).toEqual(persistentRules);
-    expect(errorHost.mutationCalls).toEqual({ create: 0, fork: 0, update: 0, restore: 0 });
-    expect(throwHost.mutationCalls).toEqual({ create: 0, fork: 0, update: 0, restore: 0 });
+    expect(hostMutationSurface(errorHost.client.session)).toEqual(["prompt", "wait"]);
+    expect(hostMutationSurface(throwHost.client.session)).toEqual(["prompt", "wait"]);
+  });
+
+  const repairOptions = (client: NativeRepairDouble["client"]) => ({
+    client,
+    sessionId: "ses_same_child",
+    agent: "vv-implementer" as const,
+    workItemId: "wi-1",
+    malformedOutput: "plain progress",
+    parseErrorCode: "MISSING_ROUTE" as const,
+    parseErrorMessage: "MISSING_ROUTE: vv-implementer output must include VVOC_ROUTE",
+  });
+
+  test("an old valid terminal result is never accepted as a continuation", async () => {
+    const oldValid = {
+      id: "msg_old_done",
+      type: "assistant",
+      content: [
+        {
+          type: "text",
+          text: `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nOld valid report.`,
+        },
+      ],
+      time: { created: 100, completed: 101 },
+    };
+    const double = createNativeRepairDouble({
+      rules: [],
+      existingMessages: [oldValid],
+      // The continuation produced no new terminal message.
+      promptResult: () => undefined,
+    });
+    expect(await attemptTrackedResultRepair(repairOptions(double.client))).toBeUndefined();
+    expect(double.calls).toHaveLength(1);
+  });
+
+  test("a continuation terminal error carrying text is not a corrected result", async () => {
+    const double = createNativeRepairDouble({
+      rules: [],
+      promptResult: () => ({
+        text: `VVOC_WORK_ITEM_ID: wi-1\nVVOC_STATUS: DONE\nVVOC_ROUTE: change_with_review\n\nText with error.`,
+        error: "aborted",
+      }),
+    });
+    expect(await attemptTrackedResultRepair(repairOptions(double.client))).toBeUndefined();
+  });
+
+  test("malformed API results and absent acceptance timestamps fail closed", async () => {
+    const invalidList = createNativeRepairDouble({ rules: [], listInvalid: true });
+    expect(await attemptTrackedResultRepair(repairOptions(invalidList.client))).toBeUndefined();
+
+    const badAccepted = createNativeRepairDouble({
+      rules: [],
+      acceptedCreated: 0,
+      promptResult: () => ({ text: "corrected" }),
+    });
+    expect(await attemptTrackedResultRepair(repairOptions(badAccepted.client))).toBeUndefined();
   });
 });
 
@@ -1007,7 +1039,7 @@ describe("workflow tooling", () => {
 // START_BLOCK_CONTRACT_DIAGNOSTICS
 describe("workflow tool contract diagnostics (registered schemas, hooks, wrappers)", () => {
   async function catchHookError(
-    plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+    plugin: NativeWorkflowHarnessPlugin,
     tool: string,
     args: unknown,
     sessionID: string,
@@ -1070,29 +1102,21 @@ describe("workflow tool contract diagnostics (registered schemas, hooks, wrapper
     await deleteWorkflowSessionDir(sessionID);
   });
 
-  test("tool.definition publishes the strict owned schema and leaves unowned tools unchanged", async () => {
+  test("native tool registration publishes the strict closed input schema", async () => {
     const { plugin } = await createWorkflowPluginHarness();
-    const ownedParameters = { decoder: "host" };
-    const ownedOutput = {
-      description: "work_item_open",
-      parameters: ownedParameters,
-      jsonSchema: { type: "object" },
-    };
-    await plugin["tool.definition"]?.({ toolID: "work_item_open" }, ownedOutput as never);
-    expect(ownedOutput.parameters).toBe(ownedParameters);
-    expect(ownedOutput.jsonSchema).not.toEqual({ type: "object" });
-    const published = ownedOutput.jsonSchema as Record<string, unknown>;
-    expect(published.additionalProperties).toBe(false);
-    expect(JSON.stringify(published)).toContain("conversation-scoped");
-
-    const unownedOriginal = { type: "object" };
-    const unownedOutput = {
-      description: "web_search",
-      parameters: { decoder: "host" },
-      jsonSchema: unownedOriginal,
-    };
-    await plugin["tool.definition"]?.({ toolID: "web_search" }, unownedOutput as never);
-    expect(unownedOutput.jsonSchema).toBe(unownedOriginal);
+    const tool = plugin.tool["work_item_open"] as unknown as { input: unknown } | undefined;
+    expect(tool).toBeDefined();
+    const schema = tool?.input as { safeParse: (value: unknown) => { success: boolean } };
+    // The published schema rejects unknown keys (strict object).
+    expect(schema.safeParse({ items: [], unexpected: true }).success).toBe(false);
+    expect(
+      schema.safeParse({
+        items: [{ key: "k", title: "t", mode: "delegated", requiredReviewers: [] }],
+      }).success,
+    ).toBe(true);
+    const jsonSchema = z.toJSONSchema(schema as never, { io: "input" }) as Record<string, unknown>;
+    expect(jsonSchema.additionalProperties).toBe(false);
+    expect(JSON.stringify(jsonSchema)).toContain("conversation-scoped");
   });
 
   test("wrapper rejects source, binding, path, and unknown-key failures with the whole store unchanged", async () => {
@@ -1408,12 +1432,84 @@ describe("workflow tool contract diagnostics (registered schemas, hooks, wrapper
 // END_BLOCK_CONTRACT_DIAGNOSTICS
 
 type WorkflowPluginHarness = {
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>;
+  plugin: NativeWorkflowHarnessPlugin;
   logs: string[];
-  promptCalls: SessionPromptCall[];
+  promptCalls: Array<{ sessionID: string; text: string }>;
+  messages: Map<string, unknown[]>;
+  sessionViews: Map<string, Record<string, unknown>>;
+  emit: (event: unknown) => void;
 };
 
 type PromptScriptEntry = string | { error: string } | { throws: string };
+
+// START_BLOCK_NATIVE_WORKFLOW_FIXTURE
+/**
+ * Native fixture for the workflow plugin. It builds a native `Plugin.Context`,
+ * runs the real `WorkflowPlugin.setup`, and captures the native tool editor,
+ * tool hooks, session hooks and event stream. `plugin.tool[name].execute` is the
+ * actual registered native tool; the `tool.execute.before`/`after` and
+ * `chat.message` members are thin native-event adapters so existing test bodies
+ * keep driving the real plugin through native registrations.
+ */
+type NativeWorkflowHarnessPlugin = {
+  tool: Record<
+    string,
+    { name: string; execute: (input: unknown, context: unknown) => Promise<unknown> } | undefined
+  >;
+  "tool.execute.before": (
+    input: { tool: string; sessionID: string; callID: string },
+    output: { args: unknown },
+  ) => Promise<void>;
+  "tool.execute.after": (
+    input: { tool: string; sessionID: string; callID: string; args: unknown },
+    output: { title?: string; output: unknown; metadata?: unknown },
+  ) => Promise<void>;
+  "chat.message": (
+    input: unknown,
+    output: { message: { agent?: string; sessionID?: string; system?: string } },
+  ) => Promise<void>;
+};
+
+class NativeEventQueue {
+  private readonly events: unknown[] = [];
+  private waiter: (() => void) | undefined;
+
+  push(event: unknown): void {
+    this.events.push(event);
+    this.waiter?.();
+    this.waiter = undefined;
+  }
+
+  drain(): AsyncIterable<unknown> {
+    return {
+      [Symbol.asyncIterator]: (): AsyncIterator<unknown> => ({
+        next: () => {
+          const next = this.events.shift();
+          if (next !== undefined) return Promise.resolve({ done: false as const, value: next });
+          return new Promise((resolve) => {
+            this.waiter = () => {
+              const value = this.events.shift();
+              resolve(
+                value === undefined
+                  ? { done: true as const, value: undefined }
+                  : { done: false as const, value },
+              );
+            };
+          });
+        },
+        return: () => Promise.resolve({ done: true as const, value: undefined }),
+      }),
+    };
+  }
+}
+
+function deriveSubagentChildId(output: string): string | undefined {
+  const element = /^<task\s+id="([^"]+)"/m.exec(output);
+  if (element) return element[1];
+  const header = /^task_id:\s+(\S+)/m.exec(output);
+  if (header) return header[1];
+  return undefined;
+}
 
 function writeWorkflowProfile(profile: OrchestrationProfile): void {
   const configHome = process.env.XDG_CONFIG_HOME;
@@ -1425,53 +1521,296 @@ function writeWorkflowProfile(profile: OrchestrationProfile): void {
   writeFileSync(join(configDir, "vvoc.json"), renderVvocConfig(config), "utf8");
 }
 
-function createWorkflowPluginHarness(
+type NativeToolInfo = {
+  name: string;
+  execute: (input: unknown, context: unknown) => Promise<unknown>;
+};
+
+type NativeFakeToolEditor = {
+  list: () => NativeToolInfo[];
+  get: (id: string) => NativeToolInfo | undefined;
+  namespace: () => void;
+  add: (tool: NativeToolInfo) => void;
+  update: () => void;
+  remove: (id: string) => void;
+};
+
+async function createWorkflowPluginHarness(
   profile?: OrchestrationProfile,
-  options?: { promptResponses?: PromptScriptEntry[] },
+  options?: {
+    promptResponses?: PromptScriptEntry[];
+    sessions?: Record<string, Record<string, unknown>>;
+    captures?: Record<string, { vvoc: ReturnType<typeof createDefaultVvocConfig> }>;
+  },
 ): Promise<WorkflowPluginHarness> {
   if (profile) writeWorkflowProfile(profile);
-  const logs: string[] = [];
-  const promptCalls: SessionPromptCall[] = [];
+  const logs: string[] = workflowLogs;
+  workflowLogs.length = 0;
+  const promptCalls: Array<{ sessionID: string; text: string }> = [];
+  const messages = new Map<string, unknown[]>();
+  const sessionViews = new Map<string, Record<string, unknown>>(
+    Object.entries(options?.sessions ?? {}),
+  );
   const pendingPromptResponses = [...(options?.promptResponses ?? [])];
-  return WorkflowPlugin({
-    client: {
-      app: {
-        log: async (payload: { body?: { message?: string } }) => {
-          const message = payload.body?.message;
-          if (typeof message === "string") logs.push(message);
-        },
+  let messageCounter = 0;
+  const queue = new NativeEventQueue();
+  const tools = new Map<
+    string,
+    { name: string; execute: (input: unknown, context: unknown) => Promise<unknown> }
+  >();
+  const beforeHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+  const afterHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+  const contextHooks: Array<(event: Record<string, unknown>) => unknown> = [];
+
+  const rootSession = (sessionID: string): Record<string, unknown> =>
+    sessionViews.get(sessionID) ?? {
+      id: sessionID,
+      location: { directory: "/tmp/project" },
+      time: { created: 1 },
+    };
+
+  const messageTime = (message: unknown): number => {
+    if (typeof message !== "object" || message === null) return 0;
+    const time = (message as { time?: { created?: unknown } }).time;
+    return typeof time?.created === "number" ? time.created : 0;
+  };
+
+  const fakeClient = {
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => rootSession(sessionID),
+      context: async ({ sessionID }: { sessionID: string }) => messages.get(sessionID) ?? [],
+      message: {
+        get: async ({ sessionID, messageID }: { sessionID: string; messageID: string }) =>
+          (messages.get(sessionID) ?? []).find(
+            (message) =>
+              typeof message === "object" &&
+              message !== null &&
+              (message as { id?: unknown }).id === messageID,
+          ),
       },
-      session: {
-        prompt: async (call: SessionPromptCall): Promise<SessionPromptConsumedResult> => {
-          promptCalls.push(call);
-          const entry = pendingPromptResponses.shift();
-          if (entry === undefined) {
-            return {
-              data: undefined,
-              error: { name: "BadRequest", data: { message: "prompt unavailable" } },
-            };
-          }
-          if (typeof entry === "string") {
-            return { data: sessionPromptResponse(call.path.id, entry) };
-          }
-          if ("throws" in entry) {
-            throw new Error(entry.throws);
-          }
-          return {
-            data: undefined,
-            error: { name: "BadRequest", data: { message: entry.error } },
-          };
-        },
+      active: async () => ({}),
+      inbox: { list: async () => [] },
+      prompt: async (input: { sessionID: string; text: string }) => {
+        promptCalls.push({ sessionID: input.sessionID, text: input.text });
+        const entry = pendingPromptResponses.shift();
+        if (typeof entry === "object" && entry !== null && "throws" in entry) {
+          throw new Error(entry.throws);
+        }
+        if (typeof entry === "string") {
+          const created = Date.now();
+          messageCounter += 1;
+          messages.set(input.sessionID, [
+            ...(messages.get(input.sessionID) ?? []),
+            {
+              id: `msg_cont_${messageCounter}`,
+              type: "assistant",
+              content: [{ type: "text", text: entry }],
+              time: { created, completed: created + 1 },
+            },
+          ]);
+        }
+        return {
+          id: `msg_prompt_${input.sessionID}`,
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+        };
       },
-    } as never,
-    project: {} as never,
-    directory: "/tmp/project",
-    worktree: "/tmp/project",
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  }).then((plugin) => ({ plugin, logs, promptCalls }));
+      wait: async () => undefined,
+      interrupt: async () => undefined,
+      hook: async (_name: string, callback: (event: Record<string, unknown>) => unknown) => {
+        contextHooks.push(callback);
+        return { dispose: async () => undefined };
+      },
+    },
+    message: {
+      list: async (input: {
+        sessionID: string;
+        order?: "asc" | "desc";
+        limit?: number;
+        type?: string;
+      }) => {
+        let data = [...(messages.get(input.sessionID) ?? [])];
+        if (input.type !== undefined) {
+          data = data.filter((message) => (message as { type?: unknown }).type === input.type);
+        }
+        data.sort((left, right) =>
+          input.order === "desc"
+            ? messageTime(right) - messageTime(left)
+            : messageTime(left) - messageTime(right),
+        );
+        if (input.limit !== undefined) data = data.slice(0, input.limit);
+        return { data, cursor: {} };
+      },
+    },
+  };
+
+  const loaded = await loadVvocConfig({ cwd: "/tmp/project" });
+  const captures = options?.captures ?? {};
+  const defaultCapture = { vvoc: loaded.config };
+  const fakeRuntime = {
+    snapshots: {
+      // Tests explicitly bind a fixture policy per session; absence is only
+      // used by the disabled/unbound regression and fails closed in production.
+      configFor: async (sessionID: string) => captures[sessionID] ?? defaultCapture,
+      accept: async () => ({ status: "unbound" }),
+    },
+    client: async () => fakeClient,
+    effectiveConfig: () => ({ vvoc: loaded.config }),
+    release: async () => undefined,
+  };
+
+  const editor = {
+    list: () => [...tools.values()],
+    get: (id: string) => tools.get(id),
+    namespace: () => undefined,
+    add: (tool: {
+      name: string;
+      execute: (input: unknown, context: unknown) => Promise<unknown>;
+    }) => {
+      tools.set(tool.name, tool);
+    },
+    update: () => undefined,
+    remove: (id: string) => {
+      tools.delete(id);
+    },
+  };
+
+  const ctx = {
+    location: {
+      directory: "/tmp/project",
+      project: { id: "proj", directory: "/tmp/project", canonical: "/tmp/project" },
+    },
+    tool: {
+      transform: async (callback: (editor: NativeFakeToolEditor) => void) => {
+        callback(editor);
+        return { dispose: async () => undefined };
+      },
+      hook: async (name: string, callback: (event: Record<string, unknown>) => unknown) => {
+        if (name === "execute.before") beforeHooks.push(callback);
+        else if (name === "execute.after") afterHooks.push(callback);
+        return { dispose: async () => undefined };
+      },
+      list: async () => [],
+      reload: async () => undefined,
+    },
+    session: {
+      hook: async (_name: string, callback: (event: Record<string, unknown>) => unknown) => {
+        contextHooks.push(callback);
+        return { dispose: async () => undefined };
+      },
+    },
+    event: { subscribe: () => queue.drain() },
+    rpc: { register: async () => ({ dispose: async () => undefined }) },
+  };
+
+  await createWorkflowPlugin({ acquireRuntime: async () => fakeRuntime as never }).setup(
+    ctx as never,
+  );
+
+  const plugin: NativeWorkflowHarnessPlugin = {
+    tool: new Proxy(
+      {},
+      {
+        get: (_target, property: string) => tools.get(property),
+      },
+    ) as NativeWorkflowHarnessPlugin["tool"],
+    "tool.execute.before": async (input, output) => {
+      // Native tool name is `subagent`; tests use the V1 `task` name.
+      const toolName = input.tool === "task" ? "subagent" : input.tool;
+      const args = (output.args ?? {}) as Record<string, unknown>;
+      const nativeInput =
+        toolName === "subagent"
+          ? {
+              agent: args.subagent_type,
+              description: args.description,
+              prompt: args.prompt,
+              ...(args.task_id === undefined ? {} : { sessionID: args.task_id }),
+              ...(args.background === undefined ? {} : { background: args.background }),
+              ...(args.model === undefined ? {} : { model: args.model }),
+            }
+          : args;
+      const event: Record<string, unknown> = {
+        tool: toolName,
+        sessionID: input.sessionID,
+        agent: "vv-controller",
+        messageID: "message-1",
+        id: input.callID,
+        input: nativeInput,
+      };
+      for (const hook of beforeHooks) await hook(event);
+      output.args = event.input;
+    },
+    "tool.execute.after": async (input, output) => {
+      const toolName = input.tool === "task" ? "subagent" : input.tool;
+      const rawArgs = (input.args ?? {}) as Record<string, unknown>;
+      const nativeInput = {
+        agent: rawArgs.subagent_type,
+        description: rawArgs.description,
+        prompt: rawArgs.prompt,
+        ...(rawArgs.task_id === undefined ? {} : { sessionID: rawArgs.task_id }),
+        ...(rawArgs.background === undefined ? {} : { background: rawArgs.background }),
+      };
+      const outputText = typeof output.output === "string" ? output.output : "";
+      const childSessionId = deriveSubagentChildId(outputText) ?? `ses_${input.callID}_child`;
+      const event: Record<string, unknown> = {
+        tool: toolName,
+        sessionID: input.sessionID,
+        agent: "vv-controller",
+        messageID: "message-1",
+        id: input.callID,
+        input: nativeInput,
+        status: "completed",
+        result: {
+          output: { sessionID: childSessionId, status: "completed", output: outputText },
+          content: `<subagent sessionID="${childSessionId}" state="completed">\n${outputText}\n</subagent>`,
+          metadata: output.metadata ?? {},
+        },
+      };
+      for (const hook of afterHooks) await hook(event);
+      const result = event.result as { output?: unknown; metadata?: unknown };
+      // Native execute.after cannot fail; the workflow surfaces diagnostics by
+      // rewriting the completed native result. The fixture returns that text.
+      output.output = result.output;
+      output.metadata = result.metadata;
+    },
+    "chat.message": async (_input, output) => {
+      const existing = output.message.system ?? "";
+      const toolNames = [
+        "work_item_open",
+        "work_item_list",
+        "work_item_close",
+        "work_item_decide",
+        "work_checkpoint",
+      ];
+      const tools: Record<string, unknown> = {};
+      for (const name of toolNames) tools[name] = { description: name, input: {} };
+      const event: Record<string, unknown> = {
+        sessionID: output.message.sessionID ?? "session",
+        agent: output.message.agent,
+        model: {},
+        system: existing.trim() === "" ? [] : [{ type: "text", text: existing }],
+        messages: [],
+        options: {},
+        tools,
+      };
+      for (const hook of contextHooks) await hook(event);
+      output.message.system = (event.system as Array<{ text: string }>)
+        .map((part) => part.text)
+        .join("\n\n");
+      (output as { tools?: Record<string, unknown> }).tools = tools;
+    },
+  };
+
+  return {
+    plugin,
+    logs,
+    promptCalls,
+    messages,
+    sessionViews,
+    emit: (event) => queue.push(event),
+  };
 }
+// END_BLOCK_NATIVE_WORKFLOW_FIXTURE
 
 describe("workflow plugin integration", () => {
   beforeEach(async () => {
@@ -1588,9 +1927,15 @@ describe("workflow plugin integration", () => {
     let listed = await listPluginItems(plugin, sessionID);
     expect(listed.items[0]?.state).toBe("awaiting_reviews");
 
-    await expect(
-      finishPluginTask(plugin, sessionID, "code", "vv-code-reviewer", workItemId, "PASS"),
-    ).rejects.toThrow("RESULT_HARD_STOP: needs_context");
+    const aggregateHardStop = await finishPluginTask(
+      plugin,
+      sessionID,
+      "code",
+      "vv-code-reviewer",
+      workItemId,
+      "PASS",
+    );
+    expect(aggregateHardStop).toContain("RESULT_HARD_STOP: needs_context");
     listed = await listPluginItems(plugin, sessionID);
     expect(listed.items[0]?.state).toBe("needs_context");
   });
@@ -1601,17 +1946,16 @@ describe("workflow plugin integration", () => {
     const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
 
     await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
-    await expect(
-      finishPluginTask(
-        plugin,
-        sessionID,
-        "impl",
-        "vv-implementer",
-        workItemId,
-        "BLOCKED",
-        "Blocked because the target API contract is missing.",
-      ),
-    ).rejects.toThrow("Blocked because the target API contract is missing.");
+    const blocked = await finishPluginTask(
+      plugin,
+      sessionID,
+      "impl",
+      "vv-implementer",
+      workItemId,
+      "BLOCKED",
+      "Blocked because the target API contract is missing.",
+    );
+    expect(blocked).toContain("Blocked because the target API contract is missing.");
 
     const listed = await listPluginItems(plugin, sessionID);
     expect(listed.items[0]?.state).toBe("blocked");
@@ -1627,32 +1971,30 @@ describe("workflow plugin integration", () => {
     const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec"]);
 
     await launchPluginTask(plugin, sessionID, "spec", "vv-spec-reviewer", workItemId);
-    await expect(
-      finishPluginTaskWithRawOutput(
-        plugin,
-        sessionID,
-        "spec",
-        "vv-spec-reviewer",
-        workItemId,
-        wrapTaskResult(
-          "ses_repair_missing_blank",
-          `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\nFindings from reviewer`,
-        ),
+    const excerpt = await finishPluginTaskWithRawOutput(
+      plugin,
+      sessionID,
+      "spec",
+      "vv-spec-reviewer",
+      workItemId,
+      wrapTaskResult(
+        "ses_repair_missing_blank",
+        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\nFindings from reviewer`,
       ),
-    ).rejects.toThrow("Findings from reviewer");
-    await expect(
-      finishPluginTaskWithRawOutput(
-        plugin,
-        sessionID,
-        "spec-second-attempt",
-        "vv-spec-reviewer",
-        workItemId,
-        wrapTaskResult(
-          "ses_repair_missing_blank",
-          `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\nFindings from reviewer`,
-        ),
+    );
+    expect(excerpt).toContain("Findings from reviewer");
+    const protocol = await finishPluginTaskWithRawOutput(
+      plugin,
+      sessionID,
+      "spec-second-attempt",
+      "vv-spec-reviewer",
+      workItemId,
+      wrapTaskResult(
+        "ses_repair_missing_blank",
+        `VVOC_WORK_ITEM_ID: ${workItemId}\nVVOC_STATUS: FAIL\nFindings from reviewer`,
       ),
-    ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+    );
+    expect(protocol).toContain("RESULT_PROTOCOL_ERROR");
   });
 
   test("incomplete wrapped output continues the same child once and applies the corrected result", async () => {
@@ -1679,11 +2021,9 @@ describe("workflow plugin integration", () => {
 
     expect(promptCalls).toHaveLength(1);
     const call = promptCalls[0];
-    expect(call?.path.id).toBe("ses_continuation_child");
-    expect(call?.body?.agent).toBe("vv-implementer");
-    expect(call?.body?.tools).toBeUndefined();
-    expect(call?.body !== undefined && "tools" in call.body).toBe(false);
-    expect(firstPromptText(call)).toContain(
+    expect(call?.sessionID).toBe("ses_continuation_child");
+    expect(Object.keys(call ?? {}).sort()).toEqual(["sessionID", "text"]);
+    expect(call?.text).toContain(
       "I have started implementing; I still need to run the focused tests.",
     );
     expect(logs).toContain(
@@ -1715,7 +2055,7 @@ describe("workflow plugin integration", () => {
     );
 
     expect(promptCalls).toHaveLength(1);
-    expect(promptCalls[0]?.path.id).toBe("ses_element_child");
+    expect(promptCalls[0]?.sessionID).toBe("ses_element_child");
     const listed = await listPluginItems(plugin, sessionID);
     expect(listed.items[0]?.state).toBe("awaiting_reviews");
   });
@@ -1730,17 +2070,16 @@ describe("workflow plugin integration", () => {
 
     const hardStopSession = "session-valid-hard-stop";
     const hardStopItem = await openAndLaunchImplementer(plugin, hardStopSession);
-    await expect(
-      finishPluginTask(
-        plugin,
-        hardStopSession,
-        "impl",
-        "vv-implementer",
-        hardStopItem,
-        "BLOCKED",
-        "Valid hard stop body.",
-      ),
-    ).rejects.toThrow("RESULT_HARD_STOP");
+    const validHardStop = await finishPluginTask(
+      plugin,
+      hardStopSession,
+      "impl",
+      "vv-implementer",
+      hardStopItem,
+      "BLOCKED",
+      "Valid hard stop body.",
+    );
+    expect(validHardStop).toContain("RESULT_HARD_STOP");
 
     expect(promptCalls).toHaveLength(0);
   });
@@ -1783,16 +2122,15 @@ describe("workflow plugin integration", () => {
 
     for (const testCase of cases) {
       const workItemId = await openAndLaunchImplementer(plugin, testCase.sessionID);
-      await expect(
-        finishPluginTaskWithRawOutput(
-          plugin,
-          testCase.sessionID,
-          "impl",
-          "vv-implementer",
-          workItemId,
-          testCase.raw(workItemId),
-        ),
-      ).rejects.toThrow(testCase.excerpt);
+      const diagnostic = await finishPluginTaskWithRawOutput(
+        plugin,
+        testCase.sessionID,
+        "impl",
+        "vv-implementer",
+        workItemId,
+        testCase.raw(workItemId),
+      );
+      expect(diagnostic).toContain(testCase.excerpt);
       expect(promptCalls).toHaveLength(0);
     }
   });
@@ -1826,16 +2164,15 @@ describe("workflow plugin integration", () => {
         promptResponses: [testCase.entry],
       });
       const workItemId = await openAndLaunchImplementer(plugin, testCase.sessionID);
-      await expect(
-        finishPluginTaskWithRawOutput(
-          plugin,
-          testCase.sessionID,
-          "impl",
-          "vv-implementer",
-          workItemId,
-          wrapTaskResult(`ses_${testCase.sessionID}`, testCase.excerpt),
-        ),
-      ).rejects.toThrow(testCase.excerpt);
+      const diagnostic = await finishPluginTaskWithRawOutput(
+        plugin,
+        testCase.sessionID,
+        "impl",
+        "vv-implementer",
+        workItemId,
+        wrapTaskResult(`ses_${testCase.sessionID}`, testCase.excerpt),
+      );
+      expect(diagnostic).toContain(testCase.excerpt);
       expect(promptCalls).toHaveLength(1);
     }
   });
@@ -1861,19 +2198,18 @@ describe("workflow plugin integration", () => {
         promptResponses: [testCase.text],
       });
       const workItemId = await openAndLaunchImplementer(plugin, testCase.sessionID);
-      await expect(
-        finishPluginTaskWithRawOutput(
-          plugin,
-          testCase.sessionID,
-          "impl",
-          "vv-implementer",
-          workItemId,
-          wrapTaskResult(
-            `ses_${testCase.sessionID}`,
-            "Original progress before invalid continuation.",
-          ),
+      const diagnostic = await finishPluginTaskWithRawOutput(
+        plugin,
+        testCase.sessionID,
+        "impl",
+        "vv-implementer",
+        workItemId,
+        wrapTaskResult(
+          `ses_${testCase.sessionID}`,
+          "Original progress before invalid continuation.",
         ),
-      ).rejects.toThrow("RESULT_PROTOCOL_ERROR");
+      );
+      expect(diagnostic).toContain("RESULT_PROTOCOL_ERROR");
       expect(promptCalls).toHaveLength(1);
     }
   });
@@ -1888,16 +2224,15 @@ describe("workflow plugin integration", () => {
     const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
     await launchPluginTask(plugin, sessionID, "impl", "vv-implementer", workItemId);
 
-    await expect(
-      finishPluginTaskWithRawOutput(
-        plugin,
-        sessionID,
-        "impl",
-        "vv-implementer",
-        workItemId,
-        wrapTaskResult("ses_continue_hard_stop", "plain progress without a protocol header"),
-      ),
-    ).rejects.toThrow("RESULT_HARD_STOP");
+    const hardStopDiagnostic = await finishPluginTaskWithRawOutput(
+      plugin,
+      sessionID,
+      "impl",
+      "vv-implementer",
+      workItemId,
+      wrapTaskResult("ses_continue_hard_stop", "plain progress without a protocol header"),
+    );
+    expect(hardStopDiagnostic).toContain("RESULT_HARD_STOP");
 
     expect(promptCalls).toHaveLength(1);
     const listed = await listPluginItems(plugin, sessionID);
@@ -1909,28 +2244,26 @@ describe("workflow plugin integration", () => {
     const sessionID = "session-state-error-excerpt";
     const workItemId = await openPluginWorkItem(plugin, sessionID, "review_only", ["spec"]);
 
-    await expect(
-      finishPluginTask(
-        plugin,
-        sessionID,
-        "spec-without-launch",
-        "vv-spec-reviewer",
-        workItemId,
-        "PASS",
-        "Parsed body should survive state rejection.",
-      ),
-    ).rejects.toThrow("Parsed body should survive state rejection.");
-    await expect(
-      finishPluginTask(
-        plugin,
-        sessionID,
-        "spec-without-launch-again",
-        "vv-spec-reviewer",
-        workItemId,
-        "PASS",
-        "Parsed body should survive state rejection.",
-      ),
-    ).rejects.toThrow("REVIEWER_NOT_IN_FLIGHT");
+    const stateError = await finishPluginTask(
+      plugin,
+      sessionID,
+      "spec-without-launch",
+      "vv-spec-reviewer",
+      workItemId,
+      "PASS",
+      "Parsed body should survive state rejection.",
+    );
+    expect(stateError).toContain("Parsed body should survive state rejection.");
+    const notInFlight = await finishPluginTask(
+      plugin,
+      sessionID,
+      "spec-without-launch-again",
+      "vv-spec-reviewer",
+      workItemId,
+      "PASS",
+      "Parsed body should survive state rejection.",
+    );
+    expect(notInFlight).toContain("REVIEWER_NOT_IN_FLIGHT");
   });
 
   test("reviewer NEEDS_CONTEXT hard stop uses needs-context reviewer excerpt", async () => {
@@ -1950,17 +2283,16 @@ describe("workflow plugin integration", () => {
       "Need schema ownership decision before review can pass.",
     );
 
-    await expect(
-      finishPluginTask(
-        plugin,
-        sessionID,
-        "code",
-        "vv-code-reviewer",
-        workItemId,
-        "PASS",
-        "Code review has no additional concerns.",
-      ),
-    ).rejects.toThrow("Need schema ownership decision before review can pass.");
+    const reviewerHardStop = await finishPluginTask(
+      plugin,
+      sessionID,
+      "code",
+      "vv-code-reviewer",
+      workItemId,
+      "PASS",
+      "Code review has no additional concerns.",
+    );
+    expect(reviewerHardStop).toContain("Need schema ownership decision before review can pass.");
 
     const listed = await listPluginItems(plugin, sessionID);
     expect(listed.items[0]?.state).toBe("needs_context");
@@ -2072,6 +2404,60 @@ describe("workflow plugin integration", () => {
     expect(systemText).not.toContain("Selective delegation is available");
   });
 
+  test("a bound family keeps its captured profile while new work sees the changed policy", async () => {
+    resetVvocConfigForTests();
+    const captured = createDefaultVvocConfig();
+    captured.orchestration = { profile: "orchestrated" };
+    const { plugin } = await createWorkflowPluginHarness("single-session", {
+      captures: { "session-bound": { vvoc: captured } },
+    });
+
+    const bound = {
+      message: { agent: "vv-controller", sessionID: "session-bound", system: "base" },
+    } as {
+      message: { agent: string; sessionID: string; system?: string };
+    };
+    await plugin["chat.message"]?.({} as never, bound as never);
+    expect(bound.message.system).toContain("Implementation loop:");
+
+    // An unbound session resolves the current effective config, not the capture.
+    const fresh = {
+      message: { agent: "vv-controller", sessionID: "session-new", system: "base" },
+    } as {
+      message: { agent: string; sessionID: string; system?: string };
+    };
+    await plugin["chat.message"]?.({} as never, fresh as never);
+    expect(fresh.message.system).not.toContain("Implementation loop:");
+    expect(fresh.message.system).toContain("review_only");
+  });
+
+  test("a family with the workflow toggle disabled hides tools, guidance, and denies execution", async () => {
+    resetVvocConfigForTests();
+    const disabled = createDefaultVvocConfig();
+    disabled.plugins = { ...disabled.plugins, workflow: false };
+    const { plugin } = await createWorkflowPluginHarness("single-session", {
+      captures: { "session-disabled": { vvoc: disabled } },
+    });
+
+    const output = {
+      message: { agent: "vv-controller", sessionID: "session-disabled", system: "base" },
+    } as {
+      message: { agent: string; sessionID: string; system?: string };
+      tools?: Record<string, unknown>;
+    };
+    await plugin["chat.message"]?.({} as never, output as never);
+    expect(output.message.system).toBe("base");
+    expect(output.tools?.work_item_open).toBeUndefined();
+    expect(output.tools?.work_checkpoint).toBeUndefined();
+
+    await expect(
+      plugin.tool?.work_item_list?.execute(
+        { includeClosed: false },
+        createToolContext("session-disabled") as never,
+      ),
+    ).rejects.toThrow("FAMILY_DISABLED");
+  });
+
   test("every orchestration profile exposes the shared tracked result protocol guidance", async () => {
     for (const profile of ["single-session", "balanced", "orchestrated", "delegated"] as const) {
       resetVvocConfigForTests();
@@ -2100,6 +2486,29 @@ describe("workflow plugin integration", () => {
         expect(normalized).toContain(status);
       }
     }
+  });
+
+  test("contains a throwing event and keeps processing later lifecycle events", async () => {
+    const { emit, logs } = await createWorkflowPluginHarness();
+    const throwingData: Record<string, unknown> = {
+      sessionID: "session-pump-fault",
+      id: "call-pump-fault",
+    };
+    // A transient throw while a handler reads one event's metadata.
+    Object.defineProperty(throwingData, "metadata", {
+      enumerable: true,
+      get() {
+        throw new Error("transient metadata failure");
+      },
+    });
+    emit({ type: "session.tool.success", data: throwingData });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The pump must still observe this deletion; a killed subscription would not.
+    emit({ type: "session.deleted", data: { sessionID: "session-pump-fault" } });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(logs.some((line) => line.includes("contained handler failure"))).toBe(true);
+    expect(logs.some((line) => line.includes("[workflow][sessionCleanup]"))).toBe(true);
   });
 });
 
@@ -2296,7 +2705,7 @@ type ListedPluginItems = {
 };
 
 async function openPluginWorkItem(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: NativeWorkflowHarnessPlugin,
   sessionID: string,
   mode: WorkItemMode,
   requiredReviewers: ReviewerRole[],
@@ -2312,7 +2721,7 @@ async function openPluginWorkItem(
 }
 
 async function launchPluginTask(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: NativeWorkflowHarnessPlugin,
   sessionID: string,
   callPrefix: string,
   subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
@@ -2330,7 +2739,7 @@ async function launchPluginTask(
 }
 
 async function openAndLaunchImplementer(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: NativeWorkflowHarnessPlugin,
   sessionID: string,
 ): Promise<string> {
   const workItemId = await openPluginWorkItem(plugin, sessionID, "implementation", ["spec"]);
@@ -2339,16 +2748,16 @@ async function openAndLaunchImplementer(
 }
 
 async function finishPluginTask(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: NativeWorkflowHarnessPlugin,
   sessionID: string,
   callPrefix: string,
   subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
   workItemId: string,
   status: ParsedResultBlock["status"],
   body = "Done.",
-): Promise<void> {
+): Promise<string> {
   const route = subagentType === "vv-implementer" ? "\nVVOC_ROUTE: change_with_review" : "";
-  await finishPluginTaskWithRawOutput(
+  return finishPluginTaskWithRawOutput(
     plugin,
     sessionID,
     callPrefix,
@@ -2359,13 +2768,18 @@ async function finishPluginTask(
 }
 
 async function finishPluginTaskWithRawOutput(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: NativeWorkflowHarnessPlugin,
   sessionID: string,
   callPrefix: string,
   subagentType: "vv-implementer" | "vv-spec-reviewer" | "vv-code-reviewer",
   workItemId: string,
   output: string,
-): Promise<void> {
+): Promise<string> {
+  const sink = {
+    title: "task",
+    output: output as unknown,
+    metadata: {} as unknown,
+  };
   await plugin["tool.execute.after"]?.(
     {
       tool: "task",
@@ -2376,16 +2790,19 @@ async function finishPluginTaskWithRawOutput(
         prompt: `VVOC_WORK_ITEM_ID: ${workItemId}\n<assignment>Run tracked task</assignment>`,
       },
     } as never,
-    {
-      title: "task",
-      output,
-      metadata: {},
-    } as never,
+    sink as never,
   );
+  const final = sink.output;
+  if (typeof final === "string") return final;
+  if (final && typeof final === "object" && "output" in final) {
+    const inner = (final as { output?: unknown }).output;
+    if (typeof inner === "string") return inner;
+  }
+  return "";
 }
 
 async function listPluginItems(
-  plugin: Awaited<ReturnType<typeof WorkflowPlugin>>,
+  plugin: NativeWorkflowHarnessPlugin,
   sessionID: string,
 ): Promise<ListedPluginItems> {
   const listedRaw = await plugin.tool?.work_item_list?.execute(
@@ -2441,124 +2858,559 @@ function wrapTaskElement(taskId: string, innerResult: string): string {
   ].join("\n");
 }
 
-type SessionPromptCall = Parameters<OpencodeClient["session"]["prompt"]>[0];
-type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses];
-type SessionPromptError = SessionPromptErrors[keyof SessionPromptErrors];
-type SessionPromptConsumedResult =
-  | { data: SessionPromptResponse; error?: undefined }
-  | { data?: undefined; error: SessionPromptError };
+// START_BLOCK_NATIVE_REPAIR_FIXTURE
+type NativeRepairCall = { sessionID: string; text: string };
 
-function assistantMessage(sessionID: string): AssistantMessage {
-  return {
-    id: `msg_${sessionID}`,
-    sessionID,
-    role: "assistant",
-    time: { created: 1 },
-    parentID: `msg_parent_${sessionID}`,
-    modelID: "deepseek-flash",
-    providerID: "deepseek",
-    mode: "build",
-    path: { cwd: "/tmp/project", root: "/tmp/project" },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-}
-
-function textPart(sessionID: string, text: string): TextPart {
-  return {
-    id: `part_${sessionID}`,
-    sessionID,
-    messageID: `msg_${sessionID}`,
-    type: "text",
-    text,
-  };
-}
-
-function sessionPromptResponse(sessionID: string, text: string): SessionPromptResponse {
-  return { info: assistantMessage(sessionID), parts: [textPart(sessionID, text)] };
-}
-
-function firstPromptText(call: SessionPromptCall | undefined): string | undefined {
-  const part = call?.body?.parts?.[0];
-  return part && part.type === "text" ? part.text : undefined;
-}
-
-type SessionPromptMutation = "create" | "fork" | "update" | "restore";
-
-type HostPermissionDouble = {
+type NativeRepairDouble = {
   client: {
-    app: { log: (payload: unknown) => Promise<void> };
     session: {
-      prompt: (call: SessionPromptCall) => Promise<SessionPromptConsumedResult>;
-      create: () => Promise<never>;
-      fork: () => Promise<never>;
-      update: () => Promise<never>;
-      restore: () => Promise<never>;
+      prompt: (input: NativeRepairCall) => Promise<unknown>;
+      wait: (input: { sessionID: string }) => Promise<void>;
+    };
+    message: {
+      list: (input: {
+        sessionID: string;
+        order?: "asc" | "desc";
+        limit?: number;
+        type?: string;
+      }) => Promise<unknown>;
     };
   };
-  calls: SessionPromptCall[];
-  mutationCalls: Record<SessionPromptMutation, number>;
+  calls: NativeRepairCall[];
   getRules: () => PermissionRule[];
 };
 
+/** Native session surface keys exposed to the repair boundary. */
+function hostMutationSurface(sessionKeys: object): string[] {
+  return Object.keys(sessionKeys).sort();
+}
+
 /**
- * Deterministic double for the confirmed OpenCode host semantics: a nonempty
- * prompt body `tools` object is materialized into {permission, action,
- * pattern: "*"} rules and replaces the complete persisted session permission
- * ruleset, while an omitted `tools` key leaves the persisted rules untouched.
- * It also counts session mutation APIs so a test can prove none were called.
+ * Native double for one same-child continuation: it records the native prompt,
+ * optionally appends the corrected assistant message the continuation retrieves
+ * (created at/after the accepted prompt), and exposes only prompt/wait plus the
+ * full-client message list so a test can prove no child creation is reachable.
  */
-function createHostPermissionDouble(options: {
+function createNativeRepairDouble(options: {
   rules: PermissionRule[];
-  promptResult?: (call: SessionPromptCall) => SessionPromptConsumedResult;
-}): HostPermissionDouble {
-  let rules = options.rules.map((rule) => ({ ...rule }));
-  const calls: SessionPromptCall[] = [];
-  const mutationCalls: Record<SessionPromptMutation, number> = {
-    create: 0,
-    fork: 0,
-    update: 0,
-    restore: 0,
-  };
-  const recordMutation = (name: SessionPromptMutation) => async (): Promise<never> => {
-    mutationCalls[name] += 1;
-    throw new Error(`unexpected session.${name} call`);
-  };
+  promptResult?: (
+    input: NativeRepairCall,
+  ) => { text?: string; error?: string } | { throws: string } | undefined;
+  acceptedCreated?: number;
+  listInvalid?: boolean;
+  existingMessages?: unknown[];
+}): NativeRepairDouble {
+  const rules = options.rules.map((rule) => ({ ...rule }));
+  const calls: NativeRepairCall[] = [];
+  const childMessages = new Map<string, unknown[]>();
+  let messageCounter = 0;
+  const acceptedCreated = options.acceptedCreated ?? Date.now();
   return {
     client: {
-      app: { log: async () => undefined },
       session: {
-        prompt: async (call: SessionPromptCall): Promise<SessionPromptConsumedResult> => {
-          calls.push(call);
-          const tools = call.body?.tools;
-          if (tools && Object.keys(tools).length > 0) {
-            rules = Object.entries(tools).map(([permission, enabled]) => ({
-              permission,
-              action: enabled ? ("allow" as const) : ("deny" as const),
-              pattern: "*",
-            }));
-          }
-          if (options.promptResult) {
-            return options.promptResult(call);
+        prompt: async (input: NativeRepairCall): Promise<unknown> => {
+          calls.push(input);
+          const outcome = options.promptResult?.(input);
+          if (outcome && "throws" in outcome) throw new Error(outcome.throws);
+          if (outcome && "text" in outcome && outcome.text !== undefined) {
+            messageCounter += 1;
+            childMessages.set(input.sessionID, [
+              ...(childMessages.get(input.sessionID) ?? []),
+              {
+                id: `msg_cont_${messageCounter}`,
+                type: "assistant",
+                content: [{ type: "text", text: outcome.text }],
+                ...(outcome.error === undefined
+                  ? {}
+                  : { error: { type: "aborted", message: outcome.error } }),
+                time: { created: acceptedCreated + 1, completed: acceptedCreated + 2 },
+              },
+            ]);
           }
           return {
-            data: undefined,
-            error: { name: "BadRequest", data: { message: "prompt unavailable" } },
+            id: `msg_prompt_${input.sessionID}`,
+            sessionID: input.sessionID,
+            time: { created: acceptedCreated },
           };
         },
-        create: recordMutation("create"),
-        fork: recordMutation("fork"),
-        update: recordMutation("update"),
-        restore: recordMutation("restore"),
+        wait: async () => undefined,
+      },
+      message: {
+        list: async (input: {
+          sessionID: string;
+          order?: "asc" | "desc";
+          limit?: number;
+          type?: string;
+        }) => {
+          if (options.listInvalid === true) return undefined;
+          let data = [
+            ...(options.existingMessages ?? []),
+            ...(childMessages.get(input.sessionID) ?? []),
+          ];
+          if (input.type !== undefined) {
+            data = data.filter((message) => (message as { type?: unknown }).type === input.type);
+          }
+          return { data, cursor: {} };
+        },
       },
     },
     calls,
-    mutationCalls,
     getRules: () => rules.map((rule) => ({ ...rule })),
   };
 }
+// END_BLOCK_NATIVE_REPAIR_FIXTURE
+
+// START_BLOCK_REAL_HOST_WORKFLOW_SMOKE
+/**
+ * Optional isolated real-host workflow smoke. Runs only when VVOC_E2E_V2_HOST
+ * points at the pinned OpenCode 2.0.18 binary; otherwise it is skipped. It loads
+ * the ACTUAL built WorkflowPlugin on the pinned host, drives real tool execution
+ * through a loopback provider, and asserts the results the provider received.
+ *
+ * Isolation, owned scratch/processes, allow-listed env, free ports, the loopback
+ * guard, service registration wait and the authenticated bounded HTTP client are
+ * reused READ-ONLY from scripts/e2e-v2/host.ts via a runtime dynamic import, so
+ * the in-scope test never duplicates (or weakens) that safety surface.
+ */
+const REAL_WORKFLOW_HOST = process.env.VVOC_E2E_V2_HOST;
+const workflowSmokeDescribe = REAL_WORKFLOW_HOST ? describe : describe.skip;
+
+type E2eHostModule = {
+  createOwnedScratch(base: string): Promise<{ dir: string; base: string; markerPath: string }>;
+  removeOwnedScratch(scratch: unknown): Promise<void>;
+  waitForRegisteredService(input: { servicePath: string; timeoutMs?: number }): Promise<string>;
+  createNativeApi(input: {
+    baseUrl: string;
+    password: string;
+    directory: string;
+    timeoutMs?: number;
+  }): (
+    path: string,
+    init?: RequestInit,
+  ) => Promise<{ status: number; body: unknown; text: string }>;
+  assertLoopbackHttpUrl(raw: string, label?: string): URL;
+  buildHostEnv(
+    base: Record<string, string>,
+    extra?: Record<string, string | undefined>,
+  ): Record<string, string>;
+  OwnedProcesses: new () => {
+    spawn(
+      command: string,
+      args: readonly string[],
+      options?: { cwd?: string; env?: Record<string, string> },
+    ): unknown;
+    stopAll(signal?: NodeJS.Signals, timeoutMs?: number): Promise<void>;
+  };
+};
+
+let e2eHostPromise: Promise<E2eHostModule> | undefined;
+const loadE2eHost = (): Promise<E2eHostModule> =>
+  (e2eHostPromise ??= import(
+    new URL("../../scripts/e2e-v2/host.ts", import.meta.url).href
+  ) as Promise<E2eHostModule>);
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const server = createServer();
+    server.once("error", rejectPromise);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address !== null ? address.port : 0;
+      server.close(() => resolvePromise(port));
+    });
+  });
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+workflowSmokeDescribe("real OpenCode 2.0.18 workflow smoke (actual built plugin)", () => {
+  type Started = {
+    api: (
+      path: string,
+      init?: RequestInit,
+    ) => Promise<{ status: number; body: unknown; text: string }>;
+    sessionID: string;
+    promptAt: number;
+    providerTrace: string;
+    project: string;
+    stop: () => Promise<void>;
+  };
+
+  async function startWorkflowHost(options: {
+    providerScript: (port: number, tracePath: string) => string;
+    promptText: string;
+  }): Promise<Started> {
+    const helpers = await loadE2eHost();
+    const scratch = await helpers.createOwnedScratch(
+      process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode",
+    );
+    const root = scratch.dir;
+    for (const sub of [
+      "project",
+      "project/.vvoc",
+      "trace",
+      "home",
+      "cfg",
+      "data",
+      "state",
+      "cache",
+      "plugin",
+    ]) {
+      mkdirSync(join(root, sub), { recursive: true });
+    }
+    const procs = new helpers.OwnedProcesses();
+    const providerPort = await getFreePort();
+    const hostPort = await getFreePort();
+    const providerTrace = join(root, "trace", "provider.jsonl");
+    const hostLog = join(root, "trace", "host.log");
+    const providerOrigin = `http://127.0.0.1:${providerPort}`;
+    helpers.assertLoopbackHttpUrl(providerOrigin, "smoke provider origin");
+    const env = helpers.buildHostEnv(process.env as Record<string, string>, {
+      PATH: process.env.PATH,
+      HOME: join(root, "home"),
+      XDG_CONFIG_HOME: join(root, "cfg"),
+      XDG_DATA_HOME: join(root, "data"),
+      XDG_STATE_HOME: join(root, "state"),
+      XDG_CACHE_HOME: join(root, "cache"),
+      LOOPBACK_API_KEY: "smoke-key",
+      OPENCODE_DISABLE_MODELS_FETCH: "1",
+    });
+    const distPlugin = join(import.meta.dir, "..", "..", "dist", "plugins", "workflow", "index.js");
+    const project = join(root, "project");
+
+    let stopped = false;
+    const stop = async (): Promise<void> => {
+      if (stopped) return;
+      stopped = true;
+      await procs.stopAll();
+      await helpers.removeOwnedScratch(scratch);
+    };
+
+    try {
+      writeFileSync(
+        join(root, "provider.ts"),
+        options.providerScript(providerPort, providerTrace),
+        "utf8",
+      );
+      procs.spawn(process.execPath, [join(root, "provider.ts")], { env });
+      // The provider must be positively listening before the host dispatches to it.
+      let listening = false;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        try {
+          await fetch(providerOrigin, { method: "HEAD", signal: AbortSignal.timeout(500) });
+          listening = true;
+          break;
+        } catch {
+          await sleep(100);
+        }
+      }
+      if (!listening) throw new Error("loopback provider did not start listening");
+
+      writeFileSync(
+        join(root, "plugin", "package.json"),
+        JSON.stringify({ name: "vvoc-workflow-smoke-plugin", private: true, version: "0.0.0" }),
+        "utf8",
+      );
+      writeFileSync(
+        join(root, "plugin", "index.ts"),
+        `import p from ${JSON.stringify(distPlugin)};\nexport default p;\n`,
+        "utf8",
+      );
+      writeFileSync(
+        join(project, "opencode.json"),
+        JSON.stringify({
+          model: "loopback/seam-smart",
+          default_agent: "vv-controller",
+          agents: {
+            "vv-controller": {
+              model: "loopback/seam-smart",
+              mode: "primary",
+              permissions: [{ action: "*", resource: "*", effect: "allow" }],
+            },
+            "vv-implementer": {
+              model: "loopback/seam-smart",
+              mode: "subagent",
+              permissions: [{ action: "*", resource: "*", effect: "allow" }],
+            },
+          },
+          providers: {
+            loopback: {
+              name: "Smoke Loopback",
+              package: "@opencode/ai/providers/openai-compatible",
+              env: ["LOOPBACK_API_KEY"],
+              settings: { baseURL: `${providerOrigin}/v1`, provider: "loopback" },
+              models: { "seam-smart": { name: "Smoke Smart" } },
+            },
+          },
+          plugins: [{ package: join(root, "plugin") }],
+        }),
+        "utf8",
+      );
+      const vvocConfig = createDefaultVvocConfig();
+      vvocConfig.orchestration = { profile: "orchestrated" };
+      writeFileSync(join(project, ".vvoc", "vvoc.json"), renderVvocConfig(vvocConfig), "utf8");
+
+      procs.spawn(
+        REAL_WORKFLOW_HOST as string,
+        [
+          "serve",
+          "--service",
+          "--hostname",
+          "127.0.0.1",
+          "--port",
+          String(hostPort),
+          "--log-level",
+          "error",
+        ],
+        { env },
+      );
+      const servicePath = join(root, "state", "opencode", "service.json");
+      const password = await helpers.waitForRegisteredService({ servicePath, timeoutMs: 30_000 });
+      const api = helpers.createNativeApi({
+        baseUrl: `http://127.0.0.1:${hostPort}`,
+        password,
+        directory: project,
+      });
+
+      // Service registration is NOT final app/agent/model readiness for this
+      // location. Wait until the real app answers and the required agent and
+      // model are registered for THIS directory before creating a session.
+      let agentReady = false;
+      let modelReady = false;
+      const readyDeadline = Date.now() + 45_000;
+      for (;;) {
+        if (!agentReady) {
+          const agents = await api("/api/agent").catch(() => undefined);
+          agentReady = agents?.status === 200 && agents.text.includes("vv-controller");
+        }
+        if (!modelReady) {
+          const models = await api("/api/model").catch(() => undefined);
+          modelReady = models?.status === 200 && models.text.includes("seam-smart");
+        }
+        if (agentReady && modelReady) break;
+        if (Date.now() > readyDeadline) {
+          throw new Error(
+            `host app/agent/model registry not ready (agent=${agentReady} model=${modelReady})`,
+          );
+        }
+        await sleep(250);
+      }
+
+      const created = await api("/api/session", {
+        method: "POST",
+        body: JSON.stringify({ location: { directory: project }, agent: "vv-controller" }),
+      });
+      if (created.status >= 400) {
+        throw new Error(`session create failed: ${created.status} ${created.text.slice(0, 400)}`);
+      }
+      const createdID =
+        typeof created.body === "object" && created.body !== null
+          ? (created.body as { data?: { id?: unknown } }).data?.id
+          : undefined;
+      if (typeof createdID !== "string") {
+        throw new Error(
+          `session create returned no id: ${created.status} ${created.text.slice(0, 400)}`,
+        );
+      }
+      const promptAt = Date.now();
+      const prompted = await api(`/api/session/${createdID}/prompt`, {
+        method: "POST",
+        body: JSON.stringify({ text: options.promptText }),
+      });
+      if (prompted.status >= 400) {
+        throw new Error(`session prompt failed: ${prompted.status} ${prompted.text.slice(0, 400)}`);
+      }
+
+      // Actual changed terminal evidence: a NEW idle message created at/after the
+      // accepted prompt, never a stale idle timestamp or a timeout fallthrough.
+      const terminalDeadline = Date.now() + 90_000;
+      for (;;) {
+        const context = await api(`/api/session/${createdID}/context`).catch(() => undefined);
+        const data =
+          context && typeof context.body === "object" && context.body !== null
+            ? (context.body as { data?: unknown }).data
+            : undefined;
+        const reached = Array.isArray(data)
+          ? data.some(
+              (message) =>
+                typeof message === "object" &&
+                message !== null &&
+                (message as { type?: unknown }).type === "idle" &&
+                typeof (message as { time?: { created?: unknown } }).time?.created === "number" &&
+                ((message as { time: { created: number } }).time.created as number) >= promptAt,
+            )
+          : false;
+        if (reached) break;
+        if (Date.now() > terminalDeadline) {
+          throw new Error(`session ${createdID} did not reach a fresh terminal state`);
+        }
+        await sleep(400);
+      }
+      void hostLog;
+
+      return {
+        api,
+        sessionID: createdID,
+        promptAt,
+        providerTrace,
+        project,
+        stop,
+      };
+    } catch (error) {
+      await stop();
+      throw error;
+    }
+  }
+
+  function providerTraceLines(tracePath: string): Array<{
+    event?: string;
+    kind?: string;
+    tools?: string[];
+    messages?: unknown;
+    stream?: boolean;
+  }> {
+    return readFileSync(tracePath, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const parsed = JSON.parse(line) as {
+          event?: string;
+          kind?: string;
+          tools?: string[];
+          messages?: unknown;
+          stream?: boolean;
+        };
+        return { ...parsed, tools: parsed.tools ?? [], messages: parsed.messages ?? [] };
+      });
+  }
+
+  test("registers the workflow tools and executes work_item_open/list through the real host", async () => {
+    const started = await startWorkflowHost({
+      providerScript: (port, tracePath) =>
+        `import { appendFileSync, mkdirSync } from "node:fs";\n` +
+        `import { dirname } from "node:path";\n` +
+        `const trace = ${JSON.stringify(tracePath)};\n` +
+        `const stamp = (r) => { mkdirSync(dirname(trace), { recursive: true }); appendFileSync(trace, JSON.stringify({ at: Date.now(), ...r }) + "\\n"); };\n` +
+        `const chunk = (model, delta, finish) => "data: " + JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta, finish_reason: finish }] }) + "\\n\\n";\n` +
+        `const sseText = (model, text) => chunk(model, { role: "assistant" }, null) + chunk(model, { content: text }, null) + chunk(model, {}, "stop") + "data: [DONE]\\n\\n";\n` +
+        `const sseTool = (model, name, args) => chunk(model, { role: "assistant", tool_calls: [{ index: 0, id: "call_" + name, type: "function", function: { name, arguments: JSON.stringify(args) } }] }, null) + chunk(model, {}, "tool_calls") + "data: [DONE]\\n\\n";\n` +
+        `const respond = (body, model, plan) => body?.stream ? new Response(plan.sse, { headers: { "content-type": "text/event-stream" } }) : Response.json({ id: "c", object: "chat.completion", created: 1, model, choices: [{ index: 0, message: plan.message, finish_reason: plan.finish }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });\n` +
+        `const textPlan = (model, text) => ({ sse: sseText(model, text), message: { role: "assistant", content: text }, finish: "stop" });\n` +
+        `const toolPlan = (model, name, args) => ({ sse: sseTool(model, name, args), message: { role: "assistant", tool_calls: [{ id: "call_" + name, type: "function", function: { name, arguments: JSON.stringify(args) } }] }, finish: "tool_calls" });\n` +
+        `Bun.serve({ hostname: "127.0.0.1", port: ${port}, async fetch(request) {\n` +
+        `  const body = await request.clone().json().catch(() => ({}));\n` +
+        `  const model = body?.model ?? "unknown";\n` +
+        `  const calls = (body?.messages ?? []).filter((m) => m?.role === "assistant" && Array.isArray(m.tool_calls)).length;\n` +
+        `  stamp({ event: "provider.request", stream: body?.stream, tools: (body?.tools ?? []).map((t) => t?.function?.name), messages: body?.messages });\n` +
+        `  if (calls === 0) return respond(body, model, toolPlan(model, "work_item_open", { items: [{ key: "k", title: "Smoke Item", mode: "delegated", requiredReviewers: [], writeScope: ["src/a.ts"] }] }));\n` +
+        `  if (calls === 1) return respond(body, model, toolPlan(model, "work_item_list", { includeClosed: true }));\n` +
+        `  return respond(body, model, textPlan(model, "smoke-done"));\n` +
+        `} });\n`,
+      promptText: "open then list the work item",
+    });
+    try {
+      const requests = providerTraceLines(started.providerTrace).filter(
+        (line) => line.event === "provider.request",
+      );
+      expect(requests.length).toBeGreaterThan(0);
+      const offered = new Set(requests.flatMap((request) => request.tools ?? []));
+      expect(offered.has("work_item_open")).toBe(true);
+      expect(offered.has("work_item_list")).toBe(true);
+      const openResult = requests.find((line) =>
+        JSON.stringify(line.messages).includes("workItemId"),
+      );
+      expect(openResult).toBeTruthy();
+      const openText = JSON.stringify(openResult?.messages);
+      expect(openText).toContain("workItemId");
+      expect(openText).toContain("Smoke Item");
+      const listResult = requests.find(
+        (line) =>
+          JSON.stringify(line.messages).includes("work_item_list") &&
+          JSON.stringify(line.messages).includes("includeClosed"),
+      );
+      expect(listResult).toBeTruthy();
+    } finally {
+      await started.stop();
+    }
+  }, 180000);
+
+  test("runs a tracked delegated launch, one same-child continuation, and settles awaiting_acceptance", async () => {
+    const started = await startWorkflowHost({
+      providerScript: (port, tracePath) =>
+        `import { appendFileSync, mkdirSync } from "node:fs";\n` +
+        `import { dirname } from "node:path";\n` +
+        `const trace = ${JSON.stringify(tracePath)};\n` +
+        `const stamp = (r) => { mkdirSync(dirname(trace), { recursive: true }); appendFileSync(trace, JSON.stringify({ at: Date.now(), ...r }) + "\\n"); };\n` +
+        `const chunk = (model, delta, finish) => "data: " + JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta, finish_reason: finish }] }) + "\\n\\n";\n` +
+        `const sseText = (model, text) => chunk(model, { role: "assistant" }, null) + chunk(model, { content: text }, null) + chunk(model, {}, "stop") + "data: [DONE]\\n\\n";\n` +
+        `const sseTool = (model, name, args) => chunk(model, { role: "assistant", tool_calls: [{ index: 0, id: "call_" + name, type: "function", function: { name, arguments: JSON.stringify(args) } }] }, null) + chunk(model, {}, "tool_calls") + "data: [DONE]\\n\\n";\n` +
+        `const respond = (body, model, plan) => body?.stream ? new Response(plan.sse, { headers: { "content-type": "text/event-stream" } }) : Response.json({ id: "c", object: "chat.completion", created: 1, model, choices: [{ index: 0, message: plan.message, finish_reason: plan.finish }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });\n` +
+        `const textPlan = (model, text) => ({ sse: sseText(model, text), message: { role: "assistant", content: text }, finish: "stop" });\n` +
+        `const toolPlan = (model, name, args) => ({ sse: sseTool(model, name, args), message: { role: "assistant", tool_calls: [{ id: "call_" + name, type: "function", function: { name, arguments: JSON.stringify(args) } }] }, finish: "tool_calls" });\n` +
+        `const hasTool = (messages, name) => messages.some((m) => m?.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.some((t) => t?.function?.name === name));\n` +
+        `const assistantTexts = (messages) => messages.filter((m) => m?.role === "assistant" && !Array.isArray(m.tool_calls));\n` +
+        `const systemText = (messages) => { const sys = messages.find((m) => m?.role === "system"); return typeof sys?.content === "string" ? sys.content : ""; };\n` +
+        `const firstMatch = (messages, re) => { const m = re.exec(JSON.stringify(messages)); return m ? m[1] : undefined; };\n` +
+        `Bun.serve({ hostname: "127.0.0.1", port: ${port}, async fetch(request) {\n` +
+        `  const body = await request.clone().json().catch(() => ({}));\n` +
+        `  const model = body?.model ?? "unknown";\n` +
+        `  const messages = body?.messages ?? [];\n` +
+        `  const sys = systemText(messages);\n` +
+        `  const kind = sys.includes("<workflow_protocol>") ? "root" : JSON.stringify(messages).includes("You are a subagent spawned by another session") ? "child" : "other";\n` +
+        `  stamp({ event: "provider.request", kind, model, messages });\n` +
+        `  if (kind === "root") {\n` +
+        `    if (!hasTool(messages, "work_item_open")) return respond(body, model, toolPlan(model, "work_item_open", { items: [{ key: "k", title: "Smoke Task", mode: "delegated", requiredReviewers: [], writeScope: ["src/a.ts"] }] }));\n` +
+        `    if (!hasTool(messages, "subagent")) {\n` +
+        `      const id = firstMatch(messages, /VVOC_WORK_ITEM_ID: (wi-[0-9]+)/);\n` +
+        `      return respond(body, model, toolPlan(model, "subagent", { agent: "vv-implementer", description: "Smoke child", prompt: "VVOC_WORK_ITEM_ID: " + id + "\\n<assignment>Report the smoke task.</assignment>" }));\n` +
+        `    }\n` +
+        `    if (!hasTool(messages, "work_item_list")) return respond(body, model, toolPlan(model, "work_item_list", { includeClosed: false }));\n` +
+        `    return respond(body, model, textPlan(model, "root-done"));\n` +
+        `  }\n` +
+        `  if (kind === "child") {\n` +
+        `    if (assistantTexts(messages).length === 0) return respond(body, model, textPlan(model, "I have started the smoke task but have not finished it."));\n` +
+        `    const id = firstMatch(messages, /VVOC_WORK_ITEM_ID: ([A-Za-z0-9_-]+)/);\n` +
+        `    return respond(body, model, textPlan(model, "VVOC_WORK_ITEM_ID: " + id + "\\nVVOC_STATUS: DONE\\nVVOC_ROUTE: change_with_review\\n\\nChild finished.\\n"));\n` +
+        `  }\n` +
+        `  return respond(body, model, textPlan(model, "title"));\n` +
+        `} });\n`,
+      promptText: "open, launch the tracked child, then list",
+    });
+    try {
+      const lines = providerTraceLines(started.providerTrace);
+      const childRequests = lines.filter(
+        (line) => line.event === "provider.request" && line.kind === "child",
+      );
+      expect(childRequests.length).toBeGreaterThanOrEqual(2);
+      const childSessionIDs = new Set(
+        childRequests.flatMap((line) => {
+          const match = /<env>[\s\S]*?Current conversation session ID: (ses_[A-Za-z0-9]+)/.exec(
+            JSON.stringify(line.messages),
+          );
+          return match ? [match[1]] : [];
+        }),
+      );
+      expect(childSessionIDs.size).toBe(1);
+      const childID = [...childSessionIDs][0];
+      expect(childID).toBeDefined();
+      const rootRequests = lines.filter(
+        (line) => line.event === "provider.request" && line.kind === "root",
+      );
+      const listRequest = rootRequests.find((line) =>
+        JSON.stringify(line.messages).includes("awaiting_acceptance"),
+      );
+      expect(listRequest).toBeTruthy();
+      const listText = JSON.stringify(listRequest?.messages).replace(/\\"/g, '"');
+      expect(listText).toContain('"attempts": 1');
+      expect(listText).toContain('"accepted": false');
+      expect(listText).toContain('"resultStatus": "DONE"');
+      const subagentRoot = rootRequests.find((line) =>
+        JSON.stringify(line.messages).includes("<subagent sessionID="),
+      );
+      expect(JSON.stringify(subagentRoot?.messages)).toContain(childID as string);
+    } finally {
+      await started.stop();
+    }
+  }, 240000);
+});
+// END_BLOCK_REAL_HOST_WORKFLOW_SMOKE

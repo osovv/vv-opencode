@@ -1,472 +1,303 @@
 // FILE: src/plugins/guardian.integration.test.ts
-// VERSION: 0.2.1
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify Guardian plugin role-based runtime config and current permission reply behavior.
-//   SCOPE: Hidden subagent registration, built-in fast-role model resolution, strict startup config failure signaling, current permission reply/HTTP fallback behavior, and review fallback behavior.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/plugins/guardian/index.ts]
-//   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN]
+//   PURPOSE: Native-boundary tests for the Guardian permission review: denied/explicit-allow preservation, low/high/invalid verdict handling, missing family deferral, per-family policy switching, the captured fast-role auxiliary inference payload, and lifecycle teardown.
+//   SCOPE: Drive the native permission.evaluate handler through an injected review seam with pinned native event shapes; verify plugin setup registers an evaluate hook and releases the shared runtime on cleanup.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/guardian/index.ts]
+//   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN, M-NATIVE-RUNTIME]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   tempDirs - Temporary Guardian workspaces scheduled for cleanup.
-//   previousConfigHome - Original XDG config home restored after tests.
-//   previousPath - Original process PATH restored after tests.
-//   previousGuardianModelEnv - Original Guardian model override restored after tests.
-//   previousGuardianDisabledEnv - Original Guardian disabled override restored after tests.
-//   setupGuardianWorkspace - Create an isolated managed Guardian prompt and vvoc config fixture.
+//   tempDirs - Tracks temporary harness roots for cleanup.
+//   makeEvent - Build a native permission.evaluate event fixture.
+//   policy - Builds a Guardian review policy fixture.
+//   Harness - Guardian handler test harness surface.
+//   createHarness - Build handler dependencies with recording history/inference/log.
+//   verdict - Serialize a risk assessment verdict.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Direct fix - Added coverage for the legacy SDK permission respond fallback used by embedded OpenCode clients without client.permission.reply.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 - Rewrote V1 agent-config/permission.reply/subprocess tests as native permission.evaluate handler tests with an injected auxiliary inference seam.]
 // END_CHANGE_SUMMARY
 
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetVvocConfigForTests } from "../lib/config-layers.js";
-import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
-import { GuardianPlugin } from "./guardian/index.js";
+import {
+  createGuardianEvaluateHandler,
+  createGuardianPlugin,
+  type GuardianPermissionEvaluation,
+  type GuardianReviewDependencies,
+  type GuardianReviewPolicy,
+} from "./guardian/index.js";
 
 const tempDirs: string[] = [];
-const previousConfigHome = process.env.XDG_CONFIG_HOME;
-const previousPath = process.env.PATH;
-const previousGuardianModelEnv = process.env.OPENCODE_GUARDIAN_MODEL;
-const previousGuardianDisabledEnv = process.env.OPENCODE_GUARDIAN_DISABLED;
 
 afterEach(async () => {
-  resetVvocConfigForTests();
-
   while (tempDirs.length > 0) {
-    const path = tempDirs.pop();
-    if (path) {
-      await rm(path, { recursive: true, force: true });
-    }
-  }
-
-  if (previousConfigHome === undefined) {
-    delete process.env.XDG_CONFIG_HOME;
-  } else {
-    process.env.XDG_CONFIG_HOME = previousConfigHome;
-  }
-
-  if (previousPath === undefined) {
-    delete process.env.PATH;
-  } else {
-    process.env.PATH = previousPath;
-  }
-
-  if (previousGuardianModelEnv === undefined) {
-    delete process.env.OPENCODE_GUARDIAN_MODEL;
-  } else {
-    process.env.OPENCODE_GUARDIAN_MODEL = previousGuardianModelEnv;
-  }
-
-  if (previousGuardianDisabledEnv === undefined) {
-    delete process.env.OPENCODE_GUARDIAN_DISABLED;
-  } else {
-    process.env.OPENCODE_GUARDIAN_DISABLED = previousGuardianDisabledEnv;
+    const dir = tempDirs.pop();
+    if (dir) await rm(dir, { recursive: true, force: true });
   }
 });
 
-async function setupGuardianWorkspace(options?: { roleFast?: string; guardianModel?: string }) {
-  resetVvocConfigForTests();
-  const roleFast = options?.roleFast ?? "openai/test-fast-model";
-  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-guardian-project-"));
-  const configHome = await mkdtemp(join(tmpdir(), "vvoc-guardian-config-home-"));
-  tempDirs.push(projectDir, configHome);
-
-  await mkdir(join(projectDir, ".vvoc", "agents"), { recursive: true });
-  await writeFile(
-    join(projectDir, ".vvoc", "agents", "guardian.md"),
-    "Custom guardian prompt.\n",
-    "utf8",
-  );
-
-  await mkdir(join(configHome, "vvoc"), { recursive: true });
-  const defaultConfig = createDefaultVvocConfig();
-  await writeFile(
-    join(configHome, "vvoc", "vvoc.json"),
-    JSON.stringify(
-      {
-        ...defaultConfig,
-        roles: {
-          ...defaultConfig.roles,
-          fast: roleFast,
-        },
-        guardian: {
-          ...defaultConfig.guardian,
-          ...(options?.guardianModel ? { model: options.guardianModel } : {}),
-        },
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
-
-  process.env.XDG_CONFIG_HOME = configHome;
-  return { projectDir, configHome };
+function makeEvent(
+  overrides: Partial<GuardianPermissionEvaluation> = {},
+): GuardianPermissionEvaluation {
+  return {
+    sessionID: "s1",
+    agent: "vv-build",
+    action: "bash",
+    resources: ["rm -rf /tmp/x"],
+    metadata: { tool: "bash" },
+    source: { type: "tool", messageID: "m1", id: "c1" },
+    effect: "ask",
+    ...overrides,
+  };
 }
 
-test("GuardianPlugin registers guardian as a hidden subagent with explicit two-step limit and fast-role model", async () => {
-  const { projectDir } = await setupGuardianWorkspace();
-  const logs: string[] = [];
-
-  const plugin = await GuardianPlugin({
-    client: {
-      app: {
-        log: async (input: { body: { message: string } }) => {
-          logs.push(input.body.message);
-          return undefined;
-        },
-      },
-      session: {
-        messages: async () => ({ data: [] }),
-      },
-      tui: {
-        showToast: async () => undefined,
-      },
-      permission: {
-        reply: async () => ({ data: true }),
-      },
-    } as never,
-    project: {} as never,
-    directory: projectDir,
-    worktree: projectDir,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
-
-  const config: Record<string, unknown> = {};
-  await plugin.config?.(config as never);
-
-  const guardian = (config.agent as Record<string, Record<string, unknown>>)?.guardian;
-  expect(guardian?.mode).toBe("subagent");
-  expect(guardian?.hidden).toBe(true);
-  expect(guardian?.steps).toBe(2);
-  expect(guardian?.prompt).toBe("Custom guardian prompt.");
-  expect(guardian?.model).toBe("openai/test-fast-model");
-  expect(guardian?.permission as Record<string, unknown>).toMatchObject({
-    web_search: "deny",
-    web_fetch: "deny",
-  });
-  expect(guardian?.tools as Record<string, unknown>).toMatchObject({
-    web_search: false,
-    web_fetch: false,
-  });
-  expect(logs).toContain(
-    "[guardian][loadGuardianRuntimeConfig][BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG] guardian runtime config loaded",
-  );
-});
-
-test("GuardianPlugin ignores stale guardian model fields in vvoc.json and keeps roles.fast as default", async () => {
-  const { projectDir } = await setupGuardianWorkspace({
-    roleFast: "openai/role-fast-model:role-variant",
-    guardianModel: "legacy/stale-guardian-model",
-  });
-
-  const plugin = await GuardianPlugin({
-    client: {
-      app: {
-        log: async () => undefined,
-      },
-      session: {
-        messages: async () => ({ data: [] }),
-      },
-      tui: {
-        showToast: async () => undefined,
-      },
-      permission: {
-        reply: async () => ({ data: true }),
-      },
-    } as never,
-    project: {} as never,
-    directory: projectDir,
-    worktree: projectDir,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
-
-  const config: Record<string, unknown> = {};
-  await plugin.config?.(config as never);
-
-  const guardian = (config.agent as Record<string, Record<string, unknown>>)?.guardian;
-  expect(guardian?.model).toBe("openai/role-fast-model:role-variant");
-});
-
-test("GuardianPlugin still allows env model override over the roles.fast default", async () => {
-  const { projectDir } = await setupGuardianWorkspace({
-    roleFast: "openai/role-fast-model",
-  });
-
-  process.env.OPENCODE_GUARDIAN_MODEL = "openai/env-guardian-model";
-
-  const plugin = await GuardianPlugin({
-    client: {
-      app: {
-        log: async () => undefined,
-      },
-      session: {
-        messages: async () => ({ data: [] }),
-      },
-      tui: {
-        showToast: async () => undefined,
-      },
-      permission: {
-        reply: async () => ({ data: true }),
-      },
-    } as never,
-    project: {} as never,
-    directory: projectDir,
-    worktree: projectDir,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
-
-  const config: Record<string, unknown> = {};
-  await plugin.config?.(config as never);
-
-  const guardian = (config.agent as Record<string, Record<string, unknown>>)?.guardian;
-  expect(guardian?.model).toBe("openai/env-guardian-model");
-});
-
-test("GuardianPlugin fails loudly when built-in fast role is invalid in vvoc config", async () => {
-  const { projectDir } = await setupGuardianWorkspace({
-    roleFast: "not-a-valid-model-selection",
-  });
-
-  await expect(
-    GuardianPlugin({
-      client: {
-        app: {
-          log: async () => undefined,
-        },
-      } as never,
-      project: {} as never,
-      directory: projectDir,
-      worktree: projectDir,
-      experimental_workspace: { register: () => undefined },
-      serverUrl: new URL("http://localhost"),
-      $: {} as never,
-    }),
-  ).rejects.toThrow(/INVALID_MODEL_SELECTION|provider\/model/);
-});
-
-test("Guardian disabled-mode deny replies through permission.reply and ignores the old permission method", async () => {
-  const { projectDir } = await setupGuardianWorkspace();
-  const replyCalls: unknown[] = [];
-  let oldPermissionMethodCalled = false;
-  process.env.OPENCODE_GUARDIAN_DISABLED = "1";
-
-  const plugin = await GuardianPlugin({
-    client: {
-      permission: {
-        reply: async (input: unknown) => {
-          replyCalls.push(input);
-          return { data: true };
-        },
-      },
-      postSessionIdPermissionsPermissionId: async () => {
-        oldPermissionMethodCalled = true;
-        return { data: true };
-      },
-    } as never,
-    project: {} as never,
-    directory: projectDir,
-    worktree: projectDir,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
-
-  await plugin.event?.({
-    event: {
-      type: "permission.asked",
-      properties: {
-        id: "perm_current",
-        sessionID: "session_current",
-        permission: "bash",
-      },
+function policy(threshold: number, familyId = "fam-1"): GuardianReviewPolicy {
+  return {
+    familyId,
+    config: {
+      timeoutMs: 5_000,
+      approvalRiskThreshold: threshold,
+      reviewToastDurationMs: 4_000,
+      sources: [],
+      warnings: [],
     },
-  } as never);
+    prompt: "Guardian policy prompt.",
+  };
+}
 
-  expect(replyCalls).toEqual([
-    {
-      requestID: "perm_current",
-      directory: projectDir,
-      reply: "reject",
-      message: "Guardian nested reviews do not allow additional permissions.",
+interface Harness {
+  deps: GuardianReviewDependencies;
+  readonly inferCalls: Array<{
+    sessionID: string;
+    prompt: string;
+    role: string;
+    timeoutMs: number;
+  }>;
+  readonly logs: Array<{ level: string; message: string }>;
+  setVerdict(text: string | undefined): void;
+  setPolicy(p: GuardianReviewPolicy | undefined): void;
+  setInferError(error: Error | undefined): void;
+}
+
+function createHarness(initial?: GuardianReviewPolicy): Harness {
+  const inferCalls: Harness["inferCalls"] = [];
+  const logs: Harness["logs"] = [];
+  let currentPolicy = initial;
+  let verdict: string | undefined = undefined;
+  let inferError: Error | undefined;
+
+  const deps: GuardianReviewDependencies = {
+    async policyFor() {
+      return currentPolicy;
     },
-  ]);
-  expect(oldPermissionMethodCalled).toBe(false);
-});
+    async history() {
+      return { lines: ["[1] user: do a thing", "[2] tool: bash echoed hello"] };
+    },
+    async infer(input) {
+      inferCalls.push(input);
+      if (inferError) throw inferError;
+      return verdict;
+    },
+    log(event) {
+      logs.push({ level: event.level, message: event.message });
+    },
+  };
 
-test("Guardian disabled-mode deny uses current HTTP reply fallback when permission.reply is absent", async () => {
-  const { projectDir } = await setupGuardianWorkspace();
-  const originalFetch = globalThis.fetch;
-  const requests: Array<{ url: string; body?: string }> = [];
-  process.env.OPENCODE_GUARDIAN_DISABLED = "1";
+  return {
+    deps,
+    inferCalls,
+    logs,
+    setVerdict(text) {
+      verdict = text;
+    },
+    setPolicy(p) {
+      currentPolicy = p;
+    },
+    setInferError(error) {
+      inferError = error;
+    },
+  };
+}
 
-  globalThis.fetch = (async (
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1],
-  ) => {
-    requests.push({
-      url: String(input),
-      body: typeof init?.body === "string" ? init.body : undefined,
+function verdict(riskLevel: string, riskScore: number): string {
+  return JSON.stringify({ risk_level: riskLevel, risk_score: riskScore, rationale: "assessed" });
+}
+
+describe("Guardian native permission evaluate", () => {
+  test("never overrides an explicit deny or an existing allow", async () => {
+    const harness = createHarness(policy(50));
+    harness.setVerdict(verdict("low", 1));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const denied = makeEvent({ effect: "deny" });
+    await handler(denied);
+    expect(denied.effect).toBe("deny");
+
+    const allowed = makeEvent({ effect: "allow" });
+    await handler(allowed);
+    expect(allowed.effect).toBe("allow");
+    expect(harness.inferCalls).toEqual([]);
+  });
+
+  test("auto-approves only a bounded low-risk verdict below the captured threshold", async () => {
+    const harness = createHarness(policy(50));
+    harness.setVerdict(verdict("low", 10));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("allow");
+    expect(harness.logs.some((entry) => entry.message.includes("auto-approved"))).toBe(true);
+  });
+
+  test("defers a high risk level even when the score is low", async () => {
+    const harness = createHarness(policy(50));
+    harness.setVerdict(verdict("high", 1));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("ask");
+  });
+
+  test("defers a low risk level whose score is at or above the threshold", async () => {
+    const harness = createHarness(policy(50));
+    harness.setVerdict(verdict("low", 75));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("ask");
+  });
+
+  test("defers invalid or incomplete verdicts; never allows", async () => {
+    const harness = createHarness(policy(90));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    for (const invalid of [
+      "not json at all",
+      JSON.stringify({ risk_level: "low" }),
+      JSON.stringify({ risk_score: 1, rationale: "" }),
+      JSON.stringify({ risk_level: "low", risk_score: "1", rationale: "x" }),
+    ]) {
+      harness.setVerdict(invalid);
+      const event = makeEvent();
+      await handler(event);
+      expect(event.effect).toBe("ask");
+    }
+  });
+
+  test("defers when inference fails or produces no output", async () => {
+    const harness = createHarness(policy(50));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    harness.setInferError(new Error("auxiliary unavailable"));
+    const failing = makeEvent();
+    await handler(failing);
+    expect(failing.effect).toBe("ask");
+    expect(harness.logs.some((entry) => entry.level === "error")).toBe(true);
+
+    harness.setInferError(undefined);
+    harness.setVerdict(undefined);
+    const empty = makeEvent();
+    await handler(empty);
+    expect(empty.effect).toBe("ask");
+  });
+
+  test("defers when no family policy is bound and never infers", async () => {
+    const harness = createHarness(undefined);
+    harness.setVerdict(verdict("low", 1));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("ask");
+    expect(harness.inferCalls).toEqual([]);
+  });
+
+  test("uses the captured fast role and actual action/resources/source in the payload", async () => {
+    const harness = createHarness(policy(50));
+    harness.setVerdict(verdict("low", 5));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent({
+      action: "edit",
+      resources: ["/repo/src/a.ts"],
+      source: { type: "tool", messageID: "m9", id: "c9" },
     });
-    return new Response(JSON.stringify(true), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }) as typeof fetch;
+    await handler(event);
 
-  try {
-    const plugin = await GuardianPlugin({
-      client: {} as never,
-      project: {} as never,
-      directory: projectDir,
-      worktree: projectDir,
-      experimental_workspace: { register: () => undefined },
-      serverUrl: new URL("http://localhost"),
-      $: {} as never,
-    });
+    expect(harness.inferCalls).toHaveLength(1);
+    const call = harness.inferCalls[0]!;
+    expect(call.role).toBe("fast");
+    expect(call.sessionID).toBe("s1");
+    expect(call.timeoutMs).toBe(5_000);
+    expect(call.prompt).toContain("edit");
+    expect(call.prompt).toContain("/repo/src/a.ts");
+    expect(call.prompt).toContain("m9");
+  });
 
-    await plugin.event?.({
-      event: {
-        type: "permission.asked",
-        properties: {
-          id: "perm_http",
-          sessionID: "session_http",
-          permission: "bash",
+  test("applies each session's own captured threshold (policy switch old/new)", async () => {
+    const harness = createHarness(policy(20, "old-family"));
+    harness.setVerdict(verdict("low", 30));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const strict = makeEvent({ sessionID: "old" });
+    await handler(strict);
+    expect(strict.effect).toBe("ask");
+
+    harness.setPolicy(policy(80, "new-family"));
+    const relaxed = makeEvent({ sessionID: "new" });
+    await handler(relaxed);
+    expect(relaxed.effect).toBe("allow");
+  });
+
+  test("setup registers evaluate and tears down the runtime registration", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-guardian-"));
+    tempDirs.push(directory);
+    let disposed = false;
+    let released = false;
+    let hookName: string | undefined;
+    const fakeRuntime = {
+      snapshots: {
+        configFor: async () => undefined,
+        accept: async () => ({ status: "unbound" }),
+      },
+      client: async () => ({ session: { context: async () => [] } }),
+      auxiliary: { generate: async () => ({ text: "{}" }) },
+      permissions: {},
+      effectiveConfig: () => ({ vvoc: {} }),
+      release: async () => {
+        released = true;
+      },
+    };
+    const plugin = createGuardianPlugin({
+      acquireRuntime: async () => fakeRuntime as never,
+    });
+    const cleanup = await plugin.setup({
+      location: { directory, project: { id: "proj", directory, canonical: directory } },
+      permission: {
+        hook: async (name: string) => {
+          hookName = name;
+          return {
+            dispose: async () => {
+              disposed = true;
+            },
+          };
         },
       },
     } as never);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
 
-  expect(requests).toHaveLength(1);
-  const requestUrl = new URL(requests[0]?.url ?? "http://localhost");
-  expect(requestUrl.origin).toBe("http://localhost");
-  expect(requestUrl.pathname).toBe("/permission/perm_http/reply");
-  expect(requestUrl.searchParams.get("directory")).toBe(projectDir);
-  expect(JSON.parse(requests[0]?.body ?? "{}") as unknown).toEqual({
-    reply: "reject",
-    message: "Guardian nested reviews do not allow additional permissions.",
+    expect(hookName).toBe("evaluate");
+    await cleanup?.();
+    expect(disposed).toBe(true);
+    expect(released).toBe(true);
   });
-});
-
-test("Guardian disabled-mode deny uses legacy SDK respond when permission.reply is absent", async () => {
-  const { projectDir } = await setupGuardianWorkspace();
-  const legacyCalls: Array<{ path?: unknown; query?: unknown; body?: unknown }> = [];
-  const originalFetch = globalThis.fetch;
-  let httpFallbackCalled = false;
-  process.env.OPENCODE_GUARDIAN_DISABLED = "1";
-
-  globalThis.fetch = (async () => {
-    httpFallbackCalled = true;
-    return new Response(JSON.stringify(true), { status: 200 });
-  }) as unknown as typeof fetch;
-
-  try {
-    const plugin = await GuardianPlugin({
-      client: {
-        postSessionIdPermissionsPermissionId: async (input: unknown) => {
-          legacyCalls.push(input as { path?: unknown; query?: unknown; body?: unknown });
-          return { data: true };
-        },
-      } as never,
-      project: {} as never,
-      directory: projectDir,
-      worktree: projectDir,
-      experimental_workspace: { register: () => undefined },
-      serverUrl: new URL("http://localhost"),
-      $: {} as never,
-    });
-
-    await plugin.event?.({
-      event: {
-        type: "permission.asked",
-        properties: {
-          id: "perm_legacy",
-          sessionID: "session_legacy",
-          permission: "bash",
-        },
-      },
-    } as never);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-
-  expect(legacyCalls).toEqual([
-    {
-      path: { id: "session_legacy", permissionID: "perm_legacy" },
-      query: { directory: projectDir },
-      body: { response: "reject" },
-    },
-  ]);
-  expect(httpFallbackCalled).toBe(false);
-});
-
-test("Guardian review failures fall back to manual approval without auto-allow", async () => {
-  const { projectDir } = await setupGuardianWorkspace();
-  const logs: string[] = [];
-  const permissionReplies: unknown[] = [];
-
-  process.env.PATH = "";
-
-  const plugin = await GuardianPlugin({
-    client: {
-      app: {
-        log: async (input: { body: { message: string } }) => {
-          logs.push(input.body.message);
-          return undefined;
-        },
-      },
-      session: {
-        messages: async () => ({ data: [] }),
-      },
-      tui: {
-        showToast: async () => undefined,
-      },
-      permission: {
-        reply: async (input: unknown) => {
-          permissionReplies.push(input);
-          return { data: true };
-        },
-      },
-    } as never,
-    project: {} as never,
-    directory: projectDir,
-    worktree: projectDir,
-    experimental_workspace: { register: () => undefined },
-    serverUrl: new URL("http://localhost"),
-    $: {} as never,
-  });
-
-  await plugin.event?.({
-    event: {
-      type: "permission.asked",
-      properties: {
-        id: "perm_1",
-        sessionID: "session_1",
-        permission: "bash",
-      },
-    },
-  } as never);
-
-  expect(permissionReplies).toHaveLength(0);
-  expect(logs).toContain(
-    "[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review started",
-  );
-  expect(logs).toContain(
-    "[guardian][reviewPermissionRequest][BLOCK_REVIEW_PERMISSION_REQUEST] guardian review completed",
-  );
 });

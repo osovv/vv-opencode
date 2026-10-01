@@ -14,6 +14,7 @@
 //   tempDirs - Tracks temporary roots for cleanup.
 //   touch - Creates a fixture file and parent directories.
 //   writeValidVvocConfig - Writes a canonical valid vvoc fixture.
+//   restoreEnv - Restores an environment variable after a test, deleting it when previously unset.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
@@ -26,13 +27,13 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   OPENCODE_CONFIG_ENV,
-  OPENCODE_TUI_CONFIG_ENV,
   VVOC_CONFIG_ENV,
   findNearestProjectConfigRoot,
+  loadEffectiveVvocConfig,
   loadVvocConfig,
+  readRawOpenCodeModelIntent,
   resolveConfigWriteTargets,
   resolveOpenCodeConfigSource,
-  resolveOpenCodeTuiConfigSource,
   resolveProjectWriteRoot,
   resolveVvocConfigSource,
   resetVvocConfigForTests,
@@ -92,18 +93,6 @@ describe("config layer resolution", () => {
 
     expect(root?.rootDir).toBe(projectDir);
     expect(root?.opencodeConfigPath).toBe(join(projectDir, ".opencode", "opencode.json"));
-  });
-
-  test("findNearestProjectConfigRoot returns a root discovered by .opencode/tui.jsonc", async () => {
-    const projectDir = await createTempRoot("vvoc-layer-tui-root-");
-    const child = join(projectDir, "packages", "app");
-    await mkdir(child, { recursive: true });
-    await touch(join(projectDir, ".opencode", "tui.jsonc"));
-
-    const root = await findNearestProjectConfigRoot(child);
-
-    expect(root?.rootDir).toBe(projectDir);
-    expect(root?.opencodeTuiConfigPath).toBe(join(projectDir, ".opencode", "tui.jsonc"));
   });
 
   test("project OpenCode config uses .opencode and ignores root opencode.json", async () => {
@@ -167,26 +156,6 @@ describe("config layer resolution", () => {
       cwd: projectDir,
       configDir: configHome,
       env: { [OPENCODE_CONFIG_ENV]: envConfig },
-    });
-
-    expect(source.kind).toBe("env");
-    expect(source.path).toBe(envConfig);
-  });
-
-  test("effective TUI source honors OPENCODE_TUI_CONFIG before project and global", async () => {
-    const projectDir = await createTempRoot("vvoc-layer-tui-env-project-");
-    const configHome = await createTempRoot("vvoc-layer-tui-env-global-");
-    const envConfig = join(await createTempRoot("vvoc-layer-tui-env-selected-"), "tui.json");
-    await touch(join(projectDir, ".opencode", "opencode.json"));
-    await touch(join(projectDir, ".opencode", "tui.json"));
-    await touch(join(configHome, "opencode", "tui.json"));
-    await touch(envConfig);
-
-    const source = await resolveOpenCodeTuiConfigSource({
-      scope: "effective",
-      cwd: projectDir,
-      configDir: configHome,
-      env: { [OPENCODE_TUI_CONFIG_ENV]: envConfig },
     });
 
     expect(source.kind).toBe("env");
@@ -261,22 +230,7 @@ describe("config layer resolution", () => {
     expect(targets.projectRoot).toBe(projectDir);
     expect(targets.opencodeBaseDir).toBe(getProjectOpencodeDir(projectDir));
     expect(targets.opencodeConfigPath).toBe(join(projectDir, ".opencode", "opencode.json"));
-    expect(targets.opencodeTuiConfigPath).toBe(join(projectDir, ".opencode", "tui.json"));
     expect(targets.vvocConfigPath).toBe(join(projectDir, ".vvoc", "vvoc.json"));
-  });
-
-  test("global write targets preserve an existing tui.jsonc selection", async () => {
-    const projectDir = await createTempRoot("vvoc-layer-tui-global-cwd-");
-    const configHome = await createTempRoot("vvoc-layer-tui-global-home-");
-    await touch(join(configHome, "opencode", "tui.jsonc"));
-
-    const targets = await resolveConfigWriteTargets({
-      scope: "global",
-      cwd: projectDir,
-      configDir: configHome,
-    });
-
-    expect(targets.opencodeTuiConfigPath).toBe(join(configHome, "opencode", "tui.jsonc"));
   });
 
   test("loadVvocConfig returns the same startup promise for repeated runtime calls", async () => {
@@ -303,6 +257,100 @@ describe("config layer resolution", () => {
     );
     await expect(first).resolves.toMatchObject({ source: { kind: "default" } });
   });
+
+  test("readRawOpenCodeModelIntent preserves raw role and literal intent before normalization", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-raw-intent-");
+    const emptyHome = await createTempRoot("vvoc-layer-raw-intent-home-");
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    const prevDir = process.env.OPENCODE_CONFIG_DIR;
+    const prevExplicit = process.env.OPENCODE_CONFIG;
+    const prevContent = process.env.OPENCODE_CONFIG_CONTENT;
+    process.env.XDG_CONFIG_HOME = emptyHome;
+    delete process.env.OPENCODE_CONFIG_DIR;
+    delete process.env.OPENCODE_CONFIG;
+    delete process.env.OPENCODE_CONFIG_CONTENT;
+    try {
+      await mkdir(join(projectDir, ".opencode"), { recursive: true });
+      await writeFile(
+        join(projectDir, ".opencode", "opencode.json"),
+        JSON.stringify(
+          {
+            model: "prov/root-literal",
+            agents: {
+              explore: { model: "prov/explore-literal" },
+            },
+            plugins: [
+              {
+                package: "@osovv/vv-opencode@1.7.0",
+                options: {
+                  modelIntent: {
+                    model: "vv-role:default",
+                    smallModel: "prov/small",
+                    agents: { build: "vv-role:smart" },
+                    commands: { deploy: "vv-role:reviewer" },
+                  },
+                },
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const intent = await readRawOpenCodeModelIntent(projectDir);
+      expect(intent?.model).toBe("prov/root-literal");
+      expect(intent?.smallModel).toBe("prov/small");
+      expect(intent?.agents).toEqual({
+        build: "vv-role:smart",
+        explore: "prov/explore-literal",
+      });
+      expect(intent?.commands).toEqual({ deploy: "vv-role:reviewer" });
+      expect(intent?.sourcePath).toBe(join(projectDir, ".opencode", "opencode.json"));
+    } finally {
+      restoreEnv("XDG_CONFIG_HOME", prevXdg);
+      restoreEnv("OPENCODE_CONFIG_DIR", prevDir);
+      restoreEnv("OPENCODE_CONFIG", prevExplicit);
+      restoreEnv("OPENCODE_CONFIG_CONTENT", prevContent);
+    }
+  });
+
+  test("readRawOpenCodeModelIntent ignores invalid documents instead of throwing", async () => {
+    const projectDir = await createTempRoot("vvoc-layer-raw-invalid-");
+    const emptyHome = await createTempRoot("vvoc-layer-raw-invalid-home-");
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    const prevDir = process.env.OPENCODE_CONFIG_DIR;
+    const prevExplicit = process.env.OPENCODE_CONFIG;
+    const prevContent = process.env.OPENCODE_CONFIG_CONTENT;
+    try {
+      process.env.XDG_CONFIG_HOME = emptyHome;
+      delete process.env.OPENCODE_CONFIG_DIR;
+      delete process.env.OPENCODE_CONFIG;
+      delete process.env.OPENCODE_CONFIG_CONTENT;
+      await mkdir(join(projectDir, ".opencode"), { recursive: true });
+      await writeFile(join(projectDir, ".opencode", "opencode.json"), "{ not json", "utf8");
+      await expect(readRawOpenCodeModelIntent(projectDir)).resolves.toBeUndefined();
+    } finally {
+      restoreEnv("XDG_CONFIG_HOME", prevXdg);
+      restoreEnv("OPENCODE_CONFIG_DIR", prevDir);
+      restoreEnv("OPENCODE_CONFIG", prevExplicit);
+      restoreEnv("OPENCODE_CONFIG_CONTENT", prevContent);
+    }
+  });
+
+  test("loadEffectiveVvocConfig resolves each location without the singleton conflict", async () => {
+    const firstDir = await createTempRoot("vvoc-layer-effective-first-");
+    const secondDir = await createTempRoot("vvoc-layer-effective-second-");
+    await writeValidVvocConfig(getProjectVvocConfigPath(firstDir));
+    await writeValidVvocConfig(getProjectVvocConfigPath(secondDir));
+
+    const first = await loadEffectiveVvocConfig({ cwd: firstDir, env: {} });
+    const second = await loadEffectiveVvocConfig({ cwd: secondDir, env: {} });
+
+    expect(first.source.path).toBe(getProjectVvocConfigPath(firstDir));
+    expect(second.source.path).toBe(getProjectVvocConfigPath(secondDir));
+  });
 });
 
 describe("getCacheHome", () => {
@@ -321,3 +369,203 @@ describe("getCacheHome", () => {
     }
   });
 });
+
+describe("native layered model intent", () => {
+  test("keeps a global role envelope when a project document only sets an unrelated field", async () => {
+    const globalHome = await createTempRoot("vvoc-intent-global-");
+    const projectDir = await createTempRoot("vvoc-intent-project-");
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    const prevDir = process.env.OPENCODE_CONFIG_DIR;
+    const prevExplicit = process.env.OPENCODE_CONFIG;
+    const prevContent = process.env.OPENCODE_CONFIG_CONTENT;
+    try {
+      delete process.env.OPENCODE_CONFIG_DIR;
+      delete process.env.OPENCODE_CONFIG;
+      delete process.env.OPENCODE_CONFIG_CONTENT;
+      process.env.XDG_CONFIG_HOME = globalHome;
+      await mkdir(join(globalHome, "opencode"), { recursive: true });
+      await writeFile(
+        join(globalHome, "opencode", "opencode.json"),
+        JSON.stringify(
+          {
+            plugins: [
+              {
+                package: "@osovv/vv-opencode@1.7.0",
+                options: {
+                  modelIntent: {
+                    model: "vv-role:default",
+                    smallModel: "vv-role:fast",
+                    agents: { build: "vv-role:smart" },
+                  },
+                },
+              },
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+      await mkdir(join(projectDir, ".opencode"), { recursive: true });
+      await writeFile(
+        join(projectDir, ".opencode", "opencode.json"),
+        JSON.stringify({ shell: "sh" }, null, 2) + "\n",
+        "utf8",
+      );
+
+      const intent = await readRawOpenCodeModelIntent(projectDir);
+      expect(intent?.model).toBe("vv-role:default");
+      expect(intent?.smallModel).toBe("vv-role:fast");
+      expect(intent?.agents).toEqual({ build: "vv-role:smart" });
+      expect(intent?.sourcePath).toBe(join(projectDir, ".opencode", "opencode.json"));
+    } finally {
+      restoreEnv("XDG_CONFIG_HOME", prevXdg);
+      restoreEnv("OPENCODE_CONFIG_DIR", prevDir);
+      restoreEnv("OPENCODE_CONFIG", prevExplicit);
+      restoreEnv("OPENCODE_CONFIG_CONTENT", prevContent);
+    }
+  });
+
+  test("higher-precedence native explicit selections win, including struct variants", async () => {
+    const globalHome = await createTempRoot("vvoc-intent-prec-global-");
+    const projectDir = await createTempRoot("vvoc-intent-prec-project-");
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    const prevDir = process.env.OPENCODE_CONFIG_DIR;
+    const prevContent = process.env.OPENCODE_CONFIG_CONTENT;
+    try {
+      delete process.env.OPENCODE_CONFIG_DIR;
+      delete process.env.OPENCODE_CONFIG_CONTENT;
+      process.env.XDG_CONFIG_HOME = globalHome;
+      await mkdir(join(globalHome, "opencode"), { recursive: true });
+      await writeFile(
+        join(globalHome, "opencode", "opencode.json"),
+        JSON.stringify(
+          {
+            model: "openai/gpt-5.6-terra#high",
+            plugins: [
+              {
+                package: "@osovv/vv-opencode@1.7.0",
+                options: { modelIntent: { model: "vv-role:default" } },
+              },
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+      await mkdir(join(projectDir, ".opencode"), { recursive: true });
+      await writeFile(
+        join(projectDir, ".opencode", "opencode.json"),
+        JSON.stringify(
+          {
+            model: { providerID: "openai", model: "gpt-5.6-sol", variant: "xhigh" },
+            agents: { build: { model: "zai-coding-plan/glm-5.3#max" } },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const intent = await readRawOpenCodeModelIntent(projectDir);
+      expect(intent?.model).toBe("openai/gpt-5.6-sol#xhigh");
+      expect(intent?.agents).toEqual({ build: "zai-coding-plan/glm-5.3#max" });
+    } finally {
+      restoreEnv("XDG_CONFIG_HOME", prevXdg);
+      restoreEnv("OPENCODE_CONFIG_DIR", prevDir);
+      restoreEnv("OPENCODE_CONFIG_CONTENT", prevContent);
+    }
+  });
+
+  test("OPENCODE_CONFIG_DIR replaces the global root and OPENCODE_CONFIG adds a document", async () => {
+    const replacementRoot = await createTempRoot("vvoc-intent-replace-");
+    const explicitDir = await createTempRoot("vvoc-intent-explicit-");
+    const projectDir = await createTempRoot("vvoc-intent-explicit-project-");
+    const prevDir = process.env.OPENCODE_CONFIG_DIR;
+    const prevExplicit = process.env.OPENCODE_CONFIG;
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    const prevContent = process.env.OPENCODE_CONFIG_CONTENT;
+    try {
+      process.env.XDG_CONFIG_HOME = replacementRoot;
+      process.env.OPENCODE_CONFIG_DIR = replacementRoot;
+      delete process.env.OPENCODE_CONFIG_CONTENT;
+      await writeFile(
+        join(replacementRoot, "opencode.json"),
+        JSON.stringify({
+          plugins: [
+            { package: "vv-opencode", options: { modelIntent: { model: "vv-role:default" } } },
+          ],
+        }) + "\n",
+        "utf8",
+      );
+      const explicitPath = join(explicitDir, "explicit.json");
+      await writeFile(
+        explicitPath,
+        JSON.stringify({ model: "openai/gpt-6-luna#low" }) + "\n",
+        "utf8",
+      );
+      process.env.OPENCODE_CONFIG = explicitPath;
+
+      const intent = await readRawOpenCodeModelIntent(projectDir);
+      expect(intent?.model).toBe("openai/gpt-6-luna#low");
+    } finally {
+      restoreEnv("OPENCODE_CONFIG_DIR", prevDir);
+      restoreEnv("OPENCODE_CONFIG", prevExplicit);
+      restoreEnv("XDG_CONFIG_HOME", prevXdg);
+      restoreEnv("OPENCODE_CONFIG_CONTENT", prevContent);
+    }
+  });
+
+  test("reads the global envelope from the native OPENCODE_CONFIG_DIR root", async () => {
+    const nativeRoot = await createTempRoot("vvoc-intent-nativeroot-");
+    const projectDir = await createTempRoot("vvoc-intent-nativeroot-project-");
+    const prevDir = process.env.OPENCODE_CONFIG_DIR;
+    const prevContent = process.env.OPENCODE_CONFIG_CONTENT;
+    try {
+      delete process.env.OPENCODE_CONFIG_CONTENT;
+      process.env.OPENCODE_CONFIG_DIR = nativeRoot;
+      await writeFile(
+        join(nativeRoot, "opencode.json"),
+        JSON.stringify({
+          plugins: [
+            {
+              package: "@osovv/vv-opencode@1.7.0",
+              options: { modelIntent: { model: "vv-role:smart" } },
+            },
+          ],
+        }) + "\n",
+        "utf8",
+      );
+      const intent = await readRawOpenCodeModelIntent(projectDir);
+      expect(intent?.model).toBe("vv-role:smart");
+      expect(intent?.sourcePath).toBe(join(nativeRoot, "opencode.json"));
+    } finally {
+      restoreEnv("OPENCODE_CONFIG_DIR", prevDir);
+      restoreEnv("OPENCODE_CONFIG_CONTENT", prevContent);
+    }
+  });
+
+  test("rejects malformed vvoc-owned modelIntent instead of silently falling back", async () => {
+    const projectDir = await createTempRoot("vvoc-intent-malformed-");
+    await mkdir(join(projectDir, ".opencode"), { recursive: true });
+    await writeFile(
+      join(projectDir, ".opencode", "opencode.json"),
+      JSON.stringify({
+        plugins: [
+          { package: "@osovv/vv-opencode@1.7.0", options: { modelIntent: "not-an-object" } },
+        ],
+      }) + "\n",
+      "utf8",
+    );
+
+    await expect(readRawOpenCodeModelIntent(projectDir)).rejects.toThrow(
+      "modelIntent must be an object",
+    );
+  });
+});
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}

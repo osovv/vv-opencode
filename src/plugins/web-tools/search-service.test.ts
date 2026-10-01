@@ -1,40 +1,69 @@
 // FILE: src/plugins/web-tools/search-service.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the provider-neutral web_search tool schema, strict contract validation with explicit execute-time defaults, permission flow, dispatch, rendering, metadata, and credential-safe errors.
-//   SCOPE: Deterministic tool-level tests with a temporary global fetch stub; no live provider calls.
-//   DEPENDS: [bun:test, @opencode-ai/plugin, src/lib/agent-tool-contract.ts, src/plugins/web-tools/search-service.ts]
+//   PURPOSE: Verify the provider-neutral native web_search tool: strict contract validation with explicit execute-time defaults, awaited permission before dispatch, provider dispatch, rendering, metadata, and credential-safe errors.
+//   SCOPE: Deterministic native tool-level tests with a temporary global fetch stub and an injected permission guard; no live provider calls.
+//   DEPENDS: [bun:test, @opencode/plugin/promise/tool, src/lib/agent-tool-contract.ts, src/plugins/web-tools/search-service.ts]
 //   LINKS: M-WEB-SEARCH-SERVICE, V-M-WEB-SEARCH-SERVICE, DF-WEB-SEARCH
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   createContext - Build a tool execution context fixture.
+//   createContext - Build a pinned native tool execute context fixture.
+//   createPermission - Build a recording permission guard fixture.
 //   withFetch - Temporarily install a deterministic global fetch fixture.
-//   structuredResult - Narrow a ToolResult to its structured form.
+//   RecordingPermission - Recording resource permission guard.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-006 - Covered strict execute-boundary rejection before permission/dispatch, the runtime count default reaching the HTTP adapter, and freshness mapping.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 - Rewrote V1 SDK tool.schema/context.ask tests as native Tool.Info input and injected resource permission guard tests.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { tool, type ToolContext, type ToolResult } from "@opencode-ai/plugin";
+import type { ToolContext } from "@opencode/plugin/promise/tool";
 import { ContractInputError } from "../../lib/agent-tool-contract.js";
 import type { FetchLike } from "./http.js";
-import { createWebSearchTool, renderSearchMarkdown } from "./search-service.js";
+import {
+  createWebSearchToolForConfig,
+  renderSearchMarkdown,
+  type WebPermissionGuard,
+} from "./search-service.js";
 
-function createContext(ask: ToolContext["ask"] = async () => undefined): ToolContext {
+function createContext(signal: AbortSignal = new AbortController().signal): ToolContext {
   return {
     sessionID: "session-1",
-    messageID: "message-1",
     agent: "test-agent",
-    directory: "/tmp/project",
-    worktree: "/tmp/project",
-    abort: new AbortController().signal,
-    metadata: () => undefined,
-    ask,
+    messageID: "message-1",
+    id: "call-1",
+    signal,
+    progress: async () => undefined,
+  } as unknown as ToolContext;
+}
+
+interface RecordingPermission extends WebPermissionGuard {
+  readonly calls: Array<{ action: string; resources: ReadonlyArray<string> }>;
+}
+
+function createPermission(
+  options: { deny?: boolean; runEffect?: boolean } = {},
+): RecordingPermission {
+  const calls: Array<{ action: string; resources: ReadonlyArray<string> }> = [];
+  return {
+    calls,
+    async guard(input, effect, guardOptions) {
+      calls.push({ action: input.action, resources: input.resources });
+      if (guardOptions?.signal?.aborted) {
+        throw new Error("PERMISSION_ABORTED");
+      }
+      if (options.deny) {
+        throw new Error("PERMISSION_DENIED");
+      }
+      if (options.runEffect === false) {
+        return undefined as never;
+      }
+      return effect();
+    },
   };
 }
 
@@ -48,21 +77,13 @@ async function withFetch<T>(fetchImpl: FetchLike, run: () => Promise<T>): Promis
   }
 }
 
-function structuredResult(result: ToolResult): Exclude<ToolResult, string> {
-  if (typeof result === "string") {
-    throw new Error("expected a structured tool result");
-  }
-  return result;
-}
-
 describe("createWebSearchTool", () => {
   test("defaults count to 8 and enforces count and freshness bounds", () => {
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-    });
-    const schema = tool.schema.object(definition.args);
+    const definition = createWebSearchToolForConfig(
+      { provider: "exa", envVar: "EXA_API_KEY", configField: "web.search.apiKey" },
+      createPermission(),
+    );
+    const schema = definition.input;
 
     expect(schema.parse({ query: "vvoc" })).toEqual({ query: "vvoc", count: 8 });
     expect(schema.safeParse({ query: "vvoc", count: 0 }).success).toBe(false);
@@ -71,17 +92,20 @@ describe("createWebSearchTool", () => {
     expect(schema.parse({ query: "vvoc", freshness: "week" }).freshness).toBe("week");
   });
 
-  test("applies count 8 when OpenCode omits it at execution", async () => {
+  test("applies count 8 when the host omits it at execution", async () => {
     const events: string[] = [];
     let requestBody: Record<string, unknown> | undefined;
-    const definition = createWebSearchTool({
-      provider: "zai",
-      region: "international",
-      envVar: "ZAI_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "zai-secret", source: "env" },
-    });
-    const runtimeArgs = { query: "vvoc" } as Parameters<typeof definition.execute>[0];
+    const permission = createPermission();
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        envVar: "ZAI_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      permission,
+    );
 
     await withFetch(
       async (_url, init) => {
@@ -91,16 +115,11 @@ describe("createWebSearchTool", () => {
           headers: { "content-type": "application/json" },
         });
       },
-      () =>
-        definition.execute(
-          runtimeArgs,
-          createContext(async () => {
-            events.push("ask");
-          }),
-        ),
+      () => definition.execute({ query: "vvoc" }, createContext()),
     );
 
-    expect(events).toEqual(["ask", "fetch"]);
+    expect(permission.calls).toEqual([{ action: "web_search", resources: ["vvoc"] }]);
+    expect(events).toEqual(["fetch"]);
     expect(requestBody).toEqual({
       search_engine: "search-prime",
       search_query: "vvoc",
@@ -109,17 +128,17 @@ describe("createWebSearchTool", () => {
   });
 
   test("rejects invalid count, freshness, and unknown credential fields before permission or dispatch", async () => {
-    let asked = false;
     let fetched = false;
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "never-print-this", source: "env" },
-    });
-    const context = createContext(async () => {
-      asked = true;
-    });
+    const permission = createPermission();
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "never-print-this", source: "env" },
+      },
+      permission,
+    );
 
     const invalidArgs: Array<Record<string, unknown>> = [
       { query: "vvoc", count: 0 },
@@ -140,7 +159,7 @@ describe("createWebSearchTool", () => {
           fetched = true;
           return new Response("unexpected");
         },
-        () => definition.execute(args as never, context),
+        () => definition.execute(args, createContext()),
       ).catch((caught) => caught);
       expect(error).toBeInstanceOf(ContractInputError);
       if (error instanceof ContractInputError) {
@@ -150,19 +169,73 @@ describe("createWebSearchTool", () => {
       expect(String(error.message)).not.toContain("never-print-this");
     }
 
-    expect(asked).toBe(false);
+    expect(permission.calls).toEqual([]);
+    expect(fetched).toBe(false);
+  });
+
+  test("permission denial yields zero provider dispatch", async () => {
+    let fetched = false;
+    const permission = createPermission({ deny: true });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "secret", source: "env" },
+      },
+      permission,
+    );
+
+    const error = await withFetch(
+      async () => {
+        fetched = true;
+        return new Response("unexpected");
+      },
+      () => definition.execute({ query: "vvoc", count: 8 }, createContext()),
+    ).catch((caught) => caught);
+
+    expect(String(error)).toContain("PERMISSION_DENIED");
+    expect(fetched).toBe(false);
+  });
+
+  test("aborted permission signal yields zero provider dispatch", async () => {
+    let fetched = false;
+    const controller = new AbortController();
+    controller.abort();
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "secret", source: "env" },
+      },
+      createPermission(),
+    );
+
+    const error = await withFetch(
+      async () => {
+        fetched = true;
+        return new Response("unexpected");
+      },
+      () => definition.execute({ query: "vvoc", count: 8 }, createContext(controller.signal)),
+    ).catch((caught) => caught);
+
+    expect(String(error)).toContain("PERMISSION_ABORTED");
     expect(fetched).toBe(false);
   });
 
   test("maps the freshness window to the provider request", async () => {
     let requestBody: Record<string, unknown> | undefined;
-    const definition = createWebSearchTool({
-      provider: "zai",
-      region: "international",
-      envVar: "ZAI_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "zai-secret", source: "env" },
-    });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        envVar: "ZAI_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      createPermission(),
+    );
 
     await withFetch(
       async (_url, init) => {
@@ -177,21 +250,18 @@ describe("createWebSearchTool", () => {
     expect(requestBody).toMatchObject({ search_recency_filter: "oneWeek" });
   });
 
-  test("asks permission before Exa dispatch and returns ranked Markdown metadata", async () => {
+  test("awaits permission before Exa dispatch and returns ranked Markdown metadata", async () => {
     const events: string[] = [];
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "exa-secret", source: "env" },
-    });
-    const context = createContext(async (input) => {
-      events.push("ask");
-      expect(input).toMatchObject({
-        permission: "web_search",
-        patterns: ["unified web tools"],
-      });
-    });
+    const permission = createPermission();
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "exa-secret", source: "env" },
+      },
+      permission,
+    );
 
     const result = await withFetch(
       async () => {
@@ -210,13 +280,22 @@ describe("createWebSearchTool", () => {
           { headers: { "content-type": "application/json" } },
         );
       },
-      () => definition.execute({ query: "unified web tools", count: 8 }, context),
+      async () => {
+        const value = await definition.execute(
+          { query: "unified web tools", count: 8 },
+          createContext(),
+        );
+        events.push("result");
+        return value;
+      },
     );
 
-    expect(events).toEqual(["ask", "fetch"]);
-    expect(structuredResult(result)).toEqual({
-      title: "web_search: unified web tools",
+    expect(permission.calls).toEqual([{ action: "web_search", resources: ["unified web tools"] }]);
+    expect(events).toEqual(["fetch", "result"]);
+    expect(result).toEqual({
       output:
+        "1. [Unified Web Tools](https://example.test/web-tools)\n   Provider-neutral search.\n   _2026-07-26_",
+      content:
         "1. [Unified Web Tools](https://example.test/web-tools)\n   Provider-neutral search.\n   _2026-07-26_",
       metadata: { provider: "exa", resultCount: 1, credentialSource: "env" },
     });
@@ -224,12 +303,15 @@ describe("createWebSearchTool", () => {
 
   test("dispatches Brave and reports config as the credential source", async () => {
     let requestedUrl = "";
-    const definition = createWebSearchTool({
-      provider: "brave",
-      envVar: "BRAVE_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "brave-secret", source: "config" },
-    });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "brave",
+        envVar: "BRAVE_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "brave-secret", source: "config" },
+      },
+      createPermission(),
+    );
 
     const result = await withFetch(
       async (url) => {
@@ -242,7 +324,7 @@ describe("createWebSearchTool", () => {
     );
 
     expect(requestedUrl).toStartWith("https://api.search.brave.com/");
-    expect(structuredResult(result).metadata).toEqual({
+    expect(result.metadata).toEqual({
       provider: "brave",
       resultCount: 0,
       credentialSource: "config",
@@ -251,13 +333,16 @@ describe("createWebSearchTool", () => {
 
   test("dispatches direct Z.AI search and reports the explicit region", async () => {
     let requestedUrl = "";
-    const definition = createWebSearchTool({
-      provider: "zai",
-      region: "international",
-      envVar: "ZAI_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "zai-secret", source: "env" },
-    });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "zai",
+        region: "international",
+        envVar: "ZAI_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "zai-secret", source: "env" },
+      },
+      createPermission(),
+    );
 
     const result = await withFetch(
       async (url) => {
@@ -279,9 +364,9 @@ describe("createWebSearchTool", () => {
     );
 
     expect(requestedUrl).toBe("https://api.z.ai/api/paas/v4/web_search");
-    expect(structuredResult(result)).toEqual({
-      title: "web_search: zai",
+    expect(result).toEqual({
       output: "1. [Z.AI Tool API](https://example.test/zai)\n   Direct search result.",
+      content: "1. [Z.AI Tool API](https://example.test/zai)\n   Direct search result.",
       metadata: {
         provider: "zai",
         region: "international",
@@ -292,11 +377,10 @@ describe("createWebSearchTool", () => {
   });
 
   test("missing credentials name both supported locations without a value", async () => {
-    const definition = createWebSearchTool({
-      provider: "brave",
-      envVar: "BRAVE_API_KEY",
-      configField: "web.search.apiKey",
-    });
+    const definition = createWebSearchToolForConfig(
+      { provider: "brave", envVar: "BRAVE_API_KEY", configField: "web.search.apiKey" },
+      createPermission(),
+    );
 
     const error = await definition
       .execute({ query: "vvoc", count: 8 }, createContext())
@@ -308,12 +392,15 @@ describe("createWebSearchTool", () => {
   });
 
   test("provider errors retain provider and code without leaking credentials", async () => {
-    const definition = createWebSearchTool({
-      provider: "exa",
-      envVar: "EXA_API_KEY",
-      configField: "web.search.apiKey",
-      credential: { value: "never-print-this", source: "env" },
-    });
+    const definition = createWebSearchToolForConfig(
+      {
+        provider: "exa",
+        envVar: "EXA_API_KEY",
+        configField: "web.search.apiKey",
+        credential: { value: "never-print-this", source: "env" },
+      },
+      createPermission(),
+    );
 
     const error = await withFetch(
       async () => new Response("denied", { status: 401 }),

@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PLAN-INDEPENDENCE - Initial execution registry coverage.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added generic failed-checkpoint rework coverage: one bounded grant against the covered accepted task, duplicate regrant rejection, and unknown-run/wrong-task/stale-attempt/not-failed guards.]
 // END_CHANGE_SUMMARY
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -31,6 +31,7 @@ import {
   decideDelegatedWorkItemInStore,
   delegatedAttemptBudget,
 } from "./delegated.js";
+import { authorizeReworkFromFailedCheckpoint } from "./checkpoints.js";
 import {
   appendExecutionWorkInStore,
   completeExecutionInStore,
@@ -793,3 +794,199 @@ describe("atomicity and guard regressions", () => {
     expect(completed.errorCode).toBe("EXECUTION_INCOMPLETE");
   });
 });
+
+// START_BLOCK_GENERIC_REWORK_TESTS
+describe("generic failed-checkpoint rework", () => {
+  /** Drive one covered task through its checkpoint to a settled FAIL. */
+  function failGenericCheckpoint(
+    registered: { runId: string },
+    checkpointId: string,
+    reviewer: "spec" | "code",
+    taskId = "T-100",
+  ): string {
+    const data = store.getStoreData();
+    const execution = findExecution(data, registered.runId)!;
+    const workItemId = execution.tasks.get(taskId)!.workItemId;
+    driveToAccepted(workItemId);
+    const started = startGenericCheckpointInStore(data, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId,
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) throw new Error(started.message);
+    const agent = reviewer === "spec" ? "vv-spec-reviewer" : "vv-code-reviewer";
+    const launched = store.beginTrackedLaunch({
+      sessionId: SESSION,
+      workItemId: started.reviewWorkItemId,
+      agent,
+    });
+    expect(launched.ok).toBe(true);
+    const applied = store.applyTrackedResult({
+      sessionId: SESSION,
+      workItemId: started.reviewWorkItemId,
+      result: {
+        agent,
+        workItemId: started.reviewWorkItemId,
+        status: "FAIL",
+        route: "review",
+        body: "failed review",
+      },
+    });
+    expect(applied.ok).toBe(true);
+    const recorded = recordGenericReviewerResultInStore(data, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId,
+      reviewer,
+    });
+    expect(recorded.ok).toBe(true);
+    return workItemId;
+  }
+
+  test("a failed generic checkpoint authorizes exactly one bounded rework of its covered task", () => {
+    const registered = register("generic-rework", [task({ requiredReviewers: ["code"] })]);
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+    const workItemId = failGenericCheckpoint(registered, "review-T-100", "code");
+
+    const reworked = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      workItemId,
+      reason: "Reviewer found a real defect.",
+      attempt: 1,
+    });
+    expect(reworked.ok).toBe(true);
+    if (!reworked.ok) return;
+    expect(reworked.grantedAttempts).toBeGreaterThan(1);
+    expect(store.getWorkItem(SESSION, workItemId)?.state).toBe("awaiting_implementer");
+
+    // Re-accept the corrected attempt, then the same failed checkpoint cannot regrant.
+    const data = store.getStoreData();
+    beginDelegatedLaunchInStore(data, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-generic-rework-2",
+    });
+    applyDelegatedResultInStore(data, {
+      sessionId: SESSION,
+      workItemId,
+      callId: "call-generic-rework-2",
+      resultStatus: "DONE",
+    });
+    decideDelegatedWorkItemInStore(data, {
+      sessionId: SESSION,
+      workItemId,
+      attempt: 2,
+      decision: "accept",
+      rationale: "Accepted after rework.",
+      evidence: ["bun test"],
+    });
+    const regrant = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      workItemId,
+      reason: "Second grant.",
+      attempt: 2,
+    });
+    expect(regrant.ok).toBe(false);
+    if (!regrant.ok) {
+      expect(regrant.errorCode).toBe("REWORK_REJECTED");
+      expect(regrant.message).toContain("ALREADY_REWORKED");
+    }
+  });
+
+  test("generic rework rejects unknown runs, wrong tasks, stale attempts and non-failed checkpoints", () => {
+    const registered = register("generic-rework-guard", [task({ requiredReviewers: ["code"] })]);
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+    const workItemId = failGenericCheckpoint(registered, "review-T-100", "code");
+
+    const unknownRun = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: "run-does-not-exist",
+      checkpointId: "review-T-100",
+      workItemId,
+      reason: "Unknown run.",
+      attempt: 1,
+    });
+    expect(unknownRun.ok).toBe(false);
+    if (!unknownRun.ok) expect(unknownRun.errorCode).toBe("RUN_NOT_FOUND");
+
+    const wrongTask = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      workItemId: "wi-does-not-exist",
+      reason: "Unknown task.",
+      attempt: 1,
+    });
+    expect(wrongTask.ok).toBe(false);
+    if (!wrongTask.ok) expect(wrongTask.errorCode).toBe("WORK_ITEM_NOT_BOUND");
+
+    const staleAttempt = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      workItemId,
+      reason: "Stale attempt.",
+      attempt: 2,
+    });
+    expect(staleAttempt.ok).toBe(false);
+    if (!staleAttempt.ok) expect(staleAttempt.errorCode).toBe("STALE_ATTEMPT");
+
+    // A fresh in-flight (not failed) checkpoint is refused before any mutation.
+    const second = register("generic-rework-not-failed", [task({ requiredReviewers: ["code"] })]);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const secondWorkItemId = second.execution.tasks.get("T-100")!.workItemId;
+    driveToAccepted(secondWorkItemId);
+    const inFlight = startGenericCheckpointInStore(store.getStoreData(), {
+      sessionId: SESSION,
+      runId: second.runId,
+      checkpointId: "review-T-100",
+    });
+    expect(inFlight.ok).toBe(true);
+    const notFailed = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: second.runId,
+      checkpointId: "review-T-100",
+      workItemId: secondWorkItemId,
+      reason: "Not failed yet.",
+      attempt: 1,
+    });
+    expect(notFailed.ok).toBe(false);
+    if (!notFailed.ok) expect(notFailed.errorCode).toBe("CHECKPOINT_NOT_FAILED");
+  });
+
+  test("provided-plan executions route through the same generic rework path", () => {
+    const data = store.getStoreData();
+    const registered = registerExecutionInStore(data, {
+      sessionId: SESSION,
+      workspaceRoot: WORKSPACE,
+      executionKey: "provided-rework",
+      source: { kind: "provided-plan", reference: "docs/checklist.md" },
+      goal: "Deliver the checklist.",
+      boundary: { files: ["src/lib/a.ts"], directories: [] },
+      tasks: [{ contract: task({ requiredReviewers: ["spec"] }) }],
+    });
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+    const workItemId = failGenericCheckpoint(registered, "review-T-100", "spec");
+    const reworked = authorizeReworkFromFailedCheckpoint(store, {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      workItemId,
+      reason: "Provided-plan reviewer failed.",
+      attempt: 1,
+    });
+    expect(reworked.ok).toBe(true);
+    if (!reworked.ok) return;
+    expect(store.getWorkItem(SESSION, workItemId)?.state).toBe("awaiting_implementer");
+  });
+});
+// END_BLOCK_GENERIC_REWORK_TESTS

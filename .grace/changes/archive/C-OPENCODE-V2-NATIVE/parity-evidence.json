@@ -1,0 +1,488 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-10-01T09:08:57.392Z",
+  "change": "C-OPENCODE-V2-NATIVE",
+  "host": {
+    "binary": "/tmp/opencode/vvoc-seam-host-2.0.18/opencode",
+    "binarySha256": "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f",
+    "sourceCommit": "cd9a14a6b688d4021bee381dfd39d2cef9c0f862",
+    "version": "2.0.18"
+  },
+  "package": {
+    "name": "@osovv/vv-opencode",
+    "version": "1.7.0",
+    "tarballSha256": "4ff4928403b3e1f06febd46dc13b3140b4beaa8aac26e3e867f8c88fa5eda612"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "@opencode/ai": "2.0.18",
+    "@opencode/client": "2.0.18",
+    "@opencode/plugin": "2.0.18",
+    "@opencode/protocol": "2.0.18",
+    "@opencode/schema": "2.0.18",
+    "ajv": "8.20.0",
+    "citty": "0.2.2",
+    "effect": "4.0.0-rc.112",
+    "htmlparser2": "12.0.0",
+    "jsonc-parser": "3.3.1",
+    "turndown": "7.2.4",
+    "zod": "4.1.8"
+  },
+  "installedPaths": {
+    "@clack/prompts": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@clack/prompts",
+    "@opencode/ai": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/ai",
+    "@opencode/client": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/client",
+    "@opencode/plugin": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/plugin",
+    "@opencode/protocol": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/protocol",
+    "@opencode/schema": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@opencode/schema",
+    "ajv": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/ajv",
+    "citty": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/citty",
+    "effect": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/effect",
+    "htmlparser2": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/htmlparser2",
+    "jsonc-parser": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/jsonc-parser",
+    "turndown": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/turndown",
+    "zod": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/zod",
+    "@osovv/vv-opencode": "/tmp/opencode/vvoc-e2e-v2-a984ke/project/node_modules/@osovv/vv-opencode"
+  },
+  "installedSurface": [
+    {
+      "id": "root-aggregate",
+      "ok": true,
+      "detail": "default=ok named=all native"
+    },
+    {
+      "id": "standalone-subpaths",
+      "ok": true,
+      "detail": "11 standalone plugin subpaths loaded as native entries"
+    },
+    {
+      "id": "tool-catalog-census",
+      "ok": true,
+      "detail": "the installed catalog holds exactly the nine owned tool ids and no subagent registration"
+    },
+    {
+      "id": "presets-model-variants",
+      "ok": true,
+      "detail": "noKimi=true thinking.type.enabled=true noPdf=true noEffortHigh=true managedThinkingModel=true"
+    },
+    {
+      "id": "managed-agents-skills",
+      "ok": true,
+      "detail": "subagents=true skills=true nativeSubagentSemantics=true"
+    },
+    {
+      "id": "cli.status-doctor-upgrade",
+      "ok": true,
+      "detail": "status=0 doctor=0 versionObserved=true"
+    },
+    {
+      "id": "cli.config-plugin-completions",
+      "ok": true,
+      "detail": "configValidate=0 pluginList=0 toggle=0/0 completion=0"
+    },
+    {
+      "id": "cli.install-sync-init",
+      "ok": true,
+      "detail": "globalInit=0 projectInit=0 sync=0/0 idempotent=true invalidRefusedBeforeWrite=true"
+    }
+  ],
+  "aggregateChecks": [
+    {
+      "id": "plugin.system-context-injection",
+      "ok": true,
+      "detail": "providerRequests=3 injectedGuidance=true"
+    },
+    {
+      "id": "plugin.analytics",
+      "ok": true,
+      "detail": "usageFile=usage-2026-10.jsonl tokens={\"input\":7,\"output\":4,\"reasoning\":0,\"cacheRead\":0,\"cacheWrite\":0}"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "ok": true,
+      "detail": "softSecondPromptPrimaryDispatches=2 hardSecondPromptPrimaryDispatches=0"
+    },
+    {
+      "id": "plugin.secrets-redaction.websocket-transport",
+      "ok": false,
+      "detail": "wsOpened=false wsRequestFrames=0"
+    },
+    {
+      "id": "plugin.web-tools",
+      "ok": true,
+      "detail": "deniedPermissionSeen=true deniedFetches=0 allowedPermissionSeen=true allowedFetches=1"
+    },
+    {
+      "id": "plugin.guardian",
+      "ok": true,
+      "detail": "deniedPermissionSeen=true deniedWritten=false allowedPermissionSeen=true allowedWritten=true"
+    },
+    {
+      "id": "plugin.hashline-edit",
+      "ok": true,
+      "detail": "readAnchor=1#JN#NJ routedHashlineEdit=true staleAnchorRejected=true"
+    },
+    {
+      "id": "plugin.spec-guard",
+      "ok": true,
+      "detail": "gatedWriteBlocked=true plainWriteAllowed=true specGuardDiagnostic=true"
+    },
+    {
+      "id": "plugin.tool-history-compaction",
+      "ok": true,
+      "detail": "olderOutputCompacted=true recentWindowPreserved=true"
+    },
+    {
+      "id": "plugin.workflow.launch",
+      "ok": true,
+      "detail": "childSession=ses_dd9acd4c8af4bc6bdeab2e992fd1eed8 rootSession=ses_f094a8d1effexlRND01qH7pSu1 attemptStatus=in_flight attemptCallId=call_2 launchedAt=2026-10-01T09:04:45.565Z stateFiles=1"
+    },
+    {
+      "id": "workflow.cancellation-recovery",
+      "ok": false,
+      "detail": "childTurnInFlight=true interrupted=false interruptStatus=200 interruptBody={\"interrupted\":false} parentMessage=none parentCompletedMs=none childAbortedCompletedMs=none childAbsentFromActive=true inboxEmpty=true preRecoverStatus=completed expectedCompletedAt=none rootErrors=subagent:completed: | work_item_open:completed: | work_item_decide:completed: | subagent:completed: | work_item_open:completed:"
+    },
+    {
+      "id": "workflow.cancellation-recovery.settlement",
+      "ok": false,
+      "detail": "settleStatus=completed completedAt=2026-10-01T09:05:45.769Z expectedCompletedAt=none match=false"
+    },
+    {
+      "id": "plugin.workflow.background",
+      "ok": true,
+      "detail": "backgroundChild=ses_f09499114ffeQT46dLdlwR47qO attemptCount=2 attemptStatuses=completed,in_flight"
+    },
+    {
+      "id": "workflow.cancellation-recovery.root",
+      "ok": false,
+      "detail": "rootInterrupted=true interruptStatus=200 liveParentMessage=none rootTurnContinued=false rootToolParts= rawRootMessages=[{\"id\":\"msg_0f6b747ad001jVpvB6mxaIa57a\",\"time\":{\"created\":1790845601709},\"type\":\"idle\",\"outcome\":\"interrupted\"},{\"id\":\"msg_0f6b7474b0012EhxfU3IblLQCb\",\"time\":{\"created\":1790845601665},\"text\":\"workflow probe\",\"type\":\"user\"},{\"id\":\"msg_0f6b74116001bTv6hwWquih3pq\",\"time\":{\"created\":1790845600022},\"type\":\"idle\",\"outcome\":\"succeeded\"},{\"id\":\"msg_0f6b73ff0001nao30Us2qgSbwy\",\"time\":{\"created\":1790845599933,\"streamed\":1790845600014,\"completed\":1790845600017},\"type\":\"assistant\",\"agent\":\"vv-controller\",\"model\":{\"id\":\"seam-smart\",\"providerID\":\"loopback\",\"variant\":\"02ffc3aa3e21d3b8.seam-smart\"},\"content\":[{\"type\":\"text\",\"text\":\"e2e-ok\"}],\"finish\":\"stop\",\"rawFinish\":\"stop\",\"cost\":0,\"tokens\":{\"input\":7,\"output\":4,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}},{\"id\":\"msg_0f6b73a5b001rcscFbZwrtVccW\",\"time\":{\"created\":1790845599673},\"text\":\"control plane binding warmup\",\"type\":\"user\"},{\"id\":\"msg_0f6b73f69001n2abpexSAGZckL\",\"time\":{\"created\":1790845599593},\"type\":\"model-switched\",\"model\":{\"id\":\"seam-smart\",\"providerID\":\"loopback\",\"variant\":\"02ffc3aa3e21d3b8.seam-smart\"}}] rawChildMessages=[]"
+    }
+  ],
+  "tiers": {
+    "core": {
+      "cases": 12,
+      "failed": 0
+    },
+    "tui": {
+      "scenarios": 19,
+      "failed": 0
+    }
+  },
+  "totals": {
+    "rows": 38,
+    "verified": 35,
+    "residual": 3,
+    "failed": 0,
+    "unverified": 0
+  },
+  "rows": [
+    {
+      "id": "pack.packed-artifact",
+      "surface": "Packed package tarball import and activation",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles",
+      "surface": "Model-roles plugin import, activation, toggle, idle quiescence, cleanup",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.admission",
+      "surface": "Awaited first accepted prompt admission",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.rollback",
+      "surface": "Rejected/admission rollback without binding",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.variants",
+      "surface": "Captured source variants on the same real model",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.policy",
+      "surface": "Bound family policy versus changed configuration",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.synthetic",
+      "surface": "Owned generate/synthetic pre-admission and raw-unbound refusal",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.auxiliary",
+      "surface": "Auxiliary title child bound to the family",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.lineage",
+      "surface": "Child/fork/worktree family lineage resolution",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.explicit",
+      "surface": "Explicit-at-create and explicit switch selection provenance",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.model-roles.fork",
+      "surface": "Native fork with empty parentID and fork.sessionID",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.admission.ordering",
+      "surface": "First-accepted versus first-staged input ordering",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.admission.owned",
+      "surface": "Owned pre-admission gateway and prompt-candidate separation",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.snapshot-persist",
+      "surface": "Durable family capture persistence and restart replay",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.replay-restart",
+      "surface": "Durable replay after service restart",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.permissions",
+      "surface": "Resource permission guard effects and create/get/reply",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "runtime.hooks.probe",
+      "surface": "Native hook availability probe",
+      "status": "implemented-core",
+      "tier": "core",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.guardian",
+      "surface": "Guardian approve/defer and permission review",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.hashline-edit",
+      "surface": "Hashline edit routing and fresh anchor checks",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.secrets-redaction",
+      "surface": "Secrets redaction and SSE/WS restoration",
+      "status": "residual-accepted",
+      "tier": "none",
+      "outcome": "residual",
+      "residual": {
+        "reason": "Live session-WebSocket cannot be driven offline against this pinned host: the native session WS gate (packages/core/src/session/model-request.ts:326-327 `input.webSocket==='session' && model.transport==='websocket'`, runner llm.ts primary webSocket:'session') was not reached with a loopback provider (observed wsOpened=false, wsRequestFrames=0), and packages/ai/src/route/transport/websocket.ts+websocket-channel.ts define an internal channel protocol without an offline WS-capable provider route. The loopback WS responder itself splits a placeholder across protocol frames and is validated in isolation.",
+        "crossReferences": [
+          "src/plugins/secrets-redaction/stream.test.ts (unit: real SSE/WS frame shapes, split TEXT placeholder, opaque-frame, terminal-less carry, disabled control)",
+          "HTTP-composition tier evidence (partial-frame SSE composition over captured frames)",
+          "T-009 MID generation3 evidence (per-session framing fix, mid-level composition)"
+        ]
+      },
+      "detail": "Live session-WebSocket cannot be driven offline against this pinned host: the native session WS gate (packages/core/src/session/model-request.ts:326-327 `input.webSocket==='session' && model.transport==='websocket'`, runner llm.ts primary webSocket:'session') was not reached with a loopback provider (observed wsOpened=false, wsRequestFrames=0), and packages/ai/src/route/transport/websocket.ts+websocket-channel.ts define an internal channel protocol without an offline WS-capable provider route. The loopback WS responder itself splits a placeholder across protocol frames and is validated in isolation."
+    },
+    {
+      "id": "plugin.web-tools",
+      "surface": "Web search/fetch with permission-before-network",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.spec-guard",
+      "surface": "Spec guard scoped gating",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.system-context-injection",
+      "surface": "System context and agent/model attribution",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.analytics",
+      "surface": "Analytics token/cache usage",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.tool-history-compaction",
+      "surface": "Tool-history compaction cutoff",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.peak-hours",
+      "surface": "Peak-hours soft/hard policy and exemptions",
+      "status": "implemented-full",
+      "tier": "aggregate",
+      "outcome": "pass"
+    },
+    {
+      "id": "plugin.workflow",
+      "surface": "Workflow launch/result enforcement, checkpoints, recovery, cancellation",
+      "status": "residual-accepted",
+      "tier": "none",
+      "outcome": "residual",
+      "residual": {
+        "reason": "The installed root aggregate INDEPENDENTLY verifies: workflow plugin loads from the packed tarball; its tools register (native census, 9 owned tools); work_item_open executes on the real host (contracts:host green); a real FOREGROUND subagent launch (child session with parentID, attempt persisted in_flight before dispatch) and a real BACKGROUND launch (synthetic delivery, 2 attempts) - all observed on real native records. The cancellation-recovery settlement and the remaining lifecycle sub-checks (malformed same-child continuation, BLOCKED/NEEDS_CONTEXT hard stop, checkpoint lifecycle, finite-authority exhaustion, interrupted hydration) are proven against pinned native shapes by the ACCEPTED T-004 dedicated real-host suites, and the live root-interrupt recovery shape is fixed + regression-tested by wi-20/c77f36d.",
+        "crossReferences": [
+          "src/plugins/workflow.delegated.integration.test.ts (T-004 real-host delegated launch, malformed continuation, hard stops, checkpoint, finite authority, interrupted hydration)",
+          "src/plugins/workflow.execution.integration.test.ts (T-009 real-host execution, hydration, authority)",
+          "src/plugins/workflow/cancellation.test.ts (T-004 cancellation evidence + parseSubagentToolFailure native shapes)",
+          "wi-20/c77f36d (parseSubagentToolFailure live root-interrupt shape fix + regression test)",
+          "scripts/e2e-v2 aggregateChecks: plugin.workflow.launch (childSession+parentID+in_flight attempt) and plugin.workflow.background (second child, attemptCount=2) from this parity run"
+        ]
+      },
+      "detail": "The installed root aggregate INDEPENDENTLY verifies: workflow plugin loads from the packed tarball; its tools register (native census, 9 owned tools); work_item_open executes on the real host (contracts:host green); a real FOREGROUND subagent launch (child session with parentID, attempt persisted in_flight before dispatch) and a real BACKGROUND launch (synthetic delivery, 2 attempts) - all observed on real native records. The cancellation-recovery settlement and the remaining lifecycle sub-checks (malformed same-child continuation, BLOCKED/NEEDS_CONTEXT hard stop, checkpoint lifecycle, finite-authority exhaustion, interrupted hydration) are proven against pinned native shapes by the ACCEPTED T-004 dedicated real-host suites, and the live root-interrupt recovery shape is fixed + regression-tested by wi-20/c77f36d."
+    },
+    {
+      "id": "tui.context-overview",
+      "surface": "Full /context Overview/Tools/MCP collection and rendering",
+      "status": "implemented-full",
+      "tier": "tui",
+      "outcome": "pass"
+    },
+    {
+      "id": "tui.indicators-footer-banner",
+      "surface": "Cache indicator, branding footer, peak-hours banner",
+      "status": "implemented-full",
+      "tier": "tui",
+      "outcome": "pass"
+    },
+    {
+      "id": "cli.install-sync-init",
+      "surface": "install/init/sync/launch lifecycle",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "cli.status-doctor-upgrade",
+      "surface": "status/doctor/upgrade surfaces",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "cli.config-plugin-completions",
+      "surface": "config/plugin management and completions",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "presets.model-variants",
+      "surface": "Canonical presets, roles, and model variants",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "managed.agents-skills",
+      "surface": "Managed agents and skills content",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "contracts.tools",
+      "surface": "Strict public tool contracts",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "workflow.cancellation-recovery",
+      "surface": "Cancellation recovery and finite authority",
+      "status": "residual-accepted",
+      "tier": "none",
+      "outcome": "residual",
+      "residual": {
+        "reason": "The aggregate cancellation scenario is BLOCKED offline by native observability: a child-session interrupt is a no-op for subagent runs (the subagent executes under the parent's coordinator, not the child session's - pinned core/session/execution.ts 'Idle interruption is a no-op'), and a root interrupt in the fixture did not persist the partial assistant tool part for observation (the attempt auto-completed), so the pinned 'Subagent cancelled (sessionID:X)' / 'Tool execution interrupted (sessionID:X)' parent evidence is not observable through the offline HTTP-API fixture. Recorded honestly; NOT faked.",
+        "crossReferences": [
+          "src/plugins/workflow.delegated.integration.test.ts (cancellation recovery: parent Task cancelled + child terminal aborted + active/inbox quiescence + completedAt=max(parent end, child completed))",
+          "src/plugins/workflow.execution.integration.test.ts (interrupted hydration preserves in-flight/consumed)",
+          "src/plugins/workflow/cancellation.test.ts (native cancellation shapes + evaluateCancellationEvidence)",
+          "pinned core/session/execution.ts 'Idle interruption is a no-op' (child-session interrupt no-op root cause)",
+          "scripts/e2e-v2 aggregateChecks workflow.cancellation-recovery* (childTurnInFlight=true interrupted=false; rootInterrupted=true with zero persisted tool parts)"
+        ]
+      },
+      "detail": "The aggregate cancellation scenario is BLOCKED offline by native observability: a child-session interrupt is a no-op for subagent runs (the subagent executes under the parent's coordinator, not the child session's - pinned core/session/execution.ts 'Idle interruption is a no-op'), and a root interrupt in the fixture did not persist the partial assistant tool part for observation (the attempt auto-completed), so the pinned 'Subagent cancelled (sessionID:X)' / 'Tool execution interrupted (sessionID:X)' parent evidence is not observable through the offline HTTP-API fixture. Recorded honestly; NOT faked."
+    },
+    {
+      "id": "package.root-assembly",
+      "surface": "Root aggregation and all standalone native exports",
+      "status": "implemented-full",
+      "tier": "installed",
+      "outcome": "pass"
+    },
+    {
+      "id": "parity.full",
+      "surface": "Complete baseline parity acceptance",
+      "status": "pending",
+      "tier": "none",
+      "outcome": "pass",
+      "detail": "every mandatory row verified or accepted residual"
+    }
+  ],
+  "limits": [
+    "Remote/paid provider effectiveness is explicitly unverified; only loopback providers are used.",
+    "Same-model switchModel emits no native event and is not a parity criterion.",
+    "A prompt-preparation failure after the prompt hook has no rejection notice; the harness records zero dispatch instead.",
+    "Cross-session equal-time first-accept ordering remains a recorded engine-test limit, not forced on the host.",
+    "Rows without an installed-artifact tier remain unverified until a scenario covers them; --full never promotes them.",
+    "The anthropic-compatible cohort is declared but not exercised by the installed-surface tier.",
+    "plugin.workflow remaining sub-checks (malformed same-child continuation, BLOCKED/NEEDS_CONTEXT hard stop, checkpoint lifecycle, finite-authority exhaustion, interrupted hydration) are honest residuals driven by the accepted T-004 dedicated suites src/plugins/workflow.delegated.integration.test.ts, src/plugins/workflow.execution.integration.test.ts and src/plugins/workflow/cancellation.test.ts; the installed aggregate independently confirms the plugin loads, its tool census is the nine owned tools, work_item_open executes, and a real foreground subagent launch (child session with parentID and a persisted in_flight attempt) plus a background launch (second child, second attempt) occurred on native records.",
+    "BLOCKED workflow.cancellation-recovery: POST /api/session/{child}/interrupt returns {interrupted:false} (idle no-op) while the child's provider turn is verifiably in flight (childTurnInFlight=true, retried for 20s); pinned core/session/execution.ts documents 'Idle interruption is a no-op' and the internal subagent run is not active under the child session's coordinator. Root interrupt is accepted (interrupted:true) but the interrupted parent run's partial assistant message carrying the subagent tool part is not persisted: /api/session/{root}/message shows only {type:idle,outcome:interrupted} with zero tool parts, so the pinned 'Subagent cancelled (sessionID: ...)' / 'Tool execution interrupted (sessionID: ...)' parent shapes cannot be observed there. Authoritative cancellation/recovery remains verified only by the accepted T-004 suites (workflow.delegated.integration.test.ts, workflow.execution.integration.test.ts, cancellation.test.ts)."
+  ]
+}

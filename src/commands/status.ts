@@ -1,8 +1,8 @@
 // FILE: src/commands/status.ts
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Show current vv-opencode installation status including OpenCode host compatibility, TUI registration, and the effective orchestration profile.
-//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable OpenCode version/runtime/TUI, vvoc, orchestration, role, and plugin diagnostics.
+//   PURPOSE: Show current vv-opencode installation status including the exact supported OpenCode host window, TUI registration, and the effective orchestration profile.
+//   SCOPE: Read-scope parsing, layered source-aware inspection lookup, and human-readable OpenCode version/supported-window/TUI, vvoc, orchestration, role, and plugin diagnostics.
 //   DEPENDS: [citty, src/lib/config-layers.ts, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.1.2 - Reported installed OpenCode version and managed TUI compatibility.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Reported the exact supported OpenCode host window instead of a V1 TUI minimum.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -49,26 +49,19 @@ export default defineCommand({
       `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
     );
     console.log(
-      `OpenCode TUI source: ${inspection.opencodeTuiSource.kind}${inspection.opencodeTuiSource.path ? ` ${inspection.opencodeTuiSource.path}` : ""}`,
-    );
-    console.log(
       `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
     );
     console.log(`Orchestration profile: ${inspection.orchestration.profile ?? "unknown"}`);
     console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
-    console.log(`OpenCode TUI minimum: ${inspection.runtime.minimumTuiVersion}`);
+    console.log(`OpenCode supported range: ${inspection.runtime.supportedRange}`);
     console.log(
-      `OpenCode TUI compatible: ${inspection.runtime.tuiCompatible === undefined ? "unknown" : inspection.runtime.tuiCompatible ? "yes" : "no"}`,
+      `OpenCode supported: ${inspection.runtime.versionSupported === undefined ? "unknown" : inspection.runtime.versionSupported ? "yes" : "no"}`,
     );
     console.log(`OpenCode config: ${inspection.opencode.path}`);
     console.log(`OpenCode config exists: ${inspection.opencode.exists ? "yes" : "no"}`);
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
-    console.log(`OpenCode TUI config: ${inspection.tui.path}`);
-    console.log(`OpenCode TUI config exists: ${inspection.tui.exists ? "yes" : "no"}`);
-    console.log(
-      `OpenCode TUI config parse: ${inspection.tui.parseError ? inspection.tui.parseError : inspection.tui.exists ? "ok" : "missing"}`,
-    );
-    console.log(`TUI package configured: ${inspection.tui.pluginConfigured ? "yes" : "no"}`);
+    console.log(`TUI package registered: ${inspection.tui.registered ? "yes" : "no"}`);
+    console.log(`TUI capability note: ${inspection.tui.note}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(`vvoc config exists: ${inspection.vvoc.exists ? "yes" : "no"}`);
     console.log(

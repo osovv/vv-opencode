@@ -1,102 +1,111 @@
 // FILE: src/tui.tsx
-// VERSION: 2.0.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Publish the dual-runtime TUI entrypoint: the full v1 context inspector, analytics indicator, branding footer, and peak-hours banner through tui(), and the v2 CLI plugin registration for /context through setup().
-//   SCOPE: Stable TUI package entrypoint and dual runtime identity only; feature registration stays in the focused modules.
-//   DEPENDS: [@opencode-ai/plugin/tui, @opencode/plugin/tui, src/tui/context/plugin.ts, src/tui/analytics/indicator.tsx, src/tui/branding/footer.tsx, src/tui/peak-hours/banner.tsx]
-//   LINKS: [M-PLUGIN-CONTEXT-TUI, M-TUI-ANALYTICS-INDICATOR, M-TUI-BRANDING-FOOTER, M-TUI-PEAK-HOURS-BANNER, V-M-PLUGIN-CONTEXT-TUI]
+//   PURPOSE: Publish the default @osovv/vv-opencode/tui native plugin module containing the /context inspector, analytics indicator, branding footer, and peak-hours banner.
+//   SCOPE: Native plugin definition (id/setup/cleanup), a shared selection-keyed policy controller over the context-inspection RPC that resolves the current selected session's native location, refresh on route and native policy-binding events, and lifecycle cleanup of every slot/keymap/effect/subscription. It performs no local filesystem config read.
+//   DEPENDS: [@opencode/plugin/tui, solid-js, src/runtime/context-inspection-contract.ts, src/tui/policy.ts, src/tui/context/collect.ts, src/tui/context/plugin.ts, src/tui/context/view.tsx, src/tui/analytics/indicator.tsx, src/tui/branding/footer.tsx, src/tui/peak-hours/banner.tsx]
+//   LINKS: [M-PLUGIN-CONTEXT-TUI, M-TUI-ANALYTICS-INDICATOR, M-TUI-BRANDING-FOOTER, M-TUI-PEAK-HOURS-BANNER, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: BARREL
 //   MAP_MODE: SUMMARY
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   default - Dual TUI entrypoint: v2 setup() registers the /context command, v1 tui() registers the full inspector, indicator, footer, and banner.
-//   ContextTuiPlugin - Named TUI plugin factory for direct consumers and tests.
+//   vvocContextTuiPlugin - Named native TUI plugin definition for direct consumers and tests.
+//   default - Native OpenCode TUI plugin module registering /context, the analytics indicator, the branding footer, and the peak-hours banner.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-MIGRATION T-007 - Added the v2 CLI plugin setup registering /context beside the unchanged v1 TUI module.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 attempt 3 - Location-checked RPC policy fetch and native step-boundary refresh so a freshly committed capture is picked up on the same session without a tab change.]
 // END_CHANGE_SUMMARY
 
-import type { TuiPluginModule } from "@opencode-ai/plugin/tui";
-import { ContextTuiPlugin } from "./tui/context/plugin.js";
+import { Plugin } from "@opencode/plugin/tui";
+import { createEffect, createSignal } from "solid-js";
+import { contextInspectionRpc } from "./runtime/context-inspection-contract.js";
 import { registerAnalyticsIndicator } from "./tui/analytics/indicator.js";
 import { registerBrandingFooter } from "./tui/branding/footer.js";
+import { collectContextAnalysis, createTuiCollectionDependencies } from "./tui/context/collect.js";
+import { activeSessionID, registerContextTuiPlugin } from "./tui/context/plugin.js";
+import { openContextDialog } from "./tui/context/view.js";
 import { registerPeakHoursBanner } from "./tui/peak-hours/banner.js";
-
-export { ContextTuiPlugin };
+import {
+  createPolicyController,
+  createRpcPolicyFetch,
+  policyContextSuppressed,
+  type ContextPolicySnapshot,
+} from "./tui/policy.js";
 
 // START_BLOCK_TUI_MODULE
-const plugin: TuiPluginModule & { id: string; setup?: (context: unknown) => Promise<void> | void } =
-  {
-    id: "vvoc-context",
-    tui: async (api, options, meta) => {
-      await ContextTuiPlugin(api, options, meta);
-      try {
-        await registerAnalyticsIndicator(api, options);
-      } catch {
-        // Fail-soft: indicator unavailable for this session.
-      }
-      try {
-        registerBrandingFooter(api);
-      } catch {
-        // Fail-soft: footer unavailable for this session.
-      }
-      try {
-        await registerPeakHoursBanner(api, options);
-      } catch {
-        // Fail-soft: banner unavailable for this session.
-      }
-    },
-    // START_BLOCK_V2_TUI_SETUP
-    // OpenCode v2 loads the same entrypoint through setup() with the CLI plugin
-    // context. The v2 surface registers the /context slash command; the full
-    // inspector components port onto the v2 dialog and router surfaces in a
-    // follow-up release and this command keeps the entry point honest.
-    async setup(context) {
-      const ctx = context as {
-        keymap: {
-          layer: (layer: unknown) => unknown;
-        };
-        ui: {
-          dialog: {
-            alert: (input: { title: string; message: string }) => Promise<void>;
-          };
-        };
-        data?: {
-          location?: { default?: () => { directory?: string } | undefined };
-        };
-        app?: { version?: string };
-      };
-      try {
-        ctx.keymap.layer(() => ({
-          mode: "global",
-          commands: [
-            {
-              id: "vvoc.context",
-              title: "vvoc context inspector",
-              slash: { name: "context" },
-              palette: true,
-              run: async () => {
-                const directory = ctx.data?.location?.default?.()?.directory ?? "unknown location";
-                await ctx.ui.dialog.alert({
-                  title: "vvoc /context",
-                  message:
-                    `OpenCode v2 runtime (host ${ctx.app?.version ?? "unknown"}).\n` +
-                    `Location: ${directory}\n` +
-                    "The full v2 context inspector ships in the next vvoc release; " +
-                    "server-side analytics, model roles, and guidance stay active.",
-                });
-              },
-            },
-          ],
-        }));
-      } catch {
-        // Fail-soft: the v2 TUI host may not expose keymap layers yet.
-      }
-    },
-    // END_BLOCK_V2_TUI_SETUP
-  };
+export const vvocContextTuiPlugin = Plugin.define({
+  id: "vvoc-context",
+  setup(ctx) {
+    const fallbackDirectory = (): string =>
+      ctx.location?.directory ?? ctx.data.location.default().directory;
+    // The policy must follow the SELECTED session's current native location, not
+    // a location captured once at plugin setup.
+    const sessionDirectory = (sessionID: string | undefined): string => {
+      if (sessionID === undefined) return fallbackDirectory();
+      const location = ctx.data.session.get(sessionID)?.location;
+      return location?.directory ?? fallbackDirectory();
+    };
+
+    const controller = createPolicyController(
+      createRpcPolicyFetch((input, options) =>
+        ctx.client.rpc(contextInspectionRpc).inspect(input, options),
+      ),
+    );
+    const [policy, setPolicy] = createSignal<ContextPolicySnapshot | undefined>(undefined);
+    const cleanups: Array<() => void> = [
+      controller.subscribe(setPolicy),
+      () => controller.dispose(),
+    ];
+
+    const refreshActive = (): void => {
+      const sessionID = activeSessionID(ctx);
+      void controller.refresh({ sessionID, directory: sessionDirectory(sessionID) });
+    };
+    createEffect(refreshActive);
+    // An initially unbound/empty tab becomes captured without a tab change.
+    // The family capture is committed from accepted-event handling, which can
+    // lag the TUI's `session.inbox.enqueued`, so refresh again on native step
+    // boundaries: pinned `session.step.started` is published when request
+    // dispatch begins (after delivery) and `session.step.ended` after the step
+    // settles, both strictly later than the enqueue that triggers the commit.
+    cleanups.push(
+      ctx.data.on("session.inbox.enqueued", (event) => {
+        if (activeSessionID(ctx) === event.data.sessionID) refreshActive();
+      }),
+      ctx.data.on("session.step.started", (event) => {
+        if (activeSessionID(ctx) === event.data.sessionID) refreshActive();
+      }),
+      ctx.data.on("session.step.ended", (event) => {
+        if (activeSessionID(ctx) === event.data.sessionID) refreshActive();
+      }),
+      ctx.data.on("session.model.selected", (event) => {
+        if (activeSessionID(ctx) === event.data.sessionID) refreshActive();
+      }),
+    );
+
+    const collection = createTuiCollectionDependencies(ctx);
+    cleanups.push(
+      registerContextTuiPlugin(ctx, ctx.options, {
+        isEnabled: () => !policyContextSuppressed(policy()),
+        revalidate: async (_context, sessionID) => {
+          await controller.refresh({ sessionID, directory: sessionDirectory(sessionID) });
+          return !policyContextSuppressed(controller.current());
+        },
+        collect: (_context, sessionID) => collectContextAnalysis(sessionID, collection),
+        open: (context, analysis) => openContextDialog(context, analysis),
+      }),
+      registerAnalyticsIndicator(ctx, policy, ctx.options),
+      registerBrandingFooter(ctx),
+      registerPeakHoursBanner(ctx, policy),
+    );
+
+    return () => {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    };
+  },
+});
 // END_BLOCK_TUI_MODULE
 
-export default plugin;
+export default vvocContextTuiPlugin;

@@ -14,6 +14,7 @@
 //   ROLE_REFERENCE_PREFIX - Stable role-reference prefix.
 //   isRoleReference - Checks whether a value is a vv-role reference.
 //   parseModelSelection - Parses provider/model into normalized parts.
+//   parseModelSelectionWithVariant - Parses canonical provider/model#variant into normalized parts.
 //   resolveRoleReference - Resolves vv-role references through a canonical role map.
 //   getBuiltInRoleBindings - Returns hard-coded role bindings for OpenCode defaults and bundled agents.
 //   BuiltInRoleName - Union type for built-in role IDs.
@@ -22,10 +23,11 @@
 //   ParsedModelSelection - Parsed provider/model[:variant] result.
 //   ResolvedRoleSelection - Resolved role reference result.
 //   BuiltInRoleBindings - Hard-coded built-in role mapping.
+//   ParsedVariantSelection - Parsed provider/model with an optional canonical variant.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.3.1 - Added reviewer role, removed orchestrator. Reviewers bound to reviewer, vv-controller back on smart.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Added canonical provider/model#variant parsing for native snapshot captures.]
 // END_CHANGE_SUMMARY
 
 export const BUILTIN_ROLE_NAMES = ["default", "smart", "fast", "reviewer"] as const;
@@ -54,6 +56,11 @@ export type ParsedModelSelection = {
 export type ResolvedRoleSelection = ParsedModelSelection & {
   roleId: string;
   roleRef: string;
+};
+
+/** Parsed provider/model with an optional canonical `#variant` suffix. */
+export type ParsedVariantSelection = ParsedModelSelection & {
+  variant?: string;
 };
 
 export type BuiltInRoleBindings = {
@@ -138,6 +145,32 @@ export function parseModelSelection(modelSelection: string): ParsedModelSelectio
   const [, provider, model] = match;
   const normalized = `${provider}/${model}`;
   return { provider, model, normalized };
+}
+
+// START_CONTRACT: parseModelSelectionWithVariant
+//   PURPOSE: Parse a canonical native provider/model#variant selection while keeping provider/model parsing rules.
+//   INPUTS: { modelSelection: string - Concrete provider/model or provider/model#variant input. }
+//   OUTPUTS: { ParsedVariantSelection - Normalized provider/model plus optional variant. }
+//   SIDE_EFFECTS: none
+//   LINKS: [fn-parseModelSelection]
+// END_CONTRACT: parseModelSelectionWithVariant
+export function parseModelSelectionWithVariant(modelSelection: string): ParsedVariantSelection {
+  const trimmed = modelSelection.trim();
+  const variantStart = trimmed.indexOf("#");
+  if (variantStart === -1) return parseModelSelection(trimmed);
+
+  const variant = trimmed.slice(variantStart + 1);
+  if (!variant || variant.includes("#")) {
+    throw createModelRolesError(
+      "INVALID_MODEL_SELECTION",
+      "modelSelection",
+      modelSelection,
+      "expected at most one #variant suffix",
+    );
+  }
+
+  const parsed = parseModelSelection(trimmed.slice(0, variantStart));
+  return { ...parsed, variant };
 }
 
 // START_CONTRACT: resolveRoleReference

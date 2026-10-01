@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Call the Spider.cloud Scrape API for one exact URL and serve binary targets through the shared direct media loader.
 //   SCOPE: Bearer auth, mapped return_format, array envelope validation, status and duration metadata, provider error mapping, and media-first dispatch.
-//   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts, @opencode-ai/plugin]
+//   DEPENDS: [src/plugins/web-tools/http.ts, src/plugins/web-tools/config.ts, src/plugins/web-tools/media-loader.ts, src/plugins/web-tools/providers/exa.ts]
 //   LINKS: [M-WEB-SPIDER, M-WEB-HTTP, M-WEB-MEDIA-LOADER, M-WEB-FETCH-SERVICE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -18,7 +18,7 @@
 //   LAST_CHANGE: [v1.0.0 - Initial Spider Scrape adapter.]
 // END_CHANGE_SUMMARY
 
-import type { ToolAttachment } from "@opencode-ai/plugin";
+import type { OwnedToolAttachment } from "../../../lib/agent-tool-contract.js";
 import type { WebProviderCredential } from "../config.js";
 import {
   DEFAULT_TEXT_MAX_BYTES,
@@ -41,7 +41,7 @@ export type SpiderOutcome =
     }
   | {
       kind: "media";
-      attachment: ToolAttachment;
+      attachment: OwnedToolAttachment;
       metadata: { status?: number; durationMs?: number };
     };
 

@@ -1,6 +1,10 @@
 <workflow_protocol>
 Workflow tracking is active for vv-managed review loops.
 
+Native subagent launches use the `subagent` tool with `agent`, `description`, `prompt`, an optional
+`model`, an optional `sessionID` (continue an existing child), and an optional `background`. Put the
+tracked header in `prompt`; never invent a separate `task`/`subagent_type`/`task_id` shape.
+
 For tracked subagents (`vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`):
 
 1. Open work items first with `work_item_open` using explicit `mode` and `requiredReviewers`.

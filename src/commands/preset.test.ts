@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Updated the exact role matrix for the four presets whose default worker role moved to xiaomi/vv-mimo-v2.6-flash-high.]
+//   LAST_CHANGE: [direct fix - Updated the exact role matrix for the four presets whose default worker role moved to xiaomi/mimo-v2.6-flash#thinking.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -32,7 +32,6 @@ describe("preset helpers", () => {
       "vv-codex",
       "vv-zai",
       "vv-deepseek",
-      "vv-kimi",
       "vv-alibaba",
       "vv-osovv-ds",
       "vv-osovv-mimo",
@@ -67,80 +66,73 @@ describe("preset helpers", () => {
       ),
     ).toEqual({
       "vv-codex": {
-        default: "openai/vv-codex-gpt-5.6-terra-high",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "openai/vv-codex-gpt-5.6-sol-xhigh",
-        reviewer: "openai/vv-codex-gpt-5.6-sol-xhigh",
+        default: "openai/gpt-5.6-terra#high",
+        fast: "openai/gpt-6-luna#low",
+        smart: "openai/gpt-5.6-sol#xhigh",
+        reviewer: "openai/gpt-5.6-sol#xhigh",
         profile: "single-session",
       },
       "vv-zai": {
-        default: "zai-coding-plan/vv-glm-5.3-flash-max",
-        fast: "zai-coding-plan/vv-glm-5.3-flash-max",
-        smart: "zai-coding-plan/vv-glm-5.3-max",
-        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        default: "zai-coding-plan/glm-5.3-flash#max",
+        fast: "zai-coding-plan/glm-5.3-flash#max",
+        smart: "zai-coding-plan/glm-5.3#max",
+        reviewer: "zai-coding-plan/glm-5.3#max",
         profile: "balanced",
       },
       "vv-deepseek": {
-        default: "deepseek/vv-deepseek-flash-max",
-        fast: "deepseek/vv-deepseek-flash-max",
-        smart: "deepseek/vv-deepseek-flash-max",
-        reviewer: "deepseek/vv-deepseek-flash-max",
+        default: "deepseek/deepseek-flash#max",
+        fast: "deepseek/deepseek-flash#max",
+        smart: "deepseek/deepseek-flash#max",
+        reviewer: "deepseek/deepseek-flash#max",
         profile: "balanced",
-      },
-      "vv-kimi": {
-        default: "kimi-for-coding/k3",
-        fast: "kimi-for-coding/kimi-for-coding-highspeed",
-        smart: "kimi-for-coding/vv-kimi-k3-max",
-        reviewer: "kimi-for-coding/kimi-for-coding",
-        profile: "single-session",
       },
       "vv-alibaba": {
         default: "alibaba-token-plan/qwen3.8-max",
         fast: "alibaba-token-plan/deepseek-v4-flash",
-        smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
+        smart: "alibaba-token-plan/qwen3.8-max#xhigh",
         reviewer: "alibaba-token-plan/glm-5.2",
         profile: "single-session",
       },
       "vv-osovv-ds": {
-        default: "deepseek/vv-deepseek-flash-max",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "deepseek/vv-deepseek-flash-max",
-        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        default: "deepseek/deepseek-flash#max",
+        fast: "openai/gpt-6-luna#low",
+        smart: "deepseek/deepseek-flash#max",
+        reviewer: "zai-coding-plan/glm-5.3#max",
         profile: "single-session",
       },
       "vv-osovv-mimo": {
-        default: "xiaomi/vv-mimo-v2.6-flash-high",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "xiaomi/vv-mimo-v2.6-flash-high",
-        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        default: "xiaomi/mimo-v2.6-flash#thinking",
+        fast: "openai/gpt-6-luna#low",
+        smart: "xiaomi/mimo-v2.6-flash#thinking",
+        reviewer: "zai-coding-plan/glm-5.3#max",
         profile: "single-session",
       },
       "vv-osovv-zai": {
-        default: "xiaomi/vv-mimo-v2.6-flash-high",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "zai-coding-plan/vv-glm-5.3-max",
-        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        default: "xiaomi/mimo-v2.6-flash#thinking",
+        fast: "openai/gpt-6-luna#low",
+        smart: "zai-coding-plan/glm-5.3#max",
+        reviewer: "zai-coding-plan/glm-5.3#max",
         profile: "single-session",
       },
       "vv-osovv-qwen": {
-        default: "xiaomi/vv-mimo-v2.6-flash-high",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "alibaba-token-plan/vv-qwen3.8-max-xhigh",
-        reviewer: "zai-coding-plan/vv-glm-5.3-max",
+        default: "xiaomi/mimo-v2.6-flash#thinking",
+        fast: "openai/gpt-6-luna#low",
+        smart: "alibaba-token-plan/qwen3.8-max#xhigh",
+        reviewer: "zai-coding-plan/glm-5.3#max",
         profile: "delegated",
       },
       "vv-astra-solo": {
-        default: "xiaomi/vv-mimo-v2.6-flash-high",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "openai/vv-codex-gpt-6-astra-max",
-        reviewer: "zai-coding-plan/vv-glm-5.3-high",
+        default: "xiaomi/mimo-v2.6-flash#thinking",
+        fast: "openai/gpt-6-luna#low",
+        smart: "openai/gpt-6-astra#max",
+        reviewer: "zai-coding-plan/glm-5.3#high",
         profile: "single-session",
       },
       "vv-astra-workers": {
-        default: "xiaomi/vv-mimo-v2.6-flash-high",
-        fast: "openai/vv-codex-gpt-6-luna-low",
-        smart: "openai/vv-codex-gpt-6-astra-max",
-        reviewer: "zai-coding-plan/vv-glm-5.3-high",
+        default: "xiaomi/mimo-v2.6-flash#thinking",
+        fast: "openai/gpt-6-luna#low",
+        smart: "openai/gpt-6-astra#max",
+        reviewer: "zai-coding-plan/glm-5.3#high",
         profile: "delegated",
       },
     });
@@ -170,7 +162,6 @@ describe("preset helpers", () => {
       "vv-codex": "single-session",
       "vv-zai": "balanced",
       "vv-deepseek": "balanced",
-      "vv-kimi": "single-session",
       "vv-alibaba": "single-session",
       "vv-osovv-ds": "single-session",
       "vv-osovv-mimo": "single-session",
@@ -191,7 +182,6 @@ describe("preset helpers", () => {
       "vv-astra-workers",
       "vv-codex",
       "vv-deepseek",
-      "vv-kimi",
       "vv-osovv-ds",
       "vv-osovv-mimo",
       "vv-osovv-qwen",
@@ -207,67 +197,67 @@ describe("preset helpers", () => {
     expect(output).toContain(
       '"description": "Starter Codex subscription role assignments for built-in vvoc roles."',
     );
-    expect(output).toContain('"default": "openai/vv-codex-gpt-5.6-terra-high"');
-    expect(output).toContain('"smart": "openai/vv-codex-gpt-5.6-sol-xhigh"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"reviewer": "openai/vv-codex-gpt-5.6-sol-xhigh"');
+    expect(output).toContain('"default": "openai/gpt-5.6-terra#high"');
+    expect(output).toContain('"smart": "openai/gpt-5.6-sol#xhigh"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"reviewer": "openai/gpt-5.6-sol#xhigh"');
   });
 
   test("formatPreset renders all four vv-osovv-ds role assignments", () => {
     const resolved = resolvePreset("vv-osovv-ds", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "deepseek/vv-deepseek-flash-max"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"smart": "deepseek/vv-deepseek-flash-max"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain('"default": "deepseek/deepseek-flash#max"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"smart": "deepseek/deepseek-flash#max"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#max"');
   });
 
   test("formatPreset renders all four vv-osovv-mimo role assignments", () => {
     const resolved = resolvePreset("vv-osovv-mimo", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"smart": "xiaomi/vv-mimo-v2.6-flash-high"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain('"default": "xiaomi/mimo-v2.6-flash#thinking"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"smart": "xiaomi/mimo-v2.6-flash#thinking"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#max"');
     expect(output).toContain("single-session");
   });
 
   test("formatPreset renders all four vv-osovv-zai role assignments", () => {
     const resolved = resolvePreset("vv-osovv-zai", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"smart": "zai-coding-plan/vv-glm-5.3-max"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain('"default": "xiaomi/mimo-v2.6-flash#thinking"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"smart": "zai-coding-plan/glm-5.3#max"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#max"');
   });
 
   test("formatPreset renders the vv-osovv-qwen delegated assignments", () => {
     const resolved = resolvePreset("vv-osovv-qwen", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"smart": "alibaba-token-plan/vv-qwen3.8-max-xhigh"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-max"');
+    expect(output).toContain('"default": "xiaomi/mimo-v2.6-flash#thinking"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"smart": "alibaba-token-plan/qwen3.8-max#xhigh"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#max"');
     expect(output).toContain("delegated");
   });
 
   test("formatPreset renders the vv-astra-solo explicit-reasoning assignments", () => {
     const resolved = resolvePreset("vv-astra-solo", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
-    expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
+    expect(output).toContain('"default": "xiaomi/mimo-v2.6-flash#thinking"');
+    expect(output).toContain('"smart": "openai/gpt-6-astra#max"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#high"');
     expect(output).toContain("single-session");
   });
 
   test("formatPreset renders the vv-astra-workers delegated assignments", () => {
     const resolved = resolvePreset("vv-astra-workers", createDefaultVvocConfig().presets);
     const output = formatPreset(resolved.name, resolved.preset);
-    expect(output).toContain('"default": "xiaomi/vv-mimo-v2.6-flash-high"');
-    expect(output).toContain('"smart": "openai/vv-codex-gpt-6-astra-max"');
-    expect(output).toContain('"fast": "openai/vv-codex-gpt-6-luna-low"');
-    expect(output).toContain('"reviewer": "zai-coding-plan/vv-glm-5.3-high"');
+    expect(output).toContain('"default": "xiaomi/mimo-v2.6-flash#thinking"');
+    expect(output).toContain('"smart": "openai/gpt-6-astra#max"');
+    expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
+    expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#high"');
     expect(output).toContain("delegated");
   });
 });
@@ -352,7 +342,7 @@ describe("applyPreset", () => {
           configDir: configHome,
         }),
       ).rejects.toThrow(
-        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-kimi, vv-osovv-ds, vv-osovv-mimo, vv-osovv-qwen, vv-osovv-zai, vv-zai",
+        "unknown preset: missing. Available presets: vv-alibaba, vv-astra-solo, vv-astra-workers, vv-codex, vv-deepseek, vv-osovv-ds, vv-osovv-mimo, vv-osovv-qwen, vv-osovv-zai, vv-zai",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
@@ -374,7 +364,7 @@ describe("applyPreset", () => {
       await writeFile(paths.vvocConfigPath, renderVvocConfig(createDefaultVvocConfig()), "utf8");
 
       const opencodeText =
-        '{\n  "$schema": "https://opencode.ai/config.json",\n  "plugin": ["example/plugin"],\n  "agent": {\n    "general": {\n      "model": "vv-role:default"\n    }\n  }\n}\n';
+        '{\n  "$schema": "https://opencode.ai/config.json",\n  "plugins": [{ "package": "example/plugin" }],\n  "agents": {\n    "general": {\n      "model": "openai/gpt-5.6-terra#high"\n    }\n  }\n}\n';
       await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
       await writeFile(paths.opencodeConfigPath, opencodeText, "utf8");
 
@@ -473,16 +463,12 @@ describe("applyPreset", () => {
 
       const bootstrapped = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
       expect(bootstrapped.version).toBe(3);
-      expect(bootstrapped.roles.default).toBe("openai/vv-codex-gpt-5.6-terra-high");
-      expect(bootstrapped.roles.smart).toBe("openai/vv-codex-gpt-5.6-sol-xhigh");
+      expect(bootstrapped.roles.default).toBe("openai/gpt-5.6-terra#high");
+      expect(bootstrapped.roles.smart).toBe("openai/gpt-5.6-sol#xhigh");
       expect(bootstrapped.orchestration).toEqual({ profile: "single-session" });
       expect(applied.orchestration).toEqual({ profile: "single-session", action: "updated" });
-      expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe(
-        "openai/vv-codex-gpt-5.6-terra-high",
-      );
-      expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe(
-        "openai/vv-codex-gpt-5.6-sol-xhigh",
-      );
+      expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe("openai/gpt-5.6-terra#high");
+      expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe("openai/gpt-5.6-sol#xhigh");
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
@@ -639,9 +625,9 @@ describe("applyPreset", () => {
         "On OpenCode v1, restart OpenCode to apply the changed roles or orchestration profile. On OpenCode v2, the config watcher applies them without a restart; running sessions stay anchored to their starting preset.",
       );
       const vvocConfig = await readVvocConfig(paths);
-      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/vv-glm-5.3-flash-max");
-      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/vv-glm-5.3-max");
-      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/vv-glm-5.3-flash-max");
+      expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5.3-flash#max");
+      expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.3#max");
+      expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-5.3-flash#max");
       expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
     } finally {
       await rm(configHome, { recursive: true, force: true });

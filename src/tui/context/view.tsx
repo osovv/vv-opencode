@@ -1,9 +1,9 @@
 // FILE: src/tui/context/view.tsx
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Render measured usage and detailed context attribution as a responsive host-owned tabbed dialog.
-//   SCOPE: Overview, Tools, and MCP tabs; unavailable-schema disclosure; modal-scoped navigation; bounded scrolling; metric formatting; warnings; and host dialog sizing.
-//   DEPENDS: [solid-js, @opencode-ai/plugin/tui, @opentui/core, @opentui/keymap, @opentui/solid, src/tui/context/types.ts]
+//   PURPOSE: Render measured usage and detailed native context attribution as a responsive host-owned tabbed dialog using the native dialog, keymap, theme, and slot APIs.
+//   SCOPE: Overview, Tools, and MCP tabs; unavailable/unknown disclosure; modal-scoped tab navigation through the native keymap layer; bounded scrolling; metric formatting; model/compaction attribution; warnings; and host dialog sizing.
+//   DEPENDS: [@opencode/plugin/tui, @opentui/core, @opentui/solid, solid-js, src/tui/context/types.ts]
 //   LINKS: [M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -11,36 +11,55 @@
 //
 // START_MODULE_MAP
 //   ContextTab - Stable Overview, Tools, and MCP tab identifiers.
-//   openContextDialog - Replace the host dialog stack with the responsive context report before selecting xlarge size.
+//   ContextThemeColors - Theme colors the dialog needs, mapped from the native resolved theme.
+//   ContextKeymapLike - Structural native keymap layer registrar accepted by the dialog.
+//   openContextDialog - Show the responsive context report through the native host dialog and select xlarge size.
+//   claimContextCommand - Claim the app slot and register the /context keymap command inside a mounted render.
 //   ContextDialogContent - Render measured usage plus component-local Overview, Tools, and MCP tabs.
 //   selectContextTabForKey - Resolve left/right and direct-number tab navigation deterministically.
-//   registerContextDialogKeymap - Register modal-only tab bindings and return their component-lifetime disposer.
 //   calculateContextBodyHeight - Bound the focused scroll region relative to terminal height.
 //   renderMetricBar - Render a percentage bar clamped visually at 100 percent.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Rendered unexposed connected MCP schema catalogs as unavailable instead of zero.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Ported the dialog to native dialog/theme/keymap APIs with native tool, MCP, model, and compaction attribution.]
 // END_CHANGE_SUMMARY
 
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
+import type { Plugin } from "@opencode/plugin/tui";
 import type { RGBA } from "@opentui/core";
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
-import { createMemo, createSignal, onCleanup } from "solid-js";
+import { useTerminalDimensions } from "@opentui/solid";
+import { createMemo, createSignal } from "solid-js";
 import type {
   ContextAnalysis,
-  ContextMcpUsage,
   ContextTokenMetric,
   ContextToolSource,
   ContextToolUsage,
 } from "./types.js";
 
 type Color = RGBA | string;
-type ContextTheme = {
+
+/** Theme colors the dialog needs, mapped from the native resolved theme. */
+export type ContextThemeColors = {
   text: Color;
-  textMuted: Color;
+  muted: Color;
   primary: Color;
   warning: Color;
+  error: Color;
+  success: Color;
+};
+
+/** Structural native keymap layer registrar accepted by the dialog. */
+export type ContextKeymapLike = {
+  layer(
+    input: () => {
+      mode?: string;
+      commands?: readonly {
+        title?: string;
+        bind?: string | false;
+        run?: (input?: string) => void | false | Promise<void>;
+      }[];
+    },
+  ): void;
 };
 
 const CONTEXT_TABS = ["overview", "tools", "mcp"] as const;
@@ -48,68 +67,135 @@ const CONTEXT_DIALOG_MAX_BODY_HEIGHT = 16;
 const CONTEXT_DIALOG_RESERVED_ROWS = 13;
 export type ContextTab = (typeof CONTEXT_TABS)[number];
 
+// START_BLOCK_CONTEXT_COMMAND_SLOT
+/**
+ * Claim the always-present native `app` slot and register the /context keymap
+ * command from inside a mounted render. Native `keymap.layer` requires the
+ * host Keymap provider context, which only exists inside the mounted component
+ * tree; registering during plugin `setup` fails with "Keymap.Provider is
+ * missing". Returns the slot disposer.
+ */
+export function claimContextCommand(
+  ctx: Plugin.Context,
+  command: {
+    readonly id: string;
+    readonly isEnabled: () => boolean;
+    readonly run: () => Promise<void>;
+  },
+): () => void {
+  return ctx.ui.slot({
+    append: "app",
+    render() {
+      ctx.keymap.layer(() => ({
+        // Global so the command is reachable from the prompt input mode, like
+        // the built-in /btw command; the default base layer is not.
+        mode: "global",
+        commands: [
+          {
+            id: command.id,
+            title: "Context usage",
+            description: "Show measured context usage and an approximate source breakdown",
+            group: "VVOC",
+            palette: true,
+            slash: { name: "context" },
+            enabled: command.isEnabled,
+            run: command.run,
+          },
+        ],
+      }));
+      return <></>;
+    },
+  });
+}
+// END_BLOCK_CONTEXT_COMMAND_SLOT
+
 // START_BLOCK_CONTEXT_DIALOG
-export function openContextDialog(api: TuiPluginApi, analysis: ContextAnalysis): void {
-  const theme = api.theme.current;
-  api.ui.dialog.replace(() => (
-    <ContextDialogContent
-      analysis={analysis}
-      keymap={api.keymap}
-      theme={{
-        text: theme.text,
-        textMuted: theme.textMuted,
-        primary: theme.primary,
-        warning: theme.warning,
-      }}
-    />
+/** Show the responsive context report through the native host dialog. */
+export function openContextDialog(ctx: Plugin.Context, analysis: ContextAnalysis): void {
+  ctx.ui.dialog.show(() => (
+    <ContextDialogContent analysis={analysis} keymap={ctx.keymap} theme={themeFrom(ctx.theme)} />
   ));
-  api.ui.dialog.setSize("xlarge");
+  ctx.ui.dialog.set({ size: "xlarge" });
 }
 
 export function ContextDialogContent(props: {
   analysis: ContextAnalysis;
-  keymap?: TuiPluginApi["keymap"];
-  theme: ContextTheme;
+  keymap?: ContextKeymapLike;
+  theme: ContextThemeColors;
 }) {
   const [tab, setTab] = createSignal<ContextTab>("overview");
   const dimensions = useTerminalDimensions();
   const narrow = createMemo(() => dimensions().width < 72);
   const bodyHeight = createMemo(() => calculateContextBodyHeight(dimensions().height));
   const barWidth = createMemo(() => calculateMetricBarWidth(dimensions().width));
+  // The dialog owns its scroll region: the host dialog does not route arrow/page
+  // keys into a plugin scrollbox, so bind them explicitly.
+  let scrollRegion: { scrollBy(delta: number, unit?: "step" | "viewport"): void } | undefined;
 
   if (props.keymap) {
-    onCleanup(
-      registerContextDialogKeymap(props.keymap, (keyName) => {
-        const selected = selectContextTabForKey(tab(), keyName);
-        if (selected !== undefined) setTab(selected);
-      }),
-    );
-  } else {
-    useKeyboard((event) => {
-      const selected = selectContextTabForKey(tab(), event.name);
-      if (selected === undefined) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setTab(selected);
-    });
+    props.keymap.layer(() => ({
+      mode: "modal",
+      commands: [
+        { title: "Previous context tab", bind: "left", run: () => selectAndSet("left") },
+        { title: "Next context tab", bind: "right", run: () => selectAndSet("right") },
+        { title: "Show context Overview", bind: "1", run: () => selectAndSet("1") },
+        { title: "Show context Tools", bind: "2", run: () => selectAndSet("2") },
+        { title: "Show context MCP", bind: "3", run: () => selectAndSet("3") },
+        { title: "Scroll context up", bind: "up", run: () => scrollRegion?.scrollBy(-1, "step") },
+        {
+          title: "Scroll context down",
+          bind: "down",
+          run: () => scrollRegion?.scrollBy(1, "step"),
+        },
+        {
+          title: "Page context up",
+          bind: "pageup",
+          run: () => scrollRegion?.scrollBy(-1, "viewport"),
+        },
+        {
+          title: "Page context down",
+          bind: "pagedown",
+          run: () => scrollRegion?.scrollBy(1, "viewport"),
+        },
+        {
+          title: "Scroll context down",
+          bind: "ctrl+d",
+          run: () => scrollRegion?.scrollBy(1, "viewport"),
+        },
+        {
+          title: "Scroll context up",
+          bind: "ctrl+u",
+          run: () => scrollRegion?.scrollBy(-1, "viewport"),
+        },
+      ],
+    }));
+  }
+
+  function selectAndSet(keyName: string): void {
+    const selected = selectContextTabForKey(tab(), keyName);
+    if (selected !== undefined) setTab(selected);
   }
 
   return (
     <box flexDirection="column" gap={1} paddingLeft={1} paddingRight={1}>
       <text fg={props.theme.text} wrapMode="word">
-        {`Context usage\n${formatModel(props.analysis)}`}
+        {`Context usage\n${formatModels(props.analysis)}`}
       </text>
 
       <UsageSummary
         analysis={props.analysis}
         primary={props.theme.primary}
-        muted={props.theme.textMuted}
+        muted={props.theme.muted}
+        warning={props.theme.warning}
         barWidth={barWidth()}
       />
 
       <TabBar tab={tab} theme={props.theme} />
 
       <scrollbox
+        ref={(value: unknown) => {
+          scrollRegion = value as typeof scrollRegion;
+        }}
         focused={true}
         height={bodyHeight()}
         scrollX={false}
@@ -134,9 +220,9 @@ export function ContextDialogContent(props: {
         </box>
       </scrollbox>
 
-      <text fg={props.theme.textMuted} wrapMode="word">
+      <text fg={props.theme.muted} wrapMode="word">
         Measured = latest provider usage. ~ = provider-neutral estimate. Percentages use only the
-        current model context limit.
+        current model context limit. Registered catalog != the session's final request.
       </text>
     </box>
   );
@@ -158,35 +244,6 @@ export function selectContextTabForKey(
   return CONTEXT_TABS[(index + delta + CONTEXT_TABS.length) % CONTEXT_TABS.length];
 }
 
-export function registerContextDialogKeymap(
-  keymap: TuiPluginApi["keymap"],
-  select: (keyName: string) => void,
-): () => void {
-  const commands = [
-    { name: "vvoc.context.tab.left", key: "left", title: "Previous context tab" },
-    { name: "vvoc.context.tab.right", key: "right", title: "Next context tab" },
-    { name: "vvoc.context.tab.overview", key: "1", title: "Show context Overview" },
-    { name: "vvoc.context.tab.tools", key: "2", title: "Show context Tools" },
-    { name: "vvoc.context.tab.mcp", key: "3", title: "Show context MCP" },
-  ] as const;
-
-  return keymap.registerLayer({
-    mode: "modal",
-    commands: commands.map((command) => ({
-      name: command.name,
-      title: command.title,
-      run() {
-        select(command.key);
-      },
-    })),
-    bindings: commands.map((command) => ({
-      key: command.key,
-      cmd: command.name,
-      desc: command.title,
-    })),
-  });
-}
-
 export function calculateContextBodyHeight(terminalHeight: number): number {
   const normalized = Number.isFinite(terminalHeight) ? Math.floor(terminalHeight) : 34;
   const hostTopOffset = Math.floor(normalized / 4);
@@ -204,7 +261,7 @@ function calculateMetricBarWidth(terminalWidth: number): number {
 // START_BLOCK_OVERVIEW_TAB
 function OverviewTab(props: {
   analysis: ContextAnalysis;
-  theme: ContextTheme;
+  theme: ContextThemeColors;
   narrow: boolean;
   barWidth: number;
 }) {
@@ -215,9 +272,7 @@ function OverviewTab(props: {
         <MetricRow
           label={category.source === "estimated" ? `~ ${category.label}` : category.label}
           metric={category}
-          color={
-            category.source === "provider-residual" ? props.theme.warning : props.theme.textMuted
-          }
+          color={category.source === "provider-residual" ? props.theme.warning : props.theme.muted}
           valueColor={props.theme.text}
           barColor={
             category.source === "provider-residual" ? props.theme.warning : props.theme.primary
@@ -227,11 +282,23 @@ function OverviewTab(props: {
         />
       ))}
 
+      {props.analysis.catalogSchemaBudget !== undefined ? (
+        <MetricRow
+          label="Registered tool catalog (budget, not current context)"
+          metric={props.analysis.catalogSchemaBudget}
+          color={props.theme.muted}
+          valueColor={props.theme.text}
+          barColor={props.theme.muted}
+          narrow={props.narrow}
+          barWidth={props.barWidth}
+        />
+      ) : null}
+
       <box
         flexDirection={props.narrow ? "column" : "row"}
         justifyContent={props.narrow ? "flex-start" : "space-between"}
       >
-        <text fg={props.theme.textMuted}>Active messages</text>
+        <text fg={props.theme.muted}>Active messages</text>
         <text fg={props.theme.text}>
           {props.analysis.activeMessageCount}
           {props.analysis.compacted ? " (after compaction)" : ""}
@@ -280,27 +347,37 @@ function MetricRow(props: {
 // END_BLOCK_OVERVIEW_TAB
 
 // START_BLOCK_TOOLS_TAB
-function ToolsTab(props: { analysis: ContextAnalysis; theme: ContextTheme; narrow: boolean }) {
+function ToolsTab(props: {
+  analysis: ContextAnalysis;
+  theme: ContextThemeColors;
+  narrow: boolean;
+}) {
   const tools = props.analysis.toolAttribution?.tools ?? [];
-  if (!props.analysis.toolAttribution) {
-    return <text fg={props.theme.warning}>Detailed tool attribution is unavailable.</text>;
-  }
-  if (tools.length === 0) {
-    return <text fg={props.theme.textMuted}>No current tool schemas or active tool history.</text>;
-  }
   return (
     <box flexDirection="column" gap={1}>
-      <text fg={props.theme.text}>Tools · schema + active post-compaction history</text>
-      {tools.map((tool) => (
-        <ToolCard tool={tool} theme={props.theme} narrow={props.narrow} />
-      ))}
+      <text fg={props.theme.text}>
+        Registered tool catalog — current location; not the session's final request
+      </text>
+      <text fg={props.theme.muted} wrapMode="word">
+        Catalog status: {props.analysis.toolCatalogStatus}
+      </text>
+      {props.analysis.toolCatalogStatus === "unavailable" ? (
+        <text fg={props.theme.warning} wrapMode="word">
+          The registered tool catalog is unavailable; schemas and code-mode intent are unknown.
+        </text>
+      ) : null}
+      {tools.length === 0 ? (
+        <text fg={props.theme.muted}>No current tool schemas or active tool history.</text>
+      ) : (
+        tools.map((tool) => <ToolCard tool={tool} theme={props.theme} narrow={props.narrow} />)
+      )}
     </box>
   );
 }
 
 function ToolCard(props: {
   tool: ContextToolUsage;
-  theme: ContextTheme;
+  theme: ContextThemeColors;
   narrow: boolean;
   nested?: boolean;
 }) {
@@ -313,10 +390,12 @@ function ToolCard(props: {
         <text fg={props.theme.text} wrapMode="char">
           {props.tool.id}
         </text>
-        <text fg={props.theme.textMuted}>{formatToolSource(props.tool.source)}</text>
+        <text fg={props.theme.muted}>{formatToolSource(props.tool.source)}</text>
       </box>
-      <text fg={props.theme.textMuted}>active calls {props.tool.calls}</text>
-      <text fg={props.theme.textMuted} wrapMode="word">
+      <text fg={props.theme.muted}>
+        active calls {props.tool.calls} · code mode {props.tool.codeMode ? "on" : "off"}
+      </text>
+      <text fg={props.theme.muted} wrapMode="word">
         schema {formatKnownMetric(props.tool.schema, props.tool.schemaKnown)} · history{" "}
         {formatMetric(props.tool.history)}
       </text>
@@ -329,86 +408,45 @@ function ToolCard(props: {
 // END_BLOCK_TOOLS_TAB
 
 // START_BLOCK_MCP_TAB
-function McpTab(props: { analysis: ContextAnalysis; theme: ContextTheme; narrow: boolean }) {
+function McpTab(props: { analysis: ContextAnalysis; theme: ContextThemeColors; narrow: boolean }) {
   const attribution = props.analysis.toolAttribution;
-  if (!attribution) {
-    return (
-      <box flexDirection="column" gap={1}>
-        <text fg={props.theme.warning}>Detailed MCP attribution is unavailable.</text>
-        {props.analysis.mcpServers.map((server) => (
-          <text fg={props.theme.textMuted} wrapMode="word">
-            {server.name} · {server.status}
-          </text>
-        ))}
-      </box>
-    );
-  }
-
   return (
     <box flexDirection="column" gap={1}>
-      <text fg={props.theme.text}>MCP servers · observable schemas + retained active history</text>
-      {attribution.mcpServers.length === 0 ? (
-        <text fg={props.theme.textMuted}>No MCP servers reported.</text>
+      <text fg={props.theme.text}>MCP servers · native status</text>
+      {props.analysis.mcpServers.length === 0 ? (
+        <text fg={props.theme.muted}>No MCP servers reported.</text>
       ) : (
-        attribution.mcpServers.map((server) => (
-          <McpServerCard server={server} theme={props.theme} narrow={props.narrow} />
+        props.analysis.mcpServers.map((server) => (
+          <box flexDirection="column">
+            <box
+              flexDirection={props.narrow ? "column" : "row"}
+              justifyContent={props.narrow ? "flex-start" : "space-between"}
+            >
+              <text fg={props.theme.text} wrapMode="word">
+                {server.name}
+              </text>
+              <text fg={server.status === "connected" ? props.theme.success : props.theme.warning}>
+                {server.status}
+              </text>
+            </box>
+            {server.error ? (
+              <text fg={props.theme.warning} wrapMode="word">
+                {server.error}
+              </text>
+            ) : null}
+          </box>
         ))
       )}
+      <text fg={props.theme.muted} wrapMode="word">
+        Tool namespace is a registration hint, not authoritative MCP server provenance; tools
+        without a known owner are grouped below.
+      </text>
 
-      <text fg={props.theme.text}>Other external/plugin</text>
-      {attribution.otherTools.length === 0 ? (
-        <text fg={props.theme.textMuted}>No unattributed external or plugin tools.</text>
+      <text fg={props.theme.text}>Other external/plugin tools</text>
+      {(attribution?.otherTools.length ?? 0) === 0 ? (
+        <text fg={props.theme.muted}>No unattributed external or plugin tools.</text>
       ) : (
-        attribution.otherTools.map((tool) => (
-          <ToolCard tool={tool} theme={props.theme} narrow={props.narrow} nested={true} />
-        ))
-      )}
-    </box>
-  );
-}
-
-function McpServerCard(props: { server: ContextMcpUsage; theme: ContextTheme; narrow: boolean }) {
-  return (
-    <box flexDirection="column">
-      <box
-        flexDirection={props.narrow ? "column" : "row"}
-        justifyContent={props.narrow ? "flex-start" : "space-between"}
-      >
-        <text fg={props.theme.text} wrapMode="word">
-          {props.server.name}
-        </text>
-        <text fg={props.server.status === "connected" ? props.theme.primary : props.theme.warning}>
-          {props.server.status}
-        </text>
-      </box>
-      <text fg={props.theme.textMuted}>
-        current tools {props.server.toolCount ?? "unavailable"}
-      </text>
-      <text fg={props.theme.textMuted} wrapMode="word">
-        schema {formatKnownMetric(props.server.schema, props.server.schemaKnown)} · history{" "}
-        {formatMetric(props.server.history)}
-      </text>
-      <text fg={props.theme.primary}>
-        {props.server.schemaKnown ? "total" : "known total"} {formatMetric(props.server.total)}
-      </text>
-      {!props.server.schemaKnown && props.server.status === "connected" ? (
-        <text fg={props.theme.textMuted} wrapMode="word">
-          OpenCode API does not expose this MCP schema catalog.
-        </text>
-      ) : null}
-      {props.server.error ? (
-        <text fg={props.theme.warning} wrapMode="word">
-          {props.server.error}
-        </text>
-      ) : null}
-      {props.server.tools.length === 0 ? (
-        <text fg={props.theme.textMuted} wrapMode="word">
-          {props.server.schemaKnown
-            ? "No attributed current schemas or active history."
-            : "No attributed active history; current schemas are unavailable."}
-        </text>
-      ) : (
-        props.server.tools.map((tool) => (
+        attribution?.otherTools.map((tool) => (
           <ToolCard tool={tool} theme={props.theme} narrow={props.narrow} nested={true} />
         ))
       )}
@@ -417,7 +455,7 @@ function McpServerCard(props: { server: ContextMcpUsage; theme: ContextTheme; na
 }
 // END_BLOCK_MCP_TAB
 
-function TabBar(props: { tab: () => ContextTab; theme: ContextTheme }) {
+function TabBar(props: { tab: () => ContextTab; theme: ContextThemeColors }) {
   return (
     <text fg={props.theme.primary} wrapMode="word">
       {() => `${formatTabBar(props.tab())}\n←/→ tabs · 1/2/3 select · ↑/↓ scroll · Esc close`}
@@ -429,33 +467,61 @@ function UsageSummary(props: {
   analysis: ContextAnalysis;
   primary: Color;
   muted: Color;
+  warning: Color;
   barWidth: number;
 }) {
   const measured = props.analysis.measured;
   if (!measured) {
     return (
       <text fg={props.muted} wrapMode="word">
-        Provider usage is not available until the session has an assistant turn.
+        Provider usage is not available for the active context yet.
       </text>
     );
   }
 
   const percent = measured.percentUsed;
-  const usageLine = `${renderMetricBar(percent, props.barWidth)} ${formatTokens(measured.usedTokens)}${
-    measured.contextLimit ? ` / ${formatTokens(measured.contextLimit)}` : ""
-  }${percent === undefined ? "" : ` (${percent.toFixed(1)}%)`}`;
-  const tokenLine = `input ${formatTokens(measured.inputTokens)} · cache read ${formatTokens(
-    measured.cacheReadTokens,
-  )} · output ${formatTokens(measured.outputTokens)}${
-    measured.remainingTokens === undefined
-      ? ""
-      : ` · remaining ${formatTokens(measured.remainingTokens)}`
+  const usageLine = `${renderMetricBar(percent, props.barWidth)} ${formatKnownTokens(
+    measured.usedTokens,
+  )}${measured.contextLimit === undefined ? "" : ` / ${formatTokens(measured.contextLimit)}`}${
+    percent === undefined ? "" : ` (${percent.toFixed(1)}%)`
   }`;
+  const tokenLine = [
+    `input ${formatKnownTokens(measured.inputTokens)}`,
+    `cache read ${formatKnownTokens(measured.cacheReadTokens)}`,
+    `cache write ${formatKnownTokens(measured.cacheWriteTokens)}`,
+    `output ${formatKnownTokens(measured.outputTokens)}`,
+    `reasoning ${formatKnownTokens(measured.reasoningTokens)}`,
+    measured.remainingTokens === undefined
+      ? undefined
+      : `remaining ${formatTokens(measured.remainingTokens)}`,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join(" · ");
+  const color =
+    measured.matchesSelectedModel && measured.compactionRelation !== "before"
+      ? props.primary
+      : props.warning;
   return (
-    <text fg={props.primary} wrapMode="word">
-      {`${usageLine}\n${tokenLine}`}
-    </text>
+    <box flexDirection="column">
+      <text fg={color} wrapMode="word">
+        {`${usageLine}\n${tokenLine}\n${measured.label}`}
+      </text>
+    </box>
   );
+}
+
+function themeFrom(theme: {
+  text: { base: RGBA; muted: RGBA; feedback: Record<string, { base: RGBA }> };
+  hue: { accent: Record<number, RGBA> };
+}): ContextThemeColors {
+  return {
+    text: theme.text.base,
+    muted: theme.text.muted,
+    primary: theme.hue.accent[200] ?? theme.text.base,
+    warning: theme.text.feedback.warning.base,
+    error: theme.text.feedback.error.base,
+    success: theme.text.feedback.success.base,
+  };
 }
 
 function formatTabBar(active: ContextTab): string {
@@ -471,8 +537,9 @@ function formatTabName(tab: ContextTab): string {
 function formatToolSource(source: ContextToolSource): string {
   if (source.kind === "builtin") return "Built-in";
   if (source.kind === "vvoc") return "vvoc";
-  if (source.kind === "mcp") return `MCP · ${source.server}`;
-  return "Other external/plugin";
+  return source.namespace === undefined
+    ? "Other external/plugin"
+    : `Other external/plugin · ${source.namespace}`;
 }
 
 function formatMetric(metric: ContextTokenMetric): string {
@@ -487,10 +554,27 @@ function formatPercent(percent: number | undefined): string {
   return percent === undefined ? "—" : `${percent.toFixed(1)}%`;
 }
 
-function formatModel(analysis: ContextAnalysis): string {
-  if (!analysis.model) return analysis.agent ?? "unknown model";
-  const model = `${analysis.model.providerID}/${analysis.model.modelID}`;
-  return analysis.agent ? `${analysis.agent} · ${model}` : model;
+function formatModels(analysis: ContextAnalysis): string {
+  const selected =
+    analysis.selectedModel === undefined
+      ? "unknown model"
+      : `${analysis.selectedModel.providerID}/${analysis.selectedModel.modelID}${
+          analysis.selectedModel.variant === undefined ? "" : `#${analysis.selectedModel.variant}`
+        }`;
+  const history =
+    analysis.historyModel === undefined
+      ? undefined
+      : `${analysis.historyModel.providerID}/${analysis.historyModel.modelID}`;
+  const parts = [
+    analysis.agent === undefined ? undefined : analysis.agent,
+    `selected ${selected}`,
+    history === undefined || history === selected ? undefined : `history ${history}`,
+  ].filter((part): part is string => part !== undefined);
+  return parts.join(" · ");
+}
+
+function formatKnownTokens(tokens: number | undefined): string {
+  return tokens === undefined ? "unknown" : formatTokens(tokens);
 }
 
 function formatTokens(tokens: number): string {

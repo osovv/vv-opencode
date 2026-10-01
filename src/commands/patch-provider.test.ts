@@ -1,8 +1,8 @@
 // FILE: src/commands/patch-provider.test.ts
-// VERSION: 0.9.0
+// VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Tests for M-CLI-PATCH-PROVIDER - global OpenCode patch presets.
-//   SCOPE: Preset validation plus global OpenCode provider and provider-specific patch application without root model rewrites.
+//   PURPOSE: Tests for M-CLI-PATCH-PROVIDER - global native OpenCode provider patch presets.
+//   SCOPE: Preset validation plus global/project native `providers` patch application with real models, native variants[], and preserved root/user fields.
 //   DEPENDS: [bun:test, src/commands/patch-provider.ts]
 //   LINKS: [M-CLI-PATCH-PROVIDER, V-M-CLI-PATCH-PROVIDER]
 //   ROLE: TEST
@@ -10,243 +10,193 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   [test scenarios] - Patch-provider behavior coverage is expressed through module-level tests.
+//   PresetValue - Preset value record shape used by the patch-provider fixtures.
+//   NativeModel - Native provider model config shape under test.
+//   NativeConfig - Native OpenCode config shape carrying providers and models.
+//   valueOf - Deep-clones a preset value into a plain record.
+//   presetModels - Reads a preset's model map.
+//   variantIds - Lists the variant ids of one native model.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Covered the xiaomi vv-mimo-v2.6-flash-high alias resolution, write, and inclusion in the all preset order.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Re-pointed provider patch coverage at native real models with native variants[], including the MiMo thinking variant.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { createRequire } from "node:module";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Config as NativeConfig } from "@opencode/schema/config";
 import {
   applyAllPatchProviderPresets,
   applyPatchProviderPreset,
   resolvePatchProviderPreset,
 } from "./patch-provider.js";
 
+type PresetValue = Record<string, unknown>;
+type NativeModel = {
+  name?: string;
+  limit?: { context?: number; input?: number; output?: number };
+  capabilities?: { tools?: boolean; input?: string[]; output?: string[] };
+  settings?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+  variants?: Array<{
+    id: string;
+    settings?: Record<string, unknown>;
+    body?: Record<string, unknown>;
+  }>;
+};
+type NativeConfig = {
+  model?: unknown;
+  small_model?: unknown;
+  plugins?: unknown[];
+  providers?: Record<string, { models?: Record<string, NativeModel> }>;
+};
+
+function valueOf(preset: { value: PresetValue }): PresetValue {
+  return JSON.parse(JSON.stringify(preset.value)) as PresetValue;
+}
+
+function presetModels(value: PresetValue): Record<string, NativeModel> {
+  return (value.models as Record<string, NativeModel> | undefined) ?? {};
+}
+
+function variantIds(model: NativeModel): string[] {
+  return (model.variants ?? []).map((variant) => variant.id);
+}
+
 describe("resolvePatchProviderPreset", () => {
-  test("returns the built-in stepfun provider patch with step-3.7-flash model", () => {
-    const preset = resolvePatchProviderPreset("stepfun-ai");
-    expect(preset).toMatchObject({
+  test("returns the built-in stepfun provider patch with native step-3.7-flash model", () => {
+    const preset = resolvePatchProviderPreset("stepfun-ai") as unknown as { value: PresetValue };
+    expect(resolvePatchProviderPreset("stepfun-ai")).toMatchObject({
       kind: "provider-object",
       providerID: "stepfun",
-      summary: "provider.stepfun.models.step-3.7-flash patched + baseURL",
+      summary: "providers.stepfun.models.step-3.7-flash + settings.baseURL patched",
     });
-    const value = JSON.parse(JSON.stringify((preset as { value: Record<string, unknown> }).value));
-    expect(value.options.baseURL).toBe("https://api.stepfun.ai/v1");
-    expect(value.models["step-3.7-flash"].name).toBe("Step 3.7 Flash");
-    expect(value.models["step-3.7-flash"].limit.context).toBe(256000);
-    expect(value.models["step-3.7-flash"].modalities.input).toEqual(["text", "image", "video"]);
+    const value = valueOf(preset);
+    expect((value.settings as { baseURL?: string }).baseURL).toBe("https://api.stepfun.ai/v1");
+    const model = presetModels(value)["step-3.7-flash"];
+    expect(model.name).toBe("Step 3.7 Flash");
+    expect(model.limit?.context).toBe(256000);
+    expect(model.capabilities?.input).toEqual(["text", "image", "video"]);
   });
 
-  test("returns the built-in codex alias patch (canonical)", () => {
+  test("returns the built-in codex patch over real OpenAI models", () => {
+    const preset = resolvePatchProviderPreset("codex") as unknown as { value: PresetValue };
     expect(resolvePatchProviderPreset("codex")).toMatchObject({
       kind: "provider-object",
       providerID: "openai",
-      summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
+      summary: "providers.openai.models real gpt-5.5/5.6/6 models + effort variants patched",
     });
-  });
-  test("returns the built-in kimi alias patch", () => {
-    expect(resolvePatchProviderPreset("kimi")).toMatchObject({
-      kind: "provider-object",
-      providerID: "kimi-for-coding",
-      summary: "provider.kimi-for-coding.models.vv-kimi-k3-max patched",
-    });
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("kimi") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-kimi-k3-max"].id).toBe("k3");
-    expect(value.models["vv-kimi-k3-max"].options.reasoningEffort).toBe("max");
+    const models = presetModels(valueOf(preset));
+    expect(Object.keys(models).sort()).toEqual([
+      "gpt-5.3-codex-spark",
+      "gpt-5.5",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-6-astra",
+      "gpt-6-luna",
+    ]);
+    expect(variantIds(models["gpt-5.5"])).toEqual(["xhigh"]);
+    expect(variantIds(models["gpt-5.6-terra"])).toEqual(["high"]);
+    expect(variantIds(models["gpt-5.6-sol"])).toEqual(["xhigh"]);
   });
 
-  test("returns the built-in alibaba alias patch", () => {
-    expect(resolvePatchProviderPreset("alibaba")).toMatchObject({
-      kind: "provider-object",
-      providerID: "alibaba-token-plan",
-      summary: "provider.alibaba-token-plan.models.vv-qwen3.8-max-xhigh patched",
-    });
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("alibaba") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-qwen3.8-max-xhigh"].id).toBe("qwen3.8-max");
-    expect(value.models["vv-qwen3.8-max-xhigh"].options.reasoningEffort).toBe("xhigh");
+  test("returns the built-in alibaba patch with qwen3.8-max#xhigh", () => {
+    const preset = resolvePatchProviderPreset("alibaba") as unknown as { value: PresetValue };
+    const model = presetModels(valueOf(preset))["qwen3.8-max"];
+    expect(model.limit).toEqual({ context: 1000000, output: 131072 });
+    expect(model.variants).toEqual([{ id: "xhigh", settings: { reasoningEffort: "xhigh" } }]);
   });
 
-  test("returns the built-in deepseek alias patch with the max image alias and preserved old aliases", () => {
+  test("returns the built-in deepseek patch with native effort variants", () => {
+    const preset = resolvePatchProviderPreset("deepseek") as unknown as { value: PresetValue };
     expect(resolvePatchProviderPreset("deepseek")).toMatchObject({
       kind: "provider-object",
       providerID: "deepseek",
-      summary: "provider.deepseek.models.vv-deepseek flash aliases patched",
+      summary:
+        "providers.deepseek.models deepseek-flash/deepseek-v4-flash + effort variants patched",
     });
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("deepseek") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-deepseek-flash-max"]).toMatchObject({
-      id: "deepseek-flash",
-      limit: { context: 1000000, output: 384000 },
-    });
-    expect(value.models["vv-deepseek-flash-max"].options.reasoningEffort).toBe("max");
-    expect(value.models["vv-deepseek-flash-max"].reasoning).toBe(true);
-    expect(value.models["vv-deepseek-flash-max"].modalities).toEqual({
-      input: ["text", "image"],
-      output: ["text"],
-    });
-    expect(value.models["vv-deepseek-v4-flash-max"].id).toBe("deepseek-v4-flash");
-    expect(value.models["vv-deepseek-v4-flash-max"].options.reasoningEffort).toBe("max");
-    expect(value.models["vv-deepseek-v4-flash-max"].modalities).toEqual({
-      input: ["text"],
-      output: ["text"],
-    });
-    expect(value.models["vv-deepseek-flash-high"]).toMatchObject({
-      id: "deepseek-flash",
-      limit: { context: 1000000, output: 384000 },
-    });
-    expect(value.models["vv-deepseek-flash-high"].options.reasoningEffort).toBe("high");
-    expect(value.models["vv-deepseek-flash-high"].modalities).toEqual({
-      input: ["text"],
-      output: ["text"],
-    });
+    const models = presetModels(valueOf(preset));
+    expect(models["deepseek-v4-flash"].limit).toEqual({ context: 1000000, output: 384000 });
+    expect(models["deepseek-v4-flash"].variants).toEqual([
+      { id: "max", settings: { reasoningEffort: "max" } },
+    ]);
+    expect(variantIds(models["deepseek-flash"])).toEqual(["max", "high"]);
+    expect(models["deepseek-flash"].variants?.[0]?.settings?.reasoningEffort).toBe("max");
+    expect(models["deepseek-flash"].variants?.[1]?.settings?.reasoningEffort).toBe("high");
   });
 
-  test("returns the built-in zai alias patch with full GLM-5.3 high, max, and flash-max", () => {
-    expect(resolvePatchProviderPreset("zai")).toMatchObject({
-      kind: "provider-object",
-      providerID: "zai-coding-plan",
-      summary: "provider.zai-coding-plan.models vv-glm-5.3 high/max/flash-max aliases patched",
-    });
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("zai") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-glm-5.3-high"]).toMatchObject({
-      id: "glm-5.3",
-      limit: { context: 1000000, output: 131072 },
-    });
-    expect(value.models["vv-glm-5.3-high"].options.reasoningEffort).toBe("high");
-    expect(value.models["vv-glm-5.3-high"].modalities).toEqual({
-      input: ["text"],
-      output: ["text"],
-    });
-    expect(value.models["vv-glm-5.3-max"]).toMatchObject({
-      id: "glm-5.3",
-      limit: { context: 1000000, output: 131072 },
-    });
-    expect(value.models["vv-glm-5.3-max"].reasoning).toBe(true);
-    expect(value.models["vv-glm-5.3-max"].options.reasoningEffort).toBe("max");
-    expect(value.models["vv-glm-5.3-max"].modalities).toEqual({
-      input: ["text"],
-      output: ["text"],
-    });
-    expect(value.models["vv-glm-5.3-flash-max"]).toMatchObject({
-      id: "glm-5.3-flash",
-      limit: { context: 1000000, output: 131072 },
-    });
-    expect(value.models["vv-glm-5.3-flash-max"].reasoning).toBe(true);
-    expect(value.models["vv-glm-5.3-flash-max"].options.reasoningEffort).toBe("max");
-    expect(value.models["vv-glm-5.3-flash-max"].modalities).toEqual({
-      input: ["text", "image", "video", "pdf"],
-      output: ["text"],
-    });
+  test("returns the built-in zai patch with GLM-5.3 effort variants", () => {
+    const preset = resolvePatchProviderPreset("zai") as unknown as { value: PresetValue };
+    const models = presetModels(valueOf(preset));
+    expect(variantIds(models["glm-5.3"])).toEqual(["high", "max"]);
+    expect(models["glm-5.3"].limit).toEqual({ context: 1000000, output: 131072 });
+    expect(models["glm-5.3-flash"].capabilities?.input).toEqual(["text", "image", "video", "pdf"]);
+    expect(variantIds(models["glm-5.3-flash"])).toEqual(["max"]);
   });
 
-  test("returns the built-in xiaomi alias patch for vv-mimo-v2.6-flash-high", () => {
+  test("returns the built-in xiaomi MiMo thinking variant without PDF or reasoningEffort", () => {
+    const preset = resolvePatchProviderPreset("xiaomi") as unknown as { value: PresetValue };
     expect(resolvePatchProviderPreset("xiaomi")).toMatchObject({
       kind: "provider-object",
       providerID: "xiaomi",
-      summary: "provider.xiaomi.models.vv-mimo-v2.6-flash-high patched",
+      summary: "providers.xiaomi.models.mimo-v2.6-flash#thinking patched",
     });
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("xiaomi") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-mimo-v2.6-flash-high"]).toMatchObject({
-      id: "mimo-v2.6-flash",
-      limit: { context: 1048576, output: 131072 },
-      reasoning: true,
-    });
-    expect(value.models["vv-mimo-v2.6-flash-high"].options.reasoningEffort).toBe("high");
-    expect(value.models["vv-mimo-v2.6-flash-high"].modalities).toEqual({
-      input: ["text", "image", "audio", "video", "pdf"],
-      output: ["text"],
-    });
-  });
-  test("codex patch includes the vv-codex-gpt-6-astra-max and Spark medium aliases", () => {
-    const value = JSON.parse(
-      JSON.stringify(
-        (resolvePatchProviderPreset("codex") as { value: Record<string, unknown> }).value,
-      ),
-    );
-    expect(value.models["vv-codex-gpt-6-luna-low"]).toMatchObject({
-      id: "gpt-6-luna",
-      limit: { context: 1050000, input: 922000, output: 128000 },
-    });
-    expect(value.models["vv-codex-gpt-6-luna-low"].options).toMatchObject({
-      reasoningEffort: "low",
-      reasoningSummary: "auto",
-      include: ["reasoning.encrypted_content"],
-    });
-
-    expect(value.models["vv-codex-gpt-6-astra-max"]).toMatchObject({
-      id: "gpt-6-astra",
-      limit: { context: 1050000, input: 922000, output: 128000 },
-    });
-    expect(value.models["vv-codex-gpt-6-astra-max"].options).toMatchObject({
-      reasoningEffort: "max",
-      reasoningSummary: "auto",
-      include: ["reasoning.encrypted_content"],
-    });
-
-    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"]).toMatchObject({
-      id: "gpt-5.3-codex-spark",
-      limit: { context: 128000, input: 100000, output: 32000 },
-    });
-    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"].options).toMatchObject({
-      reasoningEffort: "medium",
-      reasoningSummary: "auto",
-      include: ["reasoning.encrypted_content"],
-    });
-    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"].modalities).toEqual({
-      input: ["text"],
-      output: ["text"],
-    });
-    expect(value.models["vv-codex-gpt-5.3-codex-spark-medium"].variants).toEqual({
-      none: { disabled: true },
-      low: { disabled: true },
-      high: { disabled: true },
-      max: { disabled: true },
-    });
+    const models = presetModels(valueOf(preset));
+    expect(Object.keys(models)).toEqual(["mimo-v2.6-flash"]);
+    const model = models["mimo-v2.6-flash"];
+    expect(model.limit).toEqual({ context: 1048576, output: 131072 });
+    expect(model.capabilities?.input).toEqual(["text", "image", "audio", "video"]);
+    expect(model.variants).toEqual([{ id: "thinking", body: { thinking: { type: "enabled" } } }]);
+    expect(JSON.stringify(model)).not.toContain("pdf");
+    expect(JSON.stringify(model)).not.toContain("reasoningEffort");
   });
 
-  test("returns the built-in openai alias patch (compatibility)", () => {
-    const compatibilityPreset = resolvePatchProviderPreset("openai");
-    expect(compatibilityPreset).toBe(resolvePatchProviderPreset("codex"));
-    expect(compatibilityPreset).toMatchObject({
-      kind: "provider-object",
-      providerID: "openai",
-      summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
+  test("codex patch keeps distinct GPT-5.6 and GPT-6 limits and Spark medium", () => {
+    const models = presetModels(
+      valueOf(resolvePatchProviderPreset("codex") as unknown as { value: PresetValue }),
+    );
+    expect(models["gpt-5.6-terra"].limit).toEqual({
+      context: 400000,
+      input: 272000,
+      output: 128000,
     });
+    expect(models["gpt-6-luna"].limit).toEqual({
+      context: 1050000,
+      input: 922000,
+      output: 128000,
+    });
+    expect(models["gpt-6-astra"].limit).toEqual({
+      context: 1050000,
+      input: 922000,
+      output: 128000,
+    });
+    expect(models["gpt-6-luna"].variants?.[0]?.settings?.reasoningEffort).toBe("low");
+    expect(models["gpt-6-astra"].variants?.[0]?.settings?.reasoningEffort).toBe("max");
+    expect(models["gpt-5.3-codex-spark"].limit).toEqual({
+      context: 128000,
+      input: 100000,
+      output: 32000,
+    });
+    expect(variantIds(models["gpt-5.3-codex-spark"])).toEqual(["medium"]);
+    expect(models["gpt-5.3-codex-spark"].capabilities?.input).toEqual(["text"]);
+  });
+
+  test("returns the built-in openai patch through the compatibility alias", () => {
+    expect(resolvePatchProviderPreset("openai")).toBe(resolvePatchProviderPreset("codex"));
   });
 
   test("throws for unsupported presets", () => {
     expect(() => resolvePatchProviderPreset("unknown-provider")).toThrow(
-      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, kimi, alibaba, zai, xiaomi. Compatibility aliases: openai",
+      "Unsupported OpenCode patch preset: unknown-provider. Supported presets: stepfun-ai, codex, deepseek, alibaba, zai, xiaomi. Compatibility aliases: openai",
     );
   });
 });
 
 describe("applyPatchProviderPreset", () => {
-  test("writes the global OpenCode stepfun provider patch with model config", async () => {
+  test("writes the global native stepfun provider patch with model config", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -255,19 +205,18 @@ describe("applyPatchProviderPreset", () => {
         configDir: configHome,
       });
       const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
+      const parsed = JSON.parse(content) as NativeConfig;
 
       expect(result.action).toBe("created");
-      expect(content).toContain('"stepfun"');
-      expect(content).toContain("https://api.stepfun.ai/v1");
-      expect(content).toContain("step-3.7-flash");
-      expect(content).toContain("Step 3.7 Flash");
-      expect(content).toContain("256000");
+      expect(parsed.providers?.stepfun?.models?.["step-3.7-flash"].name).toBe("Step 3.7 Flash");
+      expect(parsed.providers?.stepfun?.models?.["step-3.7-flash"].limit?.context).toBe(256000);
+      expect(parsed.providers?.stepfun?.models?.["step-3.7-flash"]).not.toHaveProperty("options");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("writes the global codex alias patch without mutating root model fields", async () => {
+  test("writes the global codex patch with real models and no vv-* aliases", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -275,118 +224,39 @@ describe("applyPatchProviderPreset", () => {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
-      const parsed = JSON.parse(content) as {
-        model?: string;
-        small_model?: string;
-        provider?: Record<
-          string,
-          {
-            models?: Record<
-              string,
-              {
-                id?: string;
-                name?: string;
-                reasoning?: boolean;
-                variants?: Record<string, unknown>;
-                limit?: {
-                  context?: number;
-                  input?: number;
-                  output?: number;
-                };
-                modalities?: {
-                  input?: string[];
-                  output?: string[];
-                };
-                options?: {
-                  reasoningEffort?: string;
-                  reasoningSummary?: string;
-                  include?: string[];
-                };
-              }
-            >;
-          }
-        >;
-      };
+      const parsed = JSON.parse(
+        await readFile(join(configHome, "opencode", "opencode.json"), "utf8"),
+      ) as NativeConfig;
 
       expect(result.action).toBe("created");
       expect(parsed.model).toBeUndefined();
       expect(parsed.small_model).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.5-xhigh"]).toEqual({
-        name: "VV Codex GPT-5.5-XHigh",
-        id: "gpt-5.5",
-        variants: {},
-        limit: {
-          context: 400000,
-          input: 272000,
-          output: 128000,
-        },
-        modalities: {
-          input: ["text", "image", "pdf"],
-          output: ["text"],
-        },
-        reasoning: true,
-        options: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
+      const models = parsed.providers?.openai?.models ?? {};
+      expect(models["gpt-5.5"].limit).toEqual({
+        context: 400000,
+        input: 272000,
+        output: 128000,
       });
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-terra-high"]).toEqual({
-        name: "VV Codex GPT-5.6 Terra High",
-        id: "gpt-5.6-terra",
-        variants: {},
-        limit: {
-          context: 400000,
-          input: 272000,
-          output: 128000,
+      expect(models["gpt-5.5"].capabilities?.input).toEqual(["text", "image", "pdf"]);
+      expect(models["gpt-5.5"].variants).toEqual([
+        {
+          id: "xhigh",
+          settings: {
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+          },
         },
-        modalities: {
-          input: ["text", "image", "pdf"],
-          output: ["text"],
-        },
-        reasoning: true,
-        options: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
-      });
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-sol-xhigh"]).toEqual({
-        name: "VV Codex GPT-5.6 Sol XHigh",
-        id: "gpt-5.6-sol",
-        variants: {},
-        limit: {
-          context: 400000,
-          input: 272000,
-          output: 128000,
-        },
-        modalities: {
-          input: ["text", "image", "pdf"],
-          output: ["text"],
-        },
-        reasoning: true,
-        options: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"],
-        },
-      });
-
-      // Old vv-gpt-* aliases and the removed GPT-5.6 Luna catalog key
-      // should not be written
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.4-xhigh"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.5-xhigh"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-luna-low"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-luna-low"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-terra-high"]).toBeUndefined();
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toBeUndefined();
+      ]);
+      expect(models["gpt-5.6-terra"].variants?.[0]?.id).toBe("high");
+      expect(models["gpt-5.6-sol"].variants?.[0]?.id).toBe("xhigh");
+      expect(JSON.stringify(models)).not.toContain("vv-");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("reapplying the codex patch keeps sibling models, preserves root role refs, and becomes idempotent", async () => {
+  test("reapplying the codex patch preserves siblings, root fields, plugins, and is idempotent", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -396,20 +266,24 @@ describe("applyPatchProviderPreset", () => {
         configPath,
         JSON.stringify(
           {
-            provider: {
+            providers: {
               openai: {
                 models: {
-                  existing: {
-                    name: "Existing",
-                  },
-                  "vv-gpt-5.6-sol-xhigh": {
-                    name: "Legacy managed alias retained conservatively",
+                  existing: { name: "Existing" },
+                  "gpt-5.6-sol": {
+                    name: "User GPT-5.6 Sol override",
+                    compatibility: { requireReasoning: true },
                   },
                 },
               },
             },
-            model: "vv-role:default",
-            small_model: "vv-role:fast",
+            model: "openai/gpt-5.6-terra#high",
+            plugins: [
+              {
+                package: "@osovv/vv-opencode@1.7.0",
+                options: { modelIntent: { smallModel: "vv-role:fast" } },
+              },
+            ],
           },
           null,
           2,
@@ -425,57 +299,33 @@ describe("applyPatchProviderPreset", () => {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const content = await readFile(configPath, "utf8");
-      const parsed = JSON.parse(content) as {
-        model?: string;
-        small_model?: string;
-        provider?: Record<string, { models?: Record<string, { name?: string }> }>;
+      const parsed = JSON.parse(await readFile(configPath, "utf8")) as NativeConfig & {
+        providers?: Record<string, { models?: Record<string, Record<string, unknown>> }>;
       };
 
       expect(first.result.action).toBe("updated");
       expect(second.result.action).toBe("kept");
-      expect(parsed.model).toBe("vv-role:default");
-      expect(parsed.small_model).toBe("vv-role:fast");
-      expect(parsed.provider?.openai?.models?.existing).toEqual({ name: "Existing" });
-      expect(parsed.provider?.openai?.models?.["vv-gpt-5.6-sol-xhigh"]).toEqual({
-        name: "Legacy managed alias retained conservatively",
-      });
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.5-xhigh"]?.name).toBe(
-        "VV Codex GPT-5.5-XHigh",
-      );
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-terra-high"]?.name).toBe(
-        "VV Codex GPT-5.6 Terra High",
-      );
-      expect(parsed.provider?.openai?.models?.["vv-codex-gpt-5.6-sol-xhigh"]?.name).toBe(
-        "VV Codex GPT-5.6 Sol XHigh",
-      );
-    } finally {
-      await rm(configHome, { recursive: true, force: true });
-    }
-  });
-  test("writes the global kimi alias patch idempotently", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
-
-    try {
-      const first = await applyPatchProviderPreset("kimi", {
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-      const second = await applyPatchProviderPreset("kimi", {
-        cwd: "/workspace/project",
-        configDir: configHome,
-      });
-      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
-      expect(first.result.action).toBe("created");
-      expect(second.result.action).toBe("kept");
-      expect(content).toContain("vv-kimi-k3-max");
-      expect(content).toContain("kimi-k3");
+      expect(parsed.model).toBe("openai/gpt-5.6-terra#high");
+      expect(parsed.plugins).toEqual([
+        {
+          package: "@osovv/vv-opencode@1.7.0",
+          options: { modelIntent: { smallModel: "vv-role:fast" } },
+        },
+      ]);
+      const openaiModels = parsed.providers?.openai?.models ?? {};
+      expect(openaiModels["existing"]).toEqual({ name: "Existing" });
+      // The patch supplies a real model name but must keep the user's unrelated
+      // model setting on the same key.
+      expect(openaiModels["gpt-5.6-sol"]?.name).toBe("GPT-5.6 Sol");
+      expect(openaiModels["gpt-5.6-sol"]?.compatibility).toEqual({ requireReasoning: true });
+      expect(openaiModels["gpt-5.6-terra"]).toBeDefined();
+      expect(openaiModels["gpt-6-luna"]).toBeDefined();
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("writes the global alibaba alias patch idempotently", async () => {
+  test("writes the global alibaba patch idempotently", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -487,17 +337,21 @@ describe("applyPatchProviderPreset", () => {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const content = await readFile(join(configHome, "opencode", "opencode.json"), "utf8");
+      const parsed = JSON.parse(
+        await readFile(join(configHome, "opencode", "opencode.json"), "utf8"),
+      ) as NativeConfig;
+
       expect(first.result.action).toBe("created");
       expect(second.result.action).toBe("kept");
-      expect(content).toContain("vv-qwen3.8-max-xhigh");
-      expect(content).toContain("qwen3.8-max");
+      expect(parsed.providers?.["alibaba-token-plan"]?.models?.["qwen3.8-max"].variants).toEqual([
+        { id: "xhigh", settings: { reasoningEffort: "xhigh" } },
+      ]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("writes the global deepseek alias patch idempotently and preserves root fields and siblings", async () => {
+  test("writes the global deepseek patch idempotently and preserves root fields and siblings", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -507,15 +361,18 @@ describe("applyPatchProviderPreset", () => {
         configPath,
         JSON.stringify(
           {
-            provider: {
+            providers: {
               deepseek: {
-                models: {
-                  existing: { name: "Existing DeepSeek" },
-                },
+                models: { existing: { name: "Existing DeepSeek" } },
               },
             },
-            model: "vv-role:default",
-            small_model: "vv-role:fast",
+            model: "deepseek/deepseek-flash#max",
+            plugins: [
+              {
+                package: "@osovv/vv-opencode@1.7.0",
+                options: { modelIntent: { smallModel: "vv-role:fast" } },
+              },
+            ],
           },
           null,
           2,
@@ -531,32 +388,24 @@ describe("applyPatchProviderPreset", () => {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const parsed = JSON.parse(await readFile(configPath, "utf8")) as {
-        model?: string;
-        small_model?: string;
-        provider?: Record<string, { models?: Record<string, { name?: string }> }>;
-      };
+      const parsed = JSON.parse(await readFile(configPath, "utf8")) as NativeConfig;
 
       expect(first.result.action).toBe("updated");
       expect(second.result.action).toBe("kept");
-      expect(parsed.model).toBe("vv-role:default");
-      expect(parsed.small_model).toBe("vv-role:fast");
-      expect(parsed.provider?.deepseek?.models?.existing).toEqual({ name: "Existing DeepSeek" });
-      expect(parsed.provider?.deepseek?.models?.["vv-deepseek-v4-flash-max"]?.name).toBe(
-        "VV DeepSeek V4 Flash Max",
-      );
-      expect(parsed.provider?.deepseek?.models?.["vv-deepseek-flash-max"]?.name).toBe(
-        "VV DeepSeek Flash Max",
-      );
-      expect(parsed.provider?.deepseek?.models?.["vv-deepseek-flash-high"]?.name).toBe(
-        "VV DeepSeek Flash High",
-      );
+      expect(parsed.model).toBe("deepseek/deepseek-flash#max");
+      expect(parsed.plugins?.[0]).toMatchObject({
+        options: { modelIntent: { smallModel: "vv-role:fast" } },
+      });
+      const models = parsed.providers?.deepseek?.models ?? {};
+      expect(models["existing"]).toEqual({ name: "Existing DeepSeek" });
+      expect(variantIds(models["deepseek-v4-flash"])).toEqual(["max"]);
+      expect(variantIds(models["deepseek-flash"])).toEqual(["max", "high"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("writes the global zai alias patch idempotently and preserves root fields and siblings", async () => {
+  test("writes the global zai patch idempotently and preserves root fields and siblings", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -566,15 +415,12 @@ describe("applyPatchProviderPreset", () => {
         configPath,
         JSON.stringify(
           {
-            provider: {
+            providers: {
               "zai-coding-plan": {
-                models: {
-                  existing: { name: "Existing ZAI" },
-                },
+                models: { existing: { name: "Existing ZAI" } },
               },
             },
-            model: "vv-role:default",
-            small_model: "vv-role:fast",
+            model: "zai-coding-plan/glm-5.3#max",
           },
           null,
           2,
@@ -590,34 +436,21 @@ describe("applyPatchProviderPreset", () => {
         cwd: "/workspace/project",
         configDir: configHome,
       });
-      const parsed = JSON.parse(await readFile(configPath, "utf8")) as {
-        model?: string;
-        small_model?: string;
-        provider?: Record<string, { models?: Record<string, { name?: string }> }>;
-      };
+      const parsed = JSON.parse(await readFile(configPath, "utf8")) as NativeConfig;
 
       expect(first.result.action).toBe("updated");
       expect(second.result.action).toBe("kept");
-      expect(parsed.model).toBe("vv-role:default");
-      expect(parsed.small_model).toBe("vv-role:fast");
-      expect(parsed.provider?.["zai-coding-plan"]?.models?.existing).toEqual({
-        name: "Existing ZAI",
-      });
-      expect(parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-high"]?.name).toBe(
-        "VV GLM-5.3 High",
-      );
-      expect(parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-max"]?.name).toBe(
-        "VV GLM-5.3 Max",
-      );
-      expect(parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-flash-max"]?.name).toBe(
-        "VV GLM-5.3 Flash Max",
-      );
+      expect(parsed.model).toBe("zai-coding-plan/glm-5.3#max");
+      const models = parsed.providers?.["zai-coding-plan"]?.models ?? {};
+      expect(models["existing"]).toEqual({ name: "Existing ZAI" });
+      expect(variantIds(models["glm-5.3"])).toEqual(["high", "max"]);
+      expect(variantIds(models["glm-5.3-flash"])).toEqual(["max"]);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("applyAllPatchProviderPresets applies every registered patch in order", async () => {
+  test("applyAllPatchProviderPresets applies every registered native patch in order", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-provider-"));
 
     try {
@@ -629,7 +462,6 @@ describe("applyPatchProviderPreset", () => {
         "stepfun-ai",
         "codex",
         "deepseek",
-        "kimi",
         "alibaba",
         "zai",
         "xiaomi",
@@ -641,38 +473,166 @@ describe("applyPatchProviderPreset", () => {
         "updated",
         "updated",
         "updated",
-        "updated",
       ]);
 
       const parsed = JSON.parse(
         await readFile(join(configHome, "opencode", "opencode.json"), "utf8"),
-      ) as {
-        provider?: Record<
-          string,
-          { models?: Record<string, { options?: { reasoningEffort?: string } }> }
-        >;
-      };
+      ) as NativeConfig;
       expect(
-        parsed.provider?.deepseek?.models?.["vv-deepseek-flash-max"]?.options?.reasoningEffort,
-      ).toBe("max");
-      expect(
-        parsed.provider?.deepseek?.models?.["vv-deepseek-flash-high"]?.options?.reasoningEffort,
-      ).toBe("high");
-      expect(
-        parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-max"]?.options?.reasoningEffort,
-      ).toBe("max");
-      expect(
-        parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-flash-max"]?.options
+        parsed.providers?.deepseek?.models?.["deepseek-flash"].variants?.[0]?.settings
           ?.reasoningEffort,
       ).toBe("max");
       expect(
-        parsed.provider?.["zai-coding-plan"]?.models?.["vv-glm-5.3-high"]?.options?.reasoningEffort,
+        parsed.providers?.deepseek?.models?.["deepseek-flash"].variants?.[1]?.settings
+          ?.reasoningEffort,
       ).toBe("high");
-      expect(
-        parsed.provider?.xiaomi?.models?.["vv-mimo-v2.6-flash-high"]?.options?.reasoningEffort,
-      ).toBe("high");
+      expect(variantIds(parsed.providers?.["zai-coding-plan"]?.models?.["glm-5.3"] ?? {})).toEqual([
+        "high",
+        "max",
+      ]);
+      const mimo = parsed.providers?.xiaomi?.models?.["mimo-v2.6-flash"];
+      expect(mimo?.variants).toEqual([{ id: "thinking", body: { thinking: { type: "enabled" } } }]);
+      expect(JSON.stringify(parsed.providers)).not.toContain("vv-");
     } finally {
       await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves user-added variants while applying the MiMo thinking variant, natively decodable", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-patch-variant-"));
+    const schemaRequire = createRequire(import.meta.resolve("@opencode/schema/config"));
+    const nativeDecode = (schema: unknown) =>
+      (
+        schemaRequire("effect") as {
+          Schema: { decodeUnknownSync: (target: unknown) => (input: unknown) => unknown };
+        }
+      ).Schema.decodeUnknownSync(schema);
+
+    try {
+      const configPath = join(configHome, "opencode", "opencode.json");
+      await mkdir(join(configHome, "opencode"), { recursive: true });
+      await writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            providers: {
+              xiaomi: {
+                models: {
+                  "mimo-v2.6-flash": {
+                    name: "User MiMo",
+                    settings: { temperature: 0.1 },
+                    variants: [{ id: "user-custom", body: { temperature: 0.7 } }],
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const first = await applyPatchProviderPreset("xiaomi", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const second = await applyPatchProviderPreset("xiaomi", {
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const parsed = JSON.parse(await readFile(configPath, "utf8")) as {
+        providers?: Record<
+          string,
+          {
+            models?: Record<
+              string,
+              {
+                name?: string;
+                settings?: Record<string, unknown>;
+                variants?: Array<{ id: string; body?: Record<string, unknown> }>;
+              }
+            >;
+          }
+        >;
+      };
+
+      expect(first.result.action).toBe("updated");
+      expect(second.result.action).toBe("kept");
+      const model = parsed.providers?.xiaomi?.models?.["mimo-v2.6-flash"];
+      expect(model?.name).toBe("MiMo V2.6 Flash");
+      expect(model?.settings?.temperature).toBe(0.1);
+      expect(model?.variants?.map((variant) => variant.id)).toEqual(["user-custom", "thinking"]);
+      expect(model?.variants?.[0]?.body?.temperature).toBe(0.7);
+      expect(model?.variants?.[1]?.body).toEqual({ thinking: { type: "enabled" } });
+      // The resulting document decodes with the pinned native schema.
+      expect(() => nativeDecode(NativeConfig.Info)(parsed)).not.toThrow();
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves a user variant across every shipped preset and stays natively decodable", async () => {
+    const schemaRequire = createRequire(import.meta.resolve("@opencode/schema/config"));
+    const nativeDecode = (
+      schemaRequire("effect") as {
+        Schema: { decodeUnknownSync: (target: unknown) => (input: unknown) => unknown };
+      }
+    ).Schema.decodeUnknownSync(NativeConfig.Info);
+    for (const presetName of [
+      "stepfun-ai",
+      "codex",
+      "deepseek",
+      "alibaba",
+      "zai",
+      "xiaomi",
+    ] as const) {
+      const preset = resolvePatchProviderPreset(presetName) as unknown as {
+        providerID: string;
+        value: { models: Record<string, unknown> };
+      };
+      const modelKey = Object.keys(preset.value.models)[0];
+      const configHome = await mkdtemp(join(tmpdir(), `vvoc-patch-variant-${presetName}-`));
+      try {
+        const configPath = join(configHome, "opencode", "opencode.json");
+        await mkdir(join(configHome, "opencode"), { recursive: true });
+        await writeFile(
+          configPath,
+          JSON.stringify(
+            {
+              providers: {
+                [preset.providerID]: {
+                  models: {
+                    [modelKey]: {
+                      name: "User Model",
+                      variants: [{ id: "user-custom", body: { temperature: 0.7 } }],
+                    },
+                  },
+                },
+              },
+            },
+            null,
+            2,
+          ) + "\n",
+          "utf8",
+        );
+
+        await applyPatchProviderPreset(presetName, {
+          cwd: "/workspace/project",
+          configDir: configHome,
+        });
+        const parsed = JSON.parse(await readFile(configPath, "utf8")) as {
+          providers?: Record<
+            string,
+            { models?: Record<string, { variants?: Array<{ id: string }> }> }
+          >;
+        };
+        const variants = parsed.providers?.[preset.providerID]?.models?.[modelKey]?.variants ?? [];
+        expect(variants.some((variant) => variant.id === "user-custom")).toBe(true);
+        expect(() => nativeDecode(parsed)).not.toThrow();
+      } finally {
+        await rm(configHome, { recursive: true, force: true });
+      }
     }
   });
 

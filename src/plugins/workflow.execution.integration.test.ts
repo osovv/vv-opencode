@@ -21,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-003 - Direct-handler generic outputs (open register, checkpoint start/review/complete/authorize exact replay and extension/approval/full and narrowed revocation/recover resume/restart/verify, native authority authorize) are now asserted against the closed result schemas. Earlier T-002 correction added direct-handler input-contract regressions, conflicting recognized-field and blank-batch rejection, generic checkpoint task-batch validation, source-dependent field rejection, session-ownership-first refusal, provided-plan canonicalization/idempotency, and large valid boundary/batch acceptance.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added direct work_item_decide coverage for generic failed-checkpoint rework: the public attempt must match the current accepted attempt (STALE_ATTEMPT otherwise), an unknown run stays RUN_NOT_FOUND, and a real generic failure reopens its covered task.]
 // END_CHANGE_SUMMARY
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -1085,6 +1085,76 @@ describe("tool-layer reachability", () => {
     )) as Record<string, unknown>;
     expect(revoked.ok).toBe(true);
     expect(revoked.availableUnits).toBe(0);
+  });
+
+  test("work_item_decide rework routes a generic failed checkpoint through the common registry", async () => {
+    const registered = registerConversation("decide-rework", [
+      task({ requiredReviewers: ["code"] }),
+    ]);
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+    const workItemId = registered.execution.tasks.get("T-100")!.workItemId;
+    acceptTask(workItemId);
+    const started = startGenericCheckpointInStore(store.getStoreData(), {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    recordTrackedReviewer(started.reviewWorkItemId, "code", "FAIL");
+    const recorded = recordGenericReviewerResultInStore(store.getStoreData(), {
+      sessionId: SESSION,
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      reviewer: "code",
+    });
+    expect(recorded.ok).toBe(true);
+    if (!recorded.ok) return;
+    expect(recorded.outcome).toBe("failed");
+
+    const decideTool = createWorkItemDecideTool(store);
+    const decide = (args: Record<string, unknown>) =>
+      decideTool.execute(args as never, { sessionId: SESSION }, store) as Promise<
+        Record<string, unknown>
+      >;
+
+    // The public attempt must match the current accepted attempt.
+    const stale = await decide({
+      workItemId,
+      attempt: 2,
+      decision: "rework",
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      rationale: "Stale attempt.",
+    });
+    expect(stale.ok).toBe(false);
+    expect(stale.errorCode).toBe("STALE_ATTEMPT");
+
+    // An unknown run is a lookup failure, not a silently created binding.
+    const unknownRun = await decide({
+      workItemId,
+      attempt: 1,
+      decision: "rework",
+      runId: "run-not-registered",
+      checkpointId: "review-T-100",
+      rationale: "Unknown run.",
+    });
+    expect(unknownRun.ok).toBe(false);
+    expect(unknownRun.errorCode).toBe("RUN_NOT_FOUND");
+
+    // The generic failed checkpoint reopens its covered accepted task.
+    const reworked = await decide({
+      workItemId,
+      attempt: 1,
+      decision: "rework",
+      runId: registered.runId,
+      checkpointId: "review-T-100",
+      rationale: "The reviewer found a real defect.",
+    });
+    expect(reworked.ok).toBe(true);
+    expect(reworked.action).toBe("rework");
+    expect(store.getWorkItem(SESSION, workItemId)?.state).toBe("awaiting_implementer");
   });
 });
 

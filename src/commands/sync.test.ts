@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   SUPPORTED_RUNTIME - Supported runtime inspection fixture stub.
 //   captureConsoleLog - Captures sync command diagnostics.
 //   runSyncCommand - Runs the sync command against isolated fixtures.
 // END_MODULE_MAP
@@ -22,9 +23,15 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import syncCommand from "./sync.js";
+import { runSync } from "./sync.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { TUI_PACKAGE_SPECIFIER } from "../lib/opencode.js";
+import { SUPPORTED_OPENCODE_VERSION_RANGE } from "../lib/opencode.js";
+
+const SUPPORTED_RUNTIME = {
+  version: "2.0.18",
+  supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+  versionSupported: true,
+};
 
 test("sync command rejects invalid existing global vvoc config without rewriting it", async () => {
   const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-invalid-global-"));
@@ -70,47 +77,49 @@ test("sync command preserves disabled current plugin toggles", async () => {
       plugins?: Record<string, boolean>;
     };
     expect(synced.plugins?.["secrets-redaction"]).toBe(false);
-    const tui = JSON.parse(await readFile(join(configHome, "opencode", "tui.json"), "utf8")) as {
-      plugin?: string[];
-    };
-    expect(tui.plugin).toContain(TUI_PACKAGE_SPECIFIER);
+    const opencode = JSON.parse(
+      await readFile(join(configHome, "opencode", "opencode.json"), "utf8"),
+    ) as { plugins?: Array<string | { package: string }> };
+    expect(
+      opencode.plugins?.some((entry) =>
+        typeof entry === "string"
+          ? entry.includes("vv-opencode")
+          : entry.package.includes("vv-opencode"),
+      ),
+    ).toBe(true);
   } finally {
     await rm(configHome, { recursive: true, force: true });
   }
 });
 
-test("sync command rejects malformed existing TUI config without rewriting it", async () => {
-  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-invalid-tui-"));
+test("sync command rejects a malformed native plugins document without rewriting it", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-invalid-plugins-"));
 
   try {
     const vvocDir = join(configHome, "vvoc");
-    const tuiDir = join(configHome, "opencode");
-    const tuiPath = join(tuiDir, "tui.jsonc");
+    const opencodeDir = join(configHome, "opencode");
+    const opencodePath = join(opencodeDir, "opencode.json");
     await mkdir(vvocDir, { recursive: true });
-    await mkdir(tuiDir, { recursive: true });
+    await mkdir(opencodeDir, { recursive: true });
     await writeFile(
       join(vvocDir, "vvoc.json"),
       renderVvocConfig(createDefaultVvocConfig()),
       "utf8",
     );
-    const invalidText = '{ "plugin": [["broken"]] }\n';
-    await writeFile(tuiPath, invalidText, "utf8");
+    const invalidText = '{ "plugins": [["broken"]] }\n';
+    await writeFile(opencodePath, invalidText, "utf8");
 
     await expect(
       captureConsoleLog(() => runSyncCommand({ scope: "global", "config-dir": configHome })),
-    ).rejects.toThrow('expected "plugin[0]"');
-    expect(await readFile(tuiPath, "utf8")).toBe(invalidText);
+    ).rejects.toThrow('expected "plugins[0]"');
+    expect(await readFile(opencodePath, "utf8")).toBe(invalidText);
   } finally {
     await rm(configHome, { recursive: true, force: true });
   }
 });
 
 async function runSyncCommand(args: Record<string, unknown>): Promise<void> {
-  await (syncCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }).run(
-    {
-      args,
-    },
-  );
+  await runSync(args, { inspectRuntime: async () => SUPPORTED_RUNTIME });
 }
 
 async function captureConsoleLog(fn: () => Promise<void>): Promise<void> {

@@ -1,7 +1,5 @@
 // FILE: server.js
-// VERSION: 1.0.0
-// OpenCode v2 resolves directory-scoped plugin targets through a literal
-// `server` module next to the package manifest before consulting the exports
-// map. This shim re-exports the dual-runtime default entrypoint so both the
-// file-path and npm-specifier loading styles reach the same plugin.
+// Root native server-plugin forwarder for local-directory loading. OpenCode's
+// plugin host resolves a plugin directory's `server` subpath (or package export
+// `./server`) to this file before falling back to `index`.
 export { default } from "./dist/index.js";

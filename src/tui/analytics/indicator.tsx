@@ -1,40 +1,41 @@
 // FILE: src/tui/analytics/indicator.tsx
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Show a live per-session cache hit rate indicator in the OpenCode session prompt slot.
-//   SCOPE: Rolling step-finish accumulator, tone thresholds and label text, toggle-gated registration, session-filtered event subscription, and fail-soft slot rendering.
-//   DEPENDS: [@opencode-ai/plugin/tui, @opencode-ai/sdk, @opentui/core, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/lib/analytics/types.ts]
-//   LINKS: [M-TUI-ANALYTICS-INDICATOR, M-ANALYTICS-TYPES, M-PLUGIN-TOGGLE-CONFIG]
+//   PURPOSE: Show a live per-session cache hit rate indicator in the native session prompt footer status slot.
+//   SCOPE: Native usage-event accumulator, tone thresholds and label text, policy-gated registration, session-filtered event subscription, and fail-soft slot rendering with lifecycle cleanup.
+//   DEPENDS: [@opencode/plugin/tui, @opentui/core, src/tui/policy.ts]
+//   LINKS: [M-TUI-ANALYTICS-INDICATOR, M-PLUGIN-ANALYTICS, M-PLUGIN-CONTEXT-TUI]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   IndicatorTokens - Rolling per-session token sums.
 //   IndicatorLabel - Label text plus color tone for the current indicator state.
-//   IndicatorDependencies - Injectable enablement and label renderer dependencies for focused tests.
-//   StepFinishLike - Structural step-finish part shape accepted from either SDK generation.
-//   createIndicatorAccumulator - Rolling per-session sums fed by step-finish parts.
+//   AnalyticsIndicatorDependencies - Injectable enablement and label renderer dependencies for focused tests.
+//   IndicatorUsageLike - Structural native usage payload accepted by the accumulator.
+//   createIndicatorAccumulator - Rolling per-session sums fed by native usage events.
 //   indicatorLabel - Label and tone for the current state with threshold colors.
-//   DEFAULT_DEPENDENCIES - Production dependencies with the themed text-element label renderer.
-//   registerAnalyticsIndicator - Registers the live session_prompt_right indicator.
+//   registerAnalyticsIndicator - Register the live prompt-footer indicator and return its disposer.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-21-slot-mode-fix - Passed theme RGBA directly as fg and added a plugin id to the session_prompt_right registration.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Claims the slot before the policy resolves so the indicator appears once analytics is enabled, gated at render time.]
 // END_CHANGE_SUMMARY
 
 import type { JSX } from "@opentui/solid";
 import type { RGBA } from "@opentui/core";
-import type { TuiPluginApi, TuiSlotContext } from "@opencode-ai/plugin/tui";
-import type { PluginOptions } from "@opencode-ai/plugin";
-import { loadVvocConfigForRead } from "../../lib/config-layers.js";
-import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
-import type { IndicatorTokens } from "../../lib/analytics/types.js";
+import type { Plugin } from "@opencode/plugin/tui";
+import { createSignal } from "solid-js";
+import type { ContextPolicySnapshot } from "../policy.js";
+import { policyAnalyticsEnabled } from "../policy.js";
 
-/** Structural step-finish shape accepted from either SDK generation. */
-export type StepFinishLike = {
-  type: string;
-  tokens?: { input?: unknown; cache?: { read?: unknown; write?: unknown } };
+export type IndicatorTokens = {
+  steps: number;
+  eligibleSteps: number;
+  cacheRead: number;
+  cacheWrite: number;
+  input: number;
 };
 
 export type IndicatorLabel = {
@@ -42,32 +43,21 @@ export type IndicatorLabel = {
   tone: "muted" | "red" | "yellow" | "green";
 };
 
-export type IndicatorDependencies = {
-  enabled: (api: TuiPluginApi) => Promise<boolean>;
-  /** Renders the label node; defaults to the themed text element. */
+/** Structural native usage payload accepted by the accumulator. */
+export type IndicatorUsageLike = {
+  input?: unknown;
+  cache?: { read?: unknown; write?: unknown } | undefined;
+};
+
+export type AnalyticsIndicatorDependencies = {
+  isEnabled: () => boolean;
   renderLabel: (label: IndicatorLabel, color: RGBA) => JSX.Element;
 };
 
-export const DEFAULT_DEPENDENCIES: IndicatorDependencies = {
-  enabled: async (api) => {
-    const vvoc = await loadVvocConfigForRead({
-      scope: "effective",
-      allowDefault: true,
-      cwd: api.state.path.directory,
-    });
-    return isVvocPluginEnabled(vvoc.config, "analytics");
-  },
-  renderLabel: (label, color) => (
-    <text>
-      <span style={{ fg: color }}>{label.text}</span>
-    </text>
-  ),
-};
-
 // START_BLOCK_INDICATOR_ACCUMULATOR
-/** Rolling per-session sums fed by step-finish parts. Same eligibility rule as metrics. */
+/** Rolling per-session sums fed by native usage events. */
 export function createIndicatorAccumulator(): {
-  applyPart(part: StepFinishLike): void;
+  applyUsage(usage: IndicatorUsageLike): void;
   get(): IndicatorTokens;
 } {
   let state: IndicatorTokens = {
@@ -78,20 +68,15 @@ export function createIndicatorAccumulator(): {
     input: 0,
   };
   return {
-    applyPart(part: StepFinishLike) {
-      if (part.type !== "step-finish") return;
-      const tokens = (part.tokens ?? {}) as {
-        input?: unknown;
-        cache?: { read?: unknown; write?: unknown };
-      };
-      const cacheRead = toCount(tokens.cache?.read);
-      const cacheWrite = toCount(tokens.cache?.write);
+    applyUsage(usage) {
+      const cacheRead = toCount(usage.cache?.read);
+      const cacheWrite = toCount(usage.cache?.write);
       state = {
         steps: state.steps + 1,
         eligibleSteps: state.eligibleSteps + (cacheRead + cacheWrite > 0 ? 1 : 0),
         cacheRead: state.cacheRead + cacheRead,
         cacheWrite: state.cacheWrite + cacheWrite,
-        input: state.input + toCount(tokens.input),
+        input: state.input + toCount(usage.input),
       };
     },
     get: () => state,
@@ -114,72 +99,78 @@ function toCount(value: unknown): number {
 
 // START_BLOCK_REGISTER_INDICATOR
 /**
- * Registers the live indicator for the current session route.
- * Disabled toggle or options.enabled === false: returns without subscribing or
- * registering. Subscribes to message.part.updated (session-filtered), renders
- * through the "session_prompt_right" host slot, and cleans up the subscription
- * via api.lifecycle.onDispose. Slot registration failures disable the visual
- * element silently for the session.
+ * Register the live indicator for the active session in the native
+ * `prompt.footer.status` slot (the native placement for the old
+ * `session_prompt_right` slot). Disabled policy: no subscription and no slot.
+ * Returns a disposer that unsubscribes and removes the claim.
  */
-export async function registerAnalyticsIndicator(
-  api: TuiPluginApi,
-  options?: PluginOptions,
-  dependencies: IndicatorDependencies = DEFAULT_DEPENDENCIES,
-): Promise<void> {
-  if (options?.enabled === false) return;
-  if (!(await dependencies.enabled(api))) return;
+export function registerAnalyticsIndicator(
+  ctx: Plugin.Context,
+  policy: () => ContextPolicySnapshot | undefined,
+  options: Readonly<Record<string, unknown>> | undefined,
+  dependencies?: Partial<AnalyticsIndicatorDependencies>,
+): () => void {
+  if (options?.enabled === false) return () => undefined;
+  const deps: AnalyticsIndicatorDependencies = {
+    isEnabled: () => policyAnalyticsEnabled(policy()),
+    renderLabel: (label, color) => (
+      <text>
+        <span style={{ fg: color }}>{label.text}</span>
+      </text>
+    ),
+    ...dependencies,
+  };
+  // The slot is claimed even while the policy is still loading, so the
+  // indicator appears as soon as an allowlisted policy enables analytics
+  // without needing a plugin reload. Rendering stays policy-gated below.
 
-  const accumulator = createIndicatorAccumulator();
-  const unsubscribe = api.event.on("message.part.updated", (event) => {
-    const sessionID = currentSessionID(api);
-    if (event.properties.part.sessionID === sessionID) {
-      accumulator.applyPart(event.properties.part);
+  const accumulators = new Map<string, ReturnType<typeof createIndicatorAccumulator>>();
+  const [tokensBySession, setTokensBySession] = createSignal<Record<string, IndicatorTokens>>({});
+  const unsubscribe = ctx.data.on("session.usage.updated", (event) => {
+    const sessionID = event.data.sessionID;
+    let accumulator = accumulators.get(sessionID);
+    if (accumulator === undefined) {
+      accumulator = createIndicatorAccumulator();
+      accumulators.set(sessionID, accumulator);
     }
+    accumulator.applyUsage({
+      input: event.data.tokens.input,
+      cache: { read: event.data.tokens.cache.read, write: event.data.tokens.cache.write },
+    });
+    setTokensBySession((prev) => ({ ...prev, [sessionID]: accumulator.get() }));
   });
-  api.lifecycle.onDispose(unsubscribe);
 
+  let unregister: (() => void) | undefined;
   try {
-    // OpenCode's runtime requires a string plugin id on slot registrations, while
-    // the SDK's TuiSlotPlugin type still types id as never; cast bridges the two.
-    const plugin = {
-      id: "vvoc-analytics-indicator",
-      order: 900,
-      slots: {
-        session_prompt_right: (_ctx: TuiSlotContext, props: { session_id?: string }) => {
-          if (props.session_id !== currentSessionID(api)) return undefined;
-          const label = indicatorLabel(accumulator.get());
-          if (label.tone === "muted") return undefined;
-          return dependencies.renderLabel(label, toneColor(api, label.tone));
-        },
+    unregister = ctx.ui.slot({
+      append: "prompt.footer.status",
+      render: (input) => {
+        if (!deps.isEnabled()) return <></>;
+        const sessionID = input.sessionID;
+        if (sessionID === undefined) return <></>;
+        const tokens = tokensBySession()[sessionID];
+        if (tokens === undefined) return <></>;
+        const label = indicatorLabel(tokens);
+        if (label.tone === "muted") return <></>;
+        return deps.renderLabel(label, toneColor(ctx, label.tone));
       },
-    } as unknown as Parameters<TuiPluginApi["slots"]["register"]>[0];
-    api.slots.register(plugin);
+    });
   } catch {
     // Fail-soft: no indicator for this session.
   }
+
+  return () => {
+    unsubscribe();
+    unregister?.();
+  };
 }
 
-/** Reads the currently open sessionID from the TUI route, or "". */
-function currentSessionID(api: TuiPluginApi): string {
-  const route = api.route.current;
-  if (route.name === "session" && "params" in route) {
-    const sessionID = route.params?.sessionID;
-    return typeof sessionID === "string" ? sessionID : "";
-  }
-  return "";
-}
-
-/** Maps an indicator tone to the theme RGBA color instance. */
-function toneColor(api: TuiPluginApi, tone: IndicatorLabel["tone"]): RGBA {
-  const theme = api.theme.current;
-  const rgba =
-    tone === "green"
-      ? theme.success
-      : tone === "yellow"
-        ? theme.warning
-        : tone === "red"
-          ? theme.error
-          : theme.textMuted;
-  return rgba;
+/** Maps an indicator tone to a native theme feedback color. */
+function toneColor(ctx: Plugin.Context, tone: IndicatorLabel["tone"]): RGBA {
+  const feedback = ctx.theme.text.feedback;
+  if (tone === "green") return feedback.success.base;
+  if (tone === "yellow") return feedback.warning.base;
+  if (tone === "red") return feedback.error.base;
+  return ctx.theme.text.muted;
 }
 // END_BLOCK_REGISTER_INDICATOR

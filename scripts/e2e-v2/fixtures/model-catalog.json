@@ -1,0 +1,23 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "seam-smart",
+      "object": "model",
+      "created": 1,
+      "owned_by": "loopback",
+      "name": "Seam Smart",
+      "context_window": 128000,
+      "max_output_tokens": 8192
+    },
+    {
+      "id": "seam-fast",
+      "object": "model",
+      "created": 1,
+      "owned_by": "loopback",
+      "name": "Seam Fast",
+      "context_window": 128000,
+      "max_output_tokens": 8192
+    }
+  ]
+}

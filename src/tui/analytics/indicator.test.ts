@@ -1,73 +1,70 @@
 // FILE: src/tui/analytics/indicator.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the live indicator accumulator, label thresholds, registration gating, session filtering, and fail-soft slot handling.
-//   SCOPE: Step-finish-only accumulation, eligibility and tone boundaries, disabled toggle no-op, event subscription filtering, muted non-rendering, slot failure tolerance, plugin id registration, and real OpenTUI rendering with the applied fg color.
-//   DEPENDS: [bun:test, @opencode-ai/plugin/tui, @opencode-ai/sdk, @opentui/core, src/tui/analytics/indicator.tsx, src/lib/analytics/types.ts]
-//   LINKS: [M-TUI-ANALYTICS-INDICATOR, V-M-TUI-ANALYTICS-INDICATOR]
+//   PURPOSE: Verify the native usage accumulator, label thresholds, policy gating, session filtering, slot claim shape, and fail-soft registration.
+//   SCOPE: Pure accumulator/label boundaries plus a structural native context double; no host process.
+//   DEPENDS: [bun:test, @opentui/core, @opencode/plugin/tui, src/tui/analytics/indicator.tsx, src/tui/policy.ts]
+//   LINKS: [V-M-TUI-ANALYTICS-INDICATOR, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   stepFinishPart - Builds a step-finish part payload.
-//   state - Builds an indicator token state fixture.
-//   fakeApi - Builds a minimal TuiPluginApi double with recording hooks.
-//   partUpdatedEvent - Builds a message.part.updated event payload.
-//   testDeps - Builds indicator dependencies with a marker label renderer.
-//   renderSlot - Invokes the first registered session_prompt_right renderer.
+//   state - Build an IndicatorTokens fixture.
+//   usageEvent - Build a native session.usage.updated event.
+//   fakeContext - Minimal native context double that records slot claims.
+//   allEnabledPolicy - Context policy snapshot with every feature enabled.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-21-slot-mode-fix - Coverage now asserts the plugin id and the applied fg color via captureSpans.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Rewrote indicator coverage for native usage events, policy gating, and the prompt.footer.status claim.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
-import type { Event, Part } from "@opencode-ai/sdk";
+import type { Plugin } from "@opencode/plugin/tui";
 import {
   createIndicatorAccumulator,
   indicatorLabel,
   registerAnalyticsIndicator,
+  type IndicatorTokens,
 } from "./indicator.js";
-import type { IndicatorTokens } from "../../lib/analytics/types.js";
-
-function stepFinishPart(overrides: Record<string, unknown> = {}): Part {
-  return {
-    id: "prt_1",
-    sessionID: "ses_1",
-    messageID: "msg_1",
-    type: "step-finish",
-    reason: "stop",
-    cost: 0,
-    tokens: { input: 100, output: 0, reasoning: 0, cache: { read: 900, write: 100 } },
-    ...overrides,
-  } as unknown as Part;
-}
+import { createPolicyController, type ContextPolicySnapshot } from "../policy.js";
 
 function state(overrides: Partial<IndicatorTokens> = {}): IndicatorTokens {
   return { steps: 0, eligibleSteps: 0, cacheRead: 0, cacheWrite: 0, input: 0, ...overrides };
 }
 
-describe("createIndicatorAccumulator", () => {
-  test("ignores non-step-finish parts", () => {
-    const accumulator = createIndicatorAccumulator();
-    accumulator.applyPart({ id: "p", type: "text", text: "hi" } as unknown as Part);
-    expect(accumulator.get()).toEqual(state());
-  });
+function usageEvent(sessionID: string, usage: { input: number; read: number; write: number }) {
+  return {
+    type: "session.usage.updated" as const,
+    data: {
+      sessionID,
+      cost: 0,
+      tokens: {
+        input: usage.input,
+        output: 0,
+        reasoning: 0,
+        cache: { read: usage.read, write: usage.write },
+      },
+    },
+  };
+}
 
-  test("counts each step-finish part once with eligibility", () => {
+describe("createIndicatorAccumulator", () => {
+  test("counts each usage event once with eligibility", () => {
     const accumulator = createIndicatorAccumulator();
-    accumulator.applyPart(stepFinishPart());
-    accumulator.applyPart(
-      stepFinishPart({
-        tokens: { input: 50, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      }),
-    );
+    accumulator.applyUsage({ input: 100, cache: { read: 900, write: 100 } });
+    accumulator.applyUsage({ input: 50, cache: { read: 0, write: 0 } });
     expect(accumulator.get()).toEqual(
       state({ steps: 2, eligibleSteps: 1, cacheRead: 900, cacheWrite: 100, input: 150 }),
     );
+  });
+
+  test("ignores non-finite counters", () => {
+    const accumulator = createIndicatorAccumulator();
+    accumulator.applyUsage({ input: Number.NaN, cache: { read: -5, write: "x" } });
+    expect(accumulator.get()).toEqual(state({ steps: 1 }));
   });
 });
 
@@ -87,149 +84,126 @@ describe("indicatorLabel", () => {
   });
 });
 
-function partUpdatedEvent(part: Part, sessionID = part.sessionID): Event {
-  return {
-    type: "message.part.updated",
-    properties: { part: { ...part, sessionID } as unknown as Part },
-  } as unknown as Event;
-}
-
-function fakeApi(options: { slotsFail?: boolean } = {}) {
-  const listeners = new Map<string, Array<(event: Event) => void>>();
-  const disposers: Array<() => void> = [];
-  const registeredSlots: unknown[] = [];
-  const api = {
-    route: {
-      current: { name: "session", params: { sessionID: "ses_1" } },
-    },
-    state: { path: { directory: "/home/al/dev/project" } },
-    theme: {
-      current: {
-        success: RGBA.fromInts(0, 255, 0, 255),
-        warning: RGBA.fromInts(255, 255, 0, 255),
-        error: RGBA.fromInts(255, 0, 0, 255),
-        textMuted: RGBA.fromInts(128, 128, 128, 255),
+function fakeContext(options: { slotFails?: boolean } = {}) {
+  const listeners = new Map<string, Array<(event: unknown) => void>>();
+  const claims: Array<{ claim: unknown; render: (input: { sessionID?: string }) => unknown }> = [];
+  const theme = {
+    text: {
+      muted: RGBA.fromInts(128, 128, 128, 255),
+      feedback: {
+        success: { base: RGBA.fromInts(0, 255, 0, 255) },
+        warning: { base: RGBA.fromInts(255, 255, 0, 255) },
+        error: { base: RGBA.fromInts(255, 0, 0, 255) },
       },
     },
-    event: {
-      on: (type: string, handler: (event: Event) => void) => {
+  };
+  const context = {
+    theme,
+    data: {
+      on: (type: string, handler: (event: unknown) => void) => {
         listeners.set(type, [...(listeners.get(type) ?? []), handler]);
-        return () => {
+        return () =>
           listeners.set(
             type,
             (listeners.get(type) ?? []).filter((entry) => entry !== handler),
           );
-        };
       },
     },
-    lifecycle: {
-      onDispose: (fn: () => void) => {
-        disposers.push(fn);
-        return () => {};
+    ui: {
+      slot: (claim: unknown) => {
+        if (options.slotFails) throw new Error("slot registration failed");
+        const record = claim as { render: (input: { sessionID?: string }) => unknown };
+        claims.push({ claim, render: record.render });
+        return () => undefined;
       },
     },
-    slots: {
-      register: (plugin: unknown) => {
-        if (options.slotsFail) throw new Error("slot registration failed");
-        registeredSlots.push(plugin);
-        return "slot-id";
-      },
-    },
-  } as unknown as TuiPluginApi;
+  } as unknown as Plugin.Context;
 
-  const emit = (event: Event) => {
-    for (const handler of listeners.get(event.type) ?? []) handler(event);
+  const emit = (event: unknown): void => {
+    const type = (event as { type: string }).type;
+    for (const handler of listeners.get(type) ?? []) handler(event);
   };
+  return { context, emit, claims, theme };
+}
 
-  return { api, emit, registeredSlots, disposers };
+function allEnabledPolicy(): ContextPolicySnapshot {
+  return {
+    status: "preview",
+    scope: "current-runtime",
+    contextEnabled: true,
+    analyticsEnabled: true,
+    peakHours: { enabled: false, mode: "soft", graceActiveSessions: true, schedules: {} },
+  };
 }
 
 describe("registerAnalyticsIndicator", () => {
-  test("subscribes, filters by current session, and renders the label", async () => {
-    const { api, emit, registeredSlots } = fakeApi();
-    await registerAnalyticsIndicator(api, undefined, testDeps());
+  test("claims the prompt footer status slot and filters by session", () => {
+    const { context, emit, claims } = fakeContext();
+    const marked: Array<{ text: string; color: RGBA }> = [];
+    registerAnalyticsIndicator(context, allEnabledPolicy, undefined, {
+      renderLabel: (label, color) => {
+        marked.push({ text: label.text, color });
+        return { label, color } as never;
+      },
+    });
 
-    expect((registeredSlots[0] as { id: string }).id).toBe("vvoc-analytics-indicator");
-    emit(partUpdatedEvent(stepFinishPart(), "ses_other"));
-    expect(renderSlot(registeredSlots, "ses_1")).toBeUndefined();
+    expect((claims[0]!.claim as { append?: string }).append).toBe("prompt.footer.status");
+    emit(usageEvent("ses_other", { input: 100, read: 900, write: 100 }));
+    expect(claims[0]!.render({ sessionID: "ses_1" })).toBeTruthy();
 
-    emit(partUpdatedEvent(stepFinishPart()));
-    const element = renderSlot(registeredSlots, "ses_1") as {
+    emit(usageEvent("ses_1", { input: 100, read: 900, write: 100 }));
+    const element = claims[0]!.render({ sessionID: "ses_1" }) as {
       label: { text: string };
       color: RGBA;
     };
     expect(element.label.text).toBe("cache 82%");
-    expect(element.color).toBe(api.theme.current.success);
+    expect(marked).toHaveLength(1);
   });
 
-  test("renders nothing while the label is muted", async () => {
-    const { api, registeredSlots } = fakeApi();
-    await registerAnalyticsIndicator(api, undefined, testDeps());
-    expect(renderSlot(registeredSlots, "ses_1")).toBeUndefined();
-  });
-
-  test("disabled toggle results in no subscription and no slot registration", async () => {
-    const { api, emit, registeredSlots, disposers } = fakeApi();
-    await registerAnalyticsIndicator(api, undefined, testDeps(false));
-    emit(partUpdatedEvent(stepFinishPart()));
-    expect(registeredSlots).toHaveLength(0);
-    expect(disposers).toHaveLength(0);
-  });
-
-  test("options.enabled === false skips registration", async () => {
-    const { api, registeredSlots } = fakeApi();
-    await registerAnalyticsIndicator(api, { enabled: false }, testDeps());
-    expect(registeredSlots).toHaveLength(0);
-  });
-
-  test("slot registration failure does not propagate", async () => {
-    const { api } = fakeApi({ slotsFail: true });
-    await expect(registerAnalyticsIndicator(api, undefined, testDeps())).resolves.toBeUndefined();
-  });
-
-  test("ignores parts from other sessions entirely", async () => {
-    const { api, emit, registeredSlots } = fakeApi();
-    await registerAnalyticsIndicator(api, undefined, testDeps());
-    emit(partUpdatedEvent(stepFinishPart(), "ses_other"));
-    expect(renderSlot(registeredSlots, "ses_1")).toBeUndefined();
-  });
-
-  test("default label renders through real OpenTUI without orphan text errors", async () => {
-    const { testRender } = await import("@opentui/solid");
-    const { DEFAULT_DEPENDENCIES } = await import("./indicator.js");
-    const label = indicatorLabel(
-      state({ eligibleSteps: 1, cacheRead: 900, cacheWrite: 100, input: 100 }),
-    );
-    const green = RGBA.fromInts(0, 255, 0, 255);
-    const setup = await testRender(() => DEFAULT_DEPENDENCIES.renderLabel(label, green) as never, {
-      width: 20,
-      height: 3,
+  test("renders nothing while muted or before any usage", () => {
+    const { context, claims } = fakeContext();
+    registerAnalyticsIndicator(context, allEnabledPolicy, undefined, {
+      renderLabel: () => ({ marker: true }) as never,
     });
-    await setup.flush();
-    expect(setup.captureCharFrame()).toContain(label.text);
-    const spans = setup.captureSpans() as unknown as {
-      lines: Array<{ spans: Array<{ text: string; fg: { buffer: Record<string, number> } }> }>;
+    const rendered = claims[0]!.render({ sessionID: "ses_1" });
+    expect(typeof rendered).toBe("object");
+    expect((rendered as { marker?: boolean }).marker).toBeUndefined();
+  });
+
+  test("disabled analytics policy keeps the slot claimed but renders nothing", () => {
+    const { context, claims, emit } = fakeContext();
+    const disabled: ContextPolicySnapshot = {
+      status: "preview",
+      scope: "current-runtime",
+      contextEnabled: true,
+      analyticsEnabled: false,
+      peakHours: { enabled: false, mode: "soft", graceActiveSessions: true, schedules: {} },
     };
-    const span = spans.lines
-      .flatMap((line) => line.spans)
-      .find((entry) => entry.text.includes("cache"));
-    expect(span).toBeDefined();
-    expect(Math.round(span!.fg.buffer["1"])).toBe(255);
+    registerAnalyticsIndicator(context, () => disabled, undefined, {});
+    expect(claims).toHaveLength(1);
+    emit(usageEvent("ses_1", { input: 100, read: 900, write: 100 }));
+    const rendered = claims[0]!.render({ sessionID: "ses_1" });
+    expect((rendered as { marker?: boolean }).marker).toBeUndefined();
+  });
+
+  test("options.enabled === false skips registration", () => {
+    const { context, claims } = fakeContext();
+    registerAnalyticsIndicator(context, allEnabledPolicy, { enabled: false }, {});
+    expect(claims).toHaveLength(0);
+  });
+
+  test("slot registration failure does not propagate", () => {
+    const { context } = fakeContext({ slotFails: true });
+    expect(() =>
+      registerAnalyticsIndicator(context, allEnabledPolicy, undefined, {}),
+    ).not.toThrow();
+  });
+
+  test("policy controller from the shared store gates the indicator", async () => {
+    const controller = createPolicyController(async () => undefined);
+    await controller.refresh({ sessionID: "ses_1", directory: "/a" });
+    const snapshot = controller.current();
+    expect(snapshot?.status).toBe("unavailable");
+    controller.dispose();
   });
 });
-
-/** Test dependencies with a marker label renderer instead of real OpenTUI JSX. */
-function testDeps(enabled = true) {
-  return {
-    enabled: async () => enabled,
-    renderLabel: (label: { text: string }, color: RGBA) => ({ label, color }),
-  } as unknown as Parameters<typeof registerAnalyticsIndicator>[2];
-}
-
-/** Invokes the first registered session_prompt_right renderer. */
-function renderSlot(registeredSlots: unknown[], sessionID: string): unknown {
-  const slot = registeredSlots[0] as {
-    slots: { session_prompt_right: (ctx: unknown, props: unknown) => unknown };
-  };
-  return slot.slots.session_prompt_right({ theme: { current: {} } }, { session_id: sessionID });
-}

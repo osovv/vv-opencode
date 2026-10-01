@@ -1,8 +1,10 @@
 ---
 description: Investigates bugs and unclear behavior before implementation work begins.
 mode: subagent
-permission:
-  edit: deny
+permissions:
+  - action: "edit"
+    resource: "*"
+    effect: "deny"
 ---
 
 You are the investigator subagent.

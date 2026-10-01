@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode/inspection.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: OpenCode host compatibility diagnostics and source-aware installation inspection.
-//   SCOPE: opencode --version execution and semantic-version TUI compatibility comparison, installation-state inspection across runtime/TUI/vvoc config files with role-reference resolution and orchestration profile, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
+//   PURPOSE: Native OpenCode host compatibility diagnostics and source-aware installation inspection.
+//   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
 //   DEPENDS: [node:path, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -10,27 +10,28 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   OpenCodeRuntimeInspection - Installed OpenCode version and TUI compatibility snapshot.
-//   InstallationInspection - Current OpenCode runtime/TUI and vvoc installation status snapshot.
-//   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates TUI compatibility.
-//   isTuiOpenCodeVersionCompatible - Compares an OpenCode version with the managed TUI minimum.
+//   OpenCodeRuntimeInspection - Installed OpenCode version and supported-window snapshot.
+//   InstallationInspection - Current native OpenCode package and vvoc installation status snapshot.
+//   inspectOpenCodeRuntime - Reads the installed OpenCode version and evaluates the exact supported window.
+//   assertSupportedOpenCodeRuntime - Fails closed on an unverifiable or out-of-window host before any write.
 //   extractOpenCodeVersion - Extracts the first semantic version found in `opencode --version` output.
-//   inspectInstallation - Reads current OpenCode/vvoc installation state for status and doctor commands.
+//   inspectInstallation - Reads current native OpenCode/vvoc installation state for status and doctor commands.
 //   inspectInstallationForScope - Reads installation state using strict/effective layered source resolution.
 //   describeWriteResult - Formats config write outcomes for CLI output.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-MODULE-SPLIT - Extracted runtime inspection, installation inspection, role-reference diagnostics, and write-result formatting from the former src/lib/opencode.ts monolith into this zone module.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Migrated inspection to native plugins/agents/skills and replaced the dedicated tui.json status with a config-derived combined-package registration report.]
 // END_CHANGE_SUMMARY
 
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import {
+  readRawOpenCodeModelIntent,
   resolveOpenCodeConfigSource,
-  resolveOpenCodeTuiConfigSource,
   resolveVvocConfigSource,
   type ConfigReadScope,
   type ConfigSource,
+  type RawOpenCodeModelIntent,
 } from "../config-layers.js";
 import { BUILTIN_ROLE_NAMES, ROLE_REFERENCE_PREFIX } from "../model-roles.js";
 import { resolveOrchestrationPolicy, type OrchestrationProfile } from "../orchestration.js";
@@ -41,24 +42,26 @@ import {
   type SecretsRedactionConfig,
 } from "../vvoc-config.js";
 import { PACKAGE_NAME } from "../package.js";
-import { getVvocAgentsDir, getVvocSkillsDir } from "../vvoc-paths.js";
-import { parseObjectDocument, readOptionalText, type WriteResult } from "./shared-utils.js";
+import { getVvocSkillsDir } from "../vvoc-paths.js";
+import {
+  assertNativeOpenCodeDocument,
+  parseObjectDocument,
+  readOptionalText,
+  readPluginEntries,
+  type OpenCodePluginEntry,
+  type WriteResult,
+} from "./shared-utils.js";
 import { resolvePaths, type ResolvedPaths } from "./paths.js";
 import {
-  isPackagePluginSpecifier,
-  isTuiPackageSpecifier,
-  MINIMUM_TUI_OPENCODE_VERSION,
-  readPluginList,
-  readTuiPluginList,
-  readTuiPluginName,
-  TUI_PACKAGE_SPECIFIER,
-  type TuiPluginEntry,
+  isManagedPackageTarget,
+  isSupportedOpenCodeVersion,
+  SUPPORTED_OPENCODE_VERSION_RANGE,
 } from "./plugin-registration.js";
 
 export type OpenCodeRuntimeInspection = {
   version?: string;
-  minimumTuiVersion: string;
-  tuiCompatible?: boolean;
+  supportedRange: string;
+  versionSupported?: boolean;
   error?: string;
 };
 
@@ -71,15 +74,17 @@ export type InstallationInspection = {
     alternates: string[];
     parseError?: string;
     pluginConfigured: boolean;
-    plugins: string[];
+    plugins: OpenCodePluginEntry[];
   };
+  /**
+   * The combined native package is registered once in native `plugins`; whether
+   * the live host advertises `features.tui` is inventory state and cannot be
+   * verified from config alone, so it is reported as a config-derived
+   * registration plus an explicit limit note.
+   */
   tui: {
-    path: string;
-    exists: boolean;
-    alternates: string[];
-    parseError?: string;
-    pluginConfigured: boolean;
-    plugins: TuiPluginEntry[];
+    registered: boolean;
+    note: string;
   };
   vvoc: {
     path: string;
@@ -105,6 +110,9 @@ export type InstallationInspection = {
   problems: string[];
 };
 
+const TUI_REGISTRATION_NOTE =
+  "TUI capability is advertised by the live native host plugin inventory; config inspection alone cannot confirm loadability.";
+
 // START_BLOCK_INSPECT_OPENCODE_RUNTIME
 export async function inspectOpenCodeRuntime(
   run: () => Promise<{
@@ -118,7 +126,7 @@ export async function inspectOpenCodeRuntime(
     if (result.exitCode !== 0) {
       const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
       return {
-        minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
         error: `opencode --version failed: ${detail}`,
       };
     }
@@ -126,37 +134,48 @@ export async function inspectOpenCodeRuntime(
     const version = extractOpenCodeVersion(`${result.stdout}\n${result.stderr}`);
     if (!version) {
       return {
-        minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+        supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
         error: "opencode --version did not return a semantic version",
       };
     }
 
     return {
       version,
-      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
-      tuiCompatible: isTuiOpenCodeVersionCompatible(version),
+      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+      versionSupported: isSupportedOpenCodeVersion(version),
     };
   } catch (error) {
     return {
-      minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
       error: error instanceof Error ? error.message : String(error),
     };
   }
 }
 
-export function isTuiOpenCodeVersionCompatible(version: string): boolean {
-  const current = parseSemanticVersion(version);
-  const minimum = parseSemanticVersion(MINIMUM_TUI_OPENCODE_VERSION);
-  if (!current || !minimum) return false;
+// END_BLOCK_INSPECT_OPENCODE_RUNTIME
 
-  for (let index = 0; index < 3; index += 1) {
-    const currentPart = current.parts[index] ?? 0;
-    const minimumPart = minimum.parts[index] ?? 0;
-    if (currentPart > minimumPart) return true;
-    if (currentPart < minimumPart) return false;
+// START_CONTRACT: assertSupportedOpenCodeRuntime
+//   PURPOSE: Fail closed on an unverifiable or out-of-window OpenCode host before any runtime/TUI/vvoc/agent/skill write.
+//   INPUTS: { inspect: () => Promise<OpenCodeRuntimeInspection> - Injectable runtime inspector for tests. }
+//   OUTPUTS: { OpenCodeRuntimeInspection - The verified runtime snapshot when the host is in the supported window. }
+//   SIDE_EFFECTS: Runs `opencode --version` through the default inspector; throws on failure or unsupported version.
+//   LINKS: [fn-inspectOpenCodeRuntime, const-SUPPORTED_OPENCODE_VERSION_RANGE]
+// END_CONTRACT: assertSupportedOpenCodeRuntime
+export async function assertSupportedOpenCodeRuntime(
+  inspect: () => Promise<OpenCodeRuntimeInspection> = inspectOpenCodeRuntime,
+): Promise<OpenCodeRuntimeInspection> {
+  const runtime = await inspect();
+  if (runtime.error) {
+    throw new Error(
+      `OpenCode host is not verifiable: ${runtime.error}. vvoc requires ${SUPPORTED_OPENCODE_VERSION_RANGE}.`,
+    );
   }
-
-  return !current.prerelease || Boolean(minimum.prerelease);
+  if (runtime.versionSupported !== true) {
+    throw new Error(
+      `OpenCode ${runtime.version ?? "unknown"} is not supported. vvoc requires ${SUPPORTED_OPENCODE_VERSION_RANGE}.`,
+    );
+  }
+  return runtime;
 }
 
 async function runOpenCodeVersionCommand(): Promise<{
@@ -185,20 +204,6 @@ export function extractOpenCodeVersion(output: string): string | undefined {
   return match?.[1];
 }
 
-function parseSemanticVersion(
-  value: string,
-): { parts: [number, number, number]; prerelease?: string } | undefined {
-  const match = value
-    .trim()
-    .match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
-  if (!match) return undefined;
-  return {
-    parts: [Number(match[1]), Number(match[2]), Number(match[3])],
-    prerelease: match[4],
-  };
-}
-// END_BLOCK_INSPECT_OPENCODE_RUNTIME
-
 // START_BLOCK_INSPECT_INSTALLATION_STATE
 export async function inspectInstallation(
   paths: ResolvedPaths,
@@ -207,14 +212,14 @@ export async function inspectInstallation(
   const warnings: string[] = [];
   const problems: string[] = [];
   const runtime = options.runtime ?? {
-    minimumTuiVersion: MINIMUM_TUI_OPENCODE_VERSION,
+    supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
   };
 
   if (runtime.error) {
     problems.push(`OpenCode version unavailable: ${runtime.error}`);
-  } else if (runtime.tuiCompatible === false) {
+  } else if (runtime.versionSupported === false) {
     problems.push(
-      `OpenCode ${runtime.version ?? "unknown"} is incompatible with /context; ${runtime.minimumTuiVersion} or newer is required`,
+      `OpenCode ${runtime.version ?? "unknown"} is not supported; vvoc requires ${runtime.supportedRange}`,
     );
   }
 
@@ -224,43 +229,24 @@ export async function inspectInstallation(
     );
   }
 
-  if (paths.opencodeTuiAlternatePaths.length > 0) {
-    warnings.push(
-      `multiple OpenCode TUI config files exist: ${[paths.opencodeTuiConfigPath, ...paths.opencodeTuiAlternatePaths].join(", ")}`,
-    );
-  }
-
   const opencodeText = await readOptionalText(paths.opencodeConfigPath);
   let opencodeParseError: string | undefined;
-  let plugins: string[] = [];
+  let plugins: OpenCodePluginEntry[] = [];
   let pluginConfigured = false;
 
   if (opencodeText) {
     try {
       const document = parseObjectDocument(opencodeText, paths.opencodeConfigPath);
-      plugins = readPluginList(document, paths.opencodeConfigPath);
-      pluginConfigured = plugins.some(isPackagePluginSpecifier);
+      assertNativeOpenCodeDocument(document, paths.opencodeConfigPath, {
+        configDir: dirname(paths.opencodeConfigPath),
+      });
+      plugins = readPluginEntries(document, paths.opencodeConfigPath);
+      pluginConfigured = plugins.some((entry) =>
+        isManagedPackageTarget(typeof entry === "string" ? entry : entry.package),
+      );
     } catch (error) {
       opencodeParseError = error instanceof Error ? error.message : String(error);
       problems.push(opencodeParseError);
-    }
-  }
-
-  const tuiText = await readOptionalText(paths.opencodeTuiConfigPath);
-  let tuiParseError: string | undefined;
-  let tuiPlugins: TuiPluginEntry[] = [];
-  let tuiPluginConfigured = false;
-
-  if (tuiText) {
-    try {
-      const document = parseObjectDocument(tuiText, paths.opencodeTuiConfigPath);
-      tuiPlugins = readTuiPluginList(document, paths.opencodeTuiConfigPath);
-      tuiPluginConfigured = tuiPlugins.some((entry) =>
-        isTuiPackageSpecifier(readTuiPluginName(entry)),
-      );
-    } catch (error) {
-      tuiParseError = error instanceof Error ? error.message : String(error);
-      problems.push(tuiParseError);
     }
   }
 
@@ -287,8 +273,7 @@ export async function inspectInstallation(
   const unresolvedRoleReferences =
     opencodeText && !opencodeParseError
       ? collectUnresolvedRoleReferences(
-          opencodeText,
-          paths.opencodeConfigPath,
+          await readRawOpenCodeModelIntent(paths.cwd).catch(() => undefined),
           vvocConfig?.roles ?? {},
         )
       : [];
@@ -301,9 +286,6 @@ export async function inspectInstallation(
 
   if (!pluginConfigured) {
     problems.push(`${PACKAGE_NAME} is not configured in ${paths.opencodeConfigPath}`);
-  }
-  if (!tuiPluginConfigured) {
-    problems.push(`${TUI_PACKAGE_SPECIFIER} is not configured in ${paths.opencodeTuiConfigPath}`);
   }
   if (!vvocText) {
     problems.push(`vvoc config is missing at ${paths.vvocConfigPath}`);
@@ -321,12 +303,8 @@ export async function inspectInstallation(
       plugins,
     },
     tui: {
-      path: paths.opencodeTuiConfigPath,
-      exists: Boolean(tuiText),
-      alternates: paths.opencodeTuiAlternatePaths,
-      parseError: tuiParseError,
-      pluginConfigured: tuiPluginConfigured,
-      plugins: tuiPlugins,
+      registered: pluginConfigured,
+      note: TUI_REGISTRATION_NOTE,
     },
     vvoc: {
       path: paths.vvocConfigPath,
@@ -361,17 +339,11 @@ export async function inspectInstallationForScope(options: {
 }): Promise<
   InstallationInspection & {
     opencodeSource: ConfigSource;
-    opencodeTuiSource: ConfigSource;
     vvocSource: ConfigSource;
   }
 > {
-  const [opencodeSource, opencodeTuiSource, vvocSource, runtime] = await Promise.all([
+  const [opencodeSource, vvocSource, runtime] = await Promise.all([
     resolveOpenCodeConfigSource({
-      scope: options.scope,
-      cwd: options.cwd,
-      configDir: options.configDir,
-    }),
-    resolveOpenCodeTuiConfigSource({
       scope: options.scope,
       cwd: options.cwd,
       configDir: options.configDir,
@@ -400,19 +372,20 @@ export async function inspectInstallationForScope(options: {
     configDir: options.configDir,
   });
   const opencodeConfigPath = opencodeSource.path ?? fallbackPaths.opencodeConfigPath;
-  const opencodeTuiConfigPath = opencodeTuiSource.path ?? fallbackPaths.opencodeTuiConfigPath;
   const vvocConfigPath = vvocSource.path ?? fallbackPaths.vvocConfigPath;
+  const opencodeBaseDir = dirname(opencodeConfigPath);
+  const vvocBaseDir = dirname(vvocConfigPath);
   const scopedPaths: ResolvedPaths = {
     ...fallbackPaths,
-    opencodeBaseDir: dirname(opencodeConfigPath),
-    vvocBaseDir: dirname(vvocConfigPath),
+    opencodeBaseDir,
+    vvocBaseDir,
     opencodeConfigPath,
-    opencodeTuiConfigPath,
     vvocConfigPath,
     opencodeAlternatePaths: [],
-    opencodeTuiAlternatePaths: [],
-    managedAgentsDirPath: getVvocAgentsDir(dirname(vvocConfigPath)),
-    managedSkillsDirPath: getVvocSkillsDir(dirname(vvocConfigPath)),
+    managedAgentsDirPath: join(opencodeBaseDir, "agents"),
+    managedSkillsDirPath: getVvocSkillsDir(vvocBaseDir),
+    opencodeSkillsDirPath: join(opencodeBaseDir, "skills"),
+    vvocAgentsDirPath: join(vvocBaseDir, "agents"),
   };
 
   const inspection = await inspectInstallation(scopedPaths, { runtime });
@@ -427,7 +400,6 @@ export async function inspectInstallationForScope(options: {
     },
     scope: options.scope,
     opencodeSource,
-    opencodeTuiSource,
     vvocSource,
   };
 }
@@ -448,6 +420,9 @@ export function describeWriteResult(result: WriteResult): string {
       break;
     case "skipped":
       message = `Skipped ${result.path}`;
+      break;
+    case "deleted":
+      message = `Deleted ${result.path}`;
       break;
   }
 
@@ -480,12 +455,11 @@ function listRoleAssignments(roles: Record<string, string>): Array<{
 }
 
 function collectUnresolvedRoleReferences(
-  opencodeText: string,
-  label: string,
+  intent: RawOpenCodeModelIntent | undefined,
   roleMap: Record<string, string>,
 ): Array<{ fieldPath: string; roleRef: string; roleId: string }> {
-  const document = parseObjectDocument(opencodeText, label);
   const unresolved: Array<{ fieldPath: string; roleRef: string; roleId: string }> = [];
+  if (!intent) return unresolved;
 
   const collectFromField = (fieldPath: string, value: unknown) => {
     if (typeof value !== "string") {
@@ -502,24 +476,14 @@ function collectUnresolvedRoleReferences(
     }
   };
 
-  collectFromField("model", document.model);
-  collectFromField("small_model", document.small_model);
+  collectFromField("modelIntent.model", intent.model);
+  collectFromField("modelIntent.smallModel", intent.smallModel);
 
-  for (const parentName of ["agent", "command"] as const) {
-    const parent = document[parentName];
-    if (!parent || typeof parent !== "object" || Array.isArray(parent)) {
-      continue;
-    }
-
-    for (const [entryName, entry] of Object.entries(parent as Record<string, unknown>)) {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        continue;
-      }
-      collectFromField(
-        `${parentName}.${entryName}.model`,
-        (entry as Record<string, unknown>).model,
-      );
-    }
+  for (const [name, model] of Object.entries(intent.agents)) {
+    collectFromField(`modelIntent.agents.${name}`, model);
+  }
+  for (const [name, model] of Object.entries(intent.commands)) {
+    collectFromField(`modelIntent.commands.${name}`, model);
   }
 
   return unresolved;

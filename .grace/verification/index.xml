@@ -3,6 +3,8 @@
     <VD-MAIN>
       <Path>verification/main.xml</Path>
       <Owns>
+        <V-M-NATIVE-RUNTIME />
+        <V-M-E2E-V2-HARNESS />
         <V-M-MODEL-ROLES />
         <V-M-CONFIG-LAYERS />
         <V-M-CLI-CONFIG />
@@ -22,11 +24,9 @@
         <V-M-PLUGIN-CONTEXT-TUI />
         <V-M-PLUGIN-WEB-TOOLS />
         <V-M-PLUGIN-TOOL-HISTORY-COMPACTION />
+        <V-M-PLUGIN-ANALYTICS />
         <V-M-PEAK-HOURS-SCHEDULES />
         <V-M-PLUGIN-PEAK-HOURS />
-        <V-M-PLUGIN-ANALYTICS />
-        <V-M-PLUGIN-V2-RUNTIME />
-        <V-M-E2E-V2-HARNESS />
         <V-M-TUI-PEAK-HOURS-BANNER />
         <V-M-SPEC-LINT />
         <V-M-PLUGIN-SPEC-GUARD />

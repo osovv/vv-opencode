@@ -2,7 +2,7 @@
 // VERSION: 0.10.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Apply OpenCode patch presets to global or project OpenCode config layers.
-//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under `provider` (codex, deepseek, kimi, alibaba, zai, xiaomi), and CLI output.
+//   SCOPE: Patch preset validation, scoped OpenCode config path resolution, provider/baseURL patch writes, provider-specific object patch writes under native `providers` with real models and native `variants[]` (stepfun-ai, codex, deepseek, alibaba, zai, xiaomi), and CLI output.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: M-CLI-PATCH-PROVIDER, M-CLI-COMPLETION, M-CLI-CONFIG
 //   ROLE: RUNTIME
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Replaced the GPT-5.6 Luna catalog entry with vv-codex-gpt-6-luna-low over gpt-6-luna on the official GPT-6 contract (1.05M/922K/128K), keeping low reasoning effort.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Migrated every shipped alias to real native provider models with native variants[], body/settings/capabilities/limit shapes, and the MiMo thinking variant.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -47,8 +47,17 @@ type ProviderObjectPatchPreset = {
 
 type PatchPreset = ProviderBaseUrlPatchPreset | ProviderObjectPatchPreset;
 
+/** Codex/model reasoning overlay settings shared by generated effort variants. */
+function codexVariantSettings(effort: string): Record<string, unknown> {
+  return {
+    reasoningEffort: effort,
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"],
+  };
+}
+
 const STEPFUN_PATCH = {
-  options: {
+  settings: {
     baseURL: "https://api.stepfun.ai/v1",
   },
   models: {
@@ -59,379 +68,166 @@ const STEPFUN_PATCH = {
         input: 256000,
         output: 256000,
       },
-      modalities: {
+      capabilities: {
+        tools: true,
         input: ["text", "image", "video"],
         output: ["text"],
       },
     },
   },
-} as const satisfies Record<string, unknown>;
+} satisfies Record<string, unknown>;
 
 const OPENAI_PATCH = {
   models: {
-    "vv-codex-gpt-5.5-xhigh": {
-      name: "VV Codex GPT-5.5-XHigh",
-      id: "gpt-5.5",
-      variants: {},
-      limit: {
-        context: 400000,
-        input: 272000,
-        output: 128000,
-      },
-      modalities: {
-        input: ["text", "image", "pdf"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "xhigh",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
+    "gpt-5.5": {
+      name: "GPT-5.5",
+      limit: { context: 400000, input: 272000, output: 128000 },
+      capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+      variants: [{ id: "xhigh", settings: codexVariantSettings("xhigh") }],
     },
-    "vv-codex-gpt-5.6-terra-high": {
-      name: "VV Codex GPT-5.6 Terra High",
-      id: "gpt-5.6-terra",
-      variants: {},
-      limit: {
-        context: 400000,
-        input: 272000,
-        output: 128000,
-      },
-      modalities: {
-        input: ["text", "image", "pdf"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "high",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
+    "gpt-5.6-terra": {
+      name: "GPT-5.6 Terra",
+      limit: { context: 400000, input: 272000, output: 128000 },
+      capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+      variants: [{ id: "high", settings: codexVariantSettings("high") }],
     },
-    "vv-codex-gpt-5.6-sol-xhigh": {
-      name: "VV Codex GPT-5.6 Sol XHigh",
-      id: "gpt-5.6-sol",
-      variants: {},
-      limit: {
-        context: 400000,
-        input: 272000,
-        output: 128000,
-      },
-      modalities: {
-        input: ["text", "image", "pdf"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "xhigh",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
+    "gpt-5.6-sol": {
+      name: "GPT-5.6 Sol",
+      limit: { context: 400000, input: 272000, output: 128000 },
+      capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+      variants: [{ id: "xhigh", settings: codexVariantSettings("xhigh") }],
     },
-    "vv-codex-gpt-6-luna-low": {
-      name: "VV Codex GPT-6 Luna Low",
-      id: "gpt-6-luna",
-      variants: {},
-      // GPT-6 Luna launched Sept 22, 2026 on the official GPT-6 contract
-      // (1.05M context / 922K input / 128K output per OpenAI model docs and
-      // models.dev); the Codex 272K input cap applied only to the GPT-5.6
-      // family (Codex PR#33972). Revisit if Codex later caps GPT-6 input.
-      limit: {
-        context: 1050000,
-        input: 922000,
-        output: 128000,
-      },
-      modalities: {
-        input: ["text", "image", "pdf"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "low",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
+    // GPT-6 Luna/Astra keep the official GPT-6 contract (1.05M/922K/128K);
+    // only the GPT-5.6 family was capped to 272K input by Codex PR#33972.
+    "gpt-6-luna": {
+      name: "GPT-6 Luna",
+      limit: { context: 1050000, input: 922000, output: 128000 },
+      capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+      variants: [{ id: "low", settings: codexVariantSettings("low") }],
     },
-    "vv-codex-gpt-6-astra-max": {
-      name: "VV Codex GPT-6 Astra Max",
-      id: "gpt-6-astra",
-      variants: {},
-      // GPT-6 Astra keeps its own official contract (1.05M context / 922K
-      // input / 128K output per OpenAI model docs, Sept 2026); only the
-      // GPT-5.6 family was capped to 272K input by Codex PR#33972.
-      limit: {
-        context: 1050000,
-        input: 922000,
-        output: 128000,
-      },
-      modalities: {
-        input: ["text", "image", "pdf"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
+    "gpt-6-astra": {
+      name: "GPT-6 Astra",
+      limit: { context: 1050000, input: 922000, output: 128000 },
+      capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+      variants: [{ id: "max", settings: codexVariantSettings("max") }],
     },
-    "vv-codex-gpt-5.3-codex-spark-medium": {
-      name: "VV Codex GPT-5.3 Codex Spark Medium",
-      id: "gpt-5.3-codex-spark",
-      // The catalog auto-generates effort variants for this base model; the
-      // cited public description supports medium only, so inherited efforts are
-      // explicitly disabled instead of relying on variants: {} suppression.
-      variants: {
-        none: { disabled: true },
-        low: { disabled: true },
-        high: { disabled: true },
-        max: { disabled: true },
-      },
-      limit: {
-        context: 128000,
-        input: 100000,
-        output: 32000,
-      },
-      modalities: {
-        input: ["text"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "medium",
-        reasoningSummary: "auto",
-        include: ["reasoning.encrypted_content"],
-      },
+    "gpt-5.3-codex-spark": {
+      name: "GPT-5.3 Codex Spark",
+      limit: { context: 128000, input: 100000, output: 32000 },
+      capabilities: { tools: true, input: ["text"], output: ["text"] },
+      variants: [{ id: "medium", settings: codexVariantSettings("medium") }],
     },
   },
-} as const satisfies Record<string, unknown>;
-
-const KIMI_PATCH = {
-  models: {
-    "vv-kimi-k3-max": {
-      name: "VV Kimi K3 Max",
-      id: "k3",
-      variants: {},
-      limit: {
-        context: 1048576,
-        output: 131072,
-      },
-      modalities: {
-        input: ["text", "image", "video"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-      },
-    },
-  },
-} as const satisfies Record<string, unknown>;
+} satisfies Record<string, unknown>;
 
 const ALIBABA_PATCH = {
   models: {
-    "vv-qwen3.8-max-xhigh": {
-      name: "VV Qwen3.8-Max XHigh",
-      id: "qwen3.8-max",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 131072,
-      },
-      modalities: {
+    "qwen3.8-max": {
+      name: "Qwen3.8-Max",
+      limit: { context: 1000000, output: 131072 },
+      capabilities: {
+        tools: true,
         input: ["text", "image", "video", "pdf"],
         output: ["text"],
       },
-      reasoning: true,
-      options: {
-        reasoningEffort: "xhigh",
-      },
+      variants: [{ id: "xhigh", settings: { reasoningEffort: "xhigh" } }],
     },
   },
-} as const satisfies Record<string, unknown>;
+} satisfies Record<string, unknown>;
 
 const DEEPSEEK_PATCH = {
   models: {
-    "vv-deepseek-v4-flash-max": {
-      name: "VV DeepSeek V4 Flash Max",
-      id: "deepseek-v4-flash",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 384000,
-      },
-      modalities: {
-        input: ["text"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-      },
+    "deepseek-v4-flash": {
+      name: "DeepSeek V4 Flash",
+      limit: { context: 1000000, output: 384000 },
+      capabilities: { tools: true, input: ["text"], output: ["text"] },
+      variants: [{ id: "max", settings: { reasoningEffort: "max" } }],
     },
-    "vv-deepseek-flash-max": {
-      name: "VV DeepSeek Flash Max",
-      id: "deepseek-flash",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 384000,
-      },
-      modalities: {
-        input: ["text", "image"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-      },
-    },
-    "vv-deepseek-flash-high": {
-      name: "VV DeepSeek Flash High",
-      id: "deepseek-flash",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 384000,
-      },
-      modalities: {
-        input: ["text"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "high",
-      },
+    "deepseek-flash": {
+      name: "DeepSeek Flash",
+      limit: { context: 1000000, output: 384000 },
+      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+      variants: [
+        { id: "max", settings: { reasoningEffort: "max" } },
+        { id: "high", settings: { reasoningEffort: "high" } },
+      ],
     },
   },
-} as const satisfies Record<string, unknown>;
+} satisfies Record<string, unknown>;
 
 const ZAI_PATCH = {
   models: {
-    "vv-glm-5.3-high": {
-      name: "VV GLM-5.3 High",
-      id: "glm-5.3",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 131072,
-      },
-      modalities: {
-        input: ["text"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "high",
-      },
+    "glm-5.3": {
+      name: "GLM-5.3",
+      limit: { context: 1000000, output: 131072 },
+      capabilities: { tools: true, input: ["text"], output: ["text"] },
+      variants: [
+        { id: "high", settings: { reasoningEffort: "high" } },
+        { id: "max", settings: { reasoningEffort: "max" } },
+      ],
     },
-    "vv-glm-5.3-max": {
-      name: "VV GLM-5.3 Max",
-      id: "glm-5.3",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 131072,
-      },
-      modalities: {
-        input: ["text"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-      },
-    },
-    "vv-glm-5.3-flash-max": {
-      name: "VV GLM-5.3 Flash Max",
-      id: "glm-5.3-flash",
-      variants: {},
-      limit: {
-        context: 1000000,
-        output: 131072,
-      },
-      modalities: {
-        input: ["text", "image", "video", "pdf"],
-        output: ["text"],
-      },
-      reasoning: true,
-      options: {
-        reasoningEffort: "max",
-      },
+    "glm-5.3-flash": {
+      name: "GLM-5.3 Flash",
+      limit: { context: 1000000, output: 131072 },
+      capabilities: { tools: true, input: ["text", "image", "video", "pdf"], output: ["text"] },
+      variants: [{ id: "max", settings: { reasoningEffort: "max" } }],
     },
   },
-} as const satisfies Record<string, unknown>;
+} satisfies Record<string, unknown>;
 
 const XIAOMI_PATCH = {
   models: {
-    "vv-mimo-v2.6-flash-high": {
-      name: "VV MiMo V2.6 Flash High",
-      // Official Xiaomi API id; the vv-* name is a local OpenCode alias only.
-      // Limits/modalities follow models.dev xiaomi/mimo-v2.6-flash (1M/131K,
-      // text+image+audio+video+pdf). Effort "high" matches the alias name and
-      // the deepseek flash-high pattern; the public API documents a thinking
-      // toggle, so live effort mapping is not smoke-verified here.
-      id: "mimo-v2.6-flash",
-      variants: {},
-      limit: {
-        context: 1048576,
-        output: 131072,
-      },
-      modalities: {
-        input: ["text", "image", "audio", "video", "pdf"],
+    // Real Xiaomi API model id; thinking is a native variant that enables the
+    // documented thinking toggle. No PDF declaration, no reasoningEffort, no alias.
+    "mimo-v2.6-flash": {
+      name: "MiMo V2.6 Flash",
+      limit: { context: 1048576, output: 131072 },
+      capabilities: {
+        tools: true,
+        input: ["text", "image", "audio", "video"],
         output: ["text"],
       },
-      reasoning: true,
-      options: {
-        reasoningEffort: "high",
-      },
+      variants: [{ id: "thinking", body: { thinking: { type: "enabled" } } }],
     },
   },
-} as const satisfies Record<string, unknown>;
+} satisfies Record<string, unknown>;
 
 const PATCH_PROVIDER_PRESETS = {
   "stepfun-ai": {
     kind: "provider-object",
     providerID: "stepfun",
     value: STEPFUN_PATCH,
-    summary: "provider.stepfun.models.step-3.7-flash patched + baseURL",
+    summary: "providers.stepfun.models.step-3.7-flash + settings.baseURL patched",
   },
   codex: {
     kind: "provider-object",
     providerID: "openai",
     value: OPENAI_PATCH,
-    summary: "provider.openai.models vv-codex-gpt-5.5/5.6 aliases patched",
+    summary: "providers.openai.models real gpt-5.5/5.6/6 models + effort variants patched",
   },
   deepseek: {
     kind: "provider-object",
     providerID: "deepseek",
     value: DEEPSEEK_PATCH,
-    summary: "provider.deepseek.models.vv-deepseek flash aliases patched",
-  },
-  kimi: {
-    kind: "provider-object",
-    providerID: "kimi-for-coding",
-    value: KIMI_PATCH,
-    summary: "provider.kimi-for-coding.models.vv-kimi-k3-max patched",
+    summary: "providers.deepseek.models deepseek-flash/deepseek-v4-flash + effort variants patched",
   },
   alibaba: {
     kind: "provider-object",
     providerID: "alibaba-token-plan",
     value: ALIBABA_PATCH,
-    summary: "provider.alibaba-token-plan.models.vv-qwen3.8-max-xhigh patched",
+    summary: "providers.alibaba-token-plan.models.qwen3.8-max#xhigh patched",
   },
   zai: {
     kind: "provider-object",
     providerID: "zai-coding-plan",
     value: ZAI_PATCH,
-    summary: "provider.zai-coding-plan.models vv-glm-5.3 high/max/flash-max aliases patched",
+    summary: "providers.zai-coding-plan.models glm-5.3/glm-5.3-flash + effort variants patched",
   },
   xiaomi: {
     kind: "provider-object",
     providerID: "xiaomi",
     value: XIAOMI_PATCH,
-    summary: "provider.xiaomi.models.vv-mimo-v2.6-flash-high patched",
+    summary: "providers.xiaomi.models.mimo-v2.6-flash#thinking patched",
   },
 } as const satisfies Record<string, PatchPreset>;
 

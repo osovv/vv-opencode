@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Deep traversal helpers for restoring/redacting placeholders in nested objects and arrays.
-//   SCOPE: in-place object/array traversal, cycle-safe with WeakSet
+//   SCOPE: copy-on-write object/array traversal that never writes into the provided value, cycle-safe with a WeakMap from original to owned copy
 //   DEPENDS: session, restore, engine
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
@@ -10,12 +10,12 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   restoreDeep - restores placeholders in objects/arrays in-place
-//   redactDeep - redacts secrets in objects/arrays in-place
+//   restoreDeep - restores placeholders into owned copies of nested objects/arrays
+//   redactDeep - redacts secrets into owned copies of nested objects/arrays
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - restoreDeep/redactDeep rebuild arrays and objects into owned copies instead of assigning entries in place, so a host-frozen nested tool input can no longer trigger "Attempted to assign to readonly property"; a WeakMap records original -> copy to keep cycle and shared-reference safety. String-leaf results are unchanged.]
 // END_CHANGE_SUMMARY
 
 import { type PlaceholderSession } from "./session.js";
@@ -23,40 +23,49 @@ import { type PatternSet } from "./patterns.js";
 import { redactText } from "./engine.js";
 import { restoreText } from "./restore.js";
 
-export function restoreDeep(value: unknown, session: PlaceholderSession): unknown {
+// START_BLOCK_DEEP_COPY
+/**
+ * Copy-on-write deep traversal shared by restore and redact. Arrays and objects
+ * are rebuilt into owned copies, so the host-provided value — which the native
+ * host may freeze — is never written to. A WeakMap records original -> copy so a
+ * cyclic or shared reference resolves to one consistent copy instead of
+ * recursing forever. String leaves go through `transform`; other primitives are
+ * returned unchanged.
+ */
+function deepCopyWithText(
+  value: unknown,
+  transform: (text: string) => string,
+  seen: WeakMap<object, unknown>,
+): unknown {
   if (value === null || value === undefined) return value;
-  if (typeof value === "string") return restoreText(value, session);
-  if (typeof value === "number" || typeof value === "boolean") return value;
-  if (typeof value === "bigint") return value;
-
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      value[i] = restoreDeep(value[i], session) as never;
-    }
+  if (typeof value === "string") return transform(value);
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
     return value;
   }
+  if (typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
 
-  if (typeof value === "object") {
-    const seen = new WeakSet();
-    return restoreDeepObject(value as Record<string, unknown>, session, seen);
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (let index = 0; index < value.length; index += 1) {
+      copy.push(deepCopyWithText(value[index], transform, seen));
+    }
+    return copy;
   }
 
-  return value;
+  const source = value as Record<string, unknown>;
+  const copy: Record<string, unknown> = {};
+  seen.set(value, copy);
+  for (const key of Object.keys(source)) {
+    copy[key] = deepCopyWithText(source[key], transform, seen);
+  }
+  return copy;
 }
+// END_BLOCK_DEEP_COPY
 
-function restoreDeepObject(
-  obj: Record<string, unknown>,
-  session: PlaceholderSession,
-  seen: WeakSet<object>,
-): Record<string, unknown> {
-  if (seen.has(obj)) return obj;
-  seen.add(obj);
-
-  for (const key of Object.keys(obj)) {
-    obj[key] = restoreDeep(obj[key], session) as never;
-  }
-
-  return obj;
+export function restoreDeep(value: unknown, session: PlaceholderSession): unknown {
+  return deepCopyWithText(value, (text) => restoreText(text, session), new WeakMap());
 }
 
 export function redactDeep(
@@ -64,38 +73,9 @@ export function redactDeep(
   patternSet: PatternSet,
   session: PlaceholderSession,
 ): unknown {
-  if (value === null || value === undefined) return value;
-  if (typeof value === "string") return redactText(value, patternSet, session).text;
-  if (typeof value === "number" || typeof value === "boolean") return value;
-  if (typeof value === "bigint") return value;
-
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      value[i] = redactDeep(value[i], patternSet, session) as never;
-    }
-    return value;
-  }
-
-  if (typeof value === "object") {
-    const seen = new WeakSet();
-    return redactDeepObject(value as Record<string, unknown>, patternSet, session, seen);
-  }
-
-  return value;
-}
-
-function redactDeepObject(
-  obj: Record<string, unknown>,
-  patternSet: PatternSet,
-  session: PlaceholderSession,
-  seen: WeakSet<object>,
-): Record<string, unknown> {
-  if (seen.has(obj)) return obj;
-  seen.add(obj);
-
-  for (const key of Object.keys(obj)) {
-    obj[key] = redactDeep(obj[key], patternSet, session) as never;
-  }
-
-  return obj;
+  return deepCopyWithText(
+    value,
+    (text) => redactText(text, patternSet, session).text,
+    new WeakMap(),
+  );
 }

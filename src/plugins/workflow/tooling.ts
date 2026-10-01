@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-004 - work_item_list delegates to the read-only inspection owner; every handler that reports a delegated next action (open, failure context, recovery) now composes the same deriveDelegatedGuidance as the list so responses cannot contradict it, and generic register/amend plus checkpoint amend/complete execution views pass live store data so task status derives from current acceptance. Prior T-003: every handler result is finalized so failures carry a stable category. A missing trusted workspace root/plan loader/authorization lookup is a distinct host_context failure instead of INVALID_INPUT.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - work_item_decide rework now passes the public attempt identity into failed-checkpoint authorization so a stale attempt is refused instead of silently targeting the current accepted result.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -118,6 +118,12 @@ export type WorkflowToolContext = {
   sessionId: string;
   /** Trusted absolute workspace root; required for generic execution registration. */
   workspaceRoot?: string;
+  /**
+   * Set only by the cancellation-recovery transaction after it has settled the
+   * cancelled in-flight attempt in the same staged store. It permits the
+   * bounded resume recovery of that just-settled target; it never accepts work.
+   */
+  cancellationSettled?: boolean;
 };
 
 export type WorkflowToolDefinition<TArgs, TResult> = {
@@ -725,6 +731,7 @@ export function createWorkItemDecideTool(
           runId,
           checkpointId,
           reason: rationale,
+          attempt: parsed.attempt,
         });
         if (!reworked.ok) {
           return {
@@ -811,6 +818,7 @@ export function createWorkItemDecideTool(
           verification,
           recoveryId,
           ...(advanceGrantApproved ? { advanceGrantApproved: true } : {}),
+          ...(context.cancellationSettled === true ? { cancellationSettled: true } : {}),
           ...(userMessageId !== undefined
             ? { userMessageId, lookupUserMessage: options?.lookupUserMessage }
             : {}),

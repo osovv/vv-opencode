@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 // FILE: scripts/tui-local.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Build and launch the repository's local TUI export against existing OpenCode and vvoc configs without loading the published vv-opencode TUI package.
-//   SCOPE: Local build execution, effective/project/global launch selection, temporary TUI config generation, XDG config isolation, OpenCode arg forwarding, and cleanup.
-//   DEPENDS: [node:fs/promises, node:os, node:path, node:url, src/commands/launch.ts, src/lib/config-layers.ts, src/lib/opencode.ts]
+//   PURPOSE: Build and launch a local native TUI export against existing OpenCode/vvoc configs by pointing the native cli.json plugin list at a local package directory forwarder.
+//   SCOPE: Local build execution, effective/project/global launch selection, local plugin-directory forwarder generation, isolated XDG config home with a merged cli.json, OpenCode arg forwarding, and cleanup. It never edits live user configuration.
+//   DEPENDS: [node:fs/promises, node:os, node:path, node:url, jsonc-parser, src/commands/launch.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -12,27 +12,29 @@
 //
 // START_MODULE_MAP
 //   LocalTuiArguments - Parsed local-launch scope and forwarded OpenCode arguments.
-//   PreparedLocalTuiLaunch - Temporary config, command, and environment required for one local TUI run.
+//   PreparedLocalTuiLaunch - Temporary cli.json, plugin forwarder, command, and environment for one local TUI run.
 //   parseLocalTuiArguments - Removes the local --scope option while preserving OpenCode passthrough arguments.
-//   renderLocalTuiConfig - Replaces the managed package entry with the local dist/tui.js file URL.
-//   createLocalTuiEnvironment - Combines selected config paths with an isolated XDG config home and temporary TUI config.
-//   prepareLocalTuiLaunch - Resolves normal launch sources and writes the temporary local TUI config.
+//   renderLocalCliConfig - Merges the local plugin directory into an existing cli.json while preserving unrelated settings and comments.
+//   createLocalTuiEnvironment - Combines selected config paths with an isolated XDG config home.
+//   prepareLocalTuiLaunch - Resolves normal launch sources, writes the forwarder and temporary cli.json.
 //   parseScope - Validates the local launch scope option.
 //   runBuild - Builds the local package before launch.
 //   main - Runs the isolated local TUI launch workflow.
+//   isManagedVvocEntry - True when a cli.json plugin entry targets the vvoc package.
+//   isRecord - Narrow a value to a plain record.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Added a non-mutating local pre-release TUI launch workflow.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 - Replaced the removed V1 tui.json/opencodeTuiSource flow with the native cli.json plugin directory forwarder.]
 // END_CHANGE_SUMMARY
 
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { applyEdits, modify, parse } from "jsonc-parser";
 import { buildLaunchPlan, type LaunchScope } from "../src/commands/launch.ts";
-import { OPENCODE_TUI_CONFIG_ENV } from "../src/lib/config-layers.ts";
-import { ensureTuiPackageConfigText } from "../src/lib/opencode.ts";
+import { getGlobalOpencodeDir } from "../src/lib/vvoc-paths.ts";
 
 export type LocalTuiArguments = {
   scope: LaunchScope;
@@ -43,8 +45,9 @@ export type PreparedLocalTuiLaunch = {
   command: string[];
   env: NodeJS.ProcessEnv;
   tempRoot: string;
-  tuiConfigPath: string;
-  pluginUrl: string;
+  cliConfigPath: string;
+  pluginDir: string;
+  pluginSpec: string;
   opencodeConfigPath?: string;
   vvocConfigPath?: string;
 };
@@ -75,21 +78,32 @@ export function parseLocalTuiArguments(args: readonly string[]): LocalTuiArgumen
   return { scope, passthroughArgs };
 }
 
-export function renderLocalTuiConfig(currentText: string | undefined, pluginUrl: string): string {
-  return ensureTuiPackageConfigText(currentText, pluginUrl);
+/**
+ * Merge the local plugin directory specifier into the existing cli.json plugin
+ * list, dropping any previously managed vvoc entry, and preserve comments and
+ * unrelated settings the user already has.
+ */
+export function renderLocalCliConfig(currentText: string | undefined, pluginSpec: string): string {
+  const text = currentText !== undefined && currentText.trim().length > 0 ? currentText : "{}\n";
+  const existing = parse(text) as unknown;
+  const plugins =
+    isRecord(existing) && Array.isArray(existing.plugins) ? existing.plugins : [];
+  const filtered = plugins.filter((entry) => !isManagedVvocEntry(entry));
+  const edits = modify(text, ["plugins"], [...filtered, pluginSpec], {
+    formattingOptions: { insertSpaces: true, tabSize: 2 },
+  });
+  return applyEdits(text, edits);
 }
 
 export function createLocalTuiEnvironment(options: {
   baseEnv: NodeJS.ProcessEnv;
   launchEnv: Record<string, string>;
   isolatedConfigHome: string;
-  tuiConfigPath: string;
 }): NodeJS.ProcessEnv {
   return {
     ...options.baseEnv,
     ...options.launchEnv,
     XDG_CONFIG_HOME: options.isolatedConfigHome,
-    [OPENCODE_TUI_CONFIG_ENV]: options.tuiConfigPath,
   };
 }
 
@@ -99,6 +113,7 @@ export async function prepareLocalTuiLaunch(options: {
   scope: LaunchScope;
   passthroughArgs: string[];
   env: NodeJS.ProcessEnv;
+  configHome?: string | undefined;
 }): Promise<PreparedLocalTuiLaunch> {
   const launch = await buildLaunchPlan({
     scope: options.scope,
@@ -111,14 +126,26 @@ export async function prepareLocalTuiLaunch(options: {
 
   const tempRoot = await mkdtemp(join(tmpdir(), "vvoc-local-tui-"));
   try {
-    const sourcePath =
-      launch.opencodeTuiSource.kind === "missing" ? undefined : launch.opencodeTuiSource.path;
-    const currentText = sourcePath ? await readFile(sourcePath, "utf8") : undefined;
-    const extension = sourcePath?.endsWith(".jsonc") ? "jsonc" : "json";
-    const tuiConfigPath = join(tempRoot, "opencode", `tui.${extension}`);
-    const pluginUrl = pathToFileURL(pluginPath).href;
-    await mkdir(dirname(tuiConfigPath), { recursive: true });
-    await writeFile(tuiConfigPath, renderLocalTuiConfig(currentText, pluginUrl), "utf8");
+    // A native local plugin target must be a directory exposing a `tui` entry.
+    const pluginDir = join(tempRoot, "plugin");
+    await mkdir(pluginDir, { recursive: true });
+    const forwarded = pathToFileURL(pluginPath).href;
+    await writeFile(
+      join(pluginDir, "tui.js"),
+      `export * from ${JSON.stringify(forwarded)};\nexport { default } from ${JSON.stringify(forwarded)};\n`,
+      "utf8",
+    );
+
+    const configHome = options.configHome ?? options.env.XDG_CONFIG_HOME;
+    const sourceCliPath = join(
+      configHome === undefined ? getGlobalOpencodeDir() : getGlobalOpencodeDir(configHome),
+      "cli.json",
+    );
+    const currentText = await readFile(sourceCliPath, "utf8").catch(() => undefined);
+    const pluginSpec = pathToFileURL(pluginDir).href;
+    const cliConfigPath = join(tempRoot, "opencode", "cli.json");
+    await mkdir(dirname(cliConfigPath), { recursive: true });
+    await writeFile(cliConfigPath, renderLocalCliConfig(currentText, pluginSpec), "utf8");
 
     return {
       command: launch.command,
@@ -126,11 +153,11 @@ export async function prepareLocalTuiLaunch(options: {
         baseEnv: options.env,
         launchEnv: launch.env,
         isolatedConfigHome: tempRoot,
-        tuiConfigPath,
       }),
       tempRoot,
-      tuiConfigPath,
-      pluginUrl,
+      cliConfigPath,
+      pluginDir,
+      pluginSpec,
       opencodeConfigPath: launch.opencodeSource.path,
       vvocConfigPath: launch.vvocSource.path,
     };
@@ -172,8 +199,8 @@ async function main(): Promise<void> {
     env: process.env,
   });
 
-  console.log(`Local TUI plugin: ${launch.pluginUrl}`);
-  console.log(`Temporary TUI config: ${launch.tuiConfigPath}`);
+  console.log(`Local TUI plugin directory: ${launch.pluginDir}`);
+  console.log(`Temporary cli.json: ${launch.cliConfigPath}`);
   console.log(`OpenCode config: ${launch.opencodeConfigPath ?? "missing"}`);
   console.log(`vvoc config: ${launch.vvocConfigPath ?? "missing"}`);
   console.log("The temporary config is removed after OpenCode exits.");
@@ -191,6 +218,20 @@ async function main(): Promise<void> {
   } finally {
     await rm(launch.tempRoot, { recursive: true, force: true });
   }
+}
+
+function isManagedVvocEntry(entry: unknown): boolean {
+  const value =
+    typeof entry === "string"
+      ? entry
+      : isRecord(entry) && typeof entry.package === "string"
+        ? entry.package
+        : "";
+  return value.includes("@osovv/vv-opencode");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 if (import.meta.main) {
