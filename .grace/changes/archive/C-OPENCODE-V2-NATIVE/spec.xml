@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-OPENCODE-V2-NATIVE>
     <Summary>Full functional migration of the v1.7.0 product to native OpenCode 2.0.18, without V1 compatibility or deferred features.</Summary>
     <Problem>The released dual-runtime attempt preserved incompatible integration assumptions and omitted user-visible functionality. A clean v1.7.0 branch preserves the domain baseline while replacing host-dependent contracts.</Problem>

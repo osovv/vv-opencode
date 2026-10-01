@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-OPENCODE-V2-NATIVE>
     <IntentSummary>Preserve the complete v1.7.0 product while replacing host boundaries with native OpenCode 2.0.18 contracts; implement ten coarse tasks with two independent checkpoints and real-host acceptance.</IntentSummary>
     <BaselineAssertions>
