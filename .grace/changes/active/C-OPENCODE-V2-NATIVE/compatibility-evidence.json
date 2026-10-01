@@ -1,7 +1,7 @@
 {
   "version": 1,
   "kind": "vvoc-tool-contract-host-compatibility",
-  "generatedAt": "2026-09-28T19:14:40.442Z",
+  "generatedAt": "2026-10-01T08:39:54.301Z",
   "command": "bun run contracts:host",
   "host": {
     "opencodeVersion": "2.0.18",
@@ -269,8 +269,8 @@
     },
     {
       "path": "dist/plugins/guardian/index.js",
-      "sha256": "e688840be30578554ce7bc7b53b5214a31eb76501880bd8ef68a86a76b754215",
-      "bytes": 21940
+      "sha256": "936cfbbfe2bd0e1ce85886cf18f0d5d0b02f963150849f1370c00f29dcf45c09",
+      "bytes": 22026
     },
     {
       "path": "dist/plugins/hashline-edit/constants.js",
@@ -524,8 +524,8 @@
     },
     {
       "path": "dist/plugins/workflow/cancellation.js",
-      "sha256": "37f056468a0b5d9e2478e486dff1bd4c24e3d8d4ae61aac9819bc1877578b86b",
-      "bytes": 8562
+      "sha256": "dcf8af5664d3a516b4ee86370814a26a948b51deb569e29c445b38d22d6cbede",
+      "bytes": 10461
     },
     {
       "path": "dist/plugins/workflow/checkpoint-io.js",
@@ -554,8 +554,8 @@
     },
     {
       "path": "dist/plugins/workflow/index.js",
-      "sha256": "94e8378e177aa5882c195cd40b4e2d3da72f4110391845a43edc37ba3dff1802",
-      "bytes": 101155
+      "sha256": "c8cf5551ab376d754c3adbfded6e3f025c11a69ebaf74232a1fe0dfbc3b5064c",
+      "bytes": 101198
     },
     {
       "path": "dist/plugins/workflow/input-validation.js",
@@ -639,8 +639,8 @@
     },
     {
       "path": "dist/runtime/context-inspection-contract.js",
-      "sha256": "bfe8e7a57ede7b30b3a22544844a935b22af484f2d64850c7abfe205775c13c3",
-      "bytes": 24646
+      "sha256": "b3bb4b5e6a78670ed912ea0051f8b5bbec2aaae8ca1fca9967f51614bc9c2e38",
+      "bytes": 25033
     },
     {
       "path": "dist/runtime/context-inspection.js",
@@ -706,8 +706,8 @@
     },
     {
       "path": "src/lib/agent-tool-host.test.ts",
-      "sha256": "993393b7ab855a00d77a7d50b7df42215ce66b84a3cc4ab550989c6a675fa74d",
-      "bytes": 29282
+      "sha256": "644a8a7121f61681703f3bbf11a9c2b3df7b82e22ffd3f7d4d219c3486e750b0",
+      "bytes": 29201
     },
     {
       "path": "src/lib/analytics/store.ts",
@@ -826,8 +826,8 @@
     },
     {
       "path": "src/plugins/guardian/index.ts",
-      "sha256": "4ce5912036f742cbd114a4527bfdcda9130ee8ea7650d395a3036fedfe2daa4c",
-      "bytes": 24290
+      "sha256": "9c49c26e850cf379345734d01ccfcb92de0dbe083cda474de6b632288ee5ec84",
+      "bytes": 24376
     },
     {
       "path": "src/plugins/hashline-edit/constants.ts",
@@ -1081,8 +1081,8 @@
     },
     {
       "path": "src/plugins/workflow/cancellation.ts",
-      "sha256": "02ad6be492c8c146f9da9452ba87583789e6a80f07b05dfe7a01e299f1ce90f3",
-      "bytes": 11336
+      "sha256": "364ca3b0b3b6b79abfa0aa3ac5dcd5b6de20799eb116328caf86bf4304c606a9",
+      "bytes": 13237
     },
     {
       "path": "src/plugins/workflow/checkpoint-io.ts",
@@ -1111,8 +1111,8 @@
     },
     {
       "path": "src/plugins/workflow/index.ts",
-      "sha256": "4934f95da650abe2b839d7f3271bbecf46411efb8c6565b62357b269ea08ef39",
-      "bytes": 99122
+      "sha256": "15388f68e9b5db5419a4df8713ded7231d85f7b3ce5c86406f119e411d2138d7",
+      "bytes": 99163
     },
     {
       "path": "src/plugins/workflow/input-validation.ts",
@@ -1196,8 +1196,8 @@
     },
     {
       "path": "src/runtime/context-inspection-contract.ts",
-      "sha256": "d767e5781f118b882f851bacc9df0be92d02db7b2cb55c10b7f8685d20a65ed2",
-      "bytes": 29695
+      "sha256": "cb53ece29cea0061ea2b3793b437001f3764204b2254d4265af00a939c9da61a",
+      "bytes": 30082
     },
     {
       "path": "src/runtime/context-inspection.ts",
@@ -1293,8 +1293,8 @@
     },
     {
       "path": "scripts/check-tool-contracts-host.ts",
-      "sha256": "6e1de5d7d6a2aa943a1f704d4a890b9decbc459d1f8bfb5ce9319fcef77d4b95",
-      "bytes": 173880
+      "sha256": "e6b78b78cf3ad426033f7b7da59b6d504c952cad49c45a3a41983988a23d4fc1",
+      "bytes": 174361
     },
     {
       "path": "templates/skills/vv-execute/references/tool-contracts.md",
@@ -1445,8 +1445,8 @@
       },
       {
         "path": "dist/plugins/guardian/index.js",
-        "sha256": "e688840be30578554ce7bc7b53b5214a31eb76501880bd8ef68a86a76b754215",
-        "bytes": 21940
+        "sha256": "936cfbbfe2bd0e1ce85886cf18f0d5d0b02f963150849f1370c00f29dcf45c09",
+        "bytes": 22026
       },
       {
         "path": "dist/plugins/hashline-edit/constants.js",
@@ -1700,8 +1700,8 @@
       },
       {
         "path": "dist/plugins/workflow/cancellation.js",
-        "sha256": "37f056468a0b5d9e2478e486dff1bd4c24e3d8d4ae61aac9819bc1877578b86b",
-        "bytes": 8562
+        "sha256": "dcf8af5664d3a516b4ee86370814a26a948b51deb569e29c445b38d22d6cbede",
+        "bytes": 10461
       },
       {
         "path": "dist/plugins/workflow/checkpoint-io.js",
@@ -1730,8 +1730,8 @@
       },
       {
         "path": "dist/plugins/workflow/index.js",
-        "sha256": "94e8378e177aa5882c195cd40b4e2d3da72f4110391845a43edc37ba3dff1802",
-        "bytes": 101155
+        "sha256": "c8cf5551ab376d754c3adbfded6e3f025c11a69ebaf74232a1fe0dfbc3b5064c",
+        "bytes": 101198
       },
       {
         "path": "dist/plugins/workflow/input-validation.js",
@@ -1815,8 +1815,8 @@
       },
       {
         "path": "dist/runtime/context-inspection-contract.js",
-        "sha256": "bfe8e7a57ede7b30b3a22544844a935b22af484f2d64850c7abfe205775c13c3",
-        "bytes": 24646
+        "sha256": "b3bb4b5e6a78670ed912ea0051f8b5bbec2aaae8ca1fca9967f51614bc9c2e38",
+        "bytes": 25033
       },
       {
         "path": "dist/runtime/context-inspection.js",
@@ -1910,8 +1910,8 @@
       },
       {
         "path": "scripts/check-tool-contracts-host.ts",
-        "sha256": "6e1de5d7d6a2aa943a1f704d4a890b9decbc459d1f8bfb5ce9319fcef77d4b95",
-        "bytes": 173880
+        "sha256": "e6b78b78cf3ad426033f7b7da59b6d504c952cad49c45a3a41983988a23d4fc1",
+        "bytes": 174361
       },
       {
         "path": "src/index.ts",
@@ -1930,8 +1930,8 @@
       },
       {
         "path": "src/lib/agent-tool-host.test.ts",
-        "sha256": "993393b7ab855a00d77a7d50b7df42215ce66b84a3cc4ab550989c6a675fa74d",
-        "bytes": 29282
+        "sha256": "644a8a7121f61681703f3bbf11a9c2b3df7b82e22ffd3f7d4d219c3486e750b0",
+        "bytes": 29201
       },
       {
         "path": "src/lib/analytics/store.ts",
@@ -2050,8 +2050,8 @@
       },
       {
         "path": "src/plugins/guardian/index.ts",
-        "sha256": "4ce5912036f742cbd114a4527bfdcda9130ee8ea7650d395a3036fedfe2daa4c",
-        "bytes": 24290
+        "sha256": "9c49c26e850cf379345734d01ccfcb92de0dbe083cda474de6b632288ee5ec84",
+        "bytes": 24376
       },
       {
         "path": "src/plugins/hashline-edit/constants.ts",
@@ -2305,8 +2305,8 @@
       },
       {
         "path": "src/plugins/workflow/cancellation.ts",
-        "sha256": "02ad6be492c8c146f9da9452ba87583789e6a80f07b05dfe7a01e299f1ce90f3",
-        "bytes": 11336
+        "sha256": "364ca3b0b3b6b79abfa0aa3ac5dcd5b6de20799eb116328caf86bf4304c606a9",
+        "bytes": 13237
       },
       {
         "path": "src/plugins/workflow/checkpoint-io.ts",
@@ -2335,8 +2335,8 @@
       },
       {
         "path": "src/plugins/workflow/index.ts",
-        "sha256": "4934f95da650abe2b839d7f3271bbecf46411efb8c6565b62357b269ea08ef39",
-        "bytes": 99122
+        "sha256": "15388f68e9b5db5419a4df8713ded7231d85f7b3ce5c86406f119e411d2138d7",
+        "bytes": 99163
       },
       {
         "path": "src/plugins/workflow/input-validation.ts",
@@ -2420,8 +2420,8 @@
       },
       {
         "path": "src/runtime/context-inspection-contract.ts",
-        "sha256": "d767e5781f118b882f851bacc9df0be92d02db7b2cb55c10b7f8685d20a65ed2",
-        "bytes": 29695
+        "sha256": "cb53ece29cea0061ea2b3793b437001f3764204b2254d4265af00a939c9da61a",
+        "bytes": 30082
       },
       {
         "path": "src/runtime/context-inspection.ts",
@@ -2607,8 +2607,8 @@
       },
       {
         "path": "dist/plugins/guardian/index.js",
-        "sha256": "e688840be30578554ce7bc7b53b5214a31eb76501880bd8ef68a86a76b754215",
-        "bytes": 21940
+        "sha256": "936cfbbfe2bd0e1ce85886cf18f0d5d0b02f963150849f1370c00f29dcf45c09",
+        "bytes": 22026
       },
       {
         "path": "dist/plugins/hashline-edit/constants.js",
@@ -2862,8 +2862,8 @@
       },
       {
         "path": "dist/plugins/workflow/cancellation.js",
-        "sha256": "37f056468a0b5d9e2478e486dff1bd4c24e3d8d4ae61aac9819bc1877578b86b",
-        "bytes": 8562
+        "sha256": "dcf8af5664d3a516b4ee86370814a26a948b51deb569e29c445b38d22d6cbede",
+        "bytes": 10461
       },
       {
         "path": "dist/plugins/workflow/checkpoint-io.js",
@@ -2892,8 +2892,8 @@
       },
       {
         "path": "dist/plugins/workflow/index.js",
-        "sha256": "94e8378e177aa5882c195cd40b4e2d3da72f4110391845a43edc37ba3dff1802",
-        "bytes": 101155
+        "sha256": "c8cf5551ab376d754c3adbfded6e3f025c11a69ebaf74232a1fe0dfbc3b5064c",
+        "bytes": 101198
       },
       {
         "path": "dist/plugins/workflow/input-validation.js",
@@ -2977,8 +2977,8 @@
       },
       {
         "path": "dist/runtime/context-inspection-contract.js",
-        "sha256": "bfe8e7a57ede7b30b3a22544844a935b22af484f2d64850c7abfe205775c13c3",
-        "bytes": 24646
+        "sha256": "b3bb4b5e6a78670ed912ea0051f8b5bbec2aaae8ca1fca9967f51614bc9c2e38",
+        "bytes": 25033
       },
       {
         "path": "dist/runtime/context-inspection.js",
@@ -3072,8 +3072,8 @@
       },
       {
         "path": "scripts/check-tool-contracts-host.ts",
-        "sha256": "6e1de5d7d6a2aa943a1f704d4a890b9decbc459d1f8bfb5ce9319fcef77d4b95",
-        "bytes": 173880
+        "sha256": "e6b78b78cf3ad426033f7b7da59b6d504c952cad49c45a3a41983988a23d4fc1",
+        "bytes": 174361
       },
       {
         "path": "src/index.ts",
@@ -3092,8 +3092,8 @@
       },
       {
         "path": "src/lib/agent-tool-host.test.ts",
-        "sha256": "993393b7ab855a00d77a7d50b7df42215ce66b84a3cc4ab550989c6a675fa74d",
-        "bytes": 29282
+        "sha256": "644a8a7121f61681703f3bbf11a9c2b3df7b82e22ffd3f7d4d219c3486e750b0",
+        "bytes": 29201
       },
       {
         "path": "src/lib/analytics/store.ts",
@@ -3212,8 +3212,8 @@
       },
       {
         "path": "src/plugins/guardian/index.ts",
-        "sha256": "4ce5912036f742cbd114a4527bfdcda9130ee8ea7650d395a3036fedfe2daa4c",
-        "bytes": 24290
+        "sha256": "9c49c26e850cf379345734d01ccfcb92de0dbe083cda474de6b632288ee5ec84",
+        "bytes": 24376
       },
       {
         "path": "src/plugins/hashline-edit/constants.ts",
@@ -3467,8 +3467,8 @@
       },
       {
         "path": "src/plugins/workflow/cancellation.ts",
-        "sha256": "02ad6be492c8c146f9da9452ba87583789e6a80f07b05dfe7a01e299f1ce90f3",
-        "bytes": 11336
+        "sha256": "364ca3b0b3b6b79abfa0aa3ac5dcd5b6de20799eb116328caf86bf4304c606a9",
+        "bytes": 13237
       },
       {
         "path": "src/plugins/workflow/checkpoint-io.ts",
@@ -3497,8 +3497,8 @@
       },
       {
         "path": "src/plugins/workflow/index.ts",
-        "sha256": "4934f95da650abe2b839d7f3271bbecf46411efb8c6565b62357b269ea08ef39",
-        "bytes": 99122
+        "sha256": "15388f68e9b5db5419a4df8713ded7231d85f7b3ce5c86406f119e411d2138d7",
+        "bytes": 99163
       },
       {
         "path": "src/plugins/workflow/input-validation.ts",
@@ -3582,8 +3582,8 @@
       },
       {
         "path": "src/runtime/context-inspection-contract.ts",
-        "sha256": "d767e5781f118b882f851bacc9df0be92d02db7b2cb55c10b7f8685d20a65ed2",
-        "bytes": 29695
+        "sha256": "cb53ece29cea0061ea2b3793b437001f3764204b2254d4265af00a939c9da61a",
+        "bytes": 30082
       },
       {
         "path": "src/runtime/context-inspection.ts",
