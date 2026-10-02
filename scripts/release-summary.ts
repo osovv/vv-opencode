@@ -21,6 +21,7 @@
 //   RELEASE_SUMMARY_MAX_ATTEMPTS - Total attempts before release:bump aborts.
 //   resolveReleaseSummaryOptions - Parses env overrides and returns validated model/timeout settings.
 //   collectReleaseCommitMetadata - Reads git metadata and full per-commit diffs from latest reachable tag to HEAD through an injected runner.
+//   renderCommitDiff - Renders one commit diff for the release summary prompt.
 //   buildReleaseSummaryPrompt - Builds the stdin prompt payload for the restricted release-summary agent, bounding each commit diff to the summary model context window.
 //   MAX_COMMIT_DIFF_CHARS - Per-commit diff budget; truncated diffs keep the head and announce the cut.
 //   buildReleaseSummaryAgentConfig - Builds OPENCODE_CONFIG_CONTENT for the restricted primary release-summary agent.
