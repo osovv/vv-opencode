@@ -54,7 +54,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Regenerate the versioned tool-contracts reference during the bump and include it in the release commit so contracts:check stays current after a version change.]
+//   LAST_CHANGE: [DIRECT-FIX - Extend the bounded npm metadata retry window so delayed registry propagation no longer forces a manual tag/GitHub Release finalization.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -85,7 +85,10 @@ const ALLOWED_RELEASE_FILES = new Set([
 /** Regenerated during the bump because the generated reference embeds PACKAGE_VERSION. */
 const TOOL_CONTRACTS_REFERENCE_PATH = "templates/skills/vv-execute/references/tool-contracts.md";
 const CAPTURE_MAX_BUFFER = 128 * 1024 * 1024;
-const PUBLISHED_METADATA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
+const PUBLISHED_METADATA_RETRY_DELAYS_MS = [
+  1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000,
+  30_000, 30_000, 30_000, 30_000,
+];
 const RELEASE_TYPES = new Set([
   "major",
   "minor",
