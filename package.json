@@ -115,6 +115,7 @@
     "tui:local": "bun scripts/tui-local.ts",
     "release:check": "bun scripts/release-check.ts",
     "release:bump": "bun scripts/release-bump.ts",
+    "release:deprecate": "bun scripts/release-deprecate.ts",
     "prepare": "lefthook install --force"
   },
   "dependencies": {

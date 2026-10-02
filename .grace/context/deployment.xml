@@ -43,6 +43,7 @@
     <TrustedPublishing>The workflow uses npm provenance/trusted publishing through id-token permissions.</TrustedPublishing>
     <NormalPushes>Normal branch pushes must not publish the package.</NormalPushes>
     <Recovery>A rerun may skip npm publication only when the existing package version gitHead matches the exact requested release SHA; missing tag or GitHub Release finalization is recovered with the maintainer's authenticated local git and gh clients.</Recovery>
+    <SupersededVersions>bun run release:deprecate prints (default) or, with --apply under an authenticated npm login, applies npm deprecate for every stable 2.* version below the latest dist-tag; it keeps the current latest v2 untouched and never publishes.</SupersededVersions>
   </Publishing>
   <Rollback>
     <Expectation>Package rollback is managed by npm version selection and by rerunning vvoc sync or fixing vvoc.json manually when strict config validation blocks mutation.</Expectation>

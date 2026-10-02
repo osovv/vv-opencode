@@ -832,6 +832,8 @@ The workflow uses npm provenance/trusted publishing (`id-token: write`) and read
 
 `bun run release:check` verifies independently that `package.json` name, version, and `schemas/vvoc/v3.json` `$id` and config format version are all consistent; run it anytime.
 
+`bun run release:deprecate` keeps the published version list tidy after a release. It resolves the current `latest` dist-tag (or an explicit `--keep <version>`), selects every stable `2.*` release below it, and prints the plan. Add `--apply` with an authenticated `npm login` to run `npm deprecate` for those versions. It never publishes and never targets the kept release.
+
 ---
 
 ## License
