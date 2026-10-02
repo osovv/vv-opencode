@@ -1,3 +1,12 @@
+## <small>2.1.1 (2026-10-02)</small>
+
+### Summary
+
+Version 2.1.1 fixes two packaging and release-tooling issues. The solid-js peer dependency range is relaxed from >=1.9.15 to >=1.9.12 so the declared peers align with the @opentui packages that are pinned by the project, avoiding peer-resolution conflicts during installation. In addition, the release workflow now invokes `opencode run --standalone` instead of the prior `--pure` flag when generating the required release changelog summary, and the README and release script documentation were updated to match. Together these changes make installs smoother for consumers and keep the automated release process producing its mandatory summary reliably.
+
+* fix(package): relax solid-js peer range to satisfy @opentui pin ([8da6f6d](https://github.com/osovv/vv-opencode/commit/8da6f6d))
+* fix(release): use opencode run --standalone for the v2 release summary ([5dca67e](https://github.com/osovv/vv-opencode/commit/5dca67e))
+
 ## 2.1.0 (2026-10-01)
 
 ### Summary
