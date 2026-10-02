@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-RELEASE-RC-CHANNEL - Covered channel derivation, contradiction rejection, dispatch channel input, and rc pre-release marking.]
+//   LAST_CHANGE: [DIRECT-FIX - Added coverage that npm metadata polling keeps enough total wait for delayed registry propagation.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -251,6 +251,32 @@ describe("release finalization", () => {
     expect(waits).toEqual([1_000, 2_000]);
     expect(commands.filter((entry) => entry.mode === "capture")).toHaveLength(3);
     expect(commands.some((entry) => entry.command === "git" && entry.args[0] === "tag")).toBe(true);
+  });
+
+  test("keeps polling npm metadata long enough for npm propagation", () => {
+    const waits: number[] = [];
+    const execute: ReleaseCommandRunner = () => "";
+    const capture: ReleaseCommandRunner = () => {
+      throw new Error("package metadata not propagated");
+    };
+
+    expect(() =>
+      finalizePublishedRelease(
+        {
+          version: "1.2.3",
+          commitSha: "abc123",
+          tagName: "v1.2.3",
+          changelogText: "## 1.2.3\n\nCurrent release.",
+          channel: "latest",
+        },
+        execute,
+        capture,
+        (milliseconds) => waits.push(milliseconds),
+      ),
+    ).toThrow("did not expose gitHead");
+
+    const totalWaitMs = waits.reduce((sum, milliseconds) => sum + milliseconds, 0);
+    expect(totalWaitMs).toBeGreaterThanOrEqual(300_000);
   });
 
   test("extracts only the requested changelog block", () => {
