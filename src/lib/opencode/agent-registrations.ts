@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Replaced V1 inline agent prompt/permission registration with native discovered agent markdown plus native default_agent and skills registration.]
+//   LAST_CHANGE: [direct fix - Pass the declaring config directory when validating inline agent overrides so a global config that uses {file:} tokens no longer fails sync.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify } from "jsonc-parser";
@@ -301,7 +301,7 @@ async function readInlineManagedAgentOverrides(
   const text = await readOptionalText(paths.opencodeConfigPath);
   if (!text) return overrides;
   const document = parseObjectDocument(text, paths.opencodeConfigPath);
-  assertNativeOpenCodeDocument(document, paths.opencodeConfigPath);
+  assertNativeOpenCodeDocument(document, paths.opencodeConfigPath, assetValidationContext(paths));
   const agents = readNativeAgents(document, paths.opencodeConfigPath);
   for (const agentName of MANAGED_NATIVE_AGENT_NAMES) {
     const entry = agents[agentName];
