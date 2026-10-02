@@ -3,7 +3,7 @@
 // VERSION: 1.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Prepare and push an exact-SHA release commit, wait for CI-gated npm publication, then create the annotated tag and GitHub Release with the authenticated local user.
-//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode --pure run and retry/validation, updates package.json and schema $id, regenerates the versioned tool-contracts reference, runs release:check, commits, pushes the current branch, dispatches publish.yml with the release version and commit SHA, waits for CI success, retries npm metadata and verifies gitHead, then creates and pushes the annotated tag plus GitHub Release locally.
+//   SCOPE: Validates clean worktree, accepts npm version args (patch/minor/major/prerelease/explicit semver), generates changelog entry from git history via conventional-changelog, collects commit metadata plus full per-commit diffs, generates a mandatory AI release changelog summary with OpenCode v2 run --standalone and retry/validation, updates package.json and schema $id, regenerates the versioned tool-contracts reference, runs release:check, commits, pushes the current branch, dispatches publish.yml with the release version and commit SHA, waits for CI success, retries npm metadata and verifies gitHead, then creates and pushes the annotated tag plus GitHub Release locally.
 //   DEPENDS: [node:fs, node:child_process, gh CLI, scripts/release-summary.ts]
 //   LINKS: [M-RELEASE-AUTOMATION, VF-RELEASE-AUTOMATION]
 //   ROLE: SCRIPT
@@ -36,7 +36,7 @@
 //   run - Runs a command via execFileSync with inherited stdio and exits on failure.
 //   runCapture - Runs a command and captures stdout as a string.
 //   runCaptureRetryable - Captures stdout while surfacing command failures to bounded retry logic.
-//   runOpencodeSummary - Invokes opencode --pure run with stdin prompt for one summary attempt.
+//   runOpencodeSummary - Invokes opencode run --standalone with stdin prompt for one summary attempt.
 //   sleepMs - Blocks synchronously for the given milliseconds between retry attempts.
 //   generateChangelog - Runs conventional-changelog as subprocess to generate entry from git history.
 //   prependToChangelog - Prepends a changelog entry to CHANGELOG.md, creating the file if missing.
@@ -277,8 +277,8 @@ function runOpencodeSummary(request: OpencodeRunRequest): OpencodeRunResult {
   const result = spawnSync(
     "opencode",
     [
-      "--pure",
       "run",
+      "--standalone",
       "--format",
       "json",
       "--agent",

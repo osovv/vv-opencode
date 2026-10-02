@@ -808,7 +808,7 @@ This will:
 
 1. Reject if the worktree is dirty
 2. Bump `package.json` via `npm version --no-git-tag-version`
-3. Generate a required AI release summary with `opencode --pure run`
+3. Generate a required AI release summary with `opencode run --standalone`
 4. Prepend a `### Summary` section plus conventional commit details to `CHANGELOG.md`
 5. Update `schemas/vvoc/v3.json` `$id` to the new version
 6. Run `release:check` for consistency
