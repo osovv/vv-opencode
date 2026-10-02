@@ -1,3 +1,12 @@
+## <small>2.1.2 (2026-10-02)</small>
+
+### Summary
+
+Version 2.1.2 fixes two issues that could block normal setup and synchronization. Managed prompt sync now resolves {file:} tokens using the declaring config directory, so a global opencode.json that references an external prompt file no longer causes the entire vvoc sync to fail; this restores reliable agent prompt synchronization for configurations that use file references. The package's TUI peer dependency ranges were also aligned with the native host by dropping the unused @opentui/keymap peer and widening solid-js to >=1.9.0 to match @opencode/plugin, which prevents npm install from failing with ERESOLVE when plugins load. The TUI peers remain required rather than optional, since optional peers are not installed and the ./tui export would otherwise fail module resolution. Together these changes make installs and prompt synchronization more dependable for users running the supported native host.
+
+* fix(opencode): resolve {file:} tokens during managed prompt sync ([725288c](https://github.com/osovv/vv-opencode/commit/725288c))
+* fix(package): align TUI peer ranges with the native host ([a85e7c3](https://github.com/osovv/vv-opencode/commit/a85e7c3))
+
 ## <small>2.1.1 (2026-10-02)</small>
 
 ### Summary
