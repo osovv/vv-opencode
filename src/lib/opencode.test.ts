@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Updated managed skill inventory expectations to include the vv-execute tool-contracts.md reference and added coverage that it is created, synced, and kept.]
+//   LAST_CHANGE: [direct fix - Added coverage that prompt sync resolves {file:} tokens from the declaring config directory.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -1736,6 +1736,39 @@ describe("managed agent user ownership", () => {
       );
       // No partial mutation of the user-customized file.
       expect(await readFile(controllerPath, "utf8")).toBe(customized);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("resolves {file:} tokens from the declaring config dir during prompt sync", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-agent-file-token-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await installManagedAgentPrompts(paths, { force: true });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(
+        join(dirname(paths.opencodeConfigPath), "prompt.md"),
+        "Resolved helper system.\n",
+        "utf8",
+      );
+
+      // A user agent whose system points at a file relative to the declaring
+      // config directory. Prompt sync validates this document before writing,
+      // so it must supply the config dir instead of failing on the unresolved
+      // token (regression for the inline-override preflight).
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify({ agents: { helper: { system: "{file:./prompt.md}" } } }, null, 2) + "\n",
+        "utf8",
+      );
+
+      await expect(syncManagedAgentPrompts(paths, { force: true })).resolves.toBeDefined();
+      expect(await readFile(paths.opencodeConfigPath, "utf8")).toContain("{file:./prompt.md}");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
