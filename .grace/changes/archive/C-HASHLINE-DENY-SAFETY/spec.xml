@@ -1,0 +1,46 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-HASHLINE-DENY-SAFETY>
+    <Summary>Make hashline-edit honor an explicit permission denial and separate ownership of edit tool definitions so plugin-owned tools are never restored from captured host definitions, preventing a crash and a capability-boundary bypass when an agent denies all tools.</Summary>
+    <Problem>When an agent runs with permission deny-all and the effective vvoc config enables hashline-edit with a routing rule to a plugin-owned mode (hashline_edit or str_replace_editor), the session visibility handler tries to restore the desired tool from the captured native definitions map. That map is seeded from the host tool registry before the plugin registers its own tools, so it never contains hashline_edit or str_replace_editor; the live session tool set has already had the tool removed by the host gate, so the lookup fails and the handler throws "no genuine native definition was observed", aborting the entire opencode run. This was observed with the release-summary agent (permission deny-all, one step) in a project config that enables hashline-edit and routes deepseek to str_replace_editor. Independently, even for host-native modes (edit and apply_patch) the handler re-adds edit and write that the explicit deny removed, bypassing the permission boundary. Existing tests miss both because their fixture seeds plugin-owned tools into the host tool registry, unlike the real host.</Problem>
+    <Goals>
+      <Goal>Honor an explicit permission denial: when the live session tool set exposes no edit-family tool, the visibility handler performs no mutation and does not throw.</Goal>
+      <Goal>Separate ownership of definitions: restore plugin-owned tools (hashline_edit, str_replace_editor) from the plugin's own canonical definitions, and host-native tools (edit, write, patch) from the captured host definitions.</Goal>
+      <Goal>Preserve the legitimate per-model gate override behavior where the host removed the default editor for a model but other edit-family tools remain.</Goal>
+      <Goal>Correct the test fixtures to realistic host shapes and add deny-all regression coverage for both plugin-owned modes.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Permission denial outranks routing: the plugin must not resurrect tools that the host removed under an explicit deny.</Constraint>
+      <Constraint>The routing vocabulary, the per-mode visible tool sets, the execution permission guards, and the host edit and apply_patch contracts are unchanged.</Constraint>
+      <Constraint>The existing honest-refusal behavior is preserved: when a host-native desired tool was never captured and the session still exposes edit-family tools, the handler refuses rather than fabricating a schema.</Constraint>
+      <Constraint>No V1 chat.message or tool.execute hooks are introduced; the native plugin shape is kept.</Constraint>
+      <Constraint>The change stays a minimal, conservative diff inside the hashline-edit plugin and its tests.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No change to the release tooling or the release-summary agent permission; the temporary VVOC_CONFIG workaround used during the 2.1.3 release is not part of this fix.</NonGoal>
+      <NonGoal>No change to the host permission engine or to how OpenCode removes tools for denied agents.</NonGoal>
+      <NonGoal>No new routing modes, tool families, or visible-tool combinations.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: With hashline-edit enabled and routing deepseek to str_replace_editor, a session that exposes no edit-family tool (deny-all) causes no throw and no tool additions; the session tool set is left exactly as the host provided it.</Criterion>
+      <Criterion>AC-02: The same deny-all no-op holds for routing to hashline_edit.</Criterion>
+      <Criterion>AC-03: When a plugin-owned desired tool is absent from the live set but edit-family tools are present, it is restored from the plugin's own canonical definition, never from the captured host definitions map.</Criterion>
+      <Criterion>AC-04: When a host-native desired tool is absent but edit-family tools are present, it is restored from the captured host definitions; a host-native desired tool that was never captured still refuses honestly rather than fabricating.</Criterion>
+      <Criterion>AC-05: Existing per-model override behavior is preserved: GPT routed to edit restores genuine edit and write; a non-GPT request routed to apply_patch restores the genuine native patch; GPT routed to hashline_edit exposes hashline_edit and write and hides patch and edit.</Criterion>
+      <Criterion>AC-06: Test fixtures reflect the real host: the tool registry fixture does not seed plugin-owned tools, and deny-all regression tests cover both plugin-owned modes.</Criterion>
+      <Criterion>AC-07: The hashline-edit test suites and bun run check pass; GRACE graph and verification are synchronized; no unrelated file changes.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-HASHLINE-EDIT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/hashline-edit.integration.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/plugins/hashline-edit/routing.test.ts src/plugins/hashline-edit/str-replace-editor.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedEvidence>Fresh tests showing the deny-all no-op for both plugin-owned modes (no throw and no added tools), preserved per-model override behavior, the corrected realistic registry fixture, and a passing bun run check.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>Under an explicit deny, the live session tool set exposes no edit-family tool; the new regression tests confirm this shape rather than assuming it.</Assumption>
+      <Assumption>A normal non-denied session always exposes at least one edit-family tool because the plugin registers hashline_edit and str_replace_editor, so the no-op condition only triggers under an explicit gate or deny.</Assumption>
+    </Assumptions>
+  </C-HASHLINE-DENY-SAFETY>
+</GraceChangeSpec>

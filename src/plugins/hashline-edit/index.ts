@@ -1,8 +1,8 @@
 // FILE: src/plugins/hashline-edit/index.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Route per-model native edit tooling: register hashline_edit and str_replace_editor as native OpenCode 2.0.18 tools, resolve the session edit mode from the captured vvoc routing config, expose exactly one plugin edit tool per actual session model (never touching the host edit/patch contracts), require a native resource permission before any write, and transform native read results with true line anchors and freshness tracking.
-//   SCOPE: Native Plugin.define entry, per-bound-family captured routing resolution, session model capture from native context/model.request hooks, native session context tool-list visibility enforcement, execute.before visibility/structural guards, execute.after read-anchor transformation and freshness recording, native tool execution with awaited permission before mutation and respected caller abort, bounded post-edit metadata reporting, and editMode telemetry. Pure edit algorithms, anchors, encoding, normalization, and error semantics are unchanged. No V1 chat.message/tool.execute hooks, no V1 tool()/ToolContext.
+//   PURPOSE: Route per-model native edit tooling: register hashline_edit and str_replace_editor as native OpenCode 2.0.18 tools, resolve the session edit mode from the captured vvoc routing config, expose exactly one plugin edit tool per actual session model (never touching the host edit/patch contracts), require a native resource permission before any write, transform native read results with true line anchors and freshness tracking, and honor an explicit host permission denial while restoring plugin-owned versus captured host tool definitions by ownership.
+//   SCOPE: Native Plugin.define entry, per-bound-family captured routing resolution, session model capture from native context/model.request hooks, deny-safe native session context tool-list visibility enforcement with plugin-owned versus captured host definition ownership, execute.before visibility/structural guards, execute.after read-anchor transformation and freshness recording, native tool execution with awaited permission before mutation and respected caller abort, bounded post-edit metadata reporting, and editMode telemetry. Pure edit algorithms, anchors, encoding, normalization, and error semantics are unchanged. No V1 chat.message/tool.execute hooks, no V1 tool()/ToolContext.
 //   DEPENDS: [@opencode/plugin, @opencode/plugin/promise/tool, effect (Schema.toJsonSchemaDocument; direct dep T009), zod, zod/v4/core, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts, src/runtime/context.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT, M-NATIVE-RUNTIME, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [T-009 - Detects genuine Effect Schema codecs via Schema.isSchema before the isPlainRecord gate in nativeToolJsonSchema, so a callable effect@4 codec is converted through Schema.toJsonSchemaDocument instead of being rejected as non-plain-record.]
+//   LAST_CHANGE: [C-HASHLINE-DENY-SAFETY T-001 - Honor explicit permission denial and split plugin-owned versus captured host tool definitions in session visibility enforcement.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -100,6 +100,18 @@ type EditTypeTool = (typeof EDIT_TYPE_TOOLS)[number];
 
 function isEditTypeTool(toolName: string): toolName is EditTypeTool {
   return (EDIT_TYPE_TOOLS as readonly string[]).includes(toolName);
+}
+
+/** Plugin-owned edit tools whose definitions are never part of the captured host map. */
+const OWNED_EDIT_TOOLS = new Set<string>(EDIT_TYPE_TOOLS);
+
+/**
+ * True when the live session tool set exposes at least one edit-family tool.
+ * An explicit host denial, for example a deny-all agent permission, removes the
+ * entire family; the plugin honors that instead of resurrecting removed tools.
+ */
+function hasObservedEditFamily(tools: Record<string, unknown>): boolean {
+  return NATIVE_TOOL_NAMES.some((name) => tools[name] !== undefined);
 }
 
 /**
@@ -1148,6 +1160,10 @@ export function createHashlineEditHandlers(
     },
   };
 
+  // Plugin-owned definitions used to restore the routed tool without consulting
+  // the captured host map, which is seeded before these tools are registered.
+  const ownedToolDefinitions = tools;
+
   const handlers: HashlineEditHandlers = {
     tools,
     recordModel(event) {
@@ -1177,6 +1193,10 @@ export function createHashlineEditHandlers(
         delete tools.str_replace_editor;
         return;
       }
+      // Honor an explicit host denial: when no edit-family tool is exposed, the
+      // host removed the family deliberately (for example deny-all permissions),
+      // so neither restore nor throw.
+      if (!hasObservedEditFamily(tools)) return;
       const mode = resolveMode(event.sessionID, settings);
       const desired = new Set(visibleToolsForMode(mode));
       for (const toolName of HIDDEN_MODE_TOOLS) {
@@ -1186,7 +1206,12 @@ export function createHashlineEditHandlers(
       // creation when the host gate removed it, never fabricated.
       for (const toolName of desired) {
         if (tools[toolName] !== undefined) continue;
-        const captured = nativeDefinitions.get(toolName);
+        // Plugin-owned tools restore from the plugin's own definitions; host-native
+        // tools restore from the captured host map, refusing honestly when a
+        // genuine host definition was never observed.
+        const captured = OWNED_EDIT_TOOLS.has(toolName)
+          ? ownedToolDefinitions[toolName as EditTypeTool]
+          : nativeDefinitions.get(toolName);
         if (captured === undefined) {
           throw new Error(
             `hashline-edit: cannot expose native tool ${toolName} for edit mode ${mode}: no genuine native definition was observed.`,

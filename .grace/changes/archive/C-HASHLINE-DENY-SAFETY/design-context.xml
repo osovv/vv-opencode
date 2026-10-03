@@ -1,0 +1,21 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-HASHLINE-DENY-SAFETY</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Hashline-edit owns two tools (hashline_edit, str_replace_editor) and also governs three host-native edit tools (edit, write, patch). Its session visibility handler treats all five as one captured "native definitions" class, but the capture is seeded from the host tool registry before the plugin registers its own tools, so plugin-owned definitions are never present. When an agent denies all tools and the routing resolves to a plugin-owned mode, the handler cannot restore the absent tool and throws, aborting the session. The same handler also re-adds host-native edit/write under the deny, so even without the crash it overrides an explicit permission boundary. The correct principle is that a permission denial outranks routing: routing chooses among permitted editors, it does not grant capabilities the host removed. Existing tests hid this because their fixture seeds plugin-owned tools into the host registry, contradicting the real capture order.</Rationale>
+  <Alternatives>
+    <Alternative>Only harden the release-summary agent permission and leave the plugin unchanged. Rejected because it fixes one caller, leaves every future deny-all or locked-down agent exposed to the same crash, and still lets the plugin override denials in host-native modes.</Alternative>
+    <Alternative>Always restore plugin-owned tools from the plugin definitions without honoring the denial. Rejected because it keeps re-adding tools the host explicitly denied, which is the capability-boundary bypass this change is meant to remove.</Alternative>
+    <Alternative>Fix only the test fixtures and seed plugin-owned definitions in the real host. Rejected because seeding cannot be ordered after registration without a new host contract, and it would not address the denial-override semantics.</Alternative>
+    <Alternative>Make the visibility handler throw only for host-native tools and never enforce plugin-owned ones. Rejected because it breaks the legitimate per-model override when a plugin-owned routed tool must be re-exposed while edit-family tools remain visible.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether the release-summary agent should keep its deny-all permission or explicitly allow an editor. Deferred; the plugin should be safe regardless, and the release path already works with the temporary VVOC_CONFIG workaround.</Decision>
+    <Decision>Whether OpenCode should expose a durable signal for an intentional edit-family denial instead of inferring it from an empty live tool set. Deferred pending host support.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Deny-all agent in a project that enables hashline-edit with deepseek routed to str_replace_editor: the session exposes no edit-family tool, the handler leaves the set untouched, no throw, and the agent simply has no editor.</Scenario>
+    <Scenario>Deny-all agent routed to hashline_edit: same no-op behavior.</Scenario>
+    <Scenario>Normal per-model override: the host gate removed edit and write for a GPT model but plugin and patch tools remain visible; the plugin restores the genuine native edit and write for the edit mode.</Scenario>
+    <Scenario>Normal per-model override to a plugin-owned mode: the host removed the plugin tool but other edit-family tools remain; the plugin restores the tool from its own canonical definition.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

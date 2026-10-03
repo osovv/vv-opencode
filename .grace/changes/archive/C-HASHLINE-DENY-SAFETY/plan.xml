@@ -1,0 +1,103 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-HASHLINE-DENY-SAFETY>
+    <IntentSummary>Fix hashline-edit so an explicit permission denial is honored and plugin-owned tool definitions are never restored from the captured host definitions map. Delivers AC-01 through AC-07 of the approved GraceChangeSpec. Approved by explicit user instruction; execution has not started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-HASHLINE-EDIT</Value><Value>V-M-PLUGIN-HASHLINE-EDIT</Value>
+        <Value>src/plugins/hashline-edit/index.ts</Value>
+        <Value>src/plugins/hashline-edit.integration.test.ts</Value>
+        <Value>src/plugins/hashline-edit/routing.ts</Value>
+      </MustExist>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>const tools = event.tools;</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>const captured = nativeDefinitions.get(toolName);</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>no genuine native definition was observed.</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit.integration.test.ts</File><Text>registryInfos</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/hashline-edit.integration.test.ts</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-PLUGIN-HASHLINE-EDIT</Module></MustVerify>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>function hasObservedEditFamily(</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>const ownedToolDefinitions = tools;</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>if (!hasObservedEditFamily(tools)) return;</Text></MustContain>
+      <MustContain><File>src/plugins/hashline-edit/index.ts</File><Text>OWNED_EDIT_TOOLS.has(toolName)</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/hashline-edit.integration.test.ts</Command>
+        <Command>bun test src/plugins/hashline-edit/routing.test.ts</Command>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user approved the GraceChangeSpec C-HASHLINE-DENY-SAFETY and invoked grace-plan. This plan is draft until the user approves it; no implementation has started.</Note>
+      <Note>Design principle is load-bearing: an explicit permission denial outranks routing. The plugin may choose among host-permitted editors, but it must never resurrect tools the host removed under a deny.</Note>
+      <Note>Two distinct defects: (1) the crash because plugin-owned definitions are seeded before registration and are therefore never in the captured map; (2) the capability bypass because host-native edit and write are re-added under a deny. Both are addressed by the ownership split plus the deny no-op.</Note>
+      <Note>Ownership split: plugin-owned tools (hashline_edit, str_replace_editor) restore from the plugin's own definitions object; host-native tools (edit, write, patch) restore from the captured host definitions map, preserving the honest refusal when a host-native tool was never captured and edit-family tools remain visible.</Note>
+      <Note>Deny no-op placement: the check runs after the disabled/unbound branch and only when hashline-edit is enabled; when the live session tool set exposes no edit-family tool the handler returns without mutating or throwing, honoring the host decision.</Note>
+      <Note>Regression trigger: the release-summary agent (permission deny-all, one step) with a project config enabling hashline-edit and routing deepseek to str_replace_editor. The release tooling itself is not changed; that interaction is out of scope.</Note>
+      <Note>Test-fixture correction is part of the fix: the host registry fixture must not seed plugin-owned tools, matching the real capture order, and deny-all regression tests are added for both plugin-owned modes.</Note>
+      <Note>No final-review obligation is declared by the source. Any reviewer the controller independently requests is optional, not a recorded gate.</Note>
+      <Note>GRACE lifecycle commands (grace lint, grace status, --assertions baseline/target/final) are external execution gates and must never be nested in a MustPassCommand or task verification; the pre-implementation active-baseline check is grace lint --path . --assertions current.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors><M-PLUGIN-HASHLINE-EDIT /></GraphAnchors>
+      <VerificationAnchors><V-M-PLUGIN-HASHLINE-EDIT /></VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/hashline-edit/index.ts</File>
+      <File>src/plugins/hashline-edit.integration.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-HASHLINE-DENY-SAFETY/spec.xml</File>
+      <File>.grace/changes/active/C-HASHLINE-DENY-SAFETY/plan.xml</File>
+      <File>.grace/changes/active/C-HASHLINE-DENY-SAFETY/design-context.xml</File>
+      <File>.grace/changes/archive/C-HASHLINE-DENY-SAFETY/spec.xml</File>
+      <File>.grace/changes/archive/C-HASHLINE-DENY-SAFETY/plan.xml</File>
+      <File>.grace/changes/archive/C-HASHLINE-DENY-SAFETY/design-context.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Honor permission denial and separate tool-definition ownership in hashline-edit.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add a helper `hasObservedEditFamily` that reports whether the live session tool set exposes any edit-family tool, and define an `OWNED_EDIT_TOOLS` set for the plugin-owned tools hashline_edit and str_replace_editor.</Criterion>
+          <Criterion>In sessionContext, after the disabled/unbound branch and only when hashline-edit is enabled, return without mutating or throwing when no edit-family tool is observed, honoring an explicit host denial.</Criterion>
+          <Criterion>Add an `ownedToolDefinitions` alias to the plugin's own tools object and use it to restore plugin-owned desired tools, while host-native desired tools continue to restore from the captured native definitions map.</Criterion>
+          <Criterion>Preserve the honest refusal: a host-native desired tool that was never captured and whose edit-family tools remain visible still throws the existing error rather than fabricating a definition.</Criterion>
+          <Criterion>Update the module contract, module map, and change summary in src/plugins/hashline-edit/index.ts to describe deny-safety and the ownership split, crediting this change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun test src/plugins/hashline-edit.integration.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Correct the registry fixture and add deny-all regression tests.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Remove hashline_edit and str_replace_editor from the host registry fixture in src/plugins/hashline-edit.integration.test.ts so the fixture matches the real capture order where plugin-owned tools are not seeded.</Criterion>
+          <Criterion>Add a deny-all regression test for routing to str_replace_editor and one for routing to hashline_edit: the session tool set is empty or lacks every edit-family tool, the handler does not throw, and it adds no tools.</Criterion>
+          <Criterion>Add a regression test where a plugin-owned desired tool is absent from the live set but edit-family tools remain visible, proving it is restored from the plugin's own definition.</Criterion>
+          <Criterion>Keep the existing per-model override tests passing: GPT routed to edit restores genuine edit and write; non-GPT routed to apply_patch restores native patch; GPT routed to hashline_edit exposes hashline_edit and write and hides patch and edit.</Criterion>
+          <Criterion>Update the test module contract, module map, and change summary to cover deny-safety and the corrected fixture, crediting this change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/hashline-edit.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Reconcile GRACE projections and run the full gate.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update the V-M-PLUGIN-HASHLINE-EDIT scenario in .grace/verification/main.xml to state that explicit permission denial is honored and plugin-owned definitions are never restored from captured host definitions, and keep TestFiles and Checks resolvable.</Criterion>
+          <Criterion>Update M-PLUGIN-HASHLINE-EDIT Purpose in .grace/graph/main.xml only where behavior changed, without altering Paths or Depends.</Criterion>
+          <Criterion>Run bun run check and the hashline-edit suites; no unrelated source, schema, package surface, or generated dist file is changed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-003>
+    </ImplementationPlan>
+  </C-HASHLINE-DENY-SAFETY>
+</GraceChangePlan>

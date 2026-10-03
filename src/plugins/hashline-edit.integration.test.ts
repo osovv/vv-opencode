@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 - Rewrote V1 plugin-input/chat.message/tool.execute hook tests as native handler tests with pinned native tool context/result shapes and real temporary-file edits.]
+//   LAST_CHANGE: [C-HASHLINE-DENY-SAFETY T-002 - Added deny-all no-op regressions, plugin-owned definition restore coverage, and a realistic host registry fixture without plugin-owned seeds.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -52,9 +52,7 @@ import {
   type HashlineEditPluginSettings,
 } from "./hashline-edit/routing.js";
 import {
-  hashlineEditContract,
   hashlineEditMetadataSchema,
-  strReplaceEditorContract,
   strReplaceEditorMetadataSchema,
 } from "./hashline-edit/schemas.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
@@ -912,17 +910,9 @@ describe("HashlineEditPlugin truthful reporting", () => {
 
 describe("HashlineEditPlugin cold-start native definitions", () => {
   function registryInfos() {
+    // Real host registry: plugin-owned tools are registered AFTER this capture,
+    // so only genuine host-native definitions may appear here.
     return [
-      {
-        name: "hashline_edit",
-        description: "Owned hashline",
-        input: hashlineEditContract.runtimeSchema,
-      },
-      {
-        name: "str_replace_editor",
-        description: "Owned str",
-        input: strReplaceEditorContract.runtimeSchema,
-      },
       { name: "edit", description: "Native edit", input: z.object({ path: z.string() }) },
       { name: "write", description: "Native write", input: Schema.Struct({ path: Schema.String }) },
       { name: "patch", description: "Native patch", input: { type: "object", properties: {} } },
@@ -1031,6 +1021,39 @@ describe("HashlineEditPlugin cold-start native definitions", () => {
     await runContext("minimax-m2", tools);
     expect(Object.keys(tools).sort()).toEqual(["patch", "write"]);
     expect((tools.patch as { description: string }).description).toBe("Native patch");
+  });
+
+  test("deny-all session leaves the tool set untouched when routed to str_replace_editor", async () => {
+    const { runContext } = await setupPlugin({
+      enabled: true,
+      routing: { default: "edit", rules: { deepseek: "str_replace_editor" } },
+    });
+    const tools: Record<string, unknown> = {};
+    await runContext("deepseek-chat", tools);
+    expect(tools).toEqual({});
+  });
+
+  test("deny-all session leaves the tool set untouched when routed to hashline_edit", async () => {
+    const { runContext } = await setupPlugin({
+      enabled: true,
+      routing: { default: "edit", rules: { deepseek: "hashline_edit" } },
+    });
+    const tools: Record<string, unknown> = {};
+    await runContext("deepseek-chat", tools);
+    expect(tools).toEqual({});
+  });
+
+  test("a plugin-owned routed tool is restored from its own definition when edit-family remains", async () => {
+    const { runContext } = await setupPlugin({
+      enabled: true,
+      routing: { default: "edit", rules: { deepseek: "str_replace_editor" } },
+    });
+    const tools: Record<string, unknown> = {
+      patch: { description: "native-patch", input: { type: "object" } },
+    };
+    await runContext("deepseek-chat", tools);
+    expect(Object.keys(tools).sort()).toEqual(["str_replace_editor", "write"]);
+    expect(tools.str_replace_editor).toBeDefined();
   });
 });
 
