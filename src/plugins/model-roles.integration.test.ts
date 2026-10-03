@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify the native ModelRolesPlugin and the production acquireNativeSnapshotRuntime wrapper against native-shaped transforms, hooks, lineage, provenance, config updates and auxiliary fork work.
-//   SCOPE: Native Plugin.define export shape, disabled role override, shared-Context acquisition, staged admission and commit at the accepted inbox boundary, all-kind unbound refusal, agent-aware role selection, initial explicit/implicit provenance, post-bind explicit choices, config.updated reconfiguration, per-event event-pump error containment and recovery (invalid and transient config reads followed by valid lifecycle events), created auxiliary title children, and an optional isolated real OpenCode 2.0.18 host smoke loading the actual built plugin against a loopback provider (skipped unless VVOC_E2E_V2_HOST is set).
+//   SCOPE: Native Plugin.define export shape, disabled role override, shared-Context acquisition, bind-on-first-work and qualified-variant materialization, all-kind unbound refusal, agent-aware role selection, initial explicit/implicit provenance, post-bind explicit choices, config.updated reconfiguration, per-event event-pump error containment and recovery (invalid and transient config reads followed by valid lifecycle events), created auxiliary title children, and an optional isolated real OpenCode 2.0.18 host smoke loading the actual built plugin against a loopback provider (skipped unless VVOC_E2E_V2_HOST is set).
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, @opencode/schema/agent, @opencode/schema/model, @opencode/schema/provider, src/lib/vvoc-config.ts, src/plugins/model-roles/index.ts, src/runtime/context.ts, src/runtime/types.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES, M-NATIVE-RUNTIME, V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: TEST
@@ -23,8 +23,7 @@
 //   writeOpenCodeConfig - Write an OpenCode config document.
 //   isolateDataHome - Point the runtime data dir at an isolated temporary root.
 //   makeBoundSession - Register a bound session view on the fake context.
-//   promptAndAccept - Stage a prompt workload and deliver its matching accepted input.
-//   boundCaptureCount - Count durable family captures under the isolated data root.
+//   promptWork - Invoke the first-work prompt gateway without obsolete acceptance replay.
 //   waitFor - Poll a predicate until it holds or the bounded deadline elapses.
 //   REAL_HOST - Optional pinned real-host binary path.
 //   smokeDescribe - Describe-or-skip wrapper for the real-host smoke.
@@ -36,7 +35,7 @@
 // END_CHANGE_SUMMARY
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@opencode/schema/agent";
@@ -44,8 +43,6 @@ import { Model } from "@opencode/schema/model";
 import { Provider } from "@opencode/schema/provider";
 import type { DeepMutable } from "@opencode/plugin/promise/types";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
-import { getGlobalVvocDataDir } from "../lib/vvoc-paths.js";
-import { SNAPSHOT_STORE_DIR_NAME, snapshotScopeDirName } from "../runtime/snapshot-store.js";
 import { ModelRolesPlugin, registerModelRoles } from "./model-roles/index.js";
 import {
   acquireNativeSnapshotRuntime,
@@ -179,14 +176,6 @@ class FakeNativeContext implements NativeSnapshotContext {
     permissions?: ReadonlyArray<{ action: string; resource: string; effect: string }>;
     location?: { directory: string };
   }> = [];
-  /** Durable log items the fake serves to `session.log` for reconciliation tests. */
-  readonly acceptedLog: Array<Record<string, unknown>> = [];
-  /**
-   * Watermark the fake log ends with: undefined -> the session id (complete),
-   * null -> no marker (truncated), any string -> that aggregate (possibly wrong).
-   */
-  logWatermark: string | null | undefined = undefined;
-  logSeq: number | undefined = undefined;
   readonly forkCalls: string[] = [];
   readonly events = new EventQueue();
   modelReloads = 0;
@@ -449,34 +438,7 @@ class FakeRuntimeHost {
         },
         import: async (input: unknown) =>
           this.context.importSession(input as NativeSessionImportPayload),
-        log: (input: unknown) => {
-          const sessionID =
-            typeof input === "object" && input !== null && "sessionID" in input
-              ? (input as { sessionID?: unknown }).sessionID
-              : undefined;
-          const items =
-            typeof sessionID === "string"
-              ? this.context.acceptedLog.filter((item) => item.sessionID === sessionID)
-              : [];
-          const configured = this.context.logWatermark;
-          const watermark =
-            configured === undefined
-              ? typeof sessionID === "string"
-                ? sessionID
-                : ""
-              : configured;
-          const seq = this.context.logSeq;
-          return (async function* () {
-            for (const item of items) yield item;
-            if (watermark !== null) {
-              yield {
-                type: "log.synced",
-                aggregateID: watermark,
-                ...(seq === undefined ? {} : { seq }),
-              };
-            }
-          })();
-        },
+        log: () => ({ async *[Symbol.asyncIterator]() {} }),
       },
     };
   }
@@ -491,44 +453,9 @@ function makeBoundSession(
   context.sessions.set(id, { id, locationDirectory: context.location.directory, ...view });
 }
 
-/**
- * Stage a workload from the prompt hook (with its messageID as the expected
- * inboxID) and deliver the matching native accepted-input event, so the family
- * publishes through the real correlated path rather than a family-only commit.
- */
-async function promptAndAccept(
-  context: FakeNativeContext,
-  sessionID: string,
-  inboxID = `inbox-${sessionID}`,
-): Promise<void> {
-  context.acceptedLog.push({
-    type: "session.inbox.enqueued",
-    sessionID,
-    inboxID,
-    data: { sessionID, inboxID, item: { type: "user" } },
-  });
-  await context.invoke("prompt", { sessionID, messageID: inboxID });
-  context.events.push({
-    type: "session.inbox.enqueued",
-    data: { sessionID, inboxID, item: { type: "user" } },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 20));
-}
-
-/** Count durable family captures written under the isolated vvoc data root. */
-async function boundCaptureCount(scopeKey: string): Promise<number> {
-  const dir = join(getGlobalVvocDataDir(), SNAPSHOT_STORE_DIR_NAME, snapshotScopeDirName(scopeKey));
-  try {
-    const entries = await readdir(dir);
-    return entries.filter(
-      (entry) =>
-        entry.endsWith(".json") &&
-        !entry.endsWith(".candidates.json") &&
-        !entry.endsWith(".bound.json"),
-    ).length;
-  } catch {
-    return 0;
-  }
+/** Invoke the bind-on-first-work prompt gateway without acceptance replay. */
+async function promptWork(context: FakeNativeContext, sessionID: string): Promise<void> {
+  await context.invoke("prompt", { sessionID });
 }
 
 /** Poll a predicate until it holds or the bounded deadline elapses. */
@@ -601,7 +528,7 @@ describe("ModelRolesPlugin native delegation", () => {
 });
 
 describe("native snapshot runtime admission", () => {
-  test("stages on prompt, commits at the accepted model.request boundary, and materializes the qualified variant", async () => {
+  test("binds on the first prompt and materializes the qualified variant on its real model identity", async () => {
     await isolateDataHome();
     const project = await createProject({
       default: "prov/m1",
@@ -618,7 +545,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
 
     expect(context.switchCalls).toHaveLength(1);
     expect(context.switchCalls[0]?.model).toEqual({
@@ -639,10 +566,10 @@ describe("native snapshot runtime admission", () => {
 
     const mimo = context.models.get("xiaomi/mimo-v2.6-flash");
     expect(mimo?.body).toBeUndefined();
-    // The managed MiMo thinking variant exists on the real model after commit + refresh.
+    // The managed MiMo thinking variant exists on the real model after bind + refresh.
     expect(context.modelReloads).toBeGreaterThan(1);
 
-    // The plugin's own materialized variant must never be re-captured as a native overlay.
+    // A rehydrated runtime must not re-capture its own materialized variants as source overlays.
     const runtime = await acquireNativeSnapshotRuntime(context, {
       runtimeDeps: host.createDeps(),
     });
@@ -699,7 +626,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "explicit");
+    await promptWork(context, "explicit");
 
     expect(context.switchCalls[0]?.model).toEqual({ providerID: "prov", modelID: "user-pick" });
     await registration.dispose();
@@ -720,7 +647,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "bound");
+    await promptWork(context, "bound");
     await context.invoke("model.request", {
       sessionID: "bound",
       model: { id: "m1", providerID: "prov" },
@@ -734,13 +661,13 @@ describe("native snapshot runtime admission", () => {
 
     // A fresh session created after the preset switch carries the new default, so it is implicit.
     context.sessionModels.set("fresh", { providerID: "prov", modelID: "m9" });
-    await promptAndAccept(context, "fresh");
+    await promptWork(context, "fresh");
     const freshSwitch = context.switchCalls.at(-1);
     expect(freshSwitch?.model.providerID).toBe("prov");
     expect(freshSwitch?.model.modelID).toBe("m9");
 
     // The bound family stays frozen even after the preset switch.
-    await promptAndAccept(context, "bound");
+    await promptWork(context, "bound");
     const boundSwitches = context.switchCalls.filter((call) => call.sessionID === "bound");
     expect(boundSwitches).toHaveLength(1);
     expect(boundSwitches[0]?.model.modelID).toBe("m1");
@@ -761,7 +688,7 @@ describe("native snapshot runtime admission", () => {
     const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: deps });
     await runtime.setRoleOverride(true);
     try {
-      await promptAndAccept(context, "root");
+      await promptWork(context, "root");
       await context.invoke("model.request", {
         sessionID: "root",
         model: { id: "m1", providerID: "prov" },
@@ -791,7 +718,7 @@ describe("native snapshot runtime admission", () => {
       expect(runtime.lastConfigError()).toBeUndefined();
 
       // The intervening model.selected was processed: the explicit m9 survives.
-      await promptAndAccept(context, "root");
+      await promptWork(context, "root");
       expect(context.switchCalls.length).toBe(switchesAfterBind);
       await expect(
         context.invoke("model.request", {
@@ -859,7 +786,7 @@ describe("native snapshot runtime admission", () => {
     await runtime.setRoleOverride(true);
     try {
       // Bind family A and record the capture-backed switch.
-      await promptAndAccept(context, "bound");
+      await promptWork(context, "bound");
       await context.invoke("model.request", {
         sessionID: "bound",
         model: { id: "m1", providerID: "prov" },
@@ -872,7 +799,7 @@ describe("native snapshot runtime admission", () => {
 
       // The already-bound workload keeps using its immutable capture: no new
       // switch, no failure, and no adoption of the invalid current config.
-      await promptAndAccept(context, "bound");
+      await promptWork(context, "bound");
       expect(context.switchCalls.length).toBe(switchesAfterBind);
       await expect(
         context.invoke("model.request", {
@@ -895,7 +822,7 @@ describe("native snapshot runtime admission", () => {
       context.events.push({ type: "config.updated" });
       await waitFor(() => runtime.lastConfigError() === undefined);
       expect(runtime.lastConfigError()).toBeUndefined();
-      await promptAndAccept(context, "newborn", "inbox-newborn");
+      await promptWork(context, "newborn");
       expect(context.switchCalls.some((call) => call.sessionID === "newborn")).toBe(true);
     } finally {
       await runtime.release();
@@ -915,7 +842,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -938,7 +865,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: movedHost.createDeps(),
     });
-    await promptAndAccept(moved, "root");
+    await promptWork(moved, "root");
 
     expect(moved.switchCalls).toHaveLength(0);
     await expect(
@@ -964,7 +891,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -1009,7 +936,7 @@ describe("native snapshot runtime admission", () => {
     await registration.dispose();
   });
 
-  test("only the matching session.inbox.enqueued commits the staged family", async () => {
+  test("binds on the prompt without waiting for an inbox notification and reuses that family", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1022,11 +949,11 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-1" });
+    await promptWork(context, "root");
     expect(context.switchCalls).toHaveLength(1);
     const reloadsBefore = context.modelReloads;
 
-    // A wrong inbox id must not authorize the commit.
+    // Inbox and execution notifications no longer participate in binding.
     context.events.push({
       type: "session.inbox.enqueued",
       data: { sessionID: "root", inboxID: "msg-OTHER", item: { type: "user" } },
@@ -1039,16 +966,8 @@ describe("native snapshot runtime admission", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(context.modelReloads).toBe(reloadsBefore);
 
-    // The exact matching enqueued input commits once.
-    context.events.push({
-      type: "session.inbox.enqueued",
-      data: { sessionID: "root", inboxID: "msg-1", item: { type: "user" } },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(context.modelReloads).toBeGreaterThan(reloadsBefore);
-
-    // The family is now bound: a later prompt reuses it without switching.
-    await promptAndAccept(context, "root");
+    // The first prompt has already bound the family: a later prompt does not switch.
+    await promptWork(context, "root");
     expect(context.switchCalls).toHaveLength(1);
     await registration.dispose();
   });
@@ -1078,7 +997,7 @@ describe("native snapshot runtime admission", () => {
     context.events.push({ type: "config.updated" });
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    await promptAndAccept(context, "old-tab");
+    await promptWork(context, "old-tab");
     expect(context.switchCalls.at(-1)?.model.modelID).toBe("m9");
     await registration.dispose();
   });
@@ -1096,7 +1015,7 @@ describe("native snapshot runtime admission", () => {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -1186,7 +1105,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     expect(context.switchCalls.at(-1)?.model.modelID).toBe("m2");
     await expect(
       context.invoke("model.request", {
@@ -1213,7 +1132,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: false,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     expect(context.switchCalls).toHaveLength(0);
     await expect(
       context.invoke("model.request", {
@@ -1234,18 +1153,18 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     context.addModel("prov", "m9");
     context.setDefault("prov", "m1");
     makeBoundSession(context, "root", { model: { providerID: "prov", modelID: "m9" } });
-    // The host recorded the tab creation with the explicit model and the m1 default.
-    context.events.push({
-      type: "session.created",
-      data: { sessionID: "root", model: { id: "m9", providerID: "prov" } },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 15));
 
     const registration = await registerModelRoles(context, {
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    // The live host reports the chosen creation model after its hooks are registered.
+    context.events.push({
+      type: "session.created",
+      data: { sessionID: "root", model: { id: "m9", providerID: "prov" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    await promptWork(context, "root");
     expect(context.switchCalls.at(-1)?.model.modelID).toBe("m9");
     await expect(
       context.invoke("model.request", {
@@ -1271,7 +1190,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     await context.invoke("model.request", {
       sessionID: "root",
       model: { id: "m1", providerID: "prov" },
@@ -1284,7 +1203,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       data: { sessionID: "root", model: { id: "m9", providerID: "prov" } },
     });
     await new Promise((resolve) => setTimeout(resolve, 15));
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     expect(context.switchCalls).toHaveLength(switchesAfterBind);
     await expect(
       context.invoke("model.request", {
@@ -1296,7 +1215,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     await registration.dispose();
   });
 
-  test("unbound direct generate is refused instead of staged after resolution", async () => {
+  test("unbound direct generate is refused", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1329,7 +1248,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
     // The host resolves `default` to no variant; the guard must treat them as equal.
     await expect(
       context.invoke("model.request", {
@@ -1341,7 +1260,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     await registration.dispose();
   });
 
-  test("two concurrent families in one runtime keep independent staged switches", async () => {
+  test("two concurrent families in one runtime keep independent bindings", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1", smart: "prov/m2" });
     const context = new FakeNativeContext(project);
@@ -1370,7 +1289,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     await registration.dispose();
   });
 
-  test("a rejected preparation followed by a valid prompt binds the valid policy", async () => {
+  test("the first prompt binds the policy and later config changes cannot replace it", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1384,43 +1303,26 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    // Prompt A stages, then native preparation is rejected: no accepted event.
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-A" });
+    await promptWork(context, "root");
     expect(context.switchCalls).toHaveLength(1);
 
-    // Config changes and the user sends prompt B for the same session.
+    // Later configuration changes affect new families, never this bound one.
     await writeVvoc(project, { default: "prov/m9" });
     context.events.push({ type: "config.updated" });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-B" });
-    expect(context.switchCalls.at(-1)?.model.modelID).toBe("m9");
-
-    // B is accepted; A only failed to prepare and stays bounded, unconsumed.
-    context.events.push({
-      type: "session.inbox.enqueued",
-      data: { sessionID: "root", inboxID: "msg-B", item: { type: "user" } },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
+    await promptWork(context, "root");
+    expect(context.switchCalls).toHaveLength(1);
     await expect(
       context.invoke("model.request", {
         sessionID: "root",
-        model: { id: "m9", providerID: "prov" },
+        model: { id: "m1", providerID: "prov" },
         kind: "primary",
       }),
     ).resolves.toBeUndefined();
-
-    // A late A notification cannot change the already-bound family.
-    context.events.push({
-      type: "session.inbox.enqueued",
-      data: { sessionID: "root", inboxID: "msg-A", item: { type: "user" } },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
     await registration.dispose();
   });
 
-  test("the first accepted input wins even when its notification arrives after a later input", async () => {
+  test("the first prompt wins even if later inbox notifications arrive first", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1434,30 +1336,13 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-A" });
+    await promptWork(context, "root");
     await writeVvoc(project, { default: "prov/m9" });
     context.events.push({ type: "config.updated" });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-B" });
+    await promptWork(context, "root");
 
-    // The durable log records A accepted before B.
-    context.acceptedLog.push({
-      type: "session.inbox.enqueued",
-      sessionID: "root",
-      inboxID: "msg-A",
-      created: 10,
-      durable: { aggregateID: "root", seq: 1 },
-      data: { sessionID: "root", inboxID: "msg-A", item: { type: "user" } },
-    });
-    context.acceptedLog.push({
-      type: "session.inbox.enqueued",
-      sessionID: "root",
-      inboxID: "msg-B",
-      created: 20,
-      durable: { aggregateID: "root", seq: 2 },
-      data: { sessionID: "root", inboxID: "msg-B", item: { type: "user" } },
-    });
-    // Deliver B's live notification first; the durable order must still win.
+    // These notifications no longer determine which snapshot is bound.
     context.events.push({
       type: "session.inbox.enqueued",
       created: 20,
@@ -1465,9 +1350,8 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       data: { sessionID: "root", inboxID: "msg-B", item: { type: "user" } },
     });
     await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
 
-    // A owns the snapshot: the m1 request is authorized, the m9 request refused.
+    // The first prompt owns the snapshot: m1 is authorized and m9 is refused.
     await expect(
       context.invoke("model.request", {
         sessionID: "root",
@@ -1485,7 +1369,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     await registration.dispose();
   });
 
-  test("durable reconciliation fails closed without a verified synced watermark", async () => {
+  test("bind-on-first prompt does not depend on durable event-log replay", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1498,39 +1382,9 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    // Stage the prompt but drop the live accepted event.
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-1" });
+    await promptWork(context, "root");
     expect(context.switchCalls).toHaveLength(1);
-    context.acceptedLog.push({
-      type: "session.inbox.enqueued",
-      sessionID: "root",
-      inboxID: "msg-1",
-      data: { sessionID: "root", inboxID: "msg-1", item: { type: "user" } },
-    });
-
-    // Truncated replay: the log ends without a synced marker.
-    context.logWatermark = null;
-    await expect(
-      context.invoke("model.request", {
-        sessionID: "root",
-        model: { id: "m1", providerID: "prov" },
-        kind: "primary",
-      }),
-    ).rejects.toThrow(/unbound/);
-
-    // Wrong aggregate watermark: the replay is for a different session.
-    context.logWatermark = "some-other-session";
-    await expect(
-      context.invoke("model.request", {
-        sessionID: "root",
-        model: { id: "m1", providerID: "prov" },
-        kind: "primary",
-      }),
-    ).rejects.toThrow(/unbound/);
-    expect(await boundCaptureCount(context.location.project.id)).toBe(0);
-
-    // A genuine matching watermark commits the staged accepted input.
-    context.logWatermark = "root";
+    // The fake host exposes an empty event log. Binding is already durable.
     await expect(
       context.invoke("model.request", {
         sessionID: "root",
@@ -1538,11 +1392,10 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
         kind: "primary",
       }),
     ).resolves.toBeUndefined();
-    expect(await boundCaptureCount(context.location.project.id)).toBe(1);
     await registration.dispose();
-  }, 20000);
+  });
 
-  test("a fresh runtime reconciles a missed live event from the durable log", async () => {
+  test("a fresh runtime rehydrates a bound family from its durable pointer", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1555,18 +1408,9 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await context.invoke("prompt", { sessionID: "root", messageID: "msg-1" });
-    // The live event was missed, but the durable log has it.
-    context.acceptedLog.push({
-      type: "session.inbox.enqueued",
-      sessionID: "root",
-      inboxID: "msg-1",
-      data: { sessionID: "root", inboxID: "msg-1", item: { type: "user" } },
-    });
+    await promptWork(context, "root");
 
     const fresh = await acquireNativeSnapshotRuntime(context, { runtimeDeps: host.createDeps() });
-    const outcome = await fresh.snapshots.accept({ sessionID: "root" });
-    expect(outcome.status).toBe("bound");
     expect((await fresh.snapshots.configFor("root"))?.snapshotId).toBeDefined();
     await fresh.release();
     await registration.dispose();
@@ -1597,7 +1441,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
       enabled: true,
       runtimeDeps: host.createDeps(),
     });
-    await promptAndAccept(context, "root");
+    await promptWork(context, "root");
 
     const runtime = await acquireNativeSnapshotRuntime(context, { runtimeDeps: host.createDeps() });
     const captures = await runtime.snapshots.captures();
@@ -1615,7 +1459,7 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     await registration.dispose();
   });
 
-  test("admitWorkload publishes an owned operation before resolution and cannot adopt a prompt candidate", async () => {
+  test("admitWorkload binds owned generate work before model resolution", async () => {
     await isolateDataHome();
     const project = await createProject({ default: "prov/m1" });
     const context = new FakeNativeContext(project);
@@ -1636,52 +1480,11 @@ describe("native lifecycle provenance, resolver coherence and concurrency", () =
     };
     const owned = await runtime.admitWorkload({ sessionID: "root", directory: project, location });
     expect(owned.status).toBe("bound");
-    // The late generate hook validates against the owned committed capture.
+    // The late generate hook validates against the owned durable binding.
     await expect(context.invoke("generate", { sessionID: "root" })).resolves.toBeUndefined();
-
-    // A prompt candidate cannot be published through the owned gateway.
-    const promptContext = new FakeNativeContext(project);
-    const promptHost = new FakeRuntimeHost(promptContext);
-    promptContext.addModel("prov", "m1");
-    promptContext.addModel("prov", "m9");
-    promptContext.setDefault("prov", "m1");
-    makeBoundSession(promptContext, "root2", { model: { providerID: "prov", modelID: "m1" } });
-    const promptRegistration = await registerModelRoles(promptContext, {
-      enabled: true,
-      runtimeDeps: promptHost.createDeps(),
-    });
-    const promptRuntime = await acquireNativeSnapshotRuntime(promptContext, {
-      runtimeDeps: promptHost.createDeps(),
-    });
-    // A prompt candidate for m1 is staged, then the owned gateway runs for m9.
-    await promptContext.invoke("prompt", { sessionID: "root2", messageID: "msg-1" });
-    const promptOwned = await promptRuntime.admitWorkload({
-      sessionID: "root2",
-      directory: project,
-      location,
-      selectionOverride: { providerID: "prov", modelID: "m9" },
-    });
-    expect(promptOwned.status).toBe("bound");
-    // The owned selection owns the snapshot; the prompt candidate was not adopted.
-    await expect(
-      promptContext.invoke("model.request", {
-        sessionID: "root2",
-        model: { id: "m9", providerID: "prov" },
-        kind: "primary",
-      }),
-    ).resolves.toBeUndefined();
-    await expect(
-      promptContext.invoke("model.request", {
-        sessionID: "root2",
-        model: { id: "m1", providerID: "prov" },
-        kind: "primary",
-      }),
-    ).rejects.toThrow(/does not match/);
-    await promptRuntime.release();
-    await promptRegistration.dispose();
     await runtime.release();
     await registration.dispose();
-  }, 20000);
+  });
 });
 
 // START_BLOCK_REAL_HOST_SMOKE
@@ -2030,8 +1833,8 @@ smokeDescribe("real OpenCode 2.0.18 host smoke (actual built plugin)", () => {
     const boundRoot = await sessionInfo(sessionID);
     expect(boundRoot.model?.variant).toBe(variant);
 
-    // Real-host race control: two rapid inputs to one session still bind the
-    // current policy (per-input candidates never lose a staged input).
+    // Real-host race control: two rapid inputs to one session retain its
+    // bind-on-first-work policy.
     const created3 = (await (
       await api("/api/session", {
         method: "POST",

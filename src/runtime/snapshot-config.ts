@@ -24,12 +24,18 @@
 //   isAcceptedWorkloadEvent - True when a native event marks an accepted workload boundary.
 //   isConfigUpdateEvent - True when a native config change invalidates unbound candidates.
 //   watchConfigUpdates - Consume config.updated events and notify the owner without a forced location reload.
+//   BehaviourProjection - Credential-free, version-independent projection of a bound family's policy.
+//   buildBehaviourProjection - Build the credential-free, version-independent behaviour projection from effective roles, agent roles, and vvoc.
+//   sanitizePolicyConfig - Deep-copy a config document without credential values or package-version-derived fields.
+//   canonicalizeJson - Deterministic JSON serialization with stable key ordering.
+//   behaviourContentHash - SHA-256 content hash of a behaviour projection, independent of package version.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Full effective config capture, native agent bindings, and initial-selection provenance replace switch-event dependence.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-002 - Added the credential-free, version-independent behaviour projection and content hash.]
 // END_CHANGE_SUMMARY
 
+import { createHash } from "node:crypto";
 import type { VvocConfigSnapshot } from "../lib/config-layers.js";
 import type { VvocConfig } from "../lib/vvoc-config.js";
 import { getBuiltInRoleBindings, parseModelSelectionWithVariant } from "../lib/model-roles.js";
@@ -110,6 +116,90 @@ export function agentPolicyBindings(effective: EffectiveRuntimeConfig): AgentPol
   return agentBindingsFrom(effective.agentRoles, parseRoleSelections(effective.roles));
 }
 // END_BLOCK_POLICY_EXTRACTION
+
+// START_BLOCK_BEHAVIOUR_PROJECTION
+/** A credential-free, version-independent projection of a family's bound policy. */
+export type BehaviourProjection = {
+  readonly roleModels: Readonly<Record<string, ModelSelection>>;
+  readonly agentBindings: ReadonlyArray<AgentPolicyBinding>;
+  readonly policy: VvocConfig;
+};
+
+/** Credential field names that must never reach a durable artifact. */
+const CREDENTIAL_KEYS = new Set(["apiKey"]);
+
+/** Package-version-derived fields that must never influence snapshot identity. */
+const VERSION_DERIVED_KEYS = new Set(["$schema", "$id"]);
+
+function stripSensitiveKeys(value: unknown, parentKey?: string): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) stripSensitiveKeys(entry, parentKey);
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (CREDENTIAL_KEYS.has(key) || VERSION_DERIVED_KEYS.has(key)) {
+      delete record[key];
+      continue;
+    }
+    // The redaction seed is a secret value, not a policy knob.
+    if (parentKey === "secretsRedaction" && key === "secret") {
+      delete record[key];
+      continue;
+    }
+    stripSensitiveKeys(record[key], key);
+  }
+}
+
+/**
+ * Deep-copy a validated config document while dropping every credential value and
+ * every package-version-derived field, so the result is safe to persist and hashes
+ * independently of the installed package version.
+ */
+export function sanitizePolicyConfig(config: VvocConfig): VvocConfig {
+  const clone = structuredClone(config) as unknown;
+  stripSensitiveKeys(clone);
+  return clone as VvocConfig;
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (value === null || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(record).sort()) sorted[key] = sortJson(record[key]);
+  return sorted;
+}
+
+/** Deterministic JSON serialization with stable object key ordering. */
+export function canonicalizeJson(value: unknown): string {
+  return JSON.stringify(sortJson(value));
+}
+
+/** SHA-256 content hash of a behaviour projection; identity never depends on package version. */
+export function behaviourContentHash(projection: BehaviourProjection): string {
+  return createHash("sha256").update(canonicalizeJson(projection)).digest("hex");
+}
+
+/**
+ * Build the behaviour-relevant projection bound to a family: resolved model
+ * selections for root roles and agents plus the sanitized policy document.
+ * Credentials and version-derived fields are excluded from both the value and the hash.
+ */
+export function buildBehaviourProjection(input: {
+  readonly roles: Readonly<Record<string, string>>;
+  readonly agentRoles: Readonly<Record<string, string>>;
+  readonly vvoc: VvocConfig;
+}): BehaviourProjection {
+  const roleModels = parseRoleSelections(input.roles);
+  return {
+    roleModels,
+    agentBindings: agentBindingsFrom(input.agentRoles, roleModels),
+    policy: sanitizePolicyConfig(input.vvoc),
+  };
+}
+// END_BLOCK_BEHAVIOUR_PROJECTION
 
 // START_BLOCK_PROVENANCE
 /**

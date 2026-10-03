@@ -19,15 +19,19 @@
 
 import { describe, expect, test } from "bun:test";
 import type { VvocConfigSnapshot } from "../lib/config-layers.js";
-import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
+import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
 import {
   agentBindingsFrom,
   agentPolicyBindings,
+  behaviourContentHash,
+  buildBehaviourProjection,
+  canonicalizeJson,
   classifyInitialSelection,
   effectiveRuntimeConfig,
   isAcceptedWorkloadEvent,
   isConfigUpdateEvent,
   parseRoleSelections,
+  sanitizePolicyConfig,
   watchConfigUpdates,
 } from "./snapshot-config.js";
 import { SnapshotAdmissionError } from "./types.js";
@@ -171,5 +175,95 @@ describe("watchConfigUpdates", () => {
     failedStop();
     expect(failed).toBe(true);
     expect(errors).toHaveLength(1);
+  });
+});
+
+describe("behaviour projection", () => {
+  function projectionConfig(overrides: {
+    readonly schema?: string;
+    readonly apiKey?: string;
+    readonly redactionSecret?: string;
+  }): VvocConfig {
+    const config = createDefaultVvocConfig();
+    return {
+      ...config,
+      $schema: overrides.schema ?? config.$schema,
+      web: {
+        search: { provider: "exa", apiKey: overrides.apiKey ?? "k" },
+        fetch: { provider: "native", apiKey: overrides.apiKey ?? "k" },
+      },
+      secretsRedaction: {
+        ...config.secretsRedaction,
+        secret: overrides.redactionSecret ?? "seed",
+      },
+    };
+  }
+
+  test("strips credential values and version-derived fields", () => {
+    const config = projectionConfig({
+      schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@2.1.3/schemas/vvoc/v3.json",
+      apiKey: "secret-api-value",
+      redactionSecret: "secret-seed-value",
+    });
+    const sanitized = sanitizePolicyConfig(config);
+    const serialized = JSON.stringify(sanitized);
+    expect(serialized).not.toContain("secret-api-value");
+    expect(serialized).not.toContain("secret-seed-value");
+    expect(serialized).not.toContain("$schema");
+    expect(sanitized.web?.search?.apiKey).toBeUndefined();
+    expect(sanitized.secretsRedaction.secret).toBeUndefined();
+    expect(sanitized.roles).toEqual(config.roles);
+    expect(sanitized.plugins).toEqual(config.plugins);
+  });
+
+  test("content hash ignores package version and credentials", () => {
+    const roles = { ...createDefaultVvocConfig().roles, default: "prov/m1" };
+    const agentRoles = { build: "default" };
+    const left = buildBehaviourProjection({
+      roles,
+      agentRoles,
+      vvoc: projectionConfig({
+        schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@2.1.3/schemas/vvoc/v3.json",
+        apiKey: "left-key",
+        redactionSecret: "left-seed",
+      }),
+    });
+    const right = buildBehaviourProjection({
+      roles,
+      agentRoles,
+      vvoc: projectionConfig({
+        schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@9.9.9/schemas/vvoc/v3.json",
+        apiKey: "right-key",
+        redactionSecret: "right-seed",
+      }),
+    });
+    expect(behaviourContentHash(left)).toBe(behaviourContentHash(right));
+  });
+
+  test("content hash tracks behaviour and is deterministic across key order", () => {
+    const config = createDefaultVvocConfig();
+    const base = buildBehaviourProjection({
+      roles: config.roles,
+      agentRoles: { build: "default" },
+      vvoc: config,
+    });
+    const reorderedConfig = {
+      ...config,
+      roles: Object.fromEntries(Object.entries(config.roles).reverse()),
+    };
+    const reordered = buildBehaviourProjection({
+      roles: reorderedConfig.roles,
+      agentRoles: { build: "default" },
+      vvoc: reorderedConfig,
+    });
+    const changed = buildBehaviourProjection({
+      roles: { ...config.roles, default: "prov/changed" },
+      agentRoles: { build: "default" },
+      vvoc: config,
+    });
+    expect(canonicalizeJson({ b: 1, a: 2 })).toBe(canonicalizeJson({ a: 2, b: 1 }));
+    expect(behaviourContentHash(reordered)).toBe(behaviourContentHash(base));
+    expect(behaviourContentHash(base)).toBe(behaviourContentHash(base));
+    expect(behaviourContentHash(changed)).not.toBe(behaviourContentHash(base));
   });
 });

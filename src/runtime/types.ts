@@ -1,8 +1,8 @@
 // FILE: src/runtime/types.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the shared native runtime vocabulary: the exact supported host version, the structural plugin-context seam, lazy full-client/dependency interfaces, resource-permission request/decision types, and the durable family-snapshot/model-capture/admission/auxiliary contracts consumed by later native plugins.
-//   SCOPE: Type-only native contracts plus pure location/identity/key helpers and error constructors. No service discovery, authentication, RPC registration, permission flow, snapshot persistence, filesystem, or network I/O.
+//   PURPOSE: Define the shared native runtime vocabulary: the exact supported host version, structural plugin-context seams, resource-permission contracts, and durable family-binding/materialized-policy/auxiliary contracts consumed by native plugins.
+//   SCOPE: Type-only native contracts plus pure location/identity/key helpers and error constructors. Durable family bindings are credential-free projections; consumers receive a live-credential materialization. No service discovery, authentication, RPC registration, permission flow, snapshot persistence, filesystem, or network I/O.
 //   DEPENDS: [@opencode/plugin, @opencode/client, @opencode/schema/agent, @opencode/schema/location, @opencode/schema/permission, @opencode/schema/rpc, @opencode/schema/session]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: TYPES
@@ -37,31 +37,30 @@
 //   PERMISSION_REPLIED_EVENT - Native event type carrying a terminal permission reply.
 //   SERVER_CONNECTED_EVENT - Native event proving the live event transport finished its handshake.
 //   ModelSelection - Concrete native provider/model/variant selection.
-//   ModelVariantCapture - Persisted model variant overlay materialized as a native variant.
-//   CapturedVvocConfig - Opaque deep-copied effective vvoc configuration captured for replay.
-//   CapturedModelSettings - Captured native model/provider overlay needed to replay a request payload.
-//   CaptureIntent - Explicit/implicit/staged provenance of a captured selection.
-//   CaptureIntentMode - Capture selection provenance mode.
-//   CaptureIntentSource - Native source that produced a captured selection.
+//   ModelVariantCapture - In-memory model variant overlay materialized as a native variant.
+//   CapturedVvocConfig - Config-shaped vvoc policy value used by a materialized family capture.
+//   CapturedModelSettings - Live native model/provider overlay re-derived for a materialized capture.
+//   CaptureIntent - Selection provenance, including legacy-store decoding values.
+//   CaptureIntentMode - Legacy selection-intent mode union retained for store decoding.
+//   CaptureIntentSource - Legacy selection-intent source union retained for store decoding.
 //   PermissionCreateInput - Minimal input accepted by the native permission create call.
 //   AgentPolicyBinding - Captured agent-to-role and resolved-model binding.
-//   FamilyCapture - Durable immutable policy/model capture bound to one session family.
-//   StagedCandidate - Persisted pre-dispatch admission candidate.
-//   SnapshotAcceptRequest - Correlated acceptance input for committing a staged candidate.
-//   SnapshotOwnedAdmissionRequest - Owned generated-work admission request carrying a runtime-minted operation token.
-//   SnapshotStore - Durable per-family capture and staged-candidate persistence contract.
-//   stagedCandidateKey - Stable identity of one staged candidate within a family.
-//   stagedCandidateIdentity - Stable candidate identity from its raw owner fields.
-//   AcceptedInput - One native accepted input with ordering signals for first-accepted selection.
-//   AcceptedInputReconciliation - Accepted inputs for a session plus whether the durable replay was complete.
+//   FamilyCapture - In-memory materialization of a durable credential-free family binding.
+//   StagedCandidate - Legacy storage-only candidate type retained for the unused legacy file-store implementation.
+//   SnapshotStore - Legacy storage-only interface retained for the unused legacy file-store implementation.
+//   AcceptedInput - Legacy accepted-input record retained for store decoding.
+//   AcceptedInputReconciliation - Legacy accepted-input reconciliation record retained for store decoding.
+//   stagedCandidateIdentity - Legacy candidate identity helper retained for store decoding.
+//   stagedCandidateKey - Legacy candidate key helper retained for store decoding.
+//   SnapshotAcceptRequest - Compatibility input for plugins that still invoke retired acceptance.
 //   NativeSessionView - Structural native session view used for host-verified lineage.
 //   ModelEditorLike - Structural native model transform editor used for variant materialization.
 //   AgentEditorLike - Structural native agent transform editor used for snapshot-bound role selection.
 //   VariantRegistration - Snapshot-qualified variant to publish on one real provider/model.
 //   AdmissionOutcome - Result of one awaited family admission attempt.
 //   EffectiveRuntimeConfig - Structural effective vvoc policy input to the snapshot service.
-//   SnapshotAdmissionRequest - Per-workload admission request.
-//   SnapshotService - Documented snapshot/config/model/auxiliary service consumed by later plugins.
+//   SnapshotAdmissionRequest - Per-workload bind-on-first-work request.
+//   SnapshotService - Family-binding/config/model/auxiliary service consumed by later plugins.
 //   SnapshotLease - Per-acquisition release handle for a shared snapshot service.
 //   AuxiliaryMessageContent - Text carried by a native title request as generation input.
 //   AuxiliarySessionApi - Structural native child-session/generate boundary for auxiliary work.
@@ -78,8 +77,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added the immutable caller-supplied admission config to SnapshotAdmissionRequest and the native app coordination identity to RuntimeContext.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Added the per-input candidate store contract, accepted-input ordering/source vocabulary, owned-operation identity, and the imported parented auxiliary session seam.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Replaced runtime staged-admission contracts with durable credential-free family bindings, explicit rebind, and deletion cleanup while retaining accept/admitOwned compatibility entry points for plugins.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added the immutable caller-supplied admission config to SnapshotAdmissionRequest and the native app coordination identity to RuntimeContext.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -436,7 +435,7 @@ export interface AgentPolicyBinding {
   readonly selection?: ModelSelection | undefined;
 }
 
-/** Durable immutable policy/model capture bound to one session family. */
+/** In-memory materialization of a credential-free durable policy binding for one session family. */
 export interface FamilyCapture {
   readonly schemaVersion: 1;
   readonly snapshotId: string;
@@ -609,13 +608,14 @@ export interface VariantRegistration {
   readonly variant: ModelVariantCapture;
 }
 
-/** Result of one awaited family admission or commit attempt. */
+/** Result of one family bind-on-first-work attempt. */
 export interface AdmissionOutcome {
-  readonly status: "bound" | "staged" | "reused" | "rejected";
+  readonly status: "bound" | "reused" | "rejected";
   readonly familyId: string;
   readonly snapshotId?: string | undefined;
-  readonly candidateSelection?: ModelSelection | undefined;
-  readonly rollback?: "reverted" | "preserved-newer-choice" | "none" | undefined;
+  readonly selection?: ModelSelection | undefined;
+  /** Retained as an outcome shape compatibility field; binding does not roll back. */
+  readonly rollback?: "none" | undefined;
   readonly error?: string | undefined;
 }
 
@@ -639,7 +639,7 @@ export interface EffectiveRuntimeConfig {
   readonly sourcePath?: string | undefined;
 }
 
-/** Per-workload admission request. */
+/** Per-workload bind-on-first-work request. */
 export interface SnapshotAdmissionRequest {
   readonly sessionID: string;
   readonly directory: string;
@@ -655,108 +655,54 @@ export interface SnapshotAdmissionRequest {
    */
   readonly selectionOverride?: ModelSelection | undefined;
   readonly intent?: CaptureIntent | undefined;
-  /** Session model before admission, used for conditional rollback. */
-  readonly before?: ModelSelection | undefined;
-  /**
-   * Expected accepted-input identity for this workload: the native messageID the
-   * prompt hook received. Persisted with the candidate and required to match the
-   * later `session.inbox.enqueued` before any commit.
-   */
-  readonly inboxID?: string | undefined;
-  /**
-   * Owner token for an owned generated-work operation. Set only by the runtime's
-   * own pre-admission gateway; never by a raw external generate.
-   */
-  readonly operationID?: string | undefined;
-  /** Workload kind the candidate was staged for (`prompt`, `generate`, ...). */
-  readonly workload?: string | undefined;
-  /**
-   * When false, the candidate is persisted and committed but no native model
-   * switch is issued. Used when role overriding is disabled so admission records
-   * policy without forcing a model change.
-   */
+  /** When false, bind policy without forcing a native model switch. */
   readonly force?: boolean | undefined;
   /**
    * One immutable admission config assembled by the caller from a single coherent
    * read (fresh vvoc + raw intent + provenance-aware native agent inputs +
-   * bindings + overlays). When present the service derives the candidate target
-   * and the family capture from this exact value instead of re-reading config,
-   * so a concurrent vvoc change cannot make the target and capture disagree.
+   * bindings + overlays). When present the service derives the first-work target
+   * and durable projection from this exact value instead of re-reading config,
+   * so a concurrent vvoc change cannot make them disagree.
    */
   readonly admissionConfig?: EffectiveRuntimeConfig | undefined;
 }
 
-/** Correlated acceptance input for committing a staged candidate. */
+/** Compatibility input for plugins that call the retired acceptance layer. */
 export interface SnapshotAcceptRequest {
   readonly sessionID: string;
-  /** Live enqueued inbox id; when omitted the durable session log is reconciled. */
-  readonly inboxID?: string | undefined;
-  /** Live item type (`user`/`synthetic`); when omitted the durable log decides. */
-  readonly itemType?: string | undefined;
-  /** Pre-publication validation; returning false refuses without publishing. */
-  readonly validate?: ((selection: ModelSelection) => boolean) | undefined;
 }
 
-/**
- * Owned generated-work admission request. `operationID` is an operation token the
- * runtime itself minted for this workload; it distinguishes owned generated work
- * from prompt-input candidates and prevents the gateway from publishing a prompt
- * candidate that still needs correlated native acceptance.
- */
-export type SnapshotOwnedAdmissionRequest = SnapshotAdmissionRequest & {
-  readonly operationID: string;
-};
-
-/** Documented snapshot/config/model/auxiliary service consumed by later plugins. */
+/** Documented family-binding/config/model/auxiliary service consumed by later plugins. */
 export interface SnapshotService {
   /** Host-verified family root session id for a session. */
   familyOf(sessionID: string): Promise<string>;
-  /** Immutable captured policy bound to a session's family, or undefined when unbound. */
+  /** Materialized policy bound to a session's family, or undefined when unbound. */
   policy(sessionID: string): Promise<FamilyCapture | undefined>;
-  /** Immutable snapshot configuration for a session, including full vvoc and native overlays. */
+  /** Materialized bound configuration with live credentials and overlays reattached. */
   configFor(sessionID: string): Promise<FamilyCapture | undefined>;
-  /** All durable family captures known to this service. */
+  /** All bound-family materializations known to this service. */
   captures(): Promise<readonly FamilyCapture[]>;
-  /** Snapshot-qualified variants derived from every durable capture, optionally one family. */
+  /** Snapshot-qualified variants derived from every bound materialization, optionally one family. */
   variants(familyId?: string): Promise<readonly VariantRegistration[]>;
-  /**
-   * Persist a staged candidate and await the native qualified switch; no commit
-   * yet. `materialize` runs after the candidate selection is known and before the
-   * switch, so the catalog carries the variant the resolved request will use.
-   */
-  stage(
-    request: SnapshotAdmissionRequest,
-    materialize?: (
-      capture: FamilyCapture,
-      selection: ModelSelection,
-      candidateIdentity: string,
-    ) => Promise<void>,
-  ): Promise<AdmissionOutcome>;
-  /**
-   * Commit a stage only when workload-correlated acceptance is proven. `inboxID`/
-   * `itemType` come from a live `session.inbox.enqueued`; when omitted the service
-   * reconciles through the durable session log and fails closed unless a genuine
-   * synced watermark proves the replay complete. An explicit `validate` runs
-   * before publication so a mismatched resolved model never publishes a capture.
-   * Refuses owned candidates; those belong to `admitOwned`.
-   */
+  /** Compatibility no-op for plugins that still ask the retired admission layer to accept work. */
   accept(input: SnapshotAcceptRequest): Promise<AdmissionOutcome>;
-  /** True when a candidate is staged for the family. */
-  hasStaged(familyId: string): Promise<boolean>;
   /**
-   * Owned generated-work gateway: stage with the runtime-minted operation token,
-   * materialize the qualified variant, switch, and publish before native model
-   * resolution. It never publishes a prompt candidate and refuses when the staged
-   * candidate is no longer owned by `operationID`.
+   * Compatibility-named bind-on-first-work gateway. It serializes one family,
+   * writes a credential-free content-addressed binding, materializes live overlays,
+   * and switches only when requested.
    */
   admitOwned(
-    request: SnapshotOwnedAdmissionRequest,
-    materialize?: (
-      capture: FamilyCapture,
-      selection: ModelSelection,
-      candidateIdentity: string,
-    ) => Promise<void>,
+    request: SnapshotAdmissionRequest,
+    materialize?: (capture: FamilyCapture, selection: ModelSelection) => Promise<void>,
   ): Promise<AdmissionOutcome>;
+  /** Replace matching family bindings with the current project revision. */
+  rebind(input: {
+    readonly directory: string;
+    readonly location: RuntimeIdentity;
+    readonly familyId?: string | undefined;
+  }): Promise<readonly string[]>;
+  /** Remove one root-family pointer and garbage-collect unreferenced snapshots. */
+  removeFamily(familyId: string): Promise<void>;
   /** Snapshot-bound auxiliary generation for title and Guardian work. */
   readonly auxiliary: AuxiliaryService;
   /** Release service-owned state; never stops the host. */

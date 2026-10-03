@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Added scoped preset reads and global/project role-only preset writes.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-006 - Added the --force/--session flags that request a rebind of running families after a preset apply.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -31,6 +31,7 @@ import {
   type ConfigReadScope,
   type ConfigWriteScope,
 } from "../lib/config-layers.js";
+import { requestRebind } from "../lib/rebind-request.js";
 import { parseModelSelection } from "../lib/model-roles.js";
 import { resolvePaths } from "../lib/opencode.js";
 import {
@@ -97,6 +98,14 @@ export default defineCommand({
     preset: presetArg,
     scope: scopeArg,
     "config-dir": configDirArg,
+    force: {
+      type: "boolean" as const,
+      description: "Also rebind running session families in this project to the new preset.",
+    },
+    session: {
+      type: "string" as const,
+      description: "With --force, rebind only this session family instead of every active family.",
+    },
   },
   async run({ args }) {
     await runPresetCommand(args);
@@ -212,6 +221,9 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
   const presetName = typeof args.preset === "string" ? args.preset.trim() : "";
   const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
   const readScope = resolveReadScope(args.scope);
+  const force = args.force === true;
+  const forceSession =
+    typeof args.session === "string" && args.session.trim() ? args.session.trim() : undefined;
 
   if (!command || command === "list") {
     if (presetName) {
@@ -270,6 +282,18 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
     `  orchestration: ${applied.orchestration.action} (${applied.orchestration.profile})`,
   );
   console.log(`Target: ${applied.path}`);
+  const request = await requestRebind({
+    force,
+    directory: process.cwd(),
+    sessionId: forceSession,
+  });
+  if (request !== undefined) {
+    console.log(
+      request.sessionId === undefined
+        ? "Rebind requested for every active session family in this project."
+        : `Rebind requested for session ${request.sessionId}.`,
+    );
+  }
   if (
     applied.changes.some((change) => change.action === "updated") ||
     applied.orchestration.action === "updated"

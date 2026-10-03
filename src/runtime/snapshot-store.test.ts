@@ -20,11 +20,14 @@
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
+import { buildBehaviourProjection } from "./snapshot-config.js";
+import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
 import {
+  BINDING_STORE_DIR_NAME,
+  FileBindingStore,
   createFileSnapshotStore,
   decodeFamilyCapture,
   familyCaptureIntegrity,
@@ -181,5 +184,83 @@ describe("createFileSnapshotStore", () => {
         intent: { mode: "implicit", source: "config" },
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("FileBindingStore", () => {
+  function projection(apiKey: string) {
+    const config: VvocConfig = {
+      ...createDefaultVvocConfig(),
+      web: {
+        search: { provider: "exa", apiKey },
+        fetch: { provider: "native", apiKey },
+      },
+    };
+    return buildBehaviourProjection({
+      roles: config.roles,
+      agentRoles: { build: "default" },
+      vvoc: config,
+    });
+  }
+
+  function policyPath(dataDir: string, scopeKey: string, hash: string): string {
+    return join(
+      dataDir,
+      BINDING_STORE_DIR_NAME,
+      snapshotScopeDirName(scopeKey),
+      "policies",
+      `${hash}.json`,
+    );
+  }
+
+  test("round-trips content-addressed snapshots and family pointers", async () => {
+    const dataDir = await createDataDir();
+    const store = new FileBindingStore({ scopeKey: "proj-1", dataDir });
+    const value = projection("secret-key");
+    const hash = await store.writeSnapshot(value);
+    expect(await store.readSnapshot(hash)).toEqual(value);
+    await store.writeBinding({
+      familyId: "ses_1",
+      snapshotHash: hash,
+      boundAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect((await store.readBinding("ses_1"))?.snapshotHash).toBe(hash);
+    const counts = await store.countBindings();
+    expect(counts.get(hash)).toBe(1);
+    await store.removeBinding("ses_1");
+    expect(await store.readBinding("ses_1")).toBeUndefined();
+  });
+
+  test("deduplicates identical snapshots and never writes credentials", async () => {
+    const dataDir = await createDataDir();
+    const store = new FileBindingStore({ scopeKey: "proj-1", dataDir });
+    const left = await store.writeSnapshot(projection("left-secret"));
+    const right = await store.writeSnapshot(projection("right-secret"));
+    expect(right).toBe(left);
+    expect(await store.listSnapshots()).toEqual([left]);
+    const text = await readFile(policyPath(dataDir, "proj-1", left), "utf8");
+    expect(text).not.toContain("left-secret");
+    expect(text).not.toContain("right-secret");
+    expect(text).not.toContain("apiKey");
+  });
+
+  test("fails soft on corrupt snapshots, mismatched hashes, and missing pointers", async () => {
+    const dataDir = await createDataDir();
+    const store = new FileBindingStore({ scopeKey: "proj-1", dataDir });
+    const hash = await store.writeSnapshot(projection("k"));
+    await writeFile(policyPath(dataDir, "proj-1", hash), "{ not json", "utf8");
+    expect(await store.readSnapshot(hash)).toBeUndefined();
+    expect(await store.readSnapshot("0".repeat(64))).toBeUndefined();
+    expect(await store.readBinding("missing")).toBeUndefined();
+  });
+
+  test("ignores the legacy snapshot directory", async () => {
+    const dataDir = await createDataDir();
+    const legacyDir = join(dataDir, "snapshots", snapshotScopeDirName("proj-1"));
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, "ses_legacy.json"), "{}", "utf8");
+    const store = new FileBindingStore({ scopeKey: "proj-1", dataDir });
+    expect(await store.listSnapshots()).toEqual([]);
+    expect(await store.listBindings()).toEqual([]);
   });
 });

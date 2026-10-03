@@ -1,0 +1,72 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-SNAPSHOT-ANCHORING-REDESIGN>
+    <Summary>Replace the package-version-coupled durable family capture store with a content-addressed behaviour-policy snapshot plus a per-family pointer, so a session family keeps the models, plugin policy, and orchestration profile it bound at its first workload across /reload and server restart and changes only through an explicit CLI --force flag; never persist credentials; never let snapshot state fail plugin load or unrelated families; and inject the orchestration policy at the request tail so profile changes do not invalidate the cached prompt prefix.</Summary>
+    <Problem>The current durable snapshot persists the full effective vvoc document, including the package-version-bound $schema URL and provider and web apiKey credentials, and verifies integrity over that full document. When the package version changes, normalizeStrictVvocConfig rewrites $schema to the current version during re-parse, the recomputed integrity stops matching the stored digest, decodeFamilyCapture returns undefined, FileSnapshotStore.read throws SnapshotStoreError, and loadCaptures applies no per-family isolation, so runtime acquisition rejects and plugin load fails for the whole project. A live probe on the pinned 2.0.18 host confirmed that a capture written by 2.1.3 decodes as invalid under 2.1.4 while its stored integrity still matches the raw document. Secondary defects: credentials (vvoc web apiKey fields and modelSettings provider overlays) are persisted in plaintext; one bad family disables every family in the project; snapshots and marker files accumulate with no session-deletion cleanup; there is no way to deliberately move an existing family to current settings; and orchestration policy is injected into the system prefix, so any policy change invalidates the entire cached prompt prefix.</Problem>
+    <Goals>
+      <Goal>Bind a durable family policy at first workload that survives /reload and server restart, identified by a content hash of a behaviour-relevant projection that does not depend on package version or schema URL.</Goal>
+      <Goal>Change a bound family only through an explicit CLI --force on mutating commands or through creation of a new session; bound families are never implicitly re-resolved when configuration changes.</Goal>
+      <Goal>Support --force on preset apply, plugin enable and disable, and role set and unset, rebinding the active families of the current project to the current revision, with an optional session selector that narrows the rebind to one family.</Goal>
+      <Goal>Never persist credentials in any durable artifact; resolve them at request time from the live environment and native registry.</Goal>
+      <Goal>Guarantee that snapshot state can never fail plugin load and can never affect an unrelated family; invalid data is skipped with bounded diagnostics and the affected family follows a defined, documented rule.</Goal>
+      <Goal>Bound the lifecycle: remove a family pointer when its session is deleted, garbage-collect snapshots with no remaining references, and retain snapshots that are still referenced.</Goal>
+      <Goal>Move the orchestration policy injection to the request tail while static guidance stays in the system prefix, so a profile rebind does not invalidate the whole prefix cache, with a documented fallback if the host probe shows tail injection is unavailable.</Goal>
+      <Goal>Switch only sessions whose resolved model selection actually changed on a model rebind; a worker-only rebind leaves the root session model and cache-critical prefix untouched.</Goal>
+      <Goal>Synchronize module contracts, the GRACE graph and verification projections, and the README with the new binding lifecycle.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The old data directory under the vvoc data root snapshots folder must not be read, migrated, or automatically deleted.</Constraint>
+      <Constraint>No credential value may appear in any durable artifact or in diagnostic output.</Constraint>
+      <Constraint>No package-version-derived field may participate in snapshot identity or integrity.</Constraint>
+      <Constraint>No new standalone CLI command is introduced; force is a flag on the existing preset apply, plugin enable and disable, and role set and unset commands.</Constraint>
+      <Constraint>Existing model-roles, presets, workflow, guardian, permission, and secrets-redaction behavior is preserved; the change is scoped to snapshot storage, binding lifecycle, force propagation, and policy injection placement.</Constraint>
+      <Constraint>The pinned OpenCode 2.0.18 host contract and the native plugin shape are unchanged.</Constraint>
+      <Constraint>No source behavior change lands before an approved GraceChangePlan.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No automatic live reload or implicit rebind of bound families when configuration changes.</NonGoal>
+      <NonGoal>No durable persistence of the full vvoc document, of credentials, or of the package-version-bound schema URL.</NonGoal>
+      <NonGoal>No salvage or migration of existing invalid captures; the upgrade performs a one-time rebind of existing families to the current configuration.</NonGoal>
+      <NonGoal>No standalone vvoc rebind command.</NonGoal>
+      <NonGoal>No change to workflow state, preset semantics, guardian, secrets-redaction logic, or permission evaluation.</NonGoal>
+      <NonGoal>No new snapshot management UI, analytics, or bulk operations beyond the force flag.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: A family bound under revision R rehydrates revision R after a simulated process restart and resolves the same models, plugin policy, and orchestration profile even when the current configuration differs, and the rehydrated binding equals the stored snapshot.</Criterion>
+      <Criterion>AC-02: A new family binds the current revision, while an existing family binding is unchanged by configuration edits and by /reload.</Criterion>
+      <Criterion>AC-03: preset apply with --force, plugin enable and disable with --force, and role set and unset with --force update the pointers of active families in the current project scope; an optional session selector limits the update to one family; non-matching families keep their revision.</Criterion>
+      <Criterion>AC-04: No durable artifact contains credential fields such as apiKey for any captured revision, asserted by a serialization scan.</Criterion>
+      <Criterion>AC-05: Snapshot identity and read integrity do not depend on package version or $schema: a snapshot written under one version-bound schema URL remains valid and unchanged after the version and schema URL change.</Criterion>
+      <Criterion>AC-06: A corrupt or missing pointer or snapshot does not fail plugin load and does not affect other families; the affected family rebinds to the current configuration with a bounded diagnostic.</Criterion>
+      <Criterion>AC-07: Session deletion removes that family pointer; garbage collection removes snapshots no longer referenced and retains snapshots still referenced by another family.</Criterion>
+      <Criterion>AC-08: After a profile rebind the request system prefix is byte-identical to before and only the tail policy block changes, verified through the native request hook, or the documented fallback path is used when the host probe shows tail injection is unavailable.</Criterion>
+      <Criterion>AC-09: A worker-only model rebind does not change the root session model or its cache-critical prefix; a rebind switches only sessions whose resolved selection changed, and no family session fails the model guard with a stale expectation.</Criterion>
+      <Criterion>AC-10: Targeted runtime and plugin tests, bun run check, and grace lint pass; module contracts, graph, verification, and README describe the new behavior; no generated dist file is edited.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-NATIVE-RUNTIME />
+      <M-ORCHESTRATION-PROFILES />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-PLUGIN-MODEL-ROLES />
+      <M-CLI-PRESET />
+      <M-CLI-PLUGIN-TOGGLE />
+      <M-CLI-ROLE />
+      <M-E2E-V2-HARNESS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/runtime/snapshots.test.ts src/runtime/snapshot-store.test.ts src/runtime/context.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/plugins/model-roles.integration.test.ts src/plugins/system-context-injection.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>bun run e2e:v2</ExpectedCommand>
+      <ExpectedEvidence>Fresh tests showing restart rehydration of a bound revision, new-session and existing-family separation, force propagation and session-scoped narrowing, version-independent identity, absence of credentials in durable artifacts, fail-soft isolation of a corrupt family, pointer cleanup and reference-counted garbage collection, the system-prefix versus tail-policy split, and worker-only rebind without root retargeting; the host probes for /reload survival and tail injection; a passing bun run check, bun run build, and grace lint.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>Native /reload does not reset module-level process state on the pinned host; this is verified by probe before the plan fixes the binding lookup location, and a module-level binding store is used if context recreation occurs.</Assumption>
+      <Assumption>Mutations to the messages array in the native context hook reach the provider request, as the existing tool-history-compaction feature already relies on this mechanism.</Assumption>
+      <Assumption>The pinned host emits session deletion events, so pointer cleanup can be driven by them.</Assumption>
+      <Assumption>The force CLI runs inside the project directory, so its scope resolution matches the runtime project scope.</Assumption>
+      <Assumption>Existing captures are simultaneously invalid under the new code and credential-bearing, so ignoring them and performing a one-time rebind at upgrade is acceptable.</Assumption>
+    </Assumptions>
+  </C-SNAPSHOT-ANCHORING-REDESIGN>
+</GraceChangeSpec>

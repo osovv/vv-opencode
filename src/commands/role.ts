@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added global/project write scopes and effective/project/global read scopes.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-006 - Added the --force/--session flags that request a rebind of running families after a role change.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -27,6 +27,7 @@ import {
   type ConfigReadScope,
   type ConfigWriteScope,
 } from "../lib/config-layers.js";
+import { requestRebind } from "../lib/rebind-request.js";
 import { BUILTIN_ROLE_NAMES, parseModelSelection } from "../lib/model-roles.js";
 import { readVvocConfig, resolvePaths, syncVvocConfig } from "../lib/opencode.js";
 import { renderVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
@@ -56,6 +57,32 @@ const writeScopeArg = {
   default: "global",
   description: "Write global config or project-local config.",
 };
+
+const forceArg = {
+  type: "boolean" as const,
+  description: "Also rebind running session families in this project.",
+};
+
+const sessionArg = {
+  type: "string" as const,
+  description: "With --force, rebind only this session family.",
+};
+
+async function requestForceRebind(force: unknown, session: unknown): Promise<void> {
+  const sessionId = typeof session === "string" && session.trim() ? session.trim() : undefined;
+  const request = await requestRebind({
+    force: force === true,
+    directory: process.cwd(),
+    sessionId,
+  });
+  if (request !== undefined) {
+    console.log(
+      request.sessionId === undefined
+        ? "Rebind requested for every active session family in this project."
+        : `Rebind requested for session ${request.sessionId}.`,
+    );
+  }
+}
 
 const readScopeArg = {
   type: "enum" as const,
@@ -111,6 +138,8 @@ const roleSet = defineCommand({
     model: modelArg,
     scope: writeScopeArg,
     "config-dir": configDirArg,
+    force: forceArg,
+    session: sessionArg,
   },
   async run({ args }) {
     const roleId = normalizeRoleId(args.role, "set");
@@ -123,6 +152,7 @@ const roleSet = defineCommand({
     });
 
     console.log(`${result.action}: ${roleId} -> ${modelSelection} (${result.path})`);
+    await requestForceRebind(args.force, args.session);
   },
 });
 
@@ -135,6 +165,8 @@ const roleUnset = defineCommand({
     role: roleArg,
     scope: writeScopeArg,
     "config-dir": configDirArg,
+    force: forceArg,
+    session: sessionArg,
   },
   async run({ args }) {
     const roleId = normalizeRoleId(args.role, "unset");
@@ -144,6 +176,7 @@ const roleUnset = defineCommand({
     });
 
     console.log(`${result.action}: ${roleId} (${result.path})`);
+    await requestForceRebind(args.force, args.session);
   },
 });
 

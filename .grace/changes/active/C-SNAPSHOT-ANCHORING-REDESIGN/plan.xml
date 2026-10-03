@@ -1,0 +1,266 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-SNAPSHOT-ANCHORING-REDESIGN>
+    <IntentSummary>Replace the package-version-coupled full-capture durable store with a content-addressed behaviour-policy snapshot plus a per-family pointer, keep a family binding stable across /reload and server restart with CLI --force as the only reset, never persist credentials, isolate store failures per family so plugin load never fails, add --force to the preset, plugin, and role commands, and move orchestration policy injection to the request tail. Delivers AC-01 through AC-10 of the approved GraceChangeSpec. Draft pending explicit user approval of the completed plan; no implementation has started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-NATIVE-RUNTIME</Value><Value>V-M-NATIVE-RUNTIME</Value>
+        <Value>M-ORCHESTRATION-PROFILES</Value><Value>V-M-ORCHESTRATION-PROFILES</Value>
+        <Value>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value><Value>V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value>
+        <Value>M-PLUGIN-MODEL-ROLES</Value><Value>V-M-PLUGIN-MODEL-ROLES</Value>
+        <Value>M-CLI-PRESET</Value><Value>V-M-CLI-PRESET</Value>
+        <Value>M-CLI-PLUGIN-TOGGLE</Value><Value>V-M-CLI-PLUGIN-TOGGLE</Value>
+        <Value>M-CLI-ROLE</Value><Value>V-M-CLI-ROLE</Value>
+        <Value>M-E2E-V2-HARNESS</Value><Value>V-M-E2E-V2-HARNESS</Value>
+        <Value>src/runtime/snapshot-store.ts</Value>
+        <Value>src/runtime/snapshots.ts</Value>
+        <Value>src/runtime/snapshot-config.ts</Value>
+        <Value>src/runtime/types.ts</Value>
+        <Value>src/runtime/context.ts</Value>
+        <Value>src/runtime/snapshot-store.test.ts</Value>
+        <Value>src/runtime/snapshots.test.ts</Value>
+        <Value>src/runtime/context.test.ts</Value>
+        <Value>src/plugins/system-context-injection/index.ts</Value>
+        <Value>src/plugins/system-context-injection.integration.test.ts</Value>
+        <Value>src/plugins/model-roles.integration.test.ts</Value>
+        <Value>src/commands/preset.ts</Value>
+        <Value>src/commands/preset.test.ts</Value>
+        <Value>src/commands/plugin-toggle.ts</Value>
+        <Value>src/commands/plugin-toggle.test.ts</Value>
+        <Value>src/commands/role.ts</Value>
+        <Value>src/commands/role.test.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain><File>src/runtime/snapshot-store.ts</File><Text>function integrityProjection(capture: FamilyCapture): string {</Text></MustContain>
+      <MustContain><File>src/runtime/snapshot-store.ts</File><Text>export function familyCaptureIntegrity(capture: FamilyCapture): string {</Text></MustContain>
+      <MustContain><File>src/runtime/snapshots.ts</File><Text>async function loadCaptures(): Promise&lt;FamilyCapture[]&gt; {</Text></MustContain>
+      <MustContain><File>src/runtime/types.ts</File><Text>export interface FamilyCapture {</Text></MustContain>
+      <MustContain><File>src/runtime/snapshot-config.ts</File><Text>export function effectiveRuntimeConfig(snapshot: VvocConfigSnapshot): EffectiveRuntimeConfig {</Text></MustContain>
+      <MustContain><File>src/plugins/system-context-injection/index.ts</File><Text>function appendSystemContexts(</Text></MustContain>
+      <MustContain><File>src/commands/preset.ts</File><Text>export async function applyPreset(</Text></MustContain>
+      <MustContain><File>src/commands/plugin-toggle.ts</File><Text>async function togglePlugin(</Text></MustContain>
+      <MustContain><File>src/commands/role.ts</File><Text>export async function setRoleAssignment(</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/runtime/snapshot-config.test.ts src/runtime/snapshots.test.ts src/runtime/snapshot-store.test.ts</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-NATIVE-RUNTIME</Module></MustVerify>
+      <MustVerify><Module>M-ORCHESTRATION-PROFILES</Module></MustVerify>
+      <MustVerify><Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module></MustVerify>
+      <MustVerify><Module>M-PLUGIN-MODEL-ROLES</Module></MustVerify>
+      <MustVerify><Module>M-CLI-PRESET</Module></MustVerify>
+      <MustVerify><Module>M-CLI-PLUGIN-TOGGLE</Module></MustVerify>
+      <MustVerify><Module>M-CLI-ROLE</Module></MustVerify>
+      <MustVerify><Module>M-E2E-V2-HARNESS</Module></MustVerify>
+      <MustContain><File>src/runtime/snapshot-store.ts</File><Text>contentHash</Text></MustContain>
+      <MustContain><File>src/runtime/snapshots.ts</File><Text>rebind</Text></MustContain>
+      <MustContain><File>src/commands/preset.ts</File><Text>--force</Text></MustContain>
+      <MustContain><File>README.md</File><Text>--force</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/runtime/snapshot-config.test.ts src/runtime/snapshot-store.test.ts src/runtime/snapshots.test.ts src/runtime/context.test.ts</Command>
+        <Command>bun test src/plugins/system-context-injection.integration.test.ts src/plugins/model-roles.integration.test.ts</Command>
+        <Command>bun test src/commands/preset.test.ts src/commands/plugin-toggle.test.ts src/commands/role.test.ts</Command>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user approved the GraceChangeSpec C-SNAPSHOT-ANCHORING-REDESIGN and invoked grace-plan. This plan stays draft until the user approves the completed plan; no implementation has started.</Note>
+      <Note>Pre-plan preflight on 2026-10-03: grace lint --path . --assertions current and grace lint --path . --parallel-preflight both pass with 0 errors and 0 warnings; the active-baseline phases are valid because no observed writes have begun.</Note>
+      <Note>Measured budgets on the reference host: the targeted runtime baseline suite completes in roughly 1.5 seconds and bun run typecheck in roughly 13 seconds; the full bun run check is the whole-project gate and is budgeted by the runner default.</Note>
+      <Note>Probe-first ordering is deliberate: T-001 must run before T-007 because the tail-injection shape and the documented fallback depend on real-host behavior, and its /reload finding decides whether the binding lookup is module-scoped or runtime-scoped.</Note>
+      <Note>Behaviour-relevant projection is the load-bearing idea: the snapshot stores resolved model selections, plugin policy values, and the orchestration profile, and excludes every credential field and every package-version-derived field, so a package upgrade cannot change the content hash.</Note>
+      <Note>Fail-soft is absolute: plugin load and unrelated families must never fail because of snapshot state; a corrupt or missing pointer or snapshot rebinds the affected family to the current configuration with a bounded diagnostic rather than throwing.</Note>
+      <Note>No final-review obligation is declared by the source. Any reviewer the controller independently requests is optional, not a recorded gate.</Note>
+      <Note>GRACE lifecycle commands (grace lint, grace status, and --assertions baseline, target, final) are external execution gates and must never be nested in a MustPassCommand or in task verification; the installed-package harness bun run e2e:v2 is substrate-heavy and is used as acceptance evidence in T-001 and T-009 rather than as a gate.</Note>
+      <Note>The legacy data directory is never read and never automatically deleted; the fix release performs a one-time rebind of existing families to the current configuration, which is documented in README.</Note>
+      <Note>Execution entrypoint after plan approval is the grace-execute skill with this plan; the host stays on the pinned 2.1.3 release until the redesign release ships.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-NATIVE-RUNTIME />
+        <M-ORCHESTRATION-PROFILES />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-PLUGIN-MODEL-ROLES />
+        <M-CLI-PRESET />
+        <M-CLI-PLUGIN-TOGGLE />
+        <M-CLI-ROLE />
+        <M-E2E-V2-HARNESS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-NATIVE-RUNTIME />
+        <V-M-ORCHESTRATION-PROFILES />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-PLUGIN-MODEL-ROLES />
+        <V-M-CLI-PRESET />
+        <V-M-CLI-PLUGIN-TOGGLE />
+        <V-M-CLI-ROLE />
+        <V-M-E2E-V2-HARNESS />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/runtime/snapshot-config.ts</File>
+      <File>src/runtime/snapshot-store.ts</File>
+      <File>src/runtime/snapshots.ts</File>
+      <File>src/runtime/context.ts</File>
+      <File>src/runtime/types.ts</File>
+      <File>src/lib/rebind-request.ts</File>
+      <File>src/plugins/system-context-injection/index.ts</File>
+      <File>src/plugins/model-roles/index.ts</File>
+      <File>src/commands/preset.ts</File>
+      <File>src/commands/plugin-toggle.ts</File>
+      <File>src/commands/role.ts</File>
+      <File>src/runtime/snapshot-config.test.ts</File>
+      <File>src/runtime/snapshot-store.test.ts</File>
+      <File>src/runtime/snapshots.test.ts</File>
+      <File>src/runtime/context.test.ts</File>
+      <File>src/plugins/system-context-injection.integration.test.ts</File>
+      <File>src/plugins/model-roles.integration.test.ts</File>
+      <File>src/commands/preset.test.ts</File>
+      <File>src/commands/plugin-toggle.test.ts</File>
+      <File>src/commands/role.test.ts</File>
+      <File>scripts/e2e-v2.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-SNAPSHOT-ANCHORING-REDESIGN/spec.xml</File>
+      <File>.grace/changes/active/C-SNAPSHOT-ANCHORING-REDESIGN/plan.xml</File>
+      <File>.grace/changes/active/C-SNAPSHOT-ANCHORING-REDESIGN/design-context.xml</File>
+      <File>.grace/changes/archive/C-SNAPSHOT-ANCHORING-REDESIGN/spec.xml</File>
+      <File>.grace/changes/archive/C-SNAPSHOT-ANCHORING-REDESIGN/plan.xml</File>
+      <File>.grace/changes/archive/C-SNAPSHOT-ANCHORING-REDESIGN/design-context.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Establish pinned-host probe evidence for reload survival, tail injection, and child rebind.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Determine on the pinned 2.0.18 host whether native /reload resets plugin-context or module-scoped runtime state, record the observation, and record the resulting binding-lookup placement decision (module-scoped store versus runtime-scoped store).</Criterion>
+          <Criterion>Determine whether a transient text block appended to the last message in the native session context hook reaches the provider request, observed through the native request hook, and record the exact accepted shape.</Criterion>
+          <Criterion>Determine whether changing a child session expected model across a rebind causes the model guard to reject that child next request, and record the observed behavior together with the chosen mitigation.</Criterion>
+          <Criterion>Add read-only probe evidence rows or a scenario to the installed-package harness scripts/e2e-v2 without changing product source, and record all findings in the change design-context Scenarios; the normative spec is not edited.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/e2e-v2.test.ts</Command>
+          <Command>bun run e2e:v2</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Define the credential-free, version-independent behaviour projection and content hash.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Define the behaviour-relevant projection covering resolved model selections for root, roles, and agents including variant qualifiers, plugin policy and toggle values, and the orchestration profile, as an explicit typed value.</Criterion>
+          <Criterion>Implement canonical deterministic serialization and a sha256 content hash whose result does not depend on property insertion order.</Criterion>
+          <Criterion>Exclude every credential field such as apiKey and every package-version-derived field such as $schema and $id from the projection and therefore from the hash.</Criterion>
+          <Criterion>Add tests proving credential absence in serialized output, an identical hash across a simulated package version and schema URL change, and a deterministic hash across property order and repeated calls.</Criterion>
+          <Criterion>Update the module contract, module map, and change summary to credit this change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/snapshot-config.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Replace the capture store with content-addressed snapshots and per-family pointers.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Write each policy snapshot to a file named by its content hash and each family binding to a pointer containing familyId, snapshotHash, and boundAt, using atomic temp-then-rename writes with restrictive permissions.</Criterion>
+          <Criterion>On read, recompute the content hash and return undefined on mismatch, missing file, or parse failure; never throw for corrupt or absent state.</Criterion>
+          <Criterion>Never read the legacy snapshot directory, and never write a credential value to disk.</Criterion>
+          <Criterion>Provide reference enumeration and removal primitives needed for pointer cleanup and unreferenced-snapshot garbage collection.</Criterion>
+          <Criterion>Add tests for round-trip identity, hash-mismatch fail-soft, missing file, legacy-directory ignore, and absence of credential substrings on disk; update the module contract, map, and change summary.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/snapshot-store.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Rework family binding lifecycle: rehydrate on restart, fail soft, rebind explicitly, collect garbage.</Title>
+        <DependsOn>T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Bind a family to the current revision at its first workload, resolve the current configuration for a new session, and rehydrate an existing family from its durable pointer after a restart while config edits and /reload leave the binding unchanged.</Criterion>
+          <Criterion>Remove the candidate, inbox, operation, revision, before-and-after, and cross-context publication machinery and replace it with a per-family serialized bind-on-first-work flow.</Criterion>
+          <Criterion>A corrupt or missing pointer or snapshot rebinds the affected family to the current configuration with a bounded diagnostic and never throws during plugin load, and unrelated families are unaffected.</Criterion>
+          <Criterion>Session deletion removes the family pointer; garbage collection removes snapshots unreferenced by any pointer and retains referenced snapshots.</Criterion>
+          <Criterion>Expose a force-rebind entry point that replaces matching families pointers with the current revision, scoped by project and optionally narrowed to one family.</Criterion>
+          <Criterion>Add tests covering AC-01, AC-02, AC-06, AC-07, and the force entry point; update the module contract, map, and change summary.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/snapshots.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Wire the binding into the runtime: rehydration, guard, variants, deletion, and rebind application.</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Place the binding lookup where /reload cannot reset it, per the T-001 finding, and rehydrate durable pointers on restart.</Criterion>
+          <Criterion>Rebuild variant registrations from durable bindings and make the model guard accept rehydrated bindings without a stale-expectation failure.</Criterion>
+          <Criterion>Apply a force rebind by switching only sessions whose resolved selection actually changed; a worker-only rebind leaves the root selection and cache-critical prefix untouched, and child sessions resolve without a guard mismatch.</Criterion>
+          <Criterion>Subscribe to session deletion so pointer cleanup runs, and add tests covering AC-09 and restart rehydration; update the module contract, map, and change summary.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/context.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Add CLI --force to preset, plugin, and role commands with a scope marker.</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Add --force to preset apply, plugin enable, plugin disable, role set, and role unset, plus an optional session selector; introduce no new top-level command and preserve existing arguments and output without the flag.</Criterion>
+          <Criterion>Add a project-scoped marker writer in src/lib/rebind-request.ts carrying scope and optional session, consumed lazily on the family next request; stale markers after a process restart are ignored or cleared.</Criterion>
+          <Criterion>Add tests for flag parsing, marker content, project and session targeting, and unchanged behavior without the flag; update help text and the module contracts, maps, and change summaries.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/preset.test.ts src/commands/plugin-toggle.test.ts src/commands/role.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Inject the orchestration policy at the request tail while keeping static guidance in the system prefix.</Title>
+        <DependsOn>T-001, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Move the variable orchestration policy out of the system prefix into a transient request tail, using the shape accepted by the T-001 probe, while static guidance remains in the system prefix.</Criterion>
+          <Criterion>After a profile rebind the system prefix is byte-identical to before and only the tail block changes, verified through the native request hook.</Criterion>
+          <Criterion>When the probe shows tail injection is unavailable, implement the documented system-prefix fallback and record the one-time cache cost in design-context.</Criterion>
+          <Criterion>Add integration tests for the injection placement and the profile-rebind prefix stability, and update the module contract, map, and change summary.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/system-context-injection.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Make a worker-only model rebind re-resolve bindings without retargeting the root session.</Title>
+        <DependsOn>T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Re-resolve agent bindings and role models from the current configuration on a worker-only rebind and update families without changing the root session selection.</Criterion>
+          <Criterion>Switch only sessions whose resolved selection actually changed and leave unchanged sessions untouched.</Criterion>
+          <Criterion>Verify that children created before and after the rebind resolve without a model-guard mismatch.</Criterion>
+          <Criterion>Add integration tests for worker-only, root-inclusive, and no-op rebind cases; update the module contract, map, and change summary.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/model-roles.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Reconcile GRACE projections and README, add cross-cutting regressions, and run the full gate.</Title>
+        <DependsOn>T-006, T-007, T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update .grace/graph/main.xml and .grace/verification/main.xml for the affected modules and scenarios covering restart rehydration, version-independent identity, credential-free snapshots, fail-soft isolation, garbage collection, force semantics, and tail injection.</Criterion>
+          <Criterion>Update README for the binding lifecycle, the --force flags, restart semantics, and the one-time upgrade rebind.</Criterion>
+          <Criterion>Add cross-cutting regression tests for a simulated package version and schema URL change, a corrupt family, credential absence in durable artifacts, garbage-collection retention, and restart rehydration.</Criterion>
+          <Criterion>Run bun run check, bun run build, and bun run e2e:v2 with fresh output; no generated dist file is manually edited and no unrelated file changes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run e2e:v2</Command>
+        </Verification>
+      </T-009>
+    </ImplementationPlan>
+  </C-SNAPSHOT-ANCHORING-REDESIGN>
+</GraceChangePlan>

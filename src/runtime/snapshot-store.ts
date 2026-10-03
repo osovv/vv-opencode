@@ -18,10 +18,14 @@
 //   decodeFamilyCapture - Strictly validate and integrity-check a persisted family capture.
 //   decodeStagedCandidate - Strictly validate a persisted staged candidate.
 //   decodeStagedCandidates - Strictly validate a persisted staged-candidate array.
+//   BINDING_STORE_DIR_NAME - Directory name holding content-addressed policy snapshots and family pointers.
+//   FileBindingStoreOptions - Project scope and optional data-dir override for the binding store.
+//   FamilyBindingRecord - Durable pointer from a family to its content-addressed policy snapshot.
+//   FileBindingStore - Content-addressed snapshot and per-family pointer store with fail-soft reads.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 attempt 7 - Persist a bounded per-input candidate array per family with strict array decoding, so first-accepted selection never destroys an unaccepted input.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-003 - Added the content-addressed FileBindingStore with fail-soft reads and reference-counted GC primitives alongside the legacy capture store.]
 // END_CHANGE_SUMMARY
 
 import { createHash, randomBytes } from "node:crypto";
@@ -29,6 +33,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import { dirname, join } from "node:path";
 import { parseVvocConfigText } from "../lib/vvoc-config.js";
 import { getGlobalVvocDataDir } from "../lib/vvoc-paths.js";
+import { behaviourContentHash, type BehaviourProjection } from "./snapshot-config.js";
 import {
   SnapshotStoreError,
   stagedCandidateKey,
@@ -519,3 +524,174 @@ export function createFileSnapshotStore(options: FileSnapshotStoreOptions): Snap
   };
 }
 // END_BLOCK_FILE_STORE
+
+// START_BLOCK_BINDING_STORE
+/** Directory name holding content-addressed policy snapshots and family pointers. */
+export const BINDING_STORE_DIR_NAME = "bindings";
+
+/** Project scope and optional data-dir override for the content-addressed binding store. */
+export interface FileBindingStoreOptions {
+  /** Project scope key; families in one project cannot read another project's snapshots. */
+  readonly scopeKey: string;
+  /** Override the vvoc data dir root; defaults to `$XDG_DATA_HOME/vvoc`. */
+  readonly dataDir?: string | undefined;
+}
+
+/** Durable pointer from one family to its content-addressed policy snapshot. */
+export interface FamilyBindingRecord {
+  readonly familyId: string;
+  readonly snapshotHash: string;
+  readonly boundAt: string;
+}
+
+function decodeFamilyBinding(text: string): FamilyBindingRecord | undefined {
+  try {
+    const value = JSON.parse(text) as unknown;
+    if (!isRecord(value)) return undefined;
+    if (
+      typeof value.familyId !== "string" ||
+      typeof value.snapshotHash !== "string" ||
+      typeof value.boundAt !== "string"
+    ) {
+      return undefined;
+    }
+    return { familyId: value.familyId, snapshotHash: value.snapshotHash, boundAt: value.boundAt };
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeBehaviourProjection(text: string): BehaviourProjection | undefined {
+  try {
+    const value = JSON.parse(text) as unknown;
+    if (!isRecord(value)) return undefined;
+    if (
+      !isRecord(value.roleModels) ||
+      !Array.isArray(value.agentBindings) ||
+      !isRecord(value.policy)
+    ) {
+      return undefined;
+    }
+    return value as unknown as BehaviourProjection;
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${randomBytes(6).toString("hex")}.tmp`;
+  await writeFile(temporary, JSON.stringify(value), { mode: 0o600 });
+  await rename(temporary, path);
+}
+
+async function readTextSafe(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+async function readNamesSafe(path: string): Promise<string[]> {
+  try {
+    return await readdir(path);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Content-addressed store for credential-free behaviour-policy snapshots plus a
+ * tiny per-family pointer. Reads never throw: a missing, unparseable, or
+ * hash-mismatched artifact returns undefined so callers can fail soft per family.
+ */
+export class FileBindingStore {
+  readonly #root: string;
+
+  constructor(options: FileBindingStoreOptions) {
+    const dataDir = options.dataDir ?? getGlobalVvocDataDir();
+    this.#root = join(dataDir, BINDING_STORE_DIR_NAME, snapshotScopeDirName(options.scopeKey));
+  }
+
+  #policiesDir(): string {
+    return join(this.#root, "policies");
+  }
+
+  #familiesDir(): string {
+    return join(this.#root, "families");
+  }
+
+  #policyPath(hash: string): string {
+    return join(this.#policiesDir(), `${hash}.json`);
+  }
+
+  #familyPath(familyId: string): string {
+    return join(this.#familiesDir(), `${encodeURIComponent(familyId)}.json`);
+  }
+
+  /** Persist a projection under its content hash and return that hash; identical content reuses the file. */
+  async writeSnapshot(projection: BehaviourProjection): Promise<string> {
+    const contentHash = behaviourContentHash(projection);
+    await writeJsonAtomic(this.#policyPath(contentHash), projection);
+    return contentHash;
+  }
+
+  /** Load a projection by hash; undefined when missing, corrupt, or hash-mismatched. */
+  async readSnapshot(hash: string): Promise<BehaviourProjection | undefined> {
+    const text = await readTextSafe(this.#policyPath(hash));
+    if (text === undefined) return undefined;
+    const decoded = decodeBehaviourProjection(text);
+    if (decoded === undefined) return undefined;
+    if (behaviourContentHash(decoded) !== hash) return undefined;
+    return decoded;
+  }
+
+  async writeBinding(record: FamilyBindingRecord): Promise<void> {
+    await writeJsonAtomic(this.#familyPath(record.familyId), record);
+  }
+
+  /** Load a family pointer; undefined when missing or corrupt. */
+  async readBinding(familyId: string): Promise<FamilyBindingRecord | undefined> {
+    const text = await readTextSafe(this.#familyPath(familyId));
+    if (text === undefined) return undefined;
+    return decodeFamilyBinding(text);
+  }
+
+  async removeBinding(familyId: string): Promise<void> {
+    await rm(this.#familyPath(familyId), { force: true });
+  }
+
+  async listBindings(): Promise<readonly FamilyBindingRecord[]> {
+    const records: FamilyBindingRecord[] = [];
+    for (const name of await readNamesSafe(this.#familiesDir())) {
+      if (!name.endsWith(".json")) continue;
+      const text = await readTextSafe(join(this.#familiesDir(), name));
+      if (text === undefined) continue;
+      const record = decodeFamilyBinding(text);
+      if (record !== undefined) records.push(record);
+    }
+    return records;
+  }
+
+  async listSnapshots(): Promise<readonly string[]> {
+    const names = await readNamesSafe(this.#policiesDir());
+    return names
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => name.slice(0, -".json".length));
+  }
+
+  async removeSnapshot(hash: string): Promise<void> {
+    await rm(this.#policyPath(hash), { force: true });
+  }
+
+  /** Count how many live families reference each snapshot hash, for reference-counted garbage collection. */
+  async countBindings(): Promise<ReadonlyMap<string, number>> {
+    const counts = new Map<string, number>();
+    for (const record of await this.listBindings()) {
+      counts.set(record.snapshotHash, (counts.get(record.snapshotHash) ?? 0) + 1);
+    }
+    return counts;
+  }
+}
+// END_BLOCK_BINDING_STORE

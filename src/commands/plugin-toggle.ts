@@ -15,13 +15,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.1.0 - Added project-scope plugin toggle writes while preserving global defaults.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-006 - Added the --force/--session flags that request a rebind of running families after toggling a plugin.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolvePaths, syncVvocConfig } from "../lib/opencode.js";
 import { PLUGIN_TOGGLE_NAMES } from "../lib/plugin-toggle-config.js";
+import { requestRebind } from "../lib/rebind-request.js";
 import type { Scope } from "../lib/opencode.js";
 
 // START_BLOCK_TOGGLE_PLUGIN
@@ -66,6 +67,22 @@ async function togglePlugin(
 }
 // END_BLOCK_TOGGLE_PLUGIN
 
+async function requestForceRebind(force: unknown, session: unknown): Promise<void> {
+  const sessionId = typeof session === "string" && session.trim() ? session.trim() : undefined;
+  const request = await requestRebind({
+    force: force === true,
+    directory: process.cwd(),
+    sessionId,
+  });
+  if (request !== undefined) {
+    console.log(
+      request.sessionId === undefined
+        ? "Rebind requested for every active session family in this project."
+        : `Rebind requested for session ${request.sessionId}.`,
+    );
+  }
+}
+
 // START_BLOCK_ENABLE_COMMAND
 export const enableCommand = defineCommand({
   meta: {
@@ -88,6 +105,14 @@ export const enableCommand = defineCommand({
       type: "string",
       description: "Override the global config home.",
     },
+    force: {
+      type: "boolean" as const,
+      description: "Also rebind running session families in this project.",
+    },
+    session: {
+      type: "string" as const,
+      description: "With --force, rebind only this session family.",
+    },
   },
   async run({ args }) {
     const pluginName = args.plugin as string;
@@ -105,6 +130,7 @@ export const enableCommand = defineCommand({
     try {
       const message = await togglePlugin(pluginName, true, scope, cwd, configDir);
       console.log(message);
+      await requestForceRebind(args.force, args.session);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -135,6 +161,14 @@ export const disableCommand = defineCommand({
       type: "string",
       description: "Override the global config home.",
     },
+    force: {
+      type: "boolean" as const,
+      description: "Also rebind running session families in this project.",
+    },
+    session: {
+      type: "string" as const,
+      description: "With --force, rebind only this session family.",
+    },
   },
   async run({ args }) {
     const pluginName = args.plugin as string;
@@ -152,6 +186,7 @@ export const disableCommand = defineCommand({
     try {
       const message = await togglePlugin(pluginName, false, scope, cwd, configDir);
       console.log(message);
+      await requestForceRebind(args.force, args.session);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);

@@ -11,13 +11,15 @@
 //
 // START_MODULE_MAP
 //   NativeSystemPart - Native system part fixture.
+//   NativeMessage - Native request message fixture carrying mutable content parts.
 //   NativeContextEvent - Native chat context event fixture.
 //   makeHarness - Builds a native plugin harness with an injected capture policy.
 //   systemText - Joins injected native system part text.
+//   tailText - Joins the injected transient tail policy text of the last request message.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 - Rewrote V1 chat.message tests against native session context SystemPart injection, captured family policy, and native-registry agent modes.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static guidance is asserted in the system prefix while the variable orchestration policy is asserted at the request tail.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -29,14 +31,23 @@ interface NativeSystemPart {
   type: "text";
   text: string;
 }
+interface NativeMessage {
+  content: Array<{ type: "text"; text: string }>;
+}
 interface NativeContextEvent {
   sessionID: string;
   agent: string;
   system: NativeSystemPart[];
+  messages: NativeMessage[];
 }
 
 function systemText(event: NativeContextEvent): string {
   return event.system.map((part) => part.text).join("\n\n");
+}
+
+function tailText(event: NativeContextEvent): string {
+  const last = event.messages[event.messages.length - 1];
+  return last === undefined ? "" : last.content.map((part) => part.text).join("\n\n");
 }
 
 async function makeHarness(
@@ -105,6 +116,7 @@ async function makeHarness(
       sessionID: `session-${agent}`,
       agent,
       system: existing === undefined ? [] : [{ type: "text", text: existing }],
+      messages: [{ content: [] }],
     };
     await handler(event);
     return event;
@@ -223,12 +235,15 @@ describe("SystemContextInjectionPlugin", () => {
 
   test("injects primary-session system context for vv-controller", async () => {
     const harness = await makeHarness({ profile: "balanced" });
-    const text = systemText(await harness.inject("vv-controller"));
+    const event = await harness.inject("vv-controller");
+    const system = systemText(event);
+    const tail = tailText(event);
 
-    expect(text).toContain("<working_state>");
-    expect(text).toContain("selectively delegate bounded repository search");
-    expect(text).not.toContain("Work directly in the current session");
-    expect(text).not.toContain("Use the full tracked implementation");
+    expect(system).toContain("<working_state>");
+    expect(system).not.toContain("selectively delegate bounded repository search");
+    expect(system).not.toContain("Work directly in the current session");
+    expect(system).not.toContain("Use the full tracked implementation");
+    expect(tail).toContain("selectively delegate bounded repository search");
   });
 
   test("injects only the concrete controller policy selected by each captured profile", async () => {
@@ -270,19 +285,22 @@ describe("SystemContextInjectionPlugin", () => {
 
     for (const { profile, expected, absent } of cases) {
       const harness = await makeHarness({ profile });
-      const text = systemText(await harness.inject("vv-controller"));
-      expect(text).toContain("<working_state>");
-      expect(text).toContain(expected);
-      for (const inactive of absent) expect(text).not.toContain(inactive);
+      const event = await harness.inject("vv-controller");
+      const system = systemText(event);
+      const tail = tailText(event);
+      expect(system).toContain("<working_state>");
+      expect(system).not.toContain(expected);
+      expect(tail).toContain(expected);
+      for (const inactive of absent) expect(tail).not.toContain(inactive);
       for (const profileName of ["single-session", "balanced", "orchestrated", "delegated"]) {
-        expect(text).not.toContain(profileName);
+        expect(tail).not.toContain(profileName);
       }
     }
   });
 
   test("single-session excludes working-subagent routes and retains the reviewer exception", async () => {
     const harness = await makeHarness({ profile: "single-session" });
-    const text = systemText(await harness.inject("vv-controller"));
+    const tail = tailText(await harness.inject("vv-controller"));
 
     for (const activity of [
       "exploration",
@@ -291,7 +309,7 @@ describe("SystemContextInjectionPlugin", () => {
       "implementation",
       "verification",
     ]) {
-      expect(text).toContain(activity);
+      expect(tail).toContain(activity);
     }
     for (const inactive of [
       "proactively use the explore subagent",
@@ -300,10 +318,10 @@ describe("SystemContextInjectionPlugin", () => {
       "change_with_review",
       "tracked implementation-loop",
     ]) {
-      expect(text).not.toContain(inactive);
+      expect(tail).not.toContain(inactive);
     }
-    expect(text).toContain("Do not delegate working context to subagents");
-    expect(text).toContain("Independent reviewer subagents remain permitted");
+    expect(tail).toContain("Do not delegate working context to subagents");
+    expect(tail).toContain("Independent reviewer subagents remain permitted");
   });
 
   test("non-controller primary agents receive universal guidance without orchestration policy", async () => {
@@ -335,15 +353,26 @@ describe("SystemContextInjectionPlugin", () => {
 
   test("preserves existing system text and avoids duplicate injection", async () => {
     const harness = await makeHarness({ profile: "balanced" });
-    const event = await harness.inject("vv-controller", "Existing system context.");
-    await harness.inject("vv-controller", systemText(event));
+    const handler = harness.hooks.get("context");
+    if (handler === undefined) throw new Error("no context hook registered");
+    const event: NativeContextEvent = {
+      sessionID: "session-vv-controller",
+      agent: "vv-controller",
+      system: [{ type: "text", text: "Existing system context." }],
+      messages: [{ content: [] }],
+    };
+    await handler(event);
+    await handler(event);
 
-    const text = systemText(event);
-    expect(text).toContain("Existing system context.");
-    expect(text.match(/<working_state>/g)).toHaveLength(1);
-    expect(text.match(/<correctness_obligations>/g)).toHaveLength(1);
-    expect(text.match(/<repository_memory>/g)).toHaveLength(1);
-    expect(text.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
+    const system = systemText(event);
+    expect(system).toContain("Existing system context.");
+    expect(system.match(/<working_state>/g)).toHaveLength(1);
+    expect(system.match(/<correctness_obligations>/g)).toHaveLength(1);
+    expect(system.match(/<repository_memory>/g)).toHaveLength(1);
+    expect(system).not.toContain("Keep architecture, critical code reading");
+
+    const tail = tailText(event);
+    expect(tail.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
   });
 
   test("skips plugin-managed and managed subagents", async () => {

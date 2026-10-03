@@ -1,8 +1,8 @@
 // FILE: src/runtime/context.test.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify context-identity native runtime and snapshot-service acquisition, per-lease idempotent release, distinct-context isolation at one location, registration teardown/reacquisition, and disposed-state safety.
-//   SCOPE: Deterministic fixture-host assertions for the runtime and snapshot-service registries; no real host, network, or V1 client.
+//   PURPOSE: Verify context-identity native runtime and family-binding-service acquisition, per-lease idempotent release, distinct-context isolation at one location, registration teardown/reacquisition, and disposed-state safety.
+//   SCOPE: Deterministic fixture-host assertions for the runtime and family-binding registries; no real host, network, or V1 client.
 //   DEPENDS: [bun:test, src/runtime/context.js, src/runtime/snapshots.js, src/runtime/types.js]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: TEST
@@ -15,20 +15,22 @@
 //   NativeHandler - Shape of one registered native RPC handler.
 //   makeLocation - Build a structural runtime location fixture.
 //   FakeNativeHost - In-memory native host double that records discovery, registration, and client construction.
-//   MemoryCaptureStore - In-memory SnapshotStore double for snapshot-service sharing tests.
+//   MemoryBindingStore - In-memory binding-store double for family-binding sharing tests.
 //   createSnapshotDeps - Minimal injectable snapshot-service dependencies.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Added coherent-admission binding coverage: a role-managed agent is recomputed from the fresh role, raw intent wins, and an unmanaged agent keeps its native literal.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Updated runtime acquisition coverage for durable family-binding services and retired staged admission.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { Plugin } from "@opencode/plugin";
 import { acquireRuntime, acquireSnapshotService, rebuildAgentBindings } from "./context.js";
 import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
+import { behaviourContentHash, type BehaviourProjection } from "./snapshot-config.js";
 import type { SnapshotServiceDeps } from "./snapshots.js";
-import type { EffectiveRuntimeConfig, FamilyCapture, SnapshotStore } from "./types.js";
+import type { FamilyBindingRecord } from "./snapshot-store.js";
+import type { EffectiveRuntimeConfig } from "./types.js";
 import {
   RuntimeDisposedError,
   SUPPORTED_SERVICE_VERSION,
@@ -254,43 +256,53 @@ describe("acquireRuntime", () => {
   });
 });
 
-// START_BLOCK_SNAPSHOT_SERVICE_ACQUISITION
-class MemoryCaptureStore implements SnapshotStore {
-  readonly captures = new Map<string, FamilyCapture>();
-  readonly markers = new Set<string>();
+class MemoryBindingStore {
+  readonly snapshots = new Map<string, BehaviourProjection>();
+  readonly bindings = new Map<string, FamilyBindingRecord>();
 
-  async read(familyId: string) {
-    return this.captures.get(familyId);
+  async writeSnapshot(projection: BehaviourProjection) {
+    const hash = behaviourContentHash(projection);
+    this.snapshots.set(hash, projection);
+    return hash;
   }
-  async write(familyId: string, capture: FamilyCapture) {
-    this.captures.set(familyId, capture);
+  async readSnapshot(hash: string) {
+    return this.snapshots.get(hash);
   }
-  async remove(familyId: string) {
-    this.captures.delete(familyId);
+  async writeBinding(binding: FamilyBindingRecord) {
+    this.bindings.set(binding.familyId, binding);
   }
-  async readCandidates() {
-    return [];
+  async readBinding(familyId: string) {
+    return this.bindings.get(familyId);
   }
-  async writeCandidate() {}
-  async removeCandidate() {}
-  async removeCandidates() {}
-  async readMarker(familyId: string) {
-    return this.markers.has(familyId);
+  async removeBinding(familyId: string) {
+    this.bindings.delete(familyId);
   }
-  async writeMarker(familyId: string) {
-    this.markers.add(familyId);
+  async listBindings() {
+    return [...this.bindings.values()];
   }
-  async removeMarker(familyId: string) {
-    this.markers.delete(familyId);
+  async listSnapshots() {
+    return [...this.snapshots.keys()];
   }
-  async list() {
-    return [...this.captures.keys()];
+  async removeSnapshot(hash: string) {
+    this.snapshots.delete(hash);
+  }
+  async countBindings() {
+    const counts = new Map<string, number>();
+    for (const binding of this.bindings.values()) {
+      counts.set(binding.snapshotHash, (counts.get(binding.snapshotHash) ?? 0) + 1);
+    }
+    return counts;
   }
 }
 
-function createSnapshotDeps(store: SnapshotStore): SnapshotServiceDeps {
+function createSnapshotDeps(store: MemoryBindingStore): SnapshotServiceDeps {
   return {
     store,
+    location: {
+      directory: "/workspace/shared",
+      projectID: "project-1",
+      canonical: "/workspace/shared",
+    },
     loadConfig: async () => ({
       roles: { default: "prov/m1" },
       agentRoles: { build: "default" },
@@ -314,7 +326,7 @@ describe("acquireSnapshotService", () => {
   test("shares one snapshot service for the same context and dependency instance", async () => {
     const host = new FakeNativeHost();
     const context = host.createContext(makeLocation("/workspace/shared"));
-    const deps = createSnapshotDeps(new MemoryCaptureStore());
+    const deps = createSnapshotDeps(new MemoryBindingStore());
 
     const first = acquireSnapshotService(context, deps);
     const second = acquireSnapshotService(context, deps);
@@ -329,7 +341,7 @@ describe("acquireSnapshotService", () => {
 
   test("isolates distinct contexts that share one location", () => {
     const host = new FakeNativeHost();
-    const deps = createSnapshotDeps(new MemoryCaptureStore());
+    const deps = createSnapshotDeps(new MemoryBindingStore());
     const location = makeLocation("/workspace/shared");
     const left = acquireSnapshotService(host.createContext(location), deps);
     const right = acquireSnapshotService(host.createContext(location), deps);
@@ -341,11 +353,11 @@ describe("acquireSnapshotService", () => {
     const host = new FakeNativeHost();
     const lease = acquireSnapshotService(
       host.createContext(makeLocation("/workspace/released")),
-      createSnapshotDeps(new MemoryCaptureStore()),
+      createSnapshotDeps(new MemoryBindingStore()),
     );
     await lease.release();
 
-    const outcome = await lease.snapshots.stage({
+    const outcome = await lease.snapshots.admitOwned({
       sessionID: "ses_root",
       directory: "/workspace/released",
       location: {
@@ -397,4 +409,3 @@ describe("coherent admission bindings", () => {
     ]);
   });
 });
-// END_BLOCK_SNAPSHOT_SERVICE_ACQUISITION

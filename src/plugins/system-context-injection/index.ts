@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 attempt 2 - Explore receives its role guidance despite native subagent mode; every other subagent is excluded; agent mode is read fresh per query; skill-path delivery is explicitly handed to T007.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static primary guidance stays in the system prefix while the variable orchestration policy is injected at the request tail, so a profile change does not invalidate the cached prefix.]
 // END_CHANGE_SUMMARY
 
 import { SystemPart } from "@opencode/ai";
@@ -192,18 +192,25 @@ async function shouldInjectForAgent(
   return true;
 }
 
-/** Returns universal primary guidance and, only for vv-controller, one concrete policy. */
-function getSystemContextsForAgent(
-  agentName: string | undefined,
-  policy: ResolvedOrchestrationPolicy,
-): readonly string[] {
+/** Returns the stable guidance injected into the system prefix for one agent. */
+function getSystemContextsForAgent(agentName: string | undefined): readonly string[] {
   if (agentName === EXPLORE_SUBAGENT) {
     return EXPLORE_SYSTEM_CONTEXTS;
   }
-  if (agentName === VV_CONTROLLER_AGENT) {
-    return [...UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS, policy.controllerSystemContext];
-  }
   return UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS;
+}
+
+/**
+ * Returns the variable orchestration policy for one agent, or undefined when the
+ * agent gets none. It is injected at the request tail, never into the system
+ * prefix, so changing the profile does not invalidate the cached prefix.
+ */
+function getTailPolicyForAgent(
+  agentName: string | undefined,
+  policy: ResolvedOrchestrationPolicy,
+): string | undefined {
+  if (agentName !== VV_CONTROLLER_AGENT) return undefined;
+  return policy.controllerSystemContext;
 }
 // END_BLOCK_AGENT_FILTERS
 
@@ -226,6 +233,26 @@ function appendSystemContexts(
     if (hasInjectedContext(system, context)) continue;
     system.push(SystemPart.make(context));
   }
+}
+
+/**
+ * Append the variable orchestration policy to the tail of the last request
+ * message exactly once. The part is transient: it changes only the provider
+ * copy, so it never lands in stored history, and keeping it out of the system
+ * prefix means a profile change does not invalidate the cached prefix.
+ */
+function appendTailContext(messages: Array<{ content?: unknown }>, context: string): void {
+  if (messages.length === 0) return;
+  const last = messages[messages.length - 1];
+  if (last === null || typeof last !== "object") return;
+  const content = (last as { content?: unknown }).content;
+  if (!Array.isArray(content)) return;
+  for (const part of content) {
+    if (part === null || typeof part !== "object") continue;
+    const text = (part as { text?: unknown }).text;
+    if (typeof text === "string" && text.includes(context)) return;
+  }
+  content.push({ type: "text", text: context });
 }
 // END_BLOCK_SYSTEM_CONTEXT_FORMATTING
 
@@ -302,16 +329,21 @@ export function createSystemContextInjectionPlugin(
 
       const registration = await ctx.session.hook("context", async (event) => {
         try {
-          if (!Array.isArray(event.system)) return;
           const agentName = event.agent === undefined ? undefined : String(event.agent);
           if (!(await shouldInjectForAgent(agentName, knownSubagents, agentMode))) return;
           const config = await resolveCapturedConfig(runtime, String(event.sessionID));
           if (config === undefined) return;
           const policy = resolveOrchestrationPolicy(config);
-          appendSystemContexts(
-            event.system as Array<{ type: "text"; text: string }>,
-            getSystemContextsForAgent(agentName, policy),
-          );
+          if (Array.isArray(event.system)) {
+            appendSystemContexts(
+              event.system as Array<{ type: "text"; text: string }>,
+              getSystemContextsForAgent(agentName),
+            );
+          }
+          const tail = getTailPolicyForAgent(agentName, policy);
+          if (tail !== undefined && Array.isArray(event.messages)) {
+            appendTailContext(event.messages as Array<{ content?: unknown }>, tail);
+          }
         } catch {
           // Guidance injection must never fail a model request.
         }

@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyPreset, formatPreset, listConfiguredPresets, resolvePreset } from "./preset.js";
+import { listRebindRequests, requestRebind } from "../lib/rebind-request.js";
 import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
@@ -710,4 +711,25 @@ describe("applyPreset", () => {
       await rm(projectDir, { recursive: true, force: true });
     }
   }, 20_000);
+});
+
+describe("preset force rebind request", () => {
+  test("writes a project-scoped marker only when forced", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "vvoc-rebind-"));
+    try {
+      expect(await requestRebind({ force: false, directory: "/p", dataDir })).toBeUndefined();
+      const request = await requestRebind({
+        force: true,
+        directory: "/p",
+        sessionId: "ses_1",
+        dataDir,
+      });
+      expect(request?.sessionId).toBe("ses_1");
+      const live = await listRebindRequests({ dataDir });
+      expect(live).toHaveLength(1);
+      expect(live[0]?.directory.endsWith("/p")).toBe(true);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });

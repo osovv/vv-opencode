@@ -1,8 +1,8 @@
 // FILE: src/runtime/context.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime, the snapshot service, and the centralized native snapshot runtime (client/permissions/snapshots/config/model/auxiliary) consumed by every later native plugin.
-//   SCOPE: Context-identity reference-counted runtime/snapshot registries, per-acquisition idempotent release leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, coherent single-read admission configuration (fresh vvoc + raw intent + rebuilt provenance-aware agent bindings passed to both target and capture), cross-context app/location coordination, core stage/commit/guard/title hook registration, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No service discovery until a client is requested, no location-only sharing, no global configuration singleton, no parallel fake runtime, and no V1 compatibility facade.
+//   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime, family-binding service, and centralized native runtime (client/permissions/bindings/config/model/auxiliary) consumed by every later native plugin.
+//   SCOPE: Context-identity reference-counted registries, per-acquisition idempotent leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, coherent first-work binding, rehydrated guard/variants, session-deletion cleanup, cross-context coordination, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No candidate staging, accepted-input publication, service discovery until a client is requested, location-only sharing, global configuration singleton, parallel fake runtime, or V1 compatibility facade.
 //   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/coordination.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/snapshots.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
@@ -11,21 +11,21 @@
 //
 // START_MODULE_MAP
 //   acquireRuntime - Return a per-acquisition release lease for the runtime shared by one exact plugin context.
-//   acquireSnapshotService - Return a per-acquisition release lease for the snapshot service shared by one exact plugin context and dependency instance.
+//   acquireSnapshotService - Return a per-acquisition release lease for the family-binding service shared by one exact plugin context and dependency instance.
 //   NativeSessionInfoLike - Structural native session info used for lineage and provenance.
 //   NativeSnapshotHookEvents - Structural native hook event map used by the shared runtime.
 //   NativeSnapshotContext - Narrow structural native Plugin.Context used to acquire the shared snapshot runtime.
 //   NativeRegistration - Releasable native registration handle.
-//   NativeForkClient - Structural full client for forks, parented imports and durable session-log reconciliation.
+//   NativeForkClient - Structural full client for forks and parented imports.
 //   NativeSnapshotRuntimeOptions - Optional injectable native boundaries for the shared snapshot runtime.
-//   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, snapshots, effective config, model reload, role override, pre-admission gateway and refresh.
+//   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, family bindings, effective config, model reload, role override, first-work gateway and refresh.
 //   acquireNativeSnapshotRuntime - Acquire the shared native snapshot runtime for an actual Plugin.Context.
 //   rebuildAgentBindings - Recompute agent bindings from a freshly read policy without trusting a cached vvoc-applied selection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - One coherent admission config: bindings are rebuilt from the fresh role map plus raw intent so a vvoc role change with no config.updated selects and captures the new model; the same value drives the candidate target and the family capture for prompt and owned work, and services share an app/location-identity coordinator.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 - Registers the read-only context-inspection RPC (registered catalog plus allowlisted family/current-runtime policy) inside the shared runtime and includes it in owned cleanup.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Replaced candidate acceptance with durable bind-on-first-work, runtime rehydration of credential-free bindings, live overlay materialization, and native session-deletion cleanup.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - One coherent admission config: bindings are rebuilt from the fresh role map plus raw intent so a vvoc role change with no config.updated selects and captures the new model; the same value drives the candidate target and the family capture for prompt and owned work, and services share an app/location-identity coordinator.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -53,17 +53,15 @@ import { createPermissionService } from "./permissions.js";
 import {
   canonicalModelVariant,
   classifyInitialSelection,
-  decodeInboxEnqueuedEvent,
   decodeModelSelectedEvent,
   decodeSessionCreatedEvent,
   effectiveRuntimeConfig,
-  isAcceptedWorkloadEvent,
   isConfigUpdateEvent,
   normalizeModelSelection,
   parseRoleSelections,
 } from "./snapshot-config.js";
 import { registerContextInspectionRpc } from "./context-inspection.js";
-import { createFileSnapshotStore } from "./snapshot-store.js";
+import { FileBindingStore } from "./snapshot-store.js";
 import { createSnapshotService, type SnapshotServiceDeps } from "./snapshots.js";
 import {
   RuntimeDisposedError,
@@ -72,8 +70,6 @@ import {
   decodeAuxiliaryMetadata,
   decodeImportedSessionID,
   runtimeIdentity,
-  type AcceptedInput,
-  type AcceptedInputReconciliation,
   type AdmissionOutcome,
   type AgentEditorLike,
   type AgentPolicyBinding,
@@ -95,7 +91,6 @@ import {
   type SnapshotAdmissionRequest,
   type SnapshotLease,
   type SnapshotService,
-  type SnapshotStore,
   type VariantRegistration,
 } from "./types.js";
 
@@ -407,7 +402,7 @@ export interface NativeForkClient extends RuntimeClient {
 /** Optional injectable native boundaries for the shared snapshot runtime (tests only). */
 export interface NativeSnapshotRuntimeOptions<Client extends NativeForkClient = OpenCodeClient> {
   readonly runtimeDeps?: RuntimeDeps<Client> | undefined;
-  readonly store?: SnapshotStore | undefined;
+  readonly store?: FileBindingStore | undefined;
   readonly now?: (() => number) | undefined;
 }
 
@@ -415,16 +410,13 @@ export interface NativeSnapshotRuntimeOptions<Client extends NativeForkClient = 
 export interface NativeSnapshotRuntime<Client extends NativeForkClient = OpenCodeClient> {
   /** Native runtime with lazy authenticated full client and resource permissions. */
   readonly runtime: NativeRuntime<NativeSnapshotContext, Client>;
-  /** Immutable family snapshot/config/model/auxiliary service. */
+  /** Family-binding/config/model/auxiliary service. */
   readonly snapshots: SnapshotService;
   /**
-   * Supported pre-admission gateway for owned direct generate/synthetic work.
-   * Stages, materializes the qualified variant, switches the session, and
-   * publishes the family capture BEFORE the caller triggers native model
-   * resolution. It performs the real admission itself; it is not a "trust this
-   * arbitrary acceptance" shortcut, and unbound raw external generate remains
-   * fail-closed. Later consumers (for example Guardian's auxiliary inference and
-   * T-003) should call this rather than relying on a late generate hook.
+   * Supported bind-on-first-work gateway for owned direct generate/synthetic work.
+   * It persists the credential-free family revision, materializes the qualified
+   * live overlay, and switches before native model resolution. Unbound raw
+   * external generate remains fail-closed.
    */
   admitWorkload(request: SnapshotAdmissionRequest): Promise<AdmissionOutcome>;
   /** Snapshot-bound auxiliary generation. */
@@ -437,7 +429,7 @@ export interface NativeSnapshotRuntime<Client extends NativeForkClient = OpenCod
   effectiveConfig(): EffectiveRuntimeConfig;
   /** Enable or disable role overriding (agent models and default model) without disabling capture/guard. */
   setRoleOverride(enabled: boolean): Promise<void>;
-  /** Reload persisted captures, variant registrations and native transforms. */
+  /** Reload rehydrated family bindings, variant registrations and native transforms. */
   refresh(): Promise<void>;
   /** Last config-watcher failure, surfaced instead of being silently swallowed. */
   lastConfigError(): string | undefined;
@@ -496,6 +488,20 @@ function cloneOverlay(
   return value === undefined ? undefined : { ...value };
 }
 
+/** True for a snapshot-qualified variant previously materialized by this runtime. */
+function isManagedVariantID(
+  variantID: string,
+  modelID: string,
+  ownVariantIds: ReadonlySet<string>,
+): boolean {
+  if (ownVariantIds.has(variantID)) return true;
+  const prefix = variantID.slice(0, 16);
+  const suffix = variantID.slice(16);
+  return (
+    /^[0-9a-f]{16}$/.test(prefix) && (suffix === `.${modelID}` || suffix.startsWith(`.${modelID}.`))
+  );
+}
+
 function wantedModelKeys(config: EffectiveRuntimeConfig): Set<string> {
   const keys = new Set<string>();
   for (const selection of Object.values(parseRoleSelections(config.roles))) {
@@ -537,7 +543,7 @@ function captureModelSettings(
     });
     for (const variant of model.variants) {
       // Never re-capture vvoc-generated variants as native overlays (no accumulation).
-      if (ownVariantIds.has(String(variant.id))) continue;
+      if (isManagedVariantID(String(variant.id), modelID, ownVariantIds)) continue;
       captured.push({
         providerID,
         modelID,
@@ -838,8 +844,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         suppressedTitles: new Set(),
       };
 
-      const store =
-        options?.store ?? createFileSnapshotStore({ scopeKey: ctx.location.project.id });
+      const store = options?.store ?? new FileBindingStore({ scopeKey: ctx.location.project.id });
 
       /**
        * Read the host's final native model collection. A model transform registered
@@ -912,7 +917,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             for (const variant of entry.variants) {
               if (!isRecord(variant) || typeof variant.id !== "string") continue;
               // Never re-capture our own generated variants (no accumulation).
-              if (state.ownVariantIds.has(variant.id)) continue;
+              if (isManagedVariantID(variant.id, modelID, state.ownVariantIds)) continue;
               // Each source variant gets the base merged with THAT variant's own
               // native overlay, so two source variants of one model stay distinct.
               captured.push(overlay(providerID, modelID, variant.id, entry, variant));
@@ -953,80 +958,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
       // Initialize the live config with raw OpenCode intent before any transform runs.
       state.config = await readConfig(ctx.location.directory);
-
-      /**
-       * Live accepted inputs observed on the event stream, keyed by
-       * `sessionID\0inboxID`, carrying the native event time and durable sequence
-       * used to order the first accepted workload. Merged with the durable log.
-       */
-      const liveAccepted = new Map<string, AcceptedInput>();
-
-      /**
-       * Reconcile accepted inputs for a session. Returns the verified inputs plus
-       * whether the durable log replay reached a genuine `log.synced` watermark
-       * for THIS session. A truncated/wrong/timeout replay yields `complete:false`
-       * but may still carry verified live events; callers must not order multiple
-       * candidates from an incomplete view. Returns undefined when neither source
-       * proves any acceptance.
-       */
-      const readAcceptedInputs = async (
-        sessionID: string,
-      ): Promise<AcceptedInputReconciliation | undefined> => {
-        const accepted = new Map<string, AcceptedInput>();
-        for (const entry of liveAccepted.values()) {
-          if (entry.sessionID === sessionID) accepted.set(entry.inboxID, entry);
-        }
-        let complete = false;
-        try {
-          const client = await runtime.client();
-          const stream = client.session.log(
-            { sessionID, follow: false },
-            { signal: AbortSignal.timeout(5000) },
-          );
-          for await (const item of stream) {
-            if (!isRecord(item)) continue;
-            const type = typeof item.type === "string" ? item.type : "";
-            if (type === "log.synced") {
-              const aggregateID = item.aggregateID;
-              if (typeof aggregateID !== "string" || aggregateID !== sessionID) {
-                throw new SnapshotAdmissionError(
-                  "The session log synced a different aggregate; refusing to trust the replay.",
-                );
-              }
-              const seq = item.seq;
-              if (seq !== undefined && (typeof seq !== "number" || !Number.isFinite(seq))) {
-                throw new SnapshotAdmissionError(
-                  "The session log synced with an invalid sequence; refusing to trust the replay.",
-                );
-              }
-              complete = true;
-              break;
-            }
-            const decoded = decodeInboxEnqueuedEvent({
-              type,
-              data: item.data,
-              created: item.created,
-              durable: isRecord(item.durable) ? item.durable : undefined,
-            });
-            if (decoded !== undefined && decoded.sessionID === sessionID) {
-              accepted.set(decoded.inboxID, {
-                sessionID,
-                inboxID: decoded.inboxID,
-                itemType: decoded.itemType,
-                created: decoded.created ?? Date.now(),
-                ...(decoded.seq === undefined ? {} : { seq: decoded.seq }),
-                source: "log",
-              });
-            }
-          }
-        } catch {
-          // The live entries below remain verified; the caller decides whether an
-          // incomplete view is enough (it is not, when multiple inputs are staged).
-          complete = false;
-        }
-        if (!complete && accepted.size === 0) return undefined;
-        return { inputs: [...accepted.values()], complete };
-      };
 
       /**
        * Create a real parented auxiliary child through the authenticated full
@@ -1101,6 +1032,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
       const deps: SnapshotServiceDeps = {
         store,
+        location: runtimeIdentity(ctx.location),
         ...(options?.now === undefined ? {} : { now: options.now }),
         // Distinct plugin contexts copied from one host share the native app/location
         // object identity, so their snapshot services share one per-family
@@ -1116,7 +1048,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           toSelection((await ctx.session.get({ sessionID })).model),
         switchModel: ({ sessionID, model }) =>
           ctx.session.switchModel({ sessionID, model: toRef(model) }),
-        readAcceptedInputs,
         auxiliarySession: {
           create: importAuxiliaryChild,
           switchModel: async ({ sessionID, model }) => {
@@ -1145,15 +1076,13 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
        * transform-local editor is not proof the variant survived; the host's final
        * model list is. Returns undefined when the host exposes no list call (tests).
        */
-      const materializeCandidate = async (
-        candidateIdentity: string,
+      const materializeBinding = async (
         capture: import("./types.js").FamilyCapture,
         selection: ModelSelection,
       ): Promise<void> => {
         if (selection.variant === undefined) return;
-        // Materialize this candidate's qualified variant before its switch, keyed
-        // by candidate identity so a concurrent candidate's variants are not erased.
-        state.pendingRegistrations.set(candidateIdentity, buildVariantRegistrations([capture]));
+        // Materialize this family's qualified live variant before its first switch.
+        state.pendingRegistrations.set(capture.snapshotId, buildVariantRegistrations([capture]));
         await ctx.model.reload();
         const finalEntries = await readFinalModelEntries();
         const exists =
@@ -1171,7 +1100,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
                 );
               });
         if (!exists) {
-          state.pendingRegistrations.delete(candidateIdentity);
+          state.pendingRegistrations.delete(capture.snapshotId);
           await ctx.model.reload();
           throw new SnapshotAdmissionError(
             `Captured variant ${selection.variant} is not materializable on ${selection.providerID}/${selection.modelID}.`,
@@ -1184,8 +1113,8 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         await ctx.session.switchModel({ sessionID, model: toRef(selection) });
       };
 
-      /** Unbound candidate selection for a session's agent from the live policy. */
-      const candidateTarget = (agentID: string | undefined): ModelSelection | undefined => {
+      /** First-work selection for a session's agent from the live policy. */
+      const bindingTarget = (agentID: string | undefined): ModelSelection | undefined => {
         const bindings = state.config.agentBindings ?? [];
         if (agentID !== undefined) {
           const binding = bindings.find((agent) => agent.agentID === agentID);
@@ -1231,14 +1160,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         return expectedSelection(capture, agentID);
       };
 
-      /** Publish a staged candidate for an accepted workload before use. */
-      const reconcileAcceptedFamily = async (sessionID: string): Promise<void> => {
-        if ((await snapshots.policy(sessionID)) !== undefined) return;
-        const outcome = await snapshots.accept({ sessionID });
-        if (outcome.status === "bound") await refresh();
-      };
-
-      const stageFor = async (sessionID: string, inboxID?: string): Promise<void> => {
+      const bindFor = async (sessionID: string): Promise<void> => {
         await ensureTransforms();
         const view = toSessionView(await ctx.session.get({ sessionID }));
         const sessionModel = view.model;
@@ -1250,6 +1172,11 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         const intent = ownSwitch
           ? ({ mode: "implicit", source: "switch" } as const)
           : classifyInitialSelection({ sessionModel, creationDefault });
+        if (intent.mode === "explicit" && intent.literal !== undefined) {
+          // Creation provenance is an explicit host selection just like a later
+          // model-selected event, so preserve it through the model guard.
+          state.explicitSelections.set(sessionID, intent.literal);
+        }
 
         const existing = await snapshots.policy(sessionID);
         if (existing !== undefined) {
@@ -1275,26 +1202,21 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           }
           return;
         }
-        // Only a truly unbound candidate needs the freshest current config:
+        // Only a truly unbound family needs the freshest current config:
         // vvoc.json changes do not emit a host `config.updated`, and a stale
-        // candidate target would otherwise bind the previous role selection. The
-        // SAME immutable value is passed into the service so its capture cannot
+        // family target would otherwise bind the previous role selection. The
+        // SAME immutable value is passed into the service so its projection cannot
         // re-read a different vvoc snapshot than the target was derived from.
         const admissionConfig = await readConfig(ctx.location.directory);
         state.config = admissionConfig;
-        // Reconcile/restage by exact input identity. The snapshot service manages
-        // candidate ownership: a still-staged sibling workload never blocks this
-        // session's stage, and a first prompt rejected during native preparation
-        // is superseded by the next same-session prompt rather than deadlocking it.
-
         const explicitSelection = intent.mode === "explicit" ? intent.literal : undefined;
-        const target = explicitSelection ?? candidateTarget(view.agent);
+        const target = explicitSelection ?? bindingTarget(view.agent);
         const base = state.roleOverride ? target : (sessionModel ?? target);
-        // The agent-aware resolved target drives staging, not the capture's default
+        // The agent-aware resolved target drives binding, not the capture's default
         // role; when role overriding is off the session's current model is bound.
         const selectionOverride =
           explicitSelection === undefined && base !== undefined ? base : undefined;
-        const outcome = await snapshots.stage(
+        const outcome = await snapshots.admitOwned(
           {
             sessionID,
             directory: ctx.location.directory,
@@ -1302,20 +1224,21 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             admissionConfig,
             ...(explicitSelection === undefined ? {} : { explicit: explicitSelection }),
             ...(selectionOverride === undefined ? {} : { selectionOverride }),
-            ...(sessionModel === undefined ? {} : { before: sessionModel }),
-            ...(inboxID === undefined ? {} : { inboxID }),
-            workload: "prompt",
             force: state.roleOverride,
           },
-          async (capture, selection, candidateIdentity) => {
-            await materializeCandidate(candidateIdentity, capture, selection);
+          async (capture, selection) => {
+            await materializeBinding(capture, selection);
             state.pluginSwitches.set(sessionID, selection);
           },
         );
         if (outcome.status === "rejected") {
           throw new SnapshotAdmissionError(
-            outcome.error ?? `Admission for ${sessionID} did not produce a persisted policy.`,
+            outcome.error ?? `Binding for ${sessionID} did not produce a persisted policy.`,
           );
+        }
+        if (outcome.status === "bound") {
+          await refresh();
+          state.pendingRegistrations.clear();
         }
       };
 
@@ -1349,46 +1272,8 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           }
           return;
         }
-        // No committed capture yet. Await workload-correlated acceptance and
-        // persistence: the pump may still be committing, so retry briefly while a
-        // candidate exists. The service owns correlation and never commits
-        // arbitrary pending; the validate callback refuses a mismatched model
-        // before publication.
-        const deadline = Date.now() + 3000;
-        let lastError: string | undefined;
-        for (;;) {
-          const captureNow = await snapshots.policy(sessionID);
-          if (captureNow !== undefined) {
-            const expected =
-              kind === "title"
-                ? titleExpectedSelection(captureNow)
-                : expectedForSession(captureNow, effectiveAgent, sessionID, view.metadata);
-            if (!selectionMatches(actual, expected)) {
-              throw new SnapshotAdmissionError(
-                `Resolved ${kind} model ${actual?.providerID ?? "?"}/${actual?.modelID ?? "?"} does not match the captured family selection for ${familyId}.`,
-              );
-            }
-            return;
-          }
-          if (!(await snapshots.hasStaged(familyId))) {
-            throw new SnapshotUnboundError(
-              `Refusing unbound ${kind} dispatch for session ${sessionID} before a family policy is bound.`,
-            );
-          }
-          const outcome = await snapshots.accept({
-            sessionID,
-            validate: (selection) => selectionMatches(actual, selection),
-          });
-          if (outcome.status === "bound" || outcome.status === "reused") {
-            await refresh();
-            return;
-          }
-          lastError = outcome.error;
-          if (Date.now() >= deadline) break;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
         throw new SnapshotUnboundError(
-          `Refusing unbound ${kind} dispatch for session ${sessionID} before a family policy is bound (${lastError ?? "no accepted workload"}).`,
+          `Refusing unbound ${kind} dispatch for session ${sessionID} before first-work family binding.`,
         );
       };
 
@@ -1450,11 +1335,9 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         await ctx.model.reload();
         await ctx.agent.reload();
       };
-      owned.push(
-        await ctx.session.hook("prompt", (event) => stageFor(event.sessionID, event.messageID)),
-      );
+      owned.push(await ctx.session.hook("prompt", (event) => bindFor(event.sessionID)));
       // `context` and `generate` resolve their model before (or around) the hook,
-      // so neither can stage; owned generate/synthetic work uses admitWorkload.
+      // so neither can bind; owned generate/synthetic work uses admitWorkload.
       owned.push(
         await ctx.session.hook("generate", async (event) => {
           const view = toSessionView(await ctx.session.get({ sessionID: event.sessionID }));
@@ -1479,9 +1362,6 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           : getBuiltInRoleBindings().opencodeDefaults.smallModel;
       owned.push(
         await ctx.session.hook("title", async (event) => {
-          // The host resolved and may dispatch the title before the event pump has
-          // committed the accepted candidate; reconcile it so title work is bound.
-          await reconcileAcceptedFamily(event.sessionID);
           const title = await snapshots.auxiliary.title({
             sessionID: event.sessionID,
             result: event.result,
@@ -1498,11 +1378,8 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       );
 
       // One native event pump: creation provenance, explicit choice capture, config
-      // refresh and the accepted-input boundary all share a single subscription.
-      // Failures are contained PER EVENT: a bad config/refresh/accept never ends
-      // the only subscription, so later session.created/model.selected/inbox
-      // events are still observed and a later config event recovers the health
-      // flag once the invalid input is fixed.
+      // refresh, and family-deletion cleanup share a single subscription. Failures
+      // are contained per event so later updates still recover runtime health.
       const pump = (async () => {
         try {
           for await (const event of ctx.event.subscribe({ signal: lifecycle.signal })) {
@@ -1533,22 +1410,16 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
                 // A successful config event is the recovery signal.
                 state.configError = undefined;
               }
-              if (isAcceptedWorkloadEvent(event)) {
-                // Record the verified native acceptance with its event time/sequence,
-                // then let the service pick the FIRST accepted candidate across the
-                // family rather than the one whose notification arrived first.
-                const enqueued = decodeInboxEnqueuedEvent(event);
-                if (enqueued === undefined) continue;
-                liveAccepted.set(`${enqueued.sessionID}\u0000${enqueued.inboxID}`, {
-                  sessionID: enqueued.sessionID,
-                  inboxID: enqueued.inboxID,
-                  itemType: enqueued.itemType,
-                  created: enqueued.created ?? Date.now(),
-                  ...(enqueued.seq === undefined ? {} : { seq: enqueued.seq }),
-                  source: "live",
-                });
-                const outcome = await snapshots.accept({ sessionID: enqueued.sessionID });
-                if (outcome.status === "bound") await refresh();
+              if (event.type === "session.deleted" && isRecord(event.data)) {
+                const sessionID = event.data.sessionID;
+                if (typeof sessionID === "string") {
+                  await snapshots.removeFamily(sessionID);
+                  state.creationModels.delete(sessionID);
+                  state.creationDefaults.delete(sessionID);
+                  state.explicitSelections.delete(sessionID);
+                  state.pluginSwitches.delete(sessionID);
+                  state.suppressedTitles.delete(sessionID);
+                }
               }
             } catch (error) {
               // Contain one event's failure and keep observing later events.
@@ -1593,24 +1464,25 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         effectiveConfig: () => state.config,
         async admitWorkload(request) {
           // Supported pre-admission gateway for owned direct generate/synthetic:
-          // mint an operation token this runtime owns, then stage, materialize the
-          // qualified variant, switch and publish before the caller triggers native
-          // model resolution. It cannot publish a prompt candidate that still needs
-          // correlated native acceptance. The same coherent config that drives the
-          // target is passed to the service so owned work obeys the same rule.
+          // bind, materialize the qualified live variant, and switch before the
+          // caller triggers native model resolution.
           const admissionConfig = await readConfig(request.directory);
           state.config = admissionConfig;
-          return snapshots.admitOwned(
+          const outcome = await snapshots.admitOwned(
             {
               ...request,
               admissionConfig,
-              operationID: `op_${randomBytes(16).toString("hex")}`,
             },
-            async (capture, selection, candidateIdentity) => {
-              await materializeCandidate(candidateIdentity, capture, selection);
+            async (capture, selection) => {
+              await materializeBinding(capture, selection);
               state.pluginSwitches.set(request.sessionID, selection);
             },
           );
+          if (outcome.status === "bound") {
+            await refresh();
+            state.pendingRegistrations.clear();
+          }
+          return outcome;
         },
         async setRoleOverride(enabled) {
           state.roleOverride = enabled;
