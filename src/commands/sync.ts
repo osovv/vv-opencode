@@ -2,7 +2,7 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep OpenCode runtime/TUI plugin specifiers current.
-//   SCOPE: Scope parsing, path resolution, pinned runtime/TUI plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
+//   SCOPE: Scope parsing, path resolution, host-gated V1 OpenCode config materialization, pinned runtime/TUI plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
 //   DEPENDS: [citty, src/lib/opencode.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight and extracted an injectable runSync flow.]
+//   LAST_CHANGE: [C-V1-OPENCODE-CONFIG-MIGRATION T-002 - Added a host-gated V1-to-V2 OpenCode config materialization pre-step before native package validation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -24,6 +24,7 @@ import {
   describeWriteResult,
   ensureManagedSkillSymlink,
   ensurePackageInstalled,
+  migrateOpenCodeConfig,
   resolvePaths,
   readVvocConfig,
   syncManagedAgentPrompts,
@@ -77,6 +78,25 @@ export async function runSync(
   // command fails loudly up front instead of after a partial sync.
   await assertSupportedOpenCodeRuntime(options.inspectRuntime);
   await readVvocConfig(paths);
+  // Host-gated V1-to-V2 materialization: only runs once the host is inside the
+  // supported window, before the native document is validated and rewritten.
+  const migration = await migrateOpenCodeConfig(paths);
+  for (const legacyTuiPath of migration.legacyTuiPaths) {
+    console.log(`Reported legacy TUI config (left unchanged): ${legacyTuiPath}`);
+  }
+  if (migration.action === "aborted") {
+    const details = [...migration.unmappable, ...migration.reportOnly];
+    throw new Error(
+      `OpenCode config migration needs manual work before sync can continue:\n${details
+        .map((detail) => `  - ${detail}`)
+        .join("\n")}`,
+    );
+  }
+  if (migration.action === "migrated") {
+    console.log(
+      `Migrated ${migration.path} to the native OpenCode 2.0.18 shape (backup: ${migration.backupPath})`,
+    );
+  }
   const opencode = await ensurePackageInstalled(paths);
   const managedAgents = await syncManagedAgentRegistrations(paths);
   const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });

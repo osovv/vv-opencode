@@ -14,11 +14,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-RELEASE-RC-CHANNEL - Covered rc dist-tag resolution, no-candidate degradation, flag semantics, and default-path isolation.]
+//   LAST_CHANGE: [C-V1-OPENCODE-CONFIG-MIGRATION T-003 - Covered method-aware host guidance and non-zero upgrade exits.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
-import { runUpgradeFlow } from "./upgrade.js";
+import { describeHostUpgradeGuidance, runUpgradeFlow } from "./upgrade.js";
 
 test("runUpgradeFlow - reports already-latest without install or sync", async () => {
   const logger = createLoggerCapture();
@@ -164,6 +164,7 @@ test("runUpgradeFlow - warns when post-install sync fails but keeps upgrade succ
     fetchLatestVersion: async () => "0.15.0",
     fetchChangelog: async () => null,
     getCurrentVersion: async () => "0.14.0",
+    inspectHost: async () => ({ version: "2.0.18", versionSupported: true }),
     logger,
     runSubprocess: async (command) => {
       commands.push([...command]);
@@ -174,7 +175,7 @@ test("runUpgradeFlow - warns when post-install sync fails but keeps upgrade succ
     },
   });
 
-  expect(result).toEqual({ exitCode: 0, status: "sync-warning" });
+  expect(result).toEqual({ exitCode: 1, status: "sync-warning" });
   expect(commands).toEqual([
     ["bun", "add", "-g", "@osovv/vv-opencode@0.15.0"],
     ["vvoc", "sync"],
@@ -204,7 +205,7 @@ test("runUpgradeFlow - warns partial upgrade when post-install sync launch throw
     },
   });
 
-  expect(result).toEqual({ exitCode: 0, status: "sync-warning" });
+  expect(result).toEqual({ exitCode: 1, status: "sync-warning" });
   expect(commands).toEqual([
     ["bun", "add", "-g", "@osovv/vv-opencode@0.15.0"],
     ["vvoc", "sync"],
@@ -390,6 +391,51 @@ test("runUpgradeFlow - default upgrade off a candidate uses the latest dist-tag"
   expect(result.status).toBe("upgraded");
   expect(commands[0]?.[3]).toContain("0.36.0");
 });
+test("describeHostUpgradeGuidance - prints a single method-specific command for a global install", () => {
+  const lines = describeHostUpgradeGuidance(
+    "1.18.2",
+    "/home/user/.bun/install/global/node_modules/@opencode/cli/bin/opencode",
+  );
+  const joined = lines.join("\n");
+  expect(joined).toContain("outside the supported window");
+  expect(joined).toContain("bun add -g @opencode/cli@2.0.18");
+  expect(joined).not.toContain("official OpenCode 2.0.18 binary distribution");
+});
+
+test("describeHostUpgradeGuidance - falls back to both documented paths when the method is unknown", () => {
+  const lines = describeHostUpgradeGuidance("1.18.2", null);
+  const joined = lines.join("\n");
+  expect(joined).toContain("bun add -g @opencode/cli@2.0.18");
+  expect(joined).toContain("official OpenCode 2.0.18 binary distribution");
+});
+
+test("runUpgradeFlow - guides the user and exits non-zero when the host is out of window", async () => {
+  const logger = createLoggerCapture();
+  const commands: string[][] = [];
+
+  const result = await runUpgradeFlow({
+    fetchLatestVersion: async () => "0.15.0",
+    fetchChangelog: async () => null,
+    getCurrentVersion: async () => "0.14.0",
+    inspectHost: async () => ({ version: "1.18.2", versionSupported: false }),
+    logger,
+    runSubprocess: async (command) => {
+      commands.push([...command]);
+      return commands.length === 1
+        ? { exitCode: 0, stderr: "", stdout: "installed" }
+        : { exitCode: 1, stderr: "host unsupported", stdout: "" };
+    },
+  });
+
+  expect(result).toEqual({ exitCode: 1, status: "sync-warning" });
+  expect(commands).toEqual([
+    ["bun", "add", "-g", "@osovv/vv-opencode@0.15.0"],
+    ["vvoc", "sync"],
+  ]);
+  expect(logger.warnLines.join("\n")).toContain("outside the supported window");
+  expect(logger.warnLines.join("\n")).toContain("migration did not run");
+});
+
 function createLoggerCapture(): {
   error: (message: string) => void;
   errorLines: string[];

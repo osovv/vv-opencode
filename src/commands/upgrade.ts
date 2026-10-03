@@ -2,8 +2,8 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Upgrade the global vvoc package by checking npm, installing the latest release with Bun, triggering a fresh sync subprocess, and reinstalling shell completions.
-//   SCOPE: npm registry query, version comparison, jsDelivr changelog fetching with version-range parsing, optional pre-release version resolution, global Bun install, post-install sync execution, and post-upgrade shell completion installation.
-//   DEPENDS: [src/lib/package.ts, citty]
+//   SCOPE: npm registry query, version comparison, jsDelivr changelog fetching with version-range parsing, optional pre-release version resolution, global Bun install, post-install sync execution, best-effort method-aware host guidance when the installed host is out of window, and post-upgrade shell completion installation.
+//   DEPENDS: [src/lib/package.ts, src/lib/opencode.ts, citty, node:fs]
 //   LINKS: M-CLI-UPGRADE, V-M-CLI-UPGRADE
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -21,12 +21,15 @@
 //   UpgradeFlowResult - Upgrade flow result type.
 //   UpgradeSubprocessResult - Subprocess result type.
 //   buildPostInstallSyncCommand - Build post-install sync command.
+//   describeHostUpgradeGuidance - Produce method-aware next steps when the installed OpenCode host is out of window.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-RELEASE-RC-CHANNEL - Resolved --rc (and --allow-prerelease) upgrades from the npm rc dist-tag with a clear no-candidate message.]
+//   LAST_CHANGE: [C-V1-OPENCODE-CONFIG-MIGRATION T-003 - Added method-aware host guidance and non-zero exits when the host is unsupported or the post-install sync fails.]
 // END_CHANGE_SUMMARY
+import { realpathSync } from "node:fs";
 import { defineCommand } from "citty";
+import { inspectOpenCodeRuntime } from "../lib/opencode.js";
 import { getPackageVersion, PACKAGE_NAME } from "../lib/package.js";
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
@@ -57,6 +60,7 @@ type UpgradeDependencies = {
   fetchLatestVersion: () => Promise<string | null>;
   fetchRcDistTagVersion: () => Promise<string | null>;
   getCurrentVersion: () => Promise<string>;
+  inspectHost: () => Promise<{ version: string | undefined; versionSupported: boolean }>;
   logger: UpgradeLogger;
   runSubprocess: (command: UpgradeCommand) => Promise<UpgradeSubprocessResult>;
 };
@@ -102,6 +106,7 @@ export async function runUpgradeFlow(
   const fetchRc = overrides.fetchRcDistTagVersion ?? fetchRcDistTagVersion;
   const fetchReleaseNotes = overrides.fetchChangelog ?? fetchChangelog;
   const getCurrentVersion = overrides.getCurrentVersion ?? getPackageVersion;
+  const inspectHost = overrides.inspectHost ?? inspectOpenCodeRuntime;
   const runSubprocess = overrides.runSubprocess ?? runSubprocessCommand;
 
   try {
@@ -177,14 +182,22 @@ export async function runUpgradeFlow(
       syncResult = await runSubprocess(syncCommand);
     } catch (error) {
       warnManualSync(logger, `Could not launch sync: ${formatError(error)}`);
-      return { exitCode: 0, status: "sync-warning" };
+      return { exitCode: 1, status: "sync-warning" };
     }
 
     if (syncResult.exitCode !== 0) {
       logProcessOutput(logger.warn, syncResult.stdout);
       logProcessOutput(logger.warn, syncResult.stderr);
+      const host = await inspectHost();
+      if (!host.versionSupported) {
+        for (const line of describeHostUpgradeGuidance(host.version ?? "unknown")) {
+          logger.warn(line);
+        }
+        logger.warn("OpenCode config migration did not run.");
+        return { exitCode: 1, status: "sync-warning" };
+      }
       warnManualSync(logger, "Post-upgrade sync failed.");
-      return { exitCode: 0, status: "sync-warning" };
+      return { exitCode: syncResult.exitCode || 1, status: "sync-warning" };
     }
     logProcessOutput(logger.log, syncResult.stdout);
     logProcessOutput(logger.warn, syncResult.stderr);
@@ -219,6 +232,59 @@ export async function runUpgradeFlow(
     logger.error(`Upgrade check failed: ${formatError(error)}`);
     return { exitCode: 1, status: "registry-failed" };
   }
+}
+
+// START_CONTRACT: describeHostUpgradeGuidance
+//   PURPOSE: Produce best-effort, method-aware next steps for installing the supported OpenCode host without vvoc installing it.
+//   INPUTS: { installedVersion: string - detected unsupported host version; commandPath: string | null - resolved opencode executable path, null when unknown. }
+//   OUTPUTS: { string[] - guidance lines, always including the documented fallback when the install method is ambiguous. }
+//   SIDE_EFFECTS: none
+//   LINKS: [fn-runUpgradeFlow, fn-resolveHostInstallMethod]
+// END_CONTRACT: describeHostUpgradeGuidance
+export function describeHostUpgradeGuidance(
+  installedVersion: string,
+  commandPath: string | null = detectHostCommandPath(),
+): string[] {
+  const method = resolveHostInstallMethod(commandPath);
+  const lines = [
+    `OpenCode ${installedVersion} is outside the supported window; vvoc 2.x requires OpenCode 2.0.18.`,
+  ];
+  if (method === "bun-global" || method === "npm-global") {
+    lines.push("Install the supported host, then run `vvoc sync` to materialize your config:");
+    lines.push("  bun add -g @opencode/cli@2.0.18");
+  } else {
+    lines.push(
+      "Install the supported host from one of the documented paths, then run `vvoc sync`:",
+    );
+    lines.push("  bun add -g @opencode/cli@2.0.18");
+    lines.push("  or the matching official OpenCode 2.0.18 binary distribution");
+  }
+  return lines;
+}
+
+function detectHostCommandPath(): string | null {
+  const bun = (globalThis as { Bun?: { which?: (name: string) => string | null } }).Bun;
+  return typeof bun?.which === "function" ? bun.which("opencode") : null;
+}
+
+function resolveHostInstallMethod(
+  commandPath: string | null,
+): "bun-global" | "npm-global" | "binary" {
+  if (!commandPath) return "binary";
+  let resolved = commandPath;
+  try {
+    resolved = realpathSync(commandPath);
+  } catch {
+    // Keep the unresolved path; the heuristic below still applies.
+  }
+  const normalized = resolved.replaceAll("\\", "/");
+  if (normalized.includes("/node_modules/@opencode/cli")) {
+    return normalized.includes("/.bun/") || normalized.includes("/bun/install/global/")
+      ? "bun-global"
+      : "npm-global";
+  }
+  if (normalized.includes("/node_modules/")) return "npm-global";
+  return "binary";
 }
 
 export function buildInstallCommand(latestVersion: string): UpgradeCommand {

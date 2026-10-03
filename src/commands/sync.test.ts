@@ -11,16 +11,17 @@
 //
 // START_MODULE_MAP
 //   SUPPORTED_RUNTIME - Supported runtime inspection fixture stub.
+//   V1_OPENCODE_CONFIG - vvoc 1.7.0 OpenCode config fixture used by migration coverage.
 //   captureConsoleLog - Captures sync command diagnostics.
 //   runSyncCommand - Runs the sync command against isolated fixtures.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TUI registration creation and malformed-config no-rewrite coverage.]
+//   LAST_CHANGE: [C-V1-OPENCODE-CONFIG-MIGRATION T-002 - Added host-gated V1 config migration, manual-work abort, and out-of-window no-op coverage.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runSync } from "./sync.js";
@@ -113,6 +114,108 @@ test("sync command rejects a malformed native plugins document without rewriting
       captureConsoleLog(() => runSyncCommand({ scope: "global", "config-dir": configHome })),
     ).rejects.toThrow('expected "plugins[0]"');
     expect(await readFile(opencodePath, "utf8")).toBe(invalidText);
+  } finally {
+    await rm(configHome, { recursive: true, force: true });
+  }
+});
+
+const V1_OPENCODE_CONFIG = {
+  model: "vv-role:smart",
+  small_model: "vv-role:fast",
+  default_agent: "vv-controller",
+  agent: { explore: { model: "vv-role:fast" } },
+  skills: { paths: ["./.vvoc/skills"] },
+  command: {},
+  plugin: ["@osovv/vv-opencode@1.7.0"],
+};
+
+test("sync command materializes a V1 OpenCode config with a backup", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-migrate-"));
+
+  try {
+    const vvocDir = join(configHome, "vvoc");
+    const opencodeDir = join(configHome, "opencode");
+    const opencodePath = join(opencodeDir, "opencode.json");
+    await mkdir(vvocDir, { recursive: true });
+    await mkdir(opencodeDir, { recursive: true });
+    await writeFile(
+      join(vvocDir, "vvoc.json"),
+      renderVvocConfig(createDefaultVvocConfig()),
+      "utf8",
+    );
+    await writeFile(opencodePath, `${JSON.stringify(V1_OPENCODE_CONFIG, null, 2)}\n`, "utf8");
+
+    await captureConsoleLog(() => runSyncCommand({ scope: "global", "config-dir": configHome }));
+
+    const migrated = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
+    expect("plugin" in migrated).toBe(false);
+    expect("small_model" in migrated).toBe(false);
+    expect(Array.isArray(migrated.plugins)).toBe(true);
+    expect(JSON.stringify(migrated.plugins)).toContain("vv-opencode");
+    expect((await readdir(opencodeDir)).some((name) => name.includes(".vvoc-backup-"))).toBe(true);
+  } finally {
+    await rm(configHome, { recursive: true, force: true });
+  }
+});
+
+test("sync command aborts on a V1 config whose fields need manual work", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-migrate-abort-"));
+
+  try {
+    const vvocDir = join(configHome, "vvoc");
+    const opencodeDir = join(configHome, "opencode");
+    const opencodePath = join(opencodeDir, "opencode.json");
+    await mkdir(vvocDir, { recursive: true });
+    await mkdir(opencodeDir, { recursive: true });
+    await writeFile(
+      join(vvocDir, "vvoc.json"),
+      renderVvocConfig(createDefaultVvocConfig()),
+      "utf8",
+    );
+    const original = `${JSON.stringify({ enabled_providers: ["anthropic"] }, null, 2)}\n`;
+    await writeFile(opencodePath, original, "utf8");
+
+    await expect(
+      captureConsoleLog(() => runSyncCommand({ scope: "global", "config-dir": configHome })),
+    ).rejects.toThrow("migration needs manual work");
+    expect(await readFile(opencodePath, "utf8")).toBe(original);
+  } finally {
+    await rm(configHome, { recursive: true, force: true });
+  }
+});
+
+test("sync command leaves a V1 config untouched when the host is out of window", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-migrate-host-"));
+
+  try {
+    const vvocDir = join(configHome, "vvoc");
+    const opencodeDir = join(configHome, "opencode");
+    const opencodePath = join(opencodeDir, "opencode.json");
+    await mkdir(vvocDir, { recursive: true });
+    await mkdir(opencodeDir, { recursive: true });
+    await writeFile(
+      join(vvocDir, "vvoc.json"),
+      renderVvocConfig(createDefaultVvocConfig()),
+      "utf8",
+    );
+    const original = `${JSON.stringify(V1_OPENCODE_CONFIG, null, 2)}\n`;
+    await writeFile(opencodePath, original, "utf8");
+
+    await expect(
+      captureConsoleLog(() =>
+        runSync(
+          { scope: "global", "config-dir": configHome },
+          {
+            inspectRuntime: async () => ({
+              version: "1.18.2",
+              supportedRange: SUPPORTED_RUNTIME.supportedRange,
+              versionSupported: false,
+            }),
+          },
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(await readFile(opencodePath, "utf8")).toBe(original);
   } finally {
     await rm(configHome, { recursive: true, force: true });
   }

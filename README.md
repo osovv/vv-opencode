@@ -87,6 +87,10 @@ Project scope writes only to `./.opencode/` and `./.vvoc/`. A plain `opencode` l
 
 > **Already installed?** Run `vvoc sync` anytime to refresh plugins, prompts, skills, and presets.
 
+### Upgrading from vvoc 1.x with a V1 OpenCode host
+
+`vvoc 2.x` is native-only and requires the OpenCode 2.0.18 host. On a machine still running a V1 OpenCode host, `vvoc upgrade` installs `vvoc 2.x`, detects the unsupported host, prints a best-effort method-aware install command, and exits non-zero; it never installs or replaces OpenCode itself. After you install the supported host, the next `vvoc sync` materializes the legacy `opencode.json(c)` into the native V2 shape, validates the result, and writes a timestamped `*.vvoc-backup-<timestamp>` sibling before replacing the file. V1 fields that need a manual decision (provider filters, accepted-but-unsupported fields, `lsp`, or ambiguous provider/model shapes) abort the migration without writing and print a checklist. A legacy `tui.json(c)` is reported, never deleted; OpenCode migrates its own terminal client settings to `cli.json`.
+
 ---
 
 ## How it works: spec → plan → execute
@@ -233,7 +237,7 @@ Skills are loaded by OpenCode at session start through the native `skills` strin
 | `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
 | `vvoc patch-provider stepfun-ai\|codex\|deepseek\|alibaba\|zai\|xiaomi\|all` | Patch OpenCode providers; `codex` adds real gpt-5.5/5.6/6 models with effort variants (also accepts `openai`), `deepseek`/`alibaba`/`zai`/`xiaomi` add `#variant` suffixes on real models, `stepfun-ai` sets the StepFun `.ai` baseURL, `all` patches every provider at once |
 | `vvoc completion` | Install shell completions |
-| `vvoc upgrade` | Upgrade the global package and run follow-up sync; sync failure is reported as a partial upgrade |
+| `vvoc upgrade` | Upgrade the global package and run follow-up sync; sync failure or an out-of-window host exits non-zero with best-effort method-aware host guidance |
 | `vvoc analytics cache-hit-rate` | Aggregate persisted cache hit rate by day, week, month, session, model, provider, project, vvoc version, or OpenCode version |
 | `vvoc version` | Print installed version |
 
@@ -283,7 +287,7 @@ Usage analytics          → $XDG_DATA_HOME/vvoc/analytics/usage-YYYY-MM.jsonl
 
 OpenCode 2.x keeps one native config document per process. `opencode.json(c)` is loaded by the core/server plugin runtime and activates vvoc features such as model roles, Guardian, workflow, hashline edit, redaction, and web tools. The terminal UI process takes its own settings (tabs, keybinds, TUI-only plugin entries) from the native `cli.json`, and it also loads the TUI entrypoints of the plugins carried by the server inventory. vv-opencode uses that directly: the same pinned package entry (for example `@osovv/vv-opencode@X.Y.Z`) is registered once in the native `plugins` array, the host resolves its `./server` export for the server runtime and its `./tui` export for the terminal UI, and headless/server launches never load the UI module.
 
-`vvoc install`, `vvoc init`, and `vvoc sync` conservatively write that single pinned base-package entry — a string, or a `{ "package": …, "options": … }` object — into the native `plugins` array; sync also migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and their `options` are preserved; malformed plugin entries fail without rewrite. V1 document shapes are refused outright instead of being migrated: `plugin`, `agent`, `provider`, `command`, `small_model`, and `tools` are not native 2.0.18 keys, and vvoc fails before mutating a document that uses them.
+`vvoc install`, `vvoc init`, and `vvoc sync` conservatively write that single pinned base-package entry — a string, or a `{ "package": …, "options": … }` object — into the native `plugins` array; sync also migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Existing comments, unrelated settings, unrelated plugin entries, and their `options` are preserved; malformed plugin entries fail without rewrite. Supported V1 document shapes are materialized into the native V2 shape by `vvoc sync` once the host is inside the supported window, using the official OpenCode V1-to-V2 migration guide, with a timestamped `*.vvoc-backup-<timestamp>` sibling and validate-before-write. Residual or ambiguous V1 fields are refused before any mutation, so `plugin`, `agent`, `provider`, `command`, `small_model`, and `tools` never remain in a document vvoc writes.
 
 The native document shape vvoc validates, extends, and writes into:
 

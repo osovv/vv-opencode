@@ -1,0 +1,55 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-V1-OPENCODE-CONFIG-MIGRATION>
+    <Summary>Add host-gated automatic materialization of the legacy V1 OpenCode configuration into the native V2 shape inside `vvoc sync`, plus method-aware host guidance in `vvoc upgrade`, so upgrading a machine that runs an OpenCode v1 host with vvoc 1.7.0 requires only the user's own OpenCode 2.0.18 install.</Summary>
+    <Problem>vvoc 2.x refuses V1-shaped OpenCode documents before any write, and the upgrade chain's post-install sync fails under an unsupported host, so users on OpenCode v1 and vvoc 1.7.0 must migrate `opencode.json` by hand. OpenCode V2 normalizes supported V1 configuration in memory but provides no materializing config-migration command, leaving the materialized file as a manual task.</Problem>
+    <Goals>
+      <Goal>When `sync` runs after the host is upgraded, materialize a clean native V2 `opencode.json(c)` from the existing V1 document, following the official V1-to-V2 migration guide mappings, with a timestamped backup and a validate-before-write guarantee.</Goal>
+      <Goal>Convert each nested agent, command, provider, model, and MCP entry wholly or not at all, never writing a partially converted nested entry, and abort without writing with a precise checklist when a field is unmappable or report-only.</Goal>
+      <Goal>Translate vvoc-specific role intent (`model`, `small_model`, and per-agent `model` values of the form `vv-role:*`) into the pinned vvoc plugin entry modelIntent envelope, and register the native `plugins` entry.</Goal>
+      <Goal>Make `vvoc upgrade` detect an unsupported host, print a best-effort method-aware next step, and exit non-zero with an explicit message that migration did not run.</Goal>
+      <Goal>Preserve unrelated settings and comments and keep repeated sync idempotent with no backup spam.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The migration runs only when the OpenCode host is inside the supported window; the host gate and the pinned runtime service version are not relaxed.</Constraint>
+      <Constraint>vvoc never installs, replaces, or uninstalls the OpenCode host, and no `--with-host` flag or standalone migration command is added.</Constraint>
+      <Constraint>Each nested agent, command, provider, model, and MCP entry is converted wholly or left alone; partial nested conversion is refused because OpenCode V2 forbids nested V1 and V2 mixing.</Constraint>
+      <Constraint>OpenCode's own terminal client migration from layered `tui.json(c)` to a single global `cli.json` is owned by OpenCode and is not reimplemented; `vvoc.json` v1/v2 upgrade is out of scope because 1.7.0 is already schema v3.</Constraint>
+      <Constraint>Config writes stay conservative, comment-preserving, and idempotent; invalid or unmappable documents fail before mutation.</Constraint>
+      <Constraint>Work is validated with isolated fixtures and does not migrate any live user configuration, publish, push, or bump the package version.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No standalone `vvoc migrate-to-v2` command, no `--with-host`, and no host installation or replacement.</NonGoal>
+      <NonGoal>No generation of V2 policies for `enabled_providers` or `disabled_providers`, and no conversion of accepted-but-unsupported fields, `lsp`, or ambiguous provider and model shapes.</NonGoal>
+      <NonGoal>No `vvoc.json` pre-v3 upgrade and no deletion or pruning of a legacy `tui.json(c)`.</NonGoal>
+      <NonGoal>No backup retention or rotation policy beyond one timestamped sibling backup per change, and no exhaustive install-manager or version-manager detection.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: Given a captured vvoc 1.7.0 configuration set (`opencode.json`, `tui.json`, `vvoc.json`) and a host inside the supported window, `sync` produces a native-valid `opencode.json`, writes a timestamped sibling backup, and preserves comments and unrelated keys.</Criterion>
+      <Criterion>AC-02: Every documented mechanical mapping is applied: plugin to plugins with tuple-to-object conversion; agent and mode to agents with prompt to system, disable to disabled, variant joining, request-body moves, and maxSteps to steps; command to commands with subtask to subagent; skills object to array; snapshot to snapshots; attachment to media; reference to references; mcp servers with split timeouts and snake_case OAuth; compaction keep and buffer; permission plus tools to the ordered permissions array with action renames; provider shape and canonical IDs; provider model capability, cache, variant-array, and settings conversions; small_model to the title agent; autoshare to share; and autoupdate to update.</Criterion>
+      <Criterion>AC-03: A nested entry that cannot be converted wholly causes a no-write abort with a precise manual checklist, and no partially converted nested entry is ever written.</Criterion>
+      <Criterion>AC-04: Report-only fields (provider filters, accepted-but-unsupported fields, `lsp`, and ambiguous provider or model shapes) are listed for manual or agent-assisted action and never silently converted.</Criterion>
+      <Criterion>AC-05: vvoc role intent becomes the plugin modelIntent envelope, the native `plugins` entry is registered with legacy `/tui` specs deduplicated, and no `vv-role:*` value remains in a native config position.</Criterion>
+      <Criterion>AC-06: A transformed document that fails the pinned native codec causes a no-write abort with a non-zero exit, and the legacy `tui.json(c)` is reported but not deleted.</Criterion>
+      <Criterion>AC-07: A second `sync` on an already-migrated document changes nothing and creates no backup, and a host outside the supported window performs no config writes.</Criterion>
+      <Criterion>AC-08: `vvoc upgrade` under an unsupported host installs vvoc 2.x, prints a best-effort method-aware host next step (a single command when unambiguous, otherwise both documented install paths), and exits non-zero with an explicit message that migration did not run, replacing the current silent success on post-install sync failure.</Criterion>
+      <Criterion>AC-09: Existing `syncVvocConfig` behavior for a v3 config, including preserved retired and custom presets, is unchanged.</Criterion>
+      <Criterion>AC-10: Targeted migration, sync, and upgrade tests pass together with `bun run check`; module contracts, GRACE graph and verification, and README are synchronized where required; no generated `dist/` file is edited.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-CONFIG /><M-CLI-UPGRADE /><M-CLI-COMMANDS /><M-CONFIG-LAYERS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/commands/sync.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/commands/upgrade.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedEvidence>Fresh targeted test output for the migration, sync pre-step, and upgrade guidance; a native-valid migrated fixture with a timestamped backup; an idempotent second-run observation; a no-write abort observation for an unmappable fixture; and a passing `bun run check` on the final relevant snapshot.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>OpenCode V2 normalizes supported V1 configuration in memory without rewriting the source file, and the official V1-to-V2 migration guide mappings are authoritative for the native target shape.</Assumption>
+      <Assumption>Installing the pinned OpenCode 2.0.18 host replaces the legacy v1 `opencode` binary, so the host-first flow leaves no broken-v1 window; this is verified during planning and evidence collection.</Assumption>
+      <Assumption>A vvoc 1.7.0 `vvoc.json` is schema v3 and is already normalized by `syncVvocConfig`, including retired presets.</Assumption>
+      <Assumption>The post-install `vvoc sync` subprocess resolves the newly installed vvoc 2.x binary through PATH.</Assumption>
+    </Assumptions>
+  </C-V1-OPENCODE-CONFIG-MIGRATION>
+</GraceChangeSpec>

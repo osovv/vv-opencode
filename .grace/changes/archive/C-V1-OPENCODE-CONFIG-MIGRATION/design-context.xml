@@ -1,0 +1,23 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-V1-OPENCODE-CONFIG-MIGRATION</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>Users on OpenCode v1 with vvoc 1.7.0 cannot reach vvoc 2.x without hand-editing `opencode.json`, because vvoc 2.x refuses V1 shapes before any write. The official OpenCode V1-to-V2 migration guide states that V2 reads V1 configuration from the same locations, normalizes supported V1 and native V2 fields in memory without rewriting the source file, and offers no materializing config-migration command; conversion is optional and normally performed by asking the OpenCode agent. vvoc deliberately finishes that job for its users so that its own writers, including future patch-provider and managed-agent writes, operate on a clean native document. Host gating was chosen over migrating under an incompatible host because once the file is native the v1 host can no longer read its plugin registration, so a migration under a v1 host would create a broken-v1 window.</Rationale>
+  <Alternatives>
+    <Alternative>Rely on OpenCode V2 in-memory V1 normalization and only relax vvoc's strict document assertion, leaving the file in V1 shape. Rejected because vvoc's own writers must later mutate the file and the owner explicitly wants a materialized native schema with a backup.</Alternative>
+    <Alternative>Migrate the config before the host satisfies the supported window. Rejected because the migrated native plugin registration is not read by the v1 host, producing a broken-v1 window.</Alternative>
+    <Alternative>Have `vvoc upgrade` install the pinned OpenCode host itself. Rejected: it conflicts with the repository NonGoal that vvoc does not replace OpenCode, and it risks conflicting with the many ways users install the host.</Alternative>
+    <Alternative>Emit a standalone `vvoc migrate-to-v2` command. Rejected to keep the surface minimal; migration runs automatically inside `sync`.</Alternative>
+    <Alternative>Convert only vvoc-managed fields and leave user V1 fields in place. Rejected because a strict native validation must pass after migration, and OpenCode V2 forbids mixing V1 and V2 members inside a single nested agent, provider, command, or model entry.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether to widen or relax the supported OpenCode host window and the pinned runtime service version. Deferred as a separate change; it touches the runtime handshake and pinned SDK dependencies.</Decision>
+    <Decision>Whether to reimplement OpenCode's terminal client migration from `tui.json(c)` to `cli.json`. Deferred because OpenCode already auto-migrates global terminal settings on first V2 client startup.</Decision>
+    <Decision>Whether to generate V2 policies for the V1 provider filters. Deferred to a manual or agent-assisted decision because the mapping is not a direct field conversion.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Legacy user: `vvoc upgrade` on vvoc 1.7.0 installs vvoc 2.x, detects an OpenCode v1 host, prints the exact host install step, and exits non-zero. The user installs OpenCode 2.0.18 and runs `vvoc sync`, which migrates the config with a backup and completes.</Scenario>
+    <Scenario>Native-clean user: `sync` detects an already native document and performs no migration and no backup.</Scenario>
+    <Scenario>Unmappable document: a user-authored provider or agent entry whose fields cannot be converted unambiguously causes a no-write abort with a manual checklist, leaving the original file intact.</Scenario>
+    <Scenario>Idempotent rerun: a second `sync` after a successful migration changes nothing and creates no new backup.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

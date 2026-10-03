@@ -1,0 +1,142 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-V1-OPENCODE-CONFIG-MIGRATION>
+    <IntentSummary>Implement host-gated automatic materialization of the legacy V1 OpenCode configuration into the native V2 shape inside `vvoc sync`, plus best-effort method-aware host guidance and a non-zero exit in `vvoc upgrade`. Delivers AC-01 through AC-10 from the approved GraceChangeSpec. No standalone command, no host installation, and no host-window relaxation. Approved by explicit user instruction; execution has not started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-CONFIG</Value><Value>M-CLI-UPGRADE</Value><Value>M-CLI-COMMANDS</Value><Value>M-CONFIG-LAYERS</Value>
+        <Value>V-M-CLI-CONFIG</Value><Value>V-M-CLI-UPGRADE</Value><Value>V-M-CLI-COMMANDS</Value>
+        <Value>src/lib/opencode.ts</Value><Value>src/lib/opencode/shared-utils.ts</Value>
+        <Value>src/lib/opencode/plugin-registration.ts</Value><Value>src/lib/opencode/paths.ts</Value>
+        <Value>src/commands/sync.ts</Value><Value>src/commands/upgrade.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value><Value>src/commands/sync.test.ts</Value><Value>src/commands/upgrade.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/commands/sync.ts</File><Text>await assertSupportedOpenCodeRuntime(options.inspectRuntime);</Text></MustContain>
+      <MustContain><File>src/commands/sync.ts</File><Text>const opencode = await ensurePackageInstalled(paths);</Text></MustContain>
+      <MustContain><File>src/lib/opencode/shared-utils.ts</File><Text>export function assertNativeOpenCodeDocument(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/plugin-registration.ts</File><Text>export function normalizePluginEntries(</Text></MustContain>
+      <MustContain><File>src/commands/upgrade.ts</File><Text>export function buildPostInstallSyncCommand(): UpgradeCommand {</Text></MustContain>
+      <MustContain><File>src/commands/upgrade.ts</File><Text>function warnManualSync(logger: UpgradeLogger, reason: string): void {</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/opencode.test.ts</Command>
+        <Command>bun test src/commands/sync.test.ts</Command>
+        <Command>bun test src/commands/upgrade.test.ts</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-CLI-CONFIG</Module></MustVerify>
+      <MustVerify><Module>M-CLI-UPGRADE</Module></MustVerify>
+      <MustVerify><Module>M-CLI-COMMANDS</Module></MustVerify>
+      <MustExist>
+        <Value>src/lib/opencode/config-migration.ts</Value>
+        <Value>src/lib/opencode/config-migration.test.ts</Value>
+      </MustExist>
+      <MustContain><File>src/lib/opencode/config-migration.ts</File><Text>export function classifyOpenCodeConfig(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/config-migration.ts</File><Text>export function planOpenCodeConfigMigration(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/config-migration.ts</File><Text>export async function migrateOpenCodeConfig(</Text></MustContain>
+      <MustContain><File>src/lib/opencode/config-migration.ts</File><Text>backup</Text></MustContain>
+      <MustContain><File>src/lib/opencode.ts</File><Text>migrateOpenCodeConfig</Text></MustContain>
+      <MustContain><File>src/commands/sync.ts</File><Text>migrateOpenCodeConfig</Text></MustContain>
+      <MustContain><File>src/commands/upgrade.ts</File><Text>export function describeHostUpgradeGuidance(</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/opencode/config-migration.test.ts</Command>
+        <Command>bun test src/commands/sync.test.ts</Command>
+        <Command>bun test src/commands/upgrade.test.ts</Command>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user approved the GraceChangeSpec C-V1-OPENCODE-CONFIG-MIGRATION and then explicitly invoked grace-plan. This plan is draft until the user approves it; no implementation has started.</Note>
+      <Note>OpenCode guide basis: the official V1-to-V2 migration guide is the source of the native target shape, and OpenCode V2 normalizes supported V1 configuration in memory without rewriting the file and provides no materializing config-migration command. The migration is intentionally a vvoc-owned materialization, not a reimplementation of OpenCode behavior.</Note>
+      <Note>Nested-mixing guard is load-bearing: because OpenCode V2 does not recursively infer formats inside an agent, provider, command, or model entry, the transformer must convert each such entry wholly or leave it and abort. The plan must not accept a partially converted nested entry under any option.</Note>
+      <Note>Role-intent handling reuses the existing pipeline: the migration drops vvoc `vv-role:*` references from the V1 document, and the existing `ensurePackageInstalled` plus model-override path rebuilds the `options.modelIntent` envelope from the role bindings in `vvoc.json`, so the migration does not duplicate role resolution.</Note>
+      <Note>Insertion point: the migration pre-step runs in `runSync` after `assertSupportedOpenCodeRuntime` and before `ensurePackageInstalled`, so a document in V1 shape is materialized only once the host is inside the supported window.</Note>
+      <Note>Host guidance must never install anything: `describeHostUpgradeGuidance` performs best-effort detection (`Bun.which` plus realpath) and falls back to printing both documented install paths when the method is ambiguous. `upgrade` must return a non-zero exit code when the host is unsupported or the post-install sync fails, replacing the current silent exit code 0.</Note>
+      <Note>OpenCode terminal client migration from `tui.json(c)` to `cli.json` is owned by OpenCode and out of scope; a legacy vvoc `tui.json(c)` is only reported by the migration summary.</Note>
+      <Note>No final-review obligation is declared by the source. Any reviewer the controller independently requests is optional, not a recorded gate.</Note>
+      <Note>GRACE lifecycle commands (`grace lint`, `grace status`, `--assertions baseline|target|final`) are external execution gates and must never be nested in a MustPassCommand or task verification; the pre-implementation active-baseline check is `grace lint --path . --assertions current`.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors><M-CLI-CONFIG /><M-CLI-UPGRADE /><M-CLI-COMMANDS /></GraphAnchors>
+      <VerificationAnchors><V-M-CLI-CONFIG /><V-M-CLI-UPGRADE /><V-M-CLI-COMMANDS /></VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/opencode/config-migration.ts</File>
+      <File>src/lib/opencode/config-migration.test.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/commands/sync.ts</File>
+      <File>src/commands/sync.test.ts</File>
+      <File>src/commands/upgrade.ts</File>
+      <File>src/commands/upgrade.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-V1-OPENCODE-CONFIG-MIGRATION/spec.xml</File>
+      <File>.grace/changes/active/C-V1-OPENCODE-CONFIG-MIGRATION/plan.xml</File>
+      <File>.grace/changes/active/C-V1-OPENCODE-CONFIG-MIGRATION/design-context.xml</File>
+      <File>.grace/changes/archive/C-V1-OPENCODE-CONFIG-MIGRATION/spec.xml</File>
+      <File>.grace/changes/archive/C-V1-OPENCODE-CONFIG-MIGRATION/plan.xml</File>
+      <File>.grace/changes/archive/C-V1-OPENCODE-CONFIG-MIGRATION/design-context.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Implement the V1 OpenCode config migration module with unit tests.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Create src/lib/opencode/config-migration.ts exporting `classifyOpenCodeConfig`, `planOpenCodeConfigMigration`, and `migrateOpenCodeConfig`, with a truthful MODULE_CONTRACT linking M-CLI-CONFIG, a MODULE_MAP, block anchors, and a START_CHANGE_SUMMARY crediting this change.</Criterion>
+          <Criterion>`classifyOpenCodeConfig` distinguishes a native-clean document from a V1-shaped one and returns a structured result, including whether legacy `tui.json(c)` and any report-only fields are present.</Criterion>
+          <Criterion>`planOpenCodeConfigMigration` produces the guide-aligned native target: plugin to plugins with tuple-to-object conversion; agent and mode to agents with prompt to system, disable to disabled, variant joining, request-body moves, and maxSteps to steps; command to commands with subtask to subagent; skills object to array; snapshot to snapshots; attachment to media; reference to references; mcp servers with split timeouts and snake_case OAuth; compaction keep and buffer; permission plus tools to the ordered permissions array with action renames; provider shape and canonical IDs; provider model capability, cache, variant-array, and settings conversions; small_model to the title agent; autoshare to share; and autoupdate to update.</Criterion>
+          <Criterion>Each nested agent, command, provider, model, and MCP entry is converted wholly or marked unmappable; report-only fields (provider filters, accepted-but-unsupported fields, `lsp`, and ambiguous provider or model shapes) are reported and never silently converted.</Criterion>
+          <Criterion>`migrateOpenCodeConfig` applies the plan over the JSONC document preserving comments and unrelated keys, drops vvoc `vv-role:*` references, validates the transformed document against the pinned native codec, writes a timestamped sibling backup only when content changes, writes atomically only when valid, performs a no-op on an already native document, and aborts without writing with a checklist when unmappable or report-only fields are present.</Criterion>
+          <Criterion>Create src/lib/opencode/config-migration.test.ts with fixtures for a full vvoc 1.7.0 config set, a user-authored nested config, an unmappable fixture, and an already-native fixture, covering every mapping, the nested all-or-nothing guard, backup-on-change, idempotent rerun, and abort-on-unmappable.</Criterion>
+          <Criterion>Export the migration public functions from src/lib/opencode.ts without removing or retyping any existing export.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode/config-migration.test.ts</Command>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Integrate the migration pre-step into sync and cover it with sync tests.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>In runSync, invoke migrateOpenCodeConfig after `assertSupportedOpenCodeRuntime` and before `ensurePackageInstalled`, and print the migration result (changed path, backup path, and any report-only or abort summary) through the existing command output style.</Criterion>
+          <Criterion>An unmappable or report-only document aborts the sync with a non-zero exit code, a precise manual checklist, and no config mutation; a native-clean document is a silent no-op; a host outside the supported window still performs no config writes.</Criterion>
+          <Criterion>Extend src/commands/sync.test.ts with integration coverage for the V1 fixture migration, the idempotent second run, the no-write abort, and the out-of-window no-op, using the injectable runtime inspection seam.</Criterion>
+          <Criterion>Update the sync MODULE_CONTRACT, MODULE_MAP, and START_CHANGE_SUMMARY to describe the migration pre-step and credit this change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/sync.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Add method-aware host guidance and a non-zero exit to upgrade.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Export `describeHostUpgradeGuidance` from src/commands/upgrade.ts: it inspects the installed host with the existing runtime inspection, performs best-effort install-method detection (`Bun.which` plus realpath), prints a single method-specific command when unambiguous, and otherwise prints both documented install paths without claiming certainty.</Criterion>
+          <Criterion>When the host is outside the supported window or the post-install sync fails, runUpgradeFlow reports that migration did not run and returns a non-zero exit code, replacing the current silent exit code 0 path.</Criterion>
+          <Criterion>Extend src/commands/upgrade.test.ts with coverage for the method-aware single-command case, the ambiguous fallback case, and the non-zero exit on an unsupported host, without invoking a real global install.</Criterion>
+          <Criterion>Update the upgrade MODULE_CONTRACT, MODULE_MAP, and START_CHANGE_SUMMARY to describe the host guidance and exit-code behavior and credit this change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/upgrade.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Reconcile durable GRACE projections and README with the migration behavior.</Title>
+        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Update M-CLI-CONFIG Paths in .grace/graph/main.xml to include src/lib/opencode/config-migration.ts and keep Name, Type, Status, Depends, and Verification truthful; reconcile M-CLI-UPGRADE and M-CLI-COMMANDS Purpose only where behavior changed.</Criterion>
+          <Criterion>Update V-M-CLI-CONFIG to add src/lib/opencode/config-migration.test.ts to TestFiles and reflect the migration scenario; update V-M-CLI-UPGRADE for the host-guidance and exit-code behavior; keep each entry's commands resolvable.</Criterion>
+          <Criterion>Update README.md to document the host-first upgrade flow, the automatic sync migration with backup, and the non-zero upgrade behavior, without documenting a standalone migration command.</Criterion>
+          <Criterion>No other source, schema, package surface, or generated dist file is changed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-V1-OPENCODE-CONFIG-MIGRATION>
+</GraceChangePlan>
