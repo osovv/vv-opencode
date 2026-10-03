@@ -1,3 +1,13 @@
+## <small>2.1.3 (2026-10-03)</small>
+
+### Summary
+
+This release makes upgrading from a vvoc 1.7.0 setup far easier by materializing legacy V1 OpenCode configuration into the native V2 shape automatically during vvoc sync, with a timestamped backup and validate-before-write safety, so users no longer need to hand-edit opencode.json; the migration runs only once the host is inside the supported window and aborts without writing when a document cannot be converted unambiguously. It also improves vvoc upgrade by printing method-aware host guidance and exiting non-zero when the host is out of window or the post-install sync fails, replacing the previous silent success. Additionally, release automation now polls npm package metadata with a longer bounded retry window so delayed registry propagation no longer forces manual tag and GitHub Release finalization, and a missing internal module-map entry in the release-summary tooling was corrected to keep repository checks passing.
+
+* feat(upgrade): materialize V1 OpenCode config during vvoc sync ([da32ee0](https://github.com/osovv/vv-opencode/commit/da32ee0))
+* fix(release): extend npm metadata retry window for delayed propagation ([8c52843](https://github.com/osovv/vv-opencode/commit/8c52843))
+* chore(grace): register renderCommitDiff in release-summary module map ([157b1a0](https://github.com/osovv/vv-opencode/commit/157b1a0))
+
 ## <small>2.1.2 (2026-10-02)</small>
 
 ### Summary
