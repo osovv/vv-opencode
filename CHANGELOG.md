@@ -1,3 +1,11 @@
+## <small>2.1.4 (2026-10-03)</small>
+
+### Summary
+
+This release fixes the hashline-edit plugin so an explicit host permission denial is honored as final: when a session exposes no edit-family tool, session visibility now leaves the tool set untouched instead of throwing or resurrecting removed tools, preventing a crashed session and a capability-boundary bypass when an agent denies all tools. Tool definitions are split by ownership, restoring plugin-owned tools (hashline_edit, str_replace_editor) from the plugin's own definitions and host-native tools (edit, write, patch) from the captured host map, while preserving the honest refusal when a genuine host definition was never observed. The test registry fixture was corrected to match the real capture order, and deny-all plus plugin-owned restore regressions were added, so locked-down agents and custom routing no longer abort runs or silently override permission boundaries.
+
+* fix(hashline-edit): honor permission denial and split tool-definition ownership ([6642984](https://github.com/osovv/vv-opencode/commit/6642984))
+
 ## <small>2.1.3 (2026-10-03)</small>
 
 ### Summary
