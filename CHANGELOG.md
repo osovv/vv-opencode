@@ -1,3 +1,11 @@
+## 2.3.0-rc.1 (2026-10-04)
+
+### Summary
+
+This release fixes a Telegram gateway startup problem where awaiting the native client during plugin setup could stall server boot for an extended period until it was interrupted. The gateway bootstrap—including native client acquisition, session resync, General topic creation, pending-permission resurfacing, command registration, and polling—now runs as a supervised background task with bounded backoff retries after setup returns, so the plugin loads promptly instead of blocking. Each bootstrap attempt is contained and retried on failure, and every wait is abortable so cleanup still resolves even if the client never becomes ready, making Telegram integration startup more reliable and preventing the host from hanging on launch.
+
+* fix(telegram): bootstrap the gateway in a supervised background task ([c8a0e82](https://github.com/osovv/vv-opencode/commit/c8a0e82))
+
 ## 2.3.0-rc.0 (2026-10-04)
 
 ### Summary
