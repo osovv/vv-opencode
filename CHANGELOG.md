@@ -1,3 +1,11 @@
+## 2.3.0-rc.3 (2026-10-04)
+
+### Summary
+
+This release refines the Telegram bridge so conversations render more cleanly and accurately. Final agent messages now use Telegram's native rich-message formatting, with long text split in a fence-balanced way and an automatic plain-text fallback when rich messages are unsupported, so answers arrive well-formatted and complete rather than truncated. Tool calls are shown as compact one-line summaries using the most telling argument, making activity easier to follow, and prompts submitted through the bridge no longer echo back as if they were user messages. Together these changes make Telegram sessions read more naturally and reduce noise while preserving reliable, exactly-once delivery of finals.
+
+* feat(telegram): rich markdown finals, tool-call lines, and no self echo ([bd636d0](https://github.com/osovv/vv-opencode/commit/bd636d0))
+
 ## 2.3.0-rc.2 (2026-10-04)
 
 ### Summary
