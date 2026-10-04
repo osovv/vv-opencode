@@ -83,6 +83,9 @@ class FakeTransport implements TelegramTransport {
   async sendMessage() {
     return { messageId: 1 };
   }
+  async sendRich() {
+    return { messageId: 4 };
+  }
   async sendDocument() {
     return { messageId: 2 };
   }

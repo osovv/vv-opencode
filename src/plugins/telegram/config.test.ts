@@ -71,7 +71,7 @@ describe("resolveTelegramConfig enabled resolution", () => {
       proxyUrl: undefined,
       settings: {
         showReasoning: false,
-        showToolCalls: false,
+        showToolCalls: true,
         formatMode: "markdown",
         codeFileMaxKb: 100,
         mergeWindowMs: 1_500,
@@ -91,7 +91,7 @@ describe("resolveTelegramConfig enabled resolution", () => {
     if (resolved.enabled) {
       expect(resolved.activityWindowMinutes).toBe(30);
       expect(resolved.settings.showReasoning).toBe(true);
-      expect(resolved.settings.showToolCalls).toBe(false);
+      expect(resolved.settings.showToolCalls).toBe(true);
       expect(resolved.settings.formatMode).toBe("raw");
       expect(resolved.settings.codeFileMaxKb).toBe(5);
       expect(resolved.settings.mergeWindowMs).toBe(0);

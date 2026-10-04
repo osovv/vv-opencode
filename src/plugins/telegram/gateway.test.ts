@@ -77,6 +77,9 @@ class PollTransport implements TelegramTransport {
   async sendMessage(): Promise<{ messageId: number }> {
     return { messageId: 1 };
   }
+  async sendRich(): Promise<{ messageId: number }> {
+    return { messageId: 3 };
+  }
   async sendDocument(): Promise<{ messageId: number }> {
     return { messageId: 2 };
   }

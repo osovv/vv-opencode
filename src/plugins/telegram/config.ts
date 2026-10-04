@@ -11,7 +11,7 @@
 //
 // START_MODULE_MAP
 //   DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES - Default minutes a session stays active after its last update.
-//   DEFAULT_TELEGRAM_SETTINGS - Default owner-tunable delivery settings (hidden reasoning, compact tools, markdown).
+//   DEFAULT_TELEGRAM_SETTINGS - Default owner-tunable delivery settings (hidden reasoning, visible compact tool lines, markdown).
 //   TelegramRuntimeSettings - Fully defaulted delivery settings consumed by the delivery layer.
 //   TelegramDisabledReason - Why the gateway is disabled (absent, disabled, empty or unresolved token).
 //   ResolvedTelegramConfig - Enabled gateway configuration or a disabled result with a value-free reason.
@@ -33,7 +33,7 @@ export const DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES = 240;
 /** Default owner-tunable delivery settings: reasoning hidden, tool detail compact, markdown replies. */
 export const DEFAULT_TELEGRAM_SETTINGS = {
   showReasoning: false,
-  showToolCalls: false,
+  showToolCalls: true,
   formatMode: "markdown",
   codeFileMaxKb: 100,
   mergeWindowMs: 1_500,

@@ -42,7 +42,7 @@ import { resolveTelegramConfig, telegramBotFingerprint } from "./config.js";
 import { TelegramCommands, TelegramInteractions } from "./commands.js";
 import { TelegramDelivery } from "./delivery.js";
 import { TelegramGateway } from "./gateway.js";
-import { SessionBridge } from "./sessions.js";
+import { SessionBridge, TELEGRAM_PROMPT_SOURCE } from "./sessions.js";
 import type { NativeEventStream, NativeSessionActions, NativeSessionReads } from "./sessions.js";
 import { TelegramTopology, type TelegramStore } from "./topology.js";
 import type {
@@ -194,6 +194,7 @@ export function nativeActionsAdapter(ctx: NativePluginContext): NativeSessionAct
           sessionID: input.sessionID,
           text: input.text,
           delivery: input.delivery,
+          metadata: { source: TELEGRAM_PROMPT_SOURCE },
           ...(input.files === undefined || input.files.length === 0
             ? {}
             : {

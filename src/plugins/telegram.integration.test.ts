@@ -68,6 +68,7 @@ class WorldTransport implements TelegramTransport {
   readonly sent: WorldSent[] = [];
   readonly edits: Array<{ messageId: number; text: string }> = [];
   readonly downloads = new Map<string, Uint8Array>();
+  readonly rich: Array<{ threadId: number; markdown: string }> = [];
   commandsRegistered = 0;
   private queue: TelegramUpdate[] = [];
   private waiters: Array<() => void> = [];
@@ -94,6 +95,11 @@ class WorldTransport implements TelegramTransport {
     this.sent.push({ threadId: input.threadId, text: input.text, markup: input.replyMarkup });
     return { messageId: this.nextMessageId++ };
   }
+  async sendRich(input: { threadId: number; markdown: string }) {
+    this.rich.push({ threadId: input.threadId, markdown: input.markdown });
+    return { messageId: this.nextMessageId++ };
+  }
+
   async sendDocument() {
     return { messageId: this.nextMessageId++ };
   }

@@ -26,8 +26,10 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  compactToolArg,
   decodeFormEvent,
   decodeInboxEvent,
+  formatToolLine,
   decodePermissionEvent,
   decodeSessionEvent,
   decodeStepEvent,
@@ -77,6 +79,10 @@ class FakeTransport implements TelegramTransport {
   async reopenForumTopic(): Promise<void> {}
   async sendMessage(input: { text: string }) {
     this.sent.push(input.text);
+    return { messageId: this.nextMessageId++ };
+  }
+  async sendRich(input: { markdown: string }) {
+    this.sent.push(input.markdown);
     return { messageId: this.nextMessageId++ };
   }
   async sendDocument() {
@@ -236,12 +242,22 @@ describe("pure decoders", () => {
     ).toBe("hello");
   });
 
-  test("inbox decoders read the queued user text", () => {
+  test("inbox decoders read the queued user text and the bridge origin marker", () => {
     const decoded = decodeInboxEvent({
       inboxID: "inb_1",
       item: { type: "user", sessionID: "s", payload: { text: "do it" } },
     });
-    expect(decoded).toEqual({ inboxID: "inb_1", sessionID: "s", text: "do it" });
+    expect(decoded).toEqual({ inboxID: "inb_1", sessionID: "s", text: "do it", source: undefined });
+    const selfSubmitted = decodeInboxEvent({
+      inboxID: "inb_2",
+      item: {
+        type: "user",
+        sessionID: "s",
+        payload: { text: "from tg" },
+        metadata: { source: "vvoc-telegram" },
+      },
+    });
+    expect(selfSubmitted.source).toBe("vvoc-telegram");
   });
 
   test("tool decoders bound the argument summary", () => {
@@ -403,22 +419,35 @@ describe("event routing", () => {
     // Status transitions are throttled by the topology; the pump merely must not throw.
   });
 
-  test("tool calls render compact transients only when tool detail is on", async () => {
+  test("tool calls render compact per-tool lines and can be silenced", async () => {
     const ctx = makeBridge();
     await ctx.topology.initialize("fp");
     await ctx.bridge.adoptSession({ sessionID: "ses_t", title: "tools" });
     await ctx.bridge.handleEvent({
       type: "session.tool.called",
-      data: { sessionID: "ses_t", name: "bash", input: { command: "ls" } },
+      data: { sessionID: "ses_t", name: "bash", input: { command: "ls -la" } },
     });
-    expect(ctx.transport.sent.some((text) => text.startsWith("🔧 bash"))).toBe(false);
+    expect(ctx.transport.sent.some((text) => text.startsWith("💻 bash: `ls -la`"))).toBe(true);
 
-    await ctx.delivery.updateSettings({ showToolCalls: true });
+    await ctx.bridge.handleEvent({
+      type: "session.tool.called",
+      data: { sessionID: "ses_t", name: "edit", input: { filePath: "src/foo.ts" } },
+    });
+    expect(ctx.transport.sent.some((text) => text.startsWith("✏️ edit: `src/foo.ts`"))).toBe(true);
+
+    await ctx.delivery.updateSettings({ showToolCalls: false });
     await ctx.bridge.handleEvent({
       type: "session.tool.called",
       data: { sessionID: "ses_t", name: "bash", input: { command: "ls" } },
     });
-    expect(ctx.transport.sent.some((text) => text.startsWith("🔧 bash"))).toBe(true);
+    expect(ctx.transport.sent.filter((text) => text.startsWith("💻")).length).toBeLessThan(2);
+  });
+
+  test("formatToolLine picks the most telling argument per tool", () => {
+    expect(formatToolLine("edit", { filePath: "a.ts", oldString: "x" })).toBe("✏️ edit: `a.ts`");
+    expect(formatToolLine("bash", { command: "bun test" })).toBe("💻 bash: `bun test`");
+    expect(formatToolLine("unknown", { zed: 1 })).toBe("🔧 unknown");
+    expect(compactToolArg("a".repeat(150))).toHaveLength(101);
   });
 
   test("renames update the mapped topic title and children render cards in the parent topic", async () => {

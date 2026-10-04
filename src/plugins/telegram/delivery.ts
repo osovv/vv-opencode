@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+
 //   MIRROR_PREFIX - Storage key prefix for message mirror rows.
 //   OUTBOX_KEY - Storage key holding the bounded pending-finals queue.
 //   SETTINGS_KEY - Storage key holding persisted runtime settings.
@@ -27,13 +28,18 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-004 - Created the mirror-based delivery layer with draft streaming, edit fallback, durable exactly-once finals with boot-drain, adaptive throttle, merge window, persisted settings, and code-as-file rendering.]
+//   LAST_CHANGE: [DIRECT-FIX - Finals render as native rich markdown (Bot API 10.1) with fence-balanced chunking and a plain-text fallback keyed to the format mode.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramTransport } from "./bot-api.js";
 import type { TelegramRuntimeSettings } from "./config.js";
 import type { TelegramStore } from "./topology.js";
-import { TelegramUnsupportedError } from "./bot-api.js";
+import {
+  chunkText,
+  TELEGRAM_PLAIN_MAX_CHARS,
+  TELEGRAM_RICH_MAX_CHARS,
+  TelegramUnsupportedError,
+} from "./bot-api.js";
 
 /** Storage key prefix for message mirror rows. */
 export const MIRROR_PREFIX = "telegram/v1/mirror/";
@@ -215,7 +221,7 @@ function decodeSettings(value: unknown, fallback: DeliverySettings): DeliverySet
   if (!isPlainObject(value)) return fallback;
   return {
     showReasoning: value.showReasoning === true,
-    showToolCalls: value.showToolCalls === true,
+    showToolCalls: value.showToolCalls === undefined ? true : value.showToolCalls === true,
     formatMode: value.formatMode === "raw" ? "raw" : "markdown",
     codeFileMaxKb:
       typeof value.codeFileMaxKb === "number" && value.codeFileMaxKb > 0
@@ -375,6 +381,31 @@ export class TelegramDelivery {
       await this.#writeOutbox(patched);
       return { delivered: false, tgMessageId: undefined };
     }
+  }
+
+  /** Deliver text honoring the format mode: native rich markdown with a plain fallback. */
+  async #deliverText(threadId: number, text: string): Promise<number> {
+    if (this.#settings.formatMode === "markdown") {
+      try {
+        let firstMessageId: number | undefined;
+        for (const chunk of chunkText(text, TELEGRAM_RICH_MAX_CHARS)) {
+          const sent = await this.#transport.sendRich({ threadId, markdown: chunk });
+          firstMessageId ??= sent.messageId;
+        }
+        if (firstMessageId !== undefined) return firstMessageId;
+      } catch (error) {
+        if (!(error instanceof TelegramUnsupportedError)) throw error;
+      }
+    }
+    let firstPlainId: number | undefined;
+    for (const chunk of chunkText(text, TELEGRAM_PLAIN_MAX_CHARS)) {
+      const sent = await this.#transport.sendMessage({ threadId, text: chunk });
+      firstPlainId ??= sent.messageId;
+    }
+    if (firstPlainId === undefined) {
+      throw new Error("text delivery produced no message");
+    }
+    return firstPlainId;
   }
 
   /** Boot drain: per-record FIFO delivery of finals still missing mirrors. */

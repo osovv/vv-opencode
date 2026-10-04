@@ -75,6 +75,7 @@ class RecordingTransport implements TelegramTransport {
   readonly edits: Array<{ messageId: number; text: string }> = [];
   readonly callbacksAnswered: string[] = [];
   readonly downloads = new Map<string, Uint8Array>();
+  readonly rich: Array<{ threadId: number; markdown: string }> = [];
   async createForumTopic(name: string) {
     this.createdTopics.push(name);
     return { threadId: this.nextThreadId++ };
@@ -88,6 +89,10 @@ class RecordingTransport implements TelegramTransport {
     replyMarkup?: SentMessage["markup"];
   }) {
     this.sent.push({ threadId: input.threadId, text: input.text, markup: input.replyMarkup });
+    return { messageId: this.nextMessageId++ };
+  }
+  async sendRich(input: { threadId: number; markdown: string }) {
+    this.rich.push({ threadId: input.threadId, markdown: input.markdown });
     return { messageId: this.nextMessageId++ };
   }
   async sendDocument() {

@@ -19,8 +19,11 @@
 //   decodeSessionEvent - Pure decoder for session lifecycle facts.
 //   decodeStepEvent - Pure decoder for step start, end, and failure facts.
 //   decodeTextStreamEvent - Pure decoder for streamed assistant text deltas and completed text parts.
-//   decodeInboxEvent - Pure decoder for inbox admission of user prompts.
+//   decodeInboxEvent - Pure decoder for inbox admission of user prompts including the bridge origin marker.
+//   TELEGRAM_PROMPT_SOURCE - Metadata marker stamped on prompts submitted by the bridge itself.
 //   decodeToolCallEvent - Pure decoder for tool call starts.
+//   compactToolArg - Collapse whitespace and cap one tool argument.
+//   formatToolLine - Pure one-line tool rendering with per-tool emoji and the most telling argument.
 //   decodePermissionEvent - Pure decoder for permission lifecycle facts.
 //   DecodedFormFieldOption - One decoded form field option.
 //   DecodedFormField - One decoded form field of the kinds the bridge can answer.
@@ -30,7 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Rewrote event routing onto the real V2 vocabulary: session.text.delta/ended streaming, session.inbox.enqueued/delivered user-prompt echo, session.execution statuses, session.tool.called transients, and permission.asked plus form.created interactions.]
+//   LAST_CHANGE: [DIRECT-FIX - Bridge-submitted prompts carry a source marker and skip the self echo; tool calls render as compact per-tool lines (emoji, name, most telling argument) and are visible by default.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramDelivery } from "./delivery.js";
@@ -167,22 +170,28 @@ export function decodeTextStreamEvent(data: unknown): {
   };
 }
 
-/** Pure decoder for inbox admission: queued user input and its delivery into the session. */
+/** Pure decoder for inbox admission: queued user input, its delivery, and its origin. */
 export function decodeInboxEvent(data: unknown): {
   readonly inboxID: string | undefined;
   readonly sessionID: string | undefined;
   readonly text: string | undefined;
+  readonly source: string | undefined;
 } {
   const record = asRecord(data) ?? {};
   const item = asRecord(record.item);
   const payload = asRecord(item?.payload);
+  const metadata = asRecord(item?.metadata) ?? asRecord(payload?.metadata);
   return {
     inboxID: readString(record.inboxID),
     sessionID:
       readString(record.sessionID) ?? (item === undefined ? undefined : readString(item.sessionID)),
     text: payload === undefined ? undefined : readString(payload.text),
+    source: metadata === undefined ? undefined : readString(metadata.source),
   };
 }
+
+/** Metadata marker stamped on prompts submitted by the bridge itself. */
+export const TELEGRAM_PROMPT_SOURCE = "vvoc-telegram";
 
 /** Pure decoder for tool call starts: name plus a bounded argument summary. */
 export function decodeToolCallEvent(data: unknown): {
@@ -204,6 +213,70 @@ export function decodeToolCallEvent(data: unknown): {
     name: readString(record.name),
     argumentSummary: summary,
   };
+}
+
+/** Per-tool display emoji, keyed by the native V2 tool names with common aliases. */
+const TOOL_EMOJI: Readonly<Record<string, string>> = {
+  bash: "💻",
+  shell: "💻",
+  read: "📖",
+  view: "📖",
+  edit: "✏️",
+  str_replace_editor: "✏️",
+  hashline_edit: "✏️",
+  write: "📝",
+  grep: "🔍",
+  search: "🔍",
+  glob: "📂",
+  find: "📂",
+  webfetch: "🌐",
+  fetch: "🌐",
+  websearch: "🔎",
+  web_search: "🔎",
+  subagent: "🤖",
+  task: "🤖",
+  skill: "📚",
+};
+
+/** Input keys whose value makes the best one-line summary, in preference order. */
+const TOOL_SUMMARY_KEYS: readonly string[] = [
+  "command",
+  "filePath",
+  "path",
+  "file",
+  "pattern",
+  "query",
+  "url",
+  "agent",
+  "name",
+  "description",
+];
+
+/** Collapse whitespace, strip backticks, and cap the length of one tool argument. */
+export function compactToolArg(text: string, cap = 100): string {
+  const collapsed = text.replace(/\s+/g, " ").trim().replace(/`/g, "'");
+  return collapsed.length > cap ? `${collapsed.slice(0, cap)}…` : collapsed;
+}
+
+/** Pure one-line tool rendering: per-tool emoji, name, and the most telling argument. */
+export function formatToolLine(name: string, input: unknown): string {
+  const emoji = TOOL_EMOJI[name] ?? "🔧";
+  const record =
+    typeof input === "object" && input !== null && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : undefined;
+  let summary: string | undefined;
+  if (record !== undefined) {
+    for (const key of TOOL_SUMMARY_KEYS) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim().length > 0) {
+        summary = value;
+        break;
+      }
+    }
+  }
+  const arg = summary === undefined ? "" : `: \`${compactToolArg(summary)}\``;
+  return `${emoji} ${name}${arg}`;
 }
 
 /** Pure decoder for permission lifecycle facts over the native permission.asked shape. */
@@ -568,8 +641,10 @@ export class SessionBridge {
     if (type === "session.inbox.delivered") {
       const decoded = decodeInboxEvent(data);
       if (decoded.inboxID === undefined) return;
+      const selfSubmitted = decoded.source === TELEGRAM_PROMPT_SOURCE;
       const text = this.#inboxTexts.get(decoded.inboxID) ?? decoded.text;
       this.#inboxTexts.delete(decoded.inboxID);
+      if (selfSubmitted) return;
       if (decoded.sessionID === undefined || text === undefined) return;
       const threadId = this.#topology.topicIdFor(decoded.sessionID);
       if (threadId === undefined) return;
@@ -589,8 +664,9 @@ export class SessionBridge {
       if (decoded.sessionID === undefined || decoded.name === undefined) return;
       const threadId = this.#topology.topicIdFor(decoded.sessionID);
       if (threadId === undefined) return;
-      const args = decoded.argumentSummary === undefined ? "" : ` ${decoded.argumentSummary}`;
-      await this.#delivery.sendTransient({ threadId, text: `🔧 ${decoded.name}${args}` });
+      const record = asRecord(data);
+      const line = formatToolLine(decoded.name, record?.input);
+      await this.#delivery.sendTransient({ threadId, text: line });
       return;
     }
 

@@ -74,6 +74,12 @@ class FakeTransport implements Transport {
     this.sent.push({ threadId: input.threadId, text: input.text, messageId });
     return { messageId };
   }
+  async sendRich(input: { threadId: number; markdown: string }) {
+    if (this.failSends) throw new Error("send failed");
+    const messageId = this.nextMessageId++;
+    this.sent.push({ threadId: input.threadId, text: input.markdown, messageId });
+    return { messageId };
+  }
   async sendDocument(input: {
     threadId: number;
     filename: string;
@@ -189,12 +195,12 @@ describe("settings persistence", () => {
     await first.initialize();
     expect(first.settings).toEqual({ ...DEFAULTS });
 
-    await first.updateSettings({ showReasoning: true, formatMode: "raw" });
+    await first.updateSettings({ showReasoning: false, formatMode: "raw" });
     const second = makeDelivery(new FakeTransport(), store, clock);
     await second.initialize();
-    expect(second.settings.showReasoning).toBe(true);
+    expect(second.settings.showReasoning).toBe(false);
     expect(second.settings.formatMode).toBe("raw");
-    expect(second.settings.showToolCalls).toBe(false);
+    expect(second.settings.showToolCalls).toBe(true);
   });
 });
 

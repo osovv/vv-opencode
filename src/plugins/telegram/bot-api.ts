@@ -2,7 +2,7 @@
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Own the narrow Telegram Bot API surface the bridge consumes, with a grammy-backed production transport and an injectable call seam for deterministic tests.
-//   SCOPE: The TelegramTransport interface (topics, sends, edits, drafts with a permanent unsupported latch, callbacks, commands, file download with a hard size cap, getUpdates polling reads), typed structural update shapes, credential-safe error normalization that never exposes the token, connectivity wiring for a custom API root or an outbound proxy (never both), and a grammy call factory that performs no I/O at module import.
+//   SCOPE: The TelegramTransport interface (topics, sends, edits, drafts and rich messages with permanent unsupported latches, callbacks, commands, file download with a hard size cap, getUpdates polling reads, and markdown chunking with fence balancing, typed structural update shapes, credential-safe error normalization that never exposes the token, connectivity wiring for a custom API root or an outbound proxy (never both), and a grammy call factory that performs no I/O at module import.
 //   DEPENDS: [grammy]
 //   LINKS: [M-TELEGRAM-BOT-API, M-TELEGRAM-GATEWAY, M-TELEGRAM-CONFIG, V-M-TELEGRAM-BOT-API]
 //   ROLE: RUNTIME
@@ -23,7 +23,10 @@
 //   TelegramBotCommand - Registered command description.
 //   TelegramTransport - The narrow send-side plus polling-read API surface the bridge consumes.
 //   createGrammyCallApi - Grammy-backed production call seam constructed only on demand.
-//   createTelegramTransport - Assemble the transport over an injectable call seam with the drafts latch and credential-safe errors.
+//   TELEGRAM_RICH_MAX_CHARS - Rich-message character cap per message.
+//   TELEGRAM_PLAIN_MAX_CHARS - Plain-message fallback character cap per message.
+//   chunkText - Cap-aware text splitting with code-fence balancing.
+//   createTelegramTransport - Assemble the transport over an injectable call seam with the drafts and rich latches and credential-safe errors.
 //   TelegramInlineButton - Inline keyboard button description.
 //   TelegramTransportOptions - Construction options for the transport assembly.
 // END_MODULE_MAP
@@ -36,6 +39,43 @@ import { Api, InputFile } from "grammy";
 
 /** Default Bot API root; a custom root or proxy replaces it through configuration. */
 export const TELEGRAM_DEFAULT_API_ROOT = "https://api.telegram.org";
+
+/** Rich-message (Bot API 10.1 sendRichMessage) character cap per message. */
+export const TELEGRAM_RICH_MAX_CHARS = 32_768;
+
+/** Plain-message fallback character cap per message. */
+export const TELEGRAM_PLAIN_MAX_CHARS = 4_096;
+
+/** Cap-aware text splitting with code-fence balancing, cut at paragraph then line boundaries. */
+export function chunkText(text: string, cap: number): readonly string[] {
+  if (text.length <= cap) return [text];
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > 0) {
+    const cut = rest.length > cap ? findCutPoint(rest, cap) : rest.length;
+    let chunk = rest.slice(0, cut);
+    rest = rest.slice(cut);
+    const fenceOpen = (chunk.match(/```/g) ?? []).length % 2 === 1;
+    if (fenceOpen && rest.length > 0) {
+      chunk += "\n```";
+      rest = `\`\`\`\n${rest}`;
+    }
+    chunks.push(chunk);
+    if (rest.length <= cap) {
+      if (rest.length > 0) chunks.push(rest);
+      rest = "";
+    }
+  }
+  return chunks;
+}
+
+function findCutPoint(text: string, cap: number): number {
+  const paragraph = text.lastIndexOf("\n\n", cap);
+  if (paragraph > cap * 0.5) return paragraph;
+  const line = text.lastIndexOf("\n", cap);
+  if (line > cap * 0.5) return line;
+  return cap;
+}
 
 /** Low-level method-call seam: one Bot API method with a JSON payload. */
 export type TelegramCall = (method: string, payload: Record<string, unknown>) => Promise<unknown>;
@@ -155,6 +195,11 @@ export interface TelegramTransport {
     readonly parseMode?: "MarkdownV2" | "HTML";
     readonly disableNotification?: boolean;
     readonly replyMarkup?: readonly (readonly TelegramInlineButton[])[];
+  }): Promise<{ readonly messageId: number }>;
+  /** Native rich send (Bot API 10.1) rendering markdown; throws TelegramUnsupportedError permanently once latched. */
+  sendRich(input: {
+    readonly threadId: number;
+    readonly markdown: string;
   }): Promise<{ readonly messageId: number }>;
   sendDocument(input: {
     readonly threadId: number;
@@ -278,6 +323,7 @@ export function createTelegramTransport(options: TelegramTransportOptions): Tele
   const proxyInit =
     options.proxyUrl === undefined ? {} : ({ proxy: options.proxyUrl } as RequestInit);
   let draftsSupported = true;
+  let richSupported = true;
 
   const serializeMarkup = (
     rows: readonly (readonly TelegramInlineButton[])[] | undefined,
@@ -340,6 +386,32 @@ export function createTelegramTransport(options: TelegramTransportOptions): Tele
         throw new TelegramApiError(undefined, "sendMessage returned no message_id");
       }
       return { messageId };
+    },
+    async sendRich(input: { readonly threadId: number; readonly markdown: string }) {
+      if (!richSupported) {
+        throw new TelegramUnsupportedError("sendRichMessage");
+      }
+      try {
+        const result = await invoke<{ message_id?: unknown }>("sendRichMessage", {
+          chat_id: chatId,
+          message_thread_id: input.threadId,
+          rich_message: { markdown: input.markdown },
+        });
+        const messageId = result?.message_id;
+        if (typeof messageId !== "number") {
+          throw new TelegramApiError(undefined, "sendRichMessage returned no message_id");
+        }
+        return { messageId };
+      } catch (error) {
+        if (
+          error instanceof TelegramApiError &&
+          (error.code === 404 || isUnsupportedDescription(error.description))
+        ) {
+          richSupported = false;
+          throw new TelegramUnsupportedError("sendRichMessage");
+        }
+        throw error;
+      }
     },
     async sendDocument(input) {
       const result = await invoke<{ message_id?: unknown }>("sendDocument", {
