@@ -76,7 +76,15 @@ class FakeTransport implements TelegramTransport {
   async downloadFile(): Promise<Uint8Array> {
     return new Uint8Array();
   }
-  async getUpdates(): Promise<never[]> {
+  async getUpdates(
+    _input: { offset: number | null; timeoutSec: number },
+    signal: AbortSignal,
+  ): Promise<never[]> {
+    // Behave like a real long poll: block until aborted instead of hot-spinning.
+    if (signal.aborted) return [];
+    await new Promise<void>((resolve) =>
+      signal.addEventListener("abort", () => resolve(), { once: true }),
+    );
     return [];
   }
 }
@@ -101,10 +109,10 @@ function makeCtx(app: object) {
     location: { directory: "/home/al/dev/vv-opencode" },
     storage: new FakeStorage(),
     event: {
-      subscribe: (() => {
+      subscribe(_options?: { signal?: AbortSignal }) {
         async function* empty() {}
         return empty();
-      })(),
+      },
     },
     session: {
       prompt: async () => ({ info: { id: "msg_1" } }),
@@ -215,5 +223,47 @@ describe("singleton and lifecycle", () => {
     expect(FakeTransport.constructed).toBe(1);
     await cleanup?.();
     expect(getReleased()).toBe(1);
+  });
+});
+
+describe("boot-safety regression", () => {
+  test("setup returns promptly and cleanup resolves even when runtime acquisition never settles", async () => {
+    FakeTransport.reset();
+    const { deps } = makeDeps({
+      telegram: { botToken: "${TGTOKEN}", allowedUserIds: [7] },
+    });
+    // Reproduce the boot deadlock shape: the native client never becomes ready.
+    deps.acquireRuntime = () => new Promise(() => undefined);
+    const plugin = createTelegramBridgePlugin(deps);
+    const cleanup = await setupPlugin(plugin, makeCtx({ boot: true }));
+    expect(FakeTransport.constructed).toBe(1);
+    await Promise.race([
+      cleanup?.() ?? Promise.resolve(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("cleanup hung")), 2_000)),
+    ]);
+  });
+
+  test("a failing bootstrap attempt is contained, retried with backoff, and succeeds on a later attempt", async () => {
+    FakeTransport.reset();
+    const { deps, logs } = makeDeps({
+      telegram: { botToken: "${TGTOKEN}", allowedUserIds: [7] },
+    });
+    let attempts = 0;
+    const base = deps.acquireRuntime;
+    deps.acquireRuntime = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("server not ready yet");
+      return base();
+    };
+    const plugin = createTelegramBridgePlugin(deps);
+    const cleanup = await setupPlugin(plugin, makeCtx({ retry: true }));
+    const deadline = Date.now() + 5_000;
+    while (!logs.some((line) => line.includes("gateway started")) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(attempts).toBeGreaterThanOrEqual(2);
+    expect(logs.some((line) => line.includes("retrying"))).toBe(true);
+    expect(logs.some((line) => line.includes("gateway started"))).toBe(true);
+    await cleanup?.();
   });
 });

@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble the TelegramBridgePlugin native server plugin: resolve the telegram section and toggle, run exactly one grammy gateway per process behind an app-identity singleton, wire topology, delivery, session bridge, interactions, commands, and the polling gateway over the plugin context and the shared native runtime, and tear everything down in reverse on cleanup.
-//   SCOPE: Injectable config loader, environment, transport factory, and runtime acquisition for deterministic tests; structural native context and client seams with unknown-typed inputs decoded at checked boundaries; value-free disabled diagnostics; owner-scoped callback routing; startup ordering with General creation, delivery initialization, bridge resync, pending-permission resurfacing, and command registration; partial-setup rollback through the returned cleanup.
+//   SCOPE: Injectable config loader, environment, transport factory, and runtime acquisition for deterministic tests; structural native context and client seams with unknown-typed inputs decoded at checked boundaries; value-free disabled diagnostics; owner-scoped callback routing; a supervised background bootstrap (client acquisition, resync, General creation, pending-permission resurfacing, command registration, polling) with bounded backoff retries that never blocks plugin setup, because awaiting the native client during setup deadlocks server boot; partial-setup rollback through the returned cleanup.
 //   DEPENDS: [@opencode/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/runtime/coordination.ts, src/runtime/context.ts, src/plugins/telegram/config.ts, src/plugins/telegram/bot-api.ts, src/plugins/telegram/topology.ts, src/plugins/telegram/delivery.ts, src/plugins/telegram/sessions.ts, src/plugins/telegram/commands.ts, src/plugins/telegram/gateway.ts]
 //   LINKS: [M-PLUGIN-TELEGRAM-BRIDGE, M-TELEGRAM-GATEWAY, M-TELEGRAM-TOPICS, M-TELEGRAM-DELIVERY, M-TELEGRAM-BOT-API, M-TELEGRAM-CONFIG, V-M-PLUGIN-TELEGRAM-BRIDGE]
 //   ROLE: RUNTIME
@@ -27,7 +27,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-008 - Assembled the plugin with the app-identity singleton, structural native adapters, startup ordering, command registration, and reverse teardown.]
+//   LAST_CHANGE: [DIRECT-FIX - Moved the entire gateway bootstrap (native client acquisition, resync, General, commands, polling) into a supervised background task with bounded backoff, because awaiting the native client during plugin setup deadlocked server boot for 72s until an InterruptError.]
+//   PREVIOUS: [C-TELEGRAM-BRIDGE-PLUGIN T-008 - Assembled the plugin with the app-identity singleton, structural native adapters, startup ordering, command registration, and reverse teardown.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -408,96 +409,159 @@ export function createTelegramBridgePlugin(
       });
       const store = toTelegramStore(ctx.storage);
       const clock = { now: () => Date.now() };
-      const runtime = await acquireRuntime(ctx);
-      const client = await runtime.client();
 
-      const reads = nativeReadsAdapter(client);
-      const topology = new TelegramTopology({
-        transport,
-        store,
-        clock,
-        windowMinutes: resolved.activityWindowMinutes,
+      // START_BLOCK_BACKGROUND_STARTUP
+      // Startup never blocks plugin setup: acquiring the native client during
+      // setup deadlocks server boot (the server waits for plugin setup while the
+      // client waits for the server). The whole bootstrap — client acquisition,
+      // topology and delivery initialization, bridge resync, General creation,
+      // permission resurfacing, command registration, and polling — runs in a
+      // supervised background task with bounded backoff retries; every failure
+      // is contained and retried, and cleanup aborts and joins it.
+      const abort = new AbortController();
+      const aborted = new Promise<void>((resolve) => {
+        abort.signal.addEventListener("abort", () => resolve(), { once: true });
       });
-      const delivery = new TelegramDelivery({
-        transport,
-        store,
-        clock,
-        defaults: resolved.settings,
-      });
-      const bridge = new SessionBridge({
-        topology,
-        delivery,
-        reads,
-        actions: nativeActionsAdapter(ctx),
-        events: nativeEventsAdapter(ctx),
-        clock,
-        log,
-      });
-      const interactions = new TelegramInteractions({
-        transport,
-        topology,
-        permissions: nativePermissionsAdapter(client),
-        questions: nativeQuestionsAdapter(client),
-      });
-      bridge.setInteractions(interactions);
-      const commands = new TelegramCommands({
-        transport,
-        topology,
-        delivery,
-        bridge,
-        interactions,
-        projects: nativeProjectsAdapter(ctx, client),
-        models: nativeModelsAdapter(ctx),
-        history: nativeHistoryAdapter(client),
-        reads,
-        clock,
-      });
-      const gateway = new TelegramGateway({
-        transport,
-        store,
-        ownerIds: resolved.allowedUserIds,
-        dispatch: {
-          handleMessage: (input) => commands.handleMessage(input),
-          handleCallback: async (update) => {
-            const query = update.callback_query;
-            if (query === undefined) return;
-            if (!resolved.allowedUserIds.includes(query.from.id)) {
-              log("warn", "ignored callback from non-owner sender");
-              return;
+      const abortableSleep = async (ms: number): Promise<void> => {
+        await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, ms)), aborted]);
+      };
+      /** Race one bootstrap await against cleanup so a never-ready client cannot wedge teardown. */
+      const raceAborted = <T>(promise: Promise<T>): Promise<T> =>
+        Promise.race([
+          promise,
+          aborted.then(() => {
+            throw new Error("startup aborted");
+          }),
+        ]);
+      let started:
+        | { gateway: TelegramGateway; bridge: SessionBridge; runtime: NativeRuntimeLike }
+        | undefined;
+
+      const done = (async () => {
+        const backoffMs = [1_000, 2_000, 5_000, 15_000, 30_000] as const;
+        let attempt = 0;
+        while (!abort.signal.aborted) {
+          let runtime: NativeRuntimeLike | undefined;
+          let bridge: SessionBridge | undefined;
+          let gateway: TelegramGateway | undefined;
+          try {
+            runtime = await raceAborted(acquireRuntime(ctx));
+            const client = await raceAborted(runtime.client());
+            const reads = nativeReadsAdapter(client);
+            const topology = new TelegramTopology({
+              transport,
+              store,
+              clock,
+              windowMinutes: resolved.activityWindowMinutes,
+            });
+            const delivery = new TelegramDelivery({
+              transport,
+              store,
+              clock,
+              defaults: resolved.settings,
+            });
+            bridge = new SessionBridge({
+              topology,
+              delivery,
+              reads,
+              actions: nativeActionsAdapter(ctx),
+              events: nativeEventsAdapter(ctx),
+              clock,
+              log,
+            });
+            const interactions = new TelegramInteractions({
+              transport,
+              topology,
+              permissions: nativePermissionsAdapter(client),
+              questions: nativeQuestionsAdapter(client),
+            });
+            bridge.setInteractions(interactions);
+            const commands = new TelegramCommands({
+              transport,
+              topology,
+              delivery,
+              bridge,
+              interactions,
+              projects: nativeProjectsAdapter(ctx, client),
+              models: nativeModelsAdapter(ctx),
+              history: nativeHistoryAdapter(client),
+              reads,
+              clock,
+            });
+            gateway = new TelegramGateway({
+              transport,
+              store,
+              ownerIds: resolved.allowedUserIds,
+              dispatch: {
+                handleMessage: (input) => commands.handleMessage(input),
+                handleCallback: async (update) => {
+                  const query = update.callback_query;
+                  if (query === undefined) return;
+                  if (!resolved.allowedUserIds.includes(query.from.id)) {
+                    log("warn", "ignored callback from non-owner sender");
+                    return;
+                  }
+                  await commands.handleCallback(query);
+                },
+              },
+              clock,
+              log,
+            });
+
+            await raceAborted(topology.initialize(telegramBotFingerprint(resolved.botToken)));
+            await raceAborted(delivery.initialize());
+            await raceAborted(bridge.start());
+            await raceAborted(topology.ensureGeneral());
+            const sessions = await raceAborted(reads.listSessions());
+            await raceAborted(interactions.resurfacePending(sessions.map((session) => session.id)));
+            await raceAborted(
+              transport.setMyCommands([
+                { command: "new", description: "Create a session in a picked project" },
+                { command: "sync", description: "Reconcile topics with active sessions" },
+                { command: "status", description: "Show active sessions and context usage" },
+                { command: "model", description: "Switch the session model" },
+                { command: "rename", description: "Rename the current session" },
+                { command: "messages", description: "Browse messages, revert or fork" },
+                { command: "abort", description: "Abort the current task" },
+                { command: "settings", description: "Change delivery settings" },
+                { command: "help", description: "Show commands" },
+              ]),
+            );
+            void gateway.start().catch(() => undefined);
+            started = { gateway, bridge, runtime };
+            log("info", "gateway started");
+            await aborted;
+            return;
+          } catch (error) {
+            // Contain a failed bootstrap attempt: stop partials and retry with backoff.
+            const name = error instanceof Error ? error.name : typeof error;
+            log("warn", `gateway bootstrap attempt ${attempt + 1} failed (${name}); retrying`);
+            try {
+              if (gateway !== undefined) await gateway.stop();
+              if (bridge !== undefined) await bridge.stop();
+              if (runtime !== undefined) await runtime.release();
+            } catch {
+              // Teardown failures during a failed attempt never block the retry.
             }
-            await commands.handleCallback(query);
-          },
-        },
-        clock,
-        log,
-      });
-
-      await topology.initialize(telegramBotFingerprint(resolved.botToken));
-      await delivery.initialize();
-      await bridge.start();
-      await topology.ensureGeneral();
-      const sessions = await reads.listSessions();
-      await interactions.resurfacePending(sessions.map((session) => session.id));
-      await transport.setMyCommands([
-        { command: "new", description: "Create a session in a picked project" },
-        { command: "sync", description: "Reconcile topics with active sessions" },
-        { command: "status", description: "Show active sessions and context usage" },
-        { command: "model", description: "Switch the session model" },
-        { command: "rename", description: "Rename the current session" },
-        { command: "messages", description: "Browse messages, revert or fork" },
-        { command: "abort", description: "Abort the current task" },
-        { command: "settings", description: "Change delivery settings" },
-        { command: "help", description: "Show commands" },
-      ]);
-      const gatewayRun = gateway.start();
-      void gatewayRun.catch(() => undefined);
+            if (abort.signal.aborted) return;
+            await abortableSleep(backoffMs[Math.min(attempt, backoffMs.length - 1)]);
+            attempt += 1;
+          }
+        }
+      })();
+      void done.catch(() => undefined);
+      // END_BLOCK_BACKGROUND_STARTUP
 
       const shared: SharedGateway = {
         refs: 1,
         stop: async () => {
-          await gateway.stop();
-          await bridge.stop();
-          await runtime.release();
+          abort.abort();
+          await done.catch(() => undefined);
+          if (started !== undefined) {
+            await started.gateway.stop();
+            await started.bridge.stop();
+            await started.runtime.release();
+          }
         },
       };
       sharedGateways.set(appKey, shared);
