@@ -32,6 +32,7 @@ interface NativeSystemPart {
   text: string;
 }
 interface NativeMessage {
+  role?: string;
   content: Array<{ type: "text"; text: string }>;
 }
 interface NativeContextEvent {
@@ -116,7 +117,7 @@ async function makeHarness(
       sessionID: `session-${agent}`,
       agent,
       system: existing === undefined ? [] : [{ type: "text", text: existing }],
-      messages: [{ content: [] }],
+      messages: [{ role: "user", content: [] }],
     };
     await handler(event);
     return event;
@@ -359,7 +360,7 @@ describe("SystemContextInjectionPlugin", () => {
       sessionID: "session-vv-controller",
       agent: "vv-controller",
       system: [{ type: "text", text: "Existing system context." }],
-      messages: [{ content: [] }],
+      messages: [{ role: "user", content: [] }],
     };
     await handler(event);
     await handler(event);

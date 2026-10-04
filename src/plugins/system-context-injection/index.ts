@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static primary guidance stays in the system prefix while the variable orchestration policy is injected at the request tail, so a profile change does not invalidate the cached prefix.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static primary guidance stays in the system prefix while the variable orchestration policy is injected at the tail of the last user message only, so a profile change does not invalidate the cached prefix and tool/assistant messages keep their provider payload shape.]
 // END_CHANGE_SUMMARY
 
 import { SystemPart } from "@opencode/ai";
@@ -236,15 +236,22 @@ function appendSystemContexts(
 }
 
 /**
- * Append the variable orchestration policy to the tail of the last request
- * message exactly once. The part is transient: it changes only the provider
- * copy, so it never lands in stored history, and keeping it out of the system
- * prefix means a profile change does not invalidate the cached prefix.
+ * Append the variable orchestration policy to the tail of the request exactly
+ * once, but only when the last message is a user turn. The part is transient:
+ * it changes only the provider copy, so it never lands in stored history, and
+ * keeping it out of the system prefix means a profile change does not
+ * invalidate the cached prefix. Injecting into a tool or assistant message
+ * would corrupt the provider payload shape, and mid-turn continuation requests
+ * keep the guidance already delivered at the turn's user message.
  */
-function appendTailContext(messages: Array<{ content?: unknown }>, context: string): void {
+function appendTailContext(
+  messages: Array<{ role?: unknown; content?: unknown }>,
+  context: string,
+): void {
   if (messages.length === 0) return;
   const last = messages[messages.length - 1];
   if (last === null || typeof last !== "object") return;
+  if (String((last as { role?: unknown }).role ?? "") !== "user") return;
   const content = (last as { content?: unknown }).content;
   if (!Array.isArray(content)) return;
   for (const part of content) {
@@ -342,7 +349,7 @@ export function createSystemContextInjectionPlugin(
           }
           const tail = getTailPolicyForAgent(agentName, policy);
           if (tail !== undefined && Array.isArray(event.messages)) {
-            appendTailContext(event.messages as Array<{ content?: unknown }>, tail);
+            appendTailContext(event.messages as Array<{ role?: unknown; content?: unknown }>, tail);
           }
         } catch {
           // Guidance injection must never fail a model request.
