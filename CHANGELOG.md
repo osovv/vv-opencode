@@ -1,3 +1,11 @@
+## <small>2.1.6 (2026-10-04)</small>
+
+### Summary
+
+This release fixes configuration drift between the server and the terminal UI so that both stay on the same vvoc version. OpenCode v2 runs the TUI as a separate client that loads plugins from the global cli.json, and machines upgraded from V1 carried a second, outdated vvoc entry there that vvoc tooling never touched. As a result, the server could be current while the TUI silently lagged behind on an older version, hiding new commands such as /vv-rebind even though upgrade and status reported everything up to date. Now install, init, and sync mirror an existing managed cli.json entry to the pinned specifier, preserving comments, client preferences, options, and unrelated entries, while never creating a cli.json entry that was not already there, so fresh machines behave exactly as before. In addition, doctor and status print the TUI client pin alongside the server pin and warn when the two drift apart, making any version mismatch visible and pointing users to vvoc sync to repair it.
+
+* fix(config): mirror the cli.json TUI client pin beside the opencode.json pin ([d62beed](https://github.com/osovv/vv-opencode/commit/d62beed))
+
 ## <small>2.1.5 (2026-10-04)</small>
 
 ### Summary
