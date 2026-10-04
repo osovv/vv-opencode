@@ -1,3 +1,11 @@
+## 2.3.0-rc.0 (2026-10-04)
+
+### Summary
+
+This release candidate introduces the TelegramBridgePlugin, a native server plugin that bridges OpenCode sessions to Telegram, letting users drive and monitor multiple parallel sessions directly from a phone. Each active session gets its own private-chat forum topic, with live status shown as an emoji in the topic title, so several sessions can run side by side without opening each conversation. Users can create and sync sessions, switch models through an inline picker, answer agent questions and permission requests with inline actions, view subagent activity, fork or revert messages, and send file attachments, while assistant output streams through durable, throttled delivery that survives server restarts without duplicating messages or topics. The plugin is configured through a new optional top-level telegram section in strict schema v3, including bot token with environment-placeholder substitution, an allowed-user list, an activity window defaulting to 240 minutes, and mutually exclusive custom API root or outbound proxy options for corporate networks, with the plugin toggling itself off via a value-free diagnostic when the token is missing. This matters because it turns OpenCode into a remotely controllable, multi-session workflow available from a chat client, while keeping bot credentials out of logs and stored state and preserving exactly-once delivery.
+
+* feat(telegram): add TelegramBridgePlugin for parallel Telegram session control ([1e01e54](https://github.com/osovv/vv-opencode/commit/1e01e54))
+
 ## <small>2.2.1 (2026-10-04)</small>
 
 ### Summary
