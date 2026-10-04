@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Replaced candidate acceptance with durable bind-on-first-work, runtime rehydration of credential-free bindings, live overlay materialization, and native session-deletion cleanup.]
+//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005/T-008 - Replaced candidate acceptance with durable bind-on-first-work, runtime rehydration of credential-free bindings, live overlay materialization, explicit-selection qualification that matches the host-resolved family variant, native session-deletion cleanup.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - One coherent admission config: bindings are rebuilt from the fresh role map plus raw intent so a vvoc role change with no config.updated selects and captures the new model; the same value drives the candidate target and the family capture for prompt and owned work, and services share an app/location-identity coordinator.]
 // END_CHANGE_SUMMARY
 
@@ -775,6 +775,35 @@ function selectionMatches(
   return sameModelSelection(actual, expected);
 }
 
+/** Map a family-qualified variant id back to its native source variant. */
+function sourceVariantOf(
+  capture: import("./types.js").FamilyCapture,
+  selection: ModelSelection | undefined,
+): string | undefined {
+  if (selection?.variant === undefined) return undefined;
+  const known = capture.variants.find((variant) => variant.id === selection.variant);
+  return known?.sourceVariant ?? selection.variant;
+}
+
+/**
+ * True when two selections denote the same model and the same source variant,
+ * accepting the native variant id and its family-qualified id as equivalent.
+ * The host may resolve either form depending on whether the session model was
+ * rewritten through the family switch, and both denote the same request body.
+ */
+function sameSourceSelection(
+  capture: import("./types.js").FamilyCapture,
+  actual: ModelSelection | undefined,
+  expected: ModelSelection | undefined,
+): boolean {
+  if (actual === undefined || expected === undefined) return false;
+  return (
+    actual.providerID === expected.providerID &&
+    actual.modelID === expected.modelID &&
+    sourceVariantOf(capture, actual) === sourceVariantOf(capture, expected)
+  );
+}
+
 /** The model a family expects for host title work: the captured fast/small role. */
 function titleExpectedSelection(
   capture: import("./types.js").FamilyCapture,
@@ -1154,9 +1183,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         }
         if (!state.roleOverride) return capture.modelOverride ?? capture.rootSelection;
         const explicit = state.explicitSelections.get(sessionID);
-        // An explicit user choice wins exactly as chosen; never re-qualify it with the
-        // family variant, or the host-resolved request for that choice would mismatch.
-        if (explicit !== undefined) return normalizeModelSelection(explicit);
+        // An explicit user choice wins, but the host resolves the request against the
+        // family-qualified variant id after the first-work switch, so the expectation
+        // must use the same qualification or the guard rejects the resolved request.
+        if (explicit !== undefined) return qualifySelection(capture, explicit);
         return expectedSelection(capture, agentID);
       };
 
@@ -1265,7 +1295,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             kind === "title"
               ? titleExpectedSelection(capture)
               : expectedForSession(capture, effectiveAgent, sessionID, view.metadata);
-          if (!selectionMatches(actual, expected)) {
+          if (
+            !selectionMatches(actual, expected) &&
+            !sameSourceSelection(capture, actual, expected)
+          ) {
             throw new SnapshotAdmissionError(
               `Resolved ${kind} model ${actual?.providerID ?? "?"}/${actual?.modelID ?? "?"} does not match the captured family selection for ${familyId}.`,
             );
