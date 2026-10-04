@@ -416,14 +416,14 @@
                       }
                     }
                   },
-                   "required": [
-                     "windows"
-                   ],
-                   "additionalProperties": false
-                 }
-               }
-             },
-             "additionalProperties": false
+                  "required": [
+                    "windows"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
           },
           {
             "type": "object",
@@ -576,6 +576,86 @@
           "maximum": 5
         }
       }
+    },
+    "telegram": {
+      "type": "object",
+      "description": "Optional Telegram bridge section enabling the vvoc.telegram server plugin gateway.",
+      "additionalProperties": false,
+      "required": [
+        "botToken",
+        "allowedUserIds"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "botToken": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Telegram bot token. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup; never committed to project config."
+        },
+        "allowedUserIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer"
+          },
+          "description": "Numeric Telegram user ids allowed to interact with the bot."
+        },
+        "activityWindowMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minutes a session stays active after its last update. Default 240."
+        },
+        "apiRoot": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Custom Telegram Bot API root URL for restricted networks."
+        },
+        "proxyUrl": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Outbound proxy URL for Telegram Bot API traffic."
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "showReasoning": {
+              "type": "boolean"
+            },
+            "showToolCalls": {
+              "type": "boolean"
+            },
+            "formatMode": {
+              "type": "string",
+              "enum": [
+                "markdown",
+                "raw"
+              ]
+            },
+            "codeFileMaxKb": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mergeWindowMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "apiRoot",
+              "proxyUrl"
+            ]
+          },
+          "then": false
+        }
+      ]
     }
   }
 }

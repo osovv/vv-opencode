@@ -15,6 +15,7 @@
     <Goal>Make multi-agent work explicit through work items, tracked subagent headers, reviewer result collection, hard stops, and bounded review rounds.</Goal>
     <Goal>Improve long-run safety with Guardian permission review, secrets redaction, hashline-backed edits, strict config validation, and clear recovery diagnostics.</Goal>
     <Goal>Provide one CLI, vvoc, for setup, sync, launch, status, diagnostics, roles, presets, plugin toggles, completions, and upgrades.</Goal>
+    <Goal>Let the owner drive several parallel OpenCode sessions from a phone through a single-owner Telegram bridge inside the OpenCode server process, with one DM topic per active session, manual permission and question decisions, and durable state across service restarts.</Goal>
     <Goal>Expose an honest OpenCode-native /context view that combines provider-reported usage with clearly labeled approximate category accounting.</Goal>
     <Goal>Provide provider-neutral web_search and web_fetch tools with stable runtime defaults, permission checks, bounded transport, and normalized outputs.</Goal>
     <Goal>Make provider peak-hour pricing visible and optionally gate new peak-priced work through warnings, blocking with dynamic off-peak suggestions, and grace for work already in flight.</Goal>
@@ -213,6 +214,17 @@
       <Acceptance>Soft mode appends a bounded model notice and shows a persistent orange app_bottom banner naming the provider, window end, and connected off-peak providers; hard mode rejects the message before any LLM request with the same suggestions; sessions created before the window start, subagent sessions, subagent-like agents, and internal OpenCode agents are never hard-blocked; schedules match providers with alias normalization, carry revision-dated defaults materialized conservatively into vvoc.json, and fail open on malformed data.</Acceptance>
       <RelatedFlow>DF-LAYERED-CONFIG</RelatedFlow>
     </UC-023>
+    <UseCase>
+      <Name>Remote parallel session control through Telegram</Name>
+      <Actor>Owner</Actor>
+      <Steps>
+        <Step>Enable forum topics for the bot in BotFather and configure the optional telegram section with a ${VAR} bot token and the numeric owner allowlist.</Step>
+        <Step>Start or restart OpenCode; the plugin creates the General control topic and reconciles one topic per active session with a live status emoji in its title.</Step>
+        <Step>The owner creates sessions through /new, prompts them by plain topic text with attachments, switches models, renames, reverts or forks history, and aborts from the phone.</Step>
+        <Step>Permission requests and agent questions arrive as manual inline-button prompts in the owning topic; a custom answer holds the topic input gate until answered or cancelled.</Step>
+        <Step>After an OpenCode service restart the gateway reloads its durable state, resyncs the active set from the native session APIs, and continues without duplicate messages or a second General topic.</Step>
+      </Steps>
+    </UseCase>
   </UseCases>
   <NonGoals>
     <NonGoal>Do not replace OpenCode itself; vv-opencode layers process, managed config, skills, and plugins on top of OpenCode.</NonGoal>
@@ -261,6 +273,8 @@
     <Risk>Plugin toggles can disable critical safety or workflow behavior unless status and doctor output make that visible.</Risk>
     <Risk>Strict schema behavior can frustrate users with hand-edited configs unless errors include precise recovery steps.</Risk>
     <Risk>External search and fetch provider APIs, quotas, response shapes, and regional endpoints can change independently of vvoc.</Risk>
+    <Risk>A Telegram gateway inside the server process shares its failure domain, so polling, throttling, and state growth must stay bounded or the bot can degrade the host.</Risk>
+    <Risk>Private-chat forum topic API shapes are young and may change field naming, requiring the transport adapter to isolate them.</Risk>
   </Risks>
   <OpenQuestions>
     <Question>Should future versions validate role assignments against provider-declared capabilities such as vision?</Question>

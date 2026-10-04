@@ -56,15 +56,16 @@ describe("export requirements", () => {
     expect(pluginExportName("./plugins/model-roles")).toBe("ModelRolesPlugin");
   });
 
-  test("the real manifest requires the aggregate, TUI, and all eleven plugin subpaths", () => {
+  test("the real manifest requires the aggregate, TUI, and all plugin subpaths", () => {
     const requirements = packageExportRequirements(realManifest);
     const subpaths = requirements.map((requirement) => requirement.subpath);
     expect(subpaths).toContain(".");
     expect(subpaths).toContain("./server");
     expect(subpaths).toContain("./tui");
     const plugins = subpaths.filter((subpath) => subpath.startsWith("./plugins/"));
-    expect(plugins).toHaveLength(11);
+    expect(plugins).toHaveLength(12);
     expect(plugins).toContain("./plugins/tool-history-compaction");
+    expect(plugins).toContain("./plugins/telegram");
   });
 });
 

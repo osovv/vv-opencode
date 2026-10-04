@@ -12,10 +12,12 @@
 // START_MODULE_MAP
 //   SCHEMA_PATH - Published schema-v3 file used for parity checks.
 //   docWithWeb - Render a valid canonical document carrying an arbitrary web value.
+//   docWithTelegram - Render a fully valid canonical document carrying an arbitrary telegram value.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Covered spec-guard schema acceptance, rejection, boolean form, and file schema parity.]
+//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Covered the optional telegram section: acceptance, required fields, connectivity exclusivity, rejection cases, round-trip, and file schema parity.]
+//   PREVIOUS: [C-SPEC-IDENTITY-LINT - Covered spec-guard schema acceptance, rejection, boolean form, and file schema parity.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -40,6 +42,132 @@ const SCHEMA_PATH = join(import.meta.dir, "..", "..", "schemas", "vvoc", "v3.jso
 function docWithWeb(web: unknown): string {
   return JSON.stringify({ ...createDefaultVvocConfig(), web }, null, 2);
 }
+
+/** Render a fully valid canonical document carrying an arbitrary telegram value. */
+function docWithTelegram(telegram: unknown): string {
+  return JSON.stringify({ ...createDefaultVvocConfig(), telegram }, null, 2);
+}
+
+// START_BLOCK_TELEGRAM_SECTION_TEST
+describe("optional telegram section parsing", () => {
+  test("a document without a telegram section parses unchanged and renders without telegram", () => {
+    const rendered = renderVvocConfig(createDefaultVvocConfig());
+    expect(JSON.parse(rendered).telegram).toBeUndefined();
+    const parsed = parseVvocConfigText(rendered, "test");
+    expect(parsed.telegram).toBeUndefined();
+  });
+
+  test("a complete telegram section parses with every field preserved", () => {
+    const parsed = parseVvocConfigText(
+      docWithTelegram({
+        enabled: true,
+        botToken: "${TELEGRAM_BOT_TOKEN}",
+        allowedUserIds: [42, 1001],
+        activityWindowMinutes: 120,
+        apiRoot: "https://tg.example.com",
+        settings: { showReasoning: true, formatMode: "raw" },
+      }),
+      "test",
+    );
+    expect(parsed.telegram).toEqual({
+      enabled: true,
+      botToken: "${TELEGRAM_BOT_TOKEN}",
+      allowedUserIds: [42, 1001],
+      activityWindowMinutes: 120,
+      apiRoot: "https://tg.example.com",
+      settings: { showReasoning: true, formatMode: "raw" },
+    });
+  });
+
+  test("a minimal telegram section parses with only token and allowlist", () => {
+    const parsed = parseVvocConfigText(
+      docWithTelegram({ botToken: "123:abc", allowedUserIds: [7] }),
+      "test",
+    );
+    expect(parsed.telegram?.botToken).toBe("123:abc");
+    expect(parsed.telegram?.allowedUserIds).toEqual([7]);
+    expect(parsed.telegram?.enabled).toBeUndefined();
+  });
+
+  test("missing botToken or allowlist is rejected", () => {
+    expect(() => parseVvocConfigText(docWithTelegram({ allowedUserIds: [7] }), "test")).toThrow();
+    expect(() => parseVvocConfigText(docWithTelegram({ botToken: "123:abc" }), "test")).toThrow();
+  });
+
+  test("an empty allowlist, empty token, or non-integer ids are rejected", () => {
+    expect(() =>
+      parseVvocConfigText(docWithTelegram({ botToken: "123:abc", allowedUserIds: [] }), "test"),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(docWithTelegram({ botToken: "", allowedUserIds: [7] }), "test"),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(docWithTelegram({ botToken: "123:abc", allowedUserIds: ["7"] }), "test"),
+    ).toThrow();
+  });
+
+  test("apiRoot and proxyUrl together are rejected as mutually exclusive connectivity", () => {
+    expect(() =>
+      parseVvocConfigText(
+        docWithTelegram({
+          botToken: "123:abc",
+          allowedUserIds: [7],
+          apiRoot: "https://tg.example.com",
+          proxyUrl: "socks5://127.0.0.1:9050",
+        }),
+        "test",
+      ),
+    ).toThrow();
+  });
+
+  test("unknown keys, bad formats, and invalid settings are rejected", () => {
+    expect(() =>
+      parseVvocConfigText(
+        docWithTelegram({ botToken: "123:abc", allowedUserIds: [7], bogus: true }),
+        "test",
+      ),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(
+        docWithTelegram({ botToken: "123:abc", allowedUserIds: [7], activityWindowMinutes: 0 }),
+        "test",
+      ),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(
+        docWithTelegram({
+          botToken: "123:abc",
+          allowedUserIds: [7],
+          settings: { formatMode: "html" },
+        }),
+        "test",
+      ),
+    ).toThrow();
+  });
+
+  test("a telegram section survives a render and reparse round-trip", () => {
+    const parsed = parseVvocConfigText(
+      docWithTelegram({ botToken: "123:abc", allowedUserIds: [7], activityWindowMinutes: 90 }),
+      "test",
+    );
+    const reparsed = parseVvocConfigText(renderVvocConfig(parsed), "test");
+    expect(reparsed.telegram).toEqual(parsed.telegram);
+  });
+});
+// END_BLOCK_TELEGRAM_SECTION_TEST
+
+// START_BLOCK_TELEGRAM_PARITY_TEST
+describe("telegram schema parity", () => {
+  test("embedded TELEGRAM_CONFIG_SCHEMA matches schemas/vvoc/v3.json telegram property", () => {
+    const fileSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as {
+      properties: Record<string, unknown>;
+    };
+    expect((VVOC_CONFIG_SCHEMA.properties as Record<string, unknown>).telegram).toEqual(
+      fileSchema.properties.telegram,
+    );
+  });
+});
+// END_BLOCK_TELEGRAM_PARITY_TEST
 
 describe("optional web section parsing", () => {
   test("a document without a web section parses unchanged and renders without web", () => {

@@ -1,0 +1,354 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-TELEGRAM-BRIDGE-PLUGIN>
+    <IntentSummary>Add an in-process TelegramBridgePlugin server plugin that runs one grammy long-polling gateway inside the OpenCode server process behind an app-identity singleton, bridges private-chat DM forum topics to OpenCode sessions (fixed General control topic, one topic per active session with live status emoji in the title), streams assistant output through draft and mirror-based durable delivery, exposes manual permission and question interactions, model switching, subagent cards, message revert and fork, and inbound file attachments, keeps durable plugin-scoped state in ctx.storage, and is configured through an optional top-level telegram section in strict schema v3 with subpath and root package exports, README guidance, and synchronized GRACE graph, verification, and requirements projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-TOGGLE-CONFIG</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-NATIVE-RUNTIME</Value>
+        <Value>M-ENV-SUBSTITUTION</Value>
+        <Value>V-M-PLUGIN-TOGGLE-CONFIG</Value>
+        <Value>V-M-CLI-CONFIG</Value>
+        <Value>V-M-NATIVE-RUNTIME</Value>
+        <Value>V-M-ENV-SUBSTITUTION</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>src/lib/plugin-toggle-config.test.ts</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>src/lib/vvoc-config.test.ts</Value>
+        <Value>src/lib/env-substitution.ts</Value>
+        <Value>src/runtime/context.ts</Value>
+        <Value>src/plugins/analytics/index.ts</Value>
+        <Value>src/index.ts</Value>
+        <Value>scripts/check-package.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>package.json</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/index.xml</Value>
+        <Value>.grace/verification/index.xml</Value>
+        <Value>.grace/context/requirements.xml</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>spec-guard</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>web</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/env-substitution.ts</File>
+        <Text>resolveEnvPlaceholders</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/analytics/index.ts</File>
+        <Text>event.subscribe</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>AnalyticsPlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>./plugins/spec-guard</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-TELEGRAM-BRIDGE</Module>
+        <Module>M-TELEGRAM-GATEWAY</Module>
+        <Module>M-TELEGRAM-TOPICS</Module>
+        <Module>M-TELEGRAM-DELIVERY</Module>
+        <Module>M-TELEGRAM-BOT-API</Module>
+        <Module>M-TELEGRAM-CONFIG</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/plugins/telegram/index.ts</Value>
+        <Value>src/plugins/telegram/config.ts</Value>
+        <Value>src/plugins/telegram/bot-api.ts</Value>
+        <Value>src/plugins/telegram/topology.ts</Value>
+        <Value>src/plugins/telegram/gateway.ts</Value>
+        <Value>src/plugins/telegram/delivery.ts</Value>
+        <Value>src/plugins/telegram/sessions.ts</Value>
+        <Value>src/plugins/telegram/commands.ts</Value>
+        <Value>src/plugins/telegram/index.test.ts</Value>
+        <Value>src/plugins/telegram/config.test.ts</Value>
+        <Value>src/plugins/telegram/bot-api.test.ts</Value>
+        <Value>src/plugins/telegram/topology.test.ts</Value>
+        <Value>src/plugins/telegram/gateway.test.ts</Value>
+        <Value>src/plugins/telegram/delivery.test.ts</Value>
+        <Value>src/plugins/telegram/sessions.test.ts</Value>
+        <Value>src/plugins/telegram/commands.test.ts</Value>
+        <Value>src/plugins/telegram.integration.test.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>telegram</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>botToken</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>allowedUserIds</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>telegram</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>./plugins/telegram</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/index.ts</File>
+        <Text>TelegramBridgePlugin</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>TelegramBridgePlugin</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/telegram/config.test.ts src/plugins/telegram/topology.test.ts src/plugins/telegram/delivery.test.ts src/plugins/telegram/index.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-TELEGRAM-BRIDGE />
+        <M-TELEGRAM-GATEWAY />
+        <M-TELEGRAM-TOPICS />
+        <M-TELEGRAM-DELIVERY />
+        <M-TELEGRAM-BOT-API />
+        <M-TELEGRAM-CONFIG />
+        <M-PLUGIN-TOGGLE-CONFIG />
+        <M-CLI-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-TELEGRAM-BRIDGE />
+        <V-M-TELEGRAM-GATEWAY />
+        <V-M-TELEGRAM-TOPICS />
+        <V-M-TELEGRAM-DELIVERY />
+        <V-M-TELEGRAM-BOT-API />
+        <V-M-TELEGRAM-CONFIG />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-TELEGRAM-BRIDGE-PLUGIN/plan.xml</File>
+      <File>src/plugins/telegram/index.ts</File>
+      <File>src/plugins/telegram/config.ts</File>
+      <File>src/plugins/telegram/bot-api.ts</File>
+      <File>src/plugins/telegram/topology.ts</File>
+      <File>src/plugins/telegram/gateway.ts</File>
+      <File>src/plugins/telegram/delivery.ts</File>
+      <File>src/plugins/telegram/sessions.ts</File>
+      <File>src/plugins/telegram/commands.ts</File>
+      <File>src/plugins/telegram/index.test.ts</File>
+      <File>src/plugins/telegram/config.test.ts</File>
+      <File>src/plugins/telegram/bot-api.test.ts</File>
+      <File>src/plugins/telegram/topology.test.ts</File>
+      <File>src/plugins/telegram/gateway.test.ts</File>
+      <File>src/plugins/telegram/delivery.test.ts</File>
+      <File>src/plugins/telegram/sessions.test.ts</File>
+      <File>src/plugins/telegram/commands.test.ts</File>
+      <File>src/plugins/telegram.integration.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>src/index.ts</File>
+      <File>package.json</File>
+      <File>scripts/check-package.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>bun.lock</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Extend plugin toggles, strict schema v3, and the telegram config resolver.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>plugin-toggle-config.ts adds the telegram toggle name to PLUGIN_TOGGLE_NAMES without a default materialization entry, so existing configs gain no telegram content and the toggle defaults to enabled with the section controlling actual behavior.</Criterion>
+          <Criterion>The embedded canonical schema in vvoc-config.ts gains an optional top-level telegram section accepting enabled, botToken, allowedUserIds as a non-empty integer array, activityWindowMinutes as a positive integer defaulting to 240, apiRoot and proxyUrl as strings that are mutually exclusive, and optional delivery defaults; it rejects unknown keys, empty token strings, and both connectivity modes together, every existing arm stays unchanged, and schemas/vvoc/v3.json stays exactly equivalent.</Criterion>
+          <Criterion>src/plugins/telegram/config.ts resolves the effective telegram section from a loaded vvoc config, substitutes ${VAR} placeholders in botToken through the shared env-substitution helper, reports unset references by name without values, and returns a disabled resolution with a value-free diagnostic when the section is absent, enabled is false, or the resolved token is empty.</Criterion>
+          <Criterion>Focused tests cover schema acceptance and rejection including connectivity exclusivity, embedded and file schema equivalence, placeholder resolution with missing-variable reporting, and disabled-cause discrimination, all without network or real tokens.</Criterion>
+          <Criterion>Every touched file keeps accurate MODULE_CONTRACT, MODULE_MAP, block anchors, and change summaries.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/config.test.ts src/lib/vvoc-config.test.ts src/lib/plugin-toggle-config.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Implement the grammy-backed Bot API adapter with injectable connectivity and availability fallbacks.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/telegram/bot-api.ts defines a narrow TelegramTransport interface covering the calls this plugin needs: topic create, edit, close, reopen; message send, edit, delete; draft send; callback answer; command registration; and file download; implemented by a grammy-backed production adapter constructed from token plus resolved connectivity (default api root, custom api root, or outbound proxy, never both).</Criterion>
+          <Criterion>The adapter exposes a factory seam so deterministic tests inject a fake transport without grammy or network, and the production adapter is constructed lazily so importing the module never performs I/O.</Criterion>
+          <Criterion>Draft sends degrade deterministically: a transport reporting the method unsupported switches that transport to a permanent drafts-disabled mode and callers fall back to send-then-edit, proven by an injected fake.</Criterion>
+          <Criterion>The token appears only inside the constructed client and in request paths, never in errors, logs, or returned diagnostics; every error surface is credential-safe.</Criterion>
+          <Criterion>Tests drive the fake transport to prove call payloads, thread targeting, connectivity exclusivity wiring, and the drafts-disabled latch, with no grammy instantiation in tests.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/bot-api.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Implement the durable topic topology manager with activity window and status-emoji titles.</Title>
+        <DependsOn>T-001, T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/telegram/topology.ts owns the durable topic and session map in plugin storage under versioned keys: topicToSession, sessionToTopic, general topic id, schema version, and bot fingerprint, and a changed bot fingerprint resets every stored map instead of reusing stale bindings.</Criterion>
+          <Criterion>ensureGeneral creates and durably maps the General control topic exactly once, and repeated calls or a simulated restart reuse the stored id without creating a second General topic.</Criterion>
+          <Criterion>An activity policy decides active sessions from a session view plus clock: running, or updated within the configured window (default 240 minutes), or created or used through the bot; the window is injectable for tests.</Criterion>
+          <Criterion>reconcile takes the active session set and produces an idempotent plan executed best-effort: create topics for unmapped active sessions titled from session identity, close (never delete) topics whose sessions left the active set while preserving their stored mapping, reopen or reuse stored topic ids for returning sessions, and return a per-pass report of created, closed, reused, and failed counts.</Criterion>
+          <Criterion>Status titles compose as a leading status emoji followed by the clean session title with Bot API length clamping, transitions are applied through throttled editForumTopic calls with a per-topic last-edit guard, and an edit failure degrades to the last known title without failing the pass.</Criterion>
+          <Criterion>Because the Bot API exposes no list-topics call, storage is the sole authority: all decisions read the stored map first, and every mutation persists before the next pass.</Criterion>
+          <Criterion>Deterministic tests with an injected transport, storage fake, and clock prove General-once, create, close-not-delete, reuse-after-return, fingerprint reset, throttled emoji transitions, length clamping, idempotent reconcile, and restart survival.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/topology.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Implement the mirror-based delivery layer with draft streaming and durable finals.</Title>
+        <DependsOn>T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/telegram/delivery.ts persists a message mirror map (native message id to Telegram message id, role, topic) and a durable pending-finals queue in plugin storage, with boot-drain delivering pending finals in per-topic FIFO order and mirror-presence making finals exactly-once across restarts.</Criterion>
+          <Criterion>Streaming uses draft sends with a stable per-turn draft id while visible text grows and falls back to send-placeholder plus throttled editMessageText when the transport reports drafts unsupported; the final send persists the message, dismisses the draft, records the mirror, and marks the queued final sent.</Criterion>
+          <Criterion>An adaptive throttle schedule slows streamed edits over the lifetime of a turn (fast at start, progressively slower while the turn runs, resetting when the turn ends) and a merge window coalesces consecutive short owner texts sent within the window into one prompt, both injectable for tests.</Criterion>
+          <Criterion>Rendering honors persisted runtime settings: reasoning visibility (hidden by default), tool-call detail (compact by default), and reply format mode, with code blocks over the configured size delivered as file documents.</Criterion>
+          <Criterion>Every failure path is contained per message: a failed send retries within the throttle budget and otherwise surfaces one bounded notice without ending the loop or losing the durable final.</Criterion>
+          <Criterion>Deterministic tests with an injected transport, storage fake, and clock prove draft and edit-fallback streaming, exactly-once finals across a simulated restart with pending queue drain, mirror-based dedupe, adaptive throttle progression, merge-window coalescing, visibility settings, code-as-file, and failure containment.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/delivery.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Implement the native session bridge: event routing, resync, prompts, and subagent cards.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/telegram/sessions.ts subscribes to the native event stream through an injected subscribe function, decodes session lifecycle, message, part, permission, question, and child-session events from a structural payload without casting, and routes each decoded event to the owning session topic through topology and delivery; every per-event failure is contained so one bad event never ends the pump.</Criterion>
+          <Criterion>A resync path rebuilds the active session set from injected native session reads and drives topology reconcile, runs on startup after storage load and after any event-stream end, and leaves no permanently stale topic set after a missed live event, proven by dropping the stream mid-test.</Criterion>
+          <Criterion>Session state mapping derives running, idle, waiting-question, waiting-permission, error, and aborted statuses from event evidence only, applies them as throttled status-emoji titles, and a session leaving the active window closes its topic.</Criterion>
+          <Criterion>Prompt admission goes through an injected native prompt function with delivery steering default and returns the native message identity for mirroring; abort goes through an injected interrupt; model switching goes through an injected switch with the selection reflected in the session view.</Criterion>
+          <Criterion>Subagent activity is rendered as bounded cards in the parent topic naming the child session, agent, model, and current tool step, and child sessions never receive their own topics.</Criterion>
+          <Criterion>Deterministic tests with injected event sequences, native functions, transport, storage fake, and clock prove event routing, per-event containment, resync after stream end, status transitions, prompt and abort, model switch, and subagent cards.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/sessions.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Implement manual permission and question interactions with input gating.</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Permission requests surface as inline-button prompts in the owning session topic with once, always, and reject actions; an owner decision is dispatched through an injected native permission reply, once and always map to distinct native replies, and always additionally persists an explicit owner-visible rule only when the native surface accepts it.</Criterion>
+          <Criterion>Agent questions surface as inline-button prompts with the offered options plus a custom-answer action; choosing custom opens the topic input gate so the next plain message in that topic is consumed as the answer rather than admitted as a prompt, and completing or cancelling releases the gate with a visible notice.</Criterion>
+          <Criterion>A prompt that disappears outside Telegram (answered, cancelled, or resolved by another client) closes its buttons truthfully naming the outcome, an undeliverable decision leaves the prompt answerable with a warning line, and no decision is ever fabricated.</Criterion>
+          <Criterion>Interaction state is per topic and durable across a simulated restart only for still-pending native requests; stale prompts are closed as resolved-outside on resync.</Criterion>
+          <Criterion>Deterministic tests with injected native surfaces, transport, storage fake, and clock prove both flows, the input gate, gate release, outside-resolution closure, restart behavior, and truthfulness on failure.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/sessions.test.ts src/plugins/telegram/commands.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Implement General and session-topic commands with the model picker and attachments.</Title>
+        <DependsOn>T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/telegram/commands.ts implements General commands: /new opens an inline project picker from injected native project reads and creates the session with its project default agent and a new topic, /sync runs the idempotent topology reconcile and reports counts, /status reports server health and the active session set with context usage and per-session model, and /help lists commands.</Criterion>
+          <Criterion>Session-topic commands: /model opens an inline provider and model picker with the current model marked and applies the selection through the native switch, /rename renames session and topic within title limits, /messages lists user messages and offers revert and fork where fork creates a new session that receives its own active topic, and /abort interrupts the session.</Criterion>
+          <Criterion>Inbound attachments (images, PDF, and text files within configured size and count bounds, including one album) are downloaded through the transport, staged to a temporary location, and admitted into the prompt together with caption text; oversized or unsupported attachments produce one explicit rejection notice and never a silent drop.</Criterion>
+          <Criterion>Unknown commands and plain text in General produce bounded fallback replies; commands are registered with setMyCommands for discoverability.</Criterion>
+          <Criterion>Deterministic tests with injected native surfaces, transport, storage fake, and clock prove each command flow, picker pagination, revert and fork, attachment admission and rejection bounds, and fallback behavior.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/commands.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Assemble the plugin entry with singleton gateway, lifecycle, exports, and integration coverage.</Title>
+        <DependsOn>T-005, T-006, T-007</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/plugins/telegram/index.ts defines the native plugin (id vvoc.telegram) whose setup resolves the telegram config, starts no gateway when disabled or tokenless with a value-free diagnostic, and otherwise starts the grammy gateway stopped by the returned cleanup together with the event pump and every registration.</Criterion>
+          <Criterion>An app-identity singleton gate keyed on the native app object ensures exactly one gateway per process: a second location's setup is a no-op returning a cleanup that only drops its own reference, and the gateway stops when the last holder cleans up, proven by an injected multi-context test.</Criterion>
+          <Criterion>Gateway dispatch enforces the owner allowlist, drops messages without a mapped topic or from non-owners, persists the update offset only after dispatch, ignores stale updates queued while offline with one notice, groups albums within a poll batch, and applies bounded transport backoff without ending the loop.</Criterion>
+          <Criterion>src/index.ts re-exports TelegramBridgePlugin, adds it to VVOC_SERVER_PLUGINS in deterministic order, package.json adds the ./plugins/telegram subpath export and the grammy dependency, and the pack-check surface imports the new subpath.</Criterion>
+          <Criterion>src/plugins/telegram.integration.test.ts drives the assembled plugin through its public entry with injected transport, storage, and native surfaces: end-to-end create-session-through-topic, prompt-and-stream, permission round-trip, restart persistence without a second General, and disabled-toggle no-registration.</Criterion>
+          <Criterion>The plugin module carries complete MODULE_CONTRACT, MODULE_MAP, block anchors, and LINKS referencing M-PLUGIN-TELEGRAM-BRIDGE, and every sibling module's LINKS resolve to anchors this change owns.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/index.test.ts src/plugins/telegram.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Document the plugin and verify schema and package consistency.</Title>
+        <DependsOn>T-001, T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents the TelegramBridgePlugin: purpose and private-DM-topic model, General control topic and session topics, live status emoji titles, the 240-minute activity window with close-not-delete, every command with arguments, model picker, revert and fork, attachments with bounds, manual permission and question interactions with the input gate, delivery settings, durable state and restart behavior, the telegram config section with all fields and the ${VAR} token convention plus the never-commit rule, connectivity modes with mutual exclusivity, the kill-switch, and the OpenCode restart requirement.</Criterion>
+          <Criterion>README states the security boundary: single owner in a private chat, numeric user id allowlist, token never stored or logged, and no auto-approval.</Criterion>
+          <Criterion>Every documented command, path, field, default, and file is validated against current source and schema in the same change.</Criterion>
+          <Criterion>schemas/vvoc/v3.json equals the embedded schema and package exports import cleanly through the pack-check surface.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-009>
+      <T-010>
+        <Title>Run the integrated repository gate and resolve only in-scope failures.</Title>
+        <DependsOn>T-008, T-009</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>All telegram, toggle, schema, and integration tests pass together with no real bot token, live Telegram connection, or live model dependency anywhere in the suite.</Criterion>
+          <Criterion>bun run check passes for the whole repository with no regressions outside the observed write scope.</Criterion>
+          <Criterion>No generated dist output, user OpenCode configuration, credential file, or unrelated plugin behavior is modified.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-010>
+      <T-011>
+        <Title>Synchronize GRACE graph, verification, and requirements, then run final gates.</Title>
+        <DependsOn>T-010</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The routed graph owns M-PLUGIN-TELEGRAM-BRIDGE, M-TELEGRAM-GATEWAY, M-TELEGRAM-TOPICS, M-TELEGRAM-DELIVERY, M-TELEGRAM-BOT-API, and M-TELEGRAM-CONFIG with accurate paths, purposes, dependencies, and verification links, and updates M-PLUGIN-TOGGLE-CONFIG and M-CLI-CONFIG where behavior changed.</Criterion>
+          <Criterion>The verification projection owns the matching V-M- anchors with deterministic scenarios and commands, and updates the affected existing entries.</Criterion>
+          <Criterion>requirements.xml gains the Telegram remote-session goal and use case consistent with the approved specification.</Criterion>
+          <Criterion>Graph and verification indexes directly own every new anchor and current source LINKS fields match routed ownership.</Criterion>
+          <Criterion>bun run build, bun run pack:check, and bun run release:check pass with schema, package, and release metadata consistent.</Criterion>
+          <Criterion>GRACE lint and status report no errors attributable to C-TELEGRAM-BRIDGE-PLUGIN, and git diff contains only observed-scope files with no secrets or generated dist content.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run release:check</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-011>
+    </ImplementationPlan>
+  </C-TELEGRAM-BRIDGE-PLUGIN>
+</GraceChangePlan>

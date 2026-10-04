@@ -33,6 +33,12 @@
         <M-PLUGIN-PEAK-HOURS />
         <M-TUI-PEAK-HOURS-BANNER />
         <M-SPEC-LINT />
+        <M-PLUGIN-TELEGRAM-BRIDGE />
+        <M-TELEGRAM-GATEWAY />
+        <M-TELEGRAM-TOPICS />
+        <M-TELEGRAM-DELIVERY />
+        <M-TELEGRAM-BOT-API />
+        <M-TELEGRAM-CONFIG />
         <M-PLUGIN-SPEC-GUARD />
         <M-WEB-CONFIG />
         <M-WEB-HTTP />

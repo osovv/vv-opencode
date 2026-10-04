@@ -14,6 +14,7 @@
 //   execFileAsync - Promisified child_process.execFile used for the pack and list commands.
 //   PackageManifest - Minimal package.json view needed by the pack gate.
 //   PackDependencies - Injectable import/pack/list dependencies used by tests and the real entry.
+//   PLUGIN_EXPORT_NAME_ALIASES - Subpaths whose canonical plugin export name differs from the derived form.
 //   nativeEntryIssue - Assert one module value is a native {id, setup|effect} entry.
 //   pluginExportName - Derive the named plugin export from a plugin subpath.
 //   ExportRequirement - Required export subpath with its expected native entry kind.
@@ -28,7 +29,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Replaced the inline root-export snippet that omitted ToolHistoryCompaction and never inspected the tarball with a manifest-driven export/entry/tarball gate that covers every plugin, the native aggregate default, the TUI default, and the packed artifact contents.]
+//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-009 - Added the telegram subpath export-name alias so the pack gate verifies the TelegramBridgePlugin entry.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Replaced the inline root-export snippet that omitted ToolHistoryCompaction and never inspected the tarball with a manifest-driven export/entry/tarball gate that covers every plugin, the native aggregate default, the TUI default, and the packed artifact contents.]
 // END_CHANGE_SUMMARY
 
 import { execFile } from "node:child_process";
@@ -74,7 +76,14 @@ export function nativeEntryIssue(label: string, value: unknown): string | undefi
 }
 
 /** Derive the named plugin export from a plugin subpath (`hashline-edit` -> `HashlineEditPlugin`). */
+/** Subpaths whose canonical plugin export name differs from the derived form. */
+const PLUGIN_EXPORT_NAME_ALIASES: Readonly<Record<string, string>> = {
+  "./plugins/telegram": "TelegramBridgePlugin",
+};
+
 export function pluginExportName(subpath: string): string {
+  const aliased = PLUGIN_EXPORT_NAME_ALIASES[subpath];
+  if (aliased !== undefined) return aliased;
   const name = subpath.replace(/^\.\/plugins\//, "");
   return `${name
     .split("-")

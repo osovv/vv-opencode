@@ -37,7 +37,8 @@ describe("plugin toggle", () => {
     expect(names.includes(WEB_TOOLS_PLUGIN_NAME)).toBe(true);
     expect(names.includes("spec-guard")).toBe(true);
     expect(names.includes("systemone")).toBe(true);
-    expect(names.length).toBe(13);
+    expect(names.includes("telegram")).toBe(true);
+    expect(names.length).toBe(14);
   });
 
   test("vvoc.json toggle write round-trips", async () => {

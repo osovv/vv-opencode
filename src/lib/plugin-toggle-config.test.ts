@@ -14,7 +14,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added systemone toggle coverage and updated the canonical plugin count.]
+//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Added the telegram toggle name and updated the canonical plugin count.]
+//   PREVIOUS: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added systemone toggle coverage and updated the canonical plugin count.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
@@ -56,11 +57,12 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "peak-hours",
       "spec-guard",
       "systemone",
+      "telegram",
     ]);
   });
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(13);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(14);
   });
 });
 // END_BLOCK_CONSTANTS_TEST

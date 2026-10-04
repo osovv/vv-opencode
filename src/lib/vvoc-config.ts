@@ -46,10 +46,14 @@
 //   VvocWebFetchConfig - Optional web fetch provider section type.
 //   VvocWebConfig - Optional canonical web tools section type.
 //   createWebConfig - Normalizes an optional web section, returning undefined when empty.
+//   VvocTelegramSettings - Owner-tunable Telegram delivery defaults type.
+//   VvocTelegramConfig - Optional top-level telegram bridge section type.
+//   createTelegramConfig - Normalizes an optional telegram section, returning undefined when absent.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-002 - Added the optional strict systemone connection section and the guardian decisionBackend and systemone policy fields.]
+//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Added the optional strict top-level telegram section with ${VAR} token convention, single-owner allowlist, activity window, mutually exclusive connectivity modes, and delivery settings defaults.]
+//   PREVIOUS: [C-SYSTEMONE-DECISION-BACKEND T-002 - Added the optional strict systemone connection section and the guardian decisionBackend and systemone policy fields.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -193,6 +197,26 @@ export type VvocWebConfig = {
   fetch?: VvocWebFetchConfig;
 };
 
+/** Owner-tunable Telegram delivery defaults; persisted runtime settings seed from these. */
+export type VvocTelegramSettings = {
+  showReasoning?: boolean;
+  showToolCalls?: boolean;
+  formatMode?: "markdown" | "raw";
+  codeFileMaxKb?: number;
+  mergeWindowMs?: number;
+};
+
+/** Optional top-level telegram bridge section of canonical vvoc.json. */
+export type VvocTelegramConfig = {
+  enabled?: boolean;
+  botToken: string;
+  allowedUserIds: number[];
+  activityWindowMinutes?: number;
+  apiRoot?: string;
+  proxyUrl?: string;
+  settings?: VvocTelegramSettings;
+};
+
 export type VvocConfig = {
   $schema: string;
   version: number;
@@ -204,6 +228,7 @@ export type VvocConfig = {
   plugins: VvocPluginToggleConfig;
   web?: VvocWebConfig;
   systemone?: SystemOneConfig;
+  telegram?: VvocTelegramConfig;
 };
 
 export type ParsedVvocConfig = {
@@ -255,6 +280,71 @@ const SYSTEMONE_CONFIG_SCHEMA = {
     maxRetries: { type: "integer", minimum: 0, maximum: 5 },
   },
 };
+
+const TELEGRAM_SETTINGS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    showReasoning: { type: "boolean" },
+    showToolCalls: { type: "boolean" },
+    formatMode: { type: "string", enum: ["markdown", "raw"] },
+    codeFileMaxKb: { type: "integer", minimum: 1 },
+    mergeWindowMs: { type: "integer", minimum: 0 },
+  },
+};
+
+// START_BLOCK_TELEGRAM_SCHEMA
+/**
+ * Optional top-level telegram bridge section. Present means configured: botToken
+ * and the single-owner allowlist are required, the activity window defaults are
+ * applied at resolution time, and apiRoot plus proxyUrl are mutually exclusive
+ * connectivity modes (configuring both is a validation error).
+ */
+const TELEGRAM_CONFIG_SCHEMA = {
+  type: "object",
+  description: "Optional Telegram bridge section enabling the vvoc.telegram server plugin gateway.",
+  additionalProperties: false,
+  required: ["botToken", "allowedUserIds"],
+  properties: {
+    enabled: { type: "boolean" },
+    botToken: {
+      type: "string",
+      minLength: 1,
+      description:
+        "Telegram bot token. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup; never committed to project config.",
+    },
+    allowedUserIds: {
+      type: "array",
+      minItems: 1,
+      items: { type: "integer" },
+      description: "Numeric Telegram user ids allowed to interact with the bot.",
+    },
+    activityWindowMinutes: {
+      type: "integer",
+      minimum: 1,
+      description: "Minutes a session stays active after its last update. Default 240.",
+    },
+    apiRoot: {
+      type: "string",
+      minLength: 1,
+      description: "Custom Telegram Bot API root URL for restricted networks.",
+    },
+    proxyUrl: {
+      type: "string",
+      minLength: 1,
+      description: "Outbound proxy URL for Telegram Bot API traffic.",
+    },
+    settings: TELEGRAM_SETTINGS_SCHEMA,
+  },
+  allOf: [
+    {
+      if: { required: ["apiRoot", "proxyUrl"] },
+      // oxlint-disable-next-line unicorn/no-thenable -- JSON Schema conditional keyword.
+      then: false,
+    },
+  ],
+};
+// END_BLOCK_TELEGRAM_SCHEMA
 
 const SECRETS_REDACTION_CONFIG_SCHEMA = {
   type: "object",
@@ -539,6 +629,7 @@ export const VVOC_CONFIG_SCHEMA = {
     },
     web: WEB_CONFIG_SCHEMA,
     systemone: SYSTEMONE_CONFIG_SCHEMA,
+    telegram: TELEGRAM_CONFIG_SCHEMA,
   },
 };
 
@@ -761,6 +852,14 @@ export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): s
 
 // END_BLOCK_SECTION_PARSE_AND_RENDER
 
+// START_CONTRACT: createTelegramConfig
+//   PURPOSE: Normalize an optional telegram section from a validated document or in-memory config.
+//   INPUTS: { value: unknown - candidate telegram section }
+//   OUTPUTS: { VvocTelegramConfig | undefined - normalized section, or undefined when absent }
+//   SIDE_EFFECTS: none; the botToken value is preserved exactly and never logged
+//   LINKS: M-TELEGRAM-CONFIG, M-ENV-SUBSTITUTION
+// END_CONTRACT: createTelegramConfig
+
 // START_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
 export function parseVersionedVvocConfigText(text: string, label: string): ParsedVvocConfig {
   const value = parseStrictJson(text, label);
@@ -777,9 +876,66 @@ export function parseVvocConfigText(text: string, label: string): VvocConfig {
   return parseVersionedVvocConfigText(text, label).config;
 }
 
+export function createTelegramConfig(value: unknown): VvocTelegramConfig | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  assertAllowedKeys(
+    value,
+    [
+      "enabled",
+      "botToken",
+      "allowedUserIds",
+      "activityWindowMinutes",
+      "apiRoot",
+      "proxyUrl",
+      "settings",
+    ],
+    "telegram",
+  );
+  const settings = isPlainObject(value.settings) ? value.settings : {};
+  const allowedUserIds = Array.isArray(value.allowedUserIds)
+    ? value.allowedUserIds.filter((id): id is number => typeof id === "number")
+    : [];
+  return compactObject({
+    enabled: typeof value.enabled === "boolean" ? value.enabled : undefined,
+    botToken: readNonEmptyString(value.botToken, "telegram: botToken"),
+    allowedUserIds,
+    activityWindowMinutes:
+      typeof value.activityWindowMinutes === "number" && value.activityWindowMinutes > 0
+        ? value.activityWindowMinutes
+        : undefined,
+    apiRoot: normalizeOptionalString(typeof value.apiRoot === "string" ? value.apiRoot : undefined),
+    proxyUrl: normalizeOptionalString(
+      typeof value.proxyUrl === "string" ? value.proxyUrl : undefined,
+    ),
+    settings: compactObject({
+      showReasoning:
+        typeof settings.showReasoning === "boolean" ? settings.showReasoning : undefined,
+      showToolCalls:
+        typeof settings.showToolCalls === "boolean" ? settings.showToolCalls : undefined,
+      formatMode:
+        settings.formatMode === "raw"
+          ? "raw"
+          : settings.formatMode === "markdown"
+            ? "markdown"
+            : undefined,
+      codeFileMaxKb:
+        typeof settings.codeFileMaxKb === "number" && settings.codeFileMaxKb > 0
+          ? settings.codeFileMaxKb
+          : undefined,
+      mergeWindowMs:
+        typeof settings.mergeWindowMs === "number" && settings.mergeWindowMs >= 0
+          ? settings.mergeWindowMs
+          : undefined,
+    }),
+  }) as VvocTelegramConfig;
+}
+
 export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig()): string {
   const web = createWebConfig(config.web);
   const systemone = createSystemOneConfig(config.systemone);
+  const telegram = createTelegramConfig(config.telegram);
   return renderJson({
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
@@ -791,6 +947,7 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     plugins: config.plugins,
     ...(web ? { web } : {}),
     ...(systemone ? { systemone } : {}),
+    ...(telegram ? { telegram } : {}),
   });
 }
 // END_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
@@ -829,6 +986,7 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
       plugins: createPluginToggleConfig(value.plugins),
       web: createWebConfig(value.web),
       systemone: createSystemOneConfig(value.systemone),
+      telegram: createTelegramConfig(value.telegram),
     },
   };
 }

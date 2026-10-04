@@ -67,6 +67,12 @@
         <V-M-PLUGIN-WORKFLOW />
         <V-M-WORKFLOW-PERSISTENCE />
         <V-M-ORCHESTRATION-PROFILES />
+        <V-M-PLUGIN-TELEGRAM-BRIDGE />
+        <V-M-TELEGRAM-GATEWAY />
+        <V-M-TELEGRAM-TOPICS />
+        <V-M-TELEGRAM-DELIVERY />
+        <V-M-TELEGRAM-BOT-API />
+        <V-M-TELEGRAM-CONFIG />
         <V-M-CLI-ORCHESTRATION />
       </Owns>
     </VD-MAIN>

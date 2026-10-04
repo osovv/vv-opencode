@@ -30,7 +30,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added the systemone provider toggle name.]
+//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Added the telegram toggle name with no default materialization entry; the optional telegram section gates actual gateway behavior.]
+//   PREVIOUS: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added the systemone provider toggle name.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -48,6 +49,7 @@ export const PLUGIN_TOGGLE_NAMES = [
   "peak-hours",
   "spec-guard",
   "systemone",
+  "telegram",
 ] as const;
 
 export type VvocPluginEntryConfig = {

@@ -95,6 +95,10 @@
     "./plugins/spec-guard": {
       "types": "./dist/plugins/spec-guard/index.d.ts",
       "import": "./dist/plugins/spec-guard/index.js"
+    },
+    "./plugins/telegram": {
+      "types": "./dist/plugins/telegram/index.d.ts",
+      "import": "./dist/plugins/telegram/index.js"
     }
   },
   "scripts": {
@@ -127,6 +131,7 @@
     "ajv": "^8.17.1",
     "citty": "0.2.2",
     "effect": "4.0.0-rc.112",
+    "grammy": "^1.46.0",
     "htmlparser2": "^12.0.0",
     "jsonc-parser": "3.3.1",
     "turndown": "^7.2.4",
