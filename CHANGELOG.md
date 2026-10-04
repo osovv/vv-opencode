@@ -1,3 +1,11 @@
+## <small>2.2.1 (2026-10-04)</small>
+
+### Summary
+
+Version 2.2.1 removes the unused System One shadow mode from Guardian, simplifying the permission-review configuration. The `guardian.systemone.shadow` option has been dropped from the config schema and documentation, so Guardian now uses the System One decision backend only when it is explicitly selected and the provider is available, otherwise it falls back to the fast backend, while a runtime provider failure still defers to manual approval. This removes a calibration-only setting that no longer served a purpose, keeping the fail-safe behavior intact and making the documented configuration example cleaner for users opting into System One.
+
+* fix(guardian): remove unused System One shadow mode ([11d6bac](https://github.com/osovv/vv-opencode/commit/11d6bac))
+
 ## 2.2.0 (2026-10-04)
 
 ### Summary
