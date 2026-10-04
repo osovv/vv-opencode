@@ -333,8 +333,8 @@ describe("telegram bridge integration", () => {
     expect(world.prompts[0]?.text).toBe("make it so");
 
     world.events.push({
-      type: "permission.requested",
-      data: { sessionID: "ses_1", requestID: "pr_int", summary: "bash make test" },
+      type: "permission.asked",
+      data: { sessionID: "ses_1", id: "pr_int", action: "bash make test", resources: [] },
     });
     await waitFor(() =>
       world.transport.sent.some((entry) => entry.text.includes("bash make test")),

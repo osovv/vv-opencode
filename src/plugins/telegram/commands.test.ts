@@ -161,7 +161,10 @@ class FakeSurfaces {
   };
   readonly questionSurface: NativeQuestionSurface = {
     reply: async (input) => {
-      this.questionReplies.push({ questionID: input.questionID, answer: input.answer });
+      this.questionReplies.push({
+        questionID: input.questionID,
+        answer: JSON.stringify(input.answers),
+      });
     },
   };
 }
@@ -378,11 +381,23 @@ describe("question interactions", () => {
       questionID: "qn_1",
       phase: "requested",
       prompt: "which database?",
-      options: ["postgres", "sqlite"],
+      options: ["Postgres", "SQLite"],
+      fields: [
+        {
+          key: "db",
+          kind: "choice",
+          options: [
+            { label: "Postgres", value: "postgres" },
+            { label: "SQLite", value: "sqlite" },
+          ],
+        },
+      ],
     });
     await world.interactions.handleCallback(cb(threadId, questionCallbackData("qn_1", 1)));
-    expect(world.surfaces.questionReplies).toEqual([{ questionID: "qn_1", answer: "sqlite" }]);
-    expect(world.transport.edits.at(-1)?.text).toContain("answered: sqlite");
+    expect(world.surfaces.questionReplies).toEqual([
+      { questionID: "qn_1", answer: '{"db":"sqlite"}' },
+    ]);
+    expect(world.transport.edits.at(-1)?.text).toContain("answered: SQLite");
   });
 
   test("the custom action gates the topic until the next plain message answers", async () => {
@@ -395,13 +410,16 @@ describe("question interactions", () => {
       questionID: "qn_2",
       phase: "requested",
       prompt: "name the branch",
-      options: ["main", "dev"],
+      options: [],
+      fields: [{ key: "branch", kind: "free", options: [] }],
     });
     await world.interactions.handleCallback(cb(threadId, questionCustomCallbackData("qn_2")));
     expect(world.interactions.isGated(threadId)).toBe(true);
 
     expect(await world.interactions.consumeGatedText(threadId, "feature/x")).toBe(true);
-    expect(world.surfaces.questionReplies).toEqual([{ questionID: "qn_2", answer: "feature/x" }]);
+    expect(world.surfaces.questionReplies).toEqual([
+      { questionID: "qn_2", answer: '{"branch":"feature/x"}' },
+    ]);
     expect(world.interactions.isGated(threadId)).toBe(false);
   });
 
@@ -416,6 +434,7 @@ describe("question interactions", () => {
       phase: "requested",
       prompt: "confirm",
       options: ["yes"],
+      fields: [],
     });
     await world.interactions.handleCallback(cb(threadId, questionCustomCallbackData("qn_3")));
     expect(await world.interactions.consumeGatedText(threadId, "/cancel")).toBe(true);

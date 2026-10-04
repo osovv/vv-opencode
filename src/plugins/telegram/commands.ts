@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-006/T-007 - Created the interactions layer with manual permission and question flows plus the custom-answer gate, and the command surface with project and model pickers, /sync, /status, rename, revert, fork, abort, settings, and bounded attachments.]
+//   LAST_CHANGE: [DIRECT-FIX - Question prompts now carry decoded form fields and reply through the native form answer record with label-to-value mapping and boolean parsing.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramCallbackQuery, TelegramTransport } from "./bot-api.js";
@@ -69,12 +69,12 @@ export interface NativePermissionSurface {
   }): Promise<void>;
 }
 
-/** Injectable native question reply. */
+/** Injectable native question reply over the form answer record. */
 export interface NativeQuestionSurface {
   reply(input: {
     readonly sessionID: string;
     readonly questionID: string;
-    readonly answer: string;
+    readonly answers: Readonly<Record<string, string | number | boolean | readonly string[]>>;
   }): Promise<void>;
 }
 
@@ -129,6 +129,29 @@ export function parseCallbackData(data: string):
 }
 // END_BLOCK_CALLBACK_DATA
 
+/** Map one plain answer per visible field onto the native form answer record. */
+function buildFormAnswers(
+  fields: readonly {
+    key: string;
+    kind: string;
+    options: readonly { label: string; value: string }[];
+  }[],
+  plainAnswers: readonly string[],
+): Record<string, string | number | boolean | readonly string[]> {
+  const answers: Record<string, string | number | boolean | readonly string[]> = {};
+  fields.forEach((field, index) => {
+    const raw = plainAnswers[index];
+    if (raw === undefined) return;
+    if (field.kind === "boolean") {
+      answers[field.key] = raw.trim().toLowerCase() === "true";
+      return;
+    }
+    const match = field.options.find((option) => option.label === raw || option.value === raw);
+    answers[field.key] = match === undefined ? raw : match.value;
+  });
+  return answers;
+}
+
 interface ActivePrompt {
   readonly kind: "permission" | "question";
   readonly sessionID: string;
@@ -136,6 +159,11 @@ interface ActivePrompt {
   readonly tgMessageId: number;
   readonly label: string;
   readonly options: readonly string[];
+  readonly fields: readonly {
+    key: string;
+    kind: string;
+    options: readonly { label: string; value: string }[];
+  }[];
 }
 
 /**
@@ -207,6 +235,7 @@ export class TelegramInteractions {
       tgMessageId: sent.messageId,
       label,
       options: [],
+      fields: [],
     });
   }
 
@@ -216,6 +245,11 @@ export class TelegramInteractions {
     readonly phase: "requested" | "resolved";
     readonly prompt: string | undefined;
     readonly options: readonly string[];
+    readonly fields: readonly {
+      readonly key: string;
+      readonly kind: string;
+      readonly options: readonly { readonly label: string; readonly value: string }[];
+    }[];
   }): Promise<void> {
     const threadId = this.#topology.topicIdFor(input.sessionID);
     if (threadId === undefined) return;
@@ -233,9 +267,12 @@ export class TelegramInteractions {
         callbackData: questionCallbackData(input.questionID as string, index),
       },
     ]);
-    rows.push([
-      { text: "✍️ Custom answer", callbackData: questionCustomCallbackData(input.questionID) },
-    ]);
+    const firstKind = input.fields[0]?.kind ?? "free";
+    if (rows.length === 0 || firstKind !== "free") {
+      rows.push([
+        { text: "✍️ Custom answer", callbackData: questionCustomCallbackData(input.questionID) },
+      ]);
+    }
     const sent = await this.#transport.sendMessage({
       threadId,
       text: `❓ ${label}`,
@@ -248,6 +285,7 @@ export class TelegramInteractions {
       tgMessageId: sent.messageId,
       label,
       options: input.options,
+      fields: input.fields,
     });
   }
 
@@ -287,7 +325,7 @@ export class TelegramInteractions {
         await this.#questions.reply({
           sessionID: prompt.sessionID,
           questionID: parsed.id,
-          answer: option,
+          answers: buildFormAnswers(prompt.fields, [option]),
         });
         await this.#transport.answerCallback(query.id, "answered");
         await this.#closePrompt(threadId as number, `✅ answered: ${option}`);
@@ -322,7 +360,11 @@ export class TelegramInteractions {
       return true;
     }
     try {
-      await this.#questions.reply({ sessionID: gate.sessionID, questionID: gate.id, answer: text });
+      await this.#questions.reply({
+        sessionID: gate.sessionID,
+        questionID: gate.id,
+        answers: buildFormAnswers(prompt?.fields ?? [], [text]),
+      });
       if (prompt !== undefined) {
         await this.#editPrompt(
           threadId,

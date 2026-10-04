@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Moved the entire gateway bootstrap (native client acquisition, resync, General, commands, polling) into a supervised background task with bounded backoff, because awaiting the native client during plugin setup deadlocked server boot for 72s until an InterruptError.]
+//   LAST_CHANGE: [DIRECT-FIX - The form adapter forwards the native answer record unchanged and the event routing follows the real V2 vocabulary.]
 //   PREVIOUS: [C-TELEGRAM-BRIDGE-PLUGIN T-008 - Assembled the plugin with the app-identity singleton, structural native adapters, startup ordering, command registration, and reverse teardown.]
 // END_CHANGE_SUMMARY
 
@@ -328,7 +328,7 @@ export function nativeQuestionsAdapter(client: NativeClientLike): NativeQuestion
       client.session.form.reply({
         sessionID: input.sessionID,
         formID: input.questionID,
-        answers: [input.answer],
+        answers: input.answers,
       }),
   };
 }

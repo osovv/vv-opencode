@@ -26,10 +26,13 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  decodeInteractionEvent,
-  decodePartTextEvent,
+  decodeFormEvent,
+  decodeInboxEvent,
+  decodePermissionEvent,
   decodeSessionEvent,
   decodeStepEvent,
+  decodeTextStreamEvent,
+  decodeToolCallEvent,
   SessionBridge,
   type NativeEventEnvelope,
   type NativeSessionActions,
@@ -212,33 +215,91 @@ describe("pure decoders", () => {
     expect(decodeSessionEvent("junk").sessionID).toBeUndefined();
   });
 
-  test("step and part decoders read identity and text", () => {
-    expect(decodeStepEvent({ sessionID: "s", messageID: "m" })).toEqual({
+  test("step decoders read the V2 assistantMessageID", () => {
+    expect(decodeStepEvent({ sessionID: "s", assistantMessageID: "m9" })).toEqual({
       sessionID: "s",
-      messageID: "m",
+      messageID: "m9",
     });
-    expect(
-      decodePartTextEvent({ sessionID: "s", part: { messageID: "m", text: "hello" } }),
-    ).toEqual({
-      sessionID: "s",
-      messageID: "m",
-      text: "hello",
-    });
-    expect(decodePartTextEvent({ sessionID: "s", part: { messageID: "m" } }).text).toBeUndefined();
   });
 
-  test("interaction decoders separate requested from resolved", () => {
-    expect(
-      decodeInteractionEvent({ sessionID: "s", requestID: "p1", summary: "bash rm" }),
-    ).toMatchObject({
-      sessionID: "s",
-      id: "p1",
-      phase: "requested",
-      text: "bash rm",
-    });
-    expect(decodeInteractionEvent({ sessionID: "s", type: "permission.resolved" }).phase).toBe(
-      "resolved",
+  test("text stream decoders read deltas and completed text", () => {
+    expect(decodeTextStreamEvent({ sessionID: "s", assistantMessageID: "m", delta: "he" })).toEqual(
+      {
+        sessionID: "s",
+        assistantMessageID: "m",
+        delta: "he",
+        text: undefined,
+      },
     );
+    expect(
+      decodeTextStreamEvent({ sessionID: "s", assistantMessageID: "m", text: "hello" }).text,
+    ).toBe("hello");
+  });
+
+  test("inbox decoders read the queued user text", () => {
+    const decoded = decodeInboxEvent({
+      inboxID: "inb_1",
+      item: { type: "user", sessionID: "s", payload: { text: "do it" } },
+    });
+    expect(decoded).toEqual({ inboxID: "inb_1", sessionID: "s", text: "do it" });
+  });
+
+  test("tool decoders bound the argument summary", () => {
+    const decoded = decodeToolCallEvent({ sessionID: "s", name: "bash", input: { command: "ls" } });
+    expect(decoded.name).toBe("bash");
+    expect(decoded.argumentSummary).toContain("command");
+    expect(
+      decodeToolCallEvent({ sessionID: "s", name: "read", input: {} }).argumentSummary,
+    ).toBeUndefined();
+  });
+
+  test("permission decoders read the native asked shape", () => {
+    const asked = decodePermissionEvent({
+      sessionID: "s",
+      id: "pr_7",
+      action: "bash",
+      resources: ["/tmp/**"],
+    });
+    expect(asked).toMatchObject({ sessionID: "s", requestID: "pr_7", phase: "asked" });
+    expect(asked.summary).toBe("bash /tmp/**");
+    const replied = decodePermissionEvent({ sessionID: "s", requestID: "pr_7", reply: "once" });
+    expect(replied.phase).toBe("replied");
+  });
+
+  test("form decoders read fields, options, and custom flags", () => {
+    const created = decodeFormEvent({
+      sessionID: "s",
+      form: {
+        id: "form_1",
+        sessionID: "s",
+        title: "Pick one",
+        fields: [
+          {
+            key: "choice",
+            type: "string",
+            title: "Which db?",
+            options: [
+              { label: "Postgres", value: "postgres" },
+              { label: "SQLite", value: "sqlite" },
+            ],
+          },
+          { key: "note", type: "string", title: "Extra note" },
+        ],
+      },
+    });
+    expect(created.formID).toBe("form_1");
+    expect(created.phase).toBe("created");
+    expect(created.fields).toHaveLength(2);
+    expect(created.fields[0]).toMatchObject({
+      key: "choice",
+      kind: "choice",
+      custom: false,
+      options: [
+        { label: "Postgres", value: "postgres" },
+        { label: "SQLite", value: "sqlite" },
+      ],
+    });
+    expect(created.fields[1]?.kind).toBe("free");
   });
 });
 
@@ -267,34 +328,97 @@ describe("resync", () => {
 });
 
 describe("event routing", () => {
-  test("a streamed turn flows from step start through parts to a mirrored final", async () => {
+  test("a streamed turn flows from step start through text deltas to a mirrored final", async () => {
     const ctx = makeBridge();
     await ctx.topology.initialize("fp");
     await ctx.bridge.adoptSession({ sessionID: "ses_1", title: "work" });
 
     await ctx.bridge.handleEvent({
       type: "session.step.started",
-      data: { sessionID: "ses_1", messageID: "msg_9" },
+      data: { sessionID: "ses_1", assistantMessageID: "msg_9" },
     });
-
     await ctx.bridge.handleEvent({
-      type: "message.part.updated",
-      data: { sessionID: "ses_1", part: { messageID: "msg_9", text: "partial answer" } },
+      type: "session.text.delta",
+      data: { sessionID: "ses_1", assistantMessageID: "msg_9", delta: "partial " },
+    });
+    await ctx.bridge.handleEvent({
+      type: "session.text.delta",
+      data: { sessionID: "ses_1", assistantMessageID: "msg_9", delta: "answer" },
     });
     expect(ctx.transport.sent.length + ctx.transport.drafts.length).toBeGreaterThan(0);
 
     await ctx.bridge.handleEvent({
       type: "session.step.ended",
-      data: { sessionID: "ses_1", messageID: "msg_9" },
+      data: { sessionID: "ses_1", assistantMessageID: "msg_9", finish: "stop" },
     });
     expect(ctx.transport.sent.some((text) => text.includes("partial answer"))).toBe(true);
     expect(ctx.delivery.mirrorOf("msg_9")).toBeDefined();
 
     await ctx.bridge.handleEvent({
       type: "session.step.ended",
-      data: { sessionID: "ses_1", messageID: "msg_9" },
+      data: { sessionID: "ses_1", assistantMessageID: "msg_9", finish: "stop" },
     });
     expect(ctx.transport.sent.filter((text) => text.includes("partial answer"))).toHaveLength(1);
+  });
+
+  test("an inbox-delivered user prompt echoes as a quoted user message", async () => {
+    const ctx = makeBridge();
+    await ctx.topology.initialize("fp");
+    await ctx.bridge.adoptSession({ sessionID: "ses_1", title: "work" });
+    await ctx.bridge.handleEvent({
+      type: "session.inbox.enqueued",
+      data: {
+        inboxID: "inb_5",
+        item: { type: "user", sessionID: "ses_1", payload: { text: "make it so" } },
+      },
+    });
+    await ctx.bridge.handleEvent({
+      type: "session.inbox.delivered",
+      data: { inboxID: "inb_5", sessionID: "ses_1" },
+    });
+    expect(ctx.transport.sent.some((text) => text.startsWith("👤 make it so"))).toBe(true);
+    expect(ctx.delivery.mirrorOf("inb_5")).toBeDefined();
+  });
+
+  test("execution events drive the running, aborted, and error statuses", async () => {
+    const ctx = makeBridge();
+    await ctx.topology.initialize("fp");
+    await ctx.bridge.adoptSession({ sessionID: "ses_e", title: "status" });
+    await ctx.bridge.handleEvent({
+      type: "session.execution.started",
+      data: { sessionID: "ses_e" },
+    });
+    await ctx.bridge.handleEvent({
+      type: "session.execution.interrupted",
+      data: { sessionID: "ses_e" },
+    });
+    await ctx.bridge.handleEvent({
+      type: "session.execution.failed",
+      data: { sessionID: "ses_e" },
+    });
+    await ctx.bridge.handleEvent({
+      type: "session.execution.succeeded",
+      data: { sessionID: "ses_e" },
+    });
+    // Status transitions are throttled by the topology; the pump merely must not throw.
+  });
+
+  test("tool calls render compact transients only when tool detail is on", async () => {
+    const ctx = makeBridge();
+    await ctx.topology.initialize("fp");
+    await ctx.bridge.adoptSession({ sessionID: "ses_t", title: "tools" });
+    await ctx.bridge.handleEvent({
+      type: "session.tool.called",
+      data: { sessionID: "ses_t", name: "bash", input: { command: "ls" } },
+    });
+    expect(ctx.transport.sent.some((text) => text.startsWith("🔧 bash"))).toBe(false);
+
+    await ctx.delivery.updateSettings({ showToolCalls: true });
+    await ctx.bridge.handleEvent({
+      type: "session.tool.called",
+      data: { sessionID: "ses_t", name: "bash", input: { command: "ls" } },
+    });
+    expect(ctx.transport.sent.some((text) => text.startsWith("🔧 bash"))).toBe(true);
   });
 
   test("renames update the mapped topic title and children render cards in the parent topic", async () => {
@@ -315,33 +439,49 @@ describe("event routing", () => {
     expect(ctx.topology.topicIdFor("ses_c")).toBeUndefined();
   });
 
-  test("permission and question events reach the interactions sink and set statuses", async () => {
+  test("permission and form events reach the interactions sink and set statuses", async () => {
     const ctx = makeBridge();
     await ctx.topology.initialize("fp");
     await ctx.bridge.adoptSession({ sessionID: "ses_q", title: "asker" });
     const seen: string[] = [];
+    const fields: unknown[] = [];
     ctx.bridge.setInteractions({
       onPermissionEvent: (event) => {
         seen.push(`perm:${event.phase}:${event.requestID ?? "?"}`);
       },
       onQuestionEvent: (event) => {
         seen.push(`q:${event.phase}:${event.prompt ?? "?"}`);
+        fields.push(event.fields);
       },
     });
     await ctx.bridge.handleEvent({
-      type: "permission.requested",
-      data: { sessionID: "ses_q", requestID: "pr_1", summary: "bash rm -rf" },
+      type: "permission.asked",
+      data: { sessionID: "ses_q", id: "pr_1", action: "bash", resources: ["rm -rf"] },
     });
     await ctx.bridge.handleEvent({
-      type: "question.requested",
+      type: "form.created",
       data: {
         sessionID: "ses_q",
-        questionID: "qn_1",
-        prompt: "which db?",
-        options: ["postgres", "sqlite"],
+        form: {
+          id: "form_2",
+          sessionID: "ses_q",
+          title: "Which db?",
+          fields: [
+            {
+              key: "db",
+              type: "string",
+              title: "Which db?",
+              options: [
+                { label: "postgres", value: "postgres" },
+                { label: "sqlite", value: "sqlite" },
+              ],
+            },
+          ],
+        },
       },
     });
-    expect(seen).toEqual(["perm:requested:pr_1", "q:requested:which db?"]);
+    expect(seen).toEqual(["perm:requested:pr_1", "q:requested:Which db?"]);
+    expect(fields).toHaveLength(1);
   });
 
   test("unknown event types and undecodable payloads are ignored without throwing", async () => {
@@ -370,8 +510,22 @@ describe("pump containment and resync on stream end", () => {
       },
     });
     await ctx.bridge.start();
-    ctx.queue.push({ type: "permission.requested", data: { sessionID: "ses_x" } });
-    ctx.queue.push({ type: "question.requested", data: { sessionID: "ses_x" } });
+    ctx.queue.push({
+      type: "permission.asked",
+      data: { sessionID: "ses_x", id: "pr_x", action: "bash" },
+    });
+    ctx.queue.push({
+      type: "form.created",
+      data: {
+        sessionID: "ses_x",
+        form: {
+          id: "form_x",
+          sessionID: "ses_x",
+          title: "q?",
+          fields: [{ key: "a", type: "string", title: "q?" }],
+        },
+      },
+    });
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(ctx.queue.consumed).toHaveLength(2);
     expect(seen).toEqual(["requested"]);
