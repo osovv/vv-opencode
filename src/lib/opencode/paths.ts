@@ -16,15 +16,17 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Replaced the dedicated tui.json(c) paths with native agents/ and skills/ discovery directories.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-001 - Resolved the global-only native TUI client config path (cli.json) beside the server config paths.]
 // END_CHANGE_SUMMARY
 
 import { join } from "node:path";
 import { resolveConfigWriteTargets } from "../config-layers.js";
-import { getConfigHome, getVvocSkillsDir } from "../vvoc-paths.js";
+import { getConfigHome, getGlobalOpencodeDir, getVvocSkillsDir } from "../vvoc-paths.js";
 import { readOptionalText } from "./shared-utils.js";
 
 const OPENCODE_CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc"] as const;
+
+const CLI_CONFIG_FILE_NAME = "cli.json";
 
 export type Scope = "global" | "project";
 
@@ -46,6 +48,8 @@ export type ResolvedPaths = {
   opencodeSkillsDirPath: string;
   opencodeConfigPath: string;
   opencodeAlternatePaths: string[];
+  /** Native TUI client config (global-only): `<global opencode dir>/cli.json`. */
+  cliConfigPath: string;
 };
 
 // START_BLOCK_RESOLVE_CONFIG_PATHS
@@ -78,6 +82,7 @@ export async function resolvePaths(options: {
       targets.opencodeBaseDir,
       targets.opencodeConfigPath,
     ),
+    cliConfigPath: join(getGlobalOpencodeDir(options.configDir), CLI_CONFIG_FILE_NAME),
   };
 }
 

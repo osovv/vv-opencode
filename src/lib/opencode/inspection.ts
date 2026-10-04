@@ -21,9 +21,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Migrated inspection to native plugins/agents/skills and replaced the dedicated tui.json status with a config-derived combined-package registration report.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-002 - Exposed the native cli.json TUI client pin with a server-pin mismatch warning in installation inspection.]
 // END_CHANGE_SUMMARY
 
+import { comparePluginPins } from "./cli-plugin-registration.js";
 import { dirname, join } from "node:path";
 import {
   readRawOpenCodeModelIntent,
@@ -85,6 +86,18 @@ export type InstallationInspection = {
   tui: {
     registered: boolean;
     note: string;
+  };
+  /**
+   * The native TUI client config pin. The TUI is a separate client process
+   * whose cli.json may carry a second, host-migrated vvoc pin; mirror-only
+   * sync keeps an existing managed entry equal to the server pin.
+   */
+  cli: {
+    path: string;
+    exists: boolean;
+    parseError?: string;
+    managedPin?: string;
+    mismatch: boolean;
   };
   vvoc: {
     path: string;
@@ -250,6 +263,16 @@ export async function inspectInstallation(
     }
   }
 
+  const cliText = await readOptionalText(paths.cliConfigPath);
+  const pinCompare = comparePluginPins(plugins, cliText);
+  if (pinCompare.cliParseError !== undefined) {
+    warnings.push(`cli.json could not be parsed: ${pinCompare.cliParseError}`);
+  } else if (pinCompare.mismatch) {
+    warnings.push(
+      `TUI client pin in cli.json (${pinCompare.cliPin}) differs from the opencode.json pin (${pinCompare.serverPin}); run vvoc sync`,
+    );
+  }
+
   const vvocText = await readOptionalText(paths.vvocConfigPath);
   let vvocParseError: string | undefined;
   let vvocConfig: ReturnType<typeof createDefaultVvocConfig> | undefined;
@@ -305,6 +328,13 @@ export async function inspectInstallation(
     tui: {
       registered: pluginConfigured,
       note: TUI_REGISTRATION_NOTE,
+    },
+    cli: {
+      path: paths.cliConfigPath,
+      exists: pinCompare.cliExists,
+      ...(pinCompare.cliParseError === undefined ? {} : { parseError: pinCompare.cliParseError }),
+      ...(pinCompare.cliPin === undefined ? {} : { managedPin: pinCompare.cliPin }),
+      mismatch: pinCompare.mismatch,
     },
     vvoc: {
       path: paths.vvocConfigPath,

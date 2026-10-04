@@ -1,0 +1,48 @@
+<GraceChangeSpec graceVersion="4.0" status="superseded">
+  <C-CLI-JSON-PIN-SYNC>
+    <Summary>Keep the TUI client plugin pin in the global cli.json in sync with the pinned vvoc package: install, init, and sync (and therefore upgrade, which runs sync) update the managed vvoc entry in cli.json with the same conservative JSONC discipline used for opencode.json, and doctor and status report both pins and warn when the TUI client pin is missing or stale.</Summary>
+    <Problem>OpenCode v2 runs the TUI as a separate client process that loads client-side plugin modules from the plugins array of the global cli.json, while the server loads its plugins from opencode.json. The host itself migrated the retired V1 tui.json plugin list into cli.json, so machines upgraded from V1 carry a second, fossilized vvoc pin there. vvoc tooling writes only the opencode.json pin: git history shows no version of the v2 code ever touched the live cli.json. The result is silent version drift between server and TUI plugins, observed in production as a server on 2.1.5 with a TUI still on 2.1.2 that lacked the /vv-rebind command, while vvoc upgrade and status reported everything current because they inspect only the opencode.json pin and the global install.</Problem>
+    <Goals>
+      <Goal>Add a cli.json pin writer that reuses the managed-entry normalization from plugin-registration: string and object entries, preserved options, legacy spec migration, conflict refusal, and comment-preserving JSONC edits identical in discipline to ensurePackageConfigText.</Goal>
+      <Goal>install, init, and sync keep both pins current and report the cli.json write alongside the opencode.json write; upgrade inherits the behavior through its post-install sync.</Goal>
+      <Goal>Installation inspection exposes the cli.json pin state, and doctor and status print the TUI client pin next to the server pin.</Goal>
+      <Goal>Doctor and status warn when cli.json carries a managed vvoc pin that differs from the opencode.json pin, or when cli.json exists with plugins but no managed vvoc entry, naming both pins and the remediation command.</Goal>
+      <Goal>Unit tests cover the text transforms and pin comparison, and README documents the two pins, the migration origin of cli.json entries, and the doctor surface.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Writes to cli.json are conservative and idempotent: preserve comments, unrelated keys such as theme and session settings, unrelated plugin entries and their order, and the options of the managed entry; never touch keybinds or any other cli.json section.</Constraint>
+      <Constraint>cli.json is addressed only through the global OpenCode config home (respecting the config-dir override); no project-scoped cli.json is read or written.</Constraint>
+      <Constraint>Validation of cli.json is limited to parsing it as a JSON object and validating the plugins array shape; no opencode.json document assertions and no schema injection into existing documents; a freshly created document carries only the cli schema URL and the plugins array.</Constraint>
+      <Constraint>Unparseable or structurally invalid cli.json never breaks a command: the writer reports a clear error and the inspectors surface a bounded diagnostic instead of adopting guesses.</Constraint>
+      <Constraint>The supported host window, the opencode.json pin flow, and TUI plugin behavior are unchanged.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No management of cli.json theme, session, keybind, diff, or any other client preference.</NonGoal>
+      <NonGoal>No new CLI command and no change to command arguments; the fix extends existing install, init, sync, upgrade, doctor, and status behavior.</NonGoal></NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: ensureCliPackageConfigText rewrites a managed string or object entry to the requested specifier while preserving options, unrelated entries, order, comments, and unrelated keys; it appends a managed entry when plugins exists without one; it creates a minimal document with the cli schema URL and the pinned entry when the file is absent; repeated runs are byte-stable.</Criterion>
+      <Criterion>AC-02: install, init, and sync write both pins in one run, report the cli.json path with an updated-or-kept status, and leave a conflicted managed entry (two divergent vvoc entries) untouched with an explicit error.</Criterion>
+      <Criterion>AC-03: Installation inspection reports cli path, existence, parse state, the managed pin when present, and a mismatch flag against the opencode.json managed pin; doctor and status print the TUI client pin line in every scope.</Criterion>
+      <Criterion>AC-04: A stale or missing managed cli.json pin produces a warning that names both pins and suggests vvoc sync; a parse failure produces a bounded diagnostic; neither escalates to a doctor problem on its own.</Criterion>
+      <Criterion>AC-05: Unit tests cover managed-entry rewrite, options preservation, append-when-missing, fresh-document creation, idempotency, conflict refusal, and the pin comparison outcomes; targeted suites, bun run check, bun run build, and grace lint pass with fresh output.</Criterion>
+      <Criterion>AC-06: README documents the server pin in opencode.json, the TUI client pin in cli.json, the host migration that creates the second pin on V1-upgraded machines, and the doctor line that reveals drift; GRACE graph and verification entries for the touched modules are updated.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-CONFIG />
+      <M-CLI-COMMANDS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/opencode/cli-plugin-registration.test.ts src/lib/opencode.test.ts src/commands/doctor.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh tests proving the cli.json text transforms and pin comparison, command-level coverage showing install and sync report the cli.json write and doctor prints the TUI client pin with the mismatch warning, a passing bun run check and build, and clean grace lint with synchronized graph and verification projections.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The host reads the TUI client plugin list only from the global cli.json and uses the same entry vocabulary as the opencode.json plugins array, as its config schema and V1 migration code declare.</Assumption>
+      <Assumption>The production incident shape, a bare string pin migrated from V1 tui.json, is the representative managed-entry form; object entries with options are handled by the same normalization.</Assumption>
+      <Assumption>Machines without any cli.json gain one containing only the cli schema URL and the plugins array, which the host tolerates as a valid client config.</Assumption>
+    </Assumptions>
+  <Replacement>C-CLI-JSON-PIN-SYNC-R1</Replacement>
+  </C-CLI-JSON-PIN-SYNC>
+</GraceChangeSpec>

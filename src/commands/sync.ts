@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-V1-OPENCODE-CONFIG-MIGRATION T-002 - Added a host-gated V1-to-V2 OpenCode config materialization pre-step before native package validation.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-001 - Kept the native cli.json TUI client pin in sync beside the opencode.json server pin.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,6 +23,7 @@ import {
   assertSupportedOpenCodeRuntime,
   describeWriteResult,
   ensureManagedSkillSymlink,
+  ensureCliPackageInstalled,
   ensurePackageInstalled,
   migrateOpenCodeConfig,
   resolvePaths,
@@ -98,12 +99,14 @@ export async function runSync(
     );
   }
   const opencode = await ensurePackageInstalled(paths);
+  const cliPin = await ensureCliPackageInstalled(paths);
   const managedAgents = await syncManagedAgentRegistrations(paths);
   const managedPrompts = await syncManagedAgentPrompts(paths, { force: Boolean(args.force) });
   const managedSkills = await syncManagedSkillFiles(paths, { force: Boolean(args.force) });
   const vvocConfig = await syncVvocConfig(paths);
 
   console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
+  console.log(`${cliPin.changed ? "Updated" : "Kept"} ${cliPin.path} (TUI client pin)`);
   console.log(
     `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
   );

@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Reported the exact supported OpenCode host window instead of a V1 TUI minimum.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-002 - Printed the native cli.json TUI client pin beside the server pin.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -62,6 +62,11 @@ export default defineCommand({
     console.log(`Package configured: ${inspection.opencode.pluginConfigured ? "yes" : "no"}`);
     console.log(`TUI package registered: ${inspection.tui.registered ? "yes" : "no"}`);
     console.log(`TUI capability note: ${inspection.tui.note}`);
+    const cliPinLabel =
+      inspection.cli.parseError !== undefined
+        ? "unavailable (parse error)"
+        : (inspection.cli.managedPin ?? (inspection.cli.exists ? "none" : "no cli.json"));
+    console.log(`TUI client pin (cli.json): ${cliPinLabel}`);
     console.log(`vvoc config: ${inspection.vvoc.path}`);
     console.log(`vvoc config exists: ${inspection.vvoc.exists ? "yes" : "no"}`);
     console.log(

@@ -1,0 +1,21 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-CLI-JSON-PIN-SYNC-R1</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The TUI is a separate client process in OpenCode v2 and loads client-side plugin modules from the plugins array of the global cli.json, not from opencode.json. Host source (packages/cli/src/config/migrate.ts) migrates the retired V1 tui.json plugin list into cli.json on first v2 start, so every machine upgraded from V1 carries a second vvoc pin that only the host ever wrote. The vvoc v2 config layer modeled a single pin in opencode.json, so install, sync, upgrade, status, and doctor were blind to the client pin; the observed incident was a server on 2.1.5 with a TUI fossilized on 2.1.2 that lacked /vv-rebind while vvoc upgrade reported success. The fix mirrors the proven opencode.json pin flow onto cli.json with the same managed-entry normalization and comment-preserving editor, and teaches the inspectors to show and compare both pins.</Rationale>
+  <Alternatives>
+    <Alternative>Do nothing and document that users must edit cli.json manually after upgrades. Rejected: the drift is created by the host migration, is invisible to every vvoc surface, and silently disables new TUI features.</Alternative>
+    <Alternative>Remove the pin from cli.json and rely on the server plugin list for the TUI. Rejected: the client process does not read opencode.json plugins, and the host plugin dialog manages cli.json as the client plugin home.</Alternative>
+    <Alternative>Always create or extend cli.json with a managed entry on every install. Rejected after re-reading the shipped README: the TUI also loads plugin entrypoints from the server inventory, so a fresh machine needs no client pin, and creating a second resolution source adds sync surface without function; the writer mirrors existing entries only.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether upgrade should additionally self-check the two pins after its sync step and fail loudly on residual mismatch is deferred; sync now repairs both pins, and doctor and status surface any manual reintroduction of drift.</Decision>
+    <Decision>Whether status should also render the cli pin for project scopes, where cli.json remains global, keeps the current single global line; no per-project behavior is introduced.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>V1-upgraded machine: cli.json holds a migrated string pin at an old version while opencode.json and the global install are current; vvoc sync rewrites the cli.json entry to the pinned specifier, preserving theme and session settings and comments; doctor afterwards prints both pins equal.</Scenario>
+    <Scenario>Fresh machine with no cli.json managed entry: install and sync leave the file untouched; the TUI loads the vvoc module through the server inventory exactly as before.</Scenario>
+    <Scenario>Manual drift: the user edits cli.json to an older pin; vvoc doctor prints the two pins and a warning naming both versions and suggesting vvoc sync; sync repairs it.</Scenario>
+    <Scenario>Conflicted entries: a hand-edited cli.json contains two managed vvoc entries with divergent options; the writer refuses with an explicit error and changes nothing.</Scenario>
+    <Scenario>Unparseable cli.json: doctor prints a bounded parse diagnostic on the TUI client pin line and continues; no command adopts a guessed pin.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

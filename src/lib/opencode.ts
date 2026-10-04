@@ -2,8 +2,8 @@
 // VERSION: 1.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Public re-export barrel for native OpenCode config mutation, host compatibility diagnostics, provider patching, and scoped vvoc.json config files.
-//   SCOPE: Re-export the complete public API over the concern-scoped zone modules in src/lib/opencode/ (shared-utils, paths, plugin-registration, agent-registrations, model-overrides, vvoc-config-io, inspection) so every ../lib/opencode.js and ./opencode.js import keeps resolving unchanged under moduleResolution NodeNext, where directory imports are not available.
-//   DEPENDS: [src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts, src/lib/opencode/agent-registrations.ts, src/lib/opencode/model-overrides.ts, src/lib/opencode/vvoc-config-io.ts, src/lib/opencode/inspection.ts, src/lib/opencode/config-migration.ts]
+//   SCOPE: Re-export the complete public API over the concern-scoped zone modules in src/lib/opencode/ (shared-utils, paths, plugin-registration, cli-plugin-registration, agent-registrations, model-overrides, vvoc-config-io, inspection) so every ../lib/opencode.js and ./opencode.js import keeps resolving unchanged under moduleResolution NodeNext, where directory imports are not available.
+//   DEPENDS: [src/lib/package.ts, src/lib/vvoc-config.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts, src/lib/opencode/cli-plugin-registration.ts, src/lib/opencode/agent-registrations.ts, src/lib/opencode/model-overrides.ts, src/lib/opencode/vvoc-config-io.ts, src/lib/opencode/inspection.ts, src/lib/opencode/config-migration.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: BARREL
 //   MAP_MODE: SUMMARY
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-V1-OPENCODE-CONFIG-MIGRATION T-001 - Added the V1-to-V2 OpenCode config migration exports.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-001 - Re-exported the cli.json pin writer and pin comparison from the opencode zone barrel.]
 // END_CHANGE_SUMMARY
 
 export { PACKAGE_NAME } from "./package.js";
@@ -44,6 +44,16 @@ export {
   isManagedPackageTarget,
   normalizePluginEntries,
 } from "./opencode/plugin-registration.js";
+export {
+  CLI_CONFIG_FILE_NAME,
+  CLI_CONFIG_SCHEMA_URL,
+  comparePluginPins,
+  ensureCliPackageConfigText,
+  ensureCliPackageInstalled,
+  managedPinOf,
+  readCliPluginPin,
+} from "./opencode/cli-plugin-registration.js";
+
 export {
   TUI_PACKAGE_SPECIFIER,
   MIN_SUPPORTED_OPENCODE_VERSION,

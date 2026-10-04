@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight and extracted an injectable runInstall flow.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-001 - Kept the native cli.json TUI client pin in sync beside the opencode.json server pin.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,6 +23,7 @@ import {
   assertSupportedOpenCodeRuntime,
   describeWriteResult,
   ensureManagedSkillSymlink,
+  ensureCliPackageInstalled,
   ensurePackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
@@ -78,9 +79,11 @@ export async function runInstall(
   await assertSupportedOpenCodeRuntime(options.inspectRuntime);
   await readVvocConfig(paths);
   const opencode = await ensurePackageInstalled(paths);
+  const cliPin = await ensureCliPackageInstalled(paths);
   const managedAgents = await syncManagedAgentRegistrations(paths);
 
   console.log(`${opencode.changed ? "Updated" : "Kept"} ${opencode.path}`);
+  console.log(`${cliPin.changed ? "Updated" : "Kept"} ${cliPin.path} (TUI client pin)`);
   console.log(
     `${managedAgents.changed ? "Updated" : "Kept"} ${managedAgents.path} (managed agents)`,
   );

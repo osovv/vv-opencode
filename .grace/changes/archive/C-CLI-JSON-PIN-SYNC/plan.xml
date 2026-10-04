@@ -1,0 +1,114 @@
+<GraceChangePlan graceVersion="4.0" status="superseded">
+  <C-CLI-JSON-PIN-SYNC>
+    <IntentSummary>Superseded by C-CLI-JSON-PIN-SYNC-R1: the baseline README anchor did not match the shipped wording. Original intent: mirror the proven opencode.json pin flow onto the global cli.json: a new cli-plugin-registration module reuses the managed-entry normalization with comment-preserving JSONC edits, install, init, and sync call it beside ensurePackageInstalled (upgrade inherits via sync), inspection exposes the cli pin with a mismatch flag, and doctor and status print it with stale-pin warnings. Two tasks: the writer and command wiring with tests, then inspection surfaces, README, GRACE projections, and the full gates. Approved by explicit user instruction; execution has not started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-CONFIG</Value><Value>V-M-CLI-CONFIG</Value>
+        <Value>M-CLI-COMMANDS</Value><Value>V-M-CLI-COMMANDS</Value>
+        <Value>src/lib/opencode/paths.ts</Value>
+        <Value>src/lib/opencode/plugin-registration.ts</Value>
+        <Value>src/lib/opencode/inspection.ts</Value>
+        <Value>src/lib/opencode.ts</Value>
+        <Value>src/commands/install.ts</Value>
+        <Value>src/commands/init.ts</Value>
+        <Value>src/commands/sync.ts</Value>
+        <Value>src/commands/doctor.ts</Value>
+        <Value>src/commands/doctor.test.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain><File>src/lib/opencode/plugin-registration.ts</File><Text>export function ensurePackageConfigText(</Text></MustContain>
+      <MustContain><File>src/commands/sync.ts</File><Text>const opencode = await ensurePackageInstalled(paths);</Text></MustContain>
+      <MustContain><File>README.md</File><Text>pinned package specifier</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/opencode.test.ts src/commands/doctor.test.ts</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-CLI-CONFIG</Module></MustVerify>
+      <MustVerify><Module>M-CLI-COMMANDS</Module></MustVerify>
+      <MustContain><File>src/lib/opencode/cli-plugin-registration.ts</File><Text>ensureCliPackageInstalled</Text></MustContain>
+      <MustContain><File>src/commands/sync.ts</File><Text>ensureCliPackageInstalled</Text></MustContain>
+      <MustContain><File>src/commands/doctor.ts</File><Text>cli.json</Text></MustContain>
+      <MustContain><File>README.md</File><Text>cli.json</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/opencode/cli-plugin-registration.test.ts src/lib/opencode.test.ts src/commands/doctor.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user approved the design in conversation (fix upgrade/install/sync to keep the cli.json pin current and teach doctor/status to show both pins) and said to proceed; spec and plan are approved, execution has not started.</Note>
+      <Note>Pre-plan preflight: grace lint --path . passes with 0 errors after the spec bundle was created; no observed writes to source have begun.</Note>
+      <Note>Implementation shape: cli.json is addressed only through the global OpenCode config home resolved next to the existing paths; the writer reuses normalizePluginEntries and isManagedPackageTarget from plugin-registration, so the module imports must stay one-directional (cli module imports plugin-registration, never the reverse) to avoid a cycle; callers in install, init, and sync invoke it beside ensurePackageInstalled.</Note>
+      <Note>Pure pin comparison lives in the cli module and is unit-tested; inspection calls it, so mismatch semantics are covered without spawning a host.</Note>
+      <Note>No final-review obligation is declared by the source; GRACE lifecycle commands stay external and never nest inside a MustPassCommand.</Note>
+      <Note>Execution entrypoint is grace-execute in sequential mode.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-CONFIG />
+        <M-CLI-COMMANDS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-CONFIG />
+        <V-M-CLI-COMMANDS />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/opencode/cli-plugin-registration.ts</File>
+      <File>src/lib/opencode/cli-plugin-registration.test.ts</File>
+      <File>src/lib/opencode/paths.ts</File>
+      <File>src/lib/opencode/inspection.ts</File>
+      <File>src/lib/opencode.ts</File>
+      <File>src/commands/install.ts</File>
+      <File>src/commands/init.ts</File>
+      <File>src/commands/sync.ts</File>
+      <File>src/commands/doctor.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-CLI-JSON-PIN-SYNC/spec.xml</File>
+      <File>.grace/changes/active/C-CLI-JSON-PIN-SYNC/plan.xml</File>
+      <File>.grace/changes/active/C-CLI-JSON-PIN-SYNC/design-context.xml</File>
+      <File>.grace/changes/archive/C-CLI-JSON-PIN-SYNC/spec.xml</File>
+      <File>.grace/changes/archive/C-CLI-JSON-PIN-SYNC/plan.xml</File>
+      <File>.grace/changes/archive/C-CLI-JSON-PIN-SYNC/design-context.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Add the cli.json pin writer and wire install, init, and sync.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Resolve the global cli.json path in ResolvedPaths (global config home with the config-dir override) and expose it as cliConfigPath.</Criterion>
+          <Criterion>ensureCliPackageConfigText rewrites a managed string or object entry to the requested specifier preserving options, unrelated entries, order, comments, and unrelated keys; appends a managed entry when plugins exists without one; creates a minimal document with the cli schema URL and the pinned entry when text is absent; refuses conflicting managed entries with an explicit error; repeated runs are byte-stable.</Criterion>
+          <Criterion>ensureCliPackageInstalled writes through the same writeText path as the opencode.json pin and returns path plus changed; src/lib/opencode.ts re-exports the new functions; imports stay one-directional with plugin-registration.</Criterion>
+          <Criterion>install, init, and sync call ensureCliPackageInstalled beside ensurePackageInstalled and print the cli.json write with an updated-or-kept status.</Criterion>
+          <Criterion>Unit tests cover rewrite, options preservation, append, fresh creation, idempotency, conflict refusal, and the pure pin comparison; module contracts, maps, and change summaries are updated in every touched file.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode/cli-plugin-registration.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Surface both pins in inspection, doctor, and status; sync docs and gates.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Installation inspection reads cli.json through the pure helper, reports path, existence, parse state, managed pin, and mismatch against the opencode.json managed pin, and pushes the stale-or-missing warning naming both pins and vvoc sync; parse failures surface as bounded diagnostics without guessing.</Criterion>
+          <Criterion>doctor and status print a TUI client pin line sourced from the inspection result in every scope.</Criterion>
+          <Criterion>README documents the server pin in opencode.json, the TUI client pin in cli.json, the host migration origin, and the doctor line.</Criterion>
+          <Criterion>Update M-CLI-CONFIG and M-CLI-COMMANDS graph purposes and their verification scenarios for the cli pin flow; run bun run check, bun run build, and grace lint with fresh output; no unrelated files change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/doctor.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-002>
+    </ImplementationPlan>
+  <Replacement>C-CLI-JSON-PIN-SYNC-R1</Replacement>
+  </C-CLI-JSON-PIN-SYNC>
+</GraceChangePlan>

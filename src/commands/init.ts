@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-007 - Added a fail-closed native host window preflight before any init write.]
+//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-001 - Kept the native cli.json TUI client pin in sync beside the opencode.json server pin.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -23,6 +23,7 @@ import * as p from "@clack/prompts";
 import {
   assertSupportedOpenCodeRuntime,
   ensureManagedSkillSymlink,
+  ensureCliPackageInstalled,
   ensurePackageInstalled,
   installManagedAgentPrompts,
   installVvocConfig,
@@ -142,6 +143,13 @@ export async function runInit(options: {
   p.log.step("Registering plugin in OpenCode config...");
   const pkgResult = await ensurePackageInstalled(finalPaths);
   p.log.info(pkgResult.path + " - " + (pkgResult.changed ? "updated" : "already up to date"));
+  const cliResult = await ensureCliPackageInstalled(finalPaths);
+  p.log.info(
+    cliResult.path +
+      " - " +
+      (cliResult.changed ? "updated" : "already up to date") +
+      " (TUI client pin)",
+  );
 
   p.log.step("Registering managed agents...");
   const agentRegistration = await syncManagedAgentRegistrations(finalPaths);
@@ -187,6 +195,7 @@ async function runInitNonInteractive(options: {
   }
 
   await ensurePackageInstalled(paths);
+  await ensureCliPackageInstalled(paths);
   await syncManagedAgentRegistrations(paths);
   await installManagedAgentPrompts(paths, { force: true });
   await installManagedSkillFiles(paths, { force: true });
