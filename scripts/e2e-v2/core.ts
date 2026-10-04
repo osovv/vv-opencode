@@ -94,7 +94,11 @@ import {
   PINNED_HOST_VERSION,
   PINNED_SOURCE_COMMIT,
 } from "./host.js";
-import { createLoopbackProvider, readProviderTrace, type ProviderRequestRecord } from "./provider.js";
+import {
+  createLoopbackProvider,
+  readProviderTrace,
+  type ProviderRequestRecord,
+} from "./provider.js";
 
 /** Inputs controlling one core real-host run. */
 export interface CoreRunOptions {
@@ -311,9 +315,8 @@ function createDriver(input: {
     packedVersion: input.packedVersion,
     hostSha256: input.hostSha256,
     sourceCommit: PINNED_SOURCE_COMMIT,
-    missingAttachmentUri: pathToFileURL(
-      join(input.scratchDir, "definitely-missing-attachment.txt"),
-    ).href,
+    missingAttachmentUri: pathToFileURL(join(input.scratchDir, "definitely-missing-attachment.txt"))
+      .href,
     api: input.api,
     control: input.control,
     async createSession(body = {}) {
@@ -396,16 +399,20 @@ function createDriver(input: {
       };
     },
     async worktreeRefresh(projectID) {
-      await input.api("/api/worktree/refresh", {
-        method: "POST",
-        body: JSON.stringify({ projectID }),
-      }).catch(() => undefined);
+      await input
+        .api("/api/worktree/refresh", {
+          method: "POST",
+          body: JSON.stringify({ projectID }),
+        })
+        .catch(() => undefined);
     },
     async worktreeRemove(directory) {
-      await input.api("/api/worktree", {
-        method: "DELETE",
-        body: JSON.stringify({ directory }),
-      }).catch(() => undefined);
+      await input
+        .api("/api/worktree", {
+          method: "DELETE",
+          body: JSON.stringify({ directory }),
+        })
+        .catch(() => undefined);
     },
     async modelList() {
       const response = await input.api("/api/model");
@@ -425,7 +432,9 @@ function createDriver(input: {
         const idle = info?.time?.idle;
         if (idle !== undefined && idle !== previousIdle) return info;
         if (Date.now() > deadline) {
-          throw new Error(`session ${id} did not reach a new idle terminal state within ${timeoutMs}ms`);
+          throw new Error(
+            `session ${id} did not reach a new idle terminal state within ${timeoutMs}ms`,
+          );
         }
         await delay(300);
       }
@@ -493,9 +502,10 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
     const installIssues = installedArtifactPathIssues(installed, options.workspaceRoot);
     if (installIssues.length > 0) throw new Error(installIssues.join("; "));
     const packageDir = installed.packageDir;
-    const packedManifest = JSON.parse(
-      await readFile(join(packageDir, "package.json"), "utf8"),
-    ) as { name?: string; version?: string };
+    const packedManifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8")) as {
+      name?: string;
+      version?: string;
+    };
     const packedArtifact = await verifyPackedArtifact({
       tarballPath: packedTarball.tarballPath,
       name: packedManifest.name ?? "@osovv/vv-opencode",
@@ -601,7 +611,8 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       );
       hostPid = host.pid;
       const attach = (chunk: Buffer): void => {
-        if (hostOutput.length < 64 * 1024) hostOutput = (hostOutput + chunk.toString()).slice(0, 64 * 1024);
+        if (hostOutput.length < 64 * 1024)
+          hostOutput = (hostOutput + chunk.toString()).slice(0, 64 * 1024);
       };
       host.stdout?.on("data", attach);
       host.stderr?.on("data", attach);
@@ -666,7 +677,8 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
             throw new Error(`fixture setup failed: ${JSON.stringify(parsed)}`);
           }
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith("fixture setup failed")) throw error;
+          if (error instanceof Error && error.message.startsWith("fixture setup failed"))
+            throw error;
           // not published yet
         }
         if (Date.now() > controlDeadline) {
@@ -793,7 +805,10 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
         await rm(controlFilePath, { force: true });
         const oldPid = hostPid as number;
         owned.signal(oldPid, "SIGTERM");
-        check.truthy(await waitForPidExit(oldPid, 20_000), "first host instance exited before restart");
+        check.truthy(
+          await waitForPidExit(oldPid, 20_000),
+          "first host instance exited before restart",
+        );
 
         const restarted = await startHost();
         api = restarted.api;
@@ -1132,7 +1147,11 @@ function aggregateOpencodeConfig(input: {
       },
     },
     agents: {
-      "vv-controller": { description: "Aggregate controller", mode: "primary", model: "loopback/seam-smart" },
+      "vv-controller": {
+        description: "Aggregate controller",
+        mode: "primary",
+        model: "loopback/seam-smart",
+      },
       "vv-implementer": {
         description: "Aggregate delegated implementer",
         mode: "subagent",
@@ -1255,7 +1274,16 @@ async function bootAggregateHost(input: {
   const hostPort = await getFreePort();
   const host = input.owned.spawn(
     input.hostBinary,
-    ["serve", "--service", "--hostname", "127.0.0.1", "--port", String(hostPort), "--log-level", "error"],
+    [
+      "serve",
+      "--service",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(hostPort),
+      "--log-level",
+      "error",
+    ],
     { cwd: projectDir, env },
   );
   let output = "";
@@ -1303,7 +1331,8 @@ async function aggregatePrompt(
       sessionID = id;
       break;
     }
-    if (Date.now() > deadline) throw new Error(`session did not open: ${opened?.text ?? "no response"}`);
+    if (Date.now() > deadline)
+      throw new Error(`session did not open: ${opened?.text ?? "no response"}`);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
   }
   for (;;) {
@@ -1509,7 +1538,11 @@ export async function runAggregateParity(input: {
     }
   };
   const measureSecondPrompt = async (label: string, mode: "soft" | "hard"): Promise<number> => {
-    const host = await bootAggregateHost({ ...input, label, vvocOverrides: peakHoursOverrides(mode) });
+    const host = await bootAggregateHost({
+      ...input,
+      label,
+      vvocOverrides: peakHoursOverrides(mode),
+    });
     try {
       const sessionID = await openSession(host.api, host.projectDir);
       await promptSession(host.api, sessionID, "peak binding warmup");
@@ -1543,7 +1576,11 @@ export async function runAggregateParity(input: {
   // WebSocket and the loopback responder must serve protocol frames (HTTP
   // fallback would not produce provider.websocket events).
   try {
-    const host = await bootAggregateHost({ ...input, label: "ws-transport", transport: "websocket" });
+    const host = await bootAggregateHost({
+      ...input,
+      label: "ws-transport",
+      transport: "websocket",
+    });
     try {
       await aggregatePrompt(host.api, host.projectDir, "ws transport probe");
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 4_000));
@@ -1589,7 +1626,8 @@ function createFetchOracle(): { readonly port: number; count: () => number; stop
   return { port: server.port ?? 0, count: () => requests, stop: () => server.stop(true) };
 }
 
-const controlDelay = (ms: number) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+const controlDelay = (ms: number) =>
+  new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 
 /** Poll the native session permission list for the first pending request id. */
 async function waitForPendingPermission(
@@ -1672,7 +1710,10 @@ export async function runToolControlPlaneParity(input: {
   const oracle = createFetchOracle();
   const targetUrl = `http://127.0.0.1:${oracle.port}/resource`;
   const permissions = [{ action: "web_fetch", resource: targetUrl, effect: "ask" }];
-  const runOne = async (decision: "once" | "reject", label: string): Promise<{ fetches: number; permissionSeen: boolean }> => {
+  const runOne = async (
+    decision: "once" | "reject",
+    label: string,
+  ): Promise<{ fetches: number; permissionSeen: boolean }> => {
     const before = oracle.count();
     const host = await bootAggregateHost({
       ...input,
@@ -1682,7 +1723,12 @@ export async function runToolControlPlaneParity(input: {
     });
     let permissionSeen = false;
     try {
-      const sessionID = await controlPrompt(host.api, host.projectDir, "control plane fetch probe", timeoutMs);
+      const sessionID = await controlPrompt(
+        host.api,
+        host.projectDir,
+        "control plane fetch probe",
+        timeoutMs,
+      );
       if (sessionID !== undefined) {
         const requestID = await waitForPendingPermission(host.api, sessionID, 12_000);
         if (requestID !== undefined) {
@@ -1732,7 +1778,12 @@ export async function runToolControlPlaneParity(input: {
     });
     let seen = false;
     try {
-      const sessionID = await controlPrompt(host.api, host.projectDir, "guardian guarded write probe", timeoutMs);
+      const sessionID = await controlPrompt(
+        host.api,
+        host.projectDir,
+        "guardian guarded write probe",
+        timeoutMs,
+      );
       if (sessionID !== undefined) {
         const requestID = await waitForPendingPermission(host.api, sessionID, 12_000);
         if (requestID !== undefined) {
@@ -1923,9 +1974,7 @@ export async function runToolControlPlaneParity(input: {
         .filter((record) => record.event === "provider.request")
         .map((record) => JSON.stringify(record.body ?? ""));
       const compacted = bodies.some((body) => body.includes("[... tool output pruned ...]"));
-      const protectedRecent = bodies.some(
-        (body) => (body.match(/MATCHTOKEN/g)?.length ?? 0) >= 50,
-      );
+      const protectedRecent = bodies.some((body) => (body.match(/MATCHTOKEN/g)?.length ?? 0) >= 50);
       checks.push({
         id: "plugin.tool-history-compaction",
         ok: compacted && protectedRecent,
@@ -2087,9 +2136,7 @@ export async function runWorkflowParity(input: {
   const openItem = (key: string, title: string, scope: string) => ({
     tool: "work_item_open",
     args: {
-      items: [
-        { key, title, mode: "delegated", requiredReviewers: [], writeScope: [scope] },
-      ],
+      items: [{ key, title, mode: "delegated", requiredReviewers: [], writeScope: [scope] }],
     },
   });
   const subagentStep = (background: boolean) => ({
@@ -2138,7 +2185,10 @@ export async function runWorkflowParity(input: {
       if (host === undefined) throw new Error("workflow host not started");
       return host;
     };
-    const http = (path: string, init?: RequestInit) => current().api(path, init).catch(() => undefined);
+    const http = (path: string, init?: RequestInit) =>
+      current()
+        .api(path, init)
+        .catch(() => undefined);
     const messageList = async (sessionID: string): Promise<AnyRecord[] | undefined> => {
       const res = await http(`/api/session/${sessionID}/message`);
       if (res === undefined || res.status >= 400) return undefined;
@@ -2147,7 +2197,9 @@ export async function runWorkflowParity(input: {
       return Array.isArray(data) ? (data as AnyRecord[]) : undefined;
     };
     const listSessions = async (): Promise<AnyRecord[] | undefined> => {
-      const res = await http(`/api/session?location[directory]=${encodeURIComponent(current().projectDir)}`);
+      const res = await http(
+        `/api/session?location[directory]=${encodeURIComponent(current().projectDir)}`,
+      );
       if (res === undefined || res.status >= 400) return undefined;
       const body = res.body;
       const data = isAnyRecord(body) && Array.isArray(body.data) ? body.data : undefined;
@@ -2226,7 +2278,9 @@ export async function runWorkflowParity(input: {
         async () => {
           const states = await readWorkflowStates(dataDir);
           const attempt = states.flatMap(collectAttempts)[0];
-          return attempt !== undefined && typeof attempt.launchedAt === "string" ? attempt : undefined;
+          return attempt !== undefined && typeof attempt.launchedAt === "string"
+            ? attempt
+            : undefined;
         },
         () => true,
         30_000,
@@ -2275,9 +2329,7 @@ export async function runWorkflowParity(input: {
       const interrupted = interruptResult.ok;
       const rootPart = await findParentCancel(rootSession, childId);
       const parentMessage =
-        rootPart !== undefined &&
-        isAnyRecord(rootPart.state) &&
-        isAnyRecord(rootPart.state.error)
+        rootPart !== undefined && isAnyRecord(rootPart.state) && isAnyRecord(rootPart.state.error)
           ? String(rootPart.state.error.message)
           : undefined;
       const parentCompleted = rootPart === undefined ? undefined : maxCompletedMs(rootPart);
@@ -2302,8 +2354,9 @@ export async function runWorkflowParity(input: {
         .filter((part) => part.type === "tool")
         .map((part) => {
           const state = isAnyRecord(part.state) ? part.state : undefined;
-          const message = state !== undefined && isAnyRecord(state.error) ? state.error.message : undefined;
-          return `${String((part.name ?? part.tool) ?? "?")}:${state?.status ?? "?"}:${String(message ?? "").slice(0, 90)}`;
+          const message =
+            state !== undefined && isAnyRecord(state.error) ? state.error.message : undefined;
+          return `${String(part.name ?? part.tool ?? "?")}:${state?.status ?? "?"}:${String(message ?? "").slice(0, 90)}`;
         });
       const rootErrorDump = rootErrors.join(" | ").slice(0, 400) || "none";
       const expectedCompletedIso =
@@ -2425,16 +2478,20 @@ export async function runWorkflowParity(input: {
             .filter((part) => part.type === "tool")
             .map((part) => {
               const state = isAnyRecord(part.state) ? part.state : undefined;
-              const message = state !== undefined && isAnyRecord(state.error) ? state.error.message : undefined;
+              const message =
+                state !== undefined && isAnyRecord(state.error) ? state.error.message : undefined;
               return `${String(part.name ?? part.tool ?? "?")}:${String(state?.status ?? "?")}:${String(message ?? "").slice(0, 120)}`;
             })
             .join(" | ")
             .slice(0, 500) ?? "none";
-        const rawRootMessages = JSON.stringify(await messageList(rootSession2) ?? "none").slice(0, 1200);
+        const rawRootMessages = JSON.stringify((await messageList(rootSession2)) ?? "none").slice(
+          0,
+          1200,
+        );
         const rawChildMessages =
           child2Id === undefined
             ? "none"
-            : JSON.stringify(await messageList(child2Id) ?? "none").slice(0, 900);
+            : JSON.stringify((await messageList(child2Id)) ?? "none").slice(0, 900);
         checks.push({
           id: "workflow.cancellation-recovery.root",
           ok: rootInterrupted && PARENT_CANCEL_RE.test(liveMessage),
@@ -2558,7 +2615,8 @@ export async function runInstalledSurface(input: {
       typeof value === "string"
         ? value
         : typeof value === "object" && value !== null
-          ? ((value as Record<string, unknown>).import ?? (value as Record<string, unknown>).default)
+          ? ((value as Record<string, unknown>).import ??
+            (value as Record<string, unknown>).default)
           : undefined;
     if (typeof target !== "string") {
       subpathFailures.push(`${subpath}: no import target`);
@@ -2576,9 +2634,7 @@ export async function runInstalledSurface(input: {
       const issue = nativeEntryIssue(module[name]);
       if (issue !== undefined) subpathFailures.push(`${subpath}: ${issue}`);
     } catch (error) {
-      subpathFailures.push(
-        `${subpath}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      subpathFailures.push(`${subpath}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   record(
@@ -2631,7 +2687,8 @@ export async function runInstalledSurface(input: {
       | undefined;
     const variantText = JSON.stringify(variant ?? {});
     const noKimi =
-      !(presets.BUILTIN_VVOC_PRESET_NAMES ?? []).includes("vv-kimi") && !registryText.includes("vv-kimi");
+      !(presets.BUILTIN_VVOC_PRESET_NAMES ?? []).includes("vv-kimi") &&
+      !registryText.includes("vv-kimi");
     const thinkingOk = variant?.body?.thinking?.type === "enabled";
     const noPdf = !/pdf/i.test(variantText);
     const noEffortHigh = !/"reasoningEffort"\s*:\s*"high"/.test(variantText);
@@ -2711,9 +2768,7 @@ export async function runInstalledSurface(input: {
       const opencodePath = join(scratchDir, "cfg", "opencode", "opencode.json");
       const globalInit = await runCli(["init", "--non-interactive"]);
       const projectInit = await runCli(["init", "--non-interactive", "--scope", "project"]);
-      const globalValid = existsSync(globalVvocPath)
-        ? await readFile(globalVvocPath, "utf8")
-        : "";
+      const globalValid = existsSync(globalVvocPath) ? await readFile(globalVvocPath, "utf8") : "";
       const sync1 = await runCli(["sync"]);
       const syncHash1 = existsSync(opencodePath) ? await sha256File(opencodePath) : "missing";
       const sync2 = await runCli(["sync"]);
@@ -2756,7 +2811,8 @@ export async function runInstalledSurface(input: {
         ? await sha256File(opencodePath)
         : "missing";
       if (globalValid.length > 0) await writeFile(globalVvocPath, globalValid, "utf8");
-      const invalidRefused = invalidSync.status !== 0 && opencodeAfterInvalid === opencodeBeforeInvalid;
+      const invalidRefused =
+        invalidSync.status !== 0 && opencodeAfterInvalid === opencodeBeforeInvalid;
       record(
         "cli.install-sync-init",
         globalInit.status === 0 &&

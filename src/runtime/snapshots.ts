@@ -396,32 +396,39 @@ export function createSnapshotService(deps: SnapshotServiceDeps): SnapshotServic
           directory: request.directory,
           boundAt: Date.parse(existing.binding.boundAt),
         });
-        if (rebound === undefined) {
-          return {
-            status: "reused",
+        const bound = rebound ?? existing;
+        const config = rebound?.config ?? (await liveConfig(request.directory));
+        if (config !== undefined) {
+          const capture = materializeCapture({
             familyId,
-            snapshotId: existing.binding.snapshotHash.slice(0, 16),
-          };
-        }
-        const capture = materializeCapture({
-          familyId,
-          binding: rebound.binding,
-          projection: rebound.projection,
-          location: request.location,
-          live: rebound.config,
-        });
-        const base = request.explicit ?? request.selectionOverride ?? primarySelection(capture);
-        const selection = base === undefined ? undefined : qualifySelection(capture, base);
-        if (selection !== undefined && request.force !== false) {
-          await materialize?.(capture, selection);
-          await deps.switchModel({ sessionID: request.sessionID, model: selection });
+            binding: bound.binding,
+            projection: bound.projection,
+            location: request.location,
+            live: config,
+          });
+          // Align the session to the family selection on every work item, so a
+          // child created before its family bound (forks) resolves the same
+          // qualified model instead of a stale native default.
+          const base = request.explicit ?? request.selectionOverride ?? primarySelection(capture);
+          const selection = base === undefined ? undefined : qualifySelection(capture, base);
+          if (selection !== undefined && request.force !== false) {
+            await materialize?.(capture, selection);
+            await deps.switchModel({ sessionID: request.sessionID, model: selection });
+          }
+          if (rebound !== undefined) {
+            return {
+              status: "bound",
+              familyId,
+              snapshotId: capture.snapshotId,
+              ...(selection === undefined ? {} : { selection }),
+              rollback: "none",
+            };
+          }
         }
         return {
-          status: "bound",
+          status: "reused",
           familyId,
-          snapshotId: capture.snapshotId,
-          ...(selection === undefined ? {} : { selection }),
-          rollback: "none",
+          snapshotId: bound.binding.snapshotHash.slice(0, 16),
         };
       }
       const config = request.admissionConfig ?? (await liveConfig(request.directory));

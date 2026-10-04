@@ -60,7 +60,17 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -114,7 +124,10 @@ export async function sha256File(path: string): Promise<string> {
 // START_BLOCK_LOOPBACK_GUARD
 /** True when a hostname is a literal loopback address. */
 export function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  const normalized = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
   return (LOOPBACK_HOSTNAMES as readonly string[]).includes(normalized);
 }
 
@@ -365,9 +378,13 @@ export async function packWorkspace(input: {
     : join(input.workspaceRoot, input.filename);
   await mkdir(dirname(filename), { recursive: true });
   await rm(filename, { force: true });
-  const result = await runCommand("bun", ["pm", "pack", "--ignore-scripts", "--filename", filename], {
-    cwd: input.workspaceRoot,
-  });
+  const result = await runCommand(
+    "bun",
+    ["pm", "pack", "--ignore-scripts", "--filename", filename],
+    {
+      cwd: input.workspaceRoot,
+    },
+  );
   if (result.status !== 0 || !existsSync(filename)) {
     throw new Error(`pack failed (${result.status}): ${result.stderr || result.stdout}`);
   }
@@ -387,7 +404,9 @@ async function linkDependencyTree(
     if (existsSync(target)) continue;
     if (entry.name.startsWith("@") && entry.isDirectory()) {
       await mkdir(target, { recursive: true });
-      for (const scoped of readdirSync(join(sourceNodeModules, entry.name), { withFileTypes: true })) {
+      for (const scoped of readdirSync(join(sourceNodeModules, entry.name), {
+        withFileTypes: true,
+      })) {
         const scopedTarget = join(target, scoped.name);
         if (existsSync(scopedTarget)) continue;
         await symlink(join(sourceNodeModules, entry.name, scoped.name), scopedTarget, "dir");

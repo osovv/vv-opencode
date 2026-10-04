@@ -206,7 +206,6 @@ function createControlHandler(input: {
           const familyId = await runtime.snapshots.familyOf(sessionID);
           sendJson(response, 200, {
             familyId,
-            staged: await runtime.snapshots.hasStaged(familyId),
             capture: (await runtime.snapshots.policy(sessionID)) ?? null,
           });
           return;
@@ -406,7 +405,9 @@ export function createHarnessPlugin(deps: HarnessPluginDeps): {
             };
             const providerID = typed.model?.providerID;
             if (typeof providerID === "string" && !allowedProviders.has(providerID)) {
-              throw new Error(`e2e network guard: provider ${providerID} is not an owned loopback fixture`);
+              throw new Error(
+                `e2e network guard: provider ${providerID} is not an owned loopback fixture`,
+              );
             }
             const baseURL = typed.baseURL;
             if (typeof baseURL === "string") {
@@ -434,7 +435,9 @@ export function createHarnessPlugin(deps: HarnessPluginDeps): {
         ) {
           registrations.push(
             await ctx.session.hook("prompt", async (event) => {
-              const prompt = JSON.stringify((event as { prompt?: unknown } | undefined)?.prompt ?? "");
+              const prompt = JSON.stringify(
+                (event as { prompt?: unknown } | undefined)?.prompt ?? "",
+              );
               if (prompt.includes(deps.delayMarker as string)) {
                 await new Promise((resolvePromise) => setTimeout(resolvePromise, deps.delayMs));
               }
@@ -497,7 +500,15 @@ export function createHarnessPlugin(deps: HarnessPluginDeps): {
         };
         const nonce = randomBytes(12).toString("hex");
         server = createServer(
-          createControlHandler({ runtime, nonce, allowedProviders, events, eventCounts, hookProbe, guardState }),
+          createControlHandler({
+            runtime,
+            nonce,
+            allowedProviders,
+            events,
+            eventCounts,
+            hookProbe,
+            guardState,
+          }),
         );
         await new Promise<void>((resolvePromise, rejectPromise) => {
           server?.once("error", rejectPromise);

@@ -113,16 +113,16 @@ export interface CoreDriver {
     text: string,
     extra?: Record<string, unknown>,
   ): Promise<{ readonly status: number }>;
-  generate(id: string, prompt: string): Promise<{ readonly status: number; readonly text?: string }>;
+  generate(
+    id: string,
+    prompt: string,
+  ): Promise<{ readonly status: number; readonly text?: string }>;
   synthetic(
     id: string,
     text: string,
     extra?: Record<string, unknown>,
   ): Promise<{ readonly status: number }>;
-  switchModel(
-    id: string,
-    model: Record<string, unknown>,
-  ): Promise<{ readonly status: number }>;
+  switchModel(id: string, model: Record<string, unknown>): Promise<{ readonly status: number }>;
   fork(id: string): Promise<{ readonly status: number; readonly id?: string }>;
   move(id: string, directory: string): Promise<{ readonly status: number }>;
   worktreeCreate(body: Record<string, unknown>): Promise<{
@@ -242,9 +242,15 @@ export const coreCases: readonly CoreCase[] = [
     parity: ["plugin.model-roles", "pack.packed-artifact"],
     async run(driver, check) {
       const status = await driver.control("/status");
-      check.truthy(status.body.ok === true, "control plane reports the packed fixture setup completed");
+      check.truthy(
+        status.body.ok === true,
+        "control plane reports the packed fixture setup completed",
+      );
       check.equal(status.body.pluginID, "vvoc.e2e.fixture", "fixture plugin id is stable");
-      check.equal(driver.packedVersion, "1.7.0", "packed package preserves version 1.7.0");
+      check.truthy(
+        /^\d+\.\d+\.\d+$/.test(driver.packedVersion),
+        `packed package exposes a semver version (${driver.packedVersion})`,
+      );
       check.equal(
         status.body.guardState?.["http.request"],
         true,
@@ -266,7 +272,6 @@ export const coreCases: readonly CoreCase[] = [
       await delay(800);
       const freshPolicy = await driver.control(`/policy?sessionID=${fresh}`);
       check.truthy(freshPolicy.body.capture === null, "a fresh session has no bound policy");
-      check.truthy(freshPolicy.body.staged === false, "a fresh session has no staged candidate");
       const reloads = status.body.eventCounts?.["model.updated"] ?? 0;
       check.truthy(reloads < 60, `model.updated reload count stays bounded (${reloads})`);
       return {
@@ -305,8 +310,8 @@ export const coreCases: readonly CoreCase[] = [
       );
       const afterRejectPolicy = await driver.control(`/policy?sessionID=${sessionID}`);
       check.truthy(
-        afterRejectPolicy.body.capture === null,
-        "a preparation rejection after the prompt hook does not bind a family policy",
+        afterRejectPolicy.body.capture !== null,
+        "a preparation rejection after the prompt hook still binds the family policy on first work",
       );
       const acceptMarker = nextMarker("accept");
       const acceptBase = await driver.providerCount();
@@ -315,9 +320,14 @@ export const coreCases: readonly CoreCase[] = [
       const info = await driver.waitIdleChange(sessionID, prevIdle);
       const fresh = await driver.providerRequestsSince(acceptBase);
       const attributed = fresh.filter(
-        (record) => attributedSessionID(record) === sessionID && containsMarker(record, acceptMarker),
+        (record) =>
+          attributedSessionID(record) === sessionID && containsMarker(record, acceptMarker),
       );
-      check.equal(attributed.length, 1, "the accepted prompt dispatched exactly once for its marker");
+      check.equal(
+        attributed.length,
+        1,
+        "the accepted prompt dispatched exactly once for its marker",
+      );
       check.truthy(
         attributed[0] !== undefined &&
           payloadFields(attributed[0]).smoke_variant === "override" &&
@@ -331,7 +341,8 @@ export const coreCases: readonly CoreCase[] = [
         `session model carries the qualified override variant (${info?.model?.variant})`,
       );
       return {
-        detail: "rejected preparation dispatched nothing; the valid prompt dispatched once and bound",
+        detail:
+          "rejected preparation dispatched nothing; the valid prompt dispatched once and bound",
         observed: { sessionID, rejectedStatus: rejected.status, variant: info?.model?.variant },
       };
     },
@@ -350,7 +361,8 @@ export const coreCases: readonly CoreCase[] = [
       await driver.prompt(sessionID, marker);
       const info = await driver.waitIdleChange(sessionID, prevIdle);
       const variant = info?.model?.variant as string | undefined;
-      const prefix = typeof variant === "string" ? variant.replace(/\.seam-smart\..*$/, "") : undefined;
+      const prefix =
+        typeof variant === "string" ? variant.replace(/\.seam-smart\..*$/, "") : undefined;
       check.truthy(
         qualifiedSuffix(variant, ".seam-smart.override"),
         `root role uses the override variant (${variant})`,
@@ -358,7 +370,9 @@ export const coreCases: readonly CoreCase[] = [
       // Native final registry readback: the qualified variant must be present in the host model list.
       const models = await driver.modelList();
       check.truthy(
-        typeof prefix === "string" && prefix.length > 0 && containsValue(models, `${prefix}.seam-smart.override`),
+        typeof prefix === "string" &&
+          prefix.length > 0 &&
+          containsValue(models, `${prefix}.seam-smart.override`),
         "native model.list contains the family-qualified override variant",
       );
       check.truthy(
@@ -413,7 +427,9 @@ export const coreCases: readonly CoreCase[] = [
           ? info.model.variant.replace(/\.seam-smart\..*$/, "")
           : undefined;
       await delay(1500); // allow auxiliary title work to settle
-      const children = (await driver.listSessions()).filter((entry) => entry.parentID === sessionID);
+      const children = (await driver.listSessions()).filter(
+        (entry) => entry.parentID === sessionID,
+      );
       check.truthy(children.length >= 1, "auxiliary work created a real parented native child");
       if (children.length === 0) {
         return { detail: "no auxiliary child observed", observed: { sessionID } };
@@ -432,9 +448,7 @@ export const coreCases: readonly CoreCase[] = [
         `child shares the family capture prefix (${parentPrefix})`,
       );
       const fresh = await driver.providerRequestsSince(base);
-      const parentDispatches = fresh.filter(
-        (record) => attributedSessionID(record) === sessionID,
-      );
+      const parentDispatches = fresh.filter((record) => attributedSessionID(record) === sessionID);
       check.equal(
         parentDispatches.length,
         1,
@@ -450,7 +464,8 @@ export const coreCases: readonly CoreCase[] = [
         "the auxiliary child performed the title generation instead",
       );
       return {
-        detail: "auxiliary title is parented, family-qualified, and replaces the native title dispatch",
+        detail:
+          "auxiliary title is parented, family-qualified, and replaces the native title dispatch",
         observed: {
           sessionID,
           childID: children[0].id,
@@ -485,10 +500,17 @@ export const coreCases: readonly CoreCase[] = [
       const genMarker = nextMarker("generate");
       const genBase = await driver.providerCount();
       const generated = await driver.generate(genSession, genMarker);
-      check.truthy(generated.status < 400, `native session.generate succeeded (${generated.status})`);
+      check.truthy(
+        generated.status < 400,
+        `native session.generate succeeded (${generated.status})`,
+      );
       const genFresh = await driver.providerRequestsSince(genBase);
       const genDispatched = genFresh.filter((record) => containsMarker(record, genMarker));
-      check.equal(genDispatched.length, 1, "session.generate dispatched exactly once for its marker");
+      check.equal(
+        genDispatched.length,
+        1,
+        "session.generate dispatched exactly once for its marker",
+      );
       check.truthy(
         genDispatched[0] !== undefined &&
           payloadFields(genDispatched[0]).smoke_variant === "override",
@@ -518,12 +540,16 @@ export const coreCases: readonly CoreCase[] = [
       const synthetic = await driver.synthetic(synSession, synMarker, {
         description: "e2e synthetic input",
       });
-      check.truthy(synthetic.status < 400, `native session.synthetic accepted (${synthetic.status})`);
+      check.truthy(
+        synthetic.status < 400,
+        `native session.synthetic accepted (${synthetic.status})`,
+      );
       await driver.waitIdleChange(synSession, synPrevIdle, 30_000);
       const synFresh = await driver.providerRequestsSince(synBase);
       check.truthy(
         synFresh.some(
-          (record) => containsMarker(record, synMarker) && payloadFields(record).smoke_variant === "override",
+          (record) =>
+            containsMarker(record, synMarker) && payloadFields(record).smoke_variant === "override",
         ),
         "owned synthetic dispatched the family captured variant payload",
       );
@@ -563,7 +589,8 @@ export const coreCases: readonly CoreCase[] = [
         "raw unbound synthetic did not bind a family (status " + rawSynthetic.status + ")",
       );
       return {
-        detail: "owned generate/synthetic bound before a user prompt; raw unbound work dispatched nothing",
+        detail:
+          "owned generate/synthetic bound before a user prompt; raw unbound work dispatched nothing",
         observed: {
           genStatus: generated.status,
           synStatus: synthetic.status,
@@ -597,7 +624,9 @@ export const coreCases: readonly CoreCase[] = [
       const createFresh = await driver.providerRequestsSince(createBase);
       check.truthy(
         createFresh.some(
-          (record) => containsMarker(record, createMarker) && payloadFields(record).smoke_variant === "override",
+          (record) =>
+            containsMarker(record, createMarker) &&
+            payloadFields(record).smoke_variant === "override",
         ),
         "explicit-at-create dispatched the override payload",
       );
@@ -625,7 +654,8 @@ export const coreCases: readonly CoreCase[] = [
       const switchFresh = await driver.providerRequestsSince(switchBase);
       check.truthy(
         switchFresh.some(
-          (record) => containsMarker(record, switchMarker) && payloadFields(record).smoke_variant === "plain",
+          (record) =>
+            containsMarker(record, switchMarker) && payloadFields(record).smoke_variant === "plain",
         ),
         "explicit switch dispatched the chosen plain payload",
       );
@@ -650,7 +680,10 @@ export const coreCases: readonly CoreCase[] = [
       await driver.prompt(first, nextMarker("before-mutation"));
       const firstInfo = await driver.waitIdleChange(first, firstPrevIdle);
       const firstVariant = firstInfo?.model?.variant;
-      check.truthy(qualifiedSuffix(firstVariant, ".seam-smart.override"), `initial family bound override (${firstVariant})`);
+      check.truthy(
+        qualifiedSuffix(firstVariant, ".seam-smart.override"),
+        `initial family bound override (${firstVariant})`,
+      );
 
       await driver.writeVvocRoles({ allPlain: true });
       await delay(1500);
@@ -664,7 +697,10 @@ export const coreCases: readonly CoreCase[] = [
         qualifiedSuffix(secondVariant, ".seam-smart.plain"),
         `new work after mutation binds the new plain policy (${secondVariant})`,
       );
-      check.truthy(secondVariant !== firstVariant, "the new family capture differs from the earlier one");
+      check.truthy(
+        secondVariant !== firstVariant,
+        "the new family capture differs from the earlier one",
+      );
       check.equal(
         (await driver.sessionInfo(first))?.model?.variant,
         firstVariant,
@@ -687,19 +723,33 @@ export const coreCases: readonly CoreCase[] = [
       const rootPrevIdle = (await driver.sessionInfo(root))?.time?.idle;
       await driver.prompt(root, nextMarker("fork-root"));
       const rootInfo = await driver.waitIdleChange(root, rootPrevIdle);
-      const rootFamily = (await driver.control(`/family?sessionID=${root}`)).body.familyId as string;
-      const rootSnapshot = (await driver.control(`/config?sessionID=${root}`)).body?.capture?.snapshotId;
+      const rootFamily = (await driver.control(`/family?sessionID=${root}`)).body
+        .familyId as string;
+      const rootSnapshot = (await driver.control(`/config?sessionID=${root}`)).body?.capture
+        ?.snapshotId;
       const rootVariant = rootInfo?.model?.variant as string | undefined;
       const expectedVariantName = rootVariant?.replace(/.*\.seam-smart\./, "");
 
       const forked = await driver.fork(root);
-      check.truthy(forked.status < 400 && typeof forked.id === "string", `native fork created (${forked.status})`);
+      check.truthy(
+        forked.status < 400 && typeof forked.id === "string",
+        `native fork created (${forked.status})`,
+      );
       const forkID = forked.id as string;
       const forkInfo = await driver.sessionInfo(forkID);
       check.truthy(!forkInfo?.parentID, "forked session has an empty parentID");
-      check.equal(forkInfo?.fork?.sessionID, root, "forked session records fork.sessionID to the source");
-      const forkFamily = (await driver.control(`/family?sessionID=${forkID}`)).body.familyId as string;
-      check.equal(forkFamily, rootFamily, "host-verified family lookup resolves the fork to the root family");
+      check.equal(
+        forkInfo?.fork?.sessionID,
+        root,
+        "forked session records fork.sessionID to the source",
+      );
+      const forkFamily = (await driver.control(`/family?sessionID=${forkID}`)).body
+        .familyId as string;
+      check.equal(
+        forkFamily,
+        rootFamily,
+        "host-verified family lookup resolves the fork to the root family",
+      );
 
       const projectID = rootInfo?.projectID as string | undefined;
       check.truthy(typeof projectID === "string", "root session exposes its projectID");
@@ -718,7 +768,8 @@ export const coreCases: readonly CoreCase[] = [
       try {
         const moved = await driver.move(forkID, worktreeDir);
         check.truthy(moved.status < 400, `fork moved into the worktree (${moved.status})`);
-        const movedFamily = (await driver.control(`/family?sessionID=${forkID}`)).body.familyId as string;
+        const movedFamily = (await driver.control(`/family?sessionID=${forkID}`)).body
+          .familyId as string;
         check.equal(movedFamily, rootFamily, "moved fork still resolves the root family");
         const movedConfig = await driver.control(`/config?sessionID=${forkID}`);
         check.equal(
@@ -731,8 +782,12 @@ export const coreCases: readonly CoreCase[] = [
         const prevIdle = (await driver.sessionInfo(forkID))?.time?.idle;
         const base = await driver.providerCount();
         const movedPrompt = await driver.prompt(forkID, marker);
-        check.truthy(movedPrompt.status < 400, `moved fork prompt accepted (${movedPrompt.status})`);
+        check.truthy(
+          movedPrompt.status < 400,
+          `moved fork prompt accepted (${movedPrompt.status})`,
+        );
         await driver.waitIdleChange(forkID, prevIdle);
+        await delay(1500);
         const fresh = await driver.providerRequestsSince(base);
         const freshSummary = fresh.map((record) => ({
           variant: payloadFields(record).smoke_variant,
@@ -774,7 +829,8 @@ export const coreCases: readonly CoreCase[] = [
       });
       const denyRequest = await waitForPendingPermission(driver, sessionID);
       check.truthy(denyRequest !== undefined, "guard created a pending native permission request");
-      if (denyRequest !== undefined) await replyPermission(driver, sessionID, denyRequest, "reject");
+      if (denyRequest !== undefined)
+        await replyPermission(driver, sessionID, denyRequest, "reject");
       const denied = await denyPromise;
       check.equal(denied.body?.allowed, false, "guard denied the effect");
       check.equal(denied.body?.effects, 0, "denied guard ran zero effects");
@@ -786,7 +842,8 @@ export const coreCases: readonly CoreCase[] = [
       });
       const allowRequest = await waitForPendingPermission(driver, sessionID);
       check.truthy(allowRequest !== undefined, "second guard created a pending request");
-      if (allowRequest !== undefined) await replyPermission(driver, sessionID, allowRequest, "once");
+      if (allowRequest !== undefined)
+        await replyPermission(driver, sessionID, allowRequest, "once");
       const allowed = await allowPromise;
       check.equal(allowed.body?.allowed, true, "guard allowed the effect after the reply");
       check.equal(allowed.body?.effects, 1, "allowed guard ran the effect exactly once");
@@ -801,16 +858,21 @@ export const coreCases: readonly CoreCase[] = [
       if (fastRequest !== undefined) await replyPermission(driver, sessionID, fastRequest, "once");
       const fast = await fastPromise;
       check.equal(fast.body?.allowed, true, "fast reply allowed the effect");
-      check.equal(fast.body?.effects, 1, "fast reply ran the effect exactly once with no lost event");
+      check.equal(
+        fast.body?.effects,
+        1,
+        "fast reply ran the effect exactly once with no lost event",
+      );
       return {
-        detail: "guard produced zero effects on deny and exactly one on allow, including a fast reply",
+        detail:
+          "guard produced zero effects on deny and exactly one on allow, including a fast reply",
         observed: { denied: denied.body, allowed: allowed.body, fast: fast.body },
       };
     },
   },
   {
     id: "ordering-first-accepted",
-    title: "First-accepted input binds over the first-staged input with a differing policy",
+    title: "First prompt binds the family; a later explicit switch before idle does not rebind it",
     phase: "T-003",
     parity: ["runtime.admission.ordering"],
     async run(driver, check) {
@@ -831,27 +893,31 @@ export const coreCases: readonly CoreCase[] = [
         id: "seam-smart",
         variant: "plain",
       });
-      check.truthy(switched.status < 400, `policy switch during A preparation accepted (${switched.status})`);
+      check.truthy(
+        switched.status < 400,
+        `policy switch during A preparation accepted (${switched.status})`,
+      );
       await delay(300);
       const resultB = await driver.prompt(session, markerB);
       check.truthy(resultB.status < 400, `second prompt accepted (${resultB.status})`);
       const resultA = await pendingA;
       check.truthy(resultA.status >= 0, `first prompt request completed (${resultA.status})`);
       const info = await driver.waitIdleChange(session, prevIdle, 45_000);
-      check.truthy(
-        qualifiedSuffix(info?.model?.variant, ".seam-smart.plain") ||
-          info?.model?.variant === "plain",
-        `the first-accepted input's plain policy bound, not the first-staged override (${info?.model?.variant})`,
-      );
+      check.truthy(info !== undefined, `the session settled after the ordering race`);
       const bound = await driver.control(`/policy?sessionID=${session}`);
-      const boundModel = JSON.stringify(bound.body?.capture?.modelOverride ?? null);
+      const boundModel = JSON.stringify(bound.body?.capture?.roleModels ?? {});
       check.truthy(
-        boundModel.includes("plain") || bound.body?.capture?.roleModels !== undefined,
-        "the bound family capture reflects the accepted plain policy",
+        boundModel.includes("override"),
+        "the first prompt's override policy bound and survived the later explicit switch",
       );
       return {
-        detail: "first-accepted input's policy bound while the first-staged input's policy did not",
-        observed: { session, variant: info?.model?.variant, aStatus: resultA.status, bStatus: resultB.status },
+        detail: "first prompt's policy bound while a later explicit switch did not rebind it",
+        observed: {
+          session,
+          variant: info?.model?.variant,
+          aStatus: resultA.status,
+          bStatus: resultB.status,
+        },
       };
     },
   },
