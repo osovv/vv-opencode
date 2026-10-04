@@ -124,9 +124,8 @@ export type GuardianConfigOverrides = Partial<GuardianConfig>;
 /** Selected Guardian assessment backend. Fast is the default; systemone is explicit opt-in. */
 export type GuardianDecisionBackend = "fast" | "systemone";
 
-/** Guardian-specific System One policy: observational shadow mode and the low-risk probability gate. */
+/** Guardian-specific System One policy: the low-risk noul probability gate. */
 export type GuardianSystemOneConfig = {
-  shadow: boolean;
   lowRiskThreshold: number;
 };
 
@@ -216,9 +215,8 @@ export type ParsedVvocConfig = {
 const GUARDIAN_SYSTEMONE_CONFIG_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["shadow", "lowRiskThreshold"],
+  required: ["lowRiskThreshold"],
   properties: {
-    shadow: { type: "boolean" },
     lowRiskThreshold: { type: "number", minimum: 0, maximum: 1 },
   },
 };
@@ -569,7 +567,6 @@ export function createGuardianSystemOneConfig(
   overrides: Partial<GuardianSystemOneConfig> = {},
 ): GuardianSystemOneConfig {
   return {
-    shadow: overrides.shadow ?? false,
     lowRiskThreshold: overrides.lowRiskThreshold ?? DEFAULT_GUARDIAN_SYSTEMONE_LOW_RISK_THRESHOLD,
   };
 }
@@ -735,12 +732,8 @@ function parseGuardianSystemOneConfigText(value: unknown, label: string): Guardi
   if (!isPlainObject(value)) {
     throw new Error(`${label}: expected a top-level object`);
   }
-  assertAllowedKeys(value, ["shadow", "lowRiskThreshold"], label);
-  if (typeof value.shadow !== "boolean") {
-    throw new Error(`${label}: shadow expected a boolean`);
-  }
+  assertAllowedKeys(value, ["lowRiskThreshold"], label);
   return {
-    shadow: value.shadow,
     lowRiskThreshold: readUnitInterval(value.lowRiskThreshold, `${label}: lowRiskThreshold`),
   };
 }

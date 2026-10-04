@@ -238,16 +238,16 @@ describe("optional systemone section and guardian decision backend", () => {
     const parsed = parseVvocConfigText(
       docWithSystemone(
         { baseUrl: "http://localhost:8790", model: "example" },
-        { decisionBackend: "systemone", systemone: { shadow: true, lowRiskThreshold: 0.9 } },
+        { decisionBackend: "systemone", systemone: { lowRiskThreshold: 0.9 } },
       ),
       "test",
     );
     expect(parsed.guardian.decisionBackend).toBe("systemone");
-    expect(parsed.guardian.systemone).toEqual({ shadow: true, lowRiskThreshold: 0.9 });
+    expect(parsed.guardian.systemone).toEqual({ lowRiskThreshold: 0.9 });
     const rendered = renderVvocConfig(parsed);
     const reparsed = parseVvocConfigText(rendered, "test");
     expect(reparsed.guardian.decisionBackend).toBe("systemone");
-    expect(reparsed.guardian.systemone).toEqual({ shadow: true, lowRiskThreshold: 0.9 });
+    expect(reparsed.guardian.systemone).toEqual({ lowRiskThreshold: 0.9 });
   });
 
   test("rejects an invalid decisionBackend and an invalid guardian systemone policy", () => {
@@ -259,7 +259,7 @@ describe("optional systemone section and guardian decision backend", () => {
     ).toThrow();
     expect(() =>
       parseVvocConfigText(
-        docWithSystemone({ baseUrl: "http://x", model: "m" }, { systemone: { shadow: true } }),
+        docWithSystemone({ baseUrl: "http://x", model: "m" }, { systemone: {} }),
         "test",
       ),
     ).toThrow();
@@ -267,7 +267,7 @@ describe("optional systemone section and guardian decision backend", () => {
       parseVvocConfigText(
         docWithSystemone(
           { baseUrl: "http://x", model: "m" },
-          { systemone: { shadow: true, lowRiskThreshold: 2 } },
+          { systemone: { lowRiskThreshold: 2 } },
         ),
         "test",
       ),

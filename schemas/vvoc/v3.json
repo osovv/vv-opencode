@@ -91,13 +91,9 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "shadow",
             "lowRiskThreshold"
           ],
           "properties": {
-            "shadow": {
-              "type": "boolean"
-            },
             "lowRiskThreshold": {
               "type": "number",
               "minimum": 0,

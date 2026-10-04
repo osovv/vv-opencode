@@ -749,13 +749,12 @@ Guardian can derive its bounded low-risk assessment either from the captured `fa
 },
 "guardian": {
   "decisionBackend": "systemone",
-  "systemone": { "shadow": true, "lowRiskThreshold": 0.95 }
+  "systemone": { "lowRiskThreshold": 0.95 }
 }
 ```
 
 - `decisionBackend` is `"fast"` (default) or `"systemone"`; the default keeps today's behavior unchanged.
 - With `"systemone"`, Guardian asks one `noul` ("the action is low-risk") and one `score` (risk rubric) over the same bounded review input and reuses the existing `risk_level === "low" && risk_score < approvalRiskThreshold` rule. `lowRiskThreshold` is the noul probability gate.
-- `systemone.shadow` keeps the `fast` backend authoritative while evaluating and logging the System One decision, so thresholds can be calibrated against real decisions before opting in.
 - Fail-closed: an unavailable, unreachable, timed-out, or malformed provider defers to manual approval and never auto-approves from a provider answer. A disabled section, a disabled `systemone` plugin toggle, or an unresolved `${VAR}` key keeps the `fast` backend.
 - The `systemone` plugin toggle is a kill switch: `vvoc plugin disable systemone` constructs no provider and forces the fast backend.
 - `apiKey` may be a literal or a `${VAR}` placeholder resolved from the OpenCode process environment at startup, like web provider credentials. The resolved value is never logged or written to persisted config snapshots.

@@ -1,7 +1,7 @@
 // FILE: src/plugins/guardian.integration.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native-boundary tests for the Guardian permission review: denied/explicit-allow preservation, low/high/invalid verdict handling, missing family deferral, per-family policy switching, the captured fast-role auxiliary inference payload, the optional System One backend with shadow and fail-closed behavior, and lifecycle teardown.
+//   PURPOSE: Native-boundary tests for the Guardian permission review: denied/explicit-allow preservation, low/high/invalid verdict handling, missing family deferral, per-family policy switching, the captured fast-role auxiliary inference payload, the optional System One backend with fail-closed behavior, and lifecycle teardown.
 //   SCOPE: Drive the native permission.evaluate handler through an injected review seam with pinned native event shapes; verify plugin setup registers an evaluate hook, resolves provider availability, and releases the shared runtime on cleanup.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/guardian/index.ts, src/lib/systemone.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN, M-NATIVE-RUNTIME, M-SYSTEMONE-PROVIDER]
@@ -21,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-004 - Added System One backend, shadow, and provider-availability coverage over the injected seam.]
+//   LAST_CHANGE: [direct fix - Removed the System One shadow-calibration coverage; the backend is either authoritative when selected and available or the fast backend is used.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -74,7 +74,6 @@ function policy(
       approvalRiskThreshold: threshold,
       reviewToastDurationMs: 4_000,
       decisionBackend: "fast",
-      systemoneShadow: false,
       systemoneLowRiskThreshold: 0.95,
       sources: [],
       warnings: [],
@@ -379,25 +378,6 @@ describe("Guardian native permission evaluate", () => {
     expect(second.effect).toBe("ask");
   });
 
-  test("shadow mode keeps the fast backend authoritative and logs a comparison", async () => {
-    const harness = createHarness(
-      policy(80, "fam-shadow", {
-        decisionBackend: "fast",
-        systemoneShadow: true,
-        systemone: SYSTEMONE_CONNECTION,
-      }),
-    );
-    harness.setVerdict(verdict("low", 1));
-    harness.setTransport(systemoneTransport(0.1, 4));
-    const handler = createGuardianEvaluateHandler(harness.deps);
-
-    const event = makeEvent();
-    await handler(event);
-    expect(event.effect).toBe("allow");
-    expect(harness.inferCalls).toHaveLength(1);
-    expect(harness.logs.some((entry) => entry.message.includes("shadow comparison"))).toBe(true);
-  });
-
   test("setup registers evaluate and tears down the runtime registration", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vvoc-guardian-"));
     tempDirs.push(directory);
@@ -455,7 +435,7 @@ describe("Guardian native permission evaluate", () => {
         approvalRiskThreshold: 80,
         reviewToastDurationMs: 1_000,
         decisionBackend: "systemone",
-        systemone: { shadow: false, lowRiskThreshold: 0.95 },
+        systemone: { lowRiskThreshold: 0.95 },
       },
       secretsRedaction: {},
       presets: {},

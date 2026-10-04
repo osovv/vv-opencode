@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Review native OpenCode 2.0.18 permission evaluations with a constrained, snapshot-bound Guardian auxiliary model or an optional provider-neutral System One decision provider, auto-approving only a bounded low-risk verdict and otherwise leaving the user's manual/denied decision intact.
-//   SCOPE: Native Plugin.define entry, ctx.permission.hook("evaluate") that mutates effect only within policy, per-bound-family policy resolution from the shared capture (unbound/disabled defers), actual action/resources/source/metadata capture, bounded native host-history rendering, snapshot-bound auxiliary generation with the captured fast role and a bounded timeout, an opt-in System One backend resolved from the optional systemone section and toggle with ${VAR} key resolution, observational shadow comparison, fail-closed deferral on any provider failure, low-risk-only auto-approval, recursion guard, and credential-safe diagnostics. No V1 permission.asked event loop, no permission.reply HTTP fallback, no spawned opencode subprocess, no stateless generate, no fabricated host logger.
+//   SCOPE: Native Plugin.define entry, ctx.permission.hook("evaluate") that mutates effect only within policy, per-bound-family policy resolution from the shared capture (unbound/disabled defers), actual action/resources/source/metadata capture, bounded native host-history rendering, snapshot-bound auxiliary generation with the captured fast role and a bounded timeout, an opt-in System One backend resolved from the optional systemone section and toggle with ${VAR} key resolution, fail-closed deferral on any provider failure, low-risk-only auto-approval, recursion guard, and credential-safe diagnostics. No V1 permission.asked event loop, no permission.reply HTTP fallback, no spawned opencode subprocess, no stateless generate, no fabricated host logger.
 //   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/runtime/types.ts, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/systemone.ts, src/lib/env-substitution.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN, M-NATIVE-RUNTIME, V-M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-004 - Added the opt-in System One backend with ${VAR} key resolution, observational shadow mode, and fail-closed deferral, preserving the fast default and low-risk-only auto-approval.]
+//   LAST_CHANGE: [direct fix - Removed the System One shadow-calibration mode; the systemone backend is either authoritative when selected and available or the fast backend is used, with fail-closed deferral preserved.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -104,10 +104,8 @@ export interface GuardianRuntimeConfig {
   timeoutMs: number;
   approvalRiskThreshold: number;
   reviewToastDurationMs: number;
-  /** Effective authoritative backend after toggle, configuration, and shadow resolution. */
+  /** Effective authoritative backend after toggle and configuration resolution. */
   decisionBackend: GuardianDecisionBackend;
-  /** When true, the fast backend stays authoritative and systemone is evaluated observationally. */
-  systemoneShadow: boolean;
   /** Low-risk noul probability gate for the System One backend. */
   systemoneLowRiskThreshold: number;
   /** Resolved System One connection, present only when the provider is available. */
@@ -312,13 +310,11 @@ function resolveGuardianRuntimeConfig(loaded: VvocConfigSnapshot): GuardianRunti
   });
 
   const systemone = resolveGuardianSystemOneConnection(loaded, sources, warnings);
-  const shadow = merged.systemone?.shadow ?? false;
   const requested = merged.decisionBackend ?? "fast";
-  // Shadow forces the fast backend to stay authoritative while systemone is
-  // observed. Selecting systemone without an available provider also falls back
-  // to fast, preserving the default behavior instead of blocking permissions.
+  // Selecting systemone without an available provider falls back to fast,
+  // preserving the default behavior instead of blocking permissions.
   const decisionBackend: GuardianDecisionBackend =
-    shadow || requested === "fast" || systemone === undefined ? "fast" : "systemone";
+    requested === "systemone" && systemone !== undefined ? "systemone" : "fast";
 
   return {
     model: merged.model,
@@ -326,7 +322,6 @@ function resolveGuardianRuntimeConfig(loaded: VvocConfigSnapshot): GuardianRunti
     approvalRiskThreshold: merged.approvalRiskThreshold,
     reviewToastDurationMs: merged.reviewToastDurationMs,
     decisionBackend,
-    systemoneShadow: shadow,
     systemoneLowRiskThreshold: merged.systemone?.lowRiskThreshold ?? 0.95,
     ...(systemone === undefined ? {} : { systemone }),
     sources,
@@ -642,9 +637,8 @@ function applyGuardianAssessment(
  * overrides a `"deny"`, never overrides an explicit `"allow"`, and leaves every
  * uncertain, failing or invalid outcome as manual. The authoritative backend is
  * the fast auxiliary model by default; when the systemone backend is selected
- * and available it is used instead, and shadow mode keeps the fast backend
- * authoritative while observing systemone. A per-family recursion guard keeps
- * the snapshot-bound auxiliary inference from re-reviewing itself.
+ * and available it is used instead. A per-family recursion guard keeps the
+ * snapshot-bound auxiliary inference from re-reviewing itself.
  */
 export function createGuardianEvaluateHandler(
   deps: GuardianReviewDependencies,
@@ -693,23 +687,6 @@ export function createGuardianEvaluateHandler(
         return;
       }
       const assessment = normalizeAssessment(parseGuardianAssessment(text));
-
-      if (config.systemoneShadow && config.systemone !== undefined) {
-        const observed = await evaluateSystemOneAssessment(deps, config, prompt);
-        deps.log({
-          level: "info",
-          message: "guardian systemone shadow comparison",
-          extra: {
-            action: event.action,
-            systemoneAvailable: observed !== undefined,
-            fastRiskLevel: assessment?.risk_level,
-            fastRiskScore: assessment?.risk_score,
-            systemoneRiskLevel: observed?.risk_level,
-            systemoneRiskScore: observed?.risk_score,
-          },
-        });
-      }
-
       applyGuardianAssessment(event, assessment, config, deps, "fast");
     } catch (error) {
       // Any failure (unbound auxiliary, timeout, invalid output) defers; never allow.
