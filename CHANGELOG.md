@@ -1,3 +1,11 @@
+## 2.3.0-rc.4 (2026-10-04)
+
+### Summary
+
+The Telegram bridge now renders each tool call as a single editable status line that updates in place, progressing from a ⏳ start through the tool's key argument to a ✅ success or ❌ failure outcome, rather than posting a separate message per call. This keeps Telegram conversations cleaner and less noisy during long sessions, with status lines bounded by a 512-entry cap that trims the oldest half and a fallback that sends a fresh line if editing fails.
+
+* feat(telegram): hermes-style editable tool status lines ([a46211e](https://github.com/osovv/vv-opencode/commit/a46211e))
+
 ## 2.3.0-rc.3 (2026-10-04)
 
 ### Summary
