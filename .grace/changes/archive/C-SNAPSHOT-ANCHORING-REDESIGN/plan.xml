@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-SNAPSHOT-ANCHORING-REDESIGN>
     <IntentSummary>Replace the package-version-coupled full-capture durable store with a content-addressed behaviour-policy snapshot plus a per-family pointer, keep a family binding stable across /reload and server restart with CLI --force as the only reset, never persist credentials, isolate store failures per family so plugin load never fails, add --force to the preset, plugin, and role commands, and move orchestration policy injection to the request tail. Delivers AC-01 through AC-10 of the approved GraceChangeSpec. Draft pending explicit user approval of the completed plan; no implementation has started.</IntentSummary>
     <BaselineAssertions>

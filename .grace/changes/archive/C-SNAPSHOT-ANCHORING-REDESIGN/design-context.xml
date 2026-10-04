@@ -23,5 +23,8 @@
     <Scenario>Orchestration switch: after designing in a single-session profile, the user forces the orchestrated profile in the same session without moving context; because the policy block lives in the request tail, only the tail changes and the cached prefix survives.</Scenario>
     <Scenario>Store corruption: a pointer or snapshot is truncated; plugin load succeeds, other families are unaffected, and the affected family rebinds to the current configuration with a bounded diagnostic instead of bricking the project.</Scenario>
     <Scenario>One-time upgrade rebind: existing snapshots are invalid and credential-bearing, so they are ignored; each existing family rebinds once to the current configuration and is durable afterwards.</Scenario>
+    <Scenario>Execution finding: the transient orchestration policy part must be appended only when the last request message is a user turn; appending into a trailing tool or assistant message corrupted the provider payload shape and aborted multi-tool turns, which surfaced as failing hashline-edit, spec-guard, and tool-history-compaction acceptance rows until fixed.</Scenario>
+    <Scenario>Execution finding: the model guard must expect the host-resolved family-qualified variant for explicit selections and accept the native source-variant form as equivalent, otherwise the first request of an explicitly created session is refused.</Scenario>
+    <Scenario>Execution residual: the host creates no model request for a child session prompted after a worktree move in the acceptance harness, so the moved-fork provider payload is recorded but not asserted; lineage, capture, and session-model assertions remain enforced.</Scenario>
   </Scenarios>
 </GraceChangeDesignContext>
