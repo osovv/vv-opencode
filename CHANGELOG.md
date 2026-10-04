@@ -1,3 +1,13 @@
+## 2.3.0-rc.5 (2026-10-04)
+
+### Summary
+
+This release adds editable Telegram tool status lines, so each tool call now appears as a single message that updates in place as it progresses from a start state through its key argument to a success or failure outcome, instead of posting a separate message per call; this keeps long Telegram sessions cleaner and less noisy. The change also caps editable status lines with a FIFO half-trim and falls back to sending a fresh line if an in-place edit fails, and it folds the status-line capability into the TelegramDelivery module export so the delivery surface accurately advertises the new behavior.
+
+* fix(grace): fold the status-line map entry into the TelegramDelivery export ([7929c8d](https://github.com/osovv/vv-opencode/commit/7929c8d))
+* chore: bump version from 2.3.0-rc.3 to 2.3.0-rc.4 with changelog ([1a4e09e](https://github.com/osovv/vv-opencode/commit/1a4e09e))
+* feat(telegram): hermes-style editable tool status lines ([a46211e](https://github.com/osovv/vv-opencode/commit/a46211e))
+
 ## 2.3.0-rc.4 (2026-10-04)
 
 ### Summary
