@@ -1,3 +1,11 @@
+## 2.3.0-rc.2 (2026-10-04)
+
+### Summary
+
+This release fixes the Telegram bridge so it routes events onto the real V2 vocabulary — session, step, text-delta, inbox, tool, execution, permission, and form events — meaning Telegram topics now track actual session activity instead of missing or misreading updates. Admitted user prompts are echoed back as quoted messages so conversation context stays clear in the topic. Permission prompts now match the native asked/replied shapes, and interactive question prompts carry decoded form fields and submit answers through the native form answer record with label-to-value mapping and boolean parsing, so users can reliably answer choice and free-text questions from Telegram.
+
+* fix(telegram): route events onto the real V2 vocabulary with user-prompt echo ([99850da](https://github.com/osovv/vv-opencode/commit/99850da))
+
 ## 2.3.0-rc.1 (2026-10-04)
 
 ### Summary
