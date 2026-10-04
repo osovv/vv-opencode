@@ -1,20 +1,20 @@
 // FILE: src/plugins/guardian/index.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Review native OpenCode 2.0.18 permission evaluations with a constrained, snapshot-bound Guardian auxiliary model, auto-approving only a bounded low-risk verdict and otherwise leaving the user's manual/denied decision intact.
-//   SCOPE: Native Plugin.define entry, ctx.permission.hook("evaluate") that mutates effect only within policy, per-bound-family policy resolution from the shared capture (unbound/disabled defers), actual action/resources/source/metadata capture, bounded native host-history rendering, snapshot-bound auxiliary generation with the captured fast role and a bounded timeout, recursion guard, low-risk-only auto-approval, and credential-safe diagnostics. No V1 permission.asked event loop, no permission.reply HTTP fallback, no spawned opencode subprocess, no stateless generate, no fabricated host logger.
-//   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/runtime/types.ts, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts]
+//   PURPOSE: Review native OpenCode 2.0.18 permission evaluations with a constrained, snapshot-bound Guardian auxiliary model or an optional provider-neutral System One decision provider, auto-approving only a bounded low-risk verdict and otherwise leaving the user's manual/denied decision intact.
+//   SCOPE: Native Plugin.define entry, ctx.permission.hook("evaluate") that mutates effect only within policy, per-bound-family policy resolution from the shared capture (unbound/disabled defers), actual action/resources/source/metadata capture, bounded native host-history rendering, snapshot-bound auxiliary generation with the captured fast role and a bounded timeout, an opt-in System One backend resolved from the optional systemone section and toggle with ${VAR} key resolution, observational shadow comparison, fail-closed deferral on any provider failure, low-risk-only auto-approval, recursion guard, and credential-safe diagnostics. No V1 permission.asked event loop, no permission.reply HTTP fallback, no spawned opencode subprocess, no stateless generate, no fabricated host logger.
+//   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/runtime/types.ts, src/lib/config-layers.ts, src/lib/managed-agents.ts, src/lib/model-roles.ts, src/lib/systemone.ts, src/lib/env-substitution.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-PLUGIN-GUARDIAN, M-NATIVE-RUNTIME, V-M-PLUGIN-GUARDIAN]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   GuardianRuntimeConfig - Resolved Guardian thresholds, model and diagnostics provenance.
+//   GuardianRuntimeConfig - Resolved Guardian thresholds, backend selection, System One connection and diagnostics provenance.
 //   GuardianPermissionEvaluation - Narrow native permission.evaluate event shape.
 //   GuardianReviewHistory - Bounded host-history transcript for one review.
 //   GuardianReviewPolicy - Resolved family policy (family id, config, policy prompt).
-//   GuardianReviewDependencies - Injectable policy, history, inference and diagnostic seam.
+//   GuardianReviewDependencies - Injectable policy, history, inference, transport and diagnostic seam.
 //   createGuardianEvaluateHandler - Build the native permission.evaluate handler.
 //   GuardianPluginOptions - Optional injectable runtime acquisition for tests.
 //   createGuardianPlugin - Native plugin factory; the default export acquires the real shared runtime.
@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 - Replaced the V1 permission.asked event loop and spawned opencode subprocess with ctx.permission.hook("evaluate") mutation gated on a snapshot-bound auxiliary inference, preserving low-risk-only auto-approval and deferring uncertainty/manual decisions.]
+//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-004 - Added the opt-in System One backend with ${VAR} key resolution, observational shadow mode, and fail-closed deferral, preserving the fast default and low-risk-only auto-approval.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -41,6 +41,15 @@ import {
   type ModelRolesError,
 } from "../../lib/model-roles.js";
 import { createGuardianConfig, type GuardianConfigOverrides } from "../../lib/vvoc-config.js";
+import type { GuardianDecisionBackend } from "../../lib/vvoc-config.js";
+import { resolveEnvPlaceholders } from "../../lib/env-substitution.js";
+import {
+  evaluateSystemOne,
+  type SystemOneAnswer,
+  type SystemOneConnection,
+  type SystemOneQuestion,
+  type SystemOneTransport,
+} from "../../lib/systemone.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 
 const GUARDIAN_AGENT = "guardian";
@@ -59,6 +68,28 @@ const MAX_PROMPT_CHARS = 32_000;
 const MAX_LOG_CHARS = 2_000;
 const GUARDIAN_TRUNCATION_TAG = "guardian_truncated";
 
+// Ordered risk rubric for the optional System One backend. The score answer is a
+// probability-weighted level index; it is mapped linearly onto 0..100 so the
+// existing approvalRiskThreshold stays meaningful.
+const GUARDIAN_SYSTEMONE_RISK_LEVELS = ["very low", "low", "medium", "high", "critical"] as const;
+
+const GUARDIAN_SYSTEMONE_QUESTIONS: Record<string, SystemOneQuestion> = {
+  low_risk: {
+    type: "noul",
+    instructions:
+      "The requested action is low-risk: it is read-only or otherwise reversible, touches no secrets or credentials, stays within the project, and is not expected to have destructive side effects.",
+    criteria: {
+      true: "The action is low-risk and safe to run without a human decision.",
+      false: "The action is not clearly low-risk.",
+    },
+  },
+  risk: {
+    type: "score",
+    instructions: "How risky is the requested action overall?",
+    criteria: [...GUARDIAN_SYSTEMONE_RISK_LEVELS],
+  },
+};
+
 // START_BLOCK_TYPES
 type GuardianAssessment = {
   risk_level?: string;
@@ -73,6 +104,14 @@ export interface GuardianRuntimeConfig {
   timeoutMs: number;
   approvalRiskThreshold: number;
   reviewToastDurationMs: number;
+  /** Effective authoritative backend after toggle, configuration, and shadow resolution. */
+  decisionBackend: GuardianDecisionBackend;
+  /** When true, the fast backend stays authoritative and systemone is evaluated observationally. */
+  systemoneShadow: boolean;
+  /** Low-risk noul probability gate for the System One backend. */
+  systemoneLowRiskThreshold: number;
+  /** Resolved System One connection, present only when the provider is available. */
+  systemone?: SystemOneConnection;
   sources: string[];
   warnings: string[];
 }
@@ -112,6 +151,8 @@ export interface GuardianReviewDependencies {
     readonly role: string;
     readonly timeoutMs: number;
   }): Promise<string | undefined>;
+  /** Optional injected transport for the System One backend; defaults to fetch. */
+  transport?: SystemOneTransport;
   log(event: {
     readonly level: "debug" | "info" | "warn" | "error";
     readonly message: string;
@@ -270,13 +311,64 @@ function resolveGuardianRuntimeConfig(loaded: VvocConfigSnapshot): GuardianRunti
     ...envConfig,
   });
 
+  const systemone = resolveGuardianSystemOneConnection(loaded, sources, warnings);
+  const shadow = merged.systemone?.shadow ?? false;
+  const requested = merged.decisionBackend ?? "fast";
+  // Shadow forces the fast backend to stay authoritative while systemone is
+  // observed. Selecting systemone without an available provider also falls back
+  // to fast, preserving the default behavior instead of blocking permissions.
+  const decisionBackend: GuardianDecisionBackend =
+    shadow || requested === "fast" || systemone === undefined ? "fast" : "systemone";
+
   return {
     model: merged.model,
     timeoutMs: merged.timeoutMs,
     approvalRiskThreshold: merged.approvalRiskThreshold,
     reviewToastDurationMs: merged.reviewToastDurationMs,
+    decisionBackend,
+    systemoneShadow: shadow,
+    systemoneLowRiskThreshold: merged.systemone?.lowRiskThreshold ?? 0.95,
+    ...(systemone === undefined ? {} : { systemone }),
     sources,
     warnings,
+  };
+}
+
+/**
+ * Resolve the optional System One connection. It is unavailable when the
+ * section is absent or disabled, the systemone plugin toggle is off, or a
+ * configured ${VAR} apiKey placeholder does not resolve; in those cases the
+ * caller keeps the fast backend. The apiKey value is never logged.
+ */
+function resolveGuardianSystemOneConnection(
+  loaded: VvocConfigSnapshot,
+  sources: string[],
+  warnings: string[],
+): SystemOneConnection | undefined {
+  const section = loaded.config.systemone;
+  if (section === undefined || section.enabled === false) {
+    return undefined;
+  }
+  if (!isVvocPluginEnabled(loaded.config, "systemone")) {
+    return undefined;
+  }
+  let apiKey: string | undefined;
+  if (section.apiKey !== undefined && section.apiKey !== "") {
+    const resolved = resolveEnvPlaceholders(section.apiKey, process.env);
+    if (resolved.missing.length > 0) {
+      warnings.push("systemone: apiKey placeholder is unresolved; provider unavailable");
+      sources.push("systemone");
+      return undefined;
+    }
+    apiKey = resolved.value || undefined;
+  }
+  sources.push("systemone");
+  return {
+    baseUrl: section.baseUrl,
+    model: section.model,
+    ...(apiKey === undefined ? {} : { apiKey }),
+    timeoutMs: section.timeoutMs,
+    maxRetries: section.maxRetries,
   };
 }
 // END_BLOCK_LOAD_GUARDIAN_RUNTIME_CONFIG
@@ -444,13 +536,115 @@ function guardianDecisionFromAssessment(
 }
 // END_BLOCK_PARSE_GUARDIAN_REVIEW_OUTPUT
 
+// START_BLOCK_SYSTEMONE_BACKEND
+/**
+ * Map System One answers onto the bounded Guardian assessment shape. The noul
+ * gates risk_level ("low" only when the probability reaches the configured
+ * low-risk threshold) and the score is mapped linearly onto 0..100 so the
+ * existing approvalRiskThreshold rule is preserved unchanged.
+ */
+function assessmentFromSystemOneAnswers(
+  answers: Record<string, SystemOneAnswer>,
+  lowRiskThreshold: number,
+): GuardianAssessment | undefined {
+  const lowRisk = answers.low_risk;
+  const risk = answers.risk;
+  if (lowRisk?.type !== "noul" || risk?.type !== "score") {
+    return undefined;
+  }
+  const maxLevel = GUARDIAN_SYSTEMONE_RISK_LEVELS.length - 1;
+  if (maxLevel <= 0) {
+    return undefined;
+  }
+  const boundedScore = Math.max(0, Math.min(maxLevel, risk.score));
+  const riskScore = Math.max(0, Math.min(100, Math.round((boundedScore / maxLevel) * 100)));
+  const isLow = lowRisk.noul >= lowRiskThreshold;
+  return {
+    risk_level: isLow ? "low" : "high",
+    risk_score: riskScore,
+    rationale: `systemone low-risk probability ${lowRisk.noul.toFixed(3)}`,
+    evidence: [],
+  };
+}
+
+/**
+ * Evaluate the System One provider for one review. Any failure, timeout, or
+ * unusable answer returns undefined so the caller defers to manual approval;
+ * it never throws out of the permission hook.
+ */
+async function evaluateSystemOneAssessment(
+  deps: GuardianReviewDependencies,
+  config: GuardianRuntimeConfig,
+  state: string,
+): Promise<GuardianAssessment | undefined> {
+  if (config.systemone === undefined) {
+    return undefined;
+  }
+  try {
+    const evaluation = await evaluateSystemOne({
+      state,
+      questions: GUARDIAN_SYSTEMONE_QUESTIONS,
+      connection: config.systemone,
+      transport: deps.transport,
+    });
+    return assessmentFromSystemOneAnswers(evaluation.answers, config.systemoneLowRiskThreshold);
+  } catch (error) {
+    deps.log({
+      level: "warn",
+      message: "guardian systemone evaluation failed; no decision applied",
+      extra: { error: truncateText(guardianErrorMessage(error), MAX_LOG_CHARS) },
+    });
+    return undefined;
+  }
+}
+
+/** Apply a resolved assessment through the existing bounded allow/defer rule. */
+function applyGuardianAssessment(
+  event: GuardianPermissionEvaluation,
+  assessment: GuardianAssessment | undefined,
+  config: GuardianRuntimeConfig,
+  deps: GuardianReviewDependencies,
+  backend: GuardianDecisionBackend,
+): void {
+  if (guardianDecisionFromAssessment(assessment, config) === "allow") {
+    event.effect = "allow";
+    event.message = `Guardian auto-approved low-risk action (risk ${assessment?.risk_score ?? "unknown"}).`;
+    deps.log({
+      level: "info",
+      message: "guardian auto-approved low-risk permission request",
+      extra: {
+        action: event.action,
+        resources: event.resources.length,
+        backend,
+        riskLevel: assessment?.risk_level,
+        riskScore: assessment?.risk_score,
+      },
+    });
+    return;
+  }
+  deps.log({
+    level: "info",
+    message: "guardian deferred permission request to manual approval",
+    extra: {
+      action: event.action,
+      backend,
+      riskLevel: assessment?.risk_level,
+      riskScore: assessment?.risk_score,
+    },
+  });
+}
+// END_BLOCK_SYSTEMONE_BACKEND
+
 // START_BLOCK_EVALUATE_HANDLER
 /**
  * Build the native `permission.evaluate` handler. It only ever changes a
  * resolved `"ask"` effect to `"allow"` for a bounded low-risk verdict; it never
  * overrides a `"deny"`, never overrides an explicit `"allow"`, and leaves every
- * uncertain, failing or invalid outcome as manual. A per-family recursion guard
- * keeps the snapshot-bound auxiliary inference from re-reviewing itself.
+ * uncertain, failing or invalid outcome as manual. The authoritative backend is
+ * the fast auxiliary model by default; when the systemone backend is selected
+ * and available it is used instead, and shadow mode keeps the fast backend
+ * authoritative while observing systemone. A per-family recursion guard keeps
+ * the snapshot-bound auxiliary inference from re-reviewing itself.
  */
 export function createGuardianEvaluateHandler(
   deps: GuardianReviewDependencies,
@@ -467,11 +661,28 @@ export function createGuardianEvaluateHandler(
       const action = buildPlannedAction(event);
       const transcript = await deps.history(event.sessionID);
       const prompt = buildGuardianReviewMessage(policy.prompt, action, transcript);
+      const config = policy.config;
+
+      if (config.decisionBackend === "systemone") {
+        const assessment = await evaluateSystemOneAssessment(deps, config, prompt);
+        if (assessment === undefined) {
+          deps.log({
+            level: "warn",
+            message:
+              "guardian systemone inference produced no usable answer; deferring to manual approval",
+            extra: { action: event.action },
+          });
+          return;
+        }
+        applyGuardianAssessment(event, assessment, config, deps, "systemone");
+        return;
+      }
+
       const text = await deps.infer({
         sessionID: event.sessionID,
         prompt,
         role: "fast",
-        timeoutMs: policy.config.timeoutMs,
+        timeoutMs: config.timeoutMs,
       });
       if (text === undefined) {
         deps.log({
@@ -482,31 +693,24 @@ export function createGuardianEvaluateHandler(
         return;
       }
       const assessment = normalizeAssessment(parseGuardianAssessment(text));
-      const decision = guardianDecisionFromAssessment(assessment, policy.config);
-      if (decision === "allow") {
-        event.effect = "allow";
-        event.message = `Guardian auto-approved low-risk action (risk ${assessment?.risk_score ?? "unknown"}).`;
+
+      if (config.systemoneShadow && config.systemone !== undefined) {
+        const observed = await evaluateSystemOneAssessment(deps, config, prompt);
         deps.log({
           level: "info",
-          message: "guardian auto-approved low-risk permission request",
+          message: "guardian systemone shadow comparison",
           extra: {
             action: event.action,
-            resources: event.resources.length,
-            riskLevel: assessment?.risk_level,
-            riskScore: assessment?.risk_score,
+            systemoneAvailable: observed !== undefined,
+            fastRiskLevel: assessment?.risk_level,
+            fastRiskScore: assessment?.risk_score,
+            systemoneRiskLevel: observed?.risk_level,
+            systemoneRiskScore: observed?.risk_score,
           },
         });
-        return;
       }
-      deps.log({
-        level: "info",
-        message: "guardian deferred permission request to manual approval",
-        extra: {
-          action: event.action,
-          riskLevel: assessment?.risk_level,
-          riskScore: assessment?.risk_score,
-        },
-      });
+
+      applyGuardianAssessment(event, assessment, config, deps, "fast");
     } catch (error) {
       // Any failure (unbound auxiliary, timeout, invalid output) defers; never allow.
       deps.log({

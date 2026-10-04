@@ -1,0 +1,30 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-SYSTEMONE-DECISION-BACKEND</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>System One decision models return typed, calibrated probabilities (noul, choice, score) instead of generated text, which fits Guardian's bounded low-risk assessment: the decision is narrow, the code already owns the threshold and consequence, and the consequence is fail-safe (defer to manual approval). The ecosystem converged on the de-facto POST /v1/systemone protocol served by hosted Jev, open models (Laya, Kev, Von, Decider, OpenJev), local servers (Ollama, laya-serve), and gateways (OpenRouter, Vercel AI Gateway, Cloudflare), so binding to the protocol class instead of one vendor avoids lock-in and lets the same client run against a local endpoint for privacy. An independent spec (resilient-system-one, v1) formalizes the shape and its conformance cases; unknown response fields are ignored and provider extras such as latency_ms, routing, or action are permitted. The change is deliberately additive: the fast backend stays the default, systemone is opt-in, shadow mode allows calibration before trust, and every uncertainty falls closed to the existing fast path.</Rationale>
+  <Alternatives>
+    <Alternative>Bind Guardian directly to a single vendor (Jev) by name and endpoint. Rejected: it creates lock-in, prevents local or self-hosted operation, and contradicts the ecosystem's move to a shared wire protocol.</Alternative>
+    <Alternative>Wire only a raw baseUrl and model without a System One client abstraction. Rejected: it would scatter request shaping and typed-answer decoding into Guardian and make a second consumer copy it.</Alternative>
+    <Alternative>Implement OpenAI Decisions API and Qwen/Alibaba decision adapters now. Rejected: as of the change date both are preview products with no public request or response schema, so an adapter would encode guesses; they are deferred until a public contract exists.</Alternative>
+    <Alternative>Use an LLM-backed System One adapter (forcing a chat model to emit typed decisions). Rejected for this change: it re-introduces the free-form generation and parsing that motivated the change, and it is better evaluated later as a separate fallback adapter.</Alternative>
+    <Alternative>Make the systemone backend authoritative by default once configured. Rejected: auto-approval is safety-critical, so the default stays fast and systemone must be explicitly selected, ideally after shadow calibration.</Alternative>
+    <Alternative>Add a multi-provider registry and per-consumer policies now. Rejected: over-engineering for one consumer; deferred until a second consumer exists.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>OpenAI Decisions API adapter: add once OpenAI publishes a public endpoint, request schema, response schema, and pricing.</Decision>
+    <Decision>Qwen/Alibaba decision-model adapter: add once Model Studio documents a stable request and response contract.</Decision>
+    <Decision>Capability negotiation and degradation policy: when a provider lacks a required primitive, this change fails closed to the fast backend; whether to support per-primitive degradation is deferred until there is a measured case.</Decision>
+    <Decision>Multi-provider registry and per-consumer shadow and threshold policies: deferred until a second System One consumer exists.</Decision>
+    <Decision>Additional consumers (tool-history semantic pruning, reviewer triage, semantic spec lint, injection screening of fetched content, secret screening, evidence checking): each is deferred to its own change and must follow the placement rule that systemone only supplies a signal while deterministic code owns the threshold and consequence.</Decision>
+    <Decision>Local-first default endpoint: this change requires an explicit baseUrl and ships no implicit cloud default; choosing a recommended local default is deferred.</Decision>
+    <Decision>Calibration tooling: shadow mode only records comparable decisions; fitting thresholds to a labeled corpus is deferred.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A repository maintainer configures systemone with a local Ollama endpoint and model, sets guardian.decisionBackend to systemone, and Guardian's low-risk auto-approval runs entirely offline with no repository content leaving the machine.</Scenario>
+    <Scenario>A maintainer keeps the default fast backend and enables systemone shadow mode; Guardian keeps its current decisions while logging a structured comparison between the fast verdict and the systemone noul and score, so thresholds can be calibrated before opting in.</Scenario>
+    <Scenario>The configured System One endpoint is unreachable or slow; Guardian times out, defers to manual approval, and other permission evaluations are unaffected because each decision is bounded and contained.</Scenario>
+    <Scenario>The apiKey placeholder is unset in the environment; the provider is disabled with a value-free warning and Guardian continues on the fast backend rather than failing permission handling.</Scenario>
+    <Scenario>The systemone plugin toggle is turned off; no provider is constructed, Guardian runs on the fast backend, and no network call is attempted.</Scenario>
+    <Scenario>A maintainer points the same client at two different base URLs (a hosted gateway and a local server) by configuration alone, confirming there is no vendor-specific code path.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

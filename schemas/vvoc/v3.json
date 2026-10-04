@@ -79,6 +79,31 @@
         "reviewToastDurationMs": {
           "type": "integer",
           "minimum": 1
+        },
+        "decisionBackend": {
+          "type": "string",
+          "enum": [
+            "fast",
+            "systemone"
+          ]
+        },
+        "systemone": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "shadow",
+            "lowRiskThreshold"
+          ],
+          "properties": {
+            "shadow": {
+              "type": "boolean"
+            },
+            "lowRiskThreshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
         }
       }
     },
@@ -517,6 +542,42 @@
               }
             }
           ]
+        }
+      }
+    },
+    "systemone": {
+      "type": "object",
+      "description": "Optional provider-neutral System One connection. Any endpoint that speaks POST /v1/systemone is selected by baseUrl and model; no hosted endpoint is assumed.",
+      "additionalProperties": false,
+      "required": [
+        "baseUrl",
+        "model"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "baseUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "apiKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provider API key. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
         }
       }
     }

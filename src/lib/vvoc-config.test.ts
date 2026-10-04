@@ -23,8 +23,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createDefaultVvocConfig,
+  createGuardianConfig,
+  createSystemOneConfig,
   createWebConfig,
   parseVvocConfigText,
+  renderSystemOneConfig,
   renderVvocConfig,
   validateVvocConfigDocument,
   VVOC_CONFIG_SCHEMA,
@@ -152,6 +155,149 @@ describe("createWebConfig normalization", () => {
   });
 });
 
+describe("optional systemone section and guardian decision backend", () => {
+  function docWithSystemone(systemone: unknown, guardian?: Record<string, unknown>): string {
+    const base = createDefaultVvocConfig();
+    return JSON.stringify(
+      {
+        ...base,
+        guardian: guardian ? { ...base.guardian, ...guardian } : base.guardian,
+        systemone,
+      },
+      null,
+      2,
+    );
+  }
+
+  test("defaults carry no systemone section and no backend override", () => {
+    const defaults = createDefaultVvocConfig();
+    expect(defaults.systemone).toBeUndefined();
+    expect(defaults.guardian.decisionBackend).toBeUndefined();
+    expect(defaults.guardian.systemone).toBeUndefined();
+    const rendered = JSON.parse(renderVvocConfig(defaults)) as Record<string, unknown>;
+    expect(rendered.systemone).toBeUndefined();
+    expect((rendered.guardian as Record<string, unknown>).decisionBackend).toBeUndefined();
+  });
+
+  test("a full systemone section parses and round-trips", () => {
+    const parsed = parseVvocConfigText(
+      docWithSystemone({
+        enabled: true,
+        baseUrl: "http://localhost:8790",
+        model: "example",
+        apiKey: "${SYSTEMONE_KEY}",
+        timeoutMs: 2500,
+        maxRetries: 2,
+      }),
+      "test",
+    );
+    expect(parsed.systemone).toEqual({
+      enabled: true,
+      baseUrl: "http://localhost:8790",
+      model: "example",
+      apiKey: "${SYSTEMONE_KEY}",
+      timeoutMs: 2500,
+      maxRetries: 2,
+    });
+    const rendered = renderVvocConfig(parsed);
+    expect(parseVvocConfigText(rendered, "test").systemone).toEqual(parsed.systemone);
+  });
+
+  test("a minimal systemone section seeds enabled, timeout, and retries", () => {
+    const parsed = parseVvocConfigText(
+      docWithSystemone({ baseUrl: "https://api.example.test", model: "example" }),
+      "test",
+    );
+    expect(parsed.systemone).toEqual({
+      enabled: true,
+      baseUrl: "https://api.example.test",
+      model: "example",
+      timeoutMs: 5_000,
+      maxRetries: 1,
+    });
+  });
+
+  test("rejects a missing baseUrl or model, unknown keys, and an out-of-range retry count", () => {
+    expect(() => parseVvocConfigText(docWithSystemone({ model: "example" }), "test")).toThrow();
+    expect(() => parseVvocConfigText(docWithSystemone({ baseUrl: "http://x" }), "test")).toThrow();
+    expect(() =>
+      parseVvocConfigText(
+        docWithSystemone({ baseUrl: "http://x", model: "m", bogus: true }),
+        "test",
+      ),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(
+        docWithSystemone({ baseUrl: "http://x", model: "m", maxRetries: 6 }),
+        "test",
+      ),
+    ).toThrow();
+  });
+
+  test("guardian decisionBackend and systemone policy parse and round-trip", () => {
+    const parsed = parseVvocConfigText(
+      docWithSystemone(
+        { baseUrl: "http://localhost:8790", model: "example" },
+        { decisionBackend: "systemone", systemone: { shadow: true, lowRiskThreshold: 0.9 } },
+      ),
+      "test",
+    );
+    expect(parsed.guardian.decisionBackend).toBe("systemone");
+    expect(parsed.guardian.systemone).toEqual({ shadow: true, lowRiskThreshold: 0.9 });
+    const rendered = renderVvocConfig(parsed);
+    const reparsed = parseVvocConfigText(rendered, "test");
+    expect(reparsed.guardian.decisionBackend).toBe("systemone");
+    expect(reparsed.guardian.systemone).toEqual({ shadow: true, lowRiskThreshold: 0.9 });
+  });
+
+  test("rejects an invalid decisionBackend and an invalid guardian systemone policy", () => {
+    expect(() =>
+      parseVvocConfigText(
+        docWithSystemone({ baseUrl: "http://x", model: "m" }, { decisionBackend: "both" }),
+        "test",
+      ),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(
+        docWithSystemone({ baseUrl: "http://x", model: "m" }, { systemone: { shadow: true } }),
+        "test",
+      ),
+    ).toThrow();
+    expect(() =>
+      parseVvocConfigText(
+        docWithSystemone(
+          { baseUrl: "http://x", model: "m" },
+          { systemone: { shadow: true, lowRiskThreshold: 2 } },
+        ),
+        "test",
+      ),
+    ).toThrow();
+  });
+
+  test("createSystemOneConfig normalizes defaults and returns undefined when absent", () => {
+    expect(createSystemOneConfig(undefined)).toBeUndefined();
+    expect(createSystemOneConfig("nope")).toBeUndefined();
+    expect(createSystemOneConfig({ baseUrl: "http://x", model: "m" })).toEqual({
+      enabled: true,
+      baseUrl: "http://x",
+      model: "m",
+      timeoutMs: 5_000,
+      maxRetries: 1,
+    });
+    expect(() => renderSystemOneConfig({ baseUrl: "http://x" })).toThrow();
+  });
+
+  test("createGuardianConfig keeps backend fields absent unless provided", () => {
+    expect(createGuardianConfig().decisionBackend).toBeUndefined();
+    expect(createGuardianConfig({ decisionBackend: "fast" }).decisionBackend).toBe("fast");
+  });
+
+  test("a pre-change document without systemone fields still validates", () => {
+    const legacy = createDefaultVvocConfig();
+    expect(validateVvocConfigDocument(legacy)).toEqual([]);
+  });
+});
+
 describe("schema parity", () => {
   test("embedded WEB_CONFIG_SCHEMA matches schemas/vvoc/v3.json web property", () => {
     const fileSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as {
@@ -160,6 +306,15 @@ describe("schema parity", () => {
     expect((VVOC_CONFIG_SCHEMA.properties as Record<string, unknown>).web).toEqual(
       fileSchema.properties.web,
     );
+  });
+
+  test("embedded guardian and systemone schemas match schemas/vvoc/v3.json", () => {
+    const fileSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as {
+      properties: Record<string, unknown>;
+    };
+    const properties = VVOC_CONFIG_SCHEMA.properties as Record<string, unknown>;
+    expect(properties.guardian).toEqual(fileSchema.properties.guardian);
+    expect(properties.systemone).toEqual(fileSchema.properties.systemone);
   });
 });
 

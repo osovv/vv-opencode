@@ -1,10 +1,10 @@
 // FILE: src/plugins/guardian.integration.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native-boundary tests for the Guardian permission review: denied/explicit-allow preservation, low/high/invalid verdict handling, missing family deferral, per-family policy switching, the captured fast-role auxiliary inference payload, and lifecycle teardown.
-//   SCOPE: Drive the native permission.evaluate handler through an injected review seam with pinned native event shapes; verify plugin setup registers an evaluate hook and releases the shared runtime on cleanup.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/guardian/index.ts]
-//   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN, M-NATIVE-RUNTIME]
+//   PURPOSE: Native-boundary tests for the Guardian permission review: denied/explicit-allow preservation, low/high/invalid verdict handling, missing family deferral, per-family policy switching, the captured fast-role auxiliary inference payload, the optional System One backend with shadow and fail-closed behavior, and lifecycle teardown.
+//   SCOPE: Drive the native permission.evaluate handler through an injected review seam with pinned native event shapes; verify plugin setup registers an evaluate hook, resolves provider availability, and releases the shared runtime on cleanup.
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/guardian/index.ts, src/lib/systemone.ts]
+//   LINKS: [M-PLUGIN-GUARDIAN, V-M-PLUGIN-GUARDIAN, M-NATIVE-RUNTIME, M-SYSTEMONE-PROVIDER]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -14,12 +14,14 @@
 //   makeEvent - Build a native permission.evaluate event fixture.
 //   policy - Builds a Guardian review policy fixture.
 //   Harness - Guardian handler test harness surface.
-//   createHarness - Build handler dependencies with recording history/inference/log.
+//   createHarness - Build handler dependencies with recording history/inference/log and an injectable transport.
 //   verdict - Serialize a risk assessment verdict.
+//   systemoneTransport - Build a System One transport returning fixed noul and score answers.
+//   SYSTEMONE_CONNECTION - Fixed System One connection fixture.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-005 - Rewrote V1 agent-config/permission.reply/subprocess tests as native permission.evaluate handler tests with an injected auxiliary inference seam.]
+//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-004 - Added System One backend, shadow, and provider-availability coverage over the injected seam.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -32,7 +34,9 @@ import {
   type GuardianPermissionEvaluation,
   type GuardianReviewDependencies,
   type GuardianReviewPolicy,
+  type GuardianRuntimeConfig,
 } from "./guardian/index.js";
+import type { SystemOneTransport } from "../lib/systemone.js";
 
 const tempDirs: string[] = [];
 
@@ -58,18 +62,46 @@ function makeEvent(
   };
 }
 
-function policy(threshold: number, familyId = "fam-1"): GuardianReviewPolicy {
+function policy(
+  threshold: number,
+  familyId = "fam-1",
+  overrides: Partial<GuardianRuntimeConfig> = {},
+): GuardianReviewPolicy {
   return {
     familyId,
     config: {
       timeoutMs: 5_000,
       approvalRiskThreshold: threshold,
       reviewToastDurationMs: 4_000,
+      decisionBackend: "fast",
+      systemoneShadow: false,
+      systemoneLowRiskThreshold: 0.95,
       sources: [],
       warnings: [],
+      ...overrides,
     },
     prompt: "Guardian policy prompt.",
   };
+}
+
+const SYSTEMONE_CONNECTION = {
+  baseUrl: "http://localhost:8790",
+  model: "example",
+  timeoutMs: 50,
+  maxRetries: 0,
+};
+
+function systemoneTransport(noul: number, score: number): SystemOneTransport {
+  return async () => ({
+    status: 200,
+    body: JSON.stringify({
+      model: "example",
+      answers: {
+        low_risk: { type: "noul", noul },
+        risk: { type: "score", score, probabilities: {} },
+      },
+    }),
+  });
 }
 
 interface Harness {
@@ -84,6 +116,7 @@ interface Harness {
   setVerdict(text: string | undefined): void;
   setPolicy(p: GuardianReviewPolicy | undefined): void;
   setInferError(error: Error | undefined): void;
+  setTransport(transport: SystemOneTransport | undefined): void;
 }
 
 function createHarness(initial?: GuardianReviewPolicy): Harness {
@@ -92,6 +125,7 @@ function createHarness(initial?: GuardianReviewPolicy): Harness {
   let currentPolicy = initial;
   let verdict: string | undefined = undefined;
   let inferError: Error | undefined;
+  let transport: SystemOneTransport | undefined;
 
   const deps: GuardianReviewDependencies = {
     async policyFor() {
@@ -104,6 +138,9 @@ function createHarness(initial?: GuardianReviewPolicy): Harness {
       inferCalls.push(input);
       if (inferError) throw inferError;
       return verdict;
+    },
+    get transport() {
+      return transport;
     },
     log(event) {
       logs.push({ level: event.level, message: event.message });
@@ -122,6 +159,9 @@ function createHarness(initial?: GuardianReviewPolicy): Harness {
     },
     setInferError(error) {
       inferError = error;
+    },
+    setTransport(next) {
+      transport = next;
     },
   };
 }
@@ -259,6 +299,105 @@ describe("Guardian native permission evaluate", () => {
     expect(relaxed.effect).toBe("allow");
   });
 
+  test("systemone backend derives the assessment and auto-approves a low-risk answer", async () => {
+    const harness = createHarness(
+      policy(80, "fam-s1", {
+        decisionBackend: "systemone",
+        systemoneLowRiskThreshold: 0.95,
+        systemone: SYSTEMONE_CONNECTION,
+      }),
+    );
+    harness.setTransport(systemoneTransport(0.99, 0));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("allow");
+    expect(harness.inferCalls).toEqual([]);
+  });
+
+  test("systemone backend defers when the low-risk probability misses the gate", async () => {
+    const harness = createHarness(
+      policy(80, "fam-s2", {
+        decisionBackend: "systemone",
+        systemoneLowRiskThreshold: 0.95,
+        systemone: SYSTEMONE_CONNECTION,
+      }),
+    );
+    harness.setTransport(systemoneTransport(0.5, 0));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("ask");
+  });
+
+  test("systemone backend defers when the score reaches the approval threshold", async () => {
+    const harness = createHarness(
+      policy(80, "fam-s3", {
+        decisionBackend: "systemone",
+        systemoneLowRiskThreshold: 0.95,
+        systemone: SYSTEMONE_CONNECTION,
+      }),
+    );
+    harness.setTransport(systemoneTransport(0.99, 4));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("ask");
+  });
+
+  test("systemone backend defers on provider failure or a malformed answer and never falls through to fast", async () => {
+    const failing = createHarness(
+      policy(80, "fam-s4", {
+        decisionBackend: "systemone",
+        systemone: SYSTEMONE_CONNECTION,
+      }),
+    );
+    failing.setTransport(async () => {
+      throw new Error("provider down");
+    });
+    const handler = createGuardianEvaluateHandler(failing.deps);
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("ask");
+    expect(failing.inferCalls).toEqual([]);
+
+    const malformed = createHarness(
+      policy(80, "fam-s5", {
+        decisionBackend: "systemone",
+        systemone: SYSTEMONE_CONNECTION,
+      }),
+    );
+    malformed.setTransport(async () => ({
+      status: 200,
+      body: JSON.stringify({ answers: { low_risk: { type: "noul", noul: 0.99 } } }),
+    }));
+    const second = makeEvent();
+    await createGuardianEvaluateHandler(malformed.deps)(second);
+    expect(second.effect).toBe("ask");
+  });
+
+  test("shadow mode keeps the fast backend authoritative and logs a comparison", async () => {
+    const harness = createHarness(
+      policy(80, "fam-shadow", {
+        decisionBackend: "fast",
+        systemoneShadow: true,
+        systemone: SYSTEMONE_CONNECTION,
+      }),
+    );
+    harness.setVerdict(verdict("low", 1));
+    harness.setTransport(systemoneTransport(0.1, 4));
+    const handler = createGuardianEvaluateHandler(harness.deps);
+
+    const event = makeEvent();
+    await handler(event);
+    expect(event.effect).toBe("allow");
+    expect(harness.inferCalls).toHaveLength(1);
+    expect(harness.logs.some((entry) => entry.message.includes("shadow comparison"))).toBe(true);
+  });
+
   test("setup registers evaluate and tears down the runtime registration", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vvoc-guardian-"));
     tempDirs.push(directory);
@@ -299,5 +438,86 @@ describe("Guardian native permission evaluate", () => {
     await cleanup?.();
     expect(disposed).toBe(true);
     expect(released).toBe(true);
+  });
+
+  function providerVvoc(plugins: Record<string, unknown>): Record<string, unknown> {
+    return {
+      $schema: "test",
+      version: 3,
+      roles: {
+        default: "openai/gpt-6-luna#low",
+        smart: "openai/gpt-6-luna#low",
+        fast: "openai/gpt-6-luna#low",
+        reviewer: "openai/gpt-6-luna#low",
+      },
+      guardian: {
+        timeoutMs: 1_000,
+        approvalRiskThreshold: 80,
+        reviewToastDurationMs: 1_000,
+        decisionBackend: "systemone",
+        systemone: { shadow: false, lowRiskThreshold: 0.95 },
+      },
+      secretsRedaction: {},
+      presets: {},
+      plugins,
+      systemone: {
+        enabled: true,
+        baseUrl: "http://127.0.0.1:9",
+        model: "example",
+        apiKey: "${VVOC_TEST_MISSING_KEY}",
+        timeoutMs: 50,
+        maxRetries: 0,
+      },
+    };
+  }
+
+  async function runProviderHook(
+    vvoc: Record<string, unknown>,
+  ): Promise<GuardianPermissionEvaluation> {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-guardian-provider-"));
+    tempDirs.push(directory);
+    let evaluate: ((event: GuardianPermissionEvaluation) => Promise<void>) | undefined;
+    const fakeRuntime = {
+      snapshots: {
+        configFor: async () => ({ familyId: "fam-provider", vvoc }),
+        accept: async () => ({ status: "bound" }),
+      },
+      client: async () => ({ session: { context: async () => [] } }),
+      auxiliary: {
+        generate: async () => ({ text: verdict("low", 1) }),
+      },
+      permissions: {},
+      effectiveConfig: () => ({ vvoc }),
+      release: async () => {},
+    };
+    const plugin = createGuardianPlugin({ acquireRuntime: async () => fakeRuntime as never });
+    await plugin.setup({
+      location: { directory, project: { id: "p", directory, canonical: directory } },
+      permission: {
+        hook: async (_name: string, cb: (event: GuardianPermissionEvaluation) => Promise<void>) => {
+          evaluate = cb;
+          return { dispose: async () => {} };
+        },
+      },
+    } as never);
+    const event = makeEvent();
+    await evaluate?.(event);
+    return event;
+  }
+
+  test("an unresolved systemone apiKey disables the provider and keeps the fast backend", async () => {
+    delete process.env.VVOC_TEST_MISSING_KEY;
+    const event = await runProviderHook(providerVvoc({ guardian: true, systemone: true }));
+    expect(event.effect).toBe("allow");
+  });
+
+  test("the systemone plugin toggle off forces the fast backend", async () => {
+    process.env.VVOC_TEST_MISSING_KEY = "resolved-key";
+    try {
+      const event = await runProviderHook(providerVvoc({ guardian: true, systemone: false }));
+      expect(event.effect).toBe("allow");
+    } finally {
+      delete process.env.VVOC_TEST_MISSING_KEY;
+    }
   });
 });

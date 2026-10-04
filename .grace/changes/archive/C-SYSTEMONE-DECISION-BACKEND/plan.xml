@@ -1,0 +1,212 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-SYSTEMONE-DECISION-BACKEND>
+    <IntentSummary>Add a provider-neutral System One decision client for the de-facto POST /v1/systemone protocol (noul, choice, score) selected by baseUrl and model, add an optional strict canonical systemone connection section plus a systemone plugin toggle, and add guardian.decisionBackend ("fast" | "systemone") with an explicit shadow-calibration mode and fail-closed fallback to the existing fast auxiliary path, keeping the fast backend the default and shipping no implicit hosted endpoint.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>src/plugins/guardian/index.ts</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>src/lib/plugin-toggle-config.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/guardian/index.ts</File>
+        <Text>GUARDIAN_RUNTIME_ROLE_REF</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>createGuardianConfig</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>"spec-guard"</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>"guardian"</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>"systemone"</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>"systemone"</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>decisionBackend</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/plugins/guardian/index.ts</File>
+        <Text>decisionBackend</Text>
+      </MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-SYSTEMONE-PROVIDER</Module>
+        <Module>M-PLUGIN-GUARDIAN</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-PLUGIN-TOGGLE-CONFIG</Module>
+      </MustVerify>
+      <MustContain>
+        <File>src/lib/systemone.ts</File>
+        <Text>v1/systemone</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/systemone.ts</File>
+        <Text>questions</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>createSystemOneConfig</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/guardian/index.ts</File>
+        <Text>decisionBackend</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/guardian/index.ts</File>
+        <Text>systemone</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/plugin-toggle-config.ts</File>
+        <Text>"systemone"</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>"systemone"</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>decisionBackend</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/lib/systemone.ts</File>
+        <Text>jev</Text>
+      </MustNotContain>
+      <MustNotContain>
+        <File>src/lib/systemone.ts</File>
+        <Text>typesafe</Text>
+      </MustNotContain>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Measured on the reference host before edits: bun run check 89s, bun run build 18s, bun run pack:check 29s; budgets are ordinary leaf gates and the runner default applies. The isolated live-host contract gate is not part of this change.</Note>
+      <Note>Optional live smoke against a real System One endpoint is a manual developer step using a short-lived key from the environment; it is never a repository or CI gate and no key or endpoint is committed.</Note>
+      <Note>Scope is deliberately one consumer: the added client is provider-neutral and Guardian is the only caller. OpenAI Decisions API and Qwen/Alibaba decision adapters are deferred until a public schema exists, and every other System One use case (context pruning, reviewer triage, semantic spec lint, routing, screening) is a separate future change.</Note>
+      <Note>Fail-closed rule: any disabled, unconfigured, unreachable, timed-out, or malformed provider outcome makes Guardian defer to manual approval through the existing fast path; the provider never becomes an acceptance or review authority.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-SYSTEMONE-PROVIDER />
+        <M-PLUGIN-GUARDIAN />
+        <M-CLI-CONFIG />
+        <M-PLUGIN-TOGGLE-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-SYSTEMONE-PROVIDER />
+        <V-M-PLUGIN-GUARDIAN />
+        <V-M-CLI-CONFIG />
+        <V-M-PLUGIN-TOGGLE-CONFIG />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/systemone.ts</File>
+      <File>src/lib/systemone.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>src/lib/plugin-toggle-config.ts</File>
+      <File>src/lib/plugin-toggle-config.test.ts</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>src/plugins/guardian/index.ts</File>
+      <File>src/plugins/guardian.integration.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Provider-neutral System One client: request shaping, typed noul/choice/score decoding, bounded transport</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>systemone.ts posts {model, state, questions} to {baseUrl}/v1/systemone over an injectable transport, decodes noul as a 0..1 probability, choice as a winning key with per-option probabilities and confidence, and score as an interpolated value with per-level probabilities and confidence, and ignores unknown response fields and provider-specific extras.</Criterion>
+          <Criterion>The client is vendor-neutral: it contains no jev-, typesafe-, or other vendor-specific field or branch, and any compliant endpoint is reached by baseUrl and model alone.</Criterion>
+          <Criterion>The client applies the configured request timeout and a bounded retry count, never retries unboundedly, and surfaces a typed, credential-safe error that never includes the apiKey or the raw state.</Criterion>
+          <Criterion>Tests use an injected transport and cover request shaping, each answer type, unknown-field tolerance, timeout, retry bound, and credential-safe error text; no live endpoint, key, or network call is used.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/systemone.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Canonical config: optional systemone section, guardian decisionBackend, strict schema v3 widening</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vvoc-config.ts adds a SystemOneConfig type and createSystemOneConfig defaulting enabled true, timeoutMs and maxRetries, requiring non-empty baseUrl and model when the section is present, accepting an optional ${VAR} apiKey, and clearing unknown keys.</Criterion>
+          <Criterion>guardian config gains decisionBackend ("fast" | "systemone", default "fast") and an optional nested systemone object with shadow (boolean, default false) and lowRiskThreshold (0..1, default 0.95); createGuardianConfig seeds them conservatively so existing documents keep validating.</Criterion>
+          <Criterion>schemas/vvoc/v3.json gains the optional systemone property and the guardian decisionBackend and systemone properties, the embedded schema stays byte-equal to schemas/vvoc/v3.json, and a previously valid v3 document still validates.</Criterion>
+          <Criterion>Tests cover parse, render, defaults, rejection of missing baseUrl or model, invalid decisionBackend and threshold values, and continued validity of a pre-change document.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/vvoc-config.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>System One plugin toggle: canonical name, default entry, conservative materialization</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>plugin-toggle-config.ts adds "systemone" to PLUGIN_TOGGLE_NAMES and a default enabled entry materialized into vvoc.json on sync/init without overwriting any user-set value.</Criterion>
+          <Criterion>The toggle is resolvable through the shared isPluginEnabled helper, and an existing v3 document without the key remains enabled by default.</Criterion>
+          <Criterion>Tests cover the new canonical name, default value, materialization conservatism, and that a user-provided boolean or object entry wins.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/plugin-toggle-config.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Guardian backend switch: systemone assessment, shadow calibration, fail-closed fallback</Title>
+        <DependsOn>T-001, T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Guardian keeps the fast backend as its default and produces identical decisions when decisionBackend is "fast", proven by the existing Guardian scenarios passing unchanged.</Criterion>
+          <Criterion>With decisionBackend "systemone", Guardian builds the provider state from the existing bounded review input and derives the assessment from a noul low-risk question and a score risk rubric, mapping to risk_level and risk_score and reusing the existing low-and-below-threshold auto-approval rule.</Criterion>
+          <Criterion>With shadow enabled, the systemone provider is evaluated and a structured comparison is logged, but the permission effect is decided solely by the fast backend and is never mutated by the observed systemone answer.</Criterion>
+          <Criterion>When the provider is disabled, unconfigured, unavailable, timed out, or returns a missing or malformed noul or score, Guardian defers to manual approval and never auto-approves, and no error escapes the permission hook.</Criterion>
+          <Criterion>The systemone plugin toggle off constructs no provider and forces the fast backend.</Criterion>
+          <Criterion>Tests use the injectable Guardian inference seam and an injected systemone transport, and cover fast parity, systemone allow and defer, shadow non-mutation, unset key, provider failure, toggle off, and key absence from logs.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/guardian.integration.test.ts src/lib/systemone.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Durable state and docs: graph, verification, README</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>.grace/graph/main.xml gains M-SYSTEMONE-PROVIDER describing the provider-neutral client, and updates M-PLUGIN-GUARDIAN, M-CLI-CONFIG, and M-PLUGIN-TOGGLE-CONFIG to reflect the decisionBackend, systemone section, and toggle.</Criterion>
+          <Criterion>.grace/verification/main.xml gains V-M-SYSTEMONE-PROVIDER and updates V-M-PLUGIN-GUARDIAN, V-M-CLI-CONFIG, and V-M-PLUGIN-TOGGLE-CONFIG with the new test files and commands.</Criterion>
+          <Criterion>README documents the systemone section, the guardian decisionBackend and shadow mode, the fast default, the vendor-neutral baseUrl and model selection, key handling, and that no hosted endpoint is assumed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . &amp;&amp; grace status --path .</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Full verification gate: check, build, packaging</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Fresh evidence passes: bun run check (typecheck, lint, format, GRACE markup, tool contracts, all tests), bun run build, and bun run pack:check, each within its declared budget.</Criterion>
+          <Criterion>The change final GRACE gate is run externally after observed writes: grace lint --path . --change C-SYSTEMONE-DECISION-BACKEND --assertions final with run-commands, and no GRACE lifecycle command is nested inside a plan assertion.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check &amp;&amp; bun run build &amp;&amp; bun run pack:check</Command>
+        </Verification>
+      </T-006>
+    </ImplementationPlan>
+  </C-SYSTEMONE-DECISION-BACKEND>
+</GraceChangePlan>

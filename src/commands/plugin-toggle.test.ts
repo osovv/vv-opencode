@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Updated CLI toggle inventory coverage for the eighth default-enabled plugin.]
+//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added the systemone toggle name and updated the inventory count.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
@@ -36,7 +36,8 @@ describe("plugin toggle", () => {
     expect(names.includes("context")).toBe(true);
     expect(names.includes(WEB_TOOLS_PLUGIN_NAME)).toBe(true);
     expect(names.includes("spec-guard")).toBe(true);
-    expect(names.length).toBe(12);
+    expect(names.includes("systemone")).toBe(true);
+    expect(names.length).toBe(13);
   });
 
   test("vvoc.json toggle write round-trips", async () => {

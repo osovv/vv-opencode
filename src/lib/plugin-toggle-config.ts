@@ -30,7 +30,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SPEC-IDENTITY-LINT - Added the spec-guard toggle name, warn-mode default entry, and conservative entry materialization.]
+//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added the systemone provider toggle name.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_CONSTANTS
@@ -47,6 +47,7 @@ export const PLUGIN_TOGGLE_NAMES = [
   "analytics",
   "peak-hours",
   "spec-guard",
+  "systemone",
 ] as const;
 
 export type VvocPluginEntryConfig = {

@@ -18,6 +18,9 @@
 //   VvocPresets - Named preset map type.
 //   GuardianConfig - Guardian section configuration type.
 //   GuardianConfigOverrides - Guardian config override type.
+//   GuardianDecisionBackend - Selected Guardian assessment backend type.
+//   GuardianSystemOneConfig - Guardian System One policy type.
+//   SystemOneConfig - Optional provider-neutral System One connection type.
 //   SecretsRedactionKeywordRule - Keyword rule configuration type.
 //   SecretsRedactionRegexRule - Regex rule configuration type.
 //   SecretsRedactionConfig - Secrets redaction section configuration type.
@@ -25,11 +28,15 @@
 //   ParsedVvocConfig - Parsed vvoc config plus source schema/version.
 //   VVOC_CONFIG_SCHEMA - JSON Schema object for validation.
 //   createGuardianConfig - Builds a fully seeded guardian section from optional overrides.
+//   createGuardianSystemOneConfig - Builds a seeded guardian System One policy from optional overrides.
+//   createSystemOneConfig - Normalizes an optional System One connection, returning undefined when absent.
 //   createDefaultSecretsRedactionConfig - Builds the seeded secrets-redaction section.
 //   createDefaultVvocPresets - Builds the seeded named preset map.
 //   createDefaultVvocConfig - Builds the fully seeded canonical vvoc config document.
 //   parseGuardianConfigText - Strictly parses a guardian section JSON snippet.
 //   renderGuardianConfig - Renders a guardian section JSON snippet.
+//   parseSystemOneConfigText - Strictly parses a System One connection JSON snippet.
+//   renderSystemOneConfig - Renders a System One connection JSON snippet.
 //   parseVersionedVvocConfigText - Strictly parses vvoc.json and returns source version plus config.
 //   parseVvocConfigText - Strictly parses the canonical vvoc config document.
 //   renderVvocConfig - Renders canonical vvoc.json.
@@ -42,7 +49,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added the strict peak-hours plugin entry schema arm with mode, grace, and schedule windows.]
+//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-002 - Added the optional strict systemone connection section and the guardian decisionBackend and systemone policy fields.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -65,6 +72,9 @@ import {
 
 const DEFAULT_GUARDIAN_TIMEOUT_MS = 90_000;
 const DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD = 80;
+const DEFAULT_GUARDIAN_SYSTEMONE_LOW_RISK_THRESHOLD = 0.95;
+const DEFAULT_SYSTEMONE_TIMEOUT_MS = 5_000;
+const DEFAULT_SYSTEMONE_MAX_RETRIES = 1;
 const DEFAULT_SECRETS_REDACTION_TTL_MS = 3_600_000;
 const DEFAULT_SECRETS_REDACTION_MAX_MAPPINGS = 10_000;
 export const VVOC_CONFIG_VERSION = 3;
@@ -105,9 +115,30 @@ export type GuardianConfig = {
   timeoutMs: number;
   approvalRiskThreshold: number;
   reviewToastDurationMs: number;
+  decisionBackend?: GuardianDecisionBackend;
+  systemone?: GuardianSystemOneConfig;
 };
 
 export type GuardianConfigOverrides = Partial<GuardianConfig>;
+
+/** Selected Guardian assessment backend. Fast is the default; systemone is explicit opt-in. */
+export type GuardianDecisionBackend = "fast" | "systemone";
+
+/** Guardian-specific System One policy: observational shadow mode and the low-risk probability gate. */
+export type GuardianSystemOneConfig = {
+  shadow: boolean;
+  lowRiskThreshold: number;
+};
+
+/** Resolved connection settings for the optional provider-neutral System One section. */
+export type SystemOneConfig = {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+  timeoutMs: number;
+  maxRetries: number;
+};
 
 export type SecretsRedactionKeywordRule = {
   value: string;
@@ -173,12 +204,23 @@ export type VvocConfig = {
   presets: VvocPresets;
   plugins: VvocPluginToggleConfig;
   web?: VvocWebConfig;
+  systemone?: SystemOneConfig;
 };
 
 export type ParsedVvocConfig = {
   sourceSchema: string;
   sourceVersion: VvocConfigVersion;
   config: VvocConfig;
+};
+
+const GUARDIAN_SYSTEMONE_CONFIG_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["shadow", "lowRiskThreshold"],
+  properties: {
+    shadow: { type: "boolean" },
+    lowRiskThreshold: { type: "number", minimum: 0, maximum: 1 },
+  },
 };
 
 const GUARDIAN_CONFIG_SCHEMA = {
@@ -190,6 +232,29 @@ const GUARDIAN_CONFIG_SCHEMA = {
     timeoutMs: { type: "integer", minimum: 1 },
     approvalRiskThreshold: { type: "integer", minimum: 0, maximum: 100 },
     reviewToastDurationMs: { type: "integer", minimum: 1 },
+    decisionBackend: { type: "string", enum: ["fast", "systemone"] },
+    systemone: GUARDIAN_SYSTEMONE_CONFIG_SCHEMA,
+  },
+};
+
+const SYSTEMONE_CONFIG_SCHEMA = {
+  type: "object",
+  description:
+    "Optional provider-neutral System One connection. Any endpoint that speaks POST /v1/systemone is selected by baseUrl and model; no hosted endpoint is assumed.",
+  additionalProperties: false,
+  required: ["baseUrl", "model"],
+  properties: {
+    enabled: { type: "boolean" },
+    baseUrl: { type: "string", minLength: 1 },
+    model: { type: "string", minLength: 1 },
+    apiKey: {
+      type: "string",
+      minLength: 1,
+      description:
+        "Provider API key. Either a literal value or ${VAR} placeholders resolved from the OpenCode process environment at startup.",
+    },
+    timeoutMs: { type: "integer", minimum: 1 },
+    maxRetries: { type: "integer", minimum: 0, maximum: 5 },
   },
 };
 
@@ -475,6 +540,7 @@ export const VVOC_CONFIG_SCHEMA = {
       },
     },
     web: WEB_CONFIG_SCHEMA,
+    systemone: SYSTEMONE_CONFIG_SCHEMA,
   },
 };
 
@@ -491,7 +557,61 @@ export function createGuardianConfig(overrides: GuardianConfigOverrides = {}): G
     approvalRiskThreshold:
       overrides.approvalRiskThreshold ?? DEFAULT_GUARDIAN_APPROVAL_RISK_THRESHOLD,
     reviewToastDurationMs: overrides.reviewToastDurationMs ?? timeoutMs,
+    decisionBackend: normalizeGuardianDecisionBackend(overrides.decisionBackend),
+    systemone:
+      overrides.systemone === undefined
+        ? undefined
+        : createGuardianSystemOneConfig(overrides.systemone),
   });
+}
+
+export function createGuardianSystemOneConfig(
+  overrides: Partial<GuardianSystemOneConfig> = {},
+): GuardianSystemOneConfig {
+  return {
+    shadow: overrides.shadow ?? false,
+    lowRiskThreshold: overrides.lowRiskThreshold ?? DEFAULT_GUARDIAN_SYSTEMONE_LOW_RISK_THRESHOLD,
+  };
+}
+
+/** Normalize the optional top-level systemone section, returning undefined when absent. */
+export function createSystemOneConfig(value: unknown): SystemOneConfig | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  assertAllowedKeys(
+    value,
+    ["enabled", "baseUrl", "model", "apiKey", "timeoutMs", "maxRetries"],
+    "systemone",
+  );
+  const timeoutMs =
+    value.timeoutMs === undefined
+      ? DEFAULT_SYSTEMONE_TIMEOUT_MS
+      : readPositiveInteger(value.timeoutMs, "systemone: timeoutMs");
+  const maxRetries =
+    value.maxRetries === undefined
+      ? DEFAULT_SYSTEMONE_MAX_RETRIES
+      : readNonNegativeInteger(value.maxRetries, "systemone: maxRetries");
+  return compactObject({
+    enabled: typeof value.enabled === "boolean" ? value.enabled : true,
+    baseUrl: readNonEmptyString(value.baseUrl, "systemone: baseUrl"),
+    model: readNonEmptyString(value.model, "systemone: model"),
+    apiKey: normalizeOptionalString(typeof value.apiKey === "string" ? value.apiKey : undefined),
+    timeoutMs,
+    maxRetries,
+  });
+}
+
+function normalizeGuardianDecisionBackend(
+  value: GuardianDecisionBackend | undefined,
+): GuardianDecisionBackend | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "fast" || value === "systemone") {
+    return value;
+  }
+  throw new Error(`guardian: decisionBackend must be "fast" or "systemone"`);
 }
 
 export function createDefaultSecretsRedactionConfig(): SecretsRedactionConfig {
@@ -568,7 +688,14 @@ export function parseGuardianConfigText(text: string, label: string): GuardianCo
 
   assertAllowedKeys(
     value,
-    ["model", "timeoutMs", "approvalRiskThreshold", "reviewToastDurationMs"],
+    [
+      "model",
+      "timeoutMs",
+      "approvalRiskThreshold",
+      "reviewToastDurationMs",
+      "decisionBackend",
+      "systemone",
+    ],
     label,
   );
 
@@ -592,8 +719,47 @@ export function parseGuardianConfigText(text: string, label: string): GuardianCo
       `${label}: reviewToastDurationMs`,
     );
   }
+  if (Object.hasOwn(value, "decisionBackend")) {
+    overrides.decisionBackend = normalizeGuardianDecisionBackend(
+      value.decisionBackend as GuardianDecisionBackend,
+    );
+  }
+  if (Object.hasOwn(value, "systemone")) {
+    overrides.systemone = parseGuardianSystemOneConfigText(value.systemone, `${label}: systemone`);
+  }
 
   return overrides;
+}
+
+function parseGuardianSystemOneConfigText(value: unknown, label: string): GuardianSystemOneConfig {
+  if (!isPlainObject(value)) {
+    throw new Error(`${label}: expected a top-level object`);
+  }
+  assertAllowedKeys(value, ["shadow", "lowRiskThreshold"], label);
+  if (typeof value.shadow !== "boolean") {
+    throw new Error(`${label}: shadow expected a boolean`);
+  }
+  return {
+    shadow: value.shadow,
+    lowRiskThreshold: readUnitInterval(value.lowRiskThreshold, `${label}: lowRiskThreshold`),
+  };
+}
+
+export function parseSystemOneConfigText(text: string, label: string): SystemOneConfig {
+  const value = parseStrictJson(text, label);
+  const config = createSystemOneConfig(value);
+  if (config === undefined) {
+    throw new Error(`${label}: expected a top-level object`);
+  }
+  return config;
+}
+
+export function renderSystemOneConfig(overrides: Partial<SystemOneConfig> = {}): string {
+  const config = createSystemOneConfig({ enabled: true, ...overrides });
+  if (config === undefined) {
+    throw new Error("systemone: baseUrl and model are required");
+  }
+  return renderJson(config);
 }
 
 export function renderGuardianConfig(overrides: GuardianConfigOverrides = {}): string {
@@ -620,6 +786,7 @@ export function parseVvocConfigText(text: string, label: string): VvocConfig {
 
 export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig()): string {
   const web = createWebConfig(config.web);
+  const systemone = createSystemOneConfig(config.systemone);
   return renderJson({
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
@@ -630,6 +797,7 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     presets: createVvocPresets(config.presets),
     plugins: config.plugins,
     ...(web ? { web } : {}),
+    ...(systemone ? { systemone } : {}),
   });
 }
 // END_BLOCK_CANONICAL_CONFIG_PARSE_RENDER
@@ -667,6 +835,7 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
       presets: createVvocPresets(value.presets as VvocPresets),
       plugins: createPluginToggleConfig(value.plugins),
       web: createWebConfig(value.web),
+      systemone: createSystemOneConfig(value.systemone),
     },
   };
 }
@@ -863,6 +1032,22 @@ function readThreshold(value: unknown, label: string): number {
   }
 
   throw new Error(`${label}: expected an integer between 0 and 100`);
+}
+
+function readNonNegativeInteger(value: unknown, label: string): number {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+
+  throw new Error(`${label}: expected a non-negative integer`);
+}
+
+function readUnitInterval(value: unknown, label: string): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1) {
+    return value;
+  }
+
+  throw new Error(`${label}: expected a number between 0 and 1`);
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {

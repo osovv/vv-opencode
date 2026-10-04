@@ -173,7 +173,7 @@ Eleven server plugins run inside the OpenCode server process; the twelfth entry,
 |---|---|
 | **WorkflowPlugin** | A state machine over multi-agent work: explicit work items, required reviewers, bounded implementation/review rounds, and hard stops when more context is needed. |
 | **ModelRolesPlugin** | Semantic model roles (`vv-role:smart`, `vv-role:fast`, …) instead of hardcoded model IDs in agents, subagents, and commands — resolved from the effective vvoc role map plus the native `modelIntent` envelope each time a session family binds its snapshot. |
-| **GuardianPlugin** | Keeps long or AFK runs moving by auto-approving routine low-risk permission requests; anything risky stays in OpenCode's normal manual approval flow. |
+| **GuardianPlugin** | Keeps long or AFK runs moving by auto-approving routine low-risk permission requests; anything risky stays in OpenCode's normal manual approval flow. The assessment uses the captured `fast` auxiliary model by default, or an opt-in provider-neutral System One decision provider. |
 | **HashlineEditPlugin** | Routes each model to exactly one native edit tool (host `edit` for GLM/Qwen/Kimi, host `apply_patch` for GPT, `str_replace_editor` for DeepSeek, `hashline_edit` for unmatched models) and hides the other edit tools per session. |
 | **SystemContextInjectionPlugin** | Injects universal guidance — including correctness obligations and evidence discipline for behavior changes — plus the work policy selected by the orchestration profile into vv-controller at startup; subagents stay unpolluted. Skill discovery is registered by `vvoc install`/`sync` through the native `skills` config, not by a plugin. |
 | **SecretsRedactionPlugin** | Redacts tokens, keys, emails, and other sensitive values before messages reach the model, restoring them only where local execution needs the originals. |
@@ -733,6 +733,34 @@ vvoc plugin disable web-tools
 ```
 
 Unrelated MCP search or reader tools are not removed automatically; disable those separately if you want only the two canonical tools visible.
+
+### System One decision backend
+
+Guardian can derive its bounded low-risk assessment either from the captured `fast` auxiliary model (the default) or from a provider-neutral System One decision provider that speaks the de-facto `POST /v1/systemone` protocol (`noul`, `choice`, and `score` questions returning typed probabilities instead of generated text). The client is vendor-neutral: any compliant endpoint — a hosted provider, a gateway, or a local server — is selected by `baseUrl` and `model` alone, and no hosted endpoint is assumed.
+
+```json
+"systemone": {
+  "enabled": true,
+  "baseUrl": "http://localhost:8790",
+  "model": "example",
+  "apiKey": "${SYSTEMONE_API_KEY}",
+  "timeoutMs": 5000,
+  "maxRetries": 1
+},
+"guardian": {
+  "decisionBackend": "systemone",
+  "systemone": { "shadow": true, "lowRiskThreshold": 0.95 }
+}
+```
+
+- `decisionBackend` is `"fast"` (default) or `"systemone"`; the default keeps today's behavior unchanged.
+- With `"systemone"`, Guardian asks one `noul` ("the action is low-risk") and one `score` (risk rubric) over the same bounded review input and reuses the existing `risk_level === "low" && risk_score < approvalRiskThreshold` rule. `lowRiskThreshold` is the noul probability gate.
+- `systemone.shadow` keeps the `fast` backend authoritative while evaluating and logging the System One decision, so thresholds can be calibrated against real decisions before opting in.
+- Fail-closed: an unavailable, unreachable, timed-out, or malformed provider defers to manual approval and never auto-approves from a provider answer. A disabled section, a disabled `systemone` plugin toggle, or an unresolved `${VAR}` key keeps the `fast` backend.
+- The `systemone` plugin toggle is a kill switch: `vvoc plugin disable systemone` constructs no provider and forces the fast backend.
+- `apiKey` may be a literal or a `${VAR}` placeholder resolved from the OpenCode process environment at startup, like web provider credentials. The resolved value is never logged or written to persisted config snapshots.
+
+Switching between a hosted endpoint and a local endpoint is a `baseUrl` and `model` change only, with no code change. OpenAI Decisions API and other vendor products that do not speak `/v1/systemone` are out of scope.
 
 ### `/context` inspector
 

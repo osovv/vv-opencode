@@ -1,0 +1,84 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-SYSTEMONE-DECISION-BACKEND>
+    <Summary>Introduce a provider-neutral System One decision client that speaks the de-facto POST /v1/systemone protocol (noul, choice, score) over a configurable base URL, add an optional canonical systemone connection section and a systemone plugin toggle, and add guardian.decisionBackend ("fast" | "systemone") so Guardian resolves its bounded low-risk assessment either through the current snapshot-bound fast auxiliary model or through a calibrated decision provider, with an explicit shadow-calibration mode, fail-closed fallback to the existing fast path, credential-safe ${VAR} key resolution, and no live network in the repository gate.</Summary>
+    <Problem>Guardian currently derives its low-risk verdict by asking the captured fast-role auxiliary model to emit free-form JSON that is then parsed and thresholded. A calibrated System One decision provider returns typed, schema-exact answers with probabilities, is cheaper and faster for high-frequency permission review, and cannot be steered into emitting malicious prose. However, binding Guardian directly to a single vendor would create lock-in: the decision-model ecosystem has converged on the de-facto POST /v1/systemone protocol, served by hosted Jev, open models, local servers, and gateways, while OpenAI Decisions API and Alibaba/Qwen decision products use their own, currently non-public, wire shapes. The correct unit to bind is therefore the protocol class, not one vendor or model. There is also no safe way today to calibrate such a provider against Guardian's real decisions before it becomes authoritative.</Problem>
+    <Goals>
+      <Goal>Add a provider-neutral System One client that issues POST {baseUrl}/v1/systemone with {model, state, questions} and decodes typed noul, choice, and score answers with their probabilities and confidence, tolerating and ignoring unknown response fields per the protocol contract.</Goal>
+      <Goal>Add an optional strict canonical top-level systemone section carrying connection settings (baseUrl, model, optional ${VAR} apiKey, timeoutMs, maxRetries, enabled) so any compliant endpoint — hosted Jev, a gateway, or a local server such as Ollama, laya-serve, or Kev — is selected by configuration alone with no vendor-specific code path.</Goal>
+      <Goal>Extend guardian with decisionBackend ("fast" | "systemone") defaulting to "fast" so the existing behavior is byte-for-byte preserved unless the operator opts in.</Goal>
+      <Goal>Let the systemone backend derive the same bounded Guardian assessment by asking two typed questions over the existing review state: a noul for whether the planned action is low-risk (read-only or reversible, touches no secrets, stays within the repository) and a score for risk on an ordered rubric, mapping the results onto the existing risk_level and risk_score shape.</Goal>
+      <Goal>Add an explicit shadow-calibration mode in which the systemone provider is evaluated and logged but the fast backend remains authoritative, so thresholds can be measured against real decisions before the provider is trusted.</Goal>
+      <Goal>Keep all Guardian guarantees intact when the systemone backend is active: auto-approval only for an explicit low verdict under approvalRiskThreshold, never overriding deny or explicit allow, and deferring on every uncertainty, error, timeout, or invalid answer.</Goal>
+      <Goal>Fail closed to the fast backend, never to a guess, when the systemone provider is disabled, unconfigured, unreachable, times out, or returns answers outside the required noul and score primitives.</Goal>
+      <Goal>Resolve systemone.apiKey from a ${VAR} placeholder through the existing env-substitution contract, keep it out of persisted config snapshots, logs, and diagnostics, and disable the provider with a value-free diagnostic when the placeholder is unset or empty.</Goal>
+      <Goal>Add a systemone plugin toggle that, when disabled, constructs no provider and forces Guardian onto the fast backend, as a kill switch for network, cost, or privacy concerns.</Goal>
+      <Goal>Keep the canonical embedded schema, schemas/vvoc/v3.json, module contracts, README, package exports, GRACE graph, and GRACE verification synchronized with the implemented behavior, and never edit generated dist output.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Configuration stays strict canonical schema v3: the systemone section and the guardian extension are optional, every previously valid config remains valid, and the embedded schema matches schemas/vvoc/v3.json exactly.</Constraint>
+      <Constraint>The protocol binding is the de-facto /v1/systemone shape (state plus typed questions; noul, choice, score) and never a vendor brand: no jev-only field or behavior is required, and unknown response fields are ignored.</Constraint>
+      <Constraint>Only noul and score are required for this change; choice is decoded but unused, and an endpoint that cannot answer noul and score is treated as unavailable rather than partially trusted.</Constraint>
+      <Constraint>Guardian's default decisionBackend remains "fast" with identical behavior; opting into systemone is explicit, and an unbound, disabled, or misconfigured provider always defers to manual approval via the existing fail-closed path.</Constraint>
+      <Constraint>Shadow mode never mutates the permission effect: when shadow is enabled the fast backend is authoritative and the systemone evaluation is observational and logging-only.</Constraint>
+      <Constraint>No implicit cloud endpoint: baseUrl and model must be configured explicitly; the change ships no default that silently sends repository or transcript content to a hosted service.</Constraint>
+      <Constraint>Runtime plugins share the startup config snapshot, so systemone and guardian changes require an OpenCode restart, consistent with every existing runtime plugin.</Constraint>
+      <Constraint>The apiKey placeholder is resolved through M-ENV-SUBSTITUTION and protected by M-PLUGIN-SECRETS-REDACTION; the raw key and the request state are bounded in diagnostics and never written to logs or persisted snapshots.</Constraint>
+      <Constraint>Network effects are bounded: a finite request timeout, a finite retry count with no unbounded retry loop, and per-decision failure containment so a decision-provider outage cannot destabilize the host or block permission handling.</Constraint>
+      <Constraint>Verification is deterministic and injectable: tests use an injected transport and injected Guardian dependencies and must not require a real endpoint, API key, network, or live model call; a live-endpoint walkthrough is a documented manual step only.</Constraint>
+      <Constraint>OpenAI Decisions API and Alibaba/Qwen decision adapters are out of scope for this change because their request and response schemas are not public; adding a third wire shape now would be guessing.</Constraint>
+      <Constraint>Source contracts, README, canonical schema, GRACE graph, and GRACE verification state remain synchronized with the implemented behavior, and no generated dist output is edited manually.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Do not implement an OpenAI Decisions API adapter or a Qwen/Alibaba decision adapter in this change; they are deferred until a public schema exists.</NonGoal>
+      <NonGoal>Do not use a System One provider as an OpenCode model, provider, or vv-role for generation; it returns decisions, not text or code.</NonGoal>
+      <NonGoal>Do not add any other System One consumer besides Guardian: no tool-history pruning, reviewer cascade, skill routing, model routing, semantic spec lint, or evidence checking in this change.</NonGoal>
+      <NonGoal>Do not let System One decide acceptance, review verdicts, scope, or content; it only supplies a signal to deterministic code that owns the threshold and the consequence.</NonGoal>
+      <NonGoal>Do not build calibration datasets, fitting, or threshold-search tooling; shadow mode only records comparable decisions for later manual calibration.</NonGoal>
+      <NonGoal>Do not introduce a multi-provider registry, per-consumer shadow policies, or a capability matrix beyond the required noul and score primitives in this change.</NonGoal>
+      <NonGoal>Do not default to, or hard-code, any hosted endpoint, model name, or vendor alias as an implicit path.</NonGoal>
+      <NonGoal>Do not change the fast auxiliary backend's model, role resolution, timeout semantics, or prompt contract.</NonGoal>
+      <NonGoal>Do not use a live System One endpoint, API key, or live model provider as a repository verification gate.</NonGoal>
+      <NonGoal>Do not add a new process, CLI command, or MCP server in this change; the client is an in-process library used by Guardian.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>The System One client sends POST {baseUrl}/v1/systemone with a JSON body containing model, state, and a questions map, and decodes noul, choice, and score answers with probabilities and confidence while ignoring unknown response fields, proven with an injected transport.</Criterion>
+      <Criterion>The top-level optional systemone section validates enabled, baseUrl, model, apiKey, timeoutMs, and maxRetries; baseUrl and model are required when the section is present; the embedded schema equals schemas/vvoc/v3.json; and every previously valid config remains valid.</Criterion>
+      <Criterion>Guardian with decisionBackend "fast" (the default) produces the same decisions and side effects as before the change, confirmed by the existing Guardian tests passing unchanged.</Criterion>
+      <Criterion>Guardian with decisionBackend "systemone" derives risk_level and risk_score from a noul low-risk question and a score risk rubric over the existing bounded review state, and reuses the existing low-level-and-below-threshold auto-approval rule.</Criterion>
+      <Criterion>With decisionBackend "systemone" and shadow enabled, the systemone provider is evaluated and a structured comparison is logged, but the permission effect is determined solely by the fast backend and is never mutated by the observed systemone answer.</Criterion>
+      <Criterion>When the provider is disabled, unconfigured, unreachable, times out, or returns a missing or unsupported noul or score, Guardian defers to manual approval through the existing fail-closed path and never auto-approves.</Criterion>
+      <Criterion>The systemone plugin toggle, when disabled, constructs no provider and forces the fast backend; toggling it off never breaks permission handling.</Criterion>
+      <Criterion>systemone.apiKey is resolved from a ${VAR} placeholder, is absent from persisted config snapshots and from every log or diagnostic, and an unset or empty placeholder disables the provider with a value-free warning.</Criterion>
+      <Criterion>Switching between a hosted endpoint and a local endpoint is a baseUrl and model change only, with no vendor-specific branch, proven by a test that exercises at least two distinct base URLs through the same client.</Criterion>
+      <Criterion>The provider applies the configured timeout and a bounded retry count, and a provider outage or slow response cannot throw out of the permission hook or block other permission evaluations.</Criterion>
+      <Criterion>Focused Guardian, System One client, config, and toggle tests pass together with the repository check, build, pack, and GRACE gates; no test requires a live endpoint, API key, or live model call.</Criterion>
+      <Criterion>Module contracts, README, canonical schema, package exports, GRACE graph, and GRACE verification are updated to match the implemented behavior, and no generated dist output is edited.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-SYSTEMONE-PROVIDER />
+      <M-PLUGIN-GUARDIAN />
+      <M-CLI-CONFIG />
+      <M-PLUGIN-TOGGLE-CONFIG />
+      <M-ENV-SUBSTITUTION />
+      <M-PLUGIN-SECRETS-REDACTION />
+      <M-NATIVE-RUNTIME />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/systemone.test.ts src/lib/vvoc-config.test.ts src/lib/plugin-toggle-config.test.ts src/plugins/guardian/index.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic output proves: request shaping and typed noul, choice, and score decoding with unknown fields ignored, over an injected transport; strict acceptance and rejection of the optional systemone section with the embedded schema equal to schemas/vvoc/v3.json and previously valid configs still valid; unchanged Guardian behavior under the default fast backend; systemone-backed derivation of risk_level and risk_score with the existing low-and-below-threshold rule; shadow mode evaluating systemone without mutating the permission effect; fail-closed deferral on disabled, unconfigured, unreachable, timed-out, and malformed answers; the systemone toggle forcing the fast backend; ${VAR} key resolution with the key absent from snapshots, logs, and diagnostics and a value-free warning when unset; two distinct base URLs exercised through one client with no vendor branch; bounded timeout and retry with no throw escaping the permission hook. No live endpoint, API key, network, or live model call is used, and any live walkthrough is documented as a manual step.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user chose to bind to the protocol class rather than to Jev specifically: the systemone name and section are canonical, the provider is selected by baseUrl and model, and the default decisionBackend remains fast. OpenAI and Qwen adapters are explicitly deferred.</Assumption>
+      <Assumption>The de-facto /v1/systemone protocol (state plus typed questions with noul, choice, and score) is stable enough to implement against its published draft; unknown response fields are ignored and provider-specific extras do not change the client contract.</Assumption>
+      <Assumption>Hosted Jev (for example https://api.typesafe.ai with model jev-latest), gateway routes, and local servers such as Ollama, laya-serve, and Kev all serve compatible noul and score answers; if a target endpoint does not, it is simply treated as unavailable and Guardian falls back to fast.</Assumption>
+      <Assumption>Guardian's bounded review state (policy prompt plus planned action plus bounded host transcript) fits the provider's context budget, and the existing truncation guarantees are reused; if a provider has a smaller context, the existing bounded rendering remains authoritative and no spec requirement changes.</Assumption>
+      <Assumption>Guardian's inference dependency is already injectable (policy, history, infer, log), so the systemone backend is added as an alternative implementation of the same seam without changing the handler's decision contract.</Assumption>
+      <Assumption>A provider that answers noul and score but not choice, or vice versa, is acceptable because this change only requires noul and score; capability enumeration is a deferred decision recorded in the design context.</Assumption>
+    </Assumptions>
+  </C-SYSTEMONE-DECISION-BACKEND>
+</GraceChangeSpec>

@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-PLUGIN-PEAK-HOURS - Added peak-hours toggle, default schedules, and materialization coverage; updated the canonical plugin count.]
+//   LAST_CHANGE: [C-SYSTEMONE-DECISION-BACKEND T-003 - Added systemone toggle coverage and updated the canonical plugin count.]
 // END_CHANGE_SUMMARY
 
 import { describe, test, expect } from "bun:test";
@@ -55,11 +55,12 @@ describe("PLUGIN_TOGGLE_NAMES", () => {
       "analytics",
       "peak-hours",
       "spec-guard",
+      "systemone",
     ]);
   });
   test("is a readonly tuple", () => {
     // Type-level guarantee, but verify the values are as expected
-    expect(PLUGIN_TOGGLE_NAMES.length).toBe(12);
+    expect(PLUGIN_TOGGLE_NAMES.length).toBe(13);
   });
 });
 // END_BLOCK_CONSTANTS_TEST
@@ -316,6 +317,18 @@ describe("materializeSpecGuardEntry", () => {
   test("includes spec-guard in the canonical toggle list", () => {
     expect(PLUGIN_TOGGLE_NAMES).toContain("spec-guard");
     expect(createDefaultPluginToggleConfig()["spec-guard"]).toBe(true);
+  });
+});
+
+describe("systemone toggle", () => {
+  test("is canonical, defaults enabled, and can be disabled", () => {
+    expect(PLUGIN_TOGGLE_NAMES).toContain("systemone");
+    expect(createDefaultPluginToggleConfig().systemone).toBe(true);
+    expect(isPluginEnabled({ plugins: { systemone: false } }, "systemone")).toBe(false);
+    expect(isPluginEnabled({ plugins: { systemone: { enabled: false } } }, "systemone")).toBe(
+      false,
+    );
+    expect(isPluginEnabled({ plugins: {} }, "systemone")).toBe(true);
   });
 });
 // END_BLOCK_SPEC_GUARD_MATERIALIZE_TESTS
