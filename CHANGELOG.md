@@ -1,3 +1,16 @@
+## <small>2.1.5 (2026-10-04)</small>
+
+### Summary
+
+Version 2.1.5 redesigns how session families keep their bound models, plugin policy, and orchestration profile, replacing the version-coupled full-configuration capture with a credential-free, content-addressed behavior snapshot plus a small per-family pointer. This matters because bindings now survive /reload and full server restarts without breaking on package upgrades, credentials are no longer written to disk, and a corrupt or missing snapshot only rebinds the affected family with a diagnostic instead of failing plugin load for the whole project. Families now bind on their first workload and change only when explicitly requested, and the existing force flags on the preset, plugin, and role commands were extended with --force and --session scoping. A new /vv-rebind slash command lets you re-resolve the current session family's configuration from inside the TUI, applying on the next message without leaving the session. The orchestration policy is now injected only into the tail of the last user message rather than the system prefix, which preserves the cached prompt prefix across profile changes while keeping tool and assistant message payloads intact. An additional fix matches explicit model selections against the host-resolved family-qualified variant so the first request of an explicitly created session is no longer blocked.
+
+* feat(snapshot): content-addressed family bindings with force rebind ([595a64b](https://github.com/osovv/vv-opencode/commit/595a64b))
+* feat(tui): add /vv-rebind slash command for the current session family ([73c5feb](https://github.com/osovv/vv-opencode/commit/73c5feb))
+* chore(grace): archive C-SNAPSHOT-ANCHORING-REDESIGN as applied ([a7cb59d](https://github.com/osovv/vv-opencode/commit/a7cb59d))
+* fix(snapshot): match explicit selections against host-resolved family variants ([c8da85f](https://github.com/osovv/vv-opencode/commit/c8da85f))
+* fix(system-context): inject the orchestration policy only into user-turn tails ([a43e289](https://github.com/osovv/vv-opencode/commit/a43e289))
+* test(e2e): align core admission cases with content-addressed bindings ([e046dc9](https://github.com/osovv/vv-opencode/commit/e046dc9))
+
 ## <small>2.1.4 (2026-10-03)</small>
 
 ### Summary
