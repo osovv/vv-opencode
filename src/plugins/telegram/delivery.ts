@@ -23,12 +23,14 @@
 //   splitFinal - Extract oversized fenced code blocks into bounded file documents.
 //   nextStreamDelayMs - Pure adaptive throttle interval for streamed edits.
 //   formatUserQuote - Pure owner-quote projection for echoed prompts.
+//   MAX_STATUS_LINES - Hard cap on editable status lines with FIFO half-trim.
 //   TelegramInputMerger - Fixed-window owner-text coalescer with due/take semantics.
+//   updateStatusLine - Hermes-style keyed status line that edits its own message in place.
 //   TelegramDelivery - Delivery bound to injectable transport, store, and clock.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Finals render as native rich markdown (Bot API 10.1) with fence-balanced chunking and a plain-text fallback keyed to the format mode.]
+//   LAST_CHANGE: [DIRECT-FIX - Added Hermes-style keyed status lines: bounded in-place editing of one Telegram message per (thread, key) with edit-failure resend.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramTransport } from "./bot-api.js";
@@ -52,6 +54,9 @@ export const SETTINGS_KEY = "telegram/v1/settings";
 
 /** Hard cap on queued finals; the oldest entry drops beyond it. */
 export const MAX_PENDING_FINALS = 500;
+
+/** Hard cap on editable status lines; the oldest half drops beyond it (Hermes-style FIFO trim). */
+export const MAX_STATUS_LINES = 512;
 
 /** Adaptive throttle schedule: elapsed-time brackets to streamed-edit intervals. */
 export const STREAM_DELAY_STEPS = [
@@ -250,6 +255,7 @@ export class TelegramDelivery {
   readonly #onNotice: (threadId: number, text: string) => void;
   readonly #defaults: DeliverySettings;
   readonly #mirrors = new Map<string, MirrorRow>();
+  readonly #statusLines = new Map<string, number>();
   readonly #streams = new Map<number, StreamState>();
   #settings: DeliverySettings;
   #seq = 0;
@@ -476,6 +482,42 @@ export class TelegramDelivery {
     try {
       return (await this.#transport.sendMessage({ threadId: input.threadId, text: input.text }))
         .messageId;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Hermes-style keyed status line: the first call sends, later calls with the same
+   * (threadId, key) edit that message in place; a failed edit drops the cached id and
+   * resend replaces the line. Bounded by MAX_STATUS_LINES with FIFO half-trim.
+   */
+  async updateStatusLine(input: {
+    readonly threadId: number;
+    readonly key: string;
+    readonly text: string;
+  }): Promise<number | undefined> {
+    const cacheKey = `${input.threadId}:${input.key}`;
+    const cachedId = this.#statusLines.get(cacheKey);
+    if (cachedId !== undefined) {
+      try {
+        await this.#transport.editMessageText({ messageId: cachedId, text: input.text });
+        return cachedId;
+      } catch {
+        this.#statusLines.delete(cacheKey);
+      }
+    }
+    try {
+      const sent = await this.#transport.sendMessage({
+        threadId: input.threadId,
+        text: input.text,
+      });
+      if (this.#statusLines.size >= MAX_STATUS_LINES) {
+        const stale = [...this.#statusLines.keys()].slice(0, Math.floor(MAX_STATUS_LINES / 2));
+        for (const entry of stale) this.#statusLines.delete(entry);
+      }
+      this.#statusLines.set(cacheKey, sent.messageId);
+      return sent.messageId;
     } catch {
       return undefined;
     }

@@ -69,6 +69,7 @@ class FakeTransport implements TelegramTransport {
   nextMessageId = 10;
   readonly createdTopics: string[] = [];
   readonly sent: string[] = [];
+  readonly edits: Array<{ messageId: number; text: string }> = [];
   readonly drafts: number[] = [];
   async createForumTopic(name: string) {
     this.createdTopics.push(name);
@@ -88,7 +89,9 @@ class FakeTransport implements TelegramTransport {
   async sendDocument() {
     return { messageId: this.nextMessageId++ };
   }
-  async editMessageText(): Promise<void> {}
+  async editMessageText(input: { messageId: number; text: string }): Promise<void> {
+    this.edits.push({ messageId: input.messageId, text: input.text });
+  }
   async deleteMessage(): Promise<void> {}
   async sendDraft(input: { draftId: number }) {
     this.drafts.push(input.draftId);
@@ -419,28 +422,45 @@ describe("event routing", () => {
     // Status transitions are throttled by the topology; the pump merely must not throw.
   });
 
-  test("tool calls render compact per-tool lines and can be silenced", async () => {
+  test("tool calls progress over one editable status line per call", async () => {
     const ctx = makeBridge();
     await ctx.topology.initialize("fp");
     await ctx.bridge.adoptSession({ sessionID: "ses_t", title: "tools" });
+
+    await ctx.bridge.handleEvent({
+      type: "session.tool.input.started",
+      data: { sessionID: "ses_t", id: "call_1", name: "edit" },
+    });
     await ctx.bridge.handleEvent({
       type: "session.tool.called",
-      data: { sessionID: "ses_t", name: "bash", input: { command: "ls -la" } },
+      data: { sessionID: "ses_t", id: "call_1", name: "edit", input: { filePath: "src/foo.ts" } },
     });
-    expect(ctx.transport.sent.some((text) => text.startsWith("💻 bash: `ls -la`"))).toBe(true);
+    await ctx.bridge.handleEvent({
+      type: "session.tool.success",
+      data: { sessionID: "ses_t", id: "call_1" },
+    });
+
+    // One send for the line start, then two in-place edits of the same message id.
+    expect(ctx.transport.sent.filter((text) => text.includes("edit"))).toHaveLength(1);
+    const edits = ctx.transport.edits.map((edit) => edit.text);
+    expect(edits).toEqual(["✏️ edit: `src/foo.ts`", "✅ ✏️ edit: `src/foo.ts`"]);
 
     await ctx.bridge.handleEvent({
       type: "session.tool.called",
-      data: { sessionID: "ses_t", name: "edit", input: { filePath: "src/foo.ts" } },
+      data: { sessionID: "ses_t", id: "call_2", name: "bash", input: { command: "make test" } },
     });
-    expect(ctx.transport.sent.some((text) => text.startsWith("✏️ edit: `src/foo.ts`"))).toBe(true);
+    await ctx.bridge.handleEvent({
+      type: "session.tool.failed",
+      data: { sessionID: "ses_t", id: "call_2", error: { message: "exit 2" } },
+    });
+    expect(ctx.transport.edits.at(-1)?.text).toBe("❌ 💻 bash: `make test` — exit 2");
 
     await ctx.delivery.updateSettings({ showToolCalls: false });
     await ctx.bridge.handleEvent({
       type: "session.tool.called",
-      data: { sessionID: "ses_t", name: "bash", input: { command: "ls" } },
+      data: { sessionID: "ses_t", id: "call_3", name: "bash", input: { command: "ls" } },
     });
-    expect(ctx.transport.sent.filter((text) => text.startsWith("💻")).length).toBeLessThan(2);
+    expect(ctx.transport.sent.filter((text) => text.includes("call_3")).length).toBe(0);
   });
 
   test("formatToolLine picks the most telling argument per tool", () => {

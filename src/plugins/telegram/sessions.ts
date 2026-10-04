@@ -21,7 +21,7 @@
 //   decodeTextStreamEvent - Pure decoder for streamed assistant text deltas and completed text parts.
 //   decodeInboxEvent - Pure decoder for inbox admission of user prompts including the bridge origin marker.
 //   TELEGRAM_PROMPT_SOURCE - Metadata marker stamped on prompts submitted by the bridge itself.
-//   decodeToolCallEvent - Pure decoder for tool call starts.
+//   decodeToolCallEvent - Pure decoder for tool lifecycle facts including call ids and errors.
 //   compactToolArg - Collapse whitespace and cap one tool argument.
 //   formatToolLine - Pure one-line tool rendering with per-tool emoji and the most telling argument.
 //   decodePermissionEvent - Pure decoder for permission lifecycle facts.
@@ -33,7 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Bridge-submitted prompts carry a source marker and skip the self echo; tool calls render as compact per-tool lines (emoji, name, most telling argument) and are visible by default.]
+//   LAST_CHANGE: [DIRECT-FIX - Tool calls render as Hermes-style keyed status lines: one editable Telegram message per call, progressing ⏳ start to args to ✅ or ❌ outcome.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramDelivery } from "./delivery.js";
@@ -193,11 +193,14 @@ export function decodeInboxEvent(data: unknown): {
 /** Metadata marker stamped on prompts submitted by the bridge itself. */
 export const TELEGRAM_PROMPT_SOURCE = "vvoc-telegram";
 
-/** Pure decoder for tool call starts: name plus a bounded argument summary. */
+/** Pure decoder for tool lifecycle facts: call id, name, bounded arguments, and errors. */
 export function decodeToolCallEvent(data: unknown): {
   readonly sessionID: string | undefined;
+  readonly callID: string | undefined;
   readonly name: string | undefined;
+  readonly input: unknown;
   readonly argumentSummary: string | undefined;
+  readonly error: string | undefined;
 } {
   const record = asRecord(data) ?? {};
   const input = asRecord(record.input) ?? {};
@@ -208,10 +211,14 @@ export function decodeToolCallEvent(data: unknown): {
   } catch {
     summary = undefined;
   }
+  const errorRecord = asRecord(record.error);
   return {
     sessionID: readString(record.sessionID),
+    callID: readString(record.id),
     name: readString(record.name),
+    input: record.input,
     argumentSummary: summary,
+    error: readString(errorRecord?.message),
   };
 }
 
@@ -379,6 +386,8 @@ export class SessionBridge {
   #statuses = new Map<string, SessionStatus>();
   #turns = new Map<string, TurnState>();
   readonly #inboxTexts = new Map<string, string>();
+  readonly #toolNames = new Map<string, string>();
+  readonly #toolInputs = new Map<string, unknown>();
   #draftSeq = 0;
 
   constructor(deps: {
@@ -658,15 +667,37 @@ export class SessionBridge {
       return;
     }
 
-    if (type === "session.tool.called") {
+    if (
+      type === "session.tool.input.started" ||
+      type === "session.tool.called" ||
+      type === "session.tool.success" ||
+      type === "session.tool.failed"
+    ) {
       const decoded = decodeToolCallEvent(data);
       if (!this.#delivery.settings.showToolCalls) return;
-      if (decoded.sessionID === undefined || decoded.name === undefined) return;
+      if (decoded.sessionID === undefined || decoded.callID === undefined) return;
       const threadId = this.#topology.topicIdFor(decoded.sessionID);
       if (threadId === undefined) return;
-      const record = asRecord(data);
-      const line = formatToolLine(decoded.name, record?.input);
-      await this.#delivery.sendTransient({ threadId, text: line });
+      const name = this.#toolNames.get(decoded.callID) ?? decoded.name;
+      if (decoded.name !== undefined) this.#toolNames.set(decoded.callID, decoded.name);
+      const args =
+        decoded.input !== undefined ? decoded.input : this.#toolInputs.get(decoded.callID);
+      if (decoded.input !== undefined && type === "session.tool.called") {
+        this.#toolInputs.set(decoded.callID, decoded.input);
+      }
+      const line =
+        type === "session.tool.success"
+          ? `✅ ${formatToolLine(name ?? "tool", args)}`
+          : type === "session.tool.failed"
+            ? `❌ ${formatToolLine(name ?? "tool", args)}${decoded.error === undefined ? "" : ` — ${decoded.error.slice(0, 120)}`}`
+            : type === "session.tool.input.started"
+              ? `⏳ ${formatToolLine(name ?? "tool", undefined)}`
+              : formatToolLine(name ?? "tool", args);
+      await this.#delivery.updateStatusLine({ threadId, key: decoded.callID, text: line });
+      if (type === "session.tool.success" || type === "session.tool.failed") {
+        this.#toolNames.delete(decoded.callID);
+        this.#toolInputs.delete(decoded.callID);
+      }
       return;
     }
 
