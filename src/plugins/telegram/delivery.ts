@@ -25,8 +25,7 @@
 //   formatUserQuote - Pure owner-quote projection for echoed prompts.
 //   MAX_STATUS_LINES - Hard cap on editable status lines with FIFO half-trim.
 //   TelegramInputMerger - Fixed-window owner-text coalescer with due/take semantics.
-//   updateStatusLine - Hermes-style keyed status line that edits its own message in place.
-//   TelegramDelivery - Delivery bound to injectable transport, store, and clock.
+//   TelegramDelivery - Delivery bound to injectable transport, store, and clock, including Hermes-style keyed status lines that edit their own message in place.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
