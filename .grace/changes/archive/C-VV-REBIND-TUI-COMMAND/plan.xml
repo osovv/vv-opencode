@@ -1,0 +1,95 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-VV-REBIND-TUI-COMMAND>
+    <IntentSummary>Add the /vv-rebind native TUI slash command as a thin facade over the existing rebind request marker: reuse the /context command registration pattern (keymap command, active-session gating, bounded toasts), write one marker through the existing src/lib/rebind-request.ts writer with the active session id, and let the existing lazy consumer rebind the family on its next workload. Two tasks: implement the command with colocated tests, then synchronize README and GRACE projections and run the full gates. Draft pending explicit user approval; no implementation has started.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-CONTEXT-TUI</Value><Value>V-M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>src/tui.tsx</Value>
+        <Value>src/tui/context/plugin.ts</Value>
+        <Value>src/tui/context/plugin.test.ts</Value>
+        <Value>src/lib/rebind-request.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain><File>src/tui/context/plugin.ts</File><Text>export function registerContextTuiPlugin(</Text></MustContain>
+      <MustContain><File>src/lib/rebind-request.ts</File><Text>export async function writeRebindRequest(</Text></MustContain>
+      <MustContain><File>src/lib/rebind-request.ts</File><Text>export async function requestRebind(</Text></MustContain>
+      <MustContain><File>README.md</File><Text>--force</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/tui</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-PLUGIN-CONTEXT-TUI</Module></MustVerify>
+      <MustContain><File>src/tui.tsx</File><Text>vv-rebind</Text></MustContain>
+      <MustContain><File>README.md</File><Text>/vv-rebind</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/tui</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the user approved the GraceChangeSpec C-VV-REBIND-TUI-COMMAND and invoked grace-plan. This plan stays draft until the user approves the completed plan; no implementation has started.</Note>
+      <Note>Pre-plan preflight: grace lint --path . --assertions current and --parallel-preflight both pass with 0 errors and 0 warnings; no observed writes have begun.</Note>
+      <Note>Measured budgets on the reference host: bun test src/tui completes in about 1.2 seconds (77 tests) and bun run typecheck in about 13 seconds; bun run check is the whole-project gate and keeps the runner-default budget.</Note>
+      <Note>Implementation shape: mirror the existing /context registration (keymap command claimed from the app slot, activeSessionID gating, bounded toasts) in a small rebind module wired from src/tui.tsx; call writeRebindRequest directly (the command itself is the explicit force decision, so the CLI force-gated wrapper requestRebind is not used); perform no configuration parsing and no other filesystem access.</Note>
+      <Note>Marker matching relies on the TUI process working directory equaling the family location directory; README documents the worktree caveat per the spec assumption, and an unconsumed marker is pruned by the existing TTL.</Note>
+      <Note>No final-review obligation is declared by the source; any reviewer the controller requests is optional. GRACE lifecycle commands stay external and never nest inside a MustPassCommand.</Note>
+      <Note>Execution entrypoint after plan approval is the grace-execute skill with this plan.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-CONTEXT-TUI />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-CONTEXT-TUI />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/tui.tsx</File>
+      <File>src/tui/rebind/plugin.ts</File>
+      <File>src/tui/rebind/plugin.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-VV-REBIND-TUI-COMMAND/spec.xml</File>
+      <File>.grace/changes/active/C-VV-REBIND-TUI-COMMAND/plan.xml</File>
+      <File>.grace/changes/active/C-VV-REBIND-TUI-COMMAND/design-context.xml</File>
+      <File>.grace/changes/archive/C-VV-REBIND-TUI-COMMAND/spec.xml</File>
+      <File>.grace/changes/archive/C-VV-REBIND-TUI-COMMAND/plan.xml</File>
+      <File>.grace/changes/archive/C-VV-REBIND-TUI-COMMAND/design-context.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Register /vv-rebind in the default TUI module and write the rebind marker for the active session.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Register a /vv-rebind keymap command beside /context using the existing app-slot claim pattern, enabled exactly while a session is open, and wire it from the default TUI module in src/tui.tsx.</Criterion>
+          <Criterion>With an open session, one run writes exactly one marker through writeRebindRequest with directory resolving to the TUI working directory and sessionId equal to the active session id, then shows one bounded toast stating the next-message application.</Criterion>
+          <Criterion>With no open session, the command shows a bounded hint and writes no marker.</Criterion>
+          <Criterion>The command performs no configuration parsing and no filesystem access beyond the single atomic marker write; failure paths render bounded errors and never display configuration content or credential values.</Criterion>
+          <Criterion>Colocated tests cover registration and enablement, marker directory and sessionId, the no-session path, and the bounded error path; MODULE_CONTRACT, MODULE_MAP, and change summaries are updated in every touched file.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/tui</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Synchronize README and GRACE projections, then run the full gates.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents /vv-rebind beside the --force flags with the family-wide scope, next-message timing, the native host /reload distinction, the live credential re-attachment note, and the worktree caveat.</Criterion>
+          <Criterion>Update .grace/graph/main.xml and .grace/verification/main.xml for M-PLUGIN-CONTEXT-TUI and V-M-PLUGIN-CONTEXT-TUI to describe the rebind command scenario and its checks.</Criterion>
+          <Criterion>Run bun run check, bun run build, and grace lint with fresh output; no unrelated files change and no generated dist file is edited manually.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-002>
+    </ImplementationPlan>
+  </C-VV-REBIND-TUI-COMMAND>
+</GraceChangePlan>

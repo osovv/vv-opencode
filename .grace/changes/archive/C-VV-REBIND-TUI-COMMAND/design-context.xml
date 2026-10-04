@@ -1,0 +1,24 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-VV-REBIND-TUI-COMMAND</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The content-addressed family binding from C-SNAPSHOT-ANCHORING-REDESIGN deliberately freezes a family's models, plugin policy, and orchestration profile until an explicit force request. The force surface, however, exists only in the CLI: leaving the session, opening a terminal in the right project, and passing --session to narrow the rebind. The motivating case was a session bound while a stale project .vvoc/vvoc.json shadowed the global configuration, so web search had no key and there was no way to recompute the policy from inside the session. Because the runtime already consumes a project-directory-scoped rebind request marker lazily on the family's next workload, the TUI command is a thin third facade over the same mechanism: it resolves the active session id exactly like /context does and writes one marker with that id. Notably, credential fields are already re-attached from the live effective configuration on every request, so a case where only a key was wrong self-heals without any command; the rebind covers policy-level wrongness such as plugin toggles, provider selection, roles, models, and the orchestration profile, and a byte-identical re-resolution reuses the same content-addressed snapshot as an observable no-op.</Rationale>
+  <Alternatives>
+    <Alternative>Name the command /rebind or a /reload-style name. Rejected: the native host /reload reloads host-wide configuration and a similar name would create the expectation of a global reload, while this command re-resolves vvoc policy for one session family; /vv-rebind states the actual verb and namespace.</Alternative>
+    <Alternative>Show a diff of what changed after the rebind. Rejected for v1 by the user decision: there is no natural place to render it in a one-line TUI toast, and both snapshots are available later if a diff view is ever wanted.</Alternative>
+    <Alternative>Apply the rebind eagerly inside the command instead of writing the marker. Rejected: it would require a new server-side entry point reachable from the TUI client, while the marker reuses the existing lazy consumer, keeps application ordering before the next dispatch, and keeps one mechanism shared with the CLI force flags and the agent shell path.</Alternative>
+    <Alternative>Expose an agent-invocable vvoc_rebind tool. Rejected earlier in the redesign: the user preferred CLI-shaped surfaces, and a user-typed slash command is the direct in-session equivalent; the agent can still run the CLI through its shell if ever needed.</Alternative>
+    <Alternative>Add per-field granularity flags to the command. Rejected: a rebind already changes only what actually changed in the re-resolved configuration, so modes would add surface without behavior.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>The internal file layout for the command registration (a small rebind submodule beside the context command versus extending the existing context plugin file) is a planning choice.</Decision>
+    <Decision>Whether a future drift indicator belongs in /context (bound revision versus current configuration hash) is out of scope here and can be proposed separately.</Decision>
+    <Decision>No IO optimization around live configuration reads is included; per-request reads are page-cached small files, and any caching would be a separate change justified by profiling.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Stale project config: a session was bound while a wrong project .vvoc/vvoc.json existed; the user deletes the file, runs /vv-rebind, and the next message rebinds the family to the correctly resolved configuration, restoring web search and plugin toggles; if only the key was wrong, the next message already picks the key up from the live configuration without the command.</Scenario>
+    <Scenario>No-op rebind: the user runs /vv-rebind after editing nothing; the re-resolved projection is byte-identical, the snapshot hash is unchanged, and models and prompt cache are untouched.</Scenario>
+    <Scenario>Worker model change: the user fixes a role binding, runs /vv-rebind, and only sessions whose resolved selection changed switch models on their next request.</Scenario>
+    <Scenario>Invalid config: the user breaks vvoc.json, runs /vv-rebind; the lazy consumer fails soft, the family keeps its binding, and no session is bricked.</Scenario>
+    <Scenario>Empty tab: the command is disabled or shows a bounded hint when no session is open, and no marker is written; an unconsumed marker from a session that never works again is pruned by the existing TTL.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

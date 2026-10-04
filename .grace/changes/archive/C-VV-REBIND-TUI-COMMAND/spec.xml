@@ -1,0 +1,52 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-VV-REBIND-TUI-COMMAND>
+    <Summary>Add a /vv-rebind native TUI slash command that re-resolves the effective vvoc configuration for the current session's family by writing the existing project-scoped rebind request marker with the active session id, so the family rebinds to the current configuration on its next workload without leaving the session, opening a terminal, or knowing session ids; no new server-side rebind logic, no diff output, no argument surface.</Summary>
+    <Problem>The only way to move a bound family to the current configuration today is a CLI force flag (vvoc preset apply, plugin enable or disable, role set or unset with --force), which requires leaving the session, running a terminal command in the right project directory, and passing --session to narrow the rebind to one family. A user who discovers mid-session that the family was bound under a wrong configuration, for example a stale project .vvoc/vvoc.json that shadowed the global web key or disabled a plugin, has no in-session way to recompute the policy: the family stays frozen until a CLI force or a server restart, and symptoms like a non-working web search surface far from their cause. The rebind mechanism itself already exists as a project-scoped marker consumed lazily on the family's next workload; only the TUI entry point is missing.</Problem>
+    <Goals>
+      <Goal>Register a /vv-rebind slash command in the native OpenCode TUI beside /context, enabled exactly while a session is open.</Goal>
+      <Goal>On run, write exactly one rebind request marker through the existing src/lib/rebind-request.ts writer, scoped to the TUI working directory, carrying the active session id as the family selector.</Goal>
+      <Goal>Apply the rebind through the existing lazy consumer on the family's next workload, so the very next message already runs under the re-resolved configuration, family-wide (root plus forks and subagents).</Goal>
+      <Goal>Keep inherited semantics unchanged: models switch only when the resolved selection actually changed, and a byte-identical re-resolved policy reuses the same content-addressed snapshot as an observable no-op.</Goal>
+      <Goal>Give the user one bounded feedback line (toast) on run and a bounded hint when no session is open; never include configuration content or credential values in output.</Goal>
+      <Goal>Document /vv-rebind in README beside the --force flags, including the relationship to the native host /reload and the note that credential fields are already re-attached from the live configuration on every request.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>No new server-side rebind logic, no marker format change, and no new CLI command; the TUI command is a third facade over the same marker mechanism as the CLI force flags.</Constraint>
+      <Constraint>No diff or preview output and no arguments or flags on the command.</Constraint>
+      <Constraint>The command follows the existing default TUI module enablement (the context toggle gates the whole TUI module) and gets no separate plugin toggle.</Constraint>
+      <Constraint>Feedback is a single bounded toast; error paths reuse bounded error rendering; no credential value and no configuration content is ever displayed.</Constraint>
+      <Constraint>The marker write stays atomic and credential-free through the existing writer; the command performs no other filesystem access and no configuration parsing.</Constraint>
+      <Constraint>No change to the lazy consumer, the marker TTL, family semantics, or fail-soft behavior: an invalid effective configuration still keeps the current family binding.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No eager or immediate rebind; application stays lazy on the family's next workload by design.</NonGoal>
+      <NonGoal>No per-field granularity (models versus policy versus orchestration); a rebind changes only what actually changed in the re-resolved configuration.</NonGoal>
+      <NonGoal>No drift indicator, diff view, or status output beyond the single feedback line.</NonGoal>
+      <NonGoal>No reload of native host configuration; the host /reload remains a separate mechanism.</NonGoal>
+      <NonGoal>No caching or IO optimization work around live configuration reads.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: With the default TUI module enabled, /vv-rebind appears in the slash palette and is enabled exactly while a session is open; running it with no open session shows a bounded hint and writes no marker.</Criterion>
+      <Criterion>AC-02: With an open session, one run writes exactly one rebind request marker whose directory resolves to the TUI working directory and whose sessionId equals the active session id.</Criterion>
+      <Criterion>AC-03: The existing lazy consumer applies the marker on the family's next workload and moves the family pointer to the current revision; when the re-resolved policy projection is identical the snapshot hash is unchanged.</Criterion>
+      <Criterion>AC-04: Model switching, worker versus root behavior, explicit-selection handling, and fail-soft on an invalid configuration are unchanged from the implemented rebind semantics; the command adds no switching of its own.</Criterion>
+      <Criterion>AC-05: The command emits one bounded success line naming the next-message application and never displays configuration content, paths beyond the working directory, or credential values.</Criterion>
+      <Criterion>AC-06: README documents /vv-rebind with the --force flags, the family-wide scope, the next-message timing, and the native /reload distinction; targeted TUI tests, bun run check, and grace lint pass with fresh output.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-CONTEXT-TUI />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/tui</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh tests proving the command registration and enablement, the exact marker written for the active session (directory and sessionId), the no-session hint path with no marker, bounded single-line output without configuration content, plus a passing bun run check, bun run build, and grace lint; README updated beside the force flags.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The native TUI command context exposes the active session id the same way /context resolves it, and a keymap-registered command can be added beside the existing context command in the default TUI module.</Assumption>
+      <Assumption>The TUI process working directory equals the session family's location directory used for marker matching; a session running in another worktree requires running the command from that project, documented in README.</Assumption>
+      <Assumption>An unconsumed marker is pruned by the existing TTL, so a command run on a session that never works again leaves no permanent state.</Assumption>
+    </Assumptions>
+  </C-VV-REBIND-TUI-COMMAND>
+</GraceChangeSpec>
