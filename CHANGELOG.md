@@ -1,3 +1,11 @@
+## 2.2.0 (2026-10-04)
+
+### Summary
+
+Guardian now supports a provider-neutral System One decision backend alongside its existing default, letting teams route bounded low-risk permission assessments through a configurable endpoint that speaks the POST /v1/systemone protocol. A new optional systemone connection section and plugin toggle let you select any compliant base URL and model without vendor lock-in, while a guardian decisionBackend option lets you choose between the fast backend and systemone. A shadow-calibration mode lets you log and compare systemone verdicts before trusting them, an explicit low-risk threshold keeps auto-approval conservative, and apiKey values can be resolved from environment placeholders so secrets stay out of persisted config. The fast backend remains the default, no hosted endpoint is assumed, and any disabled, unreachable, timed-out, or malformed response falls closed to manual approval, so existing behavior is preserved unless you opt in.
+
+* feat(guardian): add provider-neutral System One decision backend ([e8f3962](https://github.com/osovv/vv-opencode/commit/e8f3962))
+
 ## <small>2.1.6 (2026-10-04)</small>
 
 ### Summary
