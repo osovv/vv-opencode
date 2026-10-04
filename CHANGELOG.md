@@ -1,3 +1,11 @@
+## 2.3.0-rc.6 (2026-10-04)
+
+### Summary
+
+The Telegram bridge now uses a native raw HTTP Bot API transport instead of a third-party client library, removing the grammy dependency and related packages from the package. This makes rich markdown rendering of delivered messages more faithful, since payloads are shaped directly with owner chat and topic thread targeting for sends, edits, callbacks, commands, and polling reads. The injectable call seam and the existing behaviors are preserved: topics can be created, edited, closed, and reopened; drafts still latch permanently when the server reports them unsupported; callbacks can be answered; commands can be registered; file downloads enforce declared and actual size caps; apiRoot and proxyUrl remain mutually exclusive at construction; and normalized errors still avoid leaking the token while surfacing retry hints. Users benefit from more accurate rich markdown output and a leaner dependency footprint with no change to configuration.
+
+* fix(telegram): raw HTTP Bot API transport for true rich markdown rendering ([37fa4f3](https://github.com/osovv/vv-opencode/commit/37fa4f3))
+
 ## 2.3.0-rc.5 (2026-10-04)
 
 ### Summary
