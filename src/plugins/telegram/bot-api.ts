@@ -1,9 +1,9 @@
 // FILE: src/plugins/telegram/bot-api.ts
 // VERSION: 1.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Own the narrow Telegram Bot API surface the bridge consumes, with a grammy-backed production transport and an injectable call seam for deterministic tests.
-//   SCOPE: The TelegramTransport interface (topics, sends, edits, drafts and rich messages with permanent unsupported latches, callbacks, commands, file download with a hard size cap, getUpdates polling reads, and markdown chunking with fence balancing, typed structural update shapes, credential-safe error normalization that never exposes the token, connectivity wiring for a custom API root or an outbound proxy (never both), and a grammy call factory that performs no I/O at module import.
-//   DEPENDS: [grammy]
+//   PURPOSE: Own the narrow Telegram Bot API surface the bridge consumes, with a raw HTTP production transport (vv-chat shape) and an injectable call seam for deterministic tests.
+//   SCOPE: The TelegramTransport interface (topics, sends, edits, drafts and rich messages with permanent unsupported latches, callbacks, commands, file download with a hard size cap, getUpdates polling reads, and markdown chunking with fence balancing, typed structural update shapes, credential-safe error normalization that never exposes the token, connectivity wiring for a custom API root or an outbound proxy (never both), and a raw HTTP call factory that performs no I/O at module import.
+//   DEPENDS: [none]
 //   LINKS: [M-TELEGRAM-BOT-API, M-TELEGRAM-GATEWAY, M-TELEGRAM-CONFIG, V-M-TELEGRAM-BOT-API]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -22,7 +22,7 @@
 //   TelegramUpdate - Structural update envelope with album grouping key.
 //   TelegramBotCommand - Registered command description.
 //   TelegramTransport - The narrow send-side plus polling-read API surface the bridge consumes.
-//   createGrammyCallApi - Grammy-backed production call seam constructed only on demand.
+//   createRawHttpCallApi - Raw HTTP Bot API call seam (vv-chat transport shape) with credential-safe errors.
 //   TELEGRAM_RICH_MAX_CHARS - Rich-message character cap per message.
 //   TELEGRAM_PLAIN_MAX_CHARS - Plain-message fallback character cap per message.
 //   chunkText - Cap-aware text splitting with code-fence balancing.
@@ -32,10 +32,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-002 - Created the grammy-backed Bot API adapter with the injectable call seam, owner chat targeting, drafts-unsupported latch, size-capped file download, connectivity exclusivity, and credential-safe error normalization.]
+//   LAST_CHANGE: [DIRECT-FIX - Replaced the grammy call layer with the vv-chat raw HTTP transport so Bot API 10.1 rich messages and drafts reach Telegram without a client-library method table.]
 // END_CHANGE_SUMMARY
-
-import { Api, InputFile } from "grammy";
 
 /** Default Bot API root; a custom root or proxy replaces it through configuration. */
 export const TELEGRAM_DEFAULT_API_ROOT = "https://api.telegram.org";
@@ -270,15 +268,20 @@ export type TelegramTransportOptions = {
   readonly chatId: number;
   readonly apiRoot?: string | undefined;
   readonly proxyUrl?: string | undefined;
-  /** Injectable call seam for tests; defaults to the grammy-backed factory. */
+  /** Injectable call seam for tests; defaults to the raw HTTP factory. */
   readonly call?: TelegramCall | undefined;
   /** Injectable file fetch for tests; defaults to global fetch with the proxy option. */
   readonly fetchFile?: ((url: string, init: RequestInit) => Promise<Response>) | undefined;
 };
 
-// START_BLOCK_GRAMMY_FACTORY
-/** Grammy-backed production call seam. Constructing a client performs no requests; unknown-to-grammy methods are reached through the raw method table by name. */
-export function createGrammyCallApi(options: {
+// START_BLOCK_RAW_FACTORY
+/**
+ * Raw HTTP Bot API call seam (the vv-chat transport shape): one POST per method to
+ * `${apiRoot}/bot<token>/<method>` with a JSON body. The token exists only inside the
+ * URL, is never part of errors, and unknown-to-SDK Bot API 10.x methods (rich messages,
+ * drafts) pass straight through without a client library method table.
+ */
+export function createRawHttpCallApi(options: {
   readonly token: string;
   readonly apiRoot?: string | undefined;
   readonly proxyUrl?: string | undefined;
@@ -286,22 +289,39 @@ export function createGrammyCallApi(options: {
   if (options.apiRoot !== undefined && options.proxyUrl !== undefined) {
     throw new Error("telegram connectivity: apiRoot and proxyUrl are mutually exclusive");
   }
-  const baseFetchConfig =
-    options.proxyUrl === undefined ? undefined : ({ proxy: options.proxyUrl } as RequestInit);
-  const api = new Api(options.token, {
-    apiRoot: options.apiRoot ?? TELEGRAM_DEFAULT_API_ROOT,
-    ...(baseFetchConfig === undefined ? {} : { baseFetchConfig }),
-  });
-  const raw = api.raw as unknown as Record<string, (payload?: object) => Promise<unknown>>;
-  return (method, payload) => {
-    const fn = raw[method];
-    if (typeof fn !== "function") {
-      return Promise.reject(new TelegramUnsupportedError(method));
+  const apiRoot = options.apiRoot ?? TELEGRAM_DEFAULT_API_ROOT;
+  const init: RequestInit =
+    options.proxyUrl === undefined ? {} : ({ proxy: options.proxyUrl } as RequestInit);
+  return async (method, payload) => {
+    const response = await fetch(`${apiRoot}/bot${options.token}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      ...init,
+    });
+    const body = (await response.json().catch(() => undefined)) as
+      | {
+          ok?: unknown;
+          result?: unknown;
+          error_code?: unknown;
+          description?: unknown;
+          parameters?: { retry_after?: unknown };
+        }
+      | undefined;
+    if (body === undefined) {
+      throw new TelegramApiError(response.status, `no JSON response (HTTP ${response.status})`);
     }
-    return fn.call(api.raw, payload);
+    if (body.ok !== true) {
+      const code = typeof body.error_code === "number" ? body.error_code : response.status;
+      const description = typeof body.description === "string" ? body.description : "unknown error";
+      const retryAfter =
+        typeof body.parameters?.retry_after === "number" ? body.parameters.retry_after : undefined;
+      throw new TelegramApiError(code, description, retryAfter);
+    }
+    return body.result;
   };
 }
-// END_BLOCK_GRAMMY_FACTORY
+// END_BLOCK_RAW_FACTORY
 
 // START_BLOCK_TRANSPORT
 /**
@@ -317,7 +337,7 @@ export function createTelegramTransport(options: TelegramTransportOptions): Tele
   }
   const token = options.token;
   const chatId = options.chatId;
-  const call: TelegramCall = options.call ?? createGrammyCallApi(options);
+  const call: TelegramCall = options.call ?? createRawHttpCallApi(options);
   const fetchFile = options.fetchFile ?? ((url: string, init: RequestInit) => fetch(url, init));
   const apiRoot = options.apiRoot ?? TELEGRAM_DEFAULT_API_ROOT;
   const proxyInit =
@@ -414,17 +434,37 @@ export function createTelegramTransport(options: TelegramTransportOptions): Tele
       }
     },
     async sendDocument(input) {
-      const result = await invoke<{ message_id?: unknown }>("sendDocument", {
-        chat_id: chatId,
-        message_thread_id: input.threadId,
-        document: new InputFile(input.content, input.filename),
-        ...(input.caption === undefined ? {} : { caption: input.caption }),
-      });
-      const messageId = result?.message_id;
-      if (typeof messageId !== "number") {
-        throw new TelegramApiError(undefined, "sendDocument returned no message_id");
+      const form = new FormData();
+      form.set("chat_id", String(chatId));
+      form.set("message_thread_id", String(input.threadId));
+      form.set("document", new Blob([input.content]), input.filename);
+      if (input.caption !== undefined) form.set("caption", input.caption);
+      let response: Response;
+      try {
+        response = await fetch(`${apiRoot}/bot${token}/sendDocument`, {
+          method: "POST",
+          body: form,
+          ...proxyInit,
+        });
+      } catch (error) {
+        throw normalizeApiError(error, token);
       }
-      return { messageId };
+      if (!response.ok) {
+        throw new TelegramApiError(
+          response.status,
+          `document upload failed (HTTP ${response.status})`,
+        );
+      }
+      const body = (await response.json().catch(() => undefined)) as
+        | { ok?: unknown; result?: { message_id?: unknown }; description?: string }
+        | undefined;
+      if (body?.ok !== true || typeof body.result?.message_id !== "number") {
+        throw new TelegramApiError(
+          undefined,
+          body?.description ?? "sendDocument returned no message_id",
+        );
+      }
+      return { messageId: body.result.message_id };
     },
     async editMessageText(input) {
       const markup = serializeMarkup(input.replyMarkup);
