@@ -11,6 +11,8 @@
 //
 // START_MODULE_MAP
 //   BUILTIN_ROLE_NAMES - Built-in role IDs in deterministic order.
+//   REFLECTOR_ROLE_NAME - Dedicated seeded role id for the vv-reflector agent.
+//   SEEDED_ROLE_NAMES - Built-in plus seeded role ids that cannot be unset.
 //   ROLE_REFERENCE_PREFIX - Stable role-reference prefix.
 //   isRoleReference - Checks whether a value is a vv-role reference.
 //   parseModelSelection - Parses provider/model into normalized parts.
@@ -32,6 +34,15 @@
 
 export const BUILTIN_ROLE_NAMES = ["default", "smart", "fast", "reviewer"] as const;
 export type BuiltInRoleName = (typeof BUILTIN_ROLE_NAMES)[number];
+
+/**
+ * Dedicated role for the bundled read-only vv-reflector agent. Seeded with a
+ * default so it always resolves, and overridable with `vvoc role set`.
+ */
+export const REFLECTOR_ROLE_NAME = "reflector";
+
+/** Roles seeded from defaults on every parse/render and therefore not removable. */
+export const SEEDED_ROLE_NAMES = [...BUILTIN_ROLE_NAMES, REFLECTOR_ROLE_NAME] as const;
 
 export const ROLE_REFERENCE_PREFIX = "vv-role:";
 
@@ -82,6 +93,7 @@ export type BuiltInRoleBindings = {
     "vv-spec-reviewer": BuiltInRoleName;
     "vv-code-reviewer": BuiltInRoleName;
     investigator: BuiltInRoleName;
+    "vv-reflector": "reflector";
   };
 };
 
@@ -107,6 +119,7 @@ const BUILTIN_ROLE_BINDINGS: BuiltInRoleBindings = {
     "vv-spec-reviewer": "reviewer",
     "vv-code-reviewer": "reviewer",
     investigator: "smart",
+    "vv-reflector": "reflector",
   },
 };
 

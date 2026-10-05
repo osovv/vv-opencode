@@ -351,9 +351,7 @@ export class TelegramDelivery {
       const rendered = splitFinal(record.text, this.#settings.codeFileMaxKb);
       let lastTgMessageId: number | undefined;
       if (rendered.text.length > 0) {
-        lastTgMessageId = (
-          await this.#transport.sendMessage({ threadId: record.threadId, text: rendered.text })
-        ).messageId;
+        lastTgMessageId = await this.#deliverText(record.threadId, rendered.text);
       }
       for (const file of rendered.files) {
         const sent = await this.#transport.sendDocument({

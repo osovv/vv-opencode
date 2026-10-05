@@ -25,7 +25,7 @@ import { defineCommand } from "citty";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { BUILTIN_ROLE_NAMES } from "../lib/model-roles.js";
+import { SEEDED_ROLE_NAMES } from "../lib/model-roles.js";
 import { ORCHESTRATION_PROFILE_NAMES } from "../lib/orchestration.js";
 import { BUILTIN_VVOC_PRESET_NAMES } from "../lib/vvoc-preset-registry.js";
 
@@ -63,7 +63,7 @@ const VVOC_PATCH_PROVIDER_PRESETS = [
 const VVOC_PRESET_COMMANDS = ["list", "show"];
 const VVOC_PLUGIN_COMMANDS = ["list"];
 const VVOC_ROLE_COMMANDS = ["set", "unset", "list"];
-const VVOC_ROLE_IDS = [...BUILTIN_ROLE_NAMES];
+const VVOC_ROLE_IDS = [...SEEDED_ROLE_NAMES];
 
 export default defineCommand({
   meta: {

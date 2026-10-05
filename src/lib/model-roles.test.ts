@@ -50,6 +50,7 @@ describe("built-in roles", () => {
         "vv-spec-reviewer": "reviewer",
         "vv-code-reviewer": "reviewer",
         investigator: "smart",
+        "vv-reflector": "reflector",
       },
     });
   });

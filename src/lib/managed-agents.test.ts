@@ -519,6 +519,20 @@ describe("managed agent prompts", () => {
     expect(normalized).toContain("Deliver these through the existing result structure");
   });
 
+  test("loads bundled vv-reflector template with read-only subagent-tree contract", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-reflector");
+    const normalized = template.replace(/\s+/g, " ");
+
+    expect(template).toContain("You are the vv-reflector subagent");
+    expect(normalized).toContain("read-only analyst");
+    expect(normalized).toContain("session and its subagent tree");
+    expect(normalized).toContain("session-graph.py");
+    expect(normalized).toContain("Read-only. Never edit, write, or run mutating commands.");
+    expect(normalized).toContain("Never spawn a subagent.");
+    expect(normalized).toContain("Return at most ten proposals");
+    expect(normalized).toContain("Return only the proposal list");
+  });
+
   test("prefers project managed prompt over global prompt", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-home-"));
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-prompt-project-"));

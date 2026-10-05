@@ -49,6 +49,7 @@ export const MANAGED_SUBAGENT_NAMES = [
   "vv-spec-reviewer",
   "vv-code-reviewer",
   "investigator",
+  "vv-reflector",
 ] as const;
 
 export type ManagedSubagentName = (typeof MANAGED_SUBAGENT_NAMES)[number];
@@ -123,6 +124,14 @@ export const MANAGED_SUBAGENTS: readonly ManagedSubagentDefinition[] = [
     mode: "subagent",
     permissions: [DENY_ALL("edit")],
   },
+  {
+    name: "vv-reflector",
+    description:
+      "Reflects on a session and its subagent tree to propose environment improvements, lessons, and runbooks.",
+    promptFileName: "vv-reflector.md",
+    mode: "subagent",
+    permissions: [DENY_ALL("edit"), DENY_ALL("subagent")],
+  },
 ];
 
 export const MANAGED_PRIMARY_AGENTS: readonly ManagedPrimaryAgentDefinition[] = [
@@ -177,6 +186,7 @@ const MANAGED_AGENT_PROMPT_FILE_NAMES = new Map<
   ["vv-spec-reviewer", "vv-spec-reviewer.md"],
   ["vv-code-reviewer", "vv-code-reviewer.md"],
   ["investigator", "investigator.md"],
+  ["vv-reflector", "vv-reflector.md"],
 ]);
 
 const GUARDIAN_NATIVE_FRONTMATTER: ManagedNativeAgentFrontmatter = {

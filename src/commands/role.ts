@@ -28,7 +28,7 @@ import {
   type ConfigWriteScope,
 } from "../lib/config-layers.js";
 import { requestRebind } from "../lib/rebind-request.js";
-import { BUILTIN_ROLE_NAMES, parseModelSelection } from "../lib/model-roles.js";
+import { BUILTIN_ROLE_NAMES, SEEDED_ROLE_NAMES, parseModelSelection } from "../lib/model-roles.js";
 import { readVvocConfig, resolvePaths, syncVvocConfig } from "../lib/opencode.js";
 import { renderVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
 
@@ -243,8 +243,8 @@ export async function unsetRoleAssignment(
 ): Promise<RoleWriteResult> {
   const normalizedRoleId = normalizeRoleId(roleId, "unset");
 
-  if (BUILTIN_ROLE_NAMES.includes(normalizedRoleId as (typeof BUILTIN_ROLE_NAMES)[number])) {
-    throw new Error(`cannot unset built-in role: ${normalizedRoleId}`);
+  if (SEEDED_ROLE_NAMES.includes(normalizedRoleId as (typeof SEEDED_ROLE_NAMES)[number])) {
+    throw new Error(`cannot unset seeded role: ${normalizedRoleId}`);
   }
 
   const { config, paths } = await loadScopedVvocConfigForWrite(options);

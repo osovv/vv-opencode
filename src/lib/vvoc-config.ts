@@ -57,7 +57,12 @@
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
-import { BUILTIN_ROLE_NAMES, parseModelSelection, type BuiltInRoleName } from "./model-roles.js";
+import {
+  BUILTIN_ROLE_NAMES,
+  parseModelSelection,
+  REFLECTOR_ROLE_NAME,
+  type BuiltInRoleName,
+} from "./model-roles.js";
 import {
   ORCHESTRATION_PROFILE_NAMES,
   createOrchestrationConfig,
@@ -728,7 +733,12 @@ function createDefaultRoleAssignments(overrides: VvocRoleAssignments = {}): Reco
     fast: "openai/gpt-6-luna#low",
     reviewer: "openai/gpt-5.6-sol#xhigh",
   } as const;
-  const roles: Record<string, string> = { ...defaults };
+  const roles: Record<string, string> = {
+    ...defaults,
+    // Dedicated reflection role: seeded so the bundled vv-reflector agent always
+    // resolves, and overridable with `vvoc role set reflector <provider/model>`.
+    [REFLECTOR_ROLE_NAME]: "openai/gpt-6-luna#low",
+  };
 
   for (const [roleId, modelSelection] of Object.entries(overrides)) {
     if (typeof modelSelection !== "string") {

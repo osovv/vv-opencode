@@ -378,7 +378,6 @@ export class SessionBridge {
   readonly #reads: NativeSessionReads;
   readonly #actions: NativeSessionActions;
   readonly #events: NativeEventStream;
-  readonly #clock: { now(): number };
   readonly #log: (level: "warn", message: string) => void;
   #interactions: BridgeInteractions | undefined;
   #abort: AbortController | undefined;
@@ -404,7 +403,6 @@ export class SessionBridge {
     this.#reads = deps.reads;
     this.#actions = deps.actions;
     this.#events = deps.events;
-    this.#clock = deps.clock;
     this.#log = deps.log ?? (() => undefined);
   }
 

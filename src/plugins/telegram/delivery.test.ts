@@ -231,6 +231,35 @@ describe("finals", () => {
     expect(((await store.get(OUTBOX_KEY)) as unknown[]).length ?? 0).toBe(0);
   });
 
+  test("markdown finals deliver through the native rich send, raw finals stay plain", async () => {
+    const transport = new FakeTransport();
+    const store = new FakeStore();
+    const clock = new Clock();
+    const delivery = makeDelivery(transport, store, clock);
+    await delivery.initialize();
+
+    const rich = await delivery.deliverFinal({
+      threadId: 6,
+      nativeMessageId: "msg_rich",
+      text: "## Heading\n\n**bold**",
+    });
+    expect(rich.delivered).toBe(true);
+    // The rich send records into the same sent log with the markdown payload.
+    expect(transport.sent).toEqual([
+      { threadId: 6, text: "## Heading\n\n**bold**", messageId: 10 },
+    ]);
+
+    await delivery.updateSettings({ formatMode: "raw" });
+    const plain = await delivery.deliverFinal({
+      threadId: 6,
+      nativeMessageId: "msg_plain",
+      text: "plain text",
+    });
+    expect(plain.delivered).toBe(true);
+    expect(transport.sent).toHaveLength(2);
+    expect(transport.sent.at(-1)?.text).toBe("plain text");
+  });
+
   test("a failed send keeps the record pending with one notice and a later drain delivers it", async () => {
     const transport = new FakeTransport();
     const store = new FakeStore();

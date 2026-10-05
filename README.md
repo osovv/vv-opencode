@@ -159,7 +159,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 grep '<COMPONENT-' .vvoc/specs/*/*.xml      # component map across spec and plan
 ```
 
-`vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute`, `vv-reflect`, and `vv-handoff` are available as managed skills for plan execution, durable repository memory, and end-of-session handoff notes.
+`vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute`, `vv-reflect`, and `vv-handoff` are available as managed skills for plan execution, environment reflection and durable repository memory, and end-of-session handoff notes.
 
 ---
 
@@ -197,6 +197,7 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 | `vv-spec-reviewer` | Checks whether implementation matches the requested spec and acceptance criteria |
 | `vv-code-reviewer` | Looks for bugs, regressions, maintainability risks, and missing tests |
 | `investigator` | Finds the root cause first when behavior is unclear or a failure needs diagnosis |
+| `vv-reflector` | Reflects on a session and its subagent tree to propose environment improvements, lessons, and runbooks; read-only, and runs the bundled `session-graph` extractor |
 | `guardian` | Supports GuardianPlugin by reviewing permission requests and auto-approving only routine low-risk ones |
 
 Managed prompts and the universal guidance injected into primary sessions carry explicit correctness obligations. For behavior changes, agents derive the material properties that must be preserved from the request and established contracts, separate write scope from impact and verification scope, investigate directly affected consumers, challenge a material assumption with a diagnostic counterexample, and choose verification at the level the risk arises. Controllers tie completion claims to observed evidence rather than status markers; reviewers distinguish no discovered defect from sufficient support for a material claim and can fail a change for a material verification gap. Agents also keep evidence-supported conclusions settled until a concrete trigger — contradictory evidence, a specific counterexample, a changed requirement, or changed inputs — reopens them; they surface false premises instead of silently satisfying them, distinguish unsupported pressure from concrete evidence, and interpret test results as evidence against the request and contracts rather than as the specification. These obligations are prompt-level guidance only: `vvoc install` / `vvoc sync` deliver the current wording, changes take effect after an OpenCode restart like all vvoc config changes, and the bundled contract tests check instruction delivery and wording — they do not evaluate or guarantee how a real model behaves.
@@ -211,7 +212,7 @@ Two families: `vv-*` skills guide the work protocol, while `vvoc-*` skills opera
 | `vv-plan` | A spec is approved and ready to implement | A task-level implementation plan with file targets, contracts, dependencies, and acceptance criteria |
 | `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification, an explicit inline-or-classic mode choice, and applied spec/plan archival |
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
-| `vv-reflect` | A long development, debugging, ops, or investigation session produced reusable knowledge | Durable notes in existing docs or `.vvoc/lessons` / `.vvoc/runbooks` for future agents |
+| `vv-reflect` | A long development, debugging, ops, or investigation session exposed environment friction or produced reusable knowledge | Dispatches the read-only `vv-reflector` subagent over the session and its subagent tree, then applies environment improvements (documents, steering, guardrails, skills, tooling) or lessons/runbooks only after per-entry approval |
 | `vv-handoff` | You are ending a session and want the visible context preserved | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, written from already-visible context only |
 | `vvoc-usage-analytics` | You ask about token usage, cache hit rate, costs, or caching regressions | Read-only analysis across `vvoc analytics`, the analytics JSONL, and historical `opencode.db` data |
 

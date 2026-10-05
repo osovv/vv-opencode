@@ -77,12 +77,15 @@ describe("role helpers", () => {
     }
   });
 
-  test("unsetRoleAssignment rejects built-in role IDs", async () => {
+  test("unsetRoleAssignment rejects seeded role IDs", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-role-builtins-"));
 
     try {
       await expect(unsetRoleAssignment("default", { configDir: configHome })).rejects.toThrow(
-        "cannot unset built-in role: default",
+        "cannot unset seeded role: default",
+      );
+      await expect(unsetRoleAssignment("reflector", { configDir: configHome })).rejects.toThrow(
+        "cannot unset seeded role: reflector",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });
