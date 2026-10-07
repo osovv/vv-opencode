@@ -1,6 +1,6 @@
 {
   "name": "@osovv/vv-opencode",
-  "version": "2.3.0-rc.7",
+  "version": "2.3.0-rc.8",
   "description": "An opinionated agentic development layer for OpenCode — spec-first when it matters, review-driven execution, portable model roles, safer tools, and long-run safety.",
   "type": "module",
   "main": "./dist/index.js",

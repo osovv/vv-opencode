@@ -1,3 +1,11 @@
+## 2.3.0-rc.8 (2026-10-07)
+
+### Summary
+
+This release fixes the Telegram bridge so it stays bounded and observable. Topics are now created only for top-level sessions, so child and helper sessions no longer spawn their own topics and instead render as cards in the parent topic. The topic surface is capped at a configurable maxTopics (default 20) most recent sessions, with evicted topics removed via deleteForumTopic, a method the Bot API supports in private chats, and their topic/session rows, mirrors, and outbox records purged so nothing later targets a dead thread. New top-level sessions are adopted immediately on session.created, the event pump now resubscribes and resyncs after a stream end instead of going silent, and a periodic resync keeps the surface current. Plugin diagnostics now append to a bounded log at $XDG_DATA_HOME/vvoc/telegram/telegram.log, and two new commands, vvoc telegram status and vvoc telegram log, report config/token/state/verdict and tail the log so operators can diagnose issues on any machine without reading server code, with the token never printed.
+
+* feat(telegram): top-level-only topics, delete-based rotation, log, and status CLI ([59deaaa](https://github.com/osovv/vv-opencode/commit/59deaaa))
+
 ## 2.3.0-rc.7 (2026-10-05)
 
 ### Summary
