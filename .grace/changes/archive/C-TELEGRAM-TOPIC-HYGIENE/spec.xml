@@ -1,0 +1,54 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-TELEGRAM-TOPIC-HYGIENE>
+    <Summary>Make the Telegram bridge surface only top-level sessions, cap it at a configurable number of recent session topics with delete-based rotation, adopt new sessions promptly, write plugin diagnostics to a bounded log file, and add a vvoc telegram status command for cross-machine diagnosis.</Summary>
+    <Problem>The bridge currently creates a Telegram topic for every session that appears in a reconcile, including child sessions and helper sessions such as "vvoc title", because resync ignores parentID while the live handler does not. It also relies on closeForumTopic for inactive sessions, but the Bot API rejects that method in private chats ("the chat is not a supergroup forum"), so every topic stays open and the surface grows without bound (33 open topics at diagnosis time). New sessions only get topics when a reconcile happens to run (startup, a stream break, or a manual /sync), the event pump never resubscribes after a stream end, and plugin diagnostics are written with console.log while the OpenCode service sends stdout to /dev/null, so there is no log to inspect on any machine.</Problem>
+    <Goals>
+      <Goal>Only top-level sessions get topics; child and helper sessions (for example "vvoc title" and subagents) never get a topic.</Goal>
+      <Goal>The surface is General plus at most maxTopics most-recent top-level session topics; evicted topics are removed with deleteForumTopic, which the Bot API supports in private chats, instead of closeForumTopic, which it does not.</Goal>
+      <Goal>New top-level sessions are adopted immediately on session.created and reconciled by a periodic resync, so a topic appears without a manual /sync.</Goal>
+      <Goal>The event pump resubscribes after a stream end and reconciles, instead of going permanently deaf after the first break.</Goal>
+      <Goal>Plugin diagnostics append to a bounded log file and are surfaced by a new vvoc telegram status command for cross-machine diagnosis.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The schema stays strict v3; maxTopics is optional with a documented default of 20 and bounds 1..100.</Constraint>
+      <Constraint>Deleting a topic drops its topic and session rows, its message mirrors, and its pending-outbox tail so no later edit targets a dead thread.</Constraint>
+      <Constraint>General is never deleted and is excluded from the cap.</Constraint>
+      <Constraint>Existing durable state stays readable; the token is never written to the log or to command output.</Constraint>
+      <Constraint>Rotation uses deleteForumTopic, the only topic-removal method the Bot API supports in private chats.</Constraint>
+      <Constraint>Runtime plugins keep consuming the startup config snapshot, so configuration changes still require an OpenCode restart.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>Closing or reopening DM topics, which the Bot API rejects in private chats.</NonGoal>
+      <NonGoal>Restarting the OpenCode host service from the vvoc CLI.</NonGoal>
+      <NonGoal>Pinning topics, per-project quotas, or preserving evicted topic history.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>resync never creates a topic for a session whose parentID is set, and the live session.created handler adopts only top-level sessions.</Criterion>
+      <Criterion>The surface holds General plus at most maxTopics top-level session topics ordered by recency; every other session topic is deleted with deleteForumTopic, and its topic row, session row, message mirrors, and outbox records are removed.</Criterion>
+      <Criterion>The transport exposes deleteForumTopic and no longer depends on closeForumTopic or reopenForumTopic.</Criterion>
+      <Criterion>telegram.maxTopics resolves with the default 20 and an explicit override, and the v3 schema accepts valid values and rejects out-of-range values.</Criterion>
+      <Criterion>A new top-level session gets a topic within one periodic resync interval without a manual /sync, and the pump resubscribes after a stream end.</Criterion>
+      <Criterion>vvoc telegram status prints the resolved enabled or disabled reason, token liveness, bot fingerprint, General id, topic/session/mirror counts, offset age, and a verdict; --json emits the same as JSON.</Criterion>
+      <Criterion>Plugin diagnostics append to a bounded log file under the vvoc data dir and are readable through vvoc telegram log.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-TELEGRAM-BRIDGE />
+      <M-TELEGRAM-GATEWAY />
+      <M-TELEGRAM-TOPICS />
+      <M-TELEGRAM-DELIVERY />
+      <M-TELEGRAM-BOT-API />
+      <M-TELEGRAM-CONFIG />
+      <M-CLI-COMMANDS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/telegram src/plugins/telegram.integration.test.ts src/commands/telegram-status.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic output proves children never get topics, the cap deletes evicted topics and cleans mirrors and outbox, maxTopics resolves with defaults and overrides, the pump resubscribes and the periodic resync adopts a new session, status renders enabled or reason plus token and durable state plus verdict, and the full repository gate passes.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The owner uses the bridge in a private chat with topics enabled, where createForumTopic, editForumTopic, and deleteForumTopic are supported and closeForumTopic is not.</Assumption>
+      <Assumption>Losing the history of evicted topics is acceptable in exchange for a bounded topic surface.</Assumption>
+      <Assumption>The durable state keys under telegram/v1 remain the storage contract read by the CLI.</Assumption>
+    </Assumptions>
+  </C-TELEGRAM-TOPIC-HYGIENE>
+</GraceChangeSpec>

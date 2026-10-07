@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble the TelegramBridgePlugin native server plugin: resolve the telegram section and toggle, run exactly one Telegram gateway per process behind an app-identity singleton, wire topology, delivery, session bridge, interactions, commands, and the polling gateway over the plugin context and the shared native runtime, and tear everything down in reverse on cleanup.
 //   SCOPE: Injectable config loader, environment, transport factory, and runtime acquisition for deterministic tests; structural native context and client seams with unknown-typed inputs decoded at checked boundaries; value-free disabled diagnostics; owner-scoped callback routing; a supervised background bootstrap (client acquisition, resync, General creation, pending-permission resurfacing, command registration, polling) with bounded backoff retries that never blocks plugin setup, because awaiting the native client during setup deadlocks server boot; partial-setup rollback through the returned cleanup.
-//   DEPENDS: [@opencode/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/runtime/coordination.ts, src/runtime/context.ts, src/plugins/telegram/config.ts, src/plugins/telegram/bot-api.ts, src/plugins/telegram/topology.ts, src/plugins/telegram/delivery.ts, src/plugins/telegram/sessions.ts, src/plugins/telegram/commands.ts, src/plugins/telegram/gateway.ts]
+//   DEPENDS: [@opencode/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/runtime/coordination.ts, src/runtime/context.ts, src/plugins/telegram/config.ts, src/plugins/telegram/bot-api.ts, src/plugins/telegram/topology.ts, src/plugins/telegram/delivery.ts, src/plugins/telegram/sessions.ts, src/plugins/telegram/commands.ts, src/plugins/telegram/gateway.ts, src/plugins/telegram/log.ts]
 //   LINKS: [M-PLUGIN-TELEGRAM-BRIDGE, M-TELEGRAM-GATEWAY, M-TELEGRAM-TOPICS, M-TELEGRAM-DELIVERY, M-TELEGRAM-BOT-API, M-TELEGRAM-CONFIG, V-M-PLUGIN-TELEGRAM-BRIDGE]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -27,8 +27,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - The form adapter forwards the native answer record unchanged and the event routing follows the real V2 vocabulary.]
-//   PREVIOUS: [C-TELEGRAM-BRIDGE-PLUGIN T-008 - Assembled the plugin with the app-identity singleton, structural native adapters, startup ordering, command registration, and reverse teardown.]
+//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-006 - Wired the maxTopics rotation cap and the bounded file log into the plugin assembly.]
+//   PREVIOUS: [DIRECT-FIX - The form adapter forwards the native answer record unchanged and the event routing follows the real V2 vocabulary.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -42,6 +42,7 @@ import { resolveTelegramConfig, telegramBotFingerprint } from "./config.js";
 import { TelegramCommands, TelegramInteractions } from "./commands.js";
 import { TelegramDelivery } from "./delivery.js";
 import { TelegramGateway } from "./gateway.js";
+import { createTelegramFileLog } from "./log.js";
 import { SessionBridge, TELEGRAM_PROMPT_SOURCE } from "./sessions.js";
 import type { NativeEventStream, NativeSessionActions, NativeSessionReads } from "./sessions.js";
 import { TelegramTopology, type TelegramStore } from "./topology.js";
@@ -353,9 +354,13 @@ export function createTelegramBridgePlugin(
   const createTransport = dependencies.createTransport ?? createTelegramTransport;
   const log =
     dependencies.log ??
-    ((level, message) => {
-      console.log(`[vvoc.telegram][${level}] ${message}`);
-    });
+    (() => {
+      const fileLog = createTelegramFileLog();
+      return (level: "info" | "warn", message: string) => {
+        console.log(`[vvoc.telegram][${level}] ${message}`);
+        fileLog(level, message);
+      };
+    })();
   const acquireRuntime =
     dependencies.acquireRuntime ??
     (async (ctx: NativePluginContext) => {
@@ -454,6 +459,7 @@ export function createTelegramBridgePlugin(
               store,
               clock,
               windowMinutes: resolved.activityWindowMinutes,
+              maxTopics: resolved.maxTopics,
             });
             const delivery = new TelegramDelivery({
               transport,

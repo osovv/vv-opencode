@@ -11,6 +11,7 @@
 //
 // START_MODULE_MAP
 //   DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES - Default minutes a session stays active after its last update.
+//   DEFAULT_TELEGRAM_MAX_TOPICS - Default number of session topics kept live beside General.
 //   DEFAULT_TELEGRAM_SETTINGS - Default owner-tunable delivery settings (hidden reasoning, visible compact tool lines, markdown).
 //   TelegramRuntimeSettings - Fully defaulted delivery settings consumed by the delivery layer.
 //   TelegramDisabledReason - Why the gateway is disabled (absent, disabled, empty or unresolved token).
@@ -20,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Created the telegram config resolver with env-placeholder token resolution, disabled-cause diagnostics, defaults, and the bot fingerprint helper.]
+//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-001 - Added the maxTopics rotation setting with a default of 20.]
 // END_CHANGE_SUMMARY
 
 import { createHash } from "node:crypto";
@@ -29,6 +30,9 @@ import type { VvocTelegramConfig } from "../../lib/vvoc-config.js";
 
 /** Default minutes a session stays active after its last update before its topic closes. */
 export const DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES = 240;
+
+/** Default number of session topics kept live beside General; older topics are deleted. */
+export const DEFAULT_TELEGRAM_MAX_TOPICS = 20;
 
 /** Default owner-tunable delivery settings: reasoning hidden, tool detail compact, markdown replies. */
 export const DEFAULT_TELEGRAM_SETTINGS = {
@@ -68,6 +72,7 @@ export type ResolvedTelegramConfig =
       readonly botToken: string;
       readonly allowedUserIds: readonly number[];
       readonly activityWindowMinutes: number;
+      readonly maxTopics: number;
       readonly apiRoot: string | undefined;
       readonly proxyUrl: string | undefined;
       readonly settings: TelegramRuntimeSettings;
@@ -107,6 +112,7 @@ export function resolveTelegramConfig(
     allowedUserIds: [...section.allowedUserIds],
     activityWindowMinutes:
       section.activityWindowMinutes ?? DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES,
+    maxTopics: section.maxTopics ?? DEFAULT_TELEGRAM_MAX_TOPICS,
     apiRoot: section.apiRoot,
     proxyUrl: section.proxyUrl,
     settings: {

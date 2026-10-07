@@ -60,8 +60,7 @@ class FakeTransport implements TelegramTransport {
     return { threadId: 100 + FakeTransport.constructed };
   }
   async editForumTopic(): Promise<void> {}
-  async closeForumTopic(): Promise<void> {}
-  async reopenForumTopic(): Promise<void> {}
+  async deleteForumTopic(): Promise<void> {}
   async sendMessage() {
     return { messageId: 1 };
   }

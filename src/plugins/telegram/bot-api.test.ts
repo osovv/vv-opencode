@@ -78,8 +78,7 @@ describe("transport payload shaping", () => {
     const created = await transport.createForumTopic("General");
     expect(created).toEqual({ threadId: 777 });
     await transport.editForumTopic(777, "⚙️ work");
-    await transport.closeForumTopic(777);
-    await transport.reopenForumTopic(777);
+    await transport.deleteForumTopic(777);
     expect(fake.callsTo("createForumTopic")[0]?.payload).toEqual({
       chat_id: 424_242,
       name: "General",
@@ -89,11 +88,7 @@ describe("transport payload shaping", () => {
       message_thread_id: 777,
       name: "⚙️ work",
     });
-    expect(fake.callsTo("closeForumTopic")[0]?.payload).toEqual({
-      chat_id: 424_242,
-      message_thread_id: 777,
-    });
-    expect(fake.callsTo("reopenForumTopic")[0]?.payload).toEqual({
+    expect(fake.callsTo("deleteForumTopic")[0]?.payload).toEqual({
       chat_id: 424_242,
       message_thread_id: 777,
     });

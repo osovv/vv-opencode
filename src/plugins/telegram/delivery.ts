@@ -29,7 +29,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Added Hermes-style keyed status lines: bounded in-place editing of one Telegram message per (thread, key) with edit-failure resend.]
+//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-004 - Added forgetThread to purge mirrors, outbox records, stream state, and status-line cache for a deleted topic.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramTransport } from "./bot-api.js";
@@ -302,6 +302,30 @@ export class TelegramDelivery {
   /** Mirror row for a native message id, if delivered before. */
   mirrorOf(nativeMessageId: string): MirrorRow | undefined {
     return this.#mirrors.get(nativeMessageId);
+  }
+
+  /**
+   * Purge everything bound to a deleted topic: its message mirrors, its pending
+   * outbox records, its stream state, and its editable status-line cache, so no
+   * later delivery or edit targets a dead thread.
+   */
+  async forgetThread(threadId: number): Promise<void> {
+    const removed: string[] = [];
+    for (const [nativeMessageId, row] of this.#mirrors) {
+      if (row.threadId !== threadId) continue;
+      this.#mirrors.delete(nativeMessageId);
+      removed.push(nativeMessageId);
+    }
+    for (const nativeMessageId of removed) {
+      await this.#store.remove(MIRROR_PREFIX + nativeMessageId);
+    }
+    const records = await this.#readOutbox();
+    const kept = records.filter((record) => record.threadId !== threadId);
+    if (kept.length !== records.length) await this.#writeOutbox(kept);
+    for (const key of this.#statusLines.keys()) {
+      if (key.startsWith(`${threadId}:`)) this.#statusLines.delete(key);
+    }
+    this.#streams.delete(threadId);
   }
 
   async #readOutbox(): Promise<PendingFinal[]> {

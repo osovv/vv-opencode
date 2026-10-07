@@ -81,8 +81,7 @@ class RecordingTransport implements TelegramTransport {
     return { threadId: this.nextThreadId++ };
   }
   async editForumTopic(): Promise<void> {}
-  async closeForumTopic(): Promise<void> {}
-  async reopenForumTopic(): Promise<void> {}
+  async deleteForumTopic(): Promise<void> {}
   async sendMessage(input: {
     threadId: number;
     text: string;

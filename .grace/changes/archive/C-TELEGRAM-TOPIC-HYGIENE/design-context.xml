@@ -1,0 +1,23 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-TELEGRAM-TOPIC-HYGIENE</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The bot runs in a private chat with topics (a "bot forum"), where Telegram supports createForumTopic, editForumTopic, and deleteForumTopic but rejects closeForumTopic with "the chat is not a supergroup forum". The current close-not-delete reconciler therefore never closes anything and the topic surface grows without bound; deletion is the only Bot API mechanism that bounds it, at the cost of the evicted topic history. The "vvoc title" topics are child sessions created by the auto-title helper: the live event handler already routes children as cards in the parent topic, but resync ignored parentID, so every reconcile minted a topic for them. A count cap ordered by recency matches the owner's stated intent ("only the last N sessions") better than the previous activity-window close, and it is deterministic and idempotent. The pump previously exited its for-await after the first stream break and only resynced once, so live status and content delivery degraded into rare bursts driven by plugin reloads; a resubscribe loop plus a periodic resync restores steady adoption of new sessions.</Rationale>
+  <Alternatives>
+    <Alternative>Keep close-not-delete and rely on the activity window. Rejected: closeForumTopic is a hard 400 in private chats, so nothing would ever leave the surface.</Alternative>
+    <Alternative>Cap topics per project directory instead of globally. Rejected for this change: the owner wants a single "last N sessions" surface across all projects; per-project quotas are recorded as a deferred decision.</Alternative>
+    <Alternative>Adopt new sessions only through a periodic timer without the session.created hook. Rejected: a new session would be invisible for up to the interval, which is the complaint being fixed; the hook makes adoption immediate and the timer is the safety net.</Alternative>
+    <Alternative>Write a dedicated SQLite-backed diagnostic ring buffer in plugin storage. Rejected: a bounded text log under the vvoc data dir is simpler, survives independently of the OpenCode database, and is trivially tail-able.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether vvoc telegram restart should run "opencode service restart" (destructive to live sessions) or only warn that a config change needs a restart.</Decision>
+    <Decision>Whether pinned topics or per-project topic quotas are wanted on top of the global recency cap.</Decision>
+    <Decision>Whether evicted topics should be configurable to retain history by some other creative-limit mechanism.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A child session titled "vvoc title" is created while a parent session runs: no topic is created for the child, and its activity renders as a card inside the parent topic.</Scenario>
+    <Scenario>Twenty one top-level sessions become active across projects: the surface holds General plus the twenty most recent, and the twenty-first oldest topic is deleted along with its mirrors and outbox records.</Scenario>
+    <Scenario>A new top-level session starts in the TUI: it gets a topic immediately through session.created, without a manual /sync.</Scenario>
+    <Scenario>The native event stream breaks: the pump resyncs, resubscribes, and keeps delivering status and content instead of going silent.</Scenario>
+    <Scenario>An operator runs vvoc telegram status on a second machine: the command reports a disabled reason, an unresolved ${VAR}, a dead token, or stale polling, so the cause is visible without reading server code.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

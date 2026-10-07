@@ -696,14 +696,14 @@ Conservatively materialized by `vvoc sync`/`init`; `enforce` blocks only ERROR s
 
 `TelegramBridgePlugin` runs a single-owner Telegram bot inside the OpenCode server process — no second process, no exposed ports. Enable forum topics for the bot in @BotFather first; the bridge uses the private chat between you and the bot only.
 
-The layout is one Telegram DM topic per active session, with a fixed **General** topic as the control lane. Topic titles carry a live status emoji (⚙️ running, 💤 idle, ❓ question, 🔐 permission, ‼️ error, ⏹ aborted) ahead of the session title. A session stays active while it is running or was updated within the activity window (default 240 minutes, or used through the bot); when it goes inactive its topic is closed — never deleted, history stays readable — and `/sync` reconciles topics to the actual active session set.
+The layout is one Telegram DM topic per **top-level** session, with a fixed **General** topic as the control lane. Child sessions and helper sessions — subagents, and the auto-title `vvoc title` session — never get a topic; their activity renders as a bounded card inside the parent topic. Topic titles carry a live status emoji (⚙️ running, 💤 idle, ❓ question, 🔐 permission, ‼️ error, ⏹ aborted) ahead of the session title. The surface is capped at General plus the `maxTopics` (default 20) most recent top-level sessions: when a newer session pushes an older one out, that topic is **deleted** — the Bot API rejects closing a topic in a private chat, so deletion is the only way to bound the surface, and the evicted thread and its history are removed. New sessions are adopted immediately on creation and a periodic reconcile keeps the surface in sync; `/sync` reconciles on demand.
 
 Commands:
 
 | Command | Where | What it does |
 |---|---|---|
 | `/new` | General | Pick a project from an inline list; the session is created with that project's default agent and gets its own topic |
-| `/sync` | General | Idempotent reconciliation: create topics for active sessions missing one, close stale ones, report counts |
+| `/sync` | General | Idempotent reconciliation: create topics for top-level sessions missing one, delete evicted ones, report counts |
 | `/status` | General or session topic | Active sessions with context usage, or the current session's state |
 | `/help` | anywhere | Command list |
 | plain text | session topic | Prompt for that session; consecutive texts inside the merge window join into one prompt |
@@ -723,17 +723,21 @@ Configuration is an optional top-level section of `vvoc.json` (schema v3). The b
   "botToken": "${TELEGRAM_BOT_TOKEN}",
   "allowedUserIds": [123456789],
   "activityWindowMinutes": 240,
+  "maxTopics": 20,
   "apiRoot": "https://tg.example.com"
 }
 ```
 
 - `botToken` — a literal or `${VAR}` placeholder resolved from the OpenCode process environment at startup; an unset variable disables the gateway with a value-free diagnostic naming the variable. Prefer the environment or the global vvoc layer; never commit a token.
 - `allowedUserIds` — the numeric Telegram user ids allowed to talk to the bot (get yours from @userinfobot). This is the entire access boundary: single owner, private chat, non-owner messages are ignored.
-- `activityWindowMinutes` — how long a session stays active after its last update (default 240).
+- `activityWindowMinutes` — how long a session counts as active after its last update (default 240).
+- `maxTopics` — how many session topics stay live beside General (default 20, 1..100); older topics are deleted.
 - `apiRoot` or `proxyUrl` — mutually exclusive connectivity modes for restricted corporate networks: a custom Bot API root behind your own reverse proxy, or an outbound proxy URL for `api.telegram.org`.
-- `settings` — delivery defaults: `showReasoning` (default false), `showToolCalls` (default false), `formatMode` (`markdown` default or `raw`), `codeFileMaxKb` (default 100; larger code blocks arrive as file documents), `mergeWindowMs` (default 1500).
+- `settings` — delivery defaults: `showReasoning` (default false), `showToolCalls` (default true), `formatMode` (`markdown` default or `raw`), `codeFileMaxKb` (default 100; larger code blocks arrive as file documents), `mergeWindowMs` (default 1500).
 
 Durable state (update offset, topic and session map, message mirror, pending finals, settings) lives in the OpenCode plugin storage, scoped to the plugin, and survives `opencode service restart`; a changed bot token resets the stored maps instead of reusing stale bindings. Assistant output streams through draft previews with a throttled edit fallback, finals are delivered exactly once per message across restarts, and all topics share one chat rate budget, so streaming is throttled adaptively. Telegram configuration changes require an OpenCode restart, like other runtime plugins; the `telegram` plugin toggle (`plugins["telegram"]`) is a kill-switch that registers nothing.
+
+Diagnose the bridge without opening the server: `vvoc telegram status` reports the resolved toggle and section, a value-free disabled reason (including unresolved `${VAR}` names), live `getMe` token liveness, the bot fingerprint, the General topic id, topic/session/mirror counts, the update offset age, whether the config is newer than the last gateway boot, and a verdict (`--json` for machine output). The plugin also appends token-free diagnostics to `$XDG_DATA_HOME/vvoc/telegram/telegram.log`, readable with `vvoc telegram log [--lines N]` or `vvoc telegram log --path`.
 
 ### Web tools
 

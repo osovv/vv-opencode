@@ -572,28 +572,10 @@ export class TelegramCommands {
         return;
       }
       case "sync": {
-        await this.#bridge.resync();
-        const sessions = await this.#reads.listSessions();
-        const running = new Set(await this.#reads.activeSessionIds());
-        const active = sessions.filter(
-          (session) =>
-            running.has(session.id) ||
-            this.#topology.isActive(session.id, {
-              running: false,
-              timeUpdatedMs: session.timeUpdatedMs,
-            }),
-        );
-        const report = await this.#topology.reconcile(
-          active.map((session) => ({
-            sessionID: session.id,
-            title: session.title ?? session.id,
-            timeUpdatedMs: session.timeUpdatedMs,
-            running: running.has(session.id),
-          })),
-        );
+        const report = await this.#bridge.resync();
         await this.#delivery.sendTransient({
           threadId,
-          text: `🔄 synced: ${report.created} created, ${report.closed} closed, ${report.reused} reused, ${report.failures} failed`,
+          text: `🔄 synced: ${report.created} created, ${report.deleted} deleted, ${report.reused} reused, ${report.failures} failed`,
         });
         return;
       }
@@ -604,11 +586,12 @@ export class TelegramCommands {
           const lines = sessions
             .filter(
               (session) =>
-                running.has(session.id) ||
-                this.#topology.isActive(session.id, {
-                  running: false,
-                  timeUpdatedMs: session.timeUpdatedMs,
-                }),
+                session.parentID === undefined &&
+                (running.has(session.id) ||
+                  this.#topology.isActive(session.id, {
+                    running: false,
+                    timeUpdatedMs: session.timeUpdatedMs,
+                  })),
             )
             .map(
               (session) =>

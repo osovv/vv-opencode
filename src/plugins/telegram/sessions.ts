@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Bridge native OpenCode sessions to Telegram topics over the real V2 event vocabulary: route session, step, text-delta, inbox, tool, execution, permission, and form events to owning topics, rebuild the active set from native reads on startup and after any stream break, admit prompts and aborts, apply model switches, stream assistant turns from text deltas, echo admitted user prompts as quoted messages, and render subagent cards.
-//   SCOPE: Injectable native read, action, and event-stream boundaries; structural decoding without casting for session lifecycle, step, part-text, permission, question, and child-session events; per-event failure containment; status transitions through the throttled topology titles; resync driving topology reconcile and delivery drain; bounded child-session cards in the parent topic.
+//   SCOPE: Injectable native read, action, and event-stream boundaries; structural decoding without casting for session lifecycle, step, part-text, permission, question, and child-session events; per-event failure containment; status transitions through the throttled topology titles; a resubscribing pump with a periodic resync that reconciles only top-level sessions and purges evicted-thread delivery state; immediate adoption of new top-level sessions; bounded child-session cards in the parent topic.
 //   DEPENDS: [src/plugins/telegram/topology.ts, src/plugins/telegram/delivery.ts]
 //   LINKS: [M-TELEGRAM-GATEWAY, M-TELEGRAM-TOPICS, M-TELEGRAM-DELIVERY, V-M-TELEGRAM-GATEWAY]
 //   ROLE: RUNTIME
@@ -33,13 +33,35 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Tool calls render as Hermes-style keyed status lines: one editable Telegram message per call, progressing ⏳ start to args to ✅ or ❌ outcome.]
+//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-005 - Top-level sessions only, immediate adoption on session.created, a resubscribing event pump, and a periodic resync with evicted-thread delivery purge.]
+//   PREVIOUS: [DIRECT-FIX - Tool calls render as Hermes-style keyed status lines: one editable Telegram message per call, progressing ⏳ start to args to ✅ or ❌ outcome.]
 // END_CHANGE_SUMMARY
 
 import type { TelegramDelivery } from "./delivery.js";
 import { formatUserQuote } from "./delivery.js";
-import type { SessionActivityView, TelegramTopology } from "./topology.js";
+import type { SessionActivityView, TelegramTopology, TopicPassReport } from "./topology.js";
 import type { SessionStatus } from "./topology.js";
+
+/** Unref a timer when the runtime supports it, so a pending wait never blocks process exit. */
+function unrefTimer(timer: ReturnType<typeof setInterval>): void {
+  (timer as unknown as { unref?: () => void }).unref?.();
+}
+
+/** Abortable bounded sleep used between resubscribes. */
+function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => resolve(), ms);
+    unrefTimer(timer as unknown as ReturnType<typeof setInterval>);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new Error("aborted"));
+      },
+      { once: true },
+    );
+  });
+}
 
 /** Structural native session facts the bridge reads. */
 export interface NativeSessionSummary {
@@ -382,6 +404,9 @@ export class SessionBridge {
   #interactions: BridgeInteractions | undefined;
   #abort: AbortController | undefined;
   #pump: Promise<void> | undefined;
+  #timer: ReturnType<typeof setInterval> | undefined;
+  readonly #resyncIntervalMs: number;
+  readonly #resubscribeDelayMs: number;
   #statuses = new Map<string, SessionStatus>();
   #turns = new Map<string, TurnState>();
   readonly #inboxTexts = new Map<string, string>();
@@ -397,6 +422,10 @@ export class SessionBridge {
     events: NativeEventStream;
     clock: { now(): number };
     log?: (level: "warn", message: string) => void;
+    /** Periodic reconcile interval; 0 disables the safety-net timer. Default 60000. */
+    resyncIntervalMs?: number;
+    /** Delay before resubscribing after a stream end. Default 5000. */
+    resubscribeDelayMs?: number;
   }) {
     this.#topology = deps.topology;
     this.#delivery = deps.delivery;
@@ -404,6 +433,8 @@ export class SessionBridge {
     this.#actions = deps.actions;
     this.#events = deps.events;
     this.#log = deps.log ?? (() => undefined);
+    this.#resyncIntervalMs = deps.resyncIntervalMs ?? 60_000;
+    this.#resubscribeDelayMs = deps.resubscribeDelayMs ?? 5_000;
   }
 
   /** Register the permission and question sink; optional because the interactions layer is wired later. */
@@ -416,7 +447,34 @@ export class SessionBridge {
     await this.resync();
     this.#abort = new AbortController();
     const signal = this.#abort.signal;
-    this.#pump = (async () => {
+    this.#pump = this.#runPump(signal);
+    if (this.#resyncIntervalMs > 0) {
+      this.#timer = setInterval(() => {
+        void this.resync().catch(() => undefined);
+      }, this.#resyncIntervalMs);
+      unrefTimer(this.#timer);
+    }
+  }
+
+  /** Stop the pump and the periodic resync timer; resolves when the loop exits. */
+  async stop(): Promise<void> {
+    if (this.#timer !== undefined) {
+      clearInterval(this.#timer);
+      this.#timer = undefined;
+    }
+    this.#abort?.abort();
+    await this.#pump?.catch(() => undefined);
+    this.#pump = undefined;
+    this.#abort = undefined;
+  }
+
+  /**
+   * Resync-then-subscribe loop. The native stream is live-only and never
+   * replays, so every stream end reconciles the active set and resubscribes
+   * after a bounded delay instead of leaving the bridge permanently deaf.
+   */
+  async #runPump(signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
       try {
         for await (const event of this.#events.subscribe(signal)) {
           if (signal.aborted) break;
@@ -430,51 +488,46 @@ export class SessionBridge {
           }
         }
       } catch {
-        // The stream is live-only; falling out always triggers a resync below.
+        // Fall through to reconcile and resubscribe below.
       }
-      if (!signal.aborted) await this.resync();
-    })();
+      if (signal.aborted) return;
+      // The stream is live-only and never replays: reconcile immediately on
+      // every break, then resubscribe after a bounded delay.
+      await this.resync().catch(() => undefined);
+      if (signal.aborted) return;
+      try {
+        await sleepAbortable(this.#resubscribeDelayMs, signal);
+      } catch {
+        return;
+      }
+    }
   }
 
-  /** Stop the pump; the returned promise settles when the loop exits. */
-  async stop(): Promise<void> {
-    this.#abort?.abort();
-    await this.#pump?.catch(() => undefined);
-    this.#pump = undefined;
-    this.#abort = undefined;
-  }
-
-  /** Rebuild the active set from native reads, reconcile topics, refresh statuses, and drain finals. */
-  async resync(): Promise<void> {
+  /**
+   * Rebuild the candidate set from native reads as top-level sessions only (a
+   * child session never gets a topic), reconcile the capped topic surface, purge
+   * delivery state for every evicted thread, and drain pending finals.
+   */
+  async resync(): Promise<TopicPassReport> {
     const [sessions, activeIds] = await Promise.all([
       this.#reads.listSessions(),
       this.#reads.activeSessionIds(),
     ]);
     const running = new Set(activeIds);
-    const views: SessionActivityView[] = [];
-    for (const session of sessions) {
-      const isRunning = running.has(session.id);
-      if (
-        !isRunning &&
-        !this.#topology.isActive(session.id, {
-          running: false,
-          timeUpdatedMs: session.timeUpdatedMs,
-        })
-      ) {
-        continue;
-      }
-      views.push({
+    const views: SessionActivityView[] = sessions
+      .filter((session) => session.parentID === undefined)
+      .map((session) => ({
         sessionID: session.id,
         title: session.title ?? session.id,
         timeUpdatedMs: session.timeUpdatedMs,
-        running: isRunning,
-      });
-    }
-    await this.#topology.reconcile(views);
-    for (const view of views) {
-      if (view.running) await this.#applyStatus(view.sessionID, "running", view.title);
+        running: running.has(session.id),
+      }));
+    const report = await this.#topology.reconcile(views);
+    for (const threadId of report.deletedThreadIds) {
+      await this.#delivery.forgetThread(threadId).catch(() => undefined);
     }
     await this.#delivery.drainPendingFinals();
+    return report;
   }
 
   /** Admit an owner prompt; bot usage advances the activity timestamp. */
@@ -547,6 +600,20 @@ export class SessionBridge {
       if (this.#topology.topicIdFor(decoded.sessionID) !== undefined) {
         const status = this.#statuses.get(decoded.sessionID) ?? "idle";
         await this.#applyStatus(decoded.sessionID, status, decoded.title);
+        return;
+      }
+      if (type === "session.created") {
+        // Adopt a brand-new top-level session immediately; the periodic resync
+        // still reconciles the cap and any missed events.
+        try {
+          await this.#topology.openTopicForSession(
+            decoded.sessionID,
+            decoded.title ?? decoded.sessionID,
+            this.#statuses.get(decoded.sessionID) ?? "running",
+          );
+        } catch {
+          // Adoption is best-effort; the next resync retries.
+        }
       }
       return;
     }

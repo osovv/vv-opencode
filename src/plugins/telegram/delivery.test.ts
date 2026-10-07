@@ -66,8 +66,7 @@ class FakeTransport implements Transport {
     throw new Error("unused");
   }
   async editForumTopic(): Promise<void> {}
-  async closeForumTopic(): Promise<void> {}
-  async reopenForumTopic(): Promise<void> {}
+  async deleteForumTopic(): Promise<void> {}
   async sendMessage(input: { threadId: number; text: string }) {
     if (this.failSends) throw new Error("send failed");
     const messageId = this.nextMessageId++;
@@ -370,5 +369,30 @@ describe("streaming", () => {
     await delivery.initialize();
     expect(await delivery.streamText(99, "x")).toBe(false);
     await expect(delivery.endTurn(99)).resolves.toBeUndefined();
+  });
+});
+
+describe("forgetThread", () => {
+  test("purges mirrors and outbox records for the deleted topic only", async () => {
+    const transport = new FakeTransport();
+    const store = new FakeStore();
+    const clock = new Clock();
+    const delivery = makeDelivery(transport, store, clock);
+    await delivery.initialize();
+
+    await delivery.deliverFinal({ threadId: 7, nativeMessageId: "msg_a", text: "one" });
+    await delivery.deliverFinal({ threadId: 8, nativeMessageId: "msg_b", text: "two" });
+    expect(delivery.mirrorOf("msg_a")).toBeDefined();
+
+    transport.failSends = true;
+    await delivery.deliverFinal({ threadId: 7, nativeMessageId: "msg_pending", text: "queued" });
+
+    await delivery.forgetThread(7);
+
+    expect(delivery.mirrorOf("msg_a")).toBeUndefined();
+    expect(delivery.mirrorOf("msg_b")).toBeDefined();
+    expect([...store.map.keys()].some((key) => key.endsWith("msg_a"))).toBe(false);
+    expect([...store.map.keys()].some((key) => key.endsWith("msg_b"))).toBe(true);
+    expect(JSON.stringify(store.map.get("telegram/v1/outbox") ?? [])).not.toContain("msg_pending");
   });
 });

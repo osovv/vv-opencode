@@ -89,8 +89,7 @@ class WorldTransport implements TelegramTransport {
     return { threadId: this.nextThreadId++ };
   }
   async editForumTopic(): Promise<void> {}
-  async closeForumTopic(): Promise<void> {}
-  async reopenForumTopic(): Promise<void> {}
+  async deleteForumTopic(): Promise<void> {}
   async sendMessage(input: { threadId: number; text: string; replyMarkup?: WorldSent["markup"] }) {
     this.sent.push({ threadId: input.threadId, text: input.text, markup: input.replyMarkup });
     return { messageId: this.nextMessageId++ };

@@ -20,6 +20,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES,
+  DEFAULT_TELEGRAM_MAX_TOPICS,
   resolveTelegramConfig,
   telegramBotFingerprint,
 } from "./config.js";
@@ -67,6 +68,7 @@ describe("resolveTelegramConfig enabled resolution", () => {
       botToken: "123:abc",
       allowedUserIds: [100_200_300],
       activityWindowMinutes: DEFAULT_TELEGRAM_ACTIVITY_WINDOW_MINUTES,
+      maxTopics: DEFAULT_TELEGRAM_MAX_TOPICS,
       apiRoot: undefined,
       proxyUrl: undefined,
       settings: {
@@ -79,10 +81,11 @@ describe("resolveTelegramConfig enabled resolution", () => {
     });
   });
 
-  test("explicit activity window and settings win over defaults", () => {
+  test("explicit activity window, maxTopics, and settings win over defaults", () => {
     const resolved = resolveTelegramConfig(
       section({
         activityWindowMinutes: 30,
+        maxTopics: 5,
         settings: { showReasoning: true, formatMode: "raw", codeFileMaxKb: 5, mergeWindowMs: 0 },
       }),
       { TELEGRAM_BOT_TOKEN: "123:abc" },
@@ -90,6 +93,7 @@ describe("resolveTelegramConfig enabled resolution", () => {
     expect(resolved.enabled).toBe(true);
     if (resolved.enabled) {
       expect(resolved.activityWindowMinutes).toBe(30);
+      expect(resolved.maxTopics).toBe(5);
       expect(resolved.settings.showReasoning).toBe(true);
       expect(resolved.settings.showToolCalls).toBe(true);
       expect(resolved.settings.formatMode).toBe("raw");

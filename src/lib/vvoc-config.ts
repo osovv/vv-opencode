@@ -217,6 +217,7 @@ export type VvocTelegramConfig = {
   botToken: string;
   allowedUserIds: number[];
   activityWindowMinutes?: number;
+  maxTopics?: number;
   apiRoot?: string;
   proxyUrl?: string;
   settings?: VvocTelegramSettings;
@@ -328,6 +329,13 @@ const TELEGRAM_CONFIG_SCHEMA = {
       type: "integer",
       minimum: 1,
       description: "Minutes a session stays active after its last update. Default 240.",
+    },
+    maxTopics: {
+      type: "integer",
+      minimum: 1,
+      maximum: 100,
+      description:
+        "Maximum number of session topics kept live beside General; older topics are deleted. Default 20.",
     },
     apiRoot: {
       type: "string",
@@ -897,6 +905,7 @@ export function createTelegramConfig(value: unknown): VvocTelegramConfig | undef
       "botToken",
       "allowedUserIds",
       "activityWindowMinutes",
+      "maxTopics",
       "apiRoot",
       "proxyUrl",
       "settings",
@@ -914,6 +923,13 @@ export function createTelegramConfig(value: unknown): VvocTelegramConfig | undef
     activityWindowMinutes:
       typeof value.activityWindowMinutes === "number" && value.activityWindowMinutes > 0
         ? value.activityWindowMinutes
+        : undefined,
+    maxTopics:
+      typeof value.maxTopics === "number" &&
+      Number.isInteger(value.maxTopics) &&
+      value.maxTopics >= 1 &&
+      value.maxTopics <= 100
+        ? value.maxTopics
         : undefined,
     apiRoot: normalizeOptionalString(typeof value.apiRoot === "string" ? value.apiRoot : undefined),
     proxyUrl: normalizeOptionalString(

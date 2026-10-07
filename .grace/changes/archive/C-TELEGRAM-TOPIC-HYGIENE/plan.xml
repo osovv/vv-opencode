@@ -1,0 +1,300 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-TELEGRAM-TOPIC-HYGIENE>
+    <IntentSummary>Constrain the vvoc Telegram bridge to top-level sessions with a recency-capped, delete-based topic rotation, adopt new sessions promptly through session.created plus a periodic resync and a resubscribing event pump, write plugin diagnostics to a bounded log file, and add a vvoc telegram status/log CLI surface for cross-machine diagnosis, all within the existing GRACE module ownership of M-TELEGRAM-TOPICS, M-TELEGRAM-BOT-API, M-TELEGRAM-GATEWAY, M-TELEGRAM-DELIVERY, M-TELEGRAM-CONFIG, M-PLUGIN-TELEGRAM-BRIDGE, and M-CLI-COMMANDS.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-TELEGRAM-BRIDGE</Value>
+        <Value>M-TELEGRAM-GATEWAY</Value>
+        <Value>M-TELEGRAM-TOPICS</Value>
+        <Value>M-TELEGRAM-DELIVERY</Value>
+        <Value>M-TELEGRAM-BOT-API</Value>
+        <Value>M-TELEGRAM-CONFIG</Value>
+        <Value>M-CLI-COMMANDS</Value>
+        <Value>src/plugins/telegram/index.ts</Value>
+        <Value>src/plugins/telegram/bot-api.ts</Value>
+        <Value>src/plugins/telegram/topology.ts</Value>
+        <Value>src/plugins/telegram/delivery.ts</Value>
+        <Value>src/plugins/telegram/sessions.ts</Value>
+        <Value>src/plugins/telegram/gateway.ts</Value>
+        <Value>src/plugins/telegram/commands.ts</Value>
+        <Value>src/plugins/telegram/config.ts</Value>
+        <Value>src/commands/plugin.ts</Value>
+        <Value>src/lib/vvoc-config.ts</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>src/cli.ts</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/index.xml</Value>
+        <Value>.grace/verification/index.xml</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/telegram/topology.ts</File>
+        <Text>closeForumTopic</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/sessions.ts</File>
+        <Text>resync</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/bot-api.ts</File>
+        <Text>getUpdates</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>allowedUserIds</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>activityWindowMinutes</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/cli.ts</File>
+        <Text>plugin</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-TELEGRAM-BRIDGE</Module>
+        <Module>M-TELEGRAM-GATEWAY</Module>
+        <Module>M-TELEGRAM-TOPICS</Module>
+        <Module>M-TELEGRAM-DELIVERY</Module>
+        <Module>M-TELEGRAM-BOT-API</Module>
+        <Module>M-TELEGRAM-CONFIG</Module>
+        <Module>M-CLI-COMMANDS</Module>
+      </MustVerify>
+      <MustExist>
+        <Value>src/plugins/telegram/log.ts</Value>
+        <Value>src/plugins/telegram/log.test.ts</Value>
+        <Value>src/commands/telegram.ts</Value>
+        <Value>src/commands/telegram-status.ts</Value>
+        <Value>src/commands/telegram-status.test.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/telegram/bot-api.ts</File>
+        <Text>deleteForumTopic</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/topology.ts</File>
+        <Text>maxTopics</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/topology.ts</File>
+        <Text>deletedThreadIds</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/delivery.ts</File>
+        <Text>forgetThread</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/sessions.ts</File>
+        <Text>parentID</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/telegram/config.ts</File>
+        <Text>maxTopics</Text>
+      </MustContain>
+      <MustContain>
+        <File>schemas/vvoc/v3.json</File>
+        <Text>maxTopics</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/vvoc-config.ts</File>
+        <Text>maxTopics</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/cli.ts</File>
+        <Text>telegram</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>maxTopics</Text>
+      </MustContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/telegram src/plugins/telegram.integration.test.ts src/commands/telegram-status.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-TELEGRAM-BRIDGE />
+        <M-TELEGRAM-GATEWAY />
+        <M-TELEGRAM-TOPICS />
+        <M-TELEGRAM-DELIVERY />
+        <M-TELEGRAM-BOT-API />
+        <M-TELEGRAM-CONFIG />
+        <M-CLI-COMMANDS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-TELEGRAM-BRIDGE />
+        <V-M-TELEGRAM-GATEWAY />
+        <V-M-TELEGRAM-TOPICS />
+        <V-M-TELEGRAM-DELIVERY />
+        <V-M-TELEGRAM-BOT-API />
+        <V-M-TELEGRAM-CONFIG />
+        <V-M-CLI-COMMANDS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>schemas/vvoc/v3.json</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/cli.ts</File>
+      <File>src/plugins/telegram/config.ts</File>
+      <File>src/plugins/telegram/config.test.ts</File>
+      <File>src/plugins/telegram/bot-api.ts</File>
+      <File>src/plugins/telegram/bot-api.test.ts</File>
+      <File>src/plugins/telegram/topology.ts</File>
+      <File>src/plugins/telegram/topology.test.ts</File>
+      <File>src/plugins/telegram/delivery.ts</File>
+      <File>src/plugins/telegram/delivery.test.ts</File>
+      <File>src/plugins/telegram/sessions.ts</File>
+      <File>src/plugins/telegram/sessions.test.ts</File>
+      <File>src/plugins/telegram/index.ts</File>
+      <File>src/plugins/telegram/index.test.ts</File>
+      <File>src/plugins/telegram/commands.ts</File>
+      <File>src/plugins/telegram/commands.test.ts</File>
+      <File>src/plugins/telegram/gateway.test.ts</File>
+      <File>src/plugins/telegram/log.ts</File>
+      <File>src/plugins/telegram/log.test.ts</File>
+      <File>src/plugins/telegram.integration.test.ts</File>
+      <File>src/commands/telegram.ts</File>
+      <File>src/commands/telegram-status.ts</File>
+      <File>src/commands/telegram-status.test.ts</File>
+      <File>README.md</File>
+      <Glob>.grace/**/*.xml</Glob>
+      <File>package.json</File>
+      <File>CHANGELOG.md</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Add the maxTopics rotation setting to strict schema v3, the vvoc config type, and the telegram resolver.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>schemas/vvoc/v3.json accepts telegram.maxTopics as an optional integer in 1..100 and rejects out-of-range or non-integer values with additionalProperties false preserved.</Criterion>
+          <Criterion>src/lib/vvoc-config.ts VvocTelegramConfig carries maxTopics and the parse/render paths round-trip it without dropping unknown-key strictness.</Criterion>
+          <Criterion>resolveTelegramConfig returns maxTopics defaulting to 20 and applying an explicit override.</Criterion>
+          <Criterion>config.test.ts covers the default and the override.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/config.test.ts src/lib/vvoc-config.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Add deleteForumTopic to the Bot API transport and drop the DM-unsupported close and reopen methods.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>TelegramTransport exposes deleteForumTopic(threadId) and the raw HTTP factory shapes the deleteForumTopic payload with chat_id and message_thread_id.</Criterion>
+          <Criterion>closeForumTopic and reopenForumTopic are removed from the interface, the factory, and every test fake.</Criterion>
+          <Criterion>bot-api.test.ts asserts the deleteForumTopic payload and no longer asserts close or reopen.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/bot-api.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Rotate the topology surface: keep General plus maxTopics recent top-level sessions and delete the evicted topics.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>TelegramTopology takes maxTopics and reconcile keeps General plus at most maxTopics candidate sessions ordered by effective recency (max of the native update time and the stored bot-usage time).</Criterion>
+          <Criterion>Every existing session topic outside the kept set is deleted with deleteForumTopic, its topic and session rows removed, and its thread id recorded in report.deletedThreadIds; TOPIC_ID_INVALID drops the stale mapping without a failure.</Criterion>
+          <Criterion>General is never deleted and never counts toward the cap; TopicPassReport carries deleted and deletedThreadIds instead of closed.</Criterion>
+          <Criterion>topic state is a single open mapping; the close and reopen transitions are gone.</Criterion>
+          <Criterion>topology.test.ts proves the cap, the recency ordering, the delete cleanup, and the invalid-id tolerance.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/topology.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Add TelegramDelivery.forgetThread to purge mirrors, outbox records, and live stream state for an evicted topic.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>forgetThread removes in-memory and persisted mirror rows whose threadId matches, removes outbox records for that thread, and drops any stream or status-line cache entries.</Criterion>
+          <Criterion>delivery.test.ts proves a delivered message's mirror and a pending outbox record for the thread are both gone and other threads are untouched.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/delivery.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Bridge only top-level sessions, adopt them on session.created, resubscribe after stream ends, and run a periodic resync.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>resync builds candidates only from sessions whose parentID is undefined and passes them to reconcile, then calls delivery.forgetThread for every deleted thread id.</Criterion>
+          <Criterion>The session.created handler adopts a top-level session with no topic immediately and still routes child sessions as parent-topic cards without a topic.</Criterion>
+          <Criterion>The event pump loops resync then subscribe with a bounded delay, so a stream end no longer terminates the pump.</Criterion>
+          <Criterion>A periodic resync runs on an unref'd injectable interval and is cleared on stop.</Criterion>
+          <Criterion>sessions.test.ts proves children never get topics, a created top-level session is adopted, and a stream end resyncs and resubscribes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/sessions.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Wire maxTopics and a bounded file log into the plugin assembly.</Title>
+        <DependsOn>T-001, T-003, T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>createTelegramBridgePlugin passes resolved.maxTopics to TelegramTopology and keeps the existing startup ordering and teardown.</Criterion>
+          <Criterion>A new log.ts appends timestamped, token-free lines to a bounded file under the vvoc data dir with size-based rotation and is the default plugin log sink.</Criterion>
+          <Criterion>index.test.ts keeps passing with an injected log; log.test.ts proves append, bound, and rotation.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/index.test.ts src/plugins/telegram/log.test.ts</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Update the Telegram command surface for the rotated candidate set and the deleted report.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>/sync and /status build candidates from all top-level sessions without the activity-window filter and no longer reference a closed count.</Criterion>
+          <Criterion>The /sync reply reports created, deleted, reused, and failed counts.</Criterion>
+          <Criterion>commands.test.ts covers the new reply text and the top-level candidate set.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram/commands.test.ts</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Add the vvoc telegram status and vvoc telegram log CLI commands.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vvoc telegram status resolves the effective telegram config, reports enabled or a value-free disabled reason, calls getMe for token liveness, prints the bot fingerprint, General id, topic/session/mirror counts, and offset age from the OpenCode database best-effort, warns when the config is newer than the running server, and prints a verdict; --json emits the same payload.</Criterion>
+          <Criterion>vvoc telegram log prints the tail of the plugin log file with an optional --lines.</Criterion>
+          <Criterion>Neither command ever prints the token.</Criterion>
+          <Criterion>telegram-status.test.ts covers an enabled report, a disabled reason, and the JSON shape with injected seams.</Criterion>
+          <Criterion>The commands are registered under the vvoc telegram parent in cli.ts.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/telegram-status.test.ts</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Update the end-to-end integration suite and run the full repository gate.</Title>
+        <DependsOn>T-006, T-007, T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>telegram.integration.test.ts reflects the delete transport and the rotation behavior and stays deterministic without a live Telegram or native dependency.</Criterion>
+          <Criterion>bun run check passes with fresh output.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/telegram.integration.test.ts</Command>
+          <Command>bun run check</Command>
+        </Verification>
+      </T-009>
+      <T-010>
+        <Title>Reconcile README and the durable GRACE projections, then release 2.3.0-rc.8.</Title>
+        <DependsOn>T-009</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README documents top-level-only topics, maxTopics with delete-based rotation, the log location, and vvoc telegram status/log.</Criterion>
+          <Criterion>M-TELEGRAM-TOPICS, M-TELEGRAM-BOT-API, M-TELEGRAM-GATEWAY, M-TELEGRAM-DELIVERY, M-PLUGIN-TELEGRAM-BRIDGE, and M-CLI-COMMANDS purposes plus V-M-* scenarios match the shipped behavior; grace lint is clean and observed drift is explained by this change.</Criterion>
+          <Criterion>bun run release:bump produces 2.3.0-rc.8 and bun run release:check passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path .</Command>
+          <Command>bun run release:check</Command>
+        </Verification>
+      </T-010>
+    </ImplementationPlan>
+  </C-TELEGRAM-TOPIC-HYGIENE>
+</GraceChangePlan>

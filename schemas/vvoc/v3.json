@@ -607,6 +607,12 @@
           "minimum": 1,
           "description": "Minutes a session stays active after its last update. Default 240."
         },
+        "maxTopics": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum number of session topics kept live beside General; older topics are deleted. Default 20."
+        },
         "apiRoot": {
           "type": "string",
           "minLength": 1,

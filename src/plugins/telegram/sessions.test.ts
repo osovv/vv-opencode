@@ -76,8 +76,7 @@ class FakeTransport implements TelegramTransport {
     return { threadId: this.nextThreadId++ };
   }
   async editForumTopic(): Promise<void> {}
-  async closeForumTopic(): Promise<void> {}
-  async reopenForumTopic(): Promise<void> {}
+  async deleteForumTopic(): Promise<void> {}
   async sendMessage(input: { text: string }) {
     this.sent.push(input.text);
     return { messageId: this.nextMessageId++ };
@@ -186,11 +185,17 @@ function summary(id: string, overrides: Partial<NativeSessionSummary> = {}): Nat
   };
 }
 
-function makeBridge(windowMinutes = 240) {
+function makeBridge(windowMinutes = 240, maxTopics?: number) {
   const transport = new FakeTransport();
   const store = new FakeStore();
   const clock = new Clock();
-  const topology = new TelegramTopology({ transport, store, clock, windowMinutes });
+  const topology = new TelegramTopology({
+    transport,
+    store,
+    clock,
+    windowMinutes,
+    ...(maxTopics === undefined ? {} : { maxTopics }),
+  });
   const delivery = new TelegramDelivery({
     transport,
     store,
@@ -207,6 +212,8 @@ function makeBridge(windowMinutes = 240) {
     actions,
     events: { subscribe: () => queue.stream },
     clock,
+    resyncIntervalMs: 0,
+    resubscribeDelayMs: 10_000,
   });
   return { transport, store, clock, topology, delivery, reads, actions, queue, bridge };
 }
@@ -323,26 +330,44 @@ describe("pure decoders", () => {
 });
 
 describe("resync", () => {
-  test("reconciles running and recent sessions, closes stale topics, and drains finals", async () => {
-    const ctx = makeBridge(1);
+  test("reconciles top-level sessions only, applies the cap, and deletes evicted topics", async () => {
+    const ctx = makeBridge(240, 1);
     await ctx.topology.initialize("fp");
     ctx.reads.sessions = [
-      summary("ses_run", { timeUpdatedMs: ctx.clock.now() - 3_600_000 }),
-      summary("ses_recent"),
       summary("ses_old", { timeUpdatedMs: ctx.clock.now() - 3_600_000 }),
+      summary("ses_recent"),
+      summary("ses_child", { parentID: "ses_recent" }),
     ];
-    ctx.reads.active = ["ses_run"];
-    await ctx.bridge.resync();
-    expect(ctx.topology.topicIdFor("ses_run")).toBeDefined();
+    const first = await ctx.bridge.resync();
+    expect(first.created).toBe(1);
     expect(ctx.topology.topicIdFor("ses_recent")).toBeDefined();
     expect(ctx.topology.topicIdFor("ses_old")).toBeUndefined();
+    expect(ctx.topology.topicIdFor("ses_child")).toBeUndefined();
 
-    ctx.reads.sessions = ctx.reads.sessions.filter((entry) => entry.id !== "ses_recent");
-    ctx.clock.advance(3_600_000);
-    await ctx.bridge.resync();
-    expect(ctx.transport.createdTopics.filter((name) => name.includes("ses_recent"))).toHaveLength(
-      1,
-    );
+    ctx.reads.sessions = [
+      summary("ses_new", { timeUpdatedMs: ctx.clock.now() + 10_000 }),
+      summary("ses_recent"),
+    ];
+    const second = await ctx.bridge.resync();
+    expect(second.deleted).toBe(1);
+    expect(second.deletedThreadIds).toHaveLength(1);
+    expect(ctx.topology.topicIdFor("ses_new")).toBeDefined();
+    expect(ctx.topology.topicIdFor("ses_recent")).toBeUndefined();
+  });
+
+  test("a new top-level session is adopted immediately while a child never is", async () => {
+    const ctx = makeBridge();
+    await ctx.topology.initialize("fp");
+    await ctx.bridge.handleEvent({
+      type: "session.created",
+      data: { sessionID: "ses_top", title: "top" },
+    });
+    expect(ctx.topology.topicIdFor("ses_top")).toBeDefined();
+    await ctx.bridge.handleEvent({
+      type: "session.created",
+      data: { sessionID: "ses_kid", title: "kid", parentID: "ses_top" },
+    });
+    expect(ctx.topology.topicIdFor("ses_kid")).toBeUndefined();
   });
 });
 

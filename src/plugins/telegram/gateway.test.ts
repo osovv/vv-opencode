@@ -72,8 +72,7 @@ class PollTransport implements TelegramTransport {
     throw new Error("unused");
   }
   async editForumTopic(): Promise<void> {}
-  async closeForumTopic(): Promise<void> {}
-  async reopenForumTopic(): Promise<void> {}
+  async deleteForumTopic(): Promise<void> {}
   async sendMessage(): Promise<{ messageId: number }> {
     return { messageId: 1 };
   }

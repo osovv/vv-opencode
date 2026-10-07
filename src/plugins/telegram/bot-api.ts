@@ -32,7 +32,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Replaced the grammy call layer with the vv-chat raw HTTP transport so Bot API 10.1 rich messages and drafts reach Telegram without a client-library method table.]
+//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-002 - Replaced the DM-unsupported close and reopen topic methods with deleteForumTopic for delete-based rotation.]
 // END_CHANGE_SUMMARY
 
 /** Default Bot API root; a custom root or proxy replaces it through configuration. */
@@ -185,8 +185,8 @@ export interface TelegramInlineButton {
 export interface TelegramTransport {
   createForumTopic(name: string): Promise<{ readonly threadId: number }>;
   editForumTopic(threadId: number, name: string): Promise<void>;
-  closeForumTopic(threadId: number): Promise<void>;
-  reopenForumTopic(threadId: number): Promise<void>;
+  /** Delete a topic and all of its messages; the only removal method the Bot API supports in private chats. */
+  deleteForumTopic(threadId: number): Promise<void>;
   sendMessage(input: {
     readonly threadId: number;
     readonly text: string;
@@ -383,11 +383,8 @@ export function createTelegramTransport(options: TelegramTransportOptions): Tele
         name,
       });
     },
-    async closeForumTopic(threadId) {
-      await invoke<boolean>("closeForumTopic", { chat_id: chatId, message_thread_id: threadId });
-    },
-    async reopenForumTopic(threadId) {
-      await invoke<boolean>("reopenForumTopic", { chat_id: chatId, message_thread_id: threadId });
+    async deleteForumTopic(threadId) {
+      await invoke<boolean>("deleteForumTopic", { chat_id: chatId, message_thread_id: threadId });
     },
     async sendMessage(input) {
       const markup = serializeMarkup(input.replyMarkup);

@@ -1,7 +1,7 @@
 // FILE: src/plugins/telegram/topology.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the durable topic topology: General-once, fingerprint reset, create, close-not-delete, reuse, idempotent reconcile, the activity policy, throttled status-emoji titles, clamping, restart survival, and failure containment.
+//   PURPOSE: Verify the durable topic topology: General-once, fingerprint reset, create, recency-capped delete-based rotation, reuse within the cap, idempotent reconcile, the activity policy, throttled status-emoji titles, clamping, restart survival, and failure containment.
 //   SCOPE: Fake transport, store, and clock driving every transition; second-instance reload proving durable authority; bot-change reset clearing rows and recreating General; per-transition failure counting with continued processing; no network or real Bot API dependency.
 //   DEPENDS: [src/plugins/telegram/topology.ts]
 //   LINKS: [M-TELEGRAM-TOPICS, V-M-TELEGRAM-TOPICS]
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-BRIDGE-PLUGIN T-003 - Covered General-once, fingerprint reset, create, close-not-delete, reuse, idempotent reconcile, activity policy, throttled emoji titles, clamping, restart survival, and failure containment.]
+//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-003 - Covered the recency cap, delete-based eviction with reported thread ids, within-cap reuse, gone-topic tolerance, and failure containment.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -57,11 +57,8 @@ class FakeTransport implements TelegramTransport {
   nextThreadId = 100;
   readonly createdTopics: string[] = [];
   readonly editedTopics: Array<{ threadId: number; name: string }> = [];
-  readonly closedTopics: number[] = [];
-  readonly reopenedTopics: number[] = [];
-  failOn: Partial<
-    Record<"createForumTopic" | "closeForumTopic" | "editForumTopic" | "reopenForumTopic", boolean>
-  > = {};
+  readonly deletedTopics: number[] = [];
+  failOn: Partial<Record<"createForumTopic" | "deleteForumTopic" | "editForumTopic", boolean>> = {};
 
   async createForumTopic(name: string) {
     if (this.failOn.createForumTopic) throw new Error("create failed");
@@ -72,13 +69,9 @@ class FakeTransport implements TelegramTransport {
     if (this.failOn.editForumTopic) throw new Error("edit failed");
     this.editedTopics.push({ threadId, name });
   }
-  async closeForumTopic(threadId: number) {
-    if (this.failOn.closeForumTopic) throw new Error("close failed");
-    this.closedTopics.push(threadId);
-  }
-  async reopenForumTopic(threadId: number) {
-    if (this.failOn.reopenForumTopic) throw new Error("reopen failed");
-    this.reopenedTopics.push(threadId);
+  async deleteForumTopic(threadId: number) {
+    if (this.failOn.deleteForumTopic) throw new Error("delete failed");
+    this.deletedTopics.push(threadId);
   }
   async sendMessage() {
     return { messageId: 1 };
@@ -118,12 +111,14 @@ function makeTopology(
   transport: FakeTransport,
   clock: Clock,
   windowMinutes = 240,
+  maxTopics?: number,
 ) {
   const topology = new TelegramTopology({
     transport,
     store,
     clock,
     windowMinutes,
+    ...(maxTopics === undefined ? {} : { maxTopics }),
     titleEditMinIntervalMs: 4_000,
   });
   return topology;
@@ -185,29 +180,51 @@ describe("General control topic", () => {
 });
 
 describe("reconcile transitions", () => {
-  test("creates topics for active sessions and closes them when they leave the active set", async () => {
+  test("creates topics for candidates and deletes the topics evicted by the cap", async () => {
     const store = new FakeStore();
     const transport = new FakeTransport();
     const clock = new Clock();
-    const topology = makeTopology(store, transport, clock);
+    const topology = makeTopology(store, transport, clock, 240, 2);
     await topology.initialize("fp");
     await topology.ensureGeneral();
 
     const created = await topology.reconcile([view("ses_a", { running: true }), view("ses_b")]);
-    expect(created).toEqual({ created: 2, closed: 0, reused: 0, titled: 0, failures: 0 });
+    expect(created).toEqual({
+      created: 2,
+      deleted: 0,
+      reused: 0,
+      titled: 0,
+      failures: 0,
+      deletedThreadIds: [],
+    });
     expect(transport.createdTopics).toContain("⚙️ t-ses_a");
     expect(transport.createdTopics).toContain("💤 t-ses_b");
 
-    const closed = await topology.reconcile([view("ses_a", { running: true })]);
-    expect(closed.closed).toBe(1);
-    expect(transport.closedTopics).toEqual([102]);
-    expect(topology.sessionFor(102)).toBe("ses_b");
+    // A third candidate beyond the cap gets no topic and evicts nothing yet.
+    const capped = await topology.reconcile([view("ses_a"), view("ses_b"), view("ses_c")]);
+    expect(capped.created).toBe(0);
+    expect(topology.topicIdFor("ses_c")).toBeUndefined();
 
-    const again = await topology.reconcile([view("ses_a", { running: true })]);
-    expect(again).toEqual({ created: 0, closed: 0, reused: 0, titled: 0, failures: 0 });
+    // A newer set pushes the old topics out and deletes them, reporting the ids.
+    const rotated = await topology.reconcile([
+      view("ses_c", { timeUpdatedMs: 2_000_001 }),
+      view("ses_d", { timeUpdatedMs: 2_000_002 }),
+    ]);
+    expect(rotated.created).toBe(2);
+    expect(rotated.deleted).toBe(2);
+    expect(rotated.deletedThreadIds).toHaveLength(2);
+    expect(transport.deletedTopics).toHaveLength(2);
+    expect(topology.topicIdFor("ses_a")).toBeUndefined();
+    expect(topology.topicIdFor("ses_b")).toBeUndefined();
+    expect(topology.topicIdFor("ses_c")).toBeDefined();
+    expect(topology.topicIdFor("ses_d")).toBeDefined();
+
+    // General is never touched by rotation.
+    expect(topology.generalThreadId).not.toBeNull();
+    expect(transport.deletedTopics).not.toContain(topology.generalThreadId);
   });
 
-  test("a returning session reuses its stored topic id through reopen", async () => {
+  test("a session within the cap keeps its stored topic across reconciles", async () => {
     const store = new FakeStore();
     const transport = new FakeTransport();
     const clock = new Clock();
@@ -215,13 +232,27 @@ describe("reconcile transitions", () => {
     await topology.initialize("fp");
     await topology.reconcile([view("ses_a")]);
     const threadId = threadOf(topology, "ses_a");
-    await topology.reconcile([]);
-    expect(transport.closedTopics).toEqual([threadId]);
     const reused = await topology.reconcile([view("ses_a", { running: true })]);
     expect(reused.reused).toBe(1);
     expect(reused.created).toBe(0);
-    expect(transport.reopenedTopics).toEqual([threadId]);
     expect(topology.topicIdFor("ses_a")).toBe(threadId);
+    expect(transport.deletedTopics).toEqual([]);
+  });
+
+  test("an already-gone topic drops its stale mapping without a failure", async () => {
+    const store = new FakeStore();
+    const transport = new FakeTransport();
+    const clock = new Clock();
+    const topology = makeTopology(store, transport, clock, 240, 1);
+    await topology.initialize("fp");
+    await topology.reconcile([view("ses_a")]);
+    transport.deleteForumTopic = async () => {
+      throw new Error("Bad Request: TOPIC_ID_INVALID");
+    };
+    const report = await topology.reconcile([view("ses_b", { timeUpdatedMs: 2_000_000 })]);
+    expect(report.failures).toBe(0);
+    expect(report.deletedThreadIds).toHaveLength(1);
+    expect(topology.topicIdFor("ses_a")).toBeUndefined();
   });
 
   test("restart survival: a second instance keeps every mapping", async () => {
