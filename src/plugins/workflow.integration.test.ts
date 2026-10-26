@@ -12,6 +12,8 @@
 // START_MODULE_MAP
 //   PermissionRule - Native permission rule shape (action/resource/effect).
 //   previousConfigHome - Preserves the caller's config-home environment for cleanup.
+//   previousDataHome - Preserves the caller's data-home environment for cleanup.
+//   isolatedDataHome - Per-process data-home root that keeps fixed-session state off the shared ambient path.
 //   SESSION_ID - Stable session identifier shared by workflow fixtures.
 //   workflowLogs - Captured workflow diagnostic console lines.
 //   originalConsoleError - Bound original console.error used to restore the sink.
@@ -54,10 +56,10 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct test determinism fix - The fake client now shares one creation instant between the scripted continuation message and the acceptance record, and post-finish listed-state reads go through a bounded waitForListedItemState poll helper, so parallel-load runs stop racing the awaiting_reviews transition behind bounded continuations.]
+//   LAST_CHANGE: [direct test determinism fix - The suite now resolves persistence against a per-process data-home root (file-scoped XDG_DATA_HOME redirect with restore) and the workflow persistence block targets that same root instead of the shared source-tree path, so concurrent test processes stop deleting each other's fixed session state (LAUNCH_PERSISTENCE_FAILED / ENOENT workflow-state.json.tmp-*).]
 // END_CHANGE_SUMMARY
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -117,6 +119,12 @@ import {
 } from "./workflow/tooling.js";
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
+const previousDataHome = process.env.XDG_DATA_HOME;
+// Fixed session IDs must not share the ambient `$XDG_DATA_HOME/vvoc/workflow/` root:
+// concurrent test processes delete each other's session directories mid-run
+// (LAUNCH_PERSISTENCE_FAILED / ENOENT workflow-state.json.tmp-*). Every
+// disk-touching block resolves persistence paths from this per-process root.
+const isolatedDataHome = `/tmp/vvoc-workflow-integration-data-${process.pid}`;
 const SESSION_ID = "session-workflow-explicit";
 
 // Capture the workflow diagnostic sink's structured console lines (the native
@@ -129,6 +137,23 @@ console.error = (...args: unknown[]) => {
   if (match) workflowLogs.push(match[1]);
   originalConsoleError(...args);
 };
+
+// File-scoped persistence isolation: every suite in this file writes workflow state
+// under one per-process data-home root and the caller's environment is restored after.
+beforeAll(() => {
+  rmSync(isolatedDataHome, { recursive: true, force: true });
+  mkdirSync(isolatedDataHome, { recursive: true });
+  process.env.XDG_DATA_HOME = isolatedDataHome;
+});
+
+afterAll(() => {
+  if (previousDataHome === undefined) {
+    delete process.env.XDG_DATA_HOME;
+  } else {
+    process.env.XDG_DATA_HOME = previousDataHome;
+  }
+  rmSync(isolatedDataHome, { recursive: true, force: true });
+});
 
 function openItem(options: {
   mode: WorkItemMode;
@@ -2530,7 +2555,9 @@ describe("workflow persistence", () => {
 
   beforeEach(() => {
     originalDataHome = process.env.XDG_DATA_HOME;
-    tmpDir = import.meta.dirname ?? "/tmp";
+    // Same per-process root as the file-scoped redirect: the former
+    // `import.meta.dirname` target is one shared path across concurrent processes.
+    tmpDir = isolatedDataHome;
     process.env.XDG_DATA_HOME = tmpDir;
   });
 
