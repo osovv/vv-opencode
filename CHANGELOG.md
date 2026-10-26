@@ -1,3 +1,28 @@
+## 2.3.0-rc.9 (2026-10-26)
+
+### Summary
+
+This release adds direct DeepSeek search and fetch support to the provider-neutral web tools, giving users another search and retrieval backend with freshness mapping, bounded rate-limit retries, and credential-safe errors such as insufficient balance. It fixes model-role admission so location-only sessions complete their first turn on the family-qualified variant, and closes the first-work window when a user model choice is observed. Release and harness behavior is also corrected: host and end-to-end evidence now stays under the scratch base instead of the workspace GRACE tree, a missing host-evidence directory reports the exact mkdir command, and prerelease versions are accepted in packed-version assertions. Packaging now mirrors every non-TypeScript source asset into dist and fails the package check when an asset is missing, while a new CI gate runs typecheck, lint, formatting, GRACE markup, and tool-contract checks on pushes and pull requests. The changelog also records the previously shipped vv-reflect environment-reflection dispatcher, read-only vv-reflector subagent, and session-graph extractor, and several test suites were made more deterministic.
+
+* docs(changelog): record the vv-reflect v2 and vv-reflector feature shipped in 2.3.0-rc.7 ([225fabe](https://github.com/osovv/vv-opencode/commit/225fabe))
+* fix(contracts): report the exact mkdir command when the host evidence bundle directory is missing ([cdcd0c2](https://github.com/osovv/vv-opencode/commit/cdcd0c2))
+* fix(contracts): write host evidence under the scratch base, not the GRACE active tree ([988ecd3](https://github.com/osovv/vv-opencode/commit/988ecd3))
+* fix(e2e): accept prerelease semver in the activation packed-version assertion ([56abd10](https://github.com/osovv/vv-opencode/commit/56abd10))
+* fix(e2e): write harness evidence under the scratch base, not the GRACE tree ([9319fa9](https://github.com/osovv/vv-opencode/commit/9319fa9))
+* fix(runtime): admit the pre-binding bare-base dispatch of an implicit first turn ([6948e11](https://github.com/osovv/vv-opencode/commit/6948e11))
+* fix(runtime): close the first-work window on a pump-missed user choice ([8d475a2](https://github.com/osovv/vv-opencode/commit/8d475a2))
+* fix(test): restore comment prefix on merged CHANGE_SUMMARY marker line ([b41b7d0](https://github.com/osovv/vv-opencode/commit/b41b7d0))
+* feat(web-tools): add direct DeepSeek search and fetch provider ([fb3d86b](https://github.com/osovv/vv-opencode/commit/fb3d86b))
+* test: use ephemeral loopback ports in the model-roles host smoke ([a55df42](https://github.com/osovv/vv-opencode/commit/a55df42))
+* test(commands): bound registered-CLI spawns through one shared helper ([3b57eed](https://github.com/osovv/vv-opencode/commit/3b57eed))
+* test(e2e): restore LAST_CHANGE and PREVIOUS prefixes in harness CHANGE_SUMMARY ([f9ea5f5](https://github.com/osovv/vv-opencode/commit/f9ea5f5))
+* test(e2e): restore required LAST_CHANGE entry in harness coverage markup ([b92f241](https://github.com/osovv/vv-opencode/commit/b92f241))
+* test(e2e): restore required LAST_CHANGE entry in harness coverage markup ([fe61708](https://github.com/osovv/vv-opencode/commit/fe61708))
+* test(secrets-redaction): reconcile the distinct-context host contract with the pinned host ([5ac63ec](https://github.com/osovv/vv-opencode/commit/5ac63ec))
+* test(workflow): determinize continuation timing and post-finish state reads ([5a32c04](https://github.com/osovv/vv-opencode/commit/5a32c04))
+* ci: add push/PR gate running typecheck, lint, format, grace markup, and tool contracts ([579360f](https://github.com/osovv/vv-opencode/commit/579360f))
+* build: mirror non-ts src assets into dist and gate package check on completeness ([7c9ddf1](https://github.com/osovv/vv-opencode/commit/7c9ddf1))
+
 ## 2.3.0-rc.8 (2026-10-07)
 
 ### Summary
